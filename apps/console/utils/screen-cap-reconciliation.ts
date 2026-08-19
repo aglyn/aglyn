@@ -72,10 +72,20 @@ export interface ScreenCapHostInput {
  */
 export const SCREEN_CAP_ROLLUP_MAX_AGE_MS = 36 * 60 * 60 * 1000
 
-/** The two fields this reads off `orgs/{orgId}/usage/{month}`. */
+/** The three fields this reads off `orgs/{orgId}/usage/{month}`. */
 export interface ScreenCapRollupSource {
   maxBillableScreens?: unknown
   computedAt?: unknown
+  /**
+   * WHICH sites are over (AGL-2321).
+   *
+   * `report-usage` has written this beside `maxBillableScreens` since
+   * AGL-1390 and nothing read it back, so the alert could say a site was past
+   * its screen cap and could not say WHICH — on an org with a hundred sites,
+   * an alert nobody can act on. The list was on the very document the alert
+   * had already fetched for the number it did use.
+   */
+  screensOverCapHostIds?: unknown
 }
 
 /**
@@ -132,20 +142,71 @@ export function recordedMaxBillableScreens(
 }
 
 /**
- * The org's worst host's billable screen count, measuring only when there is no
- * usable recorded figure (AGL-1440).
+ * The recorded over-cap host ids, defensively (AGL-2321).
+ *
+ * The stored value crosses a JSON boundary and predates any reader, so it is
+ * treated as untrusted: non-strings and blanks are dropped rather than
+ * rendered as `undefined` into a customer-facing sentence, and the list is
+ * capped so an org that has gone badly wrong produces a readable alert rather
+ * than a wall of ids.
+ *
+ * An EMPTY list is a real answer and stays empty. It means the recorded
+ * measurement found nothing over the cap, which is the normal case; inventing
+ * a placeholder would put "which sites?" back where it started.
+ */
+export function recordedOverCapHostIds(
+  rollup: ScreenCapRollupSource | null | undefined,
+): string[] {
+  const raw = rollup?.screensOverCapHostIds
+  if (!Array.isArray(raw)) return []
+  const ids: string[] = []
+  for (const value of raw) {
+    if (typeof value !== 'string') continue
+    const id = value.trim()
+    if (id && !ids.includes(id)) ids.push(id)
+    if (ids.length >= OVER_CAP_IDS_MAX) break
+  }
+  return ids
+}
+
+/** Enough to act on; more than this is a report, not an alert. */
+export const OVER_CAP_IDS_MAX = 20
+
+export interface ScreenCapReading {
+  /** The org's worst host's billable screen count. */
+  maxBillable: number
+  /** The hosts that are over the cap — the answer to "which sites?". */
+  overCapHostIds: string[]
+}
+
+/**
+ * The org's screen-cap standing, measuring only when there is no usable
+ * recorded figure (AGL-1440), and always naming the sites (AGL-2321).
  *
  * `measure` is a thunk rather than a value precisely so that the common path
  * never calls it: on a healthy platform the daily rollup keeps the figure fresh
  * and the alert cron scans nothing.
+ *
+ * BOTH arms answer "which sites", and that symmetry is the point. The recorded
+ * arm reads `screensOverCapHostIds` off the same document it took the number
+ * from; the measuring arm takes the report's own list. An alert that could
+ * name the sites only when it had just scanned them would go quiet in exactly
+ * the steady state the caching was introduced to produce.
  */
-export async function screenCapMaxBillable(
+export async function screenCapReading(
   rollup: ScreenCapRollupSource | null | undefined,
   nowMs: number,
-  measure: () => Promise<number>,
-): Promise<number> {
+  measure: () => Promise<ScreenCapReport>,
+): Promise<ScreenCapReading> {
   const recorded = recordedMaxBillableScreens(rollup, nowMs)
-  return recorded ?? measure()
+  if (recorded !== null) {
+    return { maxBillable: recorded, overCapHostIds: recordedOverCapHostIds(rollup) }
+  }
+  const report = await measure()
+  return {
+    maxBillable: report.maxBillable,
+    overCapHostIds: [...report.overCapHostIds].slice(0, OVER_CAP_IDS_MAX),
+  }
 }
 
 /**
@@ -185,7 +246,7 @@ export async function screenCapMaxBillable(
  *  - the rollup already walks every screen document for site size, so it passes
  *    those rows in via {@link ScreenCapHostInput.screens} and reads nothing;
  *  - `usage-alerts` reads the figure the rollup recorded, off a document it was
- *    already fetching — see {@link screenCapMaxBillable}. It re-measures only
+ *    already fetching — see {@link screenCapReading}. It re-measures only
  *    when that figure is missing or stale, so an org the rollup never reached
  *    is still measured rather than quietly reported as 0.
  *

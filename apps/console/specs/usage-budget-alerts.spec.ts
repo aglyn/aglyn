@@ -329,7 +329,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
 jest.mock('../utils/screen-cap-reconciliation', () => ({
   __esModule: true,
   measureScreenCaps: async () => ({ maxBillable: 0, overCapHostIds: [] }),
-  screenCapMaxBillable: async () => 0,
+  screenCapReading: async () => ({ maxBillable: 0, overCapHostIds: [] }),
 }))
 
 import { POST } from '../app/api/billing/usage-alerts/route'

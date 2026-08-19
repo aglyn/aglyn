@@ -40,7 +40,7 @@ import {
 } from '../../../../utils/storage-overage'
 import {
   measureScreenCaps,
-  screenCapMaxBillable,
+  screenCapReading,
 } from '../../../../utils/screen-cap-reconciliation'
 import {
   ORG_BILLING_DOC_ID,
@@ -328,25 +328,54 @@ async function handler(request: Request): Promise<Response> {
       // Same staleness this cron already accepts for data storage, and the
       // helper falls back to measuring when there is no usable figure, so an
       // org the rollup has not reached is measured rather than reported as 0.
-      const maxBillableScreens = await screenCapMaxBillable(
+      //
+      // AND WHICH SITES (AGL-2321). `report-usage` has written
+      // `screensOverCapHostIds` beside `maxBillableScreens` since AGL-1390 —
+      // written precisely because three separate ways past the create-time
+      // gate were found in one night — and nothing ever read it. So this
+      // alert told an owner a site was past its screen cap and could not say
+      // which one, with the list sitting on the document it had already
+      // fetched for the number it did use. On an org with a hundred sites
+      // that is an alert nobody can act on.
+      const screenCap = await screenCapReading(
         rollup
           ? {
               maxBillableScreens: rollup.get('maxBillableScreens'),
               computedAt: rollup.get('computedAt'),
+              screensOverCapHostIds: rollup.get('screensOverCapHostIds'),
             }
           : null,
         Date.now(),
         async () =>
-          (
-            await measureScreenCaps(
-              hosts.docs.map((host) => ({
-                id: host.id,
-                ref: host.ref,
-                routingMap: host.get('screens'),
-              })),
-              orgData,
-            )
-          ).maxBillable,
+          measureScreenCaps(
+            hosts.docs.map((host) => ({
+              id: host.id,
+              ref: host.ref,
+              routingMap: host.get('screens'),
+            })),
+            orgData,
+          ),
+      )
+      const maxBillableScreens = screenCap.maxBillable
+      /**
+       * The over-cap sites by the name their owner knows them by.
+       *
+       * `hosts` is already in hand, so this costs nothing. An id that is not
+       * in that snapshot still appears — as its id — rather than being
+       * dropped: a site deleted or moved since the rollup ran is exactly the
+       * kind of thing the reader needs to see, and silently shortening the
+       * list would make the sentence disagree with the count above it.
+       */
+      const hostLabels = new Map<string, string>(
+        hosts.docs.map((host) => [
+          host.id,
+          String(
+            host.get('subdomain') ?? host.get('displayName') ?? host.id,
+          ),
+        ]),
+      )
+      const overCapSites = screenCap.overCapHostIds.map(
+        (hostId) => hostLabels.get(hostId) ?? hostId,
       )
 
       // Does THIS org's plan bill storage past the band, rather than refusing
@@ -367,6 +396,14 @@ async function handler(request: Request): Promise<Response> {
          * when the product will keep working and bill.
          */
         billsOverage?: boolean
+        /**
+         * One extra sentence appended to the alert body, for a check whose
+         * number alone is not actionable (AGL-2321). Appended to BOTH channels
+         * from the same string, for the AGL-2052 reason: an email that says
+         * something the console does not is how a customer ends up arguing
+         * with support about which one meant it.
+         */
+        detail?: string
       }> = [
         {
           // AGL-484: a downgrade can leave an org over its site/storage
@@ -385,6 +422,12 @@ async function handler(request: Request): Promise<Response> {
           label: 'screens on a site',
           used: maxBillableScreens,
           limit: entitlements.screensPerHost,
+          // Named only when there is something to name. An empty list is a
+          // real answer — the recorded measurement found nothing over — and
+          // "Over the cap: ." would be worse than the silence it replaced.
+          detail: overCapSites.length
+            ? `Over the cap: ${overCapSites.join(', ')}.`
+            : undefined,
         },
         {
           key: 'mediaStorage',
@@ -552,13 +595,15 @@ async function handler(request: Request): Promise<Response> {
               ? `You're past your included ${check.label} — extra usage is now billed`
               : `You've reached your ${check.label} limit`
             : `You're above ${approachPct}% of your ${check.label} quota`
-        const alertBody = check.billsOverage
-          ? `${Math.round(check.used)} of ${check.limit} used. Past ` +
-            `${check.limit}, extra ${check.label} is billed on your ` +
-            'monthly invoice — upgrade in Billing for a bigger allowance, ' +
-            'or set a monthly cap there if you would rather it stopped.'
-          : `${Math.round(check.used)} of ${check.limit} used — upgrade ` +
-            'in Billing to raise the limit.'
+        const alertBody =
+          (check.billsOverage
+            ? `${Math.round(check.used)} of ${check.limit} used. Past ` +
+              `${check.limit}, extra ${check.label} is billed on your ` +
+              'monthly invoice — upgrade in Billing for a bigger allowance, ' +
+              'or set a monthly cap there if you would rather it stopped.'
+            : `${Math.round(check.used)} of ${check.limit} used — upgrade ` +
+              'in Billing to raise the limit.') +
+          (check.detail ? ` ${check.detail}` : '')
         await notifyOrgAdmins(org.id, {
           type: 'billing.usage',
           title: alertTitle,
