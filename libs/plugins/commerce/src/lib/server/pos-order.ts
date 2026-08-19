@@ -209,27 +209,36 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     //
     // Scaled by the cashier's discount, again like the cart: the fee is a cut
     // of what the shopper actually paid, not of the list basket.
-    const grossFeeCents = lineItems.reduce(
-      (sum, line) =>
+    // WHETHER a rate applies is a separate fact from what it rounds to
+    // (AGL-2256). This path rounds TWICE — once per line, then again when the
+    // cashier's discount scales the sum — and floored neither, so a small
+    // basket on a low rate produced 0 and the emission guard below read that as
+    // "this plan charges no fee" and sent none at all. Every other door floors
+    // at `Math.max(1, …)` when the rate is above zero.
+    let feeApplies = false
+    const grossFeeCents = lineItems.reduce((sum, line) => {
+      const linePct = Aglyn.resolveTransactionFeePct(
+        ownerOrg?.org as any,
+        (line.productType ?? 'physical') as 'physical' | 'digital' | 'service',
+      )
+      if (linePct > 0) feeApplies = true
+      return (
         sum +
-        Math.round(
-          (line.unitAmountCents *
-            line.quantity *
-            Aglyn.resolveTransactionFeePct(
-              ownerOrg?.org as any,
-              (line.productType ?? 'physical') as
-                | 'physical'
-                | 'digital'
-                | 'service',
-            )) /
-            100,
-        ),
-      0,
-    )
-    const feeCents =
+        Math.round((line.unitAmountCents * line.quantity * linePct) / 100)
+      )
+    }, 0)
+    const chargedItemsCents = Math.max(0, itemsCents - discountCents)
+    const scaledFeeCents =
       itemsCents > 0
-        ? Math.round((grossFeeCents * (itemsCents - discountCents)) / itemsCents)
+        ? Math.round((grossFeeCents * chargedItemsCents) / itemsCents)
         : 0
+    // Gated on what the shopper actually pays for goods, so a 100% cashier
+    // discount still takes nothing — the fee is a cut of the goods, and there
+    // are none left to cut.
+    const feeCents =
+      feeApplies && chargedItemsCents > 0
+        ? Math.max(1, scaledFeeCents)
+        : scaledFeeCents
     // Origin tax (AGL-285) — in-person sales are origin-based by nature.
     const storeSettings = await hostRef.collection('settings').doc('store').get()
     const taxSettings = (storeSettings.get('tax') ?? {}) as CommerceModel.TaxSettings

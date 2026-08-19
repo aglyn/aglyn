@@ -1782,3 +1782,79 @@ describe('a POS card sale records its Stripe session (AGL-2244)', () => {
     expect(orderDocs()[0]?.checkoutSessionId).toBeUndefined()
   })
 })
+
+/**
+ * AGL-2256, the register's half. POS rounds TWICE — once per line, then again
+ * when the cashier's discount scales the sum — and floored neither, so a small
+ * basket on a low rate produced 0 and the emission guard read that as "this
+ * plan charges no fee". Every other door floors at `Math.max(1, …)` when the
+ * rate is above zero.
+ */
+describe('a POS platform fee that rounds to zero (AGL-2256)', () => {
+  const realPlan = mockOrg.org.plan
+
+  afterEach(() => {
+    mockOrg.org.plan = realPlan
+  })
+
+  beforeEach(() => {
+    // Scale: 1% digital. One $0.30 sticker pack is 0.3c of fee.
+    mockOrg.org.plan = 'scale'
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Sticker pack',
+      type: 'digital',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 0.3, inventory: null }],
+    })
+  })
+
+  it('still takes a cent rather than dropping the fee entirely', async () => {
+    const result = await post({ payment: 'link' })
+    expect(result.status).toBe(200)
+    expect(
+      stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
+    ).toBe('1')
+    expect(stripeCalls[0].body.get('metadata[feeCents]')).toBe('1')
+  })
+
+  it('survives the SECOND rounding, the cashier discount', async () => {
+    // 1% of 50c is 0.5c, which rounds UP to 1 — so the per-line round is not
+    // the one under test here. A 70% discount then scales that 1c by 15/50,
+    // i.e. 0.3c, which rounds to 0.
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Recipe PDF',
+      type: 'digital',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 0.5, inventory: null }],
+    })
+    const result = await post({ payment: 'link', discountPct: 70 })
+    expect(result.status).toBe(200)
+    expect(
+      stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
+    ).toBe('1')
+  })
+
+  /**
+   * THE OTHER BRANCH. A plan whose rate is a real zero must still send
+   * nothing — Stripe rejects a zero application fee, and inventing a cent on
+   * an advertised 0% tier would be a pricing lie.
+   */
+  it('sends NOTHING on a plan whose rate is a real zero', async () => {
+    mockOrg.org.plan = 'advanced'
+    const result = await post({ payment: 'link' })
+    expect(result.status).toBe(200)
+    expect(
+      stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
+    ).toBeNull()
+    expect(stripeCalls[0].body.get('metadata[feeCents]')).toBe('0')
+  })
+
+  it('sends NOTHING when the cashier discounts the basket to zero', async () => {
+    const result = await post({ payment: 'link', discountPct: 100 })
+    expect(result.status).toBe(200)
+    expect(
+      stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
+    ).toBeNull()
+  })
+})
+

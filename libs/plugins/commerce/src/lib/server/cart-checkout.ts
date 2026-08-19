@@ -121,6 +121,15 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     )
     let itemsCents = 0
     let feeCents = 0
+    /** Whether any line carries a fee rate above zero (AGL-2232). */
+    let feeApplies = false
+    /**
+     * The goods the shopper actually pays for, after any discount that reached
+     * the session (AGL-2232). Starts as the whole basket and is lowered only
+     * when a Stripe coupon is minted, which is the one reduction the fee is
+     * scaled by.
+     */
+    let chargedItemsCents = 0
     // Weight-tier shipping rates price off this (AGL-1707). Without it every
     // `weight_tiers` rate would resolve at 0g and quote the lightest tier.
     let totalGrams = 0
@@ -179,6 +188,14 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         ownerOrg.org as any,
         product.type ?? 'physical',
       )
+      // WHETHER a rate applies is not the same fact as what it rounds to
+      // (AGL-2232), and only the sum was being kept. `checkout.ts`,
+      // `draft-order.ts` and `reserve.ts` all floor at `Math.max(1, …)` when
+      // `feePct > 0`; the cart floored nothing, so a Scale-plan cart of $0.30
+      // digital lines rounded every line to 0, the emission guard below read
+      // `feeCents > 0` as "this plan charges nothing", and the session went out
+      // with no application fee at all.
+      if (feePct > 0) feeApplies = true
       feeCents += Math.round((unitCents * line.quantity * feePct) / 100)
       params.set(`line_items[${index}][quantity]`, String(line.quantity))
       params.set(`line_items[${index}][price_data][currency]`, 'usd')
@@ -258,6 +275,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         .json({ error: CommerceModel.CART_UNPRICEABLE_SHIPPING_MESSAGE })
     }
 
+    chargedItemsCents = itemsCents
     // Discounts engine (AGL-305): entered codes and automatic
     // promotions from hosts/{id}/discounts; the AGL-96 coupons remain a
     // fallback for unknown codes.
@@ -424,12 +442,19 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           (feeCents * Math.max(0, itemsCents - totalOffCents)) /
             Math.max(1, itemsCents),
         )
+        chargedItemsCents = Math.max(0, itemsCents - totalOffCents)
       }
     }
+    // THE FLOOR (AGL-2232). A rate above zero on goods the shopper actually
+    // pays for is a fee, however small the arithmetic makes it — the same rule
+    // the other three doors already hold. Gated on `chargedItemsCents` so a
+    // basket a gift card covered entirely still takes nothing: the fee is a cut
+    // of the goods, and there are no goods left to cut.
+    if (feeApplies && chargedItemsCents > 0 && feeCents < 1) feeCents = 1
     if (feeCents > 0) {
       params.set(
         'payment_intent_data[application_fee_amount]',
-        String(Math.max(1, feeCents)),
+        String(feeCents),
       )
     }
     params.set(
