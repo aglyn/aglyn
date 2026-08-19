@@ -129,6 +129,10 @@ const MENTIONS_ONLY = new Map<string, string>([
     'The credential-rotation checklist (AGL-1915) lists the key among the secrets to rotate after an incident. Naming a secret in a runbook is the opposite of a data flow — but the suite is right to have stopped on it, because "a new file mentions ANTHROPIC_API_KEY" is exactly the event it exists to make someone look at.',
   ],
   [
+    '.github/workflows/tools-guards.yml',
+    'The workflow step that RUNS `check:provider-key-exposure` — the guard proving no model-provider key is reachable from the client closure (AGL-2379). It names the key only in the comment explaining what that guard proves. A workflow that runs a check ABOUT the key is the opposite of a data flow, but the suite is right to have stopped on it: "a new file mentions ANTHROPIC_API_KEY" is exactly the event it exists to make someone look at.',
+  ],
+  [
     'cloud/firebase-remoteconfig.template.json',
     'The DEPLOYED flag seed and its staff-facing description — the one that actually decides the flag in production.',
   ],
