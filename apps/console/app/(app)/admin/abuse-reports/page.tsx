@@ -864,6 +864,11 @@ function AdminAbuseReports() {
                       ) : null}
                     </Stack>
                   }
+                  help={docsHelp('abuseReports', {
+                    excerpt:
+                      'One report, with its severity, its status, and — on copyright ' +
+                      'reports only — the §512(i) strike count for the account.',
+                  })}
                   subheader={
                     report.reference
                       ? `Reference ${report.reference}`
@@ -1274,6 +1279,11 @@ function AdminAbuseReports() {
                       ) : null}
                     </Stack>
                   }
+                  help={docsHelp('abuseReports', {
+                    excerpt:
+                      'A counter-notice to a takedown, and the statutory clock it starts. ' +
+                      'Past the deadline, the content goes back up.',
+                  })}
                   contentGutterX
                   contentGutterY
                 >

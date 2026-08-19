@@ -156,7 +156,20 @@ export function StaffUserEraseCard({
   if (staffRole === null) return null
   if (staffRole !== 'super') {
     return (
-      <CardDisplay header={'Erase account'} contentGutterX contentGutterY>
+      <CardDisplay
+        header={'Erase account'}
+        // Same card, role-refused branch. See the org publish panel: the
+        // state that explains itself least is the one a reader reaches
+        // BECAUSE they do not have what it takes.
+        help={docsHelp('staffConsole', {
+          anchor: '#whats-there',
+          excerpt:
+            'Erasing an account is super-staff only. The page explains who ' +
+            'holds the role and what the account holder can do themselves.',
+        })}
+        contentGutterX
+        contentGutterY
+      >
         <Typography variant="body2" color="text.secondary">
           {'Erasing an account requires the super staff role. Ask someone who ' +
             'holds it, or use the account holder’s own Close account.'}

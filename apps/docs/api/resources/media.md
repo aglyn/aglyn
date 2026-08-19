@@ -1,5 +1,5 @@
 ---
-sidebar_position: 6
+sidebar_position: 7
 title: Media
 description: List the files in your organization library and in each site's media, with their dimensions, folders and CDN URLs.
 ---

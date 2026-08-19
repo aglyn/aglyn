@@ -52,6 +52,7 @@ import { useHostId, useHostSubdomain } from '../../../../../../../components/hos
 import DashboardLayout from '../../../../../../../components/layouts/dashboard.layout'
 import { buildRoute, Route } from '../../../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../../../constants/shared'
+import { docsHelp } from '../../../../../../../constants/docs-links'
 import { useOrgSlug } from '../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../../../../../../hooks/use-firestore-doc'
@@ -318,7 +319,17 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
               // does not render as a narrow column beside dead space.
               size: siblings.length > 1 ? { xs: 12, lg: 5 } : { xs: 12 },
               children: (
-        <CardDisplay header={'Details'} contentGutterX contentGutterY>
+        <CardDisplay
+          header={'Details'}
+          help={docsHelp('templatesLibrary', {
+            anchor: '#where-a-template-came-from',
+            excerpt:
+              'Where this template came from — saved here, installed from ' +
+              'the marketplace, or one of Aglyn’s starters.',
+          })}
+          contentGutterX
+          contentGutterY
+        >
           <Stack spacing={2}>
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
               <Tooltip title={chip.title}>
@@ -380,6 +391,12 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
                     children: (
           <CardDisplay
             header={`Starter bundle · ${template?.source?.starterName ?? starterId}`}
+            help={docsHelp('templatesLibrary', {
+              anchor: '#where-a-template-came-from',
+              excerpt:
+                'The starter this template came from, and what re-applying it would ' +
+                'bring across.',
+            })}
             contentGutterX
             contentGutterY
           >

@@ -37,6 +37,7 @@ import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import { docsHelp } from '../../../../constants/docs-links'
 
 interface SuppressionRecord {
   $id: string
@@ -212,6 +213,12 @@ const AdminContactSuppressions: NextPageWithLayout<Record<string, never>> = () =
 
             <CardDisplay
               header="Record a request"
+              help={docsHelp('staffConsole', {
+                anchor: '#whats-there',
+                excerpt:
+                  'Record an opt-out we received outside the product, so nothing we ' +
+                  'send reaches that number again.',
+              })}
               contentGutterX
               contentGutterY
             >
@@ -309,6 +316,12 @@ const AdminContactSuppressions: NextPageWithLayout<Record<string, never>> = () =
                   ? `Suppressed numbers · ${active.length}`
                   : 'Suppressed numbers'
               }
+              help={docsHelp('staffConsole', {
+                anchor: '#whats-there',
+                excerpt:
+                  'Numbers currently suppressed. A suppression outlives the contact ' +
+                  'record it came from, on purpose.',
+              })}
               contentGutterX
               contentGutterY
             >

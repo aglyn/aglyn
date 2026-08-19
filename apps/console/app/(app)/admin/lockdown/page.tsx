@@ -1070,6 +1070,11 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
 
             <CardDisplay
               header={'Actions taken in this session'}
+              help={docsHelp('lockdown', {
+                excerpt:
+                  'What you changed since this page loaded, so a session of edits can ' +
+                  'be read back before you leave it.',
+              })}
               contentGutterX
               contentGutterY
             >
@@ -1104,6 +1109,11 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
 
             <CardDisplay
               header={'Active platform, feature & account lockdowns'}
+              help={docsHelp('lockdown', {
+                excerpt:
+                  'Every lock currently in force, at every scope. This is the list to ' +
+                  'check before asking why a customer is refused.',
+              })}
               contentGutterX
               contentGutterY
             >

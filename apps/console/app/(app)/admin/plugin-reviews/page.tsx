@@ -256,6 +256,12 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
                 {visibleVerification.length ? (
                   <CardDisplay
                     header={`Verification requested (${visibleVerification.length})`}
+                    help={docsHelp('publisherHandbook', {
+                      anchor: '#asking-to-be-verified',
+                      excerpt:
+                        'Publishers who asked to be VERIFIED — a claim about who they are, ' +
+                        'separate from reviewing any one version.',
+                    })}
                     contentGutterX
                     contentGutterY
                   >
@@ -370,6 +376,12 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
 
                 <CardDisplay
                   header={`Listed plugins (${visibleListed.length})`}
+                  help={docsHelp('publisherHandbook', {
+                    anchor: '#review-what-happens-after-you-publish',
+                    excerpt:
+                      'Listings already installable. Listing is the step that makes a ' +
+                      'version reachable from Browse.',
+                  })}
                   contentGutterX
                   contentGutterY
                 >

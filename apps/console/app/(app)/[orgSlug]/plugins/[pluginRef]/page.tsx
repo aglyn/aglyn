@@ -33,6 +33,7 @@ import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import PluginConfigCards from '../../../../../components/plugin-config-card.component'
 import PluginWidgetSlot from '../../../../../components/plugin-widget-slot.component'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
+import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { useOrgHosts } from '../../../../../hooks/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../../../../../hooks/use-org-scope'
@@ -264,7 +265,18 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
               gets the AGL-997 control; a first-party plugin has no pins at
               all — it is on or off for the workspace — and pretending
               otherwise would invent a scope it does not have. */}
-          <CardDisplay header={'Where it runs'} contentGutterX contentGutterY>
+          <CardDisplay
+            header={'Where it runs'}
+            help={docsHelp('installYourFirstPlugin', {
+              anchor: '#step-4-targeting',
+              excerpt:
+                'A marketplace install is a set of per-site pins. A ' +
+                'first-party plugin has no pins — it is on or off for the ' +
+                'whole workspace.',
+            })}
+            contentGutterX
+            contentGutterY
+          >
             {firstParty ? (
               <Stack spacing={1}>
                 <Typography variant="body2">
@@ -311,6 +323,11 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
           {firstParty ? null : (
           <CardDisplay
             header={'Permissions & data'}
+            help={docsHelp('sandboxSecurity', {
+              excerpt:
+                'What this plugin declared it can reach, and what the ' +
+                'sandbox enforces regardless of what it declared.',
+            })}
             contentGutterX
             contentGutterY
           >

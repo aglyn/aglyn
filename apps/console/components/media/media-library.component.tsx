@@ -3932,24 +3932,26 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                     }
                     sx={{ flex: 1 }}
                   />
-                  <IconButton
-                    size="small"
-                    aria-label="Remove field"
-                    onClick={() =>
-                      setEditor((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              customMeta: prev.customMeta.filter(
-                                (_item, itemIndex) => itemIndex !== index,
-                              ),
-                            }
-                          : prev,
-                      )
-                    }
-                  >
-                    <DeleteOutlineIcon fontSize="small" />
-                  </IconButton>
+                  <Tooltip title="Remove this custom field">
+                    <IconButton
+                      size="small"
+                      aria-label="Remove field"
+                      onClick={() =>
+                        setEditor((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                customMeta: prev.customMeta.filter(
+                                  (_item, itemIndex) => itemIndex !== index,
+                                ),
+                              }
+                            : prev,
+                        )
+                      }
+                    >
+                      <DeleteOutlineIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
                 </Stack>
               ))}
               <Button
