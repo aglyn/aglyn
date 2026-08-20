@@ -232,6 +232,17 @@ const GATED_SURFACES: Record<string, { ui: string[]; via: RegExp }> = {
     ui: ['components/staff-email-send-rate-card.component.tsx'],
     via: /isSuper/,
   },
+  // The free-workspace ceiling (AGL-2265). Reading it is open to every staff
+  // role — support fields "why can't I make another workspace" and must be
+  // able to answer it — and SETTING it is `super`, the same bar as `flags`,
+  // because a low enough number is indistinguishable from signups being
+  // switched off. Like `flags/page.tsx` and the send-rate card, the card
+  // reads the role off its OWN endpoint's response rather than the claim
+  // hook; the route is the authority either way.
+  'free-workspace-cap/route.ts': {
+    ui: ['components/staff-free-workspace-cap-card.component.tsx'],
+    via: /isSuper/,
+  },
   'media-quarantine/route.ts': {
     ui: ['app/(app)/admin/media-quarantine/page.tsx'],
     via: /useStaffRole/,

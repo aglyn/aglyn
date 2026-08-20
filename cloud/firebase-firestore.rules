@@ -223,6 +223,17 @@ service cloud.firestore {
       // ownership transfer in /api/orgs/settings; `hosts` only by the host
       // APIs and the erase path. A bare client write of any of them bypasses
       // the index/projection maintenance that makes the value mean anything.
+      //
+      // `createdByUid` joins that identity set (AGL-2265), and it is the one
+      // key here that is never written again after the org exists. It is the
+      // creator attribution the free-workspace ceiling counts against —
+      // stamped once inside `createOrganization`'s transaction and mutated by
+      // nothing, `transferOrgOwnership` included — which is precisely what
+      // stops "hand a workspace to an alt account, create a fourth, take it
+      // back" from being a way past the ceiling. A client able to write it
+      // could clear its own attribution and mint free workspaces without
+      // limit, so this deny IS the control rather than paperwork around it.
+      //
       // The only client Web SDK write to a top-level org document is still
       // the erasure batch (re-swept for AGL-1824), so none of the seven has a
       // client writer to lose.
@@ -251,7 +262,7 @@ service cloud.firestore {
       // site — the exact over-entitlement AGL-2439 closes.
       allow update: if (isSuperStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
-            ['slug', 'ownerUid', 'hosts', 'sso',
+            ['slug', 'ownerUid', 'createdByUid', 'hosts', 'sso',
              'plan', 'entitlements', 'releaseFlags',
              'seatAddons', 'registerAllocations', 'collaboratorAllocations',
              'storageOverage',
@@ -261,7 +272,8 @@ service cloud.firestore {
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode'])) ||
         (isBillingStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
-            ['slug', 'ownerUid', 'hosts', 'enabledPlugins', 'sso',
+            ['slug', 'ownerUid', 'createdByUid', 'hosts', 'enabledPlugins',
+             'sso',
              'plan', 'entitlements', 'releaseFlags',
              'seatAddons', 'registerAllocations', 'collaboratorAllocations',
              'storageOverage',
@@ -272,8 +284,8 @@ service cloud.firestore {
              'erasureRequestedAt'])) ||
         (canManageOrg() && orgNotSuspended() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
-            ['slug', 'ownerUid', 'hosts', 'plan', 'entitlements',
-             'releaseFlags',
+            ['slug', 'ownerUid', 'createdByUid', 'hosts', 'plan',
+             'entitlements', 'releaseFlags',
              'enabledPlugins', 'seatAddons', 'registerAllocations',
              'collaboratorAllocations', 'storageOverage', 'bandwidthCap',
              'stripeCustomerId', 'subscription',

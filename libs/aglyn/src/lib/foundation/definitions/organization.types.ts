@@ -97,8 +97,25 @@ export interface AglynOrganization extends AglynDocument {
   $id: OrgUid
   name?: string
   slug?: OrgSlug
-  /** Creator; ownership can move without re-keying anything. */
+  /** Current owner; ownership can move without re-keying anything. */
   ownerUid?: UserUid
+  /**
+   * Who CREATED the workspace — stamped once inside `createOrganization`'s
+   * transaction and mutated by nothing, `transferOrgOwnership` included
+   * (AGL-2265).
+   *
+   * `ownerUid` moves; this does not, and the difference is the whole point.
+   * The free-workspace ceiling counts the UNION of the two, so handing a
+   * workspace to an alt account, creating a fourth and taking the first one
+   * back is not a way past the limit. Denied to client writes in the rules
+   * for the same reason — a client that could clear its own attribution could
+   * mint free workspaces without limit.
+   *
+   * Absent on every org created before AGL-2265 shipped, and every reader
+   * must tolerate that: those are counted by `ownerUid` exactly as they
+   * always were.
+   */
+  createdByUid?: UserUid
   /** Directory of the org's hosts (mirrors AglynOrgBilling.hosts). */
   hosts?: Record<HostUid, true>
 

@@ -75,6 +75,39 @@ and GDPR-erasure flags, per organization. The directory is listed server-side wi
 the Admin SDK (so it shows *every* org, not the subset client rules would return),
 ordered by organization id, 25 per page with Previous/Next.
 
+#### Free workspace limit {#free-workspace-limit}
+
+How many **free** workspaces one account may hold, on a card at the top of the
+organizations page. Every free quota in the product — sites, media, bandwidth,
+Assist messages, form submissions, contacts — is counted per workspace, so
+without this ceiling one account multiplies the whole free allowance by however
+many workspaces it opens. The default is **three**.
+
+What is counted is free workspaces the account **owns now or created**. Three
+consequences worth knowing before you answer a ticket about it:
+
+- **Paid workspaces do not count.** An agency or consultant whose workspaces
+  are paid is unaffected at any number. A workspace whose subscription lapses
+  becomes free again and counts again.
+- **Being invited to somebody else's workspace never counts.** A contractor on
+  ten client rosters owns none of them.
+- **Handing a workspace to another account does not free a slot**, because the
+  creator is recorded separately from the owner. That is deliberate: otherwise
+  "transfer it to an alt account, create another, take it back" would be a way
+  round the ceiling. Deleting a workspace *does* free a slot — the allowance it
+  was consuming went with it.
+
+Changing the number needs the **super** staff role and is audited with a
+before, an after and a typed reason. It takes effect within fifteen seconds
+across the platform and needs no deploy. **Lowering it never removes anybody's
+workspaces**: an account already over the new number keeps every one and simply
+cannot create another. Staff creating a workspace on a customer's behalf are
+exempt from the ceiling entirely.
+
+A person who hits it sees the number, and is told to upgrade one, delete one,
+or ask us — so "support raised it for this account" is a real answer. Today
+that is done by raising the platform number; there is no per-account override.
+
 ### Entitlement editor {#entitlement-editor}
 
 Full override editor for an organization's entitlements,

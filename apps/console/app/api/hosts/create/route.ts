@@ -31,6 +31,7 @@ import {
   emailUnverifiedResponse,
   ensureOrgForUser,
   firebaseAdmin,
+  freeWorkspaceCapRefusalResponse,
   isImpersonationSession,
   lockdownRefusal,
   memberHasOrgPermission,
@@ -292,6 +293,13 @@ async function handler(request: Request): Promise<Response> {
       { status: 200 },
     )
   } catch (error) {
+    // AGL-2265. This route can create a workspace on the way to creating a
+    // site (`ensureOrgForUser` for an account that holds none), so the
+    // free-workspace ceiling is reachable from here too. Answering with the
+    // ceiling's own copy beats a 500 that says "Site creation failed" when
+    // the site was never the problem.
+    const capped = freeWorkspaceCapRefusalResponse(error)
+    if (capped) return capped
     console.error(error)
     return Response.json({ error: 'Site creation failed' }, { status: 500 })
   }
