@@ -20,6 +20,7 @@ import {
   publisherAgreementRefusal,
   publisherAgreementState,
 } from '@aglyn/aglyn/app-utils/publisher-agreement'
+import { marketplacePriceRefusal } from '../model/marketplace'
 import type { ResolvedPublisher } from './publisher-profile'
 
 /** A ready-to-send refusal: the status and the body, decided together. */
@@ -64,6 +65,12 @@ export interface PublishRefusal {
  * live in every existing spec, and makes it directly unit-testable without a
  * Firestore double.
  *
+ * THE PRICE FLOOR (AGL-2343) joined the gate for the same reason: a paid
+ * listing under `MARKETPLACE_MIN_PRICE_USD` loses money on every sale, because
+ * marketplace checkout is a destination charge whose Stripe fee is debited
+ * from the PLATFORM's balance, and two of the seven doors validated the price
+ * not at all. It reads FIRST — see the comment on the check itself.
+ *
  * ORDER IS DELIBERATE and matches what `publish-plugin.ts` already did:
  * profile, then payouts, then the agreement. The first two are things a
  * publisher sets up once; the third can go stale under a publisher who did
@@ -86,6 +93,23 @@ export function publishPreconditionRefusal(
   publisher: ResolvedPublisher | null | undefined,
   options: { priceUsd: number; sells: string },
 ): PublishRefusal | null {
+  // THE PRICE FLOOR (AGL-2343), first, and 400 rather than 412: it is the only
+  // refusal here that is a property of the REQUEST rather than of the org, so
+  // it is the only one the publisher can fix in the form in front of them
+  // without leaving it. Reported before the org-setup refusals so that a
+  // publisher does not go and set up payouts only to be bounced again on the
+  // price they had already typed.
+  //
+  // It rides in the shared gate for the same reason the agreement does: two of
+  // the seven doors (`publish-theme.ts`, `publish-layout.ts`) validated the
+  // price not at all, and a gate that must be REMEMBERED at seven call sites
+  // is exactly what fails. The doors also call `marketplacePriceRefusal`
+  // inline — this is the backstop that makes the eighth door safe on the day
+  // it is written.
+  const priceRefusal = marketplacePriceRefusal(options.priceUsd)
+  if (priceRefusal) {
+    return { status: 400, body: { error: priceRefusal } }
+  }
   if (!publisher) {
     return {
       status: 412,

@@ -17,7 +17,9 @@
 'use client'
 
 import {
+  isBelowMarketplacePriceFloor,
   marketplacePriceCostNote,
+  marketplacePriceFloorHint,
   offeredPluginVersion,
   type PluginRevocation,
 } from '@aglyn/aglyn'
@@ -569,13 +571,22 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
     }
   }
 
+  // A price under the floor is refused by the publish route (AGL-2343), so the
+  // button holds rather than letting a publisher upload a bundle and read the
+  // minimum off a 400. A private plugin has no price at all — its field is
+  // disabled and sends 0 — so it can never be blocked by this.
+  const priceBelowFloor =
+    draft.visibility !== 'private' &&
+    isBelowMarketplacePriceFloor(draft.priceUsd)
+
   const blocked =
     busy ||
     !bundleFile ||
     unattested.length > 0 ||
     unfilledSubjects.length > 0 ||
     repositoryInvalid ||
-    manifestIdMismatch
+    manifestIdMismatch ||
+    priceBelowFloor
 
   return (
     <Stack spacing={2}>
@@ -906,14 +917,17 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
             // send the publisher through Stripe onboarding to sell to
             // themselves.
             disabled={draft.visibility === 'private'}
-            // See `marketplacePriceCostNote` (AGL-2343): the same advisory the
-            // artifact publish dialog shows, from the same function, so the two
-            // forms cannot quote different figures at a publisher.
+            // The minimum price (AGL-2343), from the same functions every other
+            // publish form reads, so no two forms can quote different figures
+            // at a publisher — and stated up front rather than only on refusal.
+            error={priceBelowFloor}
             helperText={
               draft.visibility === 'private'
                 ? 'Private plugins are free — nobody else can install them.'
                 : (marketplacePriceCostNote(draft.priceUsd) ??
-                  '0 for free. Paid listings need payouts set up.')
+                  marketplacePriceFloorHint(
+                    'Paid listings need payouts set up.',
+                  ))
             }
             type="number"
             value={draft.visibility === 'private' ? '0' : draft.priceUsd}

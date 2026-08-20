@@ -63,8 +63,11 @@ import {
   MARKETPLACE_PROCESSING_PERCENT_BNPL,
   MARKETPLACE_PROCESSING_PERCENT_CARD,
   bindingMarketplaceFeePct,
+  isBelowMarketplacePriceFloor,
   marketplaceBreakEvenUsd,
+  marketplaceMinPriceUsd,
   marketplacePriceCostNote,
+  marketplacePriceFloorHint,
   marketplaceSaleEconomics,
 } from './plan-entitlements'
 import type { OrgPlan } from '../foundation'
@@ -1771,12 +1774,15 @@ describe('marketplace sale economics (AGL-2343)', () => {
     expect(marketplacePriceCostNote(marketplaceBreakEvenUsd())).toBeUndefined()
   })
 
-  it('names the cost, the fee and the covering price when the price is too low', () => {
+  it('names the cost, the fee and the minimum when the price is too low', () => {
     const note = marketplacePriceCostNote(1)
     expect(note).toContain('$1')
     expect(note).toContain('$0.36')
     expect(note).toContain('$0.20')
-    expect(note).toContain(`$${marketplaceBreakEvenUsd()} or more`)
+    expect(note).toContain(`minimum paid price is $${marketplaceMinPriceUsd()}`)
+    // It reads as a REFUSAL, not as advice: the routes refuse this price, and
+    // a form that said "consider raising it" would be lying to the publisher.
+    expect(note).toContain('Too low to publish')
   })
 
   it('reproduces the $1 destination charge, cent for cent', () => {
@@ -1869,5 +1875,77 @@ describe('marketplace sale economics (AGL-2343)', () => {
         MARKETPLACE_PROCESSING_PERCENT_CARD,
       ),
     ).toBe(2)
+  })
+})
+
+/**
+ * THE FLOOR ITSELF (AGL-2343). Zach lifted the September 1 pricing lock on
+ * 2026-08-19 for exactly one decision — "make a minimum price floor that does
+ * not cause us to lose money" — so the property under test is not "the number
+ * is 3", it is "the number is the cheapest one that does not lose money".
+ */
+describe('marketplace price floor (AGL-2343)', () => {
+  const PAID_PLAN_FEE_PCT = PLAN_ENTITLEMENTS.pro.marketplaceFeePct
+
+  it('IS the break-even price, not a number chosen beside it', () => {
+    // The two must be the same figure by construction. If the floor is ever
+    // re-typed as a literal, this fails the moment the inputs move.
+    expect(marketplaceMinPriceUsd()).toBe(marketplaceBreakEvenUsd())
+  })
+
+  it('does not lose money AT the floor, and does one dollar below it', () => {
+    // The boundary, asserted in both directions. A floor that merely sat above
+    // break-even would pass a one-sided test while overcharging publishers;
+    // one that sat below it would pass a "does not lose money" test that only
+    // ever checked the dollar above.
+    const floor = marketplaceMinPriceUsd()
+    expect(
+      marketplaceSaleEconomics(floor, PAID_PLAN_FEE_PCT).platformNetCents,
+    ).toBeGreaterThanOrEqual(0)
+    expect(
+      marketplaceSaleEconomics(floor - 1, PAID_PLAN_FEE_PCT).platformNetCents,
+    ).toBeLessThan(0)
+  })
+
+  it('does not lose money at the floor on ANY plan in the table', () => {
+    // The floor is one number for every publisher, so it has to clear the
+    // whole table — not just the band it was derived from.
+    for (const plan of Object.values(PLAN_ENTITLEMENTS)) {
+      if (!(plan.marketplaceFeePct > 0)) continue
+      expect(
+        marketplaceSaleEconomics(marketplaceMinPriceUsd(), plan.marketplaceFeePct)
+          .platformNetCents,
+      ).toBeGreaterThanOrEqual(0)
+    }
+  })
+
+  it('holds a paid price below it and lets zero through', () => {
+    // Zero is the free listing, which takes no payment and so cannot lose
+    // money on one. A predicate that treated it as "below the floor" would
+    // block every free listing in the console.
+    expect(isBelowMarketplacePriceFloor(0)).toBe(false)
+    expect(isBelowMarketplacePriceFloor('')).toBe(false)
+    expect(isBelowMarketplacePriceFloor(undefined)).toBe(false)
+    expect(isBelowMarketplacePriceFloor(1)).toBe(true)
+    expect(isBelowMarketplacePriceFloor(marketplaceMinPriceUsd() - 1)).toBe(true)
+    expect(isBelowMarketplacePriceFloor(marketplaceMinPriceUsd())).toBe(false)
+    expect(isBelowMarketplacePriceFloor(1000)).toBe(false)
+  })
+
+  it('rounds a mid-type string the way the publish routes do', () => {
+    // A form's value is a string, and every route stores `Math.round`. `'2.6'`
+    // is stored as $3, so the button must not refuse what the route accepts.
+    expect(isBelowMarketplacePriceFloor('2.6')).toBe(false)
+    expect(isBelowMarketplacePriceFloor('2.4')).toBe(true)
+  })
+
+  it('states the minimum in the standing hint, before anything is refused', () => {
+    // Zach's rule: a capability not surfaced in the console is not shipped —
+    // which for a refusal means the publisher reads the minimum while typing.
+    expect(marketplacePriceFloorHint()).toContain(`$${marketplaceMinPriceUsd()}`)
+    expect(marketplacePriceFloorHint()).toContain('0 for free')
+    expect(marketplacePriceFloorHint('Payouts first.')).toContain(
+      'Payouts first.',
+    )
   })
 })

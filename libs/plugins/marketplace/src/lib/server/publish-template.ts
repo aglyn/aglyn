@@ -21,7 +21,10 @@ import {
   createResourceUid,
   decodeStoredNodes,
 } from '@aglyn/aglyn/server'
-import { MARKETPLACE_MAX_PRICE_USD, sanitizeMarketplaceDefinition } from '../model'
+import {
+  marketplacePriceRefusal,
+  sanitizeMarketplaceDefinition,
+} from '../model'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
@@ -48,14 +51,14 @@ export const publishTemplateHandler: PluginApiHandler = async (req, res) => {
   const description = String(req.body?.description ?? '').slice(0, 500)
   const category = String(req.body?.category ?? '').slice(0, 40)
   const priceUsd = Math.round(Number(req.body?.priceUsd ?? 0)) || 0
-  if (
-    priceUsd < 0 ||
-    priceUsd > MARKETPLACE_MAX_PRICE_USD ||
-    !Number.isFinite(priceUsd)
-  ) {
-    return res
-      .status(400)
-      .json({ error: `Price must be 0–${MARKETPLACE_MAX_PRICE_USD} USD` })
+  // The price floor and ceiling, from ONE validator (AGL-2343): a paid listing
+  // under `MARKETPLACE_MIN_PRICE_USD` loses money on every sale, because
+  // marketplace checkout is a destination charge whose Stripe fee is debited
+  // from the platform's balance. Also enforced in `publishPreconditionRefusal`
+  // below, so a door that drops this line is still covered.
+  const priceRefusal = marketplacePriceRefusal(priceUsd)
+  if (priceRefusal) {
+    return res.status(400).json({ error: priceRefusal })
   }
   if (!hostId || !displayName.trim()) {
     return res.status(400).json({ error: 'Missing hostId or displayName' })

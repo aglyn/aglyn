@@ -531,7 +531,7 @@ never rate or comment on its own listing.
 
 ## Getting paid
 
-One-time prices in whole USD (up to $1000). Purchases flow through the
+One-time prices in whole USD: **$0 (free), or $3 to $1000**. Purchases flow through the
 platform's Stripe; your share (80%, or 70% on free plans) pays out via
 your Connect account. The Marketplace → Sales tab tracks every sale.
 
@@ -545,22 +545,29 @@ Refunds and lost chargebacks are excluded from that total: your share is
 pulled back from your Connect account, and the amount returned is listed
 separately.
 
-### Why a $1 listing is a bad price {#low-prices-and-processing}
+### The $3 minimum on paid listings {#low-prices-and-processing}
 
-Type a very low price into the publish form and the hint under the price field
-changes to say what that sale costs to process. At $1 it reads: processing the
-payment costs about **$0.36**, more than the **$0.20** platform fee — so the
-sale does not cover the cost of taking it. $3 or more does.
+A paid listing must be **$3 or more**. Type less than that into any publish
+form and the price field turns red, the hint says why, the publish button
+holds, and the publish route refuses it — the same figure in all four places.
 
-The figures come from the payment processor's per-transaction cost, which is a
-percentage of what the buyer pays (the price plus sales tax) plus a fixed
-amount per transaction. That fixed amount is what makes small prices
-uneconomic: it does not shrink with the price, while the platform's 20% cut
-does. The quote uses the 20% take rate and assumes the most expensive payment
-method a buyer may choose, so the advice holds whichever plan you are on.
+The reason is the payment processor's per-transaction cost: a percentage of
+what the buyer pays (the price plus sales tax) plus a fixed amount per
+transaction. That fixed amount is what makes small prices uneconomic — it does
+not shrink with the price, while the platform's 20% cut does. At $1 processing
+the payment costs about **$0.36**, more than the **$0.20** platform fee, so the
+sale loses money for the platform that has to settle it.
 
-**Nothing enforces this.** The hint is advice, the publish button stays
-enabled, and a $1 listing publishes. It is there so a price is chosen knowing
-what it does, and because a **free** listing takes no payment at all and so
-costs nothing to process — that is often the better answer for something you
-were about to charge a dollar for.
+The minimum is not a round number picked for effect: it is the cheapest whole
+dollar at which the platform's cut covers the cost of collecting it, computed
+at the 20% take rate — the band that breaks even latest, so the number holds
+whichever plan you are on — and against the most expensive payment method a
+buyer may choose. If those change, so does the minimum.
+
+**Zero is not below the minimum.** A **free** listing takes no payment at all
+and so costs nothing to process; it stays available at any time, and it is
+often the better answer for something you were about to charge a dollar for.
+
+Listings priced under $3 before this minimum existed are left alone: an
+existing price is never changed for you. The floor applies the next time that
+listing is published or a new version of it goes up.

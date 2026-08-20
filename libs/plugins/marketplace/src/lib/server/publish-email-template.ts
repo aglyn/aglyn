@@ -27,7 +27,7 @@ import {
 } from '@aglyn/shared-util-email'
 import {
   MARKETPLACE_EMAIL_COMPONENT_ID_ALLOWLIST,
-  MARKETPLACE_MAX_PRICE_USD,
+  marketplacePriceRefusal,
   sanitizeMarketplaceDefinition,
 } from '../model'
 import { resolvePublisherProfile } from './publisher-profile'
@@ -60,14 +60,14 @@ export const publishEmailTemplateHandler: PluginApiHandler = async (
   const description = String(req.body?.description ?? '').slice(0, 500)
   const category = String(req.body?.category ?? '').slice(0, 40)
   const priceUsd = Math.round(Number(req.body?.priceUsd ?? 0)) || 0
-  if (
-    priceUsd < 0 ||
-    priceUsd > MARKETPLACE_MAX_PRICE_USD ||
-    !Number.isFinite(priceUsd)
-  ) {
-    return res
-      .status(400)
-      .json({ error: `Price must be 0–${MARKETPLACE_MAX_PRICE_USD} USD` })
+  // The price floor and ceiling, from ONE validator (AGL-2343): a paid listing
+  // under `MARKETPLACE_MIN_PRICE_USD` loses money on every sale, because
+  // marketplace checkout is a destination charge whose Stripe fee is debited
+  // from the platform's balance. Also enforced in `publishPreconditionRefusal`
+  // below, so a door that drops this line is still covered.
+  const priceRefusal = marketplacePriceRefusal(priceUsd)
+  if (priceRefusal) {
+    return res.status(400).json({ error: priceRefusal })
   }
   if (!hostId || !templateKey || !displayName.trim()) {
     return res

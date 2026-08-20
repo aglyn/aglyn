@@ -52,6 +52,11 @@ import {
 } from '@mui/material'
 import * as Aglyn from '@aglyn/aglyn'
 import {
+  isBelowMarketplacePriceFloor,
+  marketplacePriceCostNote,
+  marketplacePriceFloorHint,
+} from '@aglyn/aglyn'
+import {
   collection,
   doc,
   limit,
@@ -599,7 +604,17 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
           <TextField
             label="Price (USD)"
             placeholder="0 = free"
-            helperText="Paid listings need payouts set up on your marketplace profile"
+            // The minimum paid price (AGL-2343): marketplace checkout is a
+            // destination charge, so Stripe's fee is debited from the PLATFORM
+            // and at $1 it exceeds the whole platform cut. The publish route
+            // refuses anything under the floor — this field says so first.
+            error={isBelowMarketplacePriceFloor(publisher?.price)}
+            helperText={
+              marketplacePriceCostNote(publisher?.price) ??
+              marketplacePriceFloorHint(
+                'Paid listings need payouts set up on your marketplace profile.',
+              )
+            }
             value={publisher?.price ?? ''}
             onChange={(event) =>
               setPublisher((prev) =>
@@ -624,7 +639,11 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
           <Button
             variant="contained"
             color="primary"
-            disabled={!publisher?.name.trim() || publisher?.busy}
+            disabled={
+              !publisher?.name.trim() ||
+              publisher?.busy ||
+              isBelowMarketplacePriceFloor(publisher?.price)
+            }
             onClick={handlePublishConfirm}
           >
             {publisher?.busy ? 'Publishing…' : 'Publish'}

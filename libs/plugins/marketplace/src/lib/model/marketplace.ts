@@ -26,6 +26,7 @@
 // Server Component) while `@aglyn/aglyn/server` carries `node:fs` (illegal in
 // the browser). Neither is safe from here; the deep path has no dependencies.
 import { isFirstPartyMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
+import { marketplaceMinPriceUsd } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { MarketplaceArtifactType } from '@aglyn/aglyn/app-utils/marketplace-provenance'
 import type { ListingVerificationRequest } from '@aglyn/aglyn/app-utils/marketplace-verification'
 import {
@@ -934,6 +935,58 @@ export const MARKETPLACE_PLATFORM_FEE_PERCENT = 20
 export const MARKETPLACE_PLATFORM_FEE_PERCENT_FREE_PLAN = 30
 /** One-time listing price ceiling (whole USD). */
 export const MARKETPLACE_MAX_PRICE_USD = 1000
+
+/**
+ * One-time listing price FLOOR for a PAID listing (whole USD, AGL-2343).
+ *
+ * Marketplace checkout is a destination charge with no `application_fee_amount`
+ * — deliberately, so the sales tax stays with the platform that owes it
+ * (AGL-1544) — which means Stripe debits its fee from the PLATFORM's balance.
+ * Stripe's fixed 30¢ dominates at low prices, so under this figure the
+ * platform's cut is smaller than the cost of collecting it and every sale is a
+ * loss. Zach lifted the September 1 pricing lock for this on 2026-08-19:
+ * "make a minimum price floor that does not cause us to lose money."
+ *
+ * NOT A CHOSEN NUMBER. `marketplaceMinPriceUsd` derives it from the plan
+ * table's lowest take rate and the dearest enabled payment method; this is a
+ * re-export so that the routes and the console forms cannot quote different
+ * minimums at the same publisher. Zero stays legal — a free listing takes no
+ * payment and costs nothing to process.
+ */
+export const MARKETPLACE_MIN_PRICE_USD = marketplaceMinPriceUsd()
+
+/**
+ * The refusal message for a listing price, or `undefined` when the price may
+ * be published (AGL-2343).
+ *
+ * ONE VALIDATOR FOR SEVEN DOORS. Each publish route used to inline its own
+ * range check against the maximum — and `publish-theme.ts` and
+ * `publish-layout.ts` had none at all, so a $250,000 theme was publishable.
+ * The doors call this, and `publishPreconditionRefusal` calls it too, so a
+ * route that forgets is still covered.
+ *
+ * Takes the price the route already rounded: a listing price is whole dollars
+ * everywhere, and a validator that accepted $2.99 would be validating a number
+ * that is never stored.
+ */
+export function marketplacePriceRefusal(priceUsd: number): string | undefined {
+  if (!Number.isFinite(priceUsd) || priceUsd < 0) {
+    return `Price must be 0 (free) or $${MARKETPLACE_MIN_PRICE_USD}–$${MARKETPLACE_MAX_PRICE_USD} USD`
+  }
+  if (priceUsd > MARKETPLACE_MAX_PRICE_USD) {
+    return `Price must be 0 (free) or $${MARKETPLACE_MIN_PRICE_USD}–$${MARKETPLACE_MAX_PRICE_USD} USD`
+  }
+  // Zero is not "below the floor" — it is the free listing, which takes no
+  // payment at all and so costs nothing to process.
+  if (priceUsd > 0 && priceUsd < MARKETPLACE_MIN_PRICE_USD) {
+    return (
+      `A paid listing must be at least $${MARKETPLACE_MIN_PRICE_USD} USD — ` +
+      `below that, processing the payment costs more than the platform fee ` +
+      `on the sale. Use 0 for a free listing.`
+    )
+  }
+  return undefined
+}
 
 /**
  * Component ids publishable to the marketplace. Mirrors the persisted ids in
