@@ -79,9 +79,11 @@ import { authSignInHost } from '../../../utils/auth-delegation'
 import {
   clearLegalConsent,
   consumeLegalConsent,
+  isNewAccount,
   markLegalConsent,
   postLegalAcceptance,
 } from '../../../utils/legal-consent'
+import hardNavigate from '../../../utils/hard-navigate'
 import { markInteractiveSignIn } from '../../../utils/interactive-signin'
 import { markSignUpOrgFailure } from '../../../utils/signup-org-failure'
 import { rememberOnboardingPlanIntent } from '../../../utils/onboarding-plan-intent'
@@ -195,6 +197,12 @@ async function persistSignUpProfile(
 async function provisionSignUpOrg(
   credential: UserCredential,
   orgName: string,
+  // Whether the person TYPED this name (AGL-1942). The AGL-1523 picker notice
+  // quotes the name back — "we couldn't create your workspace X" — which only
+  // reads as an answer when X is what they entered. A derived name that fails
+  // falls through to the picker silently, as it always did, rather than
+  // apologising for a workspace nobody asked for by a name nobody chose.
+  nameWasTyped = true,
 ): Promise<string | null> {
   const name = orgName.trim()
   if (!name) return null
@@ -214,10 +222,12 @@ async function provisionSignUpOrg(
     // user a workspace URL they never chose.
     if (!response.ok) {
       console.error('sign-up org create failed', payload?.error)
-      markSignUpOrgFailure({
-        name,
-        error: typeof payload?.error === 'string' ? payload.error : null,
-      })
+      if (nameWasTyped) {
+        markSignUpOrgFailure({
+          name,
+          error: typeof payload?.error === 'string' ? payload.error : null,
+        })
+      }
       return null
     }
     // Activation (AGL-1561). The workspace auto-provisioned at signup is a
@@ -228,9 +238,55 @@ async function provisionSignUpOrg(
     return typeof payload?.slug === 'string' ? payload.slug : null
   } catch (error) {
     console.error('sign-up org create failed', error)
-    markSignUpOrgFailure({ name, error: null })
+    if (nameWasTyped) markSignUpOrgFailure({ name, error: null })
     return null
   }
+}
+
+/**
+ * The workspace name for a door that collected none (AGL-1942).
+ *
+ * Derived exactly as `ensureOrgForUser` derives it server-side — display
+ * name, else the email local part — so the two paths cannot disagree about
+ * what a personal workspace is called. It is renameable afterwards, and it is
+ * the same name the very next click would have produced anyway: the picker's
+ * own empty state offers "create your first site", which auto-provisions the
+ * workspace through exactly that helper.
+ */
+function derivePersonalOrgName(user: UserCredential['user']): string {
+  return (
+    user.displayName?.trim() || user.email?.split('@')[0]?.trim() || ''
+  )
+}
+
+/**
+ * The ONE landing routine every sign-up door goes through (AGL-1942).
+ *
+ * AGL-1115 collected an organization name on the form so a new account would
+ * land in a ready workspace instead of an empty chooser — but only the
+ * email/password door submits a form, so the Google doors kept the behaviour
+ * the issue was filed to remove. AGL-1117 then provisioned on the Google
+ * popup door as well, but only for a visitor who had clicked a plan CTA on
+ * the marketing site; ordinary Google sign-ups, and every mobile one, still
+ * got the picker.
+ *
+ * A hard navigation on purpose: the org is brand new, so the whole chrome
+ * (switcher, plan badge, nav) has to resolve against it rather than re-using
+ * the pre-signup tree. It also has to beat the auth layout, which pushes a
+ * signed-in visitor to `/` the moment the credential lands.
+ *
+ * No slug means the create was refused; the caller falls through to the
+ * workspace picker, which is where sign-up used to land everyone — so the
+ * worst case is the old behaviour.
+ */
+async function provisionAndLandSignUp(
+  credential: UserCredential,
+  orgName: string,
+  planIntent: Parameters<typeof onboardingDestination>[1],
+  nameWasTyped: boolean,
+): Promise<void> {
+  const slug = await provisionSignUpOrg(credential, orgName, nameWasTyped)
+  if (slug) hardNavigate(onboardingDestination(slug, planIntent))
 }
 
 function SignUp() {
@@ -304,8 +360,32 @@ function SignUp() {
         LEGAL_DOCUMENT_VERSION,
         'signup-google-redirect',
       )
+      // The mobile door provisions the workspace too (AGL-1942). It used to
+      // record the acceptance and stop, so a phone sign-up — the majority of
+      // them — reached the picker no matter what: not even the AGL-1117 plan
+      // CTA provisioned here, because that lived in the popup's `.then`,
+      // which a redirect never reaches.
+      //
+      // `isNewAccount` because "sign in with Google" and "sign up with
+      // Google" are the same call: an existing customer returning through
+      // this page must not be handed a surprise second workspace.
+      if (!isNewAccount(credential)) return
+      // Same reason the popup path remembers it (AGL-1535): the intent has to
+      // outlive this page, and awaiting matters because the provision below
+      // can end in a hard navigation that tears the write down mid-flight.
+      await rememberOnboardingPlanIntent(
+        firestore,
+        credential.user.uid,
+        planIntent,
+      )
+      await provisionAndLandSignUp(
+        credential,
+        derivePersonalOrgName(credential.user),
+        planIntent,
+        false,
+      )
     },
-    [],
+    [firestore, planIntent],
   )
   useGoogleRedirectResult(
     'sign_up',
@@ -423,57 +503,35 @@ function SignUp() {
             credential.user.uid,
             planIntent,
           )
-          // A Google sign-up has no form, so it never had a workspace name
-          // and used to land on the picker with the plan intent discarded
-          // (AGL-1117). Someone who clicked "Get Pro" and then "Sign up with
-          // Google" got no plan, no workspace, and a chooser.
-          //
-          // Only when a plan was actually picked. Without one, the picker is
-          // still the right landing: naming a workspace after somebody who
-          // never asked for one is a worse default than letting them choose.
-          // With one, they have told us what they came to do, and stranding
-          // them costs the sale.
-          //
-          // The name is derived the same way `ensureOrgForUser` derives it
-          // server-side — display name, else the email local part — so the
-          // two paths cannot disagree about what a personal workspace is
-          // called. It is renameable afterwards.
-          if (!values && planIntent) {
-            const derived =
-              credential.user.displayName?.trim() ||
-              credential.user.email?.split('@')[0]?.trim() ||
-              ''
-            const slug = derived
-              ? await provisionSignUpOrg(credential, derived)
-              : null
-            if (slug) {
-              window.location.assign(onboardingDestination(slug, planIntent))
-              return
-            }
-          }
           // Only the email/password branch has form values to keep; the
           // Google branches carry their name on the token, and the session
           // route seeds from that (AGL-1127).
-          if (values) {
-            await persistSignUpProfile(firestore, credential, values)
-            // Provision the workspace and land in it (AGL-1115), carrying the
-            // plan the visitor picked on the marketing site (AGL-1117).
-            //
-            // Only the email/password branch: the Google buttons submit no
-            // form, so there is no org name to create one from. Those still
-            // land on the workspace picker, unchanged — collecting a name
-            // from them needs the two-step flow AGL-1115 also suggests, and
-            // that is a bigger change than this.
-            const slug = await provisionSignUpOrg(
+          if (values) await persistSignUpProfile(firestore, credential, values)
+          // Provision the workspace and land in it — from EVERY door
+          // (AGL-1942), through the one routine.
+          //
+          // The form door supplies the name it collected (AGL-1115). The
+          // Google doors have no form, so the name is derived the way the
+          // server derives it; provisioning was previously gated on the
+          // visitor having clicked a marketing plan CTA (AGL-1117), which is
+          // a minority of sign-ups, so the ordinary Google visitor got the
+          // empty chooser this was all built to remove.
+          //
+          // `isNewAccount` guards the Google doors only: `signInWithPopup` is
+          // a sign-in-or-sign-up and does not ask which you meant, so an
+          // existing customer clicking Google here must not be handed a
+          // second workspace. `createUserWithEmailAndPassword` can only ever
+          // have created one.
+          const typedName = values
+            ? String(values[FIELD_SCHEMA_ORGANIZATION_NAME.name] ?? '').trim()
+            : ''
+          if (values || isNewAccount(credential)) {
+            await provisionAndLandSignUp(
               credential,
-              String(values[FIELD_SCHEMA_ORGANIZATION_NAME.name] ?? ''),
+              typedName || derivePersonalOrgName(credential.user),
+              planIntent,
+              Boolean(typedName),
             )
-            if (slug) {
-              // A hard navigation on purpose: the org is brand new, so the
-              // whole chrome (switcher, plan badge, nav) has to resolve
-              // against it rather than re-using the pre-signup tree.
-              window.location.assign(onboardingDestination(slug, planIntent))
-            }
           }
         })
         .catch((error) => {
