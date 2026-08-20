@@ -1260,6 +1260,18 @@ describe('hosts', () => {
       // anyone decided it, but because the catch-all grants by default and
       // nobody typed the name when AGL-151 created the collection.
       'screenAnalytics',
+      // AGL-2042. Six collections with no client-SDK writer at all, closed
+      // together. They belong on the floor for the `registers` reason above:
+      // the loops below derive their set from the rules, so dropping one of
+      // these from an exclusion list would shorten the parse and leave the
+      // suite green having tested one collection fewer. Named here, that edit
+      // fails instead.
+      'carts',
+      'checkouts',
+      'giftCards',
+      'stripeTaxRates',
+      'restockAlerts',
+      'inventoryReconciliation',
     ]) {
       assert.ok(
         hostServerOnlySubcollections().includes(name),
@@ -1421,6 +1433,202 @@ describe('hosts', () => {
   })
 
   /**
+   * AGL-2042 — the six with no client writer, each named.
+   *
+   * The parametrized loop above already denies all six, because it derives its
+   * set from the rules. This block exists for the reason the AGL-2038 one
+   * gives: a derived loop proves the rule, and a named write proves what was
+   * actually reachable. Somebody deciding later whether to reopen one of these
+   * needs to see the write, not a collection name in an array.
+   *
+   * The severities differ and the assertions say so rather than treating six
+   * collections as one fact. `giftCards` is stored value; the rest are
+   * integrity or PII.
+   *
+   * Every one of these was reachable for the same structural reason, which is
+   * the actual finding and not a per-collection oversight: the host catch-all
+   * grants create/update/delete to any editor unless the name appears in three
+   * separate lists, so every collection added since is open until somebody
+   * types it. The commit-time half is host-subcollection-write-deny-coverage,
+   * whose SERVER_WRITTEN_NOT_YET_DENIED list is empty as of this change.
+   */
+  it('an editor cannot mint gift-card balance (AGL-2042)', async () => {
+    // The one with money in it. Issued and redeemed by cart-checkout.ts and
+    // the commerce billing webhook, both Admin SDK.
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'hosts', HOST, 'giftCards', 'GC-REAL-1'),
+        { code: 'GC-REAL-1', balanceCents: 500, currency: 'usd' },
+      )
+    })
+    await mustDeny(
+      'topping up an existing gift card',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'giftCards', 'GC-REAL-1'), {
+        balanceCents: 5_000_000,
+      }),
+    )
+    await mustDeny(
+      'issuing a gift card that nobody paid for',
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'giftCards', 'GC-FORGED'), {
+        code: 'GC-FORGED',
+        balanceCents: 100_000,
+        currency: 'usd',
+      }),
+    )
+    await mustDeny(
+      'destroying the record of a redeemed card',
+      deleteDoc(doc(authed(EDITOR), 'hosts', HOST, 'giftCards', 'GC-REAL-1')),
+    )
+    // An OWNER too: this is a path question, not a role one — a site admin
+    // has the same incentive and no more right to mint balance.
+    await mustDeny(
+      'topping up as a site owner',
+      updateDoc(doc(authed(OWNER), 'hosts', HOST, 'giftCards', 'GC-REAL-1'), {
+        balanceCents: 5_000_000,
+      }),
+    )
+    // The READ is the product and survives: gift-cards-card.component.tsx
+    // queries this collection with the client SDK to render the console panel.
+    await assertSucceeds(
+      getDoc(doc(authed(EDITOR), 'hosts', HOST, 'giftCards', 'GC-REAL-1')),
+    )
+  })
+
+  it('an editor cannot rewrite the stock-reconciliation marker (AGL-2042)', async () => {
+    // `inventoryReconciliation/{orderId}` is what stops one order's stock
+    // decrement being applied twice (AGL-2358), written only by
+    // reconcile-stock.ts. Deleting a marker replays a decrement; forging one
+    // makes a decrement that never happened look done, so stock the store
+    // does not have stays sellable.
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(
+          context.firestore(),
+          'hosts',
+          HOST,
+          'inventoryReconciliation',
+          'order-1',
+        ),
+        { orderId: 'order-1', appliedAt: 1, units: 3 },
+      )
+    })
+    await mustDeny(
+      'forging a reconciliation marker for an unreconciled order',
+      setDoc(
+        doc(
+          authed(EDITOR),
+          'hosts',
+          HOST,
+          'inventoryReconciliation',
+          'order-99',
+        ),
+        { orderId: 'order-99', appliedAt: 1, units: 0 },
+      ),
+    )
+    await mustDeny(
+      'rewriting an existing marker',
+      updateDoc(
+        doc(
+          authed(EDITOR),
+          'hosts',
+          HOST,
+          'inventoryReconciliation',
+          'order-1',
+        ),
+        { units: 0 },
+      ),
+    )
+    await mustDeny(
+      'deleting a marker to replay the decrement',
+      deleteDoc(
+        doc(
+          authed(EDITOR),
+          'hosts',
+          HOST,
+          'inventoryReconciliation',
+          'order-1',
+        ),
+      ),
+    )
+  })
+
+  it('an editor cannot write shopper PII captured anonymously (AGL-2042)', async () => {
+    // `restockAlerts` holds email addresses typed by shoppers into an
+    // UNAUTHENTICATED storefront endpoint (notify-restock.ts, Admin SDK).
+    // Third-party contact data a site editor has no reason to author.
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'hosts', HOST, 'restockAlerts', 'alert-1'),
+        { email: 'shopper@example.com', productId: 'p-1' },
+      )
+    })
+    await mustDeny(
+      'planting an address on the restock list',
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'restockAlerts', 'alert-2'), {
+        email: 'someone-else@example.com',
+        productId: 'p-1',
+      }),
+    )
+    await mustDeny(
+      'rewriting a shopper address',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'restockAlerts', 'alert-1'), {
+        email: 'attacker@example.com',
+      }),
+    )
+    await mustDeny(
+      'deleting a restock alert',
+      deleteDoc(doc(authed(EDITOR), 'hosts', HOST, 'restockAlerts', 'alert-1')),
+    )
+    // recovery-queue-card.component.tsx queries this client-side.
+    await assertSucceeds(
+      getDoc(doc(authed(EDITOR), 'hosts', HOST, 'restockAlerts', 'alert-1')),
+    )
+  })
+
+  it('an editor cannot author pre-purchase state or the tax cache (AGL-2042)', async () => {
+    // `carts` and `checkouts` are read back by cart-checkout.ts to decide what
+    // was bought and for how much; `stripeTaxRates` caches Stripe rate ids, so
+    // a forged id is a wrong tax rate applied to a real order. All three are
+    // written exclusively by commerce server routes.
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'hosts', HOST, 'carts', 'cart-1'), { total: 4200 })
+      await setDoc(doc(db, 'hosts', HOST, 'checkouts', 'cs_1'), {
+        amountTotal: 4200,
+      })
+      await setDoc(doc(db, 'hosts', HOST, 'stripeTaxRates', 'us-ca'), {
+        rateId: 'txr_real',
+      })
+    })
+    await mustDeny(
+      'rewriting a cart total',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'carts', 'cart-1'), {
+        total: 1,
+      }),
+    )
+    await mustDeny(
+      'rewriting a checkout amount',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'checkouts', 'cs_1'), {
+        amountTotal: 1,
+      }),
+    )
+    await mustDeny(
+      'pointing the tax cache at another rate id',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'stripeTaxRates', 'us-ca'), {
+        rateId: 'txr_forged',
+      }),
+    )
+    await mustDeny(
+      'deleting an abandoned checkout out of the recovery queue',
+      deleteDoc(doc(authed(EDITOR), 'hosts', HOST, 'checkouts', 'cs_1')),
+    )
+    // The recovery-queue panel reads `checkouts` client-side and keeps working.
+    await assertSucceeds(
+      getDoc(doc(authed(EDITOR), 'hosts', HOST, 'checkouts', 'cs_1')),
+    )
+  })
+
+  /**
    * The negative control for the fix itself (AGL-2038), and the reason the
    * rules were NOT flipped to deny-by-default.
    *
@@ -1444,6 +1652,14 @@ describe('hosts', () => {
       'subscriptions', 'suppliers', 'events', 'bookings', 'activity',
       'settings', 'media', 'mediaFolders', 'leads',
       'licenseKeys', 'reservations', 'resources', 'productCategories',
+      // `suppressions` JOINS this list in AGL-2042 rather than being denied
+      // with the other six. AGL-2042's description names it as server-written,
+      // and that stopped being true on AGL-2410: the Emails console page's
+      // Suppressions tab removes an entry with a plain client `deleteDoc`,
+      // which is the only way to undo a suppression a link prescanner caused
+      // (AGL-2408). Denying it would have broken a shipped surface, and this
+      // is the assertion that would catch the next attempt.
+      'suppressions',
     ]
     // `inventoryAdjustments` LEFT this list in AGL-2269 and is not an
     // oversight: it is now append-only, so it fails the update/delete legs

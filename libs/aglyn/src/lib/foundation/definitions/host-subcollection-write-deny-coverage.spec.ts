@@ -406,27 +406,22 @@ const EDITOR_WRITABLE_HOST_SUBCOLLECTIONS: Record<string, string> = {
  * cannot quietly become a parking lot.
  */
 const SERVER_WRITTEN_NOT_YET_DENIED: Record<string, string> = {
-  carts: 'Written only by libs/plugins/commerce server routes. AGL-2042.',
-  checkouts:
-    'Checkout sessions, written only by cart-checkout.ts server-side. AGL-2042.',
-  inventoryReconciliation:
-    'A per-order idempotency marker written only by ' +
-    'libs/plugins/commerce/src/lib/server/reconcile-stock.ts through the ' +
-    'Admin SDK (AGL-2358). Two greps agree there is no client-SDK writer: no ' +
-    "`'hosts', hostId, 'inventoryReconciliation'` path anywhere in `apps` or " +
-    '`libs`, and no addDoc/setDoc/updateDoc/deleteDoc against one. Parked ' +
-    'rather than waved through, and it is not cosmetic — the marker is what ' +
-    'stops a stock decrement being applied twice, so an editor who can write ' +
-    'it can make a lost decrement permanent. AGL-2042.',
-  giftCards:
-    'Stored value, issued and redeemed by the commerce billing webhook ' +
-    'server-side. The one on this list with money in it. AGL-2042.',
-  stripeTaxRates:
-    'A server-side cache of Stripe tax rate ids, written by ' +
-    'manual-tax-rate.ts. AGL-2042.',
-  restockAlerts:
-    'Shopper emails captured by an unauthenticated storefront endpoint ' +
-    '(notify-restock.ts, Admin SDK). AGL-2042.',
+  // EMPTY, and that is the point (AGL-2042).
+  //
+  // The six names that were parked here — `carts`, `checkouts`,
+  // `giftCards`, `stripeTaxRates`, `restockAlerts` and
+  // `inventoryReconciliation` — are now in all THREE `subcollection in […]`
+  // exclusion lists of the host catch-all, each with a named emulator
+  // negative control in cloud/rules-tests/firestore-rules.test.mjs. The
+  // seventh, `suppressions`, left by the other door: AGL-2410 gave it a real
+  // client `deleteDoc`, so it moved to EDITOR_WRITABLE_HOST_SUBCOLLECTIONS
+  // above rather than being denied.
+  //
+  // Leave it empty. A name added back here is a subcollection every site
+  // editor can write until somebody closes it, so the entry must cite the
+  // issue that will — the sibling test below enforces that, and the one
+  // above it fails the moment a parked name is also denied, so this list
+  // cannot rot in either direction.
 }
 
 const hostSubcollectionsInRepo = (() => {
