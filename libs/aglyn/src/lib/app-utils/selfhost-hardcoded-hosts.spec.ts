@@ -284,9 +284,13 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
   },
   {
     file: 'libs/aglyn/src/lib/app-utils/platform-brand.ts',
-    count: 1,
+    count: 2,
     reason:
-      'PLATFORM_SUPPORT_URL — last fallback after the operator support address.',
+      'PLATFORM_SUPPORT_URL — last fallback after the operator support ' +
+      'address. Plus PLATFORM_HOME_URL, the badge destination, whose literal ' +
+      'is reached ONLY when `isAglynOperatedBrand()` — a renamed self-host ' +
+      'deployment resolves it to null and gets an unlinked badge rather than ' +
+      'a link advertising us on its own customers\' sites.',
   },
   {
     file: 'libs/aglyn/src/lib/app-utils/published-legal-pages.ts',

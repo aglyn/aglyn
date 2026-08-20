@@ -152,20 +152,20 @@ describe('white-label badge: the brand logo (AGL-1407)', () => {
   })
 
   /**
-   * With no support URL the badge is a LABEL, not a link (AGL-2428).
+   * With no home URL the badge is a LABEL, not a link (AGL-2428).
    *
-   * `supportUrl` resolves to null for a white-label org that left the field
-   * blank, and an `<a>` with no href is still announced as a link and still
-   * takes focus — a promise of a destination that does not exist. Substituting
-   * Aglyn's own support page instead is the leak the issue is about.
+   * `homeUrl` resolves to null for a white-label org that left its URL blank,
+   * and an `<a>` with no href is still announced as a link and still takes
+   * focus — a promise of a destination that does not exist. Substituting
+   * Aglyn's own page instead is the leak the issue is about.
    */
-  const renderBadgeWith = async (supportUrl: string | null) =>
+  const renderBadgeWith = async (homeUrl: string | null) =>
     renderSettled(
       <CatchAllPage
         data={{ host: { $id: HOST_ID } as never }}
         nodes={{}}
         showBranding
-        branding={{ productName: 'Acme', logoUrl: null, supportUrl } as never}
+        branding={{ productName: 'Acme', logoUrl: null, homeUrl } as never}
       />,
     )
 
@@ -175,20 +175,50 @@ describe('white-label badge: the brand logo (AGL-1407)', () => {
       (anchor.textContent ?? '').includes('Made with'),
     )
 
-  it('renders NO anchor when the org has no support URL', async () => {
+  it('renders NO anchor when the org has no home URL', async () => {
     const container = await renderBadgeWith(null)
     expect(container.textContent).toContain('Made with Acme')
     expect(badgeAnchors(container)).toHaveLength(0)
-    expect(container.innerHTML).not.toContain('aglyn.com/support')
+    expect(container.innerHTML).not.toContain('aglyn.com')
   })
 
   it('THE CONTROL: it IS an anchor when there is somewhere to send them', async () => {
     // Without this the case above is satisfied by a badge that stopped
     // linking for everybody, which would take the link off Aglyn's own
     // customers too.
-    const container = await renderBadgeWith('https://acme.test/support')
+    const container = await renderBadgeWith('https://acme.test')
     const anchors = badgeAnchors(container)
     expect(anchors).toHaveLength(1)
-    expect(anchors[0].getAttribute('href')).toBe('https://acme.test/support')
+    expect(anchors[0].getAttribute('href')).toBe('https://acme.test')
+  })
+
+  /**
+   * THE REPORTED BUG. The badge linked to the brand's SUPPORT url, and on the
+   * Aglyn deployment `PLATFORM_SUPPORT_URL` falls through to
+   * `mailto:` + the operator support address — so "Made with Aglyn" on every
+   * free customer's site opened the visitor's mail client instead of a web
+   * page. `homeUrl` is a separate field precisely so a support address can
+   * never reach this anchor again.
+   */
+  it('NEVER links a mailto:, even when the brand support URL is one', async () => {
+    const container = await renderSettled(
+      <CatchAllPage
+        data={{ host: { $id: HOST_ID } as never }}
+        nodes={{}}
+        showBranding
+        branding={
+          {
+            productName: 'Acme',
+            logoUrl: null,
+            supportUrl: 'mailto:support@acme.test',
+            homeUrl: 'https://acme.test',
+          } as never
+        }
+      />,
+    )
+    const anchors = badgeAnchors(container)
+    expect(anchors).toHaveLength(1)
+    expect(anchors[0].getAttribute('href')).toBe('https://acme.test')
+    expect(container.innerHTML).not.toContain('mailto:')
   })
 })

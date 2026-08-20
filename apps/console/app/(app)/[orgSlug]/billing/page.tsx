@@ -807,6 +807,13 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
         ) : (
         <GridItems
           spacing={3}
+          // Masonry. These cards have wildly different
+          // heights — `Usage` runs three times `Current plan` — and in a rigid
+          // twelve-column row that meant a screen of dead space under
+          // `Current plan` while `Metered usage estimate`, the card sized to
+          // fill it, sat on its own row far below. Masonry lets each card
+          // occupy only the height it needs and the next one back-fill.
+          masonry
           items={[
             {
               size: { xs: 12, md: 4 },
