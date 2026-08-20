@@ -70,7 +70,7 @@ import {
   updatePassword,
   updateProfile,
 } from 'firebase/auth'
-import { doc, setDoc } from 'firebase/firestore'
+import { deleteField, doc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import {
   useAnalytics,
@@ -310,6 +310,24 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
                 // arriving here.
                 phoneNumber: normalizedPhone ?? fields?.phoneNumber ?? null,
                 address,
+                // CLEARING THE ADDRESS IS AN ERASURE REQUEST (AGL-1963).
+                //
+                // `seedUserProfile` prefills an absent address from the IdP on
+                // EVERY sign-in, so without this marker emptying the field
+                // here is undone the next time an SSO user signs in — from
+                // the customer's own directory, with no trace, and the
+                // honoured request looks identical to the resurrected value.
+                // Nobody files a ticket to remove a street address; they
+                // empty the box on this page, which makes this the erasure
+                // surface that actually gets used.
+                //
+                // Symmetric on purpose, so it needs no knowledge of the prior
+                // value: saving an address CLEARS the marker, because someone
+                // typing one back in has changed their mind and is asking for
+                // prefill again. Same reasoning as the phone marker being
+                // owner-writable — the only party who can undo this is the
+                // person it protects.
+                addressErasedAt: address ? deleteField() : serverTimestamp(),
               },
               { merge: true },
             )

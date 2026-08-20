@@ -16,6 +16,7 @@
  */
 
 import {
+  resolveIdpAddress,
   resolveIdpDisplayName,
   resolveIdpPhone,
   resolveIdpPhotoUrl,
@@ -220,5 +221,132 @@ describe('resolveIdpPhone', () => {
   it('returns empty when the IdP releases no phone', () => {
     expect(resolveIdpPhone(saml({}))).toBe('')
     expect(resolveIdpPhone(undefined)).toBe('')
+  })
+})
+
+/**
+ * AGL-1963. The address was item 6 of AGL-1133 and the only one of the six
+ * that never shipped — written as blocked on AGL-1131 mapping attributes,
+ * which completed on 2026-08-01.
+ *
+ * These pin WHERE each part is read from, never what it is worth: deciding
+ * whether the parts amount to a storable address is `normalizeAddress`'s job,
+ * and this function deliberately returns loose strings so it cannot pre-empt
+ * that call.
+ */
+describe('resolveIdpAddress', () => {
+  const EMPTY = {
+    line1: '',
+    line2: '',
+    city: '',
+    state: '',
+    postalCode: '',
+    country: '',
+  }
+
+  it('reads a Google Workspace directory mapping', () => {
+    // The names Workspace's SAML attribute mapping offers for the Directory
+    // fields AGL-1133 anticipated.
+    expect(
+      resolveIdpAddress(
+        saml({
+          streetAddress: '100 Congress Ave',
+          locality: 'Austin',
+          region: 'TX',
+          postalCode: '78701',
+          country: 'US',
+        }),
+      ),
+    ).toEqual({
+      line1: '100 Congress Ave',
+      line2: '',
+      city: 'Austin',
+      state: 'TX',
+      postalCode: '78701',
+      country: 'US',
+    })
+  })
+
+  it('reads the ADFS claim URIs and the LDAP short forms', () => {
+    // The customer's IdP admin picks these names, not us. Guessing one house
+    // style costs a blank address and a support ticket.
+    expect(
+      resolveIdpAddress(
+        saml({
+          'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/streetaddress':
+            '1 Microsoft Way',
+          'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/stateorprovince':
+            'WA',
+        }),
+      ),
+    ).toMatchObject({ line1: '1 Microsoft Way', state: 'WA' })
+    expect(resolveIdpAddress(saml({ l: 'Austin', st: 'TX', c: 'US' }))).toMatchObject(
+      { city: 'Austin', state: 'TX', country: 'US' },
+    )
+  })
+
+  it('reads the OIDC address claim, which is an OBJECT not a string', () => {
+    // OpenID Connect Core 5.1.1. SAML has no equivalent — its attributes are
+    // flat — so this arm exists only for OIDC providers.
+    expect(
+      resolveIdpAddress({
+        address: {
+          street_address: '100 Congress Ave',
+          locality: 'Austin',
+          region: 'TX',
+          postal_code: '78701',
+          country: 'US',
+        },
+      }),
+    ).toMatchObject({
+      line1: '100 Congress Ave',
+      city: 'Austin',
+      state: 'TX',
+      postalCode: '78701',
+      country: 'US',
+    })
+  })
+
+  it('prefers a mapped SAML attribute over the OIDC claim', () => {
+    // An org that mapped its directory into the assertion has said what it
+    // wants used.
+    const both = {
+      ...saml({ locality: 'Austin' }),
+      address: { locality: 'Seattle' },
+    }
+    expect(resolveIdpAddress(both).city).toBe('Austin')
+  })
+
+  it('takes the first element of a repeated SAML attribute', () => {
+    // The assertion permits repeats and GCIP passes the array through.
+    expect(resolveIdpAddress(saml({ locality: ['Austin'] })).city).toBe('Austin')
+  })
+
+  it('returns loose parts, never a half-built address object', () => {
+    // A city and nothing else is a normal directory. Returning it as parts
+    // lets `normalizeAddress` refuse it; returning it as an object would hand
+    // every `if (address)` something truthy holding no street.
+    expect(resolveIdpAddress(saml({ locality: 'Austin' }))).toEqual({
+      ...EMPTY,
+      city: 'Austin',
+    })
+  })
+
+  it('returns empty parts when the IdP releases no address', () => {
+    // Including for an account with no `firebase` claim at all — every
+    // email/password sign-in runs through this.
+    expect(resolveIdpAddress(saml({}))).toEqual(EMPTY)
+    expect(resolveIdpAddress({ name: 'Zach Gover' })).toEqual(EMPTY)
+    expect(resolveIdpAddress(undefined)).toEqual(EMPTY)
+    expect(resolveIdpAddress(null)).toEqual(EMPTY)
+  })
+
+  it('is not confused by an address claim that is a STRING', () => {
+    // Some providers send a single formatted line. It is not the OIDC object
+    // shape, and reading `.locality` off a string yields undefined rather
+    // than throwing — assert it stays empty rather than half-read.
+    expect(resolveIdpAddress({ address: '100 Congress Ave, Austin TX' })).toEqual(
+      EMPTY,
+    )
   })
 })

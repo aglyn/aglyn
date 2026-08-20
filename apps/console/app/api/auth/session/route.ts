@@ -17,6 +17,7 @@
 
 import {
   isLockdownActive,
+  resolveIdpAddress,
   resolveIdpDisplayName,
   resolveIdpPhone,
   resolveIdpPhotoUrl,
@@ -504,6 +505,8 @@ async function handler(request: Request): Promise<Response> {
           displayName: resolveIdpDisplayName(decoded) || null,
           photoUrl: resolveIdpPhotoUrl(decoded) || null,
           phoneNumber: resolveIdpPhone(decoded) || null,
+          // AGL-1963 — see the sso-jit seed for the reasoning.
+          address: resolveIdpAddress(decoded),
         }
         after(async () => {
           try {

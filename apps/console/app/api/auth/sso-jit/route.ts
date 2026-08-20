@@ -21,6 +21,7 @@ import {
   checkSeatQuota,
   countManagerSeats,
   isOrgWideMember,
+  resolveIdpAddress,
   resolveIdpDisplayName,
   resolveIdpPhone,
   resolveIdpPhotoUrl,
@@ -158,6 +159,10 @@ async function handler(request: Request): Promise<Response> {
         displayName: idpName || null,
         photoUrl: idpPhoto || null,
         phoneNumber: resolveIdpPhone(decoded) || null,
+        // AGL-1963, the last of AGL-1133's six. Same `sign_in_attributes`
+        // reasoning as the three above; `normalizeAddress` inside the seed is
+        // what refuses a sparse assertion rather than storing half an address.
+        address: resolveIdpAddress(decoded),
       })
     } catch (error) {
       console.error('[auth/sso-jit] profile seed failed', error)
