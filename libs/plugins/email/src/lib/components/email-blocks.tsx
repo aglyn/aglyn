@@ -258,10 +258,11 @@ export const EmailRichtext = forwardRef<HTMLDivElement, EmailRichtextProps>(
           sx,
         )}
         // Sanitized on every render — same policy as the custom HTML block.
-        dangerouslySetInnerHTML={{
-          __html:
-            typeof window === 'undefined' ? '' : sanitizeCustomHtml(html),
-        }}
+        // The `typeof window` guard this replaced existed only because that
+        // policy was DOMPurify, which needs a DOM; it is now a pure function
+        // (AGL-1901), so the body survives a server render instead of being
+        // blanked — which for an email is the render that gets SENT.
+        dangerouslySetInnerHTML={{ __html: sanitizeCustomHtml(html) }}
       />
     )
   },
@@ -647,11 +648,10 @@ export const EmailHtml = forwardRef<HTMLDivElement, EmailHtmlProps>(
         ref={ref}
         {...rest}
         sx={mergeSxProps({ fontFamily: 'Helvetica, Arial, sans-serif' }, sx)}
+        // No `typeof window` guard any more (AGL-1901): the sanitizer needs
+        // no DOM, so a server-rendered email keeps its custom HTML.
         dangerouslySetInnerHTML={{
-          __html:
-            typeof window === 'undefined' || !html
-              ? ''
-              : sanitizeCustomHtml(html),
+          __html: html ? sanitizeCustomHtml(html) : '',
         }}
       />
     )

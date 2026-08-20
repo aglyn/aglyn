@@ -20,8 +20,7 @@ import { mdiCodeTags } from '@aglyn/shared-data-mdi'
 import Box from '@mui/material/Box'
 import type { SxProps } from '@mui/material/styles'
 import Typography from '@mui/material/Typography'
-import DOMPurify from 'dompurify'
-import { forwardRef, useEffect, useState } from 'react'
+import { forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 
@@ -53,60 +52,38 @@ export interface CustomHtmlProps {
 }
 
 /**
- * Our OWN DOMPurify instance, built lazily on first use.
- *
- * Not the shared module singleton, because the `style` hook below is
- * registered PER INSTANCE and `DOMPurify.addHook` on the default export
- * would silently change the behaviour of every other DOMPurify caller in
- * the app. Lazy because the factory needs a real `window` and this module
- * is imported during SSR; every caller already gates on the client (the
- * effect below, `typeof window === 'undefined'` in the email blocks).
- */
-let purifier: DOMPurifyInstance | null = null
-type DOMPurifyInstance = ReturnType<typeof DOMPurify>
-
-function getPurifier(): DOMPurifyInstance {
-  if (purifier) return purifier
-  const instance = DOMPurify(window)
-  // AGL-1725: DOMPurify performs NO CSS filtering on a `style` attribute.
-  // Measured against the installed 3.4.13 with this exact config: a
-  // `style="background:url(http://…)"` survives verbatim, as do
-  // `url(javascript:…)` and `expression(…)`. The comment this replaced
-  // asserted a filtering that does not exist — so an author's inline style
-  // was a second, unsanitised route to the same egress as the `<style>`
-  // block, and in the email blocks (which share this function) a remote
-  // image in a style attribute is an open-tracking pixel aimed at the
-  // recipient. `sanitizeAuthorCss` applies the scheme rule; it does not
-  // touch the host, for the reasons stated on that function.
-  instance.addHook('afterSanitizeAttributes', (node) => {
-    const style = node.getAttribute?.('style')
-    if (!style) return
-    const safe = Aglyn.sanitizeAuthorCss(style)
-    if (safe !== style) node.setAttribute('style', safe)
-  })
-  purifier = instance
-  return instance
-}
-
-/**
- * Sanitization policy (AGL-320): DOMPurify allowlist — no scripts,
- * iframes, objects, or event-handler attributes. Applied at EVERY render
- * (client + besigner canvas), so stored markup can never execute even if a
+ * Sanitization policy (AGL-320): an allowlist — no scripts, iframes,
+ * objects, or event-handler attributes. Applied at EVERY render (server,
+ * client, and besigner canvas), so stored markup can never execute even if a
  * write bypassed the console. Embed mode never touches the DOM — the raw
  * snippet only exists inside `sandbox="allow-scripts"` (no
- * allow-same-origin), so it cannot reach cookies, storage, or the
- * parent page.
+ * allow-same-origin), so it cannot reach cookies, storage, or the parent
+ * page.
  *
- * `style` attributes are filtered by the hook in {@link getPurifier}
- * (AGL-1725) rather than by DOMPurify, which does not filter CSS at all.
+ * The engine is `Aglyn.sanitizeAuthorHtml` (AGL-1901), which replaced a
+ * per-instance DOMPurify. DOMPurify needs a real DOM, so this component
+ * could only sanitize in an effect, and every Custom HTML block was
+ * therefore absent from the server response — the SSR/SEO half AGL-1268 left
+ * open. The new sanitizer is a pure function of the string, so the same call
+ * runs on the server and in the browser and both produce the same bytes.
+ *
+ * What carried over unchanged:
+ *
+ * - the forbidden set (`script`, `iframe`, `object`, `embed`, `form`,
+ *   `base`), `srcdoc`/`formaction`, and `ALLOW_DATA_ATTR: false`;
+ * - AGL-1725's `style`-attribute rule. DOMPurify performs NO CSS filtering,
+ *   which is why that hook existed at all; `sanitizeAuthorHtml` applies
+ *   `sanitizeAuthorCss` to every `style` attribute itself, so the rule is
+ *   part of the sanitizer rather than a hook a future caller could forget to
+ *   register.
+ * - the `<style>` element being dropped from the `html` attribute, so the
+ *   `css` attribute below stays the ONLY route to a style block. That was
+ *   DOMPurify's behaviour and `custom-html-author-css.spec.tsx` pins it;
+ *   a first pass at AGL-1901 mistook it for a gap and let the tag through,
+ *   which that spec caught.
  */
 export function sanitizeCustomHtml(html: string): string {
-  return getPurifier().sanitize(html, {
-    USE_PROFILES: { html: true },
-    FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'base'],
-    FORBID_ATTR: ['srcdoc', 'formaction'],
-    ALLOW_DATA_ATTR: false,
-  })
+  return Aglyn.sanitizeAuthorHtml(html)
 }
 
 const CustomHtml = forwardRef<HTMLDivElement, CustomHtmlProps>(
@@ -116,16 +93,14 @@ const CustomHtml = forwardRef<HTMLDivElement, CustomHtmlProps>(
     const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const { hostId } = Aglyn.useSite()
 
-    // Same shape as typography's rich text (AGL-1268): DOMPurify needs a
-    // DOM, and sanitizing during hydration made the first client render
-    // diverge from the server's empty HTML — a mismatch by construction.
-    // Sanitize in an effect instead: server render and first client render
-    // agree (empty), the content paints one frame later. The empty-SSR SEO
-    // cost is unchanged and tracked on AGL-1268.
-    const [sanitized, setSanitized] = useState('')
-    useEffect(() => {
-      setSanitized(!html || embedMode ? '' : sanitizeCustomHtml(html))
-    }, [html, embedMode])
+    // Same shape as typography's rich text, and fixed the same way
+    // (AGL-1901): sanitized DURING render rather than in an effect. The
+    // effect existed because DOMPurify needs a DOM — the server rendered
+    // nothing, so the first client render had to render nothing too or
+    // hydration would mismatch (AGL-1268). `sanitizeCustomHtml` is now a
+    // pure function of the string, so both sides compute the same markup and
+    // the block is in the server response where a crawler can read it.
+    const sanitized = !html || embedMode ? '' : sanitizeCustomHtml(html)
 
     if (!html?.trim()) {
       return (

@@ -124,6 +124,8 @@ export * from './media-folders'
 export * from './media-metadata'
 export * from './media-ref'
 export * from './author-css'
+// The isomorphic HTML rule (AGL-1901), after the CSS one it depends on.
+export * from './author-html'
 export * from './dataset-models'
 export * from './dataset-csv'
 export * from './marketplace-merge'
