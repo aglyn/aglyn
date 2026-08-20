@@ -485,3 +485,161 @@ test('applyPlan: an unknown op type is refused outright', async () => {
     /refusing unknown write op/,
   )
 })
+
+// --- Idempotence: the SECOND run is a NO-OP --------------------------------
+//
+// The tests above pin that a transform is deterministic over a fixed input.
+// That is necessary but NOT sufficient: it says nothing about what happens
+// when the transform is re-derived from state the FIRST run already mutated.
+// These four drive the real loop — plan, applyPlan against the faithful
+// double, then re-plan FROM THE MUTATED DOC — and assert run 2 plans zero
+// operations. A backfill that double-counts money fails here and only here.
+
+test('idempotence AGL-1727: re-planning from the rewritten order yields no diffs', async () => {
+  const path = 'hosts/h1/orders/cs_test_worked'
+  const db = fakeFirestore({ [path]: structuredClone(preFixOrder) })
+  const plan = (order) => {
+    const rebuilt = reconstructBuyNowOrder({
+      order,
+      session: workedSession,
+      couponPercentOff: 10,
+    })
+    const diffs = diffBuyNowOrder(order, rebuilt)
+    return diffs.length
+      ? [
+          {
+            type: 'update',
+            path,
+            data: {
+              lineItems: rebuilt.lineItems,
+              totals: rebuilt.totals,
+              'backfills.agl1727AtMs': 1_700_000_000_000,
+            },
+          },
+        ]
+      : []
+  }
+
+  const run1 = plan(db.docs.get(path))
+  assert.equal(run1.length, 1) // red: there IS something to fix
+  assert.equal(await applyPlan(db, run1), 1)
+
+  const rewritten = db.docs.get(path)
+  assert.equal(rewritten.lineItems[0].quantity, 3)
+  assert.equal(rewritten.totals.taxCents, 2228)
+  assert.equal(rewritten.backfills.agl1727AtMs, 1_700_000_000_000)
+
+  const run2 = plan(rewritten) // re-derived from the MUTATED doc
+  assert.deepEqual(run2, []) // no-op — quantity is not multiplied again
+  assert.equal(await applyPlan(db, run2), 0)
+  assert.deepEqual(db.docs.get(path), rewritten) // byte-for-byte unchanged
+})
+
+test('idempotence AGL-1753: a rebuilt contact re-plans to null — LTV is SET, never incremented', async () => {
+  const path = 'orgs/org1/contacts/c1'
+  const db = fakeFirestore({
+    [path]: {
+      email: 'amy@shop.com',
+      ltvCents: 2000, // online only — the POS/booking money is missing
+      ordersCount: 1,
+      lastPurchaseAtMs: 20,
+    },
+  })
+  const sources = {
+    orders: [
+      { id: 'o1', status: 'paid', email: 'Amy@Shop.com', totalCents: 1000, atMs: 10, channel: 'pos' },
+      { id: 'o2', status: 'paid', email: 'amy@shop.com', totalCents: 2000, atMs: 20 },
+    ],
+    bookings: [{ id: 'b1', email: 'amy@shop.com', paidCents: 1500, atMs: 60 }],
+  }
+  const plan = (contact) => {
+    const { byEmail } = aggregateContactPurchases(sources)
+    const update = planContactUpdate(contact, byEmail.get('amy@shop.com'), 1_700_000_000_000)
+    return update ? [{ type: 'update', path, data: update }] : []
+  }
+
+  const run1 = plan(db.docs.get(path))
+  assert.equal(run1.length, 1)
+  assert.equal(run1[0].data.ltvCents, 4500) // 1000 + 2000 + 1500
+  await applyPlan(db, run1)
+
+  const rebuilt = db.docs.get(path)
+  assert.equal(rebuilt.ltvCents, 4500)
+
+  // The whole hazard AGL-1745/1752 flagged: ltvCents is a FieldValue.increment
+  // on the LIVE path. If this plan incremented, run 2 would read 9000.
+  const run2 = plan(rebuilt)
+  assert.deepEqual(run2, [])
+  assert.equal(db.docs.get(path).ltvCents, 4500) // NOT 9000
+})
+
+test('idempotence AGL-1752: an invoice already written is skipped, and create() refuses to overwrite it', async () => {
+  const subPath = 'hosts/h1/subscriptions/sub_1'
+  const db = fakeFirestore({ [subPath]: { productId: 'prod1' } })
+  const snapshot = { productId: 'prod1', name: 'Monthly box' }
+  const invoicePath = `${subPath}/invoices/in_2`
+
+  const plan = () => {
+    // The script's guard: only invoices with no doc are created.
+    if (db.docs.has(invoicePath)) return []
+    const doc = invoiceDocFromStripeInvoice(renewalInvoice, {
+      snapshot,
+      nowMs: 1_700_000_000_000,
+    })
+    return [{ type: 'create', path: invoicePath, data: doc }]
+  }
+
+  const run1 = plan()
+  assert.equal(run1.length, 1)
+  assert.equal(run1[0].data.paidCents, 5000)
+  assert.equal(run1[0].data.backfilledAtMs, 1_700_000_000_000) // provenance stamp
+  await applyPlan(db, run1)
+
+  const run2 = plan()
+  assert.deepEqual(run2, []) // the doc's existence IS the idempotency key
+
+  // And the guard is not the only defence — replaying run 1 blindly still
+  // cannot double-count, because create() on a live doc throws.
+  await assert.rejects(applyPlan(db, run1), /ALREADY_EXISTS/)
+  assert.equal(db.docs.get(invoicePath).paidCents, 5000) // untouched
+
+  // The roll-up derives from the doc SET, so re-deriving cannot compound.
+  const docs = [db.docs.get(invoicePath)]
+  assert.deepEqual(subscriptionRollup(docs), subscriptionRollup(docs))
+  assert.equal(subscriptionRollup(docs).paidCents, 5000)
+})
+
+test('idempotence AGL-1745: a subscription that already carries totals re-plans to nothing', async () => {
+  const path = 'hosts/h1/subscriptions/sub_1'
+  const db = fakeFirestore({
+    [path]: { productId: 'prod1', customerEmail: 'sub@example.com' },
+  })
+  const plan = (subscription) => {
+    // The script's guard: a subscription that already has totals is done.
+    if (subscription.totals) return []
+    const doc = invoiceDocFromStripeInvoice(renewalInvoice, {
+      snapshot: { productId: 'prod1', name: 'Monthly box' },
+      nowMs: 1_700_000_000_000,
+    })
+    return [
+      {
+        type: 'update',
+        path,
+        data: {
+          lineItems: doc.lineItems,
+          totals: doc.totals,
+          'backfills.agl1745AtMs': 1_700_000_000_000,
+        },
+      },
+    ]
+  }
+
+  const run1 = plan(db.docs.get(path))
+  assert.equal(run1.length, 1)
+  await applyPlan(db, run1)
+  assert.equal(db.docs.get(path).totals.totalCents, 5000)
+
+  const run2 = plan(db.docs.get(path))
+  assert.deepEqual(run2, [])
+  assert.equal(db.docs.get(path).totals.totalCents, 5000) // not 10000
+})
