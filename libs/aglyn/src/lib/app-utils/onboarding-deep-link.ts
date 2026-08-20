@@ -136,6 +136,51 @@ export function onboardingPlanQuery(intent: OnboardingPlanIntent): string {
 }
 
 /**
+ * The signup URL a marketing CTA should carry — the WRITER half of the
+ * contract above (AGL-1989).
+ *
+ * The contract had a parser and a re-serializer but nothing that produced a
+ * link in the first place, so every published CTA was hand-typed. That is how
+ * `/pricing` came to have six CTAs carrying `interval=` and three carrying
+ * none: the "Need more scale?" strip quotes Scale, Advanced and Agency at both
+ * cadences and its CHOOSE links say only `?plan=scale`, so a visitor who had
+ * just picked Annual arrived pre-selected for a MONTHLY plan and silently lost
+ * the annual discount they were shown. Nothing could have caught it, because
+ * the string that should have been published existed nowhere a check could
+ * read it.
+ *
+ * `interval: null` is a real and different thing from `'month'`: it means the
+ * CTA does not commit to a cadence, which the billing page honours by leaving
+ * an annual org on annual (`intervalStated`). Callers with a cadence to state
+ * must state it.
+ *
+ * The marketing site is authored content, not code, so this does not publish
+ * anything — it is what the authoring input quotes, so the person clicking the
+ * link into the besigner pastes a string this contract's own parser agrees
+ * with rather than one they typed.
+ */
+export function onboardingSignupHref(
+  signupUrl: string,
+  plan: OrgPlan,
+  interval: OnboardingInterval | null,
+): string {
+  const contactSales = isCustomPricedPlan(plan)
+  // A custom-priced plan is quoted, not bought, so `parseOnboardingPlanIntent`
+  // reports `intervalStated: false` for it HOWEVER the link is written. Writing
+  // `?plan=enterprise&interval=year` anyway puts a claim on the wire that no
+  // reader honours — and before AGL-1864 fixed the reader, that exact link
+  // flipped an annual org to monthly on arrival. Drop it at the source, which
+  // is the last place it can be dropped before it is published.
+  const stated = interval != null && contactSales === false
+  return `${signupUrl}?${onboardingPlanQuery({
+    plan,
+    interval: stated ? interval : 'month',
+    intervalStated: stated,
+    contactSales,
+  })}`
+}
+
+/**
  * Where a freshly provisioned workspace should land, given the plan the
  * visitor picked on the marketing site.
  *

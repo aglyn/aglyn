@@ -50,6 +50,10 @@ import {
   ORG_COGS_UNIT_RATES_USD,
   METERED_MARKUP,
 } from '../../libs/aglyn/src/lib/app-utils/plan-entitlements.ts'
+import {
+  onboardingSignupHref,
+  type OnboardingInterval,
+} from '../../libs/aglyn/src/lib/app-utils/onboarding-deep-link.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const OUT = join(HERE, 'pricing-copy')
@@ -614,6 +618,53 @@ const TIER_SPEC: Partial<
   },
 }
 
+/**
+ * Where the CTAs point. The published strip says `https://app.aglyn.com/signup`
+ * and so does every plan card above it; this is that same destination, stated
+ * once so the two halves of the page cannot drift apart.
+ */
+const SIGNUP_URL = 'https://app.aglyn.com/signup'
+
+/**
+ * The strip's copy at one billing cadence (AGL-1989).
+ *
+ * The four plan cards above the strip live inside a Monthly/Annual Tabs, so
+ * each cadence has its own authored copy and its own CTA — the annual Starter
+ * card reads "$16 /mo · $192 billed yearly" and links to
+ * `?plan=starter&interval=year`. The strip is authored ONCE, OUTSIDE the tabs,
+ * so it quoted the monthly headline on both tabs and its CHOOSE links carried
+ * no `interval` at all: a visitor who picked Annual and then picked Scale
+ * arrived pre-selected for a MONTHLY plan and lost the discount they were
+ * just shown.
+ *
+ * The page is authored content and this file publishes nothing, so this does
+ * not fix the page. What it fixes is that the string that SHOULD be published
+ * now exists somewhere a check can read it: the `ctaHref` comes from the
+ * deep-link contract's own writer rather than being typed, and
+ * `onboardingSignupHref` is the function whose output
+ * `parseOnboardingPlanIntent` is tested to read back as a STATED interval.
+ *
+ * The sub-line follows the CARDS' convention rather than inventing one: on the
+ * monthly tab it quotes the annual per-month price ("$179/mo billed
+ * annually"), on the annual tab it quotes the yearly total ("$2,148 billed
+ * yearly"), which is what the annual Starter/Pro/Business cards do.
+ */
+const tierAtInterval = (p: Plan, interval: OnboardingInterval) => {
+  const monthly = PLAN_PRICING[p].basePriceMonthlyUsd
+  const annualMonthly = PLAN_PRICING[p].basePriceAnnualMonthlyUsd
+  return interval === 'year'
+    ? {
+        priceLabel: `$${annualMonthly} /mo`,
+        subLabel: `$${(annualMonthly * 12).toLocaleString('en-US')} billed yearly`,
+        ctaHref: onboardingSignupHref(SIGNUP_URL, p, 'year'),
+      }
+    : {
+        priceLabel: `$${monthly} /mo`,
+        subLabel: `$${annualMonthly}/mo billed annually`,
+        ctaHref: onboardingSignupHref(SIGNUP_URL, p, 'month'),
+      }
+}
+
 const tiers = {
   heading: 'Need more scale?',
   lede: 'Higher-volume plans for stores, orgs, and agencies.',
@@ -630,6 +681,10 @@ const tiers = {
         typeof s === 'string' ? SPEC[s](e) : s.lit,
       ),
       cta: 'CHOOSE',
+      byInterval: {
+        month: tierAtInterval(p, 'month'),
+        year: tierAtInterval(p, 'year'),
+      },
     }
   }),
   enterprise: {
@@ -658,6 +713,12 @@ const tiers = {
       'custom contracts',
     ],
     cta: 'CONTACT SALES',
+    // Deliberately no signup href and no cadence: Enterprise is quoted, not
+    // bought, and the published CTA goes to the contact screen rather than to
+    // signup. The deep-link parser reports `intervalStated: false` for a
+    // custom-priced plan however the link is written, so an `interval` here
+    // could only mislead.
+    byInterval: null,
   },
 }
 

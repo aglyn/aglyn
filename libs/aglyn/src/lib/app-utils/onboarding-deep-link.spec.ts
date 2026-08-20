@@ -18,6 +18,7 @@
 import {
   onboardingDestination,
   onboardingPlanQuery,
+  onboardingSignupHref,
   parseOnboardingPlanIntent,
 } from './onboarding-deep-link'
 
@@ -164,5 +165,74 @@ describe('an interval the link never stated (AGL-1535)', () => {
     expect(parseOnboardingPlanIntent(query(onboardingPlanQuery(intent)))).toEqual(
       intent,
     )
+  })
+})
+
+describe('onboardingSignupHref — the CTA the marketing site publishes (AGL-1989)', () => {
+  const SIGNUP = 'https://app.aglyn.com/signup'
+  /**
+   * The three tiers in the /pricing "Need more scale?" strip, which is the
+   * table whose CHOOSE links shipped with no interval on either tab.
+   */
+  const SCALE_STRIP = ['scale', 'advanced', 'agency'] as const
+
+  it('states the interval for every tier the scale strip quotes', () => {
+    // The published links were `?plan=scale`, `?plan=advanced`, `?plan=agency`
+    // — on the Annual tab too. Naming all three because a fix that repairs one
+    // reads as done.
+    for (const plan of SCALE_STRIP) {
+      expect(onboardingSignupHref(SIGNUP, plan, 'year')).toBe(
+        `${SIGNUP}?plan=${plan}&interval=year`,
+      )
+      expect(onboardingSignupHref(SIGNUP, plan, 'month')).toBe(
+        `${SIGNUP}?plan=${plan}&interval=month`,
+      )
+    }
+  })
+
+  it('round-trips through the parser that reads it at the other end', () => {
+    // The half that matters: not that the string contains the word "year", but
+    // that the console's own reader gets `year` AND `intervalStated` out of it
+    // — the flag the billing page requires before it will move the toggle.
+    for (const plan of SCALE_STRIP) {
+      for (const interval of ['month', 'year'] as const) {
+        const href = onboardingSignupHref(SIGNUP, plan, interval)
+        expect(parseOnboardingPlanIntent(new URL(href).searchParams)).toEqual({
+          plan,
+          interval,
+          intervalStated: true,
+          contactSales: false,
+        })
+      }
+    }
+  })
+
+  it('omits the interval entirely when the CTA does not commit to one', () => {
+    const href = onboardingSignupHref(SIGNUP, 'scale', null)
+    expect(href).toBe(`${SIGNUP}?plan=scale`)
+    expect(parseOnboardingPlanIntent(new URL(href).searchParams)?.intervalStated).toBe(
+      false,
+    )
+  })
+
+  it('refuses to state an interval for a plan that is quoted, not bought', () => {
+    // `?plan=enterprise&interval=year` is a claim no reader honours: the parser
+    // returns `intervalStated: false` for a custom-priced plan however the link
+    // is written, so publishing the word "year" there can only mislead.
+    for (const interval of ['month', 'year'] as const) {
+      expect(onboardingSignupHref(SIGNUP, 'enterprise', interval)).toBe(
+        `${SIGNUP}?plan=enterprise`,
+      )
+    }
+    expect(
+      parseOnboardingPlanIntent(
+        new URL(onboardingSignupHref(SIGNUP, 'enterprise', 'year')).searchParams,
+      ),
+    ).toEqual({
+      plan: 'enterprise',
+      interval: 'month',
+      intervalStated: false,
+      contactSales: true,
+    })
   })
 })

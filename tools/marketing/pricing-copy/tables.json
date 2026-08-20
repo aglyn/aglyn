@@ -805,7 +805,19 @@
           "25,000 products per site",
           "2.5 TB bandwidth"
         ],
-        "cta": "CHOOSE"
+        "cta": "CHOOSE",
+        "byInterval": {
+          "month": {
+            "priceLabel": "$249 /mo",
+            "subLabel": "$179/mo billed annually",
+            "ctaHref": "https://app.aglyn.com/signup?plan=scale&interval=month"
+          },
+          "year": {
+            "priceLabel": "$179 /mo",
+            "subLabel": "$2,148 billed yearly",
+            "ctaHref": "https://app.aglyn.com/signup?plan=scale&interval=year"
+          }
+        }
       },
       {
         "plan": "advanced",
@@ -821,7 +833,19 @@
           "unlimited products",
           "priority scale & limits"
         ],
-        "cta": "CHOOSE"
+        "cta": "CHOOSE",
+        "byInterval": {
+          "month": {
+            "priceLabel": "$399 /mo",
+            "subLabel": "$299/mo billed annually",
+            "ctaHref": "https://app.aglyn.com/signup?plan=advanced&interval=month"
+          },
+          "year": {
+            "priceLabel": "$299 /mo",
+            "subLabel": "$3,588 billed yearly",
+            "ctaHref": "https://app.aglyn.com/signup?plan=advanced&interval=year"
+          }
+        }
       },
       {
         "plan": "agency",
@@ -837,7 +861,19 @@
           "unlimited records & variables",
           "20 POS registers per site"
         ],
-        "cta": "CHOOSE"
+        "cta": "CHOOSE",
+        "byInterval": {
+          "month": {
+            "priceLabel": "$799 /mo",
+            "subLabel": "$649/mo billed annually",
+            "ctaHref": "https://app.aglyn.com/signup?plan=agency&interval=month"
+          },
+          "year": {
+            "priceLabel": "$649 /mo",
+            "subLabel": "$7,788 billed yearly",
+            "ctaHref": "https://app.aglyn.com/signup?plan=agency&interval=year"
+          }
+        }
       }
     ],
     "enterprise": {
@@ -854,7 +890,8 @@
         "dedicated support",
         "custom contracts"
       ],
-      "cta": "CONTACT SALES"
+      "cta": "CONTACT SALES",
+      "byInterval": null
     }
   },
   "usage": {
