@@ -164,6 +164,25 @@ const contactUpserts: any[] = []
 const notifications: any[] = []
 
 const mockVerifyIdToken = jest.fn(async () => ({ uid: 'cashier-1' }))
+
+/**
+ * The org-permission resolver (AGL-2474). MOCKED, and mocked here rather than
+ * left to the real one: the real module reads the org, the membership and the
+ * custom role through `@aglyn/tenant-data-admin`, which this file replaces
+ * with a closed-world double — so it would fail closed and 403 every test in
+ * the suite for a reason that has nothing to do with what they assert.
+ *
+ * Defaults to GRANTED so the existing cases keep measuring what they were
+ * written to measure; the `managePos` block below drives it to false.
+ */
+const mockResolveOrgPermissions = jest.fn(async () => ({
+  orgId: 'org-1',
+  role: 'admin',
+  isOwner: true,
+  permissions: { managePos: true } as Record<string, boolean>,
+  orgWide: true,
+  hostRole: 'admin',
+}))
 /**
  * The org's stored commerce plugin settings (AGL-2161). `undefined` is the
  * common case — no settings doc — and every test that sets it restores it in
@@ -180,6 +199,12 @@ const mockOrg: any = {
     slug: 'acme',
   },
 }
+
+jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
+  ...jest.requireActual('@aglyn/tenant-runtime/org-permissions'),
+  resolveOrgPermissions: (...args: any[]) =>
+    mockResolveOrgPermissions(...(args as [])),
+}))
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: {
@@ -350,6 +375,15 @@ beforeEach(() => {
   mockPluginSettings = undefined
   fetchMock.mockClear()
   mockVerifyIdToken.mockClear()
+  mockResolveOrgPermissions.mockClear()
+  mockResolveOrgPermissions.mockResolvedValue({
+    orgId: 'org-1',
+    role: 'admin',
+    isOwner: true,
+    permissions: { managePos: true },
+    orgWide: true,
+    hostRole: 'admin',
+  } as any)
 
   // `editor`, not `manager` (AGL-2262): the projection has no such role,
   // and the register admitted it only because the gate was a denylist.
@@ -1919,6 +1953,54 @@ describe('a POS platform fee that rounds to zero (AGL-2256)', () => {
  * strictly WIDER than the rules it claimed to mirror: any role string that was
  * not literally `viewer` transacted.
  */
+/**
+ * `managePos` IS ENFORCED (AGL-2474).
+ *
+ * The key was declared by `COMMERCE_PERMISSIONS`, registered by both surfaces,
+ * resolved into every permission map — and read by nothing anywhere in the
+ * repo. A permission that cannot deny anything is not a permission; it is a
+ * label the customer is told is a control. These cases are what make it one.
+ */
+describe('the managePos permission gates the register (AGL-2474)', () => {
+  it('refuses a host admin whose managePos was revoked', async () => {
+    // The host allowlist still ADMITS this user — `memberRoles` says admin.
+    // Before this change that was the entire test, so a revoked `managePos`
+    // rang the sale anyway.
+    docs.set('hosts/host-1', { memberRoles: { 'cashier-1': 'admin' } })
+    mockResolveOrgPermissions.mockResolvedValue({
+      orgId: 'org-1',
+      role: 'admin',
+      isOwner: true,
+      permissions: { managePos: false },
+      orgWide: true,
+      hostRole: 'admin',
+    } as any)
+    const result = await post({ payment: 'cash', cashReceivedCents: 500 })
+    expect(result.status).toBe(403)
+    // The refusal must be a refusal, not a 403 with a sale behind it.
+    expect(orderDocs()).toHaveLength(0)
+  })
+
+  it('POSITIVE CONTROL: the same admin rings the sale when it is granted', async () => {
+    // Without this the test above passes for any reason at all — a broken
+    // fixture, a 403 from the allowlist, an exception in the handler.
+    docs.set('hosts/host-1', { memberRoles: { 'cashier-1': 'admin' } })
+    const result = await post({ payment: 'cash', cashReceivedCents: 500 })
+    expect(result.status).toBe(200)
+    expect(orderDocs()).toHaveLength(1)
+  })
+
+  it('resolves the permission against the HOST in context', async () => {
+    docs.set('hosts/host-1', { memberRoles: { 'cashier-1': 'admin' } })
+    await post({ payment: 'cash', cashReceivedCents: 500 })
+    // A resolver called with no host resolves an org-wide question and would
+    // hand a site collaborator someone else's standing.
+    expect(mockResolveOrgPermissions).toHaveBeenCalledWith('cashier-1', {
+      hostId: 'host-1',
+    })
+  })
+})
+
 describe('who may ring a sale (AGL-2262)', () => {
   async function postAs(role: unknown) {
     docs.set('hosts/host-1', { memberRoles: { 'cashier-1': role } })

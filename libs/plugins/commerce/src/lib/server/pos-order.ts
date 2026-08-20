@@ -33,6 +33,7 @@ import {
 import { alertLowStockCrossing } from './low-stock'
 import { decrementVariantStock } from './reserve-stock'
 import { posMaxDiscountPct } from '../plugin-config'
+import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 
 /**
  * The settlement claim (AGL-1691) now lives in `@aglyn/aglyn/server`
@@ -117,6 +118,22 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     // nothing a real projection can produce.
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
     if (memberRole !== 'admin' && memberRole !== 'editor') {
+      return res.status(403).json({ error: 'Not permitted' })
+    }
+    // THE `managePos` PERMISSION, actually read (AGL-2474). The allowlist
+    // above is a HOST-level fact and stays — it is what the Firestore rules
+    // enforce and dropping it would widen this route. This is the org-level
+    // half: `managePos` was declared by COMMERCE_PERMISSIONS, resolved into
+    // every permission map, displayed nowhere and read by nothing, so the
+    // capability was inert. Both must hold, matching the marketplace
+    // install/publish routes' resolveOrgPermissions + memberRoles pairing.
+    //
+    // Behaviour is unchanged for anyone who has not been given an explicit
+    // override: `managePos` defaults to true for the admin and editor tiers,
+    // which is exactly the set the allowlist already admits. What it adds is
+    // the ability to REVOKE POS from one admin without demoting them.
+    const membership = await resolveOrgPermissions(decoded.uid, { hostId })
+    if (!membership.permissions.managePos) {
       return res.status(403).json({ error: 'Not permitted' })
     }
     const ownerOrg = await getOrgForHost(hostId)

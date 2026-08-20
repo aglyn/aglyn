@@ -148,7 +148,13 @@ export interface ConsolePluginPageProps {
    * so a plugin page can gate actions (e.g. install/publish) without the
    * console-app session/permission hooks.
    */
-  permissions?: Partial<OrgPermissions>
+  /**
+   * Widened past the legacy six (AGL-2474): plugin-declared keys such as
+   * commerce's `managePos` are resolved into the same map, and typing this
+   * `Partial<OrgPermissions>` meant a plugin could not read its OWN
+   * permission without a cast — the declared key was not assignable.
+   */
+  permissions?: Partial<OrgPermissions> & Record<string, boolean | undefined>
   /**
    * The verdict for the release flag that governs this surface (AGL-1662),
    * resolved by the shell from the nav item's `navTabId` — the same flag

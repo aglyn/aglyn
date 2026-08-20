@@ -64,6 +64,21 @@ import {
  * lazy-loaded library, and then fails `@nx/enforce-module-boundaries` on every
  * STATIC import of it across the whole repo — 144 errors from one `require`.
  */
+/**
+ * The org-permission resolver (AGL-2474), granted by default. `pos-order.ts`
+ * now reads `managePos`; the real resolver would fail closed against this
+ * file's closed-world `@aglyn/tenant-data-admin` double and 403 every
+ * discount case for a reason none of them are about.
+ */
+const mockResolveOrgPermissions = jest.fn(async () => ({
+  orgId: 'org-1',
+  role: 'admin',
+  isOwner: true,
+  permissions: { managePos: true } as Record<string, boolean>,
+  orgWide: true,
+  hostRole: 'admin',
+}))
+
 const mockMergePluginConfig = mergePluginConfig
 const mockCommerceSchema = COMMERCE_CONFIG_SCHEMA
 
@@ -166,6 +181,12 @@ const fakeFirestore = {
 
 const CASHIER_UID = 'cashier-1'
 let mockPluginSettings: Record<string, unknown> | undefined
+
+jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
+  ...jest.requireActual('@aglyn/tenant-runtime/org-permissions'),
+  resolveOrgPermissions: (...args: any[]) =>
+    mockResolveOrgPermissions(...(args as [])),
+}))
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: {
