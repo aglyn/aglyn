@@ -406,3 +406,111 @@ describe('storefront subscription sale record (AGL-1732)', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * A storefront subscription says which tax it will bill (AGL-2323).
+ *
+ * ## The failure this closes
+ *
+ * A subscription bills on its own for as long as it lives, and the tax
+ * mechanism attached at the sale is the one every future invoice uses. Before
+ * this, the record kept none of it: `hosts/{hostId}/subscriptions/{id}` stored
+ * what was bought, for how much, and nothing at all about the regime that
+ * produced the tax inside that figure.
+ *
+ * That absence is what made AGL-2323's two halves unanswerable rather than
+ * merely unfixed. "Which subscriptions were sold before AGL-1751 and bill
+ * untaxed from cycle two?" and "which subscribers still carry the 8.25% rate
+ * their merchant has since corrected to 6.25%?" are both questions about the
+ * back book, and neither could be asked of our own database — the only place
+ * the answer existed was a live Stripe enumeration, which is precisely the
+ * mutation-adjacent operation nobody wants to run to find out whether they
+ * need to run it.
+ *
+ * ONE derivation, `storefrontTaxModeOf`, in the two-argument form the cart,
+ * draft and buy-now order doors already use (AGL-2451) — so the subscription
+ * record, the order minted for each cycle and the `storefrontTaxCollected`
+ * row filed for the same Stripe id cannot state three different regimes.
+ *
+ * The rate IDENTITY rides the session metadata `checkout.ts` stamps, because
+ * the session itself cannot answer it: `line_items` is not expanded on a
+ * delivered event, so the tax rate attached to the subscription item is
+ * invisible here. `taxMode` alone says manual-versus-Stripe; `taxRateId` and
+ * `taxRatePct` say WHICH manual rate, which is the only thing that makes rate
+ * drift detectable without a Stripe read.
+ *
+ * NOTHING HERE CHANGES WHAT ANYONE IS CHARGED. These are records of a decision
+ * already taken at the sale.
+ */
+describe('a subscription records the tax regime it bills (AGL-2323)', () => {
+  /**
+   * THE DEFECT, in one assertion: the stored subscription said nothing about
+   * its tax. `SUBSCRIPTION_SESSION` is a manual-tax sale — 825¢ of it, on the
+   * pre-AGL-1751 `metadata[taxCents]` construction — and the record read as
+   * though the question had never been asked.
+   */
+  it('stamps the regime on the subscription record', async () => {
+    await deliver(SUBSCRIPTION_SESSION)
+    const stored = subscriptionDocs()[0] as any
+    expect(stored.taxMode).toBe('manual')
+  })
+
+  /**
+   * The post-AGL-1751 shape: the tax is a real Stripe Tax Rate, so
+   * `metadata[taxCents]` is 0 and `total_details.amount_tax` carries the
+   * figure. Same regime, read from the other end — and the rate's identity is
+   * stored beside it, which is what a drift check reads.
+   */
+  it('stores the recurring rate identity the sale attached', async () => {
+    await deliver({
+      ...SUBSCRIPTION_SESSION,
+      total_details: { ...SUBSCRIPTION_SESSION.total_details, amount_tax: 825 },
+      metadata: {
+        ...SUBSCRIPTION_SESSION.metadata,
+        taxCents: '0',
+        taxRateId: 'txr_live_1',
+        taxPct: '8.25',
+      },
+    })
+    const stored = subscriptionDocs()[0] as any
+    expect(stored.taxMode).toBe('manual')
+    expect(stored.taxRateId).toBe('txr_live_1')
+    expect(stored.taxRatePct).toBe(8.25)
+  })
+
+  /**
+   * A Stripe Tax subscription is a DIFFERENT regime and carries no rate of the
+   * merchant's own — the identity fields must stay absent rather than be
+   * filled with a plausible zero. AGL-1904: reading a populated tax breakdown
+   * as merchant-configured is the trap this field exists to avoid.
+   */
+  it('reads a Stripe Tax subscription as stripe-automatic', async () => {
+    await deliver({
+      ...SUBSCRIPTION_SESSION,
+      automatic_tax: { enabled: true },
+      total_details: { ...SUBSCRIPTION_SESSION.total_details, amount_tax: 700 },
+      metadata: { ...SUBSCRIPTION_SESSION.metadata, taxCents: '0' },
+    })
+    const stored = subscriptionDocs()[0] as any
+    expect(stored.taxMode).toBe('stripe-automatic')
+    expect(stored.taxRateId).toBeUndefined()
+    expect(stored.taxRatePct).toBeUndefined()
+  })
+
+  /**
+   * `none` is an ANSWER and absent is not (the `StorefrontTaxMode` docblock).
+   * A store that decided not to collect must read as having decided, or the
+   * back-book question cannot separate it from a record written before this
+   * field existed.
+   */
+  it('records an untaxed sale as `none`, never as absent', async () => {
+    await deliver({
+      ...SUBSCRIPTION_SESSION,
+      amount_total: 9000,
+      metadata: { ...SUBSCRIPTION_SESSION.metadata, taxCents: '0' },
+    })
+    const stored = subscriptionDocs()[0] as any
+    expect(stored.taxMode).toBe('none')
+    expect(stored.taxRateId).toBeUndefined()
+  })
+})

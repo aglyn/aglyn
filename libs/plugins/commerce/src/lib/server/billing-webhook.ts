@@ -1644,6 +1644,46 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 : {}),
               checkoutSessionId: String(object.id),
               createdAtMs: Date.now(),
+              // WHICH TAX this subscription will bill, for as long as it
+              // lives (AGL-2323).
+              //
+              // A subscription bills on its own, and the mechanism attached at
+              // the sale is the one every future invoice uses. The record kept
+              // none of it: what was bought and for how much, and nothing at
+              // all about the regime that produced the tax inside that figure.
+              //
+              // That absence is what made AGL-2323 unanswerable rather than
+              // merely unfixed. "Which subscriptions predate AGL-1751 and bill
+              // untaxed from cycle two?" and "which subscribers still carry a
+              // rate their merchant has since corrected?" are questions about
+              // the back book, and the only place the answer lived was a live
+              // Stripe enumeration — the mutation-adjacent operation nobody
+              // wants to run to find out whether they need to run it.
+              //
+              // ONE derivation, in the two-argument form the cart, draft and
+              // buy-now order doors already use (AGL-2451), so this record,
+              // the order minted for each cycle and the
+              // `storefrontTaxCollected` row filed for the same Stripe id
+              // cannot state three different regimes. The second argument
+              // carries the pre-AGL-1751 shape, where the manual tax rode
+              // `metadata[taxCents]` and `total_details.amount_tax` read 0.
+              taxMode: storefrontTaxModeOf(
+                object,
+                Number(object?.metadata?.taxCents ?? 0),
+              ),
+              // The rate's IDENTITY, from the metadata `checkout.ts` stamps —
+              // the session cannot answer it, because `line_items` is not
+              // expanded on a delivered event. `taxMode` separates manual from
+              // Stripe Tax; these two say WHICH manual rate, which is the only
+              // thing that makes rate drift detectable without a Stripe read.
+              // Absent where there is no merchant rate to name, never filled
+              // with a plausible zero (AGL-1904).
+              ...(object?.metadata?.taxRateId
+                ? { taxRateId: String(object.metadata.taxRateId) }
+                : {}),
+              ...(Number(object?.metadata?.taxPct) > 0
+                ? { taxRatePct: Number(object.metadata.taxPct) }
+                : {}),
             },
             { merge: true },
           )

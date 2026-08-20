@@ -712,6 +712,32 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
             'subscription_data[metadata][type]': 'commerce-subscription',
             'subscription_data[metadata][hostId]': hostId,
             'subscription_data[metadata][productId]': productId,
+            // WHICH RATE this subscription will bill, on the subscription
+            // itself (AGL-2323).
+            //
+            // The rate above is attached to `line_items[0]` and Checkout
+            // carries it onto the subscription item, where it bills correctly
+            // and forever. But the id it lands on is then visible to nothing
+            // we own: `line_items` is not expanded on a delivered
+            // `checkout.session.completed`, and the subscription object the
+            // renewal webhook reads does not restate it either.
+            //
+            // That is what made AGL-2323's second half unanswerable. Tax rates
+            // are immutable, so a merchant correcting 8.25% → 6.25% mints a
+            // NEW object and every existing subscriber keeps billing the old
+            // one — correct behaviour for an immutable object, and invisible
+            // drift without this. Naming the rate here makes the live Stripe
+            // subscription self-describing, so the set of subscribers a
+            // correction would affect can be enumerated before anyone decides
+            // whether to touch them.
+            //
+            // Metadata only. Nothing here changes what is charged.
+            ...(recurringTaxRateId
+              ? {
+                  'subscription_data[metadata][taxRateId]': recurringTaxRateId,
+                  'subscription_data[metadata][taxPct]': String(taxPct),
+                }
+              : {}),
           }
         : {}),
       // One-time sales keep the AGL-1711 construction — an ordinary product
@@ -758,6 +784,20 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       ...(variantId ? { 'metadata[variantId]': variantId } : {}),
       'metadata[quantity]': String(quantity),
       'metadata[feeCents]': String(feeCents),
+      // The same two facts on the SESSION, because that is the object
+      // `billing-webhook.ts` is handed when it writes the subscription record
+      // (AGL-2323). Mirrored rather than moved: the subscription copy above is
+      // what a Stripe-side enumeration reads, this one is what our own
+      // database gets. Absent on every path with no merchant rate to name — a
+      // Stripe Tax sale computes against Aglyn's registrations and has no rate
+      // object of the merchant's own (AGL-1904), and a one-time sale mints
+      // none at all.
+      ...(recurringTaxRateId
+        ? {
+            'metadata[taxRateId]': recurringTaxRateId,
+            'metadata[taxPct]': String(taxPct),
+          }
+        : {}),
       // The order's decomposition, snapshotted as we compute it (AGL-1711).
       // Two of these three are invisible to Stripe's own `total_details` BY
       // OUR OWN CONSTRUCTION — the manual tax goes over as an ordinary

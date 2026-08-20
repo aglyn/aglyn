@@ -453,3 +453,131 @@ describe('an undecided store cannot sell (AGL-1999)', () => {
     expect(result.status).toBe(200)
   })
 })
+
+/**
+ * A subscription session says which tax it carries (AGL-2323).
+ *
+ * ## Why the metadata and not the object
+ *
+ * AGL-1751 attaches a real Stripe Tax Rate to `line_items[0]`, and Checkout
+ * carries it onto the subscription item. That is the right mechanism and it
+ * bills correctly — but the id it produces is then visible nowhere our own
+ * records can reach: `line_items` is not expanded on a delivered
+ * `checkout.session.completed`, and the subscription object the renewal
+ * webhook sees does not restate it either. So a merchant who corrects their
+ * zone rate leaves every existing subscriber carrying the OLD rate object,
+ * and nothing on our side can name which subscribers those are.
+ *
+ * Stamping the percentage and the rate id into `subscription_data[metadata]`
+ * puts the fact on the live Stripe subscription itself — self-describing, so
+ * a future re-rate can enumerate exactly what it would touch — and mirroring
+ * it into the session metadata is what lets `billing-webhook.ts` write it onto
+ * `hosts/{hostId}/subscriptions/{id}` at the sale.
+ *
+ * Metadata changes no money. This is the record, not the charge.
+ *
+ * ## `subscription_data[automatic_tax]` DOES NOT EXIST
+ *
+ * AGL-2323 filed a third item — that subscription-level `automatic_tax` is
+ * "implicit and unpinned" because `checkout.ts` sets the flag on the SESSION
+ * only, and that renewal taxation therefore "rests entirely on Stripe's
+ * implicit propagation". That premise is wrong in both halves, and acting on
+ * it would have been an outage:
+ *
+ *   - The Checkout Session API has NO `subscription_data.automatic_tax`
+ *     parameter. Its documented children are `application_fee_percent`,
+ *     `billing_cycle_anchor`, `billing_cycle_anchor_config`, `billing_mode`,
+ *     `default_tax_rates`, `description`, `invoice_settings`, `metadata`,
+ *     `on_behalf_of`, `pending_invoice_item_interval`, `proration_behavior`,
+ *     `transfer_data`, `trial_end`, `trial_period_days` and `trial_settings`.
+ *     Stripe rejects unknown parameters, so sending it would 400 every
+ *     Stripe-Tax subscription checkout on the storefront.
+ *   - The propagation is not implicit. The top-level `automatic_tax`
+ *     parameter is documented as "Settings for automatic tax lookup for this
+ *     session and resulting payments, invoices, **and subscriptions**" — the
+ *     session flag IS the subscription flag, by contract.
+ *
+ * So the guard below pins the ABSENCE, with the reason, rather than adding a
+ * parameter that does not exist.
+ */
+describe('a subscription session says which tax it carries (AGL-2323)', () => {
+  const realFetch = global.fetch
+  const realKey = process.env.STRIPE_SECRET_KEY
+
+  beforeAll(() => {
+    global.fetch = fetchMock as unknown as typeof fetch
+    process.env.STRIPE_SECRET_KEY = 'sk_test_fake_never_used'
+  })
+
+  afterAll(() => {
+    global.fetch = realFetch
+    process.env.STRIPE_SECRET_KEY = realKey as string
+  })
+
+  beforeEach(() => {
+    fetchMock.mockClear()
+    taxRateResponse = { ok: true, body: { id: 'txr_test_1' } }
+  })
+
+  it('stamps the rate identity on the subscription and on the session', async () => {
+    const { result, body } = await runCheckout({
+      settings: { tax: manualTax },
+      product: subscription,
+    })
+    expect(result.status).toBe(200)
+    // On the Stripe subscription, so the live object can say for itself which
+    // rate it will bill for as long as it lives.
+    expect(body?.get('subscription_data[metadata][taxRateId]')).toBe(
+      'txr_test_1',
+    )
+    expect(body?.get('subscription_data[metadata][taxPct]')).toBe('8.25')
+    // On the session, because that is the object the webhook is handed.
+    expect(body?.get('metadata[taxRateId]')).toBe('txr_test_1')
+    expect(body?.get('metadata[taxPct]')).toBe('8.25')
+    // The AGL-1751 mechanism is untouched — this is a record beside it, not a
+    // replacement for it. If the rate stopped being attached, the assertions
+    // above would still pass while the subscription billed untaxed.
+    expect(body?.get('line_items[0][tax_rates][0]')).toBe('txr_test_1')
+  })
+
+  it('stamps no rate identity where there is no rate of the merchant’s own', async () => {
+    // Stripe Tax computes against AGLYN's registrations (AGL-1904); there is
+    // no merchant rate object to name, and inventing one would book the sale
+    // as manual on every downstream reader.
+    const stripeMode = await runCheckout({
+      settings: { tax: { mode: 'stripe' } },
+      product: subscription,
+    })
+    expect(stripeMode.body?.get('subscription_data[metadata][taxRateId]')).toBeNull()
+    expect(stripeMode.body?.get('metadata[taxRateId]')).toBeNull()
+
+    const noTax = await runCheckout({
+      settings: { tax: { mode: 'none' } },
+      product: subscription,
+    })
+    expect(noTax.body?.get('subscription_data[metadata][taxRateId]')).toBeNull()
+    expect(noTax.body?.get('metadata[taxRateId]')).toBeNull()
+
+    // A one-time sale keeps the AGL-1711 line construction and mints no rate
+    // at all, so it has nothing to name either.
+    const oneTime = await runCheckout({ settings: { tax: manualTax } })
+    expect(oneTime.body?.get('metadata[taxRateId]')).toBeNull()
+  })
+
+  it('sends NO subscription_data[automatic_tax] — Stripe has no such parameter', async () => {
+    const { result, body } = await runCheckout({
+      settings: { tax: { mode: 'stripe' } },
+      product: subscription,
+    })
+    expect(result.status).toBe(200)
+    // The session-level flag, which Stripe documents as applying to the
+    // resulting subscription and its invoices. This is the whole mechanism.
+    expect(body?.get('automatic_tax[enabled]')).toBe('true')
+    // And nothing under `subscription_data` claiming to restate it.
+    expect(
+      [...(body?.keys() ?? [])].filter((key) =>
+        key.startsWith('subscription_data[automatic_tax'),
+      ),
+    ).toEqual([])
+  })
+})
