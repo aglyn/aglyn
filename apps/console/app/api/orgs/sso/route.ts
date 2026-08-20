@@ -165,8 +165,21 @@ async function handler(request: Request): Promise<Response> {
         })
       }
 
+      // AGL-2020: on a deployment with no auth origin configured this throws
+      // rather than handing back Aglyn's own `*.firebaseapp.com`. The status
+      // read degrades instead of 500ing — the operator still gets their domain
+      // claims and their current config, plus the reason the ACS URL is
+      // missing. A 500 here would hide the one sentence that fixes it.
+      let metadata = null
+      let metadataError = null
+      try {
+        metadata = ssoServiceMetadata()
+      } catch (error) {
+        metadataError = String((error as Error)?.message ?? error)
+      }
+
       return Response.json(
-        { ok: true, sso, metadata: ssoServiceMetadata(), claims },
+        { ok: true, sso, metadata, metadataError, claims },
         { status: 200 },
       )
     }

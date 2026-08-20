@@ -373,6 +373,21 @@ export interface SsoServiceMetadata {
 }
 
 /**
+ * Thrown by `ssoServiceMetadata()` when this deployment has no auth origin at
+ * all (AGL-2020).
+ *
+ * Deliberately names the variables and NOT a value: handing the operator
+ * a `*.firebaseapp.com` example here is how they end up pasting somebody
+ * else's project id into their IdP. `sso-provisioning.spec.ts` asserts this
+ * string mentions no Aglyn host.
+ */
+export const SSO_AUTH_ORIGIN_UNCONFIGURED_MESSAGE =
+  'Single sign-on is not configured for this deployment: no auth origin ' +
+  'could be resolved. Set NEXT_PUBLIC_FIREBASE_PROJECT_ID — or one of ' +
+  'NEXT_PUBLIC_FIREBASE_AUTH_HANDLER_HOST, NEXT_PUBLIC_WORKSPACE_DOMAIN or ' +
+  'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN — and rebuild.'
+
+/**
  * A HOST, never a URL.
  *
  * These strings are compared byte for byte — by GCIP against the assertion's
@@ -413,6 +428,29 @@ function normalizeAuthHost(value: string): string {
  *      are not on the workspace domain, the emulator, and self-host installs
  *      that have not stood up an auth subdomain.
  *
+ * When all four are absent this THROWS (AGL-2020). It used to default the
+ * project id to `aglyn-main` — ours — which is the anti-pattern AGL-1919
+ * exists to prevent, and it was silent in both directions that matter:
+ * `provisionSsoPool()` wrote our origin into the operator's OWN GCIP provider
+ * as `rpEntityId`/`callbackURL`, and the console printed it as the Reply URL
+ * for their customer to paste into their IdP. A third party's SAML assertions
+ * would then be posted at infrastructure the operator does not run.
+ *
+ * Throwing rather than degrading is deliberate, and this is the one place in
+ * the self-host audit where "run with the feature off" is not available: there
+ * is no empty value to fall back to. `authDomain: ''` emits
+ * `https:///__/auth/handler`, which GCIP accepts on write and which then
+ * rejects every assertion afterwards with nothing in the config that looks
+ * wrong — the same "looks configured, works never" shape as an App Check
+ * provider built on `undefined`. SSO is opt-in and deliberately configured, so
+ * an operator reaching this has asked for it; a named error telling them which
+ * variable to set is strictly better than either wrong origin.
+ *
+ * The READ path degrades instead of 500ing: `/api/orgs/sso?action=status`
+ * catches this and returns `metadata: null` with the message, so the settings
+ * page renders the reason rather than a wrong instruction. The WRITE path
+ * (`provisionSsoPool`) lets it fly.
+ *
  * `entityId` carries the scheme. It is not cosmetic: live GCIP for the first
  * SSO org holds `https://auth.aglyn.com`, and Google Workspace is already
  * sending that exact Audience. Emitting the bare host here would be written
@@ -424,11 +462,15 @@ export function ssoServiceMetadata(): SsoServiceMetadata {
   const workspaceDomain = normalizeAuthHost(
     process.env['NEXT_PUBLIC_WORKSPACE_DOMAIN'],
   )
+  const projectId = String(
+    process.env['NEXT_PUBLIC_FIREBASE_PROJECT_ID'] ?? '',
+  ).trim()
   const authDomain =
     normalizeAuthHost(process.env['NEXT_PUBLIC_FIREBASE_AUTH_HANDLER_HOST']) ||
     (workspaceDomain ? `auth.${workspaceDomain}` : '') ||
     normalizeAuthHost(process.env['NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN']) ||
-    `${process.env['NEXT_PUBLIC_FIREBASE_PROJECT_ID'] || 'aglyn-main'}.firebaseapp.com`
+    (projectId ? `${projectId}.firebaseapp.com` : '')
+  if (!authDomain) throw new Error(SSO_AUTH_ORIGIN_UNCONFIGURED_MESSAGE)
   return {
     authDomain,
     acsUrl: `https://${authDomain}/__/auth/handler`,
