@@ -274,17 +274,6 @@ const ALLOWED = new Map<string, string>([
     'apps/console/constants/legal/v4/privacy.txt',
     'Frozen published Privacy Policy (v4, AGL-1564) — immutable evidence.',
   ],
-  // Zach's 2026-08-18 mandate, carried VERBATIM (3695fc02d). The word appears
-  // as "the open source community" — the ordinary English meaning, in quoted
-  // source material, not product naming. This block is under a standing
-  // instruction never to paraphrase, summarise or edit it: it has already lost
-  // a directive once by being summarised, which is why it is quoted rather
-  // than described. Rewording it to satisfy this guard would defeat the commit
-  // that carries it and silently alter words attributed to the founder.
-  //
-  // Scoped to the ONE file. Do not widen this to `.claude/` — the coverage
-  // test below asserts that this remains the only exemption outside the
-  // product tree, so widening it fails rather than quietly permitting more.
   // The generated release record. `8e72befb8` (1.0.0-beta.1) rendered the
   // AGL-2066 commit subject — "the no-community sweep exempts a verbatim
   // quote, narrowly" — into the changelog, and the guard went red on main
