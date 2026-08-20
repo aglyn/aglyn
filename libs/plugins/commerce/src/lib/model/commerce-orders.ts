@@ -25,6 +25,7 @@
  */
 
 import type { ProductType } from './commerce'
+import type { StorefrontTaxMode } from './commerce-tax-decision'
 
 export type OrderStatus =
   | 'pending'
@@ -293,6 +294,34 @@ export interface HostOrder {
   discountBy?: string
   lineItems?: OrderLineItem[]
   totals?: OrderTotals
+  /**
+   * WHICH TAX REGIME this order carried (AGL-2451), resolved at the moment the
+   * sale decided it and stamped here rather than re-derived later.
+   *
+   * `totals.taxCents` says how much tax was charged and nothing about who
+   * computed it. Those are different facts about whose registration the money
+   * is held under: a `stripe-automatic` storefront sale's tax is computed
+   * against AGLYN's registrations and settles into Aglyn's balance (MEASURED —
+   * see `server/storefront-tax.ts`), while a `manual` one is the merchant's own
+   * rate on their own origin. An order that cannot say which one it carried
+   * cannot be reconciled against the return, or corrected afterwards.
+   *
+   * AGL-2440's merchant report reads the authoritative
+   * `storefrontTaxCollected` record; this is the same fact on the single order,
+   * and both come from `storefrontTaxMode` so the two cannot drift.
+   *
+   * ## ABSENT MEANS "NOT RECORDED" — AND NOTHING MAY DEFAULT IT
+   *
+   * Every order written before AGL-2451 shipped genuinely has no stamp, and
+   * that is the honest reading. `liftLegacyOrder` deliberately does NOT
+   * synthesise one the way it synthesises `totals.taxCents: 0`: it runs on the
+   * READ path, its result is spread into merge writes, and a defaulted `none`
+   * would overwrite a real `stripe-automatic` — the converter-on-partial-writes
+   * hazard, in a place where the destroyed value is a tax fact. The console
+   * renders an absent mode as unknown, never as `none`
+   * (`describeOrderTaxMode`).
+   */
+  taxMode?: StorefrontTaxMode
   customerEmail?: string | null
   customerName?: string | null
   /** Storefront customer id once accounts exist (AGL-294). */

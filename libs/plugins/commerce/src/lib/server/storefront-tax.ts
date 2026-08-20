@@ -91,8 +91,20 @@
  * failure must never 500 a webhook into redelivery.
  */
 
-/** Which machinery produced the tax on this sale. See the module note. */
-export type StorefrontTaxMode = 'stripe-automatic' | 'manual' | 'none'
+import {
+  storefrontTaxMode,
+  type StorefrontTaxMode,
+} from '../model/commerce-tax-decision'
+
+/**
+ * Which machinery produced the tax on this sale. See the module note.
+ *
+ * The union and its derivation live in the MODEL since AGL-2451, because the
+ * merchant's order document now carries the same fact (`HostOrder.taxMode`)
+ * and two copies of a rule that must agree are one copy too many. Re-exported
+ * here so this module stays the place the mechanism is documented.
+ */
+export type { StorefrontTaxMode }
 
 /**
  * Whose registrations Stripe Tax computed against, from
@@ -232,24 +244,36 @@ export interface StorefrontTaxContext {
   manualTaxCents?: number
 }
 
-/**
- * Decomposes a paid storefront session or invoice into the stored row, or
- * `null` when there is no host to attribute it to.
- *
- * The caller decides WHICH objects reach this — the commerce webhook
- * self-selects on `metadata.type`, exactly as every other section does.
- */
-export function storefrontTaxRow(
-  object: unknown,
-  context: StorefrontTaxContext,
-): StorefrontTaxRow | null {
-  const source = object as any
-  const hostId = String(context?.hostId ?? '')
-  if (!hostId) return null
+/** What one Stripe object says about the tax it carried. */
+export interface ResolvedStorefrontTax {
+  /** `automatic_tax.enabled` — the discriminator, never the tax lines. */
+  automatic: boolean
+  /** Stripe's own breakdown, present only on a `stripe-automatic` sale. */
+  lines: StorefrontTaxLine[]
+  taxCents: number
+  taxMode: StorefrontTaxMode
+}
 
+/**
+ * Reads the tax off one paid session or invoice — the SINGLE derivation, and
+ * the reason it is its own exported function (AGL-2451).
+ *
+ * `storefrontTaxRow` builds the `storefrontTaxCollected` record from it, and
+ * the four order-writing doors in `billing-webhook.ts` stamp `HostOrder.taxMode`
+ * from it, so an order and the row filed for the same Stripe id cannot state
+ * different regimes. Re-deriving the mode beside a second reading of the same
+ * object is exactly how the two would drift.
+ *
+ * Pure and total: unreadable input answers `taxMode: 'none'`, never throws.
+ */
+export function resolveStorefrontTax(
+  object: unknown,
+  manualTaxCents = 0,
+): ResolvedStorefrontTax {
+  const source = object as any
   const automatic = source?.automatic_tax?.enabled === true
   const lines = automatic ? taxLines(source) : []
-  const manualCents = Math.max(0, asCents(context?.manualTaxCents))
+  const manualCents = Math.max(0, asCents(manualTaxCents))
   // The flag, never the lines — see the module note. A manual-mode
   // subscription renewal carries real Stripe tax rates in `total_taxes[]`,
   // and booking those as Aglyn-collected would be the whole defect restated.
@@ -274,12 +298,44 @@ export function storefrontTaxRow(
       ? sumLines(lines)
       : asCents(source?.total_details?.amount_tax ?? source?.tax)
     : Math.max(manualCents, manualLineCents)
+  return {
+    automatic,
+    lines,
+    taxCents,
+    taxMode: storefrontTaxMode({ automatic, taxCents }),
+  }
+}
 
-  const taxMode: StorefrontTaxMode = automatic
-    ? 'stripe-automatic'
-    : taxCents > 0
-      ? 'manual'
-      : 'none'
+/**
+ * Just the regime, for the order-writing doors (AGL-2451). Delegates, so this
+ * is the same answer the filed tax record gives for the same object.
+ */
+export function storefrontTaxModeOf(
+  object: unknown,
+  manualTaxCents = 0,
+): StorefrontTaxMode {
+  return resolveStorefrontTax(object, manualTaxCents).taxMode
+}
+
+/**
+ * Decomposes a paid storefront session or invoice into the stored row, or
+ * `null` when there is no host to attribute it to.
+ *
+ * The caller decides WHICH objects reach this — the commerce webhook
+ * self-selects on `metadata.type`, exactly as every other section does.
+ */
+export function storefrontTaxRow(
+  object: unknown,
+  context: StorefrontTaxContext,
+): StorefrontTaxRow | null {
+  const source = object as any
+  const hostId = String(context?.hostId ?? '')
+  if (!hostId) return null
+
+  const { automatic, lines, taxCents, taxMode } = resolveStorefrontTax(
+    source,
+    context?.manualTaxCents,
+  )
 
   const liabilityType = asStringOrNull(source?.automatic_tax?.liability?.type)
   const taxLiability: StorefrontTaxLiability | null = !automatic

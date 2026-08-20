@@ -578,6 +578,51 @@ describe('storefront subscription renewals (AGL-1743)', () => {
     ])
   })
 
+  /**
+   * WHICH TAX THE CYCLE CARRIED (AGL-2451), and the door where reading the
+   * lines instead of the flag would be most wrong: a MANUAL-mode subscription
+   * attaches a real Stripe Tax Rate so the tax recurs (AGL-1751), so its
+   * renewal invoices arrive with a populated `total_taxes[]` that is
+   * indistinguishable from a Stripe Tax invoice by amount alone. The two arms
+   * below carry the SAME tax lines and differ only in `automatic_tax.enabled`.
+   */
+  it('stamps the tax regime on the minted order, from the flag', async () => {
+    const taxed = {
+      ...RENEWAL_INVOICE,
+      amount_paid: 9743,
+      total: 9743,
+      tax: 743,
+      total_taxes: [
+        {
+          amount: 743,
+          taxable_amount: 9000,
+          taxability_reason: 'standard_rated',
+          tax_rate_details: {
+            tax_rate: { id: 'txr_1', percentage: 8.25, jurisdiction: 'Texas' },
+          },
+        },
+      ],
+    }
+    await deliver({ ...taxed, automatic_tax: { enabled: false } })
+    expect((docs.get('hosts/host-1/orders/in_2') as any).taxMode).toBe('manual')
+
+    docs.delete('hosts/host-1/orders/in_2')
+    docs.delete('hosts/host-1/subscriptions/sub_1/invoices/in_2')
+    await deliver({
+      ...taxed,
+      automatic_tax: { enabled: true, liability: { type: 'self' } },
+    })
+    expect((docs.get('hosts/host-1/orders/in_2') as any).taxMode).toBe(
+      'stripe-automatic',
+    )
+  })
+
+  /** A cycle that carried no tax says so, rather than saying nothing. */
+  it('stamps none on an untaxed cycle', async () => {
+    await deliver(RENEWAL_INVOICE)
+    expect((docs.get('hosts/host-1/orders/in_2') as any).taxMode).toBe('none')
+  })
+
   it('prices the order from the invoice decomposition', async () => {
     await deliver(RENEWAL_INVOICE)
 

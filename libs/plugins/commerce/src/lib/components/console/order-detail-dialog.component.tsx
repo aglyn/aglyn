@@ -754,6 +754,23 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
               </Stack>
             ))}
             {/*
+              HOW the tax on this order was computed (AGL-2451). The `Tax` row
+              above states an amount and nothing about which machinery produced
+              it, and a merchant reading one order could not tell Stripe Tax
+              (computed against Aglyn's registrations) from their own configured
+              rate. Those are different facts about whose registration the money
+              is held under, and the order is where a merchant looks.
+
+              Describes the mechanism and makes NO remittance determination —
+              the constraint AGL-2440's report ships under. An order written
+              before the stamp existed says so, rather than being rendered as
+              "no tax": absent means NOT RECORDED, and `describeOrderTaxMode`
+              is where that distinction is kept.
+             */}
+            <Typography variant="caption" color="text.secondary">
+              {CommerceModel.describeOrderTaxMode(order.taxMode)}
+            </Typography>
+            {/*
               Both figures live in `refundedCents` (AGL-1787), so a lost
               chargeback used to render as "Refunded $62.00" — the merchant's
               own decision, spelled the same as money taken from them. Split by

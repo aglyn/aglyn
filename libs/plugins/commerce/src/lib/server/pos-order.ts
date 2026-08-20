@@ -587,6 +587,16 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           // carries the fee since AGL-2111; this is the one that is netted
           // from the payout rather than invoiced, and `feeCollection` says so.
           totals: cardTotals,
+          // WHICH TAX THIS SALE CARRIED (AGL-2451), from the decision resolved
+          // above. The register never reaches `stripe-automatic` — AGL-2145
+          // refuses that store in person, because there is no shopper address
+          // at a till — so this is `manual` or `none`, and the QR session
+          // carries the same figure over as `metadata[taxCents]` for the
+          // webhook to restate when the card is actually charged.
+          taxMode: CommerceModel.storefrontTaxModeForDecision(
+            taxDecision,
+            taxCents,
+          ),
           ...(feeCents > 0 ? { feeCollection } : {}),
           customerEmail: customerEmail || null,
           timeline: [{ atMs: Date.now(), event: 'pos-card-pending' }],
@@ -744,6 +754,15 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         ...(locationId ? { locationId } : {}),
         lineItems,
         totals,
+        // WHICH TAX THIS SALE CARRIED (AGL-2451). Cash and folio never reach
+        // Stripe at all, so no Stripe object will ever state this and NOTHING
+        // else can supply it later — the decision resolved above is the only
+        // witness there will be, and here is the one moment it can be written
+        // down.
+        taxMode: CommerceModel.storefrontTaxModeForDecision(
+          taxDecision,
+          taxCents,
+        ),
         // AGL-2111: the fee is on `totals` for this tender too, and this says
         // it will arrive on the org's Aglyn invoice rather than as a short
         // payout — there is no payout, the merchant kept the cash.

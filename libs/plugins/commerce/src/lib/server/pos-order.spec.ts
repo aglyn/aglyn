@@ -489,6 +489,54 @@ describe('the POS card sale tax witness (AGL-1953)', () => {
     expect(result.status).toBe(200)
     expect(stripeCalls[0].body.get('metadata[taxCents]')).toBe('0')
   })
+
+  /**
+   * WHICH REGIME THE REGISTER SOLD UNDER (AGL-2451), on the order itself.
+   *
+   * The cash and folio tenders never reach Stripe at all, so no Stripe object
+   * will ever state this and nothing downstream can supply it later: the
+   * decision resolved at ring-up is the only witness there will be. A register
+   * order that cannot say which tax it carried cannot be reconciled against
+   * the merchant's return afterwards, which is the whole point of the field.
+   */
+  it('stamps the tax regime on a CASH sale, which Stripe never sees', async () => {
+    docs.set('hosts/host-1/settings/store', TAXED_STORE)
+    const result = await post({ payment: 'cash', cashReceivedCents: 500 })
+    expect(result.status).toBe(200)
+    expect(orderDocs()[0]?.totals?.taxCents).toBe(33)
+    expect(orderDocs()[0]?.taxMode).toBe('manual')
+  })
+
+  /** The card tender's pending order carries it too, before the webhook lands. */
+  it('stamps the tax regime on a CARD sale at the moment it is rung', async () => {
+    docs.set('hosts/host-1/settings/store', TAXED_STORE)
+    await post({ payment: 'link' })
+    expect(orderDocs()[0]?.taxMode).toBe('manual')
+  })
+
+  /**
+   * A store that decided to collect nothing says `none` — a recorded decision,
+   * not an absent field. Absent means NOT RECORDED and belongs only to orders
+   * written before this shipped.
+   */
+  it('stamps none when the store collects no tax, on both tenders', async () => {
+    docs.set('hosts/host-1/settings/store', { tax: { mode: 'none' } })
+    await post({ payment: 'cash', cashReceivedCents: 500 })
+    expect(orderDocs()[0]?.taxMode).toBe('none')
+  })
+
+  /**
+   * NEGATIVE CONTROL for the derivation: `stripe-automatic` must never appear
+   * on a register order. AGL-2145 refuses that store in person — there is no
+   * shopper address at a till — so the mode is unreachable here by refusal,
+   * and this pins that the stamp did not invent it anyway.
+   */
+  it('never stamps stripe-automatic at the register', async () => {
+    docs.set('hosts/host-1/settings/store', { tax: { mode: 'stripe' } })
+    const result = await post({ payment: 'cash', cashReceivedCents: 500 })
+    expect(result.status).toBe(409)
+    expect(orderDocs()).toHaveLength(0)
+  })
 })
 
 /**

@@ -44,6 +44,7 @@ import {
   settlePromotionSlot,
 } from './promotion-hold'
 import { flagOrderRestock } from './restock-flag'
+import { storefrontTaxModeOf } from './storefront-tax'
 import { recordStorefrontTax } from './storefront-tax-record'
 import { enqueueSupplierDelivery } from './supplier-outbox'
 
@@ -2097,6 +2098,15 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               channel: 'subscription',
               lineItems: invoiceLineItems,
               totals: invoiceTotals,
+              // WHICH TAX THIS CYCLE CARRIED (AGL-2451), from the invoice's own
+              // `automatic_tax.enabled` and never from its tax lines. This is
+              // the door the distinction matters most at: a MANUAL-mode
+              // subscription carries a real Stripe Tax Rate so the recurring
+              // tax survives (AGL-1751), so every renewal invoice arrives with
+              // a populated `total_taxes[]` that looks exactly like a Stripe
+              // Tax one. Reading the lines would stamp the merchant's own tax
+              // as Aglyn-collected on every cycle they ever bill.
+              taxMode: storefrontTaxModeOf(object),
               timeline: [{ atMs: paidAtMs, event: 'paid' }],
               paymentIntentId: String(object?.payment_intent ?? '') || null,
               subscriptionId,
@@ -2512,6 +2522,17 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             channel: 'online',
             lineItems,
             totals,
+            // WHICH TAX THIS SALE CARRIED (AGL-2451). `totals.taxCents` above
+            // says how much; this says who computed it, which is the fact that
+            // decides whose registration the money is held under. The same
+            // resolver `recordStorefrontTax` used a few hundred lines up, so
+            // the order and the filed row cannot disagree. A manual cart's tax
+            // rides a real Stripe Tax Rate since AGL-1953 and therefore has a
+            // populated breakdown — the flag is what tells the two apart.
+            taxMode: storefrontTaxModeOf(
+              object,
+              Number(object?.metadata?.taxCents ?? 0),
+            ),
             timeline: [
               { atMs: Date.now(), event: 'paid' },
               ...(unresolvedLines.length
@@ -3141,6 +3162,25 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             orderRef,
             {
               status: 'paid',
+              // WHICH TAX THIS ORDER CARRIED (AGL-2451), resolved from the
+              // session that actually charged it rather than from the draft's
+              // frozen composition. `draft-order.ts` stamps its own reading at
+              // compose time and this is the authoritative restatement: a
+              // Stripe Tax draft freezes `taxCents: 0` and only the paid
+              // session knows the figure, so only the paid session can say the
+              // regime with the tax in hand.
+              //
+              // The metadata witness matters here more than anywhere: a POS
+              // CARD sale completes through this same branch with the whole
+              // basket sent as one opaque `In-store purchase` line, so Stripe
+              // states no tax at all and `metadata[taxCents]` is the only
+              // record that any of the charge was tax (AGL-1953). Without it
+              // every register card sale would stamp `none` beside an order
+              // plainly carrying tax.
+              taxMode: storefrontTaxModeOf(
+                object,
+                Number(object?.metadata?.taxCents ?? 0),
+              ),
               paymentIntentId: String(object?.payment_intent ?? '') || null,
               customerEmail:
                 object?.customer_details?.email ?? lifted.customerEmail ?? null,
@@ -3441,6 +3481,15 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             channel: 'online',
             lineItems: buyNowLineItems,
             totals: buyNowTotals,
+            // WHICH TAX THIS SALE CARRIED (AGL-2451). Buy-now's manual tax
+            // goes over as an ordinary `line_items[1]` Stripe is never told is
+            // tax (AGL-1711), so the session reports `amount_tax: 0` and
+            // `metadata[taxCents]` — the key `checkout.ts` writes — is the only
+            // witness. Same resolver as the filed tax row, same witness.
+            taxMode: storefrontTaxModeOf(
+              object,
+              Number(object?.metadata?.taxCents ?? 0),
+            ),
             timeline: [{ atMs: Date.now(), event: 'paid' }],
             paymentIntentId: String(object?.payment_intent ?? '') || null,
             checkoutSessionId: String(object.id),

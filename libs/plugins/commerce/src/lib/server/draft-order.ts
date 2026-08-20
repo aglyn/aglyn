@@ -387,6 +387,20 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
         channel: 'draft',
         lineItems,
         totals,
+        // WHICH TAX REGIME THIS ORDER IS COMPOSED UNDER (AGL-2451), from the
+        // decision taken above rather than from the frozen `taxCents` — a
+        // Stripe Tax draft freezes 0 there and only the paid session knows the
+        // figure, so a mode read back off the amount would call it `none`.
+        //
+        // Stamped at composition so a draft that is never paid still says what
+        // it was priced under, and RESTATED by the `commerce-draft` webhook
+        // branch from the session that actually charged it. The webhook's is
+        // authoritative — it has Stripe's computed tax in hand — and for a
+        // manual draft the two agree by construction.
+        taxMode: CommerceModel.storefrontTaxModeForDecision(
+          taxDecision,
+          taxCents,
+        ),
         customerEmail: email || null,
         timeline: [
           {

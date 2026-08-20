@@ -16,8 +16,11 @@
  */
 
 import {
+  describeOrderTaxMode,
   storefrontTaxDecision,
   storefrontTaxMisconfiguration,
+  storefrontTaxMode,
+  storefrontTaxModeForDecision,
   STOREFRONT_TAX_NO_ORIGIN_MESSAGE,
   STOREFRONT_TAX_POS_STRIPE_MESSAGE,
 } from './commerce-tax-decision'
@@ -209,5 +212,94 @@ describe('storefrontTaxMisconfiguration (AGL-2145)', () => {
         { inPerson: true },
       ),
     ).toBeNull()
+  })
+})
+
+/**
+ * The regime an order carries, and how it is worded (AGL-2451).
+ *
+ * The whole point of the field is that one order can be reconciled against
+ * the `storefrontTaxCollected` record and, eventually, against a return. That
+ * only holds while ONE rule produces both, which is why this rule is here and
+ * not restated at each of the seven order-writing doors.
+ */
+describe('storefrontTaxMode (AGL-2451)', () => {
+  it('reads the flag, so a taxed manual sale is never Aglyn-collected', () => {
+    // THE TRAP, as a unit. A manual-mode renewal carries a real Stripe Tax
+    // Rate (AGL-1751) so its invoice has tax on it; only the flag separates it
+    // from a Stripe Tax sale of the identical amount.
+    expect(storefrontTaxMode({ automatic: false, taxCents: 825 })).toBe('manual')
+    expect(storefrontTaxMode({ automatic: true, taxCents: 825 })).toBe(
+      'stripe-automatic',
+    )
+  })
+
+  /**
+   * A Stripe Tax sale stays `stripe-automatic` at zero tax: "Stripe Tax
+   * answered not-collecting" is the audit answer to why a jurisdiction is
+   * absent from a return, and collapsing it to `none` destroys that answer.
+   */
+  it('keeps stripe-automatic at zero tax, and calls an untaxed sale none', () => {
+    expect(storefrontTaxMode({ automatic: true, taxCents: 0 })).toBe(
+      'stripe-automatic',
+    )
+    expect(storefrontTaxMode({ automatic: false, taxCents: 0 })).toBe('none')
+  })
+
+  /** The decision-shaped entry point the register and the draft path use. */
+  it('maps a decision the same way, with exempt landing on none', () => {
+    expect(
+      storefrontTaxModeForDecision({ kind: 'stripe-automatic' }, 0),
+    ).toBe('stripe-automatic')
+    expect(storefrontTaxModeForDecision({ kind: 'manual' }, 412)).toBe('manual')
+    expect(storefrontTaxModeForDecision({ kind: 'manual' }, 0)).toBe('none')
+    expect(
+      storefrontTaxModeForDecision({ kind: 'exempt', reason: 'x' }, 0),
+    ).toBe('none')
+    expect(storefrontTaxModeForDecision({ kind: 'none', reason: 'x' }, 0)).toBe(
+      'none',
+    )
+  })
+})
+
+describe('describeOrderTaxMode (AGL-2451)', () => {
+  /**
+   * ABSENT IS NOT `none`. Every order written before the stamp shipped has no
+   * mode, and wording that as "no sales tax was calculated" would state a tax
+   * fact nobody recorded — on an order that may well have carried tax.
+   */
+  it('says an unstamped order is unrecorded, never that it had no tax', () => {
+    const unknown = describeOrderTaxMode(undefined)
+    expect(unknown).toBe(describeOrderTaxMode(null))
+    expect(unknown).not.toBe(describeOrderTaxMode('none'))
+    expect(unknown).toMatch(/not recorded/i)
+    expect(unknown).not.toMatch(/no sales tax/i)
+  })
+
+  /** Each mode says HOW, and each says something different. */
+  it('describes the mechanism for each recorded mode', () => {
+    expect(describeOrderTaxMode('stripe-automatic')).toMatch(/Stripe Tax/)
+    expect(describeOrderTaxMode('manual')).toMatch(/own configured tax rate/)
+    expect(describeOrderTaxMode('none')).toMatch(/No sales tax/)
+    expect(
+      new Set(
+        (['stripe-automatic', 'manual', 'none', undefined] as const).map(
+          describeOrderTaxMode,
+        ),
+      ).size,
+    ).toBe(4)
+  })
+
+  /**
+   * NO REMITTANCE DETERMINATION — the constraint AGL-2440 ships under and the
+   * reason this wording is a tested artefact rather than a string literal in a
+   * component. Who owes which authority what attaches by operation of law
+   * (AGL-1904/AGL-1956); it belongs to counsel, not to an order dialog.
+   */
+  it('never tells the merchant who owes or remits the tax', () => {
+    for (const mode of ['stripe-automatic', 'manual', 'none', undefined] as const) {
+      const text = describeOrderTaxMode(mode)
+      expect(text).not.toMatch(/remit|owe|liable|liability|your responsibility/i)
+    }
   })
 })
