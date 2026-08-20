@@ -18,6 +18,7 @@
 import { PLATFORM_BRANDING_PROFILE } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import { deferLazyPanelNodes } from '@aglyn/tenant-runtime/defer-lazy-panels'
+import { getTemplateScreenRouting } from '@aglyn/tenant-runtime/template-screens'
 import type { Metadata } from 'next'
 import { notFound, permanentRedirect, redirect } from 'next/navigation'
 import { hostShowsPlatformAttribution } from '../../../utils/platform-attribution'
@@ -766,13 +767,46 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
   // component sitting inside a withheld panel still belongs to this page, and
   // narrowing on the pruned map would drop its plugin and leave that panel
   // unrenderable the moment someone opened it.
-  const clientProps: Props = deferred?.deferredPanelIds.length
+  const prunedProps: Props = deferred?.deferredPanelIds.length
     ? {
         ...result.props,
         nodes: deferred.nodes,
         deferral: { host, slug: slug ?? [] },
       }
     : result.props
+  /**
+   * Screen links resolve against the routing map the ROUTER honours, not the
+   * one publishing wrote (AGL-1998).
+   *
+   * `host.screens` carries every screen under its own published slug, and the
+   * loader then edits that table at serve time: template screens are dropped,
+   * and a collection's list template answers at `/{collectionSlug}` instead of
+   * the slug it was published under. A screen link rendered from the raw map
+   * therefore emitted an href the site itself 404s — on aglyn.com, every link
+   * pointing at the blog's list template said `/blog-list-template`.
+   *
+   * Derived HERE because this is the one place the props become a client prop,
+   * and it costs no Firestore read: `load-page-data` has already asked for the
+   * same cache entry on this request (it is how the route was matched), so this
+   * is a hit on `unstable_cache` rather than a second trip.
+   */
+  const routedHost = result.props.data?.host as
+    | { $id?: string; screens?: Record<string, string> }
+    | undefined
+  let screenRoutes: Record<string, string> | undefined
+  if (routedHost?.$id) {
+    const routing = await getTemplateScreenRouting({ hostId: routedHost.$id })
+    screenRoutes = Aglyn.linkableScreenRoutes(routedHost.screens, {
+      routedElsewhere: routing.listRoutes,
+      unrouted: routing.templateScreenIds,
+    })
+  }
+  // A new object again, never a mutated one — `result.props` belongs to the
+  // cached loader, and `prunedProps` IS that object whenever nothing was
+  // withheld above.
+  const clientProps: Props = screenRoutes
+    ? { ...prunedProps, screenRoutes }
+    : prunedProps
   return (
     <>
       {jsonLd.map((json, index) => (

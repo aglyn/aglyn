@@ -55,6 +55,14 @@ jest.mock('@aglyn/tenant-runtime/template-screens', () => ({
   __esModule: true,
   __esModuleDefault: true,
   default: jest.fn(async () => new Set<string>()),
+  // Faithful to the real module's OTHER export (AGL-1998): a double that
+  // omits it makes `loadNotFoundScreen`/`page.tsx` throw on an undefined
+  // function, and the surrounding try/catch turns that into a silent null.
+  getTemplateScreenIds: jest.fn(async () => new Set<string>()),
+  getTemplateScreenRouting: jest.fn(async () => ({
+    templateScreenIds: new Set<string>(),
+    listRoutes: {} as Record<string, string>,
+  })),
 }))
 // The REAL helpers, reached by file path so the stub stays light. `decodeStoredNodes`
 // especially: it is the subject, and a faked one would assert nothing.

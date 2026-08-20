@@ -78,6 +78,14 @@ export interface Props {
    * clientAutomations, automationOverlays, ...). Opaque to the app.
    */
   [pluginContribution: string]: unknown
+  /**
+   * The routing map screen links resolve against (AGL-1998) — `host.screens`
+   * corrected to what the ROUTER serves: template screens dropped, a
+   * collection's list template moved to `/{collectionSlug}`. Derived in
+   * `page.tsx`; absent only when no host resolved, and the client then falls
+   * back to the raw map exactly as it always did.
+   */
+  screenRoutes?: Record<string, string>
   /** Collection list/entry payload when the path is content, not a screen. */
   content?: CollectionContent
   /** Password-protected screen: nodes withheld until unlock (AGL-87). */

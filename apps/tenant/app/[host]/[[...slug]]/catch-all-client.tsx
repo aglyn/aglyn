@@ -263,7 +263,15 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
 
   // Id-based screen links resolve against this routing map at render time;
   // ISR keeps it current (slug renames show up on the next revalidate).
-  const screens = props.data?.host?.screens
+  //
+  // `screenRoutes` is the same map corrected to what the router actually
+  // serves (AGL-1998) — see `page.tsx`. The raw `host.screens` stays as the
+  // fallback for props composed before that field existed: HTML already in an
+  // ISR cache, and a `/api/screen/nodes` payload fetched by a client holding
+  // it. Both then behave exactly as they did before, rather than losing every
+  // link at once.
+  const screens = (props.screenRoutes ??
+    props.data?.host?.screens) as Record<string, string> | undefined
   // Locale plumbing (AGL-164): the switcher component reads variants of
   // the CURRENT screen from this context.
   const screenLocale = (props.data?.screen?.data as any)?.locale

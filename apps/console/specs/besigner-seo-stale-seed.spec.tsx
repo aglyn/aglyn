@@ -162,6 +162,15 @@ jest.mock('@aglyn/aglyn', () => ({
   reservedScreenRouteSegment: jest.requireActual(
     '@aglyn/aglyn/app-utils/screen-route',
   ).reservedScreenRouteSegment,
+  // The REAL derivation for the same reason (AGL-1998): it decides what the
+  // canvas and the link picker can point at, and it is a pure function over
+  // the routing map.
+  linkableScreenRoutes: jest.requireActual(
+    '@aglyn/aglyn/app-utils/screen-route',
+  ).linkableScreenRoutes,
+  SCREEN_KIND_TEMPLATE: jest.requireActual(
+    '@aglyn/aglyn/app-utils/screen-route',
+  ).SCREEN_KIND_TEMPLATE,
   screenRoutePathToUrl: () => '',
   wouldCreateScreenCycle: () => false,
 }))

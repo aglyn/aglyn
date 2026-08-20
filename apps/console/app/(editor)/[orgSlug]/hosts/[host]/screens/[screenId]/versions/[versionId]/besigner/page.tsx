@@ -119,6 +119,7 @@ import {
   collectionTemplateRoutesSummary,
 } from '../../../../../../../../../../constants/collection-templates'
 import useCollectionTemplates from '../../../../../../../../../../hooks/use-collection-templates'
+import useScreenLinkRoutes from '../../../../../../../../../../hooks/use-screen-link-routes'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
 import useHostComponentDefinitions from '../../../../../../../../../../hooks/use-host-component-definitions'
 import usePresence from '../../../../../../../../../../hooks/use-presence'
@@ -347,7 +348,8 @@ function BesignerPage(props) {
   // Publishing a collection's list/entry template is what makes the compose
   // pipeline use it, but the template is not a page of the site (AGL-1267):
   // its routing-map slug 404s, so nothing here may name it (AGL-1269).
-  const { templateScreenIds, routesByScreenId } = useCollectionTemplates(hostId)
+  const collectionTemplates = useCollectionTemplates(hostId)
+  const { templateScreenIds, routesByScreenId } = collectionTemplates
   // AGL-1271: a template's live URL is decided by the collection that
   // renders it, not its own (dropped) routing-map entry.
   const { url: liveUrl, unavailableReason: liveUnavailableReason } = useMemo(
@@ -901,9 +903,16 @@ function BesignerPage(props) {
   // Id-based screen links: the canvas resolves hrefs from the live routing
   // map (rendered, never navigable in the editor), and the Attributes panel
   // uses the same context to list screens in the screen-select field.
+  // What the SITE serves, not what publishing wrote (AGL-1998): a picker that
+  // offers a path the tenant router 404s hands the author a dead anchor.
+  const linkableRoutes = useScreenLinkRoutes({
+    templates: collectionTemplates,
+    routingMap,
+    screens: screenDocs,
+  })
   const screenLinks = useMemo(
     () => ({
-      screens: routingMap,
+      screens: linkableRoutes,
       labels: Object.fromEntries(
         Object.entries(screensById).map(([id, screen]) => [
           id,
@@ -914,7 +923,7 @@ function BesignerPage(props) {
       // Static canvas: interactions inert, menus/drawers show editor affordance (AGL-830).
       editorInert: true,
     }),
-    [routingMap, screensById],
+    [linkableRoutes, screensById],
   )
 
 
