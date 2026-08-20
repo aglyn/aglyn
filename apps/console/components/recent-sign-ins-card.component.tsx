@@ -19,13 +19,20 @@
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   Alert,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   LinearProgress,
   List,
   ListItem,
+  ListItemSecondaryAction,
   ListItemText,
   Typography,
 } from '@mui/material'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
 
@@ -37,6 +44,15 @@ interface DeviceRow {
   ip: string | null
   firstSeenMs: number | null
   lastSeenMs: number | null
+  /** Set once the owner has signed this device out (AGL-1959). */
+  revokedAtMs: number | null
+  /**
+   * Set when this device was recorded WITHOUT mailing an alert, because it
+   * shared an IP and an operating system with a device already known
+   * (AGL-1959). Shown, because a silent sign-in the owner cannot see is the
+   * one thing suppression must never produce.
+   */
+  alertSuppressedAtMs: number | null
 }
 
 /** Date AND time: two sign-ins on the same day is the interesting case. */
@@ -69,17 +85,76 @@ function formatSeen(ms: number | null): string {
  * one before it was theirs. The field names describe this card; the data for
  * it was already being written.
  *
- * REVOCATION IS DELIBERATELY ABSENT. Ending a session needs invalidation,
- * which is a larger piece; the review surface alone closes the loop the email
- * opens, and a "sign out everywhere" button that did not actually sign anyone
- * out would be worse than no button. The card says what it cannot do rather
- * than implying it.
+ * Revocation landed with AGL-1959, on the terms AGL-2318 set for it: "a 'sign
+ * out everywhere' button that did not actually sign anyone out would be worse
+ * than no button." What the button does is described in
+ * `app/api/_lib/device-revocation.ts`. Two things about it belong in the UI
+ * rather than only in a comment, because getting either wrong is a person
+ * believing they are safe when they are not:
+ *
+ *  - **It signs out every device, including this one.** Firebase has no
+ *    per-device refresh-token revocation, so the only lever that reaches the
+ *    other browser's stored credential is account-wide. The confirmation says
+ *    that in those words instead of implying a narrower effect.
+ *  - **A tab that is already open can survive up to an hour.** Firestore rules
+ *    key on the ID token, not on our cookie, and the revoked browser holds one
+ *    until it expires. It cannot get another. Anything that goes through our
+ *    server stops immediately.
  */
 export function RecentSignInsCard() {
   const { data: user } = useUser()
   const [devices, setDevices] = useState<DeviceRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [confirming, setConfirming] = useState<DeviceRow | null>(null)
+  const [revoking, setRevoking] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const revoke = useCallback(
+    async (device: DeviceRow) => {
+      setRevoking(true)
+      setError(null)
+      try {
+        const idToken = await (
+          user as { getIdToken?: () => Promise<string> }
+        )?.getIdToken?.()
+        const response = await fetch('/api/account/devices/revoke', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({ deviceId: device.id }),
+        })
+        const body = await response.json().catch(() => null)
+        if (!response.ok) {
+          // Named, never swallowed — for the same reason the load error is.
+          // "Nothing happened" is the one answer this control must not give
+          // silently, because the person will walk away believing it did.
+          setError(body?.error ?? 'Could not sign that device out')
+          return
+        }
+        setDevices((rows) =>
+          (rows ?? []).map((row) =>
+            row.id === device.id
+              ? { ...row, revokedAtMs: Number(body?.revokedAt ?? Date.now()) }
+              : row,
+          ),
+        )
+        setNotice(
+          'Signed out. Every device has been signed out, including this ' +
+            'one — you will be asked to sign in again. A tab that is already ' +
+            'open may keep working for up to an hour.',
+        )
+      } catch {
+        setError('Could not sign that device out')
+      } finally {
+        setRevoking(false)
+        setConfirming(null)
+      }
+    },
+    [user],
+  )
 
   useEffect(() => {
     if (!user) return
@@ -136,9 +211,9 @@ export function RecentSignInsCard() {
       ) : (
         <>
           <Typography variant="body2" color="text.secondary" gutterBottom>
-            {'If you do not recognise one of these, change your password and ' +
-              'add a passkey. Signing a device out remotely is not available ' +
-              'yet.'}
+            {'If you do not recognise one of these, sign it out and change ' +
+              'your password. Signing out one device signs out every device, ' +
+              'including this one.'}
           </Typography>
           <List dense>
             {devices.map((device) => (
@@ -164,16 +239,67 @@ export function RecentSignInsCard() {
                       device.firstSeenMs
                         ? `first seen ${formatSeen(device.firstSeenMs)}`
                         : null,
+                      device.revokedAtMs
+                        ? `signed out ${formatSeen(device.revokedAtMs)}`
+                        : null,
+                      // Suppression silences the email, never the row.
+                      device.alertSuppressedAtMs
+                        ? 'no email sent — same network and system as a ' +
+                          'device already known'
+                        : null,
                     ]
                       .filter(Boolean)
                       .join(' · ')
                   }
                 />
+                <ListItemSecondaryAction>
+                  <Button
+                    size="small"
+                    color="error"
+                    disabled={revoking || Boolean(device.revokedAtMs)}
+                    onClick={() => setConfirming(device)}
+                  >
+                    {device.revokedAtMs ? 'Signed out' : 'Sign out'}
+                  </Button>
+                </ListItemSecondaryAction>
               </ListItem>
             ))}
           </List>
         </>
       )}
+      {notice ? <Alert severity="info">{notice}</Alert> : null}
+      <Dialog open={Boolean(confirming)} onClose={() => setConfirming(null)}>
+        <DialogTitle>{'Sign this device out?'}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {/*
+              The whole effect, stated before the click rather than discovered
+              after it. Firebase has no per-device refresh-token revocation, so
+              the only lever that reaches the other browser's stored credential
+              is account-wide — and a person who expects one device to drop and
+              finds themselves signed out everywhere will read a working
+              control as a broken one.
+            */}
+            {`Signing out ${
+              confirming?.deviceName || 'this device'
+            } signs out every device on your account, including this one. ` +
+              'You will need to sign in again. A tab that is already open ' +
+              'may keep working for up to an hour.'}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirming(null)} disabled={revoking}>
+            {'Cancel'}
+          </Button>
+          <Button
+            color="error"
+            disabled={revoking}
+            onClick={() => confirming && void revoke(confirming)}
+          >
+            {'Sign out everywhere'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </CardDisplay>
   )
 }

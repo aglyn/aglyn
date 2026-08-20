@@ -845,6 +845,33 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
     },
   ]
 
+  /**
+   * Honour `?tab=` on first paint (AGL-1959).
+   *
+   * The new-device security email's button says "Review account security" and
+   * landed on this page's DEFAULT tab, which is Account — so the person who
+   * had just been told a stranger signed in arrived at their email address and
+   * had to find Security themselves. The email now links `?tab=security`.
+   *
+   * Read off `window` in an effect rather than through `useSearchParams`,
+   * which would opt this whole page into a client-side bailout and needs a
+   * Suspense boundary it does not have.
+   *
+   * Declared HERE, below `sections`, so it can check the id against the tabs
+   * this account actually has: Security is absent for an SSO-governed account
+   * with no password, and selecting a panel that is not rendered leaves an
+   * empty page with no tab highlighted. `sections` is rebuilt every render and
+   * is deliberately not a dependency — this applies the link once, and must
+   * not fight the user's own clicks afterwards.
+   */
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get('tab')
+    if (requested && sections.some((section) => section.id === requested)) {
+      setTab(requested)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const onTabChange = useCallback(
     async (_event: unknown, value: string) => {
       setTab(value)

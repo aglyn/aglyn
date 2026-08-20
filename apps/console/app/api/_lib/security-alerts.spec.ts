@@ -72,8 +72,24 @@ function firestoreWithDevices(seed: Record<string, Record<string, unknown>>) {
         docs[id] = options?.merge ? { ...docs[id], ...data } : data
       },
     }),
-    limit: () => ({
-      get: async () => ({ empty: Object.keys(docs).length === 0 }),
+    /*
+     * `{ empty, docs }`, not `{ empty }` alone (AGL-1959).
+     *
+     * The probe used to ask one question — "is there any prior device?" — so
+     * a double that answered only `empty` was faithful. IP-overlap suppression
+     * reads the SET, and a double that returns no `docs` makes
+     * `recordDeviceAndMaybeAlert` throw into its own catch and report
+     * `{ newDevice: false, alerted: false }`: a false RED that looks like a
+     * behaviour change and is really a missing field on the fake.
+     */
+    limit: (n: number) => ({
+      get: async () => {
+        const ids = Object.keys(docs).slice(0, n)
+        return {
+          empty: ids.length === 0,
+          docs: ids.map((id) => ({ id, data: () => docs[id] })),
+        }
+      },
     }),
   }
   const firestore = {
@@ -109,7 +125,15 @@ describe('recordDeviceAndMaybeAlert (AGL-665)', () => {
     })
     const outcome = await recordDeviceAndMaybeAlert(params(firestore))
 
-    expect(outcome).toEqual({ newDevice: true, alerted: true })
+    // The suppression verdict rides along on every outcome that reached the
+    // decision (AGL-1959), so `alerted: false` can be told apart from a first
+    // device and from a send that failed. `device-old` carries neither an IP
+    // nor a device name, so nothing overlaps and the alert goes out.
+    expect(outcome).toEqual({
+      newDevice: true,
+      alerted: true,
+      suppression: { suppress: false, reason: 'no-overlap' },
+    })
     expect(docs['device-new']).toMatchObject({
       deviceName: 'Chrome on macOS',
       createdAt: NOW,
@@ -191,7 +215,11 @@ describe('recordDeviceAndMaybeAlert (AGL-665)', () => {
     const { firestore } = firestoreWithDevices({ 'device-old': { createdAt: 1 } })
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
     const outcome = await recordDeviceAndMaybeAlert(params(firestore))
-    expect(outcome).toEqual({ newDevice: true, alerted: false })
+    expect(outcome).toEqual({
+      newDevice: true,
+      alerted: false,
+      suppression: { suppress: false, reason: 'no-overlap' },
+    })
     // An email Resend refused is not a cost (AGL-1438).
     expect(mockMeterPlatformEmail).not.toHaveBeenCalled()
     errorSpy.mockRestore()
