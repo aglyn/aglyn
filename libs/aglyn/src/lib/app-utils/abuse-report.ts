@@ -133,6 +133,34 @@ export interface AbuseReportCategoryDefinition {
  * `csam` is `urgent` and is deliberately NOT given a self-service lever
  * anywhere in the product — it is a report-to-NCMEC-and-preserve obligation,
  * not a takedown button, and the runbook says so.
+ *
+ * ## The `csam` hint says nothing about authorities (AGL-2045)
+ *
+ * It used to read *"Reported to the authorities and handled outside the normal
+ * queue."* The second clause was true — `urgent` really does jump the queue and
+ * fire a staff notification. The first was not: there is no CyberTipline
+ * submission path, no report generation, no preservation handling and no
+ * runbook step behind it, as `staff-console/abuse-reports.md` concedes in its
+ * own limits list.
+ *
+ * That is worse than simply lacking the mechanism, because the sentence is
+ * load-bearing on somebody else's decision. A person who has just found this
+ * material and reads that it has been "reported to the authorities" may
+ * reasonably stop there — so the claim can *replace* a real CyberTipline
+ * report rather than supplement one. It also ships to every self-hoster, each
+ * of whom makes the same promise on their own public form with even less
+ * behind it, and it sits opposite a live statutory duty (18 U.S.C. §2258A)
+ * that attaches to the provider on actual knowledge.
+ *
+ * So the hint now describes only the handling — which is real and is the same
+ * on every deployment — and sends the reporter to NCMEC themselves. Naming the
+ * CyberTipline is not a promise about the operator; it is the one instruction
+ * that survives being read by somebody who then closes the tab.
+ *
+ * Whether Aglyn should *build* the mechanism and make an authorities claim
+ * true is open for Zach on AGL-2045. If it is ever built, the claim must
+ * render from its own explicit configuration — never inferred — exactly as
+ * AGL-2016 gated the DMCA designation.
  */
 export const ABUSE_REPORT_CATEGORIES: readonly AbuseReportCategoryDefinition[] =
   [
@@ -145,7 +173,7 @@ export const ABUSE_REPORT_CATEGORIES: readonly AbuseReportCategoryDefinition[] =
     {
       id: 'csam',
       label: 'Child sexual abuse material',
-      hint: 'Reported to the authorities and handled outside the normal queue.',
+      hint: 'Handled outside the normal queue and escalated to the operator immediately. Please also report it directly to NCMEC at report.cybertip.org — do not rely on this form alone.',
       severity: 'urgent',
     },
     {
