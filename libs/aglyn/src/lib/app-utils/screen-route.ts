@@ -342,6 +342,247 @@ export function screenClaimsToBeAPage(
 }
 
 /**
+ * One screen, reduced to the two things {@link billableScreenIds} asks about.
+ *
+ * Rows rather than a query (AGL-1390) because the enforcement points ask about
+ * a state that does not exist yet: a promotion is checked against the count it
+ * WOULD leave behind. A function that does its own reads can only answer for
+ * the present. `readScreenSources` in /api/hosts/resources is the reader.
+ */
+export interface BillableScreenSource {
+  id: string
+  kind?: unknown
+  deletedAt?: unknown
+}
+
+/**
+ * A host's `screens` routing map (screen id → route path) as
+ * `publishScreenRoute` writes it. Only membership is read, never the path.
+ */
+export type ScreenRoutingMap = Record<string, unknown> | null | undefined
+
+/**
+ * WHICH screens spend the plan's screen allowance (AGL-1173).
+ *
+ * The ids rather than the count, because an enforcement point that cannot name
+ * the screen it is refusing over is a refusal the person reading it cannot act
+ * on.
+ *
+ * A plain `screens.count()` charged for three things the subscriber never
+ * chose to author, and the screens list — which filters them out — then
+ * disagreed with the server about how much of the plan was used:
+ *
+ *  - **Soft-deleted screens.** Delete stamps `deletedAt` rather than
+ *    removing the doc, so deleting a screen never freed a slot. On the free
+ *    plan (5 screens) that was a dead end with no way out from the UI.
+ *  - **Email screens** (`kind: 'email'`), which live on the Emails page and
+ *    were already excluded from the list count but not from enforcement.
+ *  - **A collection's ENTRY template** — one screen serving every entry at no
+ *    URL of its own. Adding a blog cost two of the free plan's five screens
+ *    before the first page existed.
+ *
+ * ## Why it lives HERE, next to the predicate (AGL-2093)
+ *
+ * It was in /api/hosts/resources, and the console's Screens page — which runs
+ * the same rule as a precheck before it lets somebody add a page — could not
+ * import it from there (that module reaches `@aglyn/aglyn/server`, which pulls
+ * `node:stream` in through the API adapter). So the page restated it, and the
+ * restatement drifted: it never learned the error-screen bound below, and on a
+ * host holding five `kind: 'error'` screens the console offered room the API
+ * then refused. A precheck that warns on a different number than the API
+ * enforces is worse than no precheck at all, and a rule that has to be
+ * restated to be reused will be restated wrongly eventually. One function, two
+ * callers.
+ *
+ * ## ONE document answers it now (AGL-1400)
+ *
+ * The third exclusion used to be a JOIN: the count read the `collections`
+ * collection and subtracted whatever screen ids the template pointers named.
+ * That shape produced four issues in one arc, because the other side of the
+ * join is editable and each new way to edit it was a new bypass — AGL-1173
+ * created the exclusion, AGL-1383 froze the two fields the screen itself
+ * carried, AGL-1387 found the list template was a page after all, and AGL-1390
+ * found the pointer could be toggled to mint permanent slots and had to move
+ * the write server-side and evaluate the cap against the post-state.
+ *
+ * Since AGL-1400 an entry template says so on its own document
+ * (`kind: 'template'`), stamped by /api/hosts/screens and frozen in the rules
+ * exactly as `kind: 'email'` is. So this reads the `screens` collection and
+ * nothing else: the pointer is a pointer again, freely writable, and it excuses
+ * nothing. `screenClaimsToBeAPage` is the whole rule, which is the property
+ * that keeps the count and the serve path (`getScreen`) from ever disagreeing.
+ *
+ * What did NOT change is what anybody pays. A collection's LIST template stays
+ * a page — `/{collectionSlug}` renders that exact screen (AGL-1387) — so it is
+ * never stamped and still counts, and an entry template stays excluded
+ * (AGL-1173's charge is not reinstated).
+ *
+ * ## The routing map outranks the document, and ONLY ADDS (AGL-1383, AGL-1445)
+ *
+ * `deletedAt` and `kind: 'email'` are ordinary client-writable fields on the
+ * screen's OWN document, and the party they are subtracted on behalf of is the
+ * party being metered. `updateDoc(screenRef, {kind: 'email'})` — one write, no
+ * route change — used to take a live page off a Free plan's five and leave it
+ * serving, because nothing else read either field. So for those two the
+ * document's account of itself is consulted only for screens the routing map
+ * does not route: **a routed screen counts, whatever it says about itself**.
+ *
+ * The converse is NOT true and must not become true, which is AGL-1445's
+ * settlement. An unrouted screen with no slug — a draft, or an orphan left
+ * behind by an unpublish — serves nothing, and it still counts:
+ *
+ *  - `screensPerHost` is a CREATE-TIME gate. /api/hosts/resources counts and
+ *    refuses; `report-usage` re-measures monthly but RECORDS rather than
+ *    enforces. The create is the only door.
+ *  - A screen is born unrouted, and publishing is a separate later act — a
+ *    client `updateDoc` on the host's `screens` map (`publishScreenRoute`),
+ *    gated on `canPublishHostContent` and on nothing else.
+ *
+ * So subtracting unrouted screens would not make the count fairer, it would
+ * make every create free — the new document is unrouted by construction — and
+ * leave the publishes that follow ungated. A Free site would hold unlimited
+ * pages. AGL-1445's option 2 (server-stamping a non-page `kind` on orphans by
+ * a sweep) lands in the same place unless the promotion BACK passes a gate,
+ * and for an orphan the promotion is the publish. `kind: 'template'` can be
+ * trusted precisely because its promotion is `convertScreenKind`, checked
+ * exactly like a create; there is no equivalent door in front of the routing
+ * map. The price is one slot until somebody deletes the orphan, which is one
+ * click and which the Screens page lists like any other row —
+ * `unrouted-screen-counts.spec.ts` pins it at the enforcement point.
+ *
+ * `kind: 'template'` is deliberately outside the map's override, and it is the
+ * one value that can be. A template is routed ON PURPOSE — publishing is how
+ * the compose pipeline picks it up, and AGL-1267 drops it from routing when the
+ * request arrives — so the map cannot be the arbiter for it. What makes
+ * trusting it safe is that no client writes it: the demotion that sets it
+ * always succeeds (it lowers the count) and the promotion that clears it is
+ * checked exactly like a create (it raises it), so there is no toggle to run a
+ * loop through.
+ */
+export function billableScreenIds(
+  screens: ReadonlyArray<BillableScreenSource>,
+  routingMap?: ScreenRoutingMap,
+): Set<string> {
+  const routed = new Set(Object.keys(routingMap ?? {}))
+  const exemptErrors = exemptErrorScreenIds(screens)
+  const billable = new Set<string>()
+  for (const screen of screens) {
+    if (screen.kind === SCREEN_KIND_TEMPLATE) continue
+    const claimsToBeAPage = screenClaimsToBeAPage({
+      kind: screen.kind as string,
+      deletedAt: screen.deletedAt,
+    })
+    // A `kind: 'error'` screen OVER the slot bound is a page again (AGL-2093).
+    const exemptionSpent =
+      screen.kind === SCREEN_KIND_ERROR &&
+      screen.deletedAt == null &&
+      !exemptErrors.has(screen.id)
+    if (routed.has(screen.id) || claimsToBeAPage || exemptionSpent) {
+      billable.add(screen.id)
+    }
+  }
+  return billable
+}
+
+/**
+ * The live `kind: 'error'` screens whose billing exemption actually HOLDS —
+ * at most {@link ERROR_SCREEN_MAX_PER_HOST} of them (AGL-2093).
+ *
+ * ## Why the bound lives here and not at one endpoint
+ *
+ * AGL-2092 introduced the exemption and bounded it at four — one per
+ * `HostErrorScreens` slot — by checking the post-state at the moment
+ * /api/hosts/screens STAMPS the kind. That made the claim true of the assign
+ * route and false end to end, because the stamp is not the only writer:
+ * `SITE_EXPORT_FIELDS.screens` carries `kind`, so a hand-edited bundle could
+ * declare `kind: 'error'` on all 200 of its screens and /api/hosts/import
+ * excluded every one of them from `screensPerHost` — never passing the bound,
+ * never binding a slot. N unbilled screens, one file.
+ *
+ * That is the arc's fifth repetition of one sentence (AGL-1173, AGL-1383,
+ * AGL-1387, AGL-1390, AGL-1400): *an exclusion enforced at a write path is
+ * enforced only at the write paths somebody remembered.* So the bound moves
+ * into the rule the enforcement points SHARE. However a screen came to say
+ * `kind: 'error'` — assign, import, or the next writer — a host gets four
+ * unbilled ones and the rest spend the plan's allowance exactly as pages do.
+ *
+ * ## Which four
+ *
+ * The lowest ids, sorted. The choice is arbitrary and the DETERMINISM is not:
+ * every enforcement point models a post-state by re-running this over a
+ * different row set, and a rule that picked "the first four encountered" would
+ * hand two callers different answers for the same host. The SIZE of the exempt
+ * set never depends on the order — it is `min(live errors, 4)` — so only which
+ * ids a refusal message names can move, never whether one is refused.
+ *
+ * Tombstones are excluded for `nonPageScreenIds`' reason: a cap counting
+ * soft-deleted rows is AGL-1173's bug one cap over, where deleting an error
+ * screen never frees its slot.
+ *
+ * The stamp-time bound in /api/hosts/screens is deliberately KEPT. It is the
+ * better refusal — it names the four slots and arrives before the write — and
+ * this is the backstop under it, so no writer can mint a fifth unbilled error
+ * screen even by a path that never consults it.
+ */
+export function exemptErrorScreenIds(
+  screens: ReadonlyArray<BillableScreenSource>,
+): Set<string> {
+  const live: Array<string> = []
+  for (const screen of screens) {
+    if (screen.kind !== SCREEN_KIND_ERROR) continue
+    if (screen.deletedAt != null) continue
+    live.push(screen.id)
+  }
+  if (live.length <= ERROR_SCREEN_MAX_PER_HOST) return new Set(live)
+  return new Set(live.sort().slice(0, ERROR_SCREEN_MAX_PER_HOST))
+}
+
+/**
+ * The screens the flat platform cap bounds (AGL-1399, AGL-1439): LIVE documents
+ * that are not billable pages — the exact complement of {@link billableScreenIds}.
+ *
+ * ## Why the complement, and not `kind === 'email' || kind === 'template'`
+ *
+ * Both issues are one sentence — *a `kind` value that excludes a document from
+ * billing, declarable by the metered party* — and a cap that enumerated the two
+ * values would be correct until the third arrived, which is how this arc has
+ * already gone four times (AGL-1173, AGL-1383, AGL-1387, AGL-1390). Written as
+ * the complement, a new non-page `kind` is bounded by the act of adding it to
+ * `screenClaimsToBeAPage`: there is no second list to remember.
+ *
+ * Two properties fall out of taking the complement rather than negating the
+ * predicate directly:
+ *
+ *  - **A soft-deleted screen is in NEITHER set.** Delete stamps `deletedAt`
+ *    rather than removing the doc, and a cap that counted tombstones would be
+ *    the AGL-1173 bug one cap over — deleting an email document would never free
+ *    a slot, and a host at the cap could never author another.
+ *  - **A ROUTED email document counts once, against the plan.** The routing map
+ *    outranks the document (AGL-1383), so such a screen is a page somebody is
+ *    already paying for; charging it to the infrastructure cap as well would be
+ *    counting one document twice. The two sets partition the live screens.
+ *
+ * Taking the complement is also what makes AGL-2093's bound arrive here for
+ * free: an error screen past `ERROR_SCREEN_MAX_PER_HOST` becomes billable
+ * above, so it leaves this set in the same act. The partition holds — every
+ * live screen is in exactly one of the two — and the fifth error screen is
+ * bounded by the PLAN rather than by the flat 5,000, which is the stronger of
+ * the two numbers on every finite tier.
+ */
+export function nonPageScreenIds(
+  screens: ReadonlyArray<BillableScreenSource>,
+  routingMap?: ScreenRoutingMap,
+): Set<string> {
+  const billable = billableScreenIds(screens, routingMap)
+  const nonPage = new Set<string>()
+  for (const screen of screens) {
+    if (screen.deletedAt != null) continue
+    if (!billable.has(screen.id)) nonPage.add(screen.id)
+  }
+  return nonPage
+}
+
+/**
  * How many LIVE screen documents a host may hold that are NOT billable pages —
  * email documents, entry templates, and whatever non-page `kind` comes next
  * (AGL-1399, AGL-1439).

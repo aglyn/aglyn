@@ -49,10 +49,15 @@ import {
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // The REAL counting rule, not a restatement of it. This mock used to carry
+  // its own `screenClaimsToBeAPage` and no `ERROR_SCREEN_MAX_PER_HOST` at all,
+  // which is the unfaithful-double shape: the detector under test would have
+  // agreed with a fake that had never heard of AGL-2093's bound.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/screen-route'),
+  // The plan IS stubbed, deliberately: these tests are about the freshness of
+  // a recorded measurement, and a five-screen allowance keeps the arithmetic
+  // in the assertions rather than in the plan table.
   resolveOrgEntitlements: () => ({ screensPerHost: 5 }),
-  SCREEN_KIND_TEMPLATE: 'template',
-  screenClaimsToBeAPage: (screen: { kind?: unknown; deletedAt?: unknown }) =>
-    !screen.deletedAt && screen.kind !== 'email' && screen.kind !== 'template',
 }))
 
 /** A host ref whose `screens` scan counts every document it hands back. */
