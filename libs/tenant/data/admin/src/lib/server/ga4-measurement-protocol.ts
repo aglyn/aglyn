@@ -533,3 +533,91 @@ export async function sendGa4SitePublished(input: {
   // Always synthetic here: there is no browser client id to have missed.
   return { ...result, synthesizedClientId: true }
 }
+
+/**
+ * Send one `stripe_connected` for an account that became able to take
+ * payments with no browser present (AGL-1580). Never throws.
+ *
+ * ## Why this needs a server sender at all
+ *
+ * There are two client-side emitters for this event — the commerce payments
+ * card and the marketplace seller panel — and both are gated the same way:
+ *
+ *     if (!chargesEnabled) trackEvent('stripe_connected')
+ *
+ * where `chargesEnabled` is the state read from the merchant's profile BEFORE
+ * the connect request. The gate is right in intent: the connect handler is a
+ * re-entrant create-or-resume that answers `chargesEnabled: true` on every
+ * later visit, so a bare event there would count one merchant once per click
+ * forever.
+ *
+ * What defeats it is AGL-1997. Stripe emits `account.updated` the moment
+ * hosted onboarding completes — while the merchant is still on Stripe's
+ * domain, before the `return_url` bounces them back — and
+ * {@link syncConnectAccountStatus} mirrors `charges_enabled` onto the profile
+ * from that webhook. So by the time the merchant lands back in the console
+ * the flag they are supposed to transition FROM already reads `true`, the
+ * client guard is false, and the event never fires. It is not a race that
+ * usually goes the wrong way; the webhook wins by an entire page load.
+ *
+ * ## The two senders cannot double-count
+ *
+ * Both key off the SAME stored flag, from opposite sides of it:
+ *
+ * - merchant clicks first → the connect route writes `true` → the later
+ *   `account.updated` sees no transition → only the CLIENT event fires;
+ * - webhook lands first → the transition is here → the merchant's later click
+ *   reads a pre-state of `true` → only the SERVER event fires.
+ *
+ * Exactly one of the two guards can be open for a given account, which is why
+ * this is added alongside the client emitters rather than replacing them —
+ * a deployment with no Connect webhook destination (the self-host default)
+ * still reports through the browser.
+ *
+ * ## One synthetic user per connected account
+ *
+ * The client id is hashed from the Stripe account id for the reason
+ * {@link sendGa4SitePublished} hashes the host: "% who connect Stripe" counts
+ * MERCHANTS, and a random id per hit would let one account that reconnects
+ * look like several activated customers. The account id is the hash seed and
+ * is never transmitted.
+ *
+ * ## No parameters, deliberately
+ *
+ * `stripe_connected` is declared as `Record<string, never>` in the client
+ * event contract, and a server sender that invented a param would create a
+ * dimension only half the hits carry.
+ */
+export async function sendGa4StripeConnected(input: {
+  /** Stripe account id — hashed into a client id, never sent. */
+  accountId: string
+  /**
+   * Ours rather than a customer's (AGL-1582). Omitted by the webhook caller
+   * for the same reason the publish executor omits it: no server-side signal
+   * distinguishes our own connected account from a customer's, and guessing
+   * would stamp real merchants as internal — which a data filter then
+   * permanently discards.
+   */
+  internal?: boolean
+}): Promise<Ga4SendResult> {
+  const credentials = ga4Credentials()
+  if (!credentials) {
+    return { sent: false, synthesizedClientId: false, reason: 'not-configured' }
+  }
+  if (!input.accountId) {
+    return { sent: false, synthesizedClientId: false, reason: 'no-client-id' }
+  }
+  const result = await postGa4Event({
+    credentials,
+    eventName: 'stripe_connected',
+    // Sanitized despite being empty, so the guarantee holds because the
+    // sanitizer ran rather than because this call site happened to pass
+    // nothing.
+    params: sanitizeEventParams({}),
+    clientId: synthesizeClientId(input.accountId),
+    log: { tag: 'AGL-1580:ga4-stripe-connected' },
+    internal: input.internal,
+  })
+  // Always synthetic here: there is no browser client id to have missed.
+  return { ...result, synthesizedClientId: true }
+}
