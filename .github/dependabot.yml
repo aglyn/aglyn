@@ -74,6 +74,18 @@ updates:
       # name rather than the target and would propose a bump to the wrong
       # package. Remove this entry when the pin becomes a plain version.
       - dependency-name: typescript
+      # @base-ui/react >= 1.7.0 cannot pass the console suite. 1.7.0 added
+      # utils/dispatchClickWithModifiers.js (absent in 1.6.0), which on keydown
+      # synthesises the click via `new (ownerWindow(el).PointerEvent)(...)`.
+      # jest does not run in the repo's jsdom 29 — jest-environment-jsdom pins
+      # its own nested jsdom 26.1.0, which has NO PointerEvent — so every
+      # keyboard-activated base-ui button throws "PointerEvent is not a
+      # constructor". Browser and production builds are unaffected; it is the
+      # test environment alone. Patch releases of the 1.6 line still arrive.
+      # Remove this together with the jest PointerEvent polyfill. (AGL-2470)
+      - dependency-name: '@base-ui/react'
+        versions:
+          - '>=1.7.0'
     groups:
       # A dependency lands in the FIRST group whose patterns match, so the
       # order of these blocks is load-bearing: `eslint-config-next` belongs
