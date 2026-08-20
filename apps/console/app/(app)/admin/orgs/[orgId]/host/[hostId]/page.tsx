@@ -46,6 +46,7 @@ import { docsHelp } from '../../../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../../../constants/shared'
 import useFirestoreDoc from '../../../../../../../hooks/use-firestore-doc'
+import { StaffDomainCard } from '../../../../../../../components/staff-domain-card.component'
 
 /**
  * The published-site apex, from the ONE shared source (AGL-2195).
@@ -225,9 +226,13 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                         {`host id ${hostId}`}
                       </Typography>
                       <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 0.5 }}>
-                        {host?.cname ? (
-                          <Chip size="small" label={`domain: ${host.cname}`} />
-                        ) : null}
+                        {/*
+                          The custom domain moved to its own card below
+                          (AGL-2011). It used to be a bare `domain: {cname}`
+                          chip here — the domain, with no verdict and no
+                          attachment flag, so a broken domain and a working one
+                          rendered identically on the page support looks at.
+                        */}
                         <Chip
                           size="small"
                           variant="outlined"
@@ -299,6 +304,10 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                     </Stack>
                   </CardDisplay>
                 ),
+              },
+              {
+                size: { xs: 12 },
+                children: <StaffDomainCard hostId={hostId} host={host} />,
               },
               {
                 size: { xs: 12 },

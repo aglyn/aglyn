@@ -16,7 +16,11 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { firebaseAdmin, projectDomainStatus } from '@aglyn/tenant-data-admin'
+import {
+  domainStateServes,
+  firebaseAdmin,
+  projectDomainStatus,
+} from '@aglyn/tenant-data-admin'
 import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { upsertSubdomainRedirect } from '../../../../utils/server/subdomain-redirect'
 
@@ -110,12 +114,10 @@ async function handler(request: Request): Promise<Response> {
       // Deliberately the SAME predicate as the attach route, including
       // `certificate-pending` (AGL-1996). A sweeper that used a looser
       // definition of "serving" than the door it is completing for would
-      // re-introduce the bug that door was fixed to avoid.
-      const serves =
-        status.state !== 'not-attached' &&
-        status.state !== 'ownership-pending' &&
-        status.state !== 'dns-misconfigured' &&
-        status.state !== 'certificate-pending'
+      // re-introduce the bug that door was fixed to avoid — and until
+      // AGL-2011 that sameness was two hand-kept copies of four comparisons,
+      // held by this comment. It is now literally one function.
+      const serves = domainStateServes(status.state)
       if (!serves) {
         stillPending.push(domain)
         continue

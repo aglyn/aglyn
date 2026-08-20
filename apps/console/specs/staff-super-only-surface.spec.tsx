@@ -177,7 +177,13 @@ const GATED_SURFACES: Record<string, { ui: string[]; via: RegExp }> = {
     via: /canEdit/,
   },
   'host/route.ts': {
-    ui: ['app/(app)/admin/orgs/[orgId]/host/[hostId]/page.tsx'],
+    ui: [
+      'app/(app)/admin/orgs/[orgId]/host/[hostId]/page.tsx',
+      // The route's SECOND super-only action (AGL-2011). Its control lives in
+      // the card, not the page, so listing only the page would have left the
+      // Re-attach button covered by a gate on a different button.
+      'components/staff-domain-card.component.tsx',
+    ],
     via: /SuperStaffOnly/,
   },
   'lockdown/route.ts': {

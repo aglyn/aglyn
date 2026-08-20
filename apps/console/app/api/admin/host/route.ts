@@ -18,16 +18,19 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { isBlockedSubdomain, SUBDOMAIN_PATTERN } from '@aglyn/aglyn/server'
 import {
+  domainStateServes,
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  projectDomainStatus,
   updateExisting,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 
 /**
  * Staff host management (AGL-390): retarget a host's subdomain (validated,
- * unique, not reserved) from the staff console. Super-staff only; audited
+ * unique, not reserved) from the staff console, and re-attach its custom
+ * domain to the hosting platform (AGL-2011). Super-staff only; both audited
  * to adminAudit.
  */
 async function handler(request: Request): Promise<Response> {
@@ -44,7 +47,9 @@ async function handler(request: Request): Promise<Response> {
 
   const hostId = String(body?.hostId ?? '')
   const action = String(body?.action ?? '')
-  if (!hostId || action !== 'set-subdomain') {
+  // An ALLOW-LIST, still — the second action is named, not pattern-matched,
+  // so an unknown `action` is a 400 rather than a fall-through to the first.
+  if (!hostId || (action !== 'set-subdomain' && action !== 'reattach-domain')) {
     return Response.json({ error: 'Bad request' }, { status: 400 })
   }
 
@@ -58,6 +63,10 @@ async function handler(request: Request): Promise<Response> {
     const actorRole = String(decoded['staffRole'] ?? 'support')
     if (actorRole !== 'super') {
       return Response.json({ error: 'Requires the super staff role' }, { status: 403 })
+    }
+
+    if (action === 'reattach-domain') {
+      return await reattachDomain(hostId, decoded.uid)
     }
 
     const subdomain = String(body?.subdomain ?? '')
@@ -151,6 +160,138 @@ async function handler(request: Request): Promise<Response> {
     console.error(error)
     return Response.json({ error: 'Host update failed' }, { status: 500 })
   }
+}
+
+/**
+ * Re-run the hosting-platform attach for the domain a site ALREADY holds.
+ *
+ * Support's half of AGL-1913. The customer's card has had a Re-attach button
+ * since AGL-166; staff had no equivalent, so the only way to unstick a
+ * customer's domain was to impersonate them and press theirs — an
+ * impersonation session opened to press one idempotent button, which is a
+ * disproportionate amount of access for the job and shows up in the audit as
+ * the customer acting on themselves.
+ *
+ * DELIBERATELY NARROWER THAN `/api/domains/attach`, and this is the security
+ * property, not a simplification: it takes NO domain from the caller. It reads
+ * `host.cname` and re-attaches that. So the capability granted here is "finish
+ * what this site already claims", never "give this site a domain" — a staff
+ * member cannot point a customer's site at a name the customer never asked
+ * for, and there is no cross-host claim to race, which is why the uniqueness
+ * transaction the customer route runs has no counterpart here. The host
+ * already holds the claim; that is the precondition, not the outcome.
+ *
+ * Writes exactly one field, `cnameAttachmentPending`, under the same
+ * `domainStateServes` predicate as the attach route and the completer cron.
+ */
+async function reattachDomain(
+  hostId: string,
+  actorUid: string,
+): Promise<Response> {
+  const token = process.env.VERCEL_TOKEN
+  const projectId = process.env.VERCEL_TENANT_PROJECT_ID
+  const teamId = process.env.VERCEL_TEAM_ID
+
+  const firestore = firebaseAdmin.app().firestore()
+  const hostRef = firestore.collection('hosts').doc(hostId)
+  const hostSnapshot = await hostRef.get()
+  if (!hostSnapshot.exists) {
+    return Response.json({ error: 'No such site' }, { status: 404 })
+  }
+  const domain = String(hostSnapshot.get('cname') ?? '')
+    .trim()
+    .toLowerCase()
+  if (!domain) {
+    return Response.json(
+      { error: 'This site has no custom domain to re-attach.' },
+      { status: 400 },
+    )
+  }
+  if (!token || !projectId) {
+    // The same 501 the customer route and the cron give, for the same reason:
+    // on a self-hosted deployment there is no platform API to ask. NOT a 500 —
+    // nothing is broken, the capability simply is not configured, and the card
+    // renders a 501 as information rather than an error.
+    return Response.json(
+      {
+        error:
+          'Domain attachment is not configured (missing VERCEL_TOKEN / ' +
+          'VERCEL_TENANT_PROJECT_ID).',
+      },
+      { status: 501 },
+    )
+  }
+
+  const query = teamId ? `?teamId=${encodeURIComponent(teamId)}` : ''
+  const response = await fetch(
+    `https://api.vercel.com/v10/projects/${projectId}/domains${query}`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name: domain }),
+    },
+  )
+  const payload = await response.json().catch(() => null)
+  // `domain_already_in_use` is the answer for a domain that is ALREADY on the
+  // project, which is the common case for a re-attach and is success here. It
+  // is not taken as a green light: `projectDomainStatus` below asks whether
+  // the name is on OUR project rather than inferring it from the error code,
+  // so the same code coming back from a name held elsewhere still resolves to
+  // `not-attached`.
+  if (!response.ok && payload?.error?.code !== 'domain_already_in_use') {
+    console.error(payload)
+    await hostRef
+      .set({ cnameAttachmentPending: true }, { merge: true })
+      .catch(() => undefined)
+    return Response.json(
+      { error: payload?.error?.message ?? 'Attach failed at the platform' },
+      { status: 502 },
+    )
+  }
+
+  const status = await projectDomainStatus(domain, { projectId })
+  const serving = domainStateServes(status.state)
+  const before = hostSnapshot.get('cnameAttachmentPending') === true
+  await hostRef
+    .set(
+      {
+        cnameAttachmentPending: serving
+          ? firebaseAdmin.firestore.FieldValue.delete()
+          : // Not a lie about the attach: it landed. But this field is what
+            // `liveCustomDomain` reads to decide whether visitors may be sent
+            // here, and a domain awaiting an ownership challenge or pointed
+            // elsewhere is exactly what that guard exists for.
+            true,
+      },
+      { merge: true },
+    )
+    .catch(() => undefined)
+
+  // Audited like every other staff write on this route. The row records the
+  // PROBED state rather than "re-attached", because the interesting question
+  // afterwards is what the platform said, not that somebody pressed a button.
+  await firestore.collection('adminAudit').add({
+    actorUid,
+    action: 'host.reattach-domain',
+    target: `hosts/${hostId}`,
+    before: { cnameAttachmentPending: before },
+    after: { cnameAttachmentPending: !serving, state: status.state },
+    at: FieldValue.serverTimestamp(),
+  })
+
+  return Response.json(
+    {
+      ok: true,
+      domain,
+      state: status.state,
+      serving,
+      attachmentPending: !serving,
+    },
+    { status: 200 },
+  )
 }
 
 export const dynamic = 'force-dynamic'

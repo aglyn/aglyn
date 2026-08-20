@@ -41,6 +41,10 @@ import useFirestoreDoc from '../hooks/use-firestore-doc'
 // invariant held by a comment, and widening the pool by env var would have
 // printed an address the route rejects.
 import {
+  domainChipFor,
+  type DomainStatus,
+} from '../utils/domain-status'
+import {
   CNAME_TARGET,
   dnsInstructionsIntro,
   dnsInstructionsFor,
@@ -51,57 +55,11 @@ export interface CustomDomainCardProps {
   hostId: string
 }
 
-/**
- * What `/api/domains/status` reports (AGL-1913). `none` is a site with no
- * custom domain; `unknown`/`skipped` mean the platform could not be asked.
+/*
+ * `DomainStatus` and the chip vocabulary moved to `utils/domain-status.ts`
+ * (AGL-2011) so the staff host page renders the SAME words for the same
+ * verdict. Moved, not reworded — the customer-facing copy below is unchanged.
  */
-interface DomainStatus {
-  domain: string | null
-  state:
-    | 'none'
-    | 'serving'
-    | 'certificate-pending'
-    | 'ownership-pending'
-    | 'dns-misconfigured'
-    | 'not-attached'
-    | 'skipped'
-    | 'unknown'
-  verification?: { type: string; domain: string; value: string }[]
-  conflicts?: { type?: string; name?: string; value?: string }[]
-  attachmentPending?: boolean
-}
-
-/**
- * The chip, per state.
- *
- * Every state here used to render as the same green chip, which is the bug:
- * a certificate still issuing and a domain that will never work are not the
- * same news, and the customer is the one who has to act on the difference.
- * `unknown` deliberately falls back to the old label rather than inventing a
- * problem — a status call that could not answer is not evidence of one.
- */
-function chipFor(
-  domain: string,
-  status: DomainStatus | null,
-  attachmentPending: boolean,
-): { label: string; color: 'success' | 'warning' | 'error' | 'info' } {
-  switch (status?.state) {
-    case 'serving':
-      return { label: `${domain} — live`, color: 'success' }
-    case 'certificate-pending':
-      return { label: `${domain} — issuing certificate`, color: 'info' }
-    case 'ownership-pending':
-      return { label: `${domain} — ownership check needed`, color: 'warning' }
-    case 'dns-misconfigured':
-      return { label: `${domain} — DNS not pointing here`, color: 'warning' }
-    case 'not-attached':
-      return { label: `${domain} — not attached`, color: 'error' }
-    default:
-      return attachmentPending
-        ? { label: `${domain} — attachment pending`, color: 'warning' }
-        : { label: domain, color: 'success' }
-  }
-}
 
 /** The one thing to do next, in the customer's own terms. */
 function explanationFor(
@@ -423,7 +381,7 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
           <Stack spacing={1}>
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
               {(() => {
-                const chip = chipFor(
+                const chip = domainChipFor(
                   connected,
                   status,
                   host?.cnameAttachmentPending === true,
