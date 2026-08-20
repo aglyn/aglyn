@@ -126,6 +126,17 @@ updates:
         patterns:
           - eslint
           - 'eslint-*'
+          # `typescript-eslint` is the UMBRELLA package for the scoped ones
+          # below and re-exports the plugin, so the two must move together: on
+          # a version skew eslint registers the @typescript-eslint plugin twice
+          # and refuses the config outright with `Cannot redefine plugin`,
+          # killing the lint target rather than reporting a finding. It matches
+          # none of the other patterns here — it is unscoped and does not start
+          # with `eslint-` — so without this line it falls through to
+          # dev-minor-patch and arrives in a DIFFERENT PR from its own
+          # siblings, which is exactly how #881 and #879 came to disagree.
+          # (AGL-2478)
+          - typescript-eslint
           - '@typescript-eslint/*'
           - prettier
           - 'prettier-*'
