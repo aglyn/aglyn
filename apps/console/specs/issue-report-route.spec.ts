@@ -48,6 +48,52 @@
 
 const mockVerifyIdToken = jest.fn()
 const mockGetOrgForUser = jest.fn()
+const mockResolveOrgIdForHost = jest.fn()
+const mockGetServerReleaseFlagValues = jest.fn()
+const mockGetOrgReleaseFlagOverrides = jest.fn()
+
+/**
+ * Firestore double for the host-verification reads (AGL-2185).
+ *
+ * Modelled on the real shapes the route actually uses — `.exists`, and a
+ * `.get(field)` accessor rather than a plain data bag — because a double that
+ * answers a method the SDK does not have proves nothing about production.
+ * `hosts` holds the host docs; `orgMembers` is the set of `orgId/uid` pairs
+ * that exist, which is the fallback branch's whole question.
+ */
+const firestoreWorld: {
+  hosts: Record<string, Record<string, unknown>>
+  orgMembers: Set<string>
+} = { hosts: {}, orgMembers: new Set() }
+
+const docSnapshot = (data: Record<string, unknown> | undefined) => ({
+  exists: Boolean(data),
+  get: (field: string) => data?.[field],
+  data: () => data,
+})
+
+const mockFirestore = () => ({
+  collection: (name: string) => ({
+    doc: (id: string) => ({
+      get: async () => {
+        if (name === 'hosts') return docSnapshot(firestoreWorld.hosts[id])
+        throw new Error(`unexpected collection ${name}`)
+      },
+      collection: (sub: string) => ({
+        doc: (uid: string) => ({
+          get: async () => {
+            if (name === 'orgs' && sub === 'members') {
+              return docSnapshot(
+                firestoreWorld.orgMembers.has(`${id}/${uid}`) ? {} : undefined,
+              )
+            }
+            throw new Error(`unexpected subcollection ${name}/${sub}`)
+          },
+        }),
+      }),
+    }),
+  }),
+})
 
 /** Fixed-window limiter double: real contract, spendable budget. */
 const limiterBudget: Record<string, number> = {}
@@ -71,11 +117,17 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       auth: () => ({
         verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args),
       }),
+      firestore: () => mockFirestore(),
     }),
   },
   consumeRateLimit: (...args: unknown[]) =>
     (mockConsumeRateLimit as any)(...args),
   getOrgForUser: (...args: unknown[]) => mockGetOrgForUser(...args),
+  resolveOrgIdForHost: (...args: unknown[]) => mockResolveOrgIdForHost(...args),
+  getServerReleaseFlagValues: (...args: unknown[]) =>
+    mockGetServerReleaseFlagValues(...args),
+  getOrgReleaseFlagOverrides: (...args: unknown[]) =>
+    mockGetOrgReleaseFlagOverrides(...args),
   isImpersonationSession: () => false,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
@@ -95,10 +147,12 @@ jest.mock('@aglyn/shared-data-enums', () => ({
   BUILD_ID: 'deadbee',
 }))
 
+import { RELEASE_FLAGS } from '@aglyn/aglyn/app-utils/release-flags'
 import { POST } from '../app/api/issue-reports/route'
 
 const KEY = 'lin_api_TEST'
-const TEAM = 'team-cus-uuid'
+const TEAM = 'team-aglyn-uuid'
+const PROJECT = 'project-customer-bug-reports-uuid'
 
 let fetchCalls: { url: string; init: any }[] = []
 let fetchAnswer: { status?: number; body?: unknown } = {}
@@ -131,6 +185,7 @@ beforeEach(() => {
 
   process.env.LINEAR_API_KEY = KEY
   process.env.LINEAR_CUSTOMER_REPORTS_TEAM_ID = TEAM
+  process.env.LINEAR_CUSTOMER_REPORTS_PROJECT_ID = PROJECT
 
   mockVerifyIdToken.mockResolvedValue({
     uid: 'uid-123',
@@ -140,14 +195,36 @@ beforeEach(() => {
   mockGetOrgForUser.mockResolvedValue({
     orgId: 'org-abc',
     org: { name: 'Acme Co', plan: 'business' },
-    member: {},
+    member: { role: 'admin' },
   })
+
+  // The reporter's own site, and an org membership that does NOT reach it —
+  // so the two access branches are distinguishable rather than both true.
+  firestoreWorld.hosts = {
+    'host-mine': { displayName: 'Acme Storefront', memberRoles: { 'uid-123': 'editor' } },
+    'host-theirs': { displayName: 'Someone Else Ltd', memberRoles: {} },
+  }
+  firestoreWorld.orgMembers = new Set(['org-abc/uid-123'])
+  mockResolveOrgIdForHost.mockResolvedValue('org-someone-else')
+
+  // Every registered flag, off, then one deliberately on — the shape
+  // `getServerReleaseFlagValues` really returns (it fills registry defaults
+  // for every key before applying the template). The route runs the REAL
+  // `isReleaseFlagOnForOrg` over this, so a wrong shape fails loudly.
+  mockGetServerReleaseFlagValues.mockResolvedValue({
+    ...Object.fromEntries(
+      RELEASE_FLAGS.map((definition) => [definition.key, { enabled: false }]),
+    ),
+    release_contacts: { enabled: true },
+  })
+  mockGetOrgReleaseFlagOverrides.mockResolvedValue({})
 })
 
 afterAll(() => {
   global.fetch = realFetch
   delete process.env.LINEAR_API_KEY
   delete process.env.LINEAR_CUSTOMER_REPORTS_TEAM_ID
+  delete process.env.LINEAR_CUSTOMER_REPORTS_PROJECT_ID
 })
 
 const BODY = {
@@ -268,7 +345,29 @@ describe('AGL-2185 · what actually reaches Linear', () => {
     expect(fetchCalls[0].url).toBe('https://api.linear.app/graphql')
     expect(fetchCalls[0].init.headers.Authorization).toBe(KEY)
     expect(sentInput().teamId).toBe(TEAM)
+    expect(sentInput().projectId).toBe(PROJECT)
     expect(sentInput().title).toBe('[Bug] Media picker forgets the folder')
+  })
+
+  it('files into the "Customer bug reports" PROJECT, from configuration', async () => {
+    // Zach, 2026-08-19: "tracked in a separate linear project then our
+    // primary one". The destination must be configuration, not a constant —
+    // a compiled-in project id would file a self-host operator's reports at a
+    // project their key cannot see, which loses them silently.
+    process.env.LINEAR_CUSTOMER_REPORTS_PROJECT_ID = 'project-other'
+    await post()
+    expect(sentInput().projectId).toBe('project-other')
+  })
+
+  it('still files when no project is configured, without an explicit null', async () => {
+    // The self-host shape: a team and no project structure. Linear rejects
+    // `projectId: null`, so sending the key at all would turn a supported
+    // deployment into one that cannot file.
+    delete process.env.LINEAR_CUSTOMER_REPORTS_PROJECT_ID
+    const response = await post()
+    expect(response.status).toBe(200)
+    expect(sentInput().teamId).toBe(TEAM)
+    expect('projectId' in sentInput()).toBe(false)
   })
 
   it('carries every fact a triager would otherwise have to ask for', async () => {
@@ -290,6 +389,69 @@ describe('AGL-2185 · what actually reaches Linear', () => {
     }
     expect(description).toContain('Open the picker, choose a folder')
     expect(description).toContain('| Contact consent | Yes')
+  })
+
+  it('attaches the role, the correlation id and the flag state', async () => {
+    await post()
+    const description = sentInput().description
+    // Role: "a bug that only bites a custom role is a different bug".
+    expect(description).toContain('| Role | admin |')
+    // A flag that is ON is named; one that is OFF is not — otherwise the row
+    // says nothing about which surface the reporter was actually looking at.
+    expect(description).toContain('release\\_contacts')
+    expect(description).not.toContain('release\\_assist')
+    // The correlation id is a real uuid, not a constant — the shape of bug
+    // where a field "records a constant instead of the measured value".
+    const correlation = /\| Correlation id \| ([0-9a-f-]{36}) \|/.exec(description)
+    expect(correlation).not.toBeNull()
+
+    const second = await post()
+    expect(second.status).toBe(200)
+    const again = /\| Correlation id \| ([0-9a-f-]{36}) \|/.exec(
+      JSON.parse(fetchCalls[1].init.body).variables.input.description,
+    )
+    expect(again[1]).not.toBe(correlation[1])
+  })
+
+  it('says the flags could not be read, rather than reporting "none"', async () => {
+    // A failed Remote Config read must not render as a flag-free org: that
+    // is how a report against a flagged-off surface gets triaged as a phantom.
+    mockGetServerReleaseFlagValues.mockRejectedValue(new Error('no remote config'))
+    await post()
+    expect(sentInput().description).toContain('could not be read')
+  })
+
+  it('attaches a site the reporter can actually see', async () => {
+    await post({ ...BODY, hostId: 'host-mine' })
+    expect(sentInput().description).toContain(
+      '| Site | Acme Storefront (host-mine) |',
+    )
+  })
+
+  it('DROPS a site the reporter cannot see, and still files', async () => {
+    // The privacy boundary. A signed-in member naming someone else's host id
+    // must not stamp that customer's site onto a report in our tracker — and
+    // the refusal must cost the reporter nothing, so the report still files.
+    const response = await post({ ...BODY, hostId: 'host-theirs' })
+    expect(response.status).toBe(200)
+    const description = sentInput().description
+    expect(description).not.toContain('host-theirs')
+    expect(description).not.toContain('Someone Else Ltd')
+    expect(description).toContain('unverified')
+  })
+
+  it('reaches a site through org membership when host membership is absent', async () => {
+    // The workspace admin who owns billing but was never added to the site.
+    // Without this branch their reports would never name the site they are on.
+    mockResolveOrgIdForHost.mockResolvedValue('org-abc')
+    await post({ ...BODY, hostId: 'host-theirs' })
+    expect(sentInput().description).toContain('Someone Else Ltd')
+  })
+
+  it('drops a host id that names nothing at all', async () => {
+    const response = await post({ ...BODY, hostId: 'no-such-host' })
+    expect(response.status).toBe(200)
+    expect(sentInput().description).toContain('unverified')
   })
 
   it('records a withheld consent as a refusal, not as silence', async () => {
@@ -387,6 +549,23 @@ describe('AGL-2185 · a 200 from Linear is not a filing', () => {
   it('reports a rejected key as a failure', async () => {
     fetchAnswer = { status: 401, body: {} }
     expect((await post()).status).toBe(502)
+  })
+
+  it('hands the reporter something to quote when filing failed', async () => {
+    // The deliberate failure choice (AGL-2185): told plainly, not queued.
+    // A durable queue needs a writer, a retry worker AND a reader, and the
+    // missing reader is the failure this repo keeps finding — a queue nobody
+    // drains loses reports exactly like a dropped POST, but silently. So the
+    // reporter must leave with a reference support can find the log line by;
+    // on success that is the Linear identifier, and here it is this.
+    fetchAnswer = { status: 500, body: {} }
+    const response = await post()
+    expect(response.status).toBe(502)
+    const payload = await response.json()
+    expect(payload.correlationId).toMatch(/^[0-9a-f-]{36}$/)
+    expect(payload.error).toContain(payload.correlationId)
+    // And it must not claim success in any readable way.
+    expect(payload.ok).toBeUndefined()
   })
 })
 

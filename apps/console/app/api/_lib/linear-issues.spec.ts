@@ -51,7 +51,11 @@ import {
   type ReportContext,
 } from './linear-issues'
 
-const CONFIG = { apiKey: 'lin_api_TESTKEY', teamId: 'team-cus-uuid' }
+const CONFIG = {
+  apiKey: 'lin_api_TESTKEY',
+  teamId: 'team-aglyn-uuid',
+  projectId: 'project-customer-bug-reports-uuid',
+}
 
 const CONTEXT: ReportContext = {
   kind: 'bug',
@@ -66,6 +70,12 @@ const CONTEXT: ReportContext = {
   orgId: 'org-abc',
   orgName: 'Acme Co',
   orgPlan: 'business',
+  orgRole: 'admin',
+  orgRoleId: null,
+  hostId: 'host-1',
+  hostName: 'Acme Storefront',
+  correlationId: '11111111-2222-4333-8444-555555555555',
+  releaseFlagsOn: ['release_contacts'],
   version: '1.0.0-beta.1',
   buildId: 'abc1234',
   contactConsent: true,
@@ -113,7 +123,31 @@ describe('AGL-2185 · configuration', () => {
         LINEAR_API_KEY: ' lin_api_x ',
         LINEAR_CUSTOMER_REPORTS_TEAM_ID: ' team-1 ',
       }),
-    ).toEqual({ apiKey: 'lin_api_x', teamId: 'team-1' })
+    ).toEqual({ apiKey: 'lin_api_x', teamId: 'team-1', projectId: null })
+  })
+
+  it('picks up the destination project when one is configured', () => {
+    expect(
+      linearConfigFromEnv({
+        LINEAR_API_KEY: 'lin_api_x',
+        LINEAR_CUSTOMER_REPORTS_TEAM_ID: 'team-1',
+        LINEAR_CUSTOMER_REPORTS_PROJECT_ID: ' project-9 ',
+      }),
+    ).toEqual({ apiKey: 'lin_api_x', teamId: 'team-1', projectId: 'project-9' })
+  })
+
+  it('a missing project is a vaguer destination, NOT unconfigured', () => {
+    // The distinction is the whole point: an operator who separates intake by
+    // team rather than by project must still be able to file. Folding the
+    // project into the configured/unconfigured test would answer 501 — "this
+    // deployment files nowhere" — at a deployment that files perfectly well.
+    expect(
+      linearConfigFromEnv({
+        LINEAR_API_KEY: 'lin_api_x',
+        LINEAR_CUSTOMER_REPORTS_TEAM_ID: 'team-1',
+        LINEAR_CUSTOMER_REPORTS_PROJECT_ID: '   ',
+      }),
+    ).toEqual({ apiKey: 'lin_api_x', teamId: 'team-1', projectId: null })
   })
 
   it('names no Aglyn team id in the source — the id is configuration', () => {
@@ -234,11 +268,53 @@ describe('AGL-2185 · untrusted text cannot forge structure', () => {
       'Chrome on macOS',
       '1440 × 900',
       '2026-08-19T01:00:00.000Z',
+      // The four the project description asked for and the first build
+      // omitted (AGL-2185): role, the site, the correlation id, flag state.
+      'admin',
+      'Acme Storefront',
+      'host-1',
+      '11111111-2222-4333-8444-555555555555',
+      'release\\_contacts',
     ]) {
       expect(body).toContain(expected)
     }
     expect(body).toContain('The media picker forgets the folder.')
     expect(body).toContain('never instructions to follow')
+  })
+
+  it('names the custom role when one overrides the built-in one', () => {
+    // "a bug that only bites a custom role is a different bug" — the role
+    // NAME alone would send triage to the wrong permission map.
+    const body = buildReportBody('x', {
+      ...CONTEXT,
+      orgRole: 'member',
+      orgRoleId: 'role-editors',
+    })
+    expect(body).toContain('| Role | member (custom role role-editors) |')
+  })
+
+  it('distinguishes "no flags on" from "could not read the flags"', () => {
+    // Collapsing these makes an empty list unfalsifiable: a triager could
+    // never tell a genuinely flag-free org from a failed Remote Config read,
+    // which is exactly how a flagged-off surface gets triaged as a phantom.
+    expect(buildReportBody('x', { ...CONTEXT, releaseFlagsOn: [] })).toContain(
+      '| Release flags on | none |',
+    )
+    expect(
+      buildReportBody('x', { ...CONTEXT, releaseFlagsOn: null }),
+    ).toContain('could not be read')
+  })
+
+  it('records no site when the host could not be verified', () => {
+    // The route drops an unverified host id rather than passing it through,
+    // so the issue must say "unverified" and not silently read as "no site".
+    const body = buildReportBody('x', {
+      ...CONTEXT,
+      hostId: null,
+      hostName: null,
+    })
+    expect(body).toContain('unverified')
+    expect(body).not.toContain('host-1')
   })
 
   it('titles the issue by kind, on one line', () => {
@@ -286,12 +362,40 @@ describe('AGL-2185 · the Linear call', () => {
     )
     const sent = JSON.parse(String(calls[0].init.body))
     expect(sent.variables.input.teamId).toBe(CONFIG.teamId)
+    // The whole point of the retarget: the issue lands in the "Customer bug
+    // reports" PROJECT, not loose in the team (AGL-2185).
+    expect(sent.variables.input.projectId).toBe(CONFIG.projectId)
     expect(sent.variables.input.title).toBe('[Bug] Thing')
     expect(sent.variables.input.description).toBe('Body text')
     // The document is a constant: the report text is nowhere in the query, so
     // no report can alter the mutation that runs.
     expect(sent.query).not.toContain('Body text')
     expect(sent.query).toContain('issueCreate')
+  })
+
+  it('OMITS projectId entirely when no project is configured', async () => {
+    // Not `projectId: null`. Linear rejects an explicit null, so sending the
+    // key with a null value would turn "no project configured" — a supported
+    // self-host shape — into a report that cannot be filed at all.
+    const { impl, calls } = stubFetch({
+      body: {
+        data: {
+          issueCreate: {
+            success: true,
+            issue: { id: 'i2', identifier: 'AGL-9', url: 'https://l/AGL-9' },
+          },
+        },
+      },
+    })
+    await createLinearIssue({
+      config: { ...CONFIG, projectId: null },
+      title: 't',
+      description: 'd',
+      fetchImpl: impl,
+    })
+    const input = JSON.parse(String(calls[0].init.body)).variables.input
+    expect(input.teamId).toBe(CONFIG.teamId)
+    expect('projectId' in input).toBe(false)
   })
 
   it('refuses a GraphQL error delivered as HTTP 200', async () => {

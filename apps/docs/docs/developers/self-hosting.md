@@ -335,9 +335,14 @@ answers `501` and names them, and no report is ever sent to Aglyn.
 
 Scope the key when you create it. Linear can restrict a personal API key to
 **Create issues** and to **specific teams** — do both, so a leaked key cannot
-read your backlog. Use a team of its own rather than your delivery team: an
-unbounded inbound stream in the team you plan releases from destroys the open
-count you steer by.
+read your backlog. Keep inbound reports out of whatever queue you plan
+releases from: unbounded inbound volume in that queue destroys the count you
+steer by.
+
+`LINEAR_CUSTOMER_REPORTS_PROJECT_ID` is optional. Set it to file into a
+specific project inside that team, if you separate intake by project rather
+than by team. Left unset the report still files, into the team's own backlog —
+a missing project is a vaguer destination, never a lost report.
 
 Both are **server-only**. Never prefix either with `NEXT_PUBLIC_`, which would
 inline a workspace-wide credential into the browser bundle.

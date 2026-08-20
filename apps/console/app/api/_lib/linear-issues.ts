@@ -20,17 +20,22 @@
  *
  * Linear is Aglyn's issue tracker, so a bug a customer hits belongs where a
  * bug we find goes — not in a Firestore collection nobody opens. Reports land
- * in the **Customer Reports** team (`CUS`), never in `AGL`: `AGL`'s open count
- * is the Sept-1 release signal, and an unbounded inbound stream would destroy
- * it. Triage promotes a genuinely release-blocking report into `AGL` by hand,
- * deliberately.
+ * in the **Customer bug reports** project, never mixed into the engineering
+ * backlog: Zach, 2026-08-19, "tracked in a separate linear project then our
+ * primary one".
+ *
+ * That separation survives because the Sept-1 cut is defined by the
+ * `launch-blocker` LABEL, not by an open-issue count — so inbound volume,
+ * which nobody controls, cannot move the release signal. Triage promotes a
+ * genuinely release-blocking report by creating a linked engineering issue in
+ * the primary project; the report itself is never moved or relabelled.
  *
  * This module is deliberately PURE — no Firebase, no Next, no repo barrels,
  * and `fetch` is injectable. Its spec therefore exercises the real escaping
  * and the real GraphQL envelope, rather than a closed world of mocks that can
  * only agree with themselves.
  *
- * ## Configuration, and why it is two variables
+ * ## Configuration, and why it is three variables
  *
  * `LINEAR_API_KEY` is a server-side secret. It carries no `NEXT_PUBLIC_`
  * prefix precisely because that prefix is the only thing Next inlines into
@@ -79,6 +84,17 @@ export const MAX_DESCRIPTION = 5000
 export interface LinearConfig {
   apiKey: string
   teamId: string
+  /**
+   * Optional destination project inside {@link teamId} (AGL-2185).
+   *
+   * Linear requires a `teamId` on every issue, so the team is what makes
+   * this configured at all; the project is the finer destination Zach asked
+   * for on 2026-08-19 — "tracked in a separate linear **project** then our
+   * primary one". Left unset the issue still files, in the team's own
+   * backlog, which is the right answer for a self-host operator who has one
+   * team and no project structure to honour.
+   */
+  projectId: string | null
 }
 
 /**
@@ -98,7 +114,11 @@ export function linearConfigFromEnv(
   const apiKey = (env['LINEAR_API_KEY'] ?? '').trim()
   const teamId = (env['LINEAR_CUSTOMER_REPORTS_TEAM_ID'] ?? '').trim()
   if (!apiKey || !teamId) return null
-  return { apiKey, teamId }
+  // Optional, and deliberately NOT part of the configured/unconfigured test:
+  // a missing project is a less specific destination, not a lost report.
+  const projectId =
+    (env['LINEAR_CUSTOMER_REPORTS_PROJECT_ID'] ?? '').trim() || null
+  return { apiKey, teamId, projectId }
 }
 
 /**
@@ -194,6 +214,34 @@ export interface ReportContext {
   orgId: string | null
   orgName: string | null
   orgPlan: string | null
+  /**
+   * The reporter's org role, and the custom role doc id when one overrides
+   * it (AGL-243). Read from the membership doc, never from the client: "a
+   * bug that only bites a custom role is a different bug", and a role the
+   * reporter could assert would send triage after the wrong permission map.
+   */
+  orgRole: string | null
+  orgRoleId: string | null
+  /**
+   * The site the reporter was working on. Client-supplied and therefore
+   * VERIFIED against the session before it arrives here — an unverified id
+   * is dropped rather than recorded, so this field never names a host the
+   * reporter cannot see.
+   */
+  hostId: string | null
+  hostName: string | null
+  /**
+   * Ties this report to the server log line for the request that filed it.
+   * Server-generated; the reporter is handed it only when filing FAILED,
+   * which is the one moment they have no Linear identifier to quote.
+   */
+  correlationId: string
+  /**
+   * Release flags ON for this org at the moment of the report, so a report
+   * against a flagged-off surface is recognisable. Keys only — a flag key is
+   * a product-surface name, not a secret.
+   */
+  releaseFlagsOn: string[] | null
   /** Server constants for the build actually serving the reporter. */
   version: string
   buildId: string
@@ -228,8 +276,29 @@ export function buildReportBody(
         : '— (no org in context)',
     ],
     ['Plan', inlineSafe(context.orgPlan, 40) || '—'],
+    [
+      'Role',
+      context.orgRoleId
+        ? `${inlineSafe(context.orgRole, 40) || 'member'} (custom role ${inlineSafe(context.orgRoleId, 64)})`
+        : inlineSafe(context.orgRole, 40) || '—',
+    ],
     ['Console route', safeRoute(context.route) || '—'],
-    ['Host', inlineSafe(context.host, 120) || '—'],
+    [
+      'Site',
+      context.hostId
+        ? `${inlineSafe(context.hostName) || '—'} (${inlineSafe(context.hostId, 64)})`
+        : '— (not on a site, or unverified)',
+    ],
+    ['Console host', inlineSafe(context.host, 120) || '—'],
+    [
+      'Release flags on',
+      context.releaseFlagsOn === null
+        ? '— (could not be read)'
+        : context.releaseFlagsOn.length === 0
+          ? 'none'
+          : inlineSafe(context.releaseFlagsOn.join(', '), 400),
+    ],
+    ['Correlation id', inlineSafe(context.correlationId, 64) || '—'],
     ['Version', inlineSafe(context.version, 64) || '—'],
     ['Build', inlineSafe(context.buildId, 64) || '—'],
     ['Browser', inlineSafe(context.browser, 64) || '—'],
@@ -325,6 +394,12 @@ export async function createLinearIssue(
         variables: {
           input: {
             teamId: args.config.teamId,
+            // Omitted entirely when unconfigured. Sending `projectId: null`
+            // is not the same request as not sending the field, and Linear
+            // rejects the explicit null.
+            ...(args.config.projectId
+              ? { projectId: args.config.projectId }
+              : {}),
             title: args.title,
             description: args.description,
           },
