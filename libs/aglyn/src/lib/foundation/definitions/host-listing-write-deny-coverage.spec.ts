@@ -98,7 +98,11 @@ const HOST_TYPES_FILE =
 const LISTING_TYPES_FILE =
   'libs/plugins/marketplace/src/lib/model/marketplace.ts'
 const RESOLVER_DIR = 'libs/aglyn/src/lib/app-utils'
-const HOST_SEED_FILE = 'apps/console/app/api/hosts/create/route.ts'
+// AGL-2465 lifted the seed write out of `POST /api/hosts/create` and into
+// `claimHostForOrg`, so `/api/hosts/create` and `POST /v1/sites` share it
+// verbatim. The guard threw rather than silently asserting nothing about the
+// host field set — which is the whole point of the throw. Repointed here.
+const HOST_SEED_FILE = 'apps/console/utils/server/provision-host.ts'
 
 /**
  * The resolver modules, read once.

@@ -363,6 +363,14 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'Reader of AGLYN_TENANT_APEX; the literal is its default.',
   },
   {
+    file: 'tools/scripts/check-legal-index-dates.mjs',
+    count: 1,
+    reason:
+      'Reader of NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN; the literal is its ' +
+      'default. Internal tool — a self-hoster runs it against their own ' +
+      'origin.',
+  },
+  {
     file: 'tools/scripts/check-retired-colours.mjs',
     count: 1,
     reason:
