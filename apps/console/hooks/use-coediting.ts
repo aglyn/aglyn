@@ -361,6 +361,93 @@ function scheduleRemoteReconcile(): void {
   queueMicrotask(() => flushRemoteReconcile())
 }
 
+/**
+ * The millisecond floor a mirror entry must reach to still count as unsaved
+ * work — the stored document's `updatedAt`, or 0 when there is no usable
+ * stamp.
+ *
+ * Only the `ms:` form yields a floor. `versionStamp` also returns `ts:` for a
+ * `{seconds, nanoseconds}` object and `s:` for a string, and both of those
+ * fall through to 0, which admits EVERY entry in the room however old. All
+ * five `useCoEditing` call sites pass a live client-SDK `Timestamp` (which
+ * has `toMillis`), so today they all get `ms:` — checked, because a stamp
+ * that crossed an RSC boundary would arrive as the plain `{seconds}` shape
+ * and silently disable the filter rather than fail.
+ */
+export function mirrorFloorMillis(storedStamp: unknown): number {
+  const stamp = Aglyn.versionStamp(storedStamp)
+  return stamp?.startsWith('ms:') ? Number(stamp.slice(3)) : 0
+}
+
+/**
+ * Whether a mirror entry is work this tab should apply on join.
+ *
+ * ## This one predicate IS the R4 product question (AGL-1870)
+ *
+ * The rule is "anything published at or after the last save". An entry older
+ * than the save was folded into the document the canvas just loaded, so
+ * replaying it is noise. An entry NEWER than the save is, by definition, the
+ * unsaved work the mirror exists to carry — and it is applied no matter how
+ * old it is, because nothing ever reaps it. The room is cleared only by a
+ * successful save from a `canEdit` peer; an abandoned tab leaves its entries
+ * behind forever.
+ *
+ * ## Measured on production 2026-08-20, not reasoned about
+ *
+ * `coedit/` held 17 rooms, 383 node entries, 159.9 KiB, oldest entry 15.6
+ * days. Joining each room against its stored version's `updatedAt`:
+ *
+ *   15 of 17 rooms hold at least one entry this predicate ADMITS;
+ *    2 rooms (353 of the 383 entries, 136 KiB) are refused by the floor —
+ *      downloaded on every join, then discarded. Both predate the AGL-1262
+ *      clear-per-node fix, and nothing will ever remove them, because the
+ *      only reaper is a save on a document nobody is editing.
+ *
+ * Of the 15, twelve hold exactly one entry stamped within a minute of the
+ * save that was supposed to clear the room — a last debounced publish landing
+ * after `clearMirror` had already read the room, so its content matches the
+ * saved document and replaying it is a no-op. Every editing session leaves
+ * one behind: 14 distinct publishing tabs, 14 rooms, one entry each.
+ *
+ * The other three are the real question. They hold 18 entries published days
+ * to WEEKS after the last save — genuinely unsaved work from tabs that closed
+ * without saving, still live by this predicate:
+ *
+ *   saved 2026-07-26 → 15 entries from 2026-08-05  (+9.5 days)
+ *   saved 2026-07-13 →  2 entries from 2026-08-05  (+22.8 days)
+ *   saved 2026-08-13 →  1 entry  from 2026-08-18   (+4.7 days)
+ *
+ * Whoever next opens those three versions has that work applied to their
+ * canvas. Preserving it is arguably the point of a live mirror; resurrecting
+ * a stranger's three-week-old abandoned edit onto a document they have just
+ * opened is arguably a bug. That is a call for the product owner, and R4 is
+ * deliberately not making it here.
+ *
+ * By contrast `presence/` held ZERO orgs at the same moment — its
+ * `onDisconnect().remove()` leaves nothing behind. Presence is the control
+ * that proves the mechanism works; co-editing is where the mechanism has a
+ * cost, because a presence entry is disposable and an unsaved edit is not.
+ *
+ * ## Why `onDisconnect().remove()` is not simply the answer
+ *
+ * `onDisconnect` fires on ANY loss of connection — a closed tab, a slept
+ * laptop, a thirty-second network blip — and the author's tab cannot undo it
+ * on reconnect: `shadowRef` still holds the JSON it published, so `publish()`
+ * diffs clean and never re-sends. The peers who already applied the edit keep
+ * it, a joiner after the wipe does not, and whichever of them saves decides.
+ * Any reaper considered here has to answer that, which is why the timer-based
+ * options in AGL-1870 R4 are not merely the timid choice.
+ *
+ * Kept pure and exported so whichever way that call goes lands as a change to
+ * a tested predicate rather than to a closure inside an effect.
+ */
+export function isMirrorEntryLive(
+  entry: MirrorEntry,
+  floorMillis: number,
+): boolean {
+  return (entry.at ?? 0) >= floorMillis
+}
+
 export function useCoEditing(options: {
   session: PresenceSession | null
   docType: 'screen' | 'layout' | 'component' | 'template' | 'email'
@@ -458,17 +545,16 @@ export function useCoEditing(options: {
   useEffect(() => {
     if (!roomPath || !session || !loaded || !enabled) return undefined
     const roomRef = ref(session.database, roomPath)
-    const floor = Aglyn.versionStamp(storedStamp)
-    const floorMillis = floor?.startsWith('ms:')
-      ? Number(floor.slice(3))
-      : 0
+    const floorMillis = mirrorFloorMillis(storedStamp)
 
     const handle = (nodeId: string | null, value: MirrorEntry | null) => {
       if (!nodeId || !value) return
       // Our own echo.
       if (value.by === TAB_SESSION_ID) return
-      // Already folded into the document we loaded.
-      if ((value.at ?? 0) < floorMillis) return
+      // Already folded into the document we loaded — and see
+      // {@link isMirrorEntryLive} for what this admits, measured on
+      // production, and for the R4 decision that rests on it (AGL-1870).
+      if (!isMirrorEntryLive(value, floorMillis)) return
       applyingRef.current = true
       try {
         if (applyRemoteNode(nodeId, value)) {

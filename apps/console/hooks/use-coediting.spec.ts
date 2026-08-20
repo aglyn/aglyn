@@ -18,7 +18,12 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { applyRemoteNode, flushRemoteReconcile } from './use-coediting'
+import {
+  applyRemoteNode,
+  flushRemoteReconcile,
+  isMirrorEntryLive,
+  mirrorFloorMillis,
+} from './use-coediting'
 
 /**
  * The AGL-677 application rules, asserted against the REAL canvas singleton
@@ -610,5 +615,77 @@ describe('undo against a co-editor (AGL-1958)', () => {
     // No marks carried over, so 'theirs' rewinds like any other local node.
     // With a stale mark it would have been preserved at the edited value.
     expect(children('theirs')).toBe('theirs v0')
+  })
+})
+
+/**
+ * The join-time admission rule (AGL-1870 R4).
+ *
+ * These cases are the PRODUCTION rooms, measured 2026-08-20, not invented
+ * fixtures: every number below came off `coedit/` on `aglyn-main`. They pin
+ * what the mirror does today so that whichever way the R4 product call goes —
+ * reap on disconnect, reap on a timer, or leave it — the change shows up here
+ * as a red rather than as a silent shift in which unsaved work survives.
+ */
+describe('isMirrorEntryLive (AGL-1870 R4: what a joiner replays)', () => {
+  const at = (iso: string) => new Date(iso).getTime()
+  /** What a live client-SDK `Timestamp` looks like to `versionStamp`. */
+  const stamp = (iso: string) => ({ toMillis: () => at(iso) })
+
+  it('refuses an entry older than the last save', () => {
+    // Production: 2 rooms, 353 of the 383 entries, 136 KiB — published a
+    // minute BEFORE the save that folded them in. Downloaded on every join
+    // and then discarded, for ever, because nothing reaps them.
+    const floor = mirrorFloorMillis(stamp('2026-08-05T05:43:00Z'))
+    expect(
+      isMirrorEntryLive({ at: at('2026-08-05T05:42:00Z') }, floor),
+    ).toBe(false)
+  })
+
+  it('admits genuinely unsaved work three weeks after the last save', () => {
+    // Production: saved 2026-07-13, two entries from 2026-08-05 (+22.8 days)
+    // from a tab that closed without saving. The next person to open that
+    // version has them applied. This is the case the R4 call is about.
+    const floor = mirrorFloorMillis(stamp('2026-07-13T06:09:00Z'))
+    expect(
+      isMirrorEntryLive({ at: at('2026-08-05T01:57:04Z') }, floor),
+    ).toBe(true)
+  })
+
+  it('admits the leftover every save leaves behind, at the floor exactly', () => {
+    // Production: 12 rooms holding exactly one entry stamped at or just after
+    // the save meant to clear them. The boundary is inclusive — an entry
+    // written in the same millisecond as the save is live, not stale.
+    const floor = mirrorFloorMillis(stamp('2026-08-12T22:57:17Z'))
+    expect(isMirrorEntryLive({ at: floor }, floor)).toBe(true)
+    expect(isMirrorEntryLive({ at: floor - 1 }, floor)).toBe(false)
+  })
+
+  it('admits everything when the document has never been saved', () => {
+    // No stamp means no floor, so a never-saved document replays its whole
+    // room. Correct today — there is no saved state to be older than — but it
+    // is also the widest the rule ever gets.
+    expect(mirrorFloorMillis(undefined)).toBe(0)
+    expect(isMirrorEntryLive({ at: at('2020-01-01T00:00:00Z') }, 0)).toBe(true)
+  })
+
+  it('treats a missing `at` as the oldest possible entry', () => {
+    const floor = mirrorFloorMillis(stamp('2026-08-12T22:57:17Z'))
+    expect(isMirrorEntryLive({}, floor)).toBe(false)
+  })
+
+  /**
+   * The filter is disabled — silently — by any stamp shape that is not
+   * `ms:`. A `{seconds, nanoseconds}` object is what a Firestore timestamp
+   * becomes once it crosses an RSC boundary, and it yields floor 0, which
+   * admits the whole room including the 353 entries the `ms:` form refuses.
+   * All five call sites pass a live `Timestamp` today; this is the guard on
+   * that staying true.
+   */
+  it('yields NO floor for the serialized timestamp shape', () => {
+    expect(mirrorFloorMillis({ seconds: 1_754_365_380, nanoseconds: 0 })).toBe(0)
+    expect(mirrorFloorMillis('2026-08-05T05:43:00Z')).toBe(0)
+    // The live shape, by contrast, does produce one.
+    expect(mirrorFloorMillis(stamp('2026-08-05T05:43:00Z'))).toBeGreaterThan(0)
   })
 })
