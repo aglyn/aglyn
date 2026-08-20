@@ -84,3 +84,45 @@ describe('health routes report the running build (AGL-2091)', () => {
     expect(source(file)).not.toContain('VERCEL_GIT_COMMIT_SHA')
   })
 })
+
+/**
+ * The build metadata is read where a BUNDLER can see it (AGL-2091).
+ *
+ * `PACKAGE_VERSION`, `BUILD_ID` and `COMMIT_REF` are build-time defines, not
+ * runtime environment variables — nothing sets them in the process. So the
+ * resolvers only work if the literal `process.env.NAME` text survives into the
+ * module for the bundler to replace, and they silently return null the moment
+ * someone "tidies" them into a parameterised read of `process.env`.
+ *
+ * That failure is invisible to every unit test in this repo, because a unit
+ * test passes its own environment object and never exercises the default. It
+ * is only visible in a deployed build, as a health body reporting
+ * `"version": null` — which is the exact symptom AGL-2091 exists to remove.
+ * Hence a source assertion.
+ */
+describe('build metadata is read as a literal, not through an alias', () => {
+  const source = readFileSync(
+    resolve(REPO_ROOT, 'libs/aglyn/src/lib/app-utils/deployment-shape.ts'),
+    'utf8',
+  )
+
+  it.each(['PACKAGE_VERSION', 'BUILD_ID', 'COMMIT_REF'])(
+    'reads process.env.%s literally',
+    (name) => {
+      expect(source).toContain(`process.env.${name}`)
+    },
+  )
+
+  it('does not default the build-metadata readers to process.env', () => {
+    // `deploymentEnvironmentLabel` legitimately does, because the variables it
+    // reads are real at runtime. These two are not, so the same default would
+    // be a resolver that cannot resolve.
+    for (const fn of ['deploymentCommitRef', 'platformVersion']) {
+      const declaration = source.slice(
+        source.indexOf(`export function ${fn}(`),
+        source.indexOf(`export function ${fn}(`) + 200,
+      )
+      expect(declaration).not.toContain('= process.env')
+    }
+  })
+})

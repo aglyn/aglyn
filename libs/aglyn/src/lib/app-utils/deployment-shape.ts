@@ -146,6 +146,37 @@ export function isDevelopmentRuntime(
  */
 const UNSTAMPED = new Set(['', 'NULL', 'null', 'undefined'])
 
+/**
+ * Build metadata, read as LITERALS at module scope — and that is load-bearing.
+ *
+ * `PACKAGE_VERSION`, `BUILD_ID` and `COMMIT_REF` are not runtime environment
+ * variables. They are build-time defines: `with-aglyn.nextjs.config.js` lists
+ * them in `env`, and the bundler replaces the literal text
+ * `process.env.PACKAGE_VERSION` with the value. Nothing sets them in the
+ * process — the Dockerfiles set `COMMIT_REF` in the BUILD stage, not the
+ * runner — so a read that the bundler cannot see statically resolves to
+ * `undefined` at runtime.
+ *
+ * A parameterised read is exactly such a read: with `env = process.env`,
+ * `env['PACKAGE_VERSION']` is a property access on an alias and no bundler
+ * replaces it. The functions below therefore default to this snapshot rather
+ * than to `process.env`, which is the difference between a health body that
+ * reports a version and one that reports null while every unit test passes.
+ * `deploymentEnvironmentLabel()` above can default to `process.env` because
+ * `VERCEL_ENV`, `NODE_ENV` and `AGLYN_STANDALONE` are genuine runtime
+ * variables — the distinction is the variable, not the style.
+ *
+ * `VERCEL_GIT_COMMIT_SHA` is both, and is read here for uniformity; it is set
+ * in the Vercel runtime as well as inlined, and `/api/health` has been
+ * answering `"commit"` from it in production all along.
+ */
+const BUILD_METADATA: Record<string, string | undefined> = {
+  BUILD_ID: process.env.BUILD_ID,
+  COMMIT_REF: process.env.COMMIT_REF,
+  PACKAGE_VERSION: process.env.PACKAGE_VERSION,
+  VERCEL_GIT_COMMIT_SHA: process.env.VERCEL_GIT_COMMIT_SHA,
+}
+
 function stamped(value: string | undefined): string | null {
   const trimmed = String(value ?? '').trim()
   return UNSTAMPED.has(trimmed) ? null : trimmed
@@ -174,7 +205,7 @@ function stamped(value: string | undefined): string | null {
  * so an existing uptime series stays comparable across the change.
  */
 export function deploymentCommitRef(
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = BUILD_METADATA,
 ): string | null {
   const ref =
     stamped(env['BUILD_ID']) ??
@@ -198,7 +229,7 @@ export function deploymentCommitRef(
  * teaches whoever reads it to ignore the field.
  */
 export function platformVersion(
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = BUILD_METADATA,
 ): string | null {
   return stamped(env['PACKAGE_VERSION'])
 }
