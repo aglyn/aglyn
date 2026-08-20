@@ -200,6 +200,47 @@ class FakeFirestore {
   collection(name) {
     return new FakeCollectionRef(this, name)
   }
+  /**
+   * Models `Firestore.runTransaction` faithfully enough to be worth having.
+   *
+   * The load-bearing part is the reads-before-writes rule: the real Admin SDK
+   * THROWS if a read follows a write inside a transaction, and a double that
+   * silently allows it reports green on code that can never run in production
+   * (AGL-1488 hit exactly that — 9/9 green on an ordering the SDK rejects).
+   * So this throws too, and `putMediaDocument`'s comment about reading the
+   * counter unconditionally is a real constraint here rather than a note.
+   *
+   * Writes are buffered and applied on commit, so a transaction that throws
+   * leaves the store untouched.
+   */
+  async runTransaction(fn) {
+    let wrote = false
+    const buffered = []
+    const transaction = {
+      get: async (ref) => {
+        if (wrote) {
+          throw new Error(
+            'Firestore transactions require all reads before all writes',
+          )
+        }
+        return ref.get()
+      },
+      set: (ref, data, options) => {
+        wrote = true
+        buffered.push({ ref, data, options })
+        return transaction
+      },
+      update: (ref, data) => {
+        wrote = true
+        buffered.push({ ref, data, options: { merge: true } })
+        return transaction
+      },
+    }
+    const result = await fn(transaction)
+    for (const { ref, data, options } of buffered) await ref.set(data, options)
+    return result
+  }
+
   /** Takes the document AND its subtree — the whole point of the prune. */
   async recursiveDelete(ref) {
     const prefix = `${ref.path}/`
@@ -219,6 +260,36 @@ function withHost(store, hostId) {
   store.docs.set(`orgs/${ORG_ID}`, { name: 'Demo Agency' })
   return new FakeDocRef(store, `hosts/${hostId}`)
 }
+
+test('the transaction double refuses a read after a write, as the Admin SDK does', async () => {
+  // Without this the double is worse than no double: AGL-1488 measured 9/9
+  // green on a read-after-write ordering the real Admin SDK rejects outright,
+  // so the suite was certifying code that could never run in production.
+  const store = new FakeFirestore()
+  const ref = store.collection('x').doc('y')
+  await assert.rejects(
+    () =>
+      store.runTransaction(async (transaction) => {
+        transaction.set(ref, { a: 1 })
+        await transaction.get(ref)
+      }),
+    /all reads before all writes/,
+  )
+  // ...and nothing was committed, because the buffer is only applied on commit.
+  assert.equal(store.docs.get('x/y'), undefined)
+})
+
+test('the transaction double commits the legal ordering', async () => {
+  // The positive control: without it the test above is satisfied by a
+  // runTransaction that simply throws at everything.
+  const store = new FakeFirestore()
+  const ref = store.collection('x').doc('z')
+  await store.runTransaction(async (transaction) => {
+    await transaction.get(ref)
+    transaction.set(ref, { b: 2 })
+  })
+  assert.deepEqual(store.docs.get('x/z'), { b: 2 })
+})
 
 async function seed(brandId, { store = new FakeFirestore(), hostId } = {}) {
   const host = hostId ?? `host-${brandId}`
