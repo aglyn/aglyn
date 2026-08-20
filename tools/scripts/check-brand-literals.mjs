@@ -38,7 +38,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -163,6 +163,13 @@ function trackedFiles() {
     .split('\0')
     .filter((path) => path && SWEPT.test(path))
     .map((path) => join(REPO_ROOT, path))
+    // An index entry does not promise a file on disk: `git status` calls the
+    // gap `AD`, and it appears mid-merge, mid-rebase, and whenever a mutation
+    // run stages a generated `*.mutant.ts` and removes it again. Without this
+    // the sweep dies on an unhandled ENOENT. Same fix, same reasoning, as the
+    // colour ratchet's `trackedFiles` (AGL-2025) — the two enumerate
+    // identically and shared the defect.
+    .filter((path) => existsSync(path))
 }
 
 const files = trackedFiles()

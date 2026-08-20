@@ -35,7 +35,7 @@
  * Exit codes: 0 clean · 1 a file gained a colour, or a baseline row is stale.
  */
 
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { dirname, join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -137,6 +137,20 @@ function trackedFiles() {
     .split('\0')
     .filter((path) => path && SWEPT.test(path))
     .map((path) => join(REPO_ROOT, path))
+    // `git ls-files` enumerates the INDEX, and an index entry does not
+    // promise a file on disk. `git status` calls the gap `AD` — added to the
+    // index, then deleted from the working tree — and it happens routinely
+    // mid-merge, mid-rebase, and to anyone running mutation tests, which
+    // stage a generated `*.mutant.ts` and remove it again. Found exactly that
+    // way: the sweep died on an unhandled ENOENT for a file another agent had
+    // staged and deleted seconds earlier.
+    //
+    // Skipping is the correct reading, not a papering-over. The ratchet
+    // measures what the working tree CONTAINS, and a file that is not there
+    // contains no colours. A checkout broken badly enough to matter is caught
+    // by the corpus-size premise check below, which is the assertion that
+    // stops an empty sweep reading as a pass.
+    .filter((path) => existsSync(path))
 }
 
 const files = trackedFiles()
