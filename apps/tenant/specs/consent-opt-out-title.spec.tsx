@@ -40,6 +40,28 @@
  *    go red while a case-insensitive check would not;
  *  - drop `aria-label` from the pill → the accessible-name assertion goes
  *    red on its own.
+ *
+ * ## The ICON half (AGL-2011 follow-up)
+ *
+ * §7015 is a title **and** an icon: the combined link is only good for both
+ * notices when it carries the opt-out icon the Attorney General publishes.
+ * The title commit shipped the words and deliberately left the mark out
+ * rather than draw a regulator's artwork from memory. It is now committed
+ * verbatim, so the guard below pins the published geometry rather than the
+ * mere presence of an `<svg>` — an approximation is the failure mode this
+ * whole exercise exists to prevent.
+ *
+ * Red conditions, each verified by mutation in a scratch worktree:
+ *  - remove `<CcpaOptOutIcon />` from the pill → 6 red;
+ *  - swap the shell for a plausible hand-drawn toggle on a 24×24 grid → the
+ *    official-artwork assertion goes red (a bare `querySelector('svg')`
+ *    would not have);
+ *  - recolour the blue to `currentColor`, i.e. to the theme → 2 red;
+ *  - move the icon after the title → the §7015 ordering assertion goes red;
+ *  - drop `aria-hidden` and give the icon its own `aria-label` → the
+ *    decorative assertion goes red;
+ *  - stamp the mark on the prior-consent ask banner as well → red;
+ *  - give the icon a `<text>` node → the visible-label assertions go red.
  */
 
 import ConsentBannerUi from '@aglyn/aglyn/app-utils/consent-banner-ui'
@@ -50,6 +72,27 @@ import { fireEvent, render, screen } from '@testing-library/react'
  * of imported: this literal IS the thing under test.
  */
 const REQUIRED_TITLE = 'Your Privacy Choices'
+
+/**
+ * The official artwork's own geometry, spelled out here for the same reason
+ * `REQUIRED_TITLE` is: importing the component's constants and comparing them
+ * to themselves would pass whatever they said.
+ *
+ * `viewBox` and the toggle-shell outline are transcribed from the California
+ * Attorney General's published `privacyoptions.svg`
+ * (`oag.ca.gov/privacy/ccpa/icons-download`, sha256 `86f2eb97cc1f3909…`), the
+ * unmodified copy of which is committed at
+ * `apps/tenant/public/_static/images/legal/ccpa-opt-out-icon.svg`. The shell
+ * is the discriminating path: a hand-drawn approximation of "a blue toggle"
+ * would satisfy a mere `querySelector('svg')` and fail this.
+ */
+const OFFICIAL_VIEWBOX = '0 0 30 14'
+const OFFICIAL_SHELL_PATH =
+  'M22.6,0H7.4c-3.9,0-7,3.1-7,7s3.1,7,7,7h15.2c3.9,0,7-3.1,7-7S26.4,0,22.6,0z M1.6,7c0-3.2,2.6-5.8,5.8-5.8' +
+  ' h9.9l-3.1,11.6H7.4C4.2,12.8,1.6,10.2,1.6,7z'
+/** The two colours the regulation's artwork is published in. */
+const OFFICIAL_BLUE = '#0066FF'
+const OFFICIAL_WHITE = '#FFFFFF'
 
 /**
  * The implied posture with a decision already on file — no banner, no panel,
@@ -112,6 +155,110 @@ describe('the persistent opt-out control carries the CPRA title', () => {
       // know which link to look for.
       renderPill(false)
       expect(pill()?.textContent).toBe(REQUIRED_TITLE)
+    })
+  })
+
+  describe('the opt-out ICON that must accompany the title (§7015)', () => {
+    const icon = () =>
+      pill()?.querySelector('svg[data-aglyn-consent-optout-icon]') ?? null
+
+    it('renders an icon inside the pill at all', () => {
+      renderPill()
+      expect(icon()).not.toBeNull()
+    })
+
+    it('is the OFFICIAL artwork, not an approximation of it', () => {
+      renderPill()
+      const svg = icon()
+      // The AG file's own coordinate space. A redrawn mark on a 24×24 grid —
+      // the shape every icon set reaches for — goes red here.
+      expect(svg?.getAttribute('viewBox')).toBe(OFFICIAL_VIEWBOX)
+
+      const paths = Array.from(svg?.querySelectorAll('path') ?? [])
+      const outlines = paths.map((p) => p.getAttribute('d'))
+      // Exact path data, not a fuzzy match: this is the published mark.
+      expect(outlines).toContain(OFFICIAL_SHELL_PATH)
+      // All four shapes of the published file: the white left field, the
+      // blue shell, the white cross, the blue check.
+      expect(paths).toHaveLength(4)
+
+      const fills = paths.map((p) => p.getAttribute('fill'))
+      expect(fills).toEqual([
+        OFFICIAL_WHITE,
+        OFFICIAL_BLUE,
+        OFFICIAL_WHITE,
+        OFFICIAL_BLUE,
+      ])
+    })
+
+    it('is not recoloured to a theme', () => {
+      renderPill()
+      // Every painted colour is one of the regulation's two. A tenant palette
+      // leaking in here — `currentColor` included, which would take the
+      // pill's `#333` — is a modification of a regulator's mark.
+      const fills = Array.from(icon()?.querySelectorAll('path') ?? []).map(
+        (p) => p.getAttribute('fill'),
+      )
+      // Counted first: `[].every(…)` is `true`, so a missing icon would
+      // otherwise certify its own colours.
+      expect(fills).toHaveLength(4)
+      expect(fills.every((f) => f === OFFICIAL_BLUE || f === OFFICIAL_WHITE))
+        .toBe(true)
+    })
+
+    it('sits immediately BEFORE the title, per §7015', () => {
+      renderPill()
+      const control = pill() as HTMLElement
+      // The icon is the pill's first child, and the words follow it.
+      // Asserted non-null on its own line: `firstElementChild` is also null
+      // when there is no icon, and `expect(null).toBe(null)` is a pass.
+      expect(icon()).not.toBeNull()
+      expect(control.firstElementChild).toBe(icon())
+      expect(control.lastChild?.textContent).toBe(REQUIRED_TITLE)
+    })
+
+    it('is decorative: it does not say the title a second time', () => {
+      renderPill()
+      expect(icon()?.getAttribute('aria-hidden')).toBe('true')
+      // Nothing inside the icon contributes an accessible name of its own.
+      expect(icon()?.querySelector('title')).toBeNull()
+      expect(icon()?.getAttribute('aria-label')).toBeNull()
+      // …and the accessible name of the CONTROL is still exactly the title,
+      // announced once.
+      expect(screen.getByRole('button', { name: REQUIRED_TITLE })).toBe(pill())
+    })
+
+    it('adds no text of its own to the visible label', () => {
+      // Guards the title assertions above against a future icon that carries
+      // a `<text>` node: `textContent` would then read "Your Privacy Choices"
+      // plus whatever it said, and the exact-title check would go red for a
+      // reason nobody would guess.
+      renderPill()
+      expect(pill()?.textContent).toBe(REQUIRED_TITLE)
+    })
+
+    it('renders whether or not the site shares for advertising', () => {
+      renderPill(false)
+      expect(icon()).not.toBeNull()
+    })
+
+    it('does NOT appear on the one-time prior-consent ask banner', () => {
+      // That banner is a consent solicitation, not the persistent §7015 link
+      // — it is deliberately titled "Privacy choices" and stamping the
+      // regulator's mark on it would advertise it as the thing it is not.
+      render(
+        <ConsentBannerUi
+          hostId="opt-out-icon-ask-host"
+          stored={null}
+          posture="opt-in"
+          advertising
+        />,
+      )
+      const banner = document.querySelector('[data-aglyn-consent-banner]')
+      expect(banner).not.toBeNull()
+      expect(
+        banner?.querySelector('[data-aglyn-consent-optout-icon]'),
+      ).toBeNull()
     })
   })
 

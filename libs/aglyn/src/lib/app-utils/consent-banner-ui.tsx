@@ -84,6 +84,121 @@ import {
  */
 export const CONSENT_OPT_OUT_TITLE = 'Your Privacy Choices'
 
+/**
+ * The official CCPA **opt-out icon** — the other half of §7015, and the half
+ * AGL-2011's title commit deliberately left undone.
+ *
+ * §7015(a) requires the icon *"in approximately the same size as any other
+ * icons"* and §7015(c) requires it to *"be approximately the same size as
+ * other icons on the business's webpage"* and to appear immediately to the
+ * left of the "Your Privacy Choices" text. §7015(f) is the reason the shapes
+ * below are transcribed rather than drawn: the regulation points at
+ * *published artwork*, not at a description of a toggle, so an approximation
+ * that reads as "close enough" is not the mark the regulation names.
+ *
+ * ## Provenance — read this before touching a single coordinate
+ *
+ * Downloaded from the California Attorney General's own icon page,
+ * `oag.ca.gov/privacy/ccpa/icons-download`, by two independent routes that
+ * agree byte for byte: the `ccpa-icons.zip` bundle that page offers, and the
+ * standalone `privacyoptions.svg` that page displays inline. Both are
+ * sha256 `86f2eb97cc1f3909c12e4512de9e267215d94ac5aaee9393d0f007f18c34e8ba`.
+ * The unmodified file is committed at
+ * `apps/tenant/public/_static/images/legal/ccpa-opt-out-icon.svg` — diff it
+ * against the AG's copy to re-verify at any time.
+ *
+ * ## Why the paths are inlined here and not `<img src>`-ed
+ *
+ * The AGL-1810 duplicate-with-pointer pattern, for the same reason the admin
+ * bar uses it: this component renders on **every published customer site**
+ * and inside the console's preview simulator, and neither an extra fetch nor
+ * a broken-image glyph is acceptable where a regulator's mark is supposed to
+ * be. A self-hosted deployment gets the mark with no asset pipeline at all.
+ * If the AG ever republishes the artwork, change the committed file AND
+ * these four constants.
+ *
+ * ## What was changed in transcription, and what was not
+ *
+ * The coordinates and the two colours are verbatim. The only change is that
+ * the AG file carries its fills in a `<style>` block of `.st0`–`.st3`
+ * classes, and an inline `<style>` inside a shared overlay is **document-
+ * global CSS**: shipping it would define `.st0`/`.st1` on every customer's
+ * page and restyle any element of theirs that happens to use those names. So
+ * each class is expanded to the presentation attributes it stood for —
+ * `.st0`/`.st1` are `fill-rule:evenodd; clip-rule:evenodd` plus the fill,
+ * `.st2`/`.st3` are the fill alone. Paint order is the file's own; the white
+ * left-hand fill is painted before the blue shell that rings it.
+ */
+/** `.st0` — the white field behind the check, inside the shell's cut-out. */
+const OPT_OUT_ICON_LEFT_FIELD_PATH =
+  'M7.4,12.8h6.8l3.1-11.6H7.4C4.2,1.2,1.6,3.8,1.6,7S4.2,12.8,7.4,12.8z'
+/** `.st1` — the blue toggle shell, evenodd so the left half reads through. */
+const OPT_OUT_ICON_SHELL_PATH =
+  'M22.6,0H7.4c-3.9,0-7,3.1-7,7s3.1,7,7,7h15.2c3.9,0,7-3.1,7-7S26.4,0,22.6,0z M1.6,7c0-3.2,2.6-5.8,5.8-5.8' +
+  ' h9.9l-3.1,11.6H7.4C4.2,12.8,1.6,10.2,1.6,7z'
+/** `.st2` (`id="x"`) — the white cross on the blue half. */
+const OPT_OUT_ICON_CROSS_PATH =
+  'M24.6,4c0.2,0.2,0.2,0.6,0,0.8l0,0L22.5,7l2.2,2.2c0.2,0.2,0.2,0.6,0,0.8c-0.2,0.2-0.6,0.2-0.8,0' +
+  ' l0,0l-2.2-2.2L19.5,10c-0.2,0.2-0.6,0.2-0.8,0c-0.2-0.2-0.2-0.6,0-0.8l0,0L20.8,7l-2.2-2.2c-0.2-0.2-0.2-0.6,0-0.8' +
+  ' c0.2-0.2,0.6-0.2,0.8,0l0,0l2.2,2.2L23.8,4C24,3.8,24.4,3.8,24.6,4z'
+/** `.st3` (`id="y"`) — the blue check on the white half. */
+const OPT_OUT_ICON_CHECK_PATH =
+  'M12.7,4.1c0.2,0.2,0.3,0.6,0.1,0.8l0,0L8.6,9.8C8.5,9.9,8.4,10,8.3,10c-0.2,0.1-0.5,0.1-0.7-0.1l0,0' +
+  ' L5.4,7.7c-0.2-0.2-0.2-0.6,0-0.8c0.2-0.2,0.6-0.2,0.8,0l0,0L8,8.6l3.8-4.5C12,3.9,12.4,3.9,12.7,4.1z'
+
+/** The mark's own colours. Not themeable — see {@link CcpaOptOutIcon}. */
+const OPT_OUT_ICON_BLUE = '#0066FF'
+const OPT_OUT_ICON_WHITE = '#FFFFFF'
+
+/**
+ * The opt-out icon, sized for the pill.
+ *
+ * `aria-hidden`, because it sits beside the words it stands for: the pill
+ * already announces "Your Privacy Choices" as its accessible name, and a
+ * labelled icon next to identical visible text makes a screen reader say the
+ * title twice. Same treatment as the admin bar's mark.
+ *
+ * 26 × 12 against the file's own `0 0 30 14` viewBox, so the default
+ * `preserveAspectRatio` scales the drawing to the 12px height — one line of
+ * the pill's 12px/1.4 text — and centres it. That is what §7015's "the same
+ * size as other icons" asks for here: the pill has no other icons, so the
+ * text is the scale to match.
+ *
+ * **The colours are the regulation's, not the theme's.** The pill's own
+ * background is a fixed near-white that no tenant palette reaches, which is
+ * exactly the surface this artwork was published against — so it needs no
+ * light/dark variant and must not be given one.
+ */
+function CcpaOptOutIcon(): ReactElement {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 30 14"
+      width={26}
+      height={12}
+      aria-hidden="true"
+      focusable="false"
+      style={{ flexShrink: 0, display: 'block' }}
+      data-aglyn-consent-optout-icon=""
+    >
+      <path
+        d={OPT_OUT_ICON_LEFT_FIELD_PATH}
+        fill={OPT_OUT_ICON_WHITE}
+        fillRule="evenodd"
+        clipRule="evenodd"
+      />
+      <path
+        d={OPT_OUT_ICON_SHELL_PATH}
+        fill={OPT_OUT_ICON_BLUE}
+        fillRule="evenodd"
+        clipRule="evenodd"
+      />
+      <path d={OPT_OUT_ICON_CROSS_PATH} fill={OPT_OUT_ICON_WHITE} />
+      <path d={OPT_OUT_ICON_CHECK_PATH} fill={OPT_OUT_ICON_BLUE} />
+    </svg>
+  )
+}
+
 const OVERLAY_FONT =
   'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
 
@@ -149,6 +264,14 @@ const LINK_BUTTON: CSSProperties = {
 /**
  * The persistent entry point. Deliberately quiet — a small bottom-left pill
  * — but always present and always the same, page after page.
+ *
+ * `inline-flex` rather than the button default, so the §7015 icon and the
+ * §7015 title share one baseline-centred row. The 6px gap keeps them read as
+ * one control — the regulation wants the icon *with* the link, not near it —
+ * while `flexWrap` lets the label drop under the icon in a narrow viewport
+ * instead of forcing the pill wider than the screen. The clearance the pill
+ * reserves at the foot of the page is MEASURED, so it absorbs both the extra
+ * width and a wrapped second line without any constant here changing.
  */
 const PILL_STYLE: CSSProperties = {
   position: 'fixed',
@@ -156,6 +279,11 @@ const PILL_STYLE: CSSProperties = {
   bottom: 12,
   zIndex: 2147483390,
   boxSizing: 'border-box',
+  display: 'inline-flex',
+  alignItems: 'center',
+  flexWrap: 'wrap',
+  gap: 6,
+  maxWidth: 'calc(100vw - 24px)',
   padding: '6px 12px',
   borderRadius: 999,
   border: '1px solid rgba(0, 0, 0, 0.24)',
@@ -542,6 +670,15 @@ export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | nul
         setPreferencesOpen(true)
       }}
     >
+      {/*
+        Icon FIRST: §7015 places the opt-out icon immediately to the left of
+        the title, and this is the control the regulation is about. The
+        prior-consent banner deliberately gets neither the title nor the icon
+        — it is a consent solicitation that disappears once answered, so
+        dressing it in the regulation's mark would advertise it as the
+        persistent opt-out link it cannot be.
+      */}
+      <CcpaOptOutIcon />
       {CONSENT_OPT_OUT_TITLE}
     </button>
   )
