@@ -25,6 +25,8 @@ import {
   decodeStoredNodes,
   findScreenIdByRoutePath,
   normalizeScreenSlug,
+  reservedScreenRouteMessage,
+  reservedScreenRouteSegment,
   screenRoutePathToUrl,
   wouldCreateScreenCycle,
   type ScreenRouteNode,
@@ -260,6 +262,20 @@ function Screens(props) {
       // request paths against the host's `screens` routing map, so the slug
       // must both live on the screen doc and be registered in that map.
       const path = normalizeScreenSlug(slugInput)
+      // A handful of addresses the published site cannot answer, whatever the
+      // routing map says (AGL-2076) — refused BEFORE the conflict read, since
+      // no amount of the host's own state changes the answer. Without this the
+      // page was created, published, listed as live, and served the framework's
+      // own `404.html`; the only way to find out was to curl for
+      // `x-matched-path`.
+      const reserved = reservedScreenRouteSegment(path)
+      if (reserved) {
+        dequeueLoading()
+        return enqueueSnackbar(reservedScreenRouteMessage(reserved), {
+          variant: 'warning',
+          persist: false,
+        })
+      }
       if (path) {
         const hostSnapshot = await getDoc(doc(firestore, 'hosts', hostId))
         const owner = findScreenIdByRoutePath(hostSnapshot.get('screens'), path)

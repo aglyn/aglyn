@@ -22,6 +22,8 @@ import {
   HostScreenVisibility,
   nameSearchKey,
   normalizeScreenSlug,
+  reservedScreenRouteMessage,
+  reservedScreenRouteSegment,
   screenRoutePathToUrl,
   type ScreenRouteNode,
   type ScreenUid,
@@ -458,6 +460,16 @@ function ScreenDetails() {
       ...screensById,
       [screenId]: { ...screensById[screenId], slug },
     })
+    // An address the published site cannot answer (AGL-2076). Checked on the
+    // COMPOSED path, not the raw slug: `search` under a parent is `docs/search`
+    // and serves fine, and only a first segment collides.
+    const reserved = reservedScreenRouteSegment(composed ?? slug)
+    if (reserved) {
+      return enqueueSnackbar(reservedScreenRouteMessage(reserved), {
+        variant: 'warning',
+        persist: false,
+      })
+    }
     const owner = composed
       ? findScreenIdByRoutePath(routingMap, composed)
       : undefined

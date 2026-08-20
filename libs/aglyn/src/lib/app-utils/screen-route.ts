@@ -61,6 +61,80 @@ export function normalizeScreenSlug(
   return segment || undefined
 }
 
+/**
+ * Route segments the published site CANNOT serve, whatever the routing map
+ * says (AGL-2076).
+ *
+ * Every entry was measured against production on 2026-08-19 with a fresh
+ * `x-vercel-cache: MISS`, because a stale negative always passes. Two
+ * mechanisms, both of which resolve ahead of `[host]/[[...slug]]`:
+ *
+ *  - `404`, `500` — Next emits `pages/404.html` and `pages/500.html` even for
+ *    an app-router-only build, and the deployed filesystem answers them as
+ *    static files (`content-disposition: inline; filename="404"`,
+ *    `accept-ranges`, an `etag`, and no `x-nextjs-prerender`). The tenant
+ *    middleware's own CSP headers are on those responses, so the middleware
+ *    ran and its rewrite still lost. There is no rewrite this app can write
+ *    that beats them, which is why the honest fix is to refuse the slug at
+ *    authoring time rather than to keep promising an address that is dead.
+ *  - `search`, `api`, `_next`, `_static` — routes and exclusions the tenant
+ *    app owns. `/search` matches `app/[host]/search`; the other three are the
+ *    middleware matcher's exclusions, so no host rewrite happens at all and
+ *    the path is parsed as `[host]` with an empty slug.
+ *
+ * NOT reserved, and deliberately so, because measuring found them fine:
+ * `401`, `403`, `503` (`/401` returns 200 through the catch-all — two of the
+ * four designed error screens have always been viewable at their slugs, which
+ * is what made the `404` case look like a Next.js defect), and `index`.
+ *
+ * `fonts` and `examples` USED to be dead for the third reason and are not
+ * here: they were exclusions inherited from the Vercel platforms starter kit
+ * for directories `apps/tenant/public` has never contained. They are given
+ * back rather than reserved — see the matcher in `apps/tenant/middleware.ts`.
+ */
+export const RESERVED_SCREEN_ROUTE_SEGMENTS: readonly string[] = [
+  '404',
+  '500',
+  'search',
+  'api',
+  '_next',
+  '_static',
+]
+
+/**
+ * The reserved segment a routing-map path would collide with, or `undefined`
+ * when the path is servable. The segment rather than a boolean, so a refusal
+ * can name what it is refusing over.
+ *
+ * Reads the FIRST segment only. For `api`/`_next`/`_static` that is exactly
+ * right — the middleware excludes the whole subtree, so `api/docs` is as dead
+ * as `api`. For `404`/`500`/`search` it over-refuses in principle (`/404/why`
+ * would serve), and that is deliberate: a child path only exists when its
+ * PARENT screen is published, the parent would sit at `404`, and this same
+ * rule refuses that. A second list to express a case that cannot arise would
+ * be a second list to keep correct.
+ *
+ * Takes a composed routing-map path (`about`, `company/about`, `'/'`), not a
+ * raw slug field — `'/'` is the home screen and is never reserved.
+ */
+export function reservedScreenRouteSegment(
+  path: string | null | undefined,
+): string | undefined {
+  if (!path || path === SCREEN_ROOT_PATH) return undefined
+  const [first] = path.replace(/^\/+/, '').split('/')
+  return RESERVED_SCREEN_ROUTE_SEGMENTS.includes(first) ? first : undefined
+}
+
+/**
+ * The refusal an author reads when {@link reservedScreenRouteSegment} names a
+ * segment. One sentence, in one place, because the Screens page, the version
+ * view and the besigner all have to say the same thing — three surfaces
+ * wording a platform constraint three ways is how AGL-2093's precheck drifted.
+ */
+export function reservedScreenRouteMessage(segment: string): string {
+  return `"/${segment}" is a reserved address on every Aglyn site — pick another slug`
+}
+
 /** Minimal screen shape the hierarchy helpers need. */
 export interface ScreenRouteNode {
   slug?: string
