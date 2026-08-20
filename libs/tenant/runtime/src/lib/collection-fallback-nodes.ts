@@ -47,8 +47,13 @@ interface FallbackEntry {
   publishedAt?: { seconds: number } | null
 }
 
+// The one shared formatter (AGL-1926). This composes server-side, so the
+// inline `toLocaleDateString()` it replaces was not itself a hydration
+// mismatch — but it was a THIRD spelling of "the entry's published date",
+// free to drift from the byline and the related-post card that quote the
+// same instant. Pinned locale and zone, so all three agree by construction.
 const formatDate = (value?: { seconds: number } | null) =>
-  value?.seconds ? new Date(value.seconds * 1000).toLocaleDateString() : ''
+  Aglyn.formatCollectionEntryDate(value)
 
 /**
  * What may be interpolated into the cover block's CSS `url("…")` (AGL-1407).

@@ -295,46 +295,83 @@ export function normalizeCollectionEntryDateFormat(
  * replaced, character for character — because the block is live on published
  * entries and opening a dropdown must not restyle them.
  *
- * `locale` is normally left off, so the site renders in the runtime's locale
- * as it always has; it exists so a caller that must pin the output (and the
- * specs that assert the frame's shape) can say so rather than assume.
+ * ## Why the runtime gets no say (AGL-1926)
+ *
+ * Every branch pins BOTH the locale and the time zone, and the answer is a
+ * pure function of the timestamp. It used to pass `locale` straight through
+ * (normally `undefined`) with no `timeZone` at all, so the output was a
+ * function of the RUNTIME: `en-US` + UTC on a Vercel server, the visitor's
+ * own locale and zone in their browser. That is fine while only the server
+ * ever calls it — the string is stamped into node props at compose time and
+ * both sides then agree on it — but it makes the function a hydration
+ * mismatch waiting for its first client-side caller, and `catch-all-client`
+ * was exactly that caller. A post published at 02:30 UTC is dated the 10th by
+ * the server and the 9th by every visitor west of Greenwich; React reports
+ * the difference as a text mismatch (the live React #418 on tenant-web,
+ * AGL-1926) and then reconciles against a DOM it no longer describes, which
+ * is where the `removeChild`/`insertBefore` pair comes from.
+ *
+ * The pinned values are the ones production already emits, so no published
+ * page changes: Vercel runs UTC with an `en-US` ICU default, which is why
+ * every entry date served from aglyn.com today reads `8/9/2026`. Pinning
+ * makes that byte-for-byte guaranteed instead of a property of the host.
+ *
+ * `locale` still exists for a caller that must render in a different one; it
+ * now defaults to the value the server was picking implicitly rather than to
+ * "whatever this runtime happens to be".
  */
+export const COLLECTION_ENTRY_DATE_LOCALE = 'en-US'
+
+/**
+ * The zone the calendar day is read in. Entry timestamps are absolute
+ * instants; the day they are ATTRIBUTED to has to be one both sides agree on,
+ * and UTC is the only zone a server and an unknown visitor share.
+ */
+export const COLLECTION_ENTRY_DATE_TIME_ZONE = 'UTC'
+
 export function formatCollectionEntryDate(
   publishedAt: { seconds: number } | null | undefined,
   format?: CollectionEntryDateFormat,
-  locale?: string,
+  locale: string = COLLECTION_ENTRY_DATE_LOCALE,
 ): string {
   const seconds = publishedAt?.seconds
   if (!seconds) return ''
   const date = new Date(seconds * 1000)
+  const timeZone = COLLECTION_ENTRY_DATE_TIME_ZONE
   switch (normalizeCollectionEntryDateFormat(format)) {
     case 'monthYear':
       return date.toLocaleDateString(locale, {
         month: 'short',
         year: 'numeric',
+        timeZone,
       })
     case 'mediumDate':
       return date.toLocaleDateString(locale, {
         month: 'short',
         day: 'numeric',
         year: 'numeric',
+        timeZone,
       })
     case 'longDate':
       return date.toLocaleDateString(locale, {
         month: 'long',
         day: 'numeric',
         year: 'numeric',
+        timeZone,
       })
     case 'iso':
-      // The LOCAL calendar day, not `toISOString()`: a post published at 8pm
-      // local time is not dated tomorrow.
+      // The calendar day in the pinned zone, not `toISOString()`'s slice by
+      // luck and not the RUNTIME's local day: `getFullYear`/`getMonth`/
+      // `getDate` read the host's zone, so this branch moved an entry by a
+      // day depending on who rendered it. The UTC accessors are the same
+      // reading the three `toLocaleDateString` branches above now take.
       return (
-        `${date.getFullYear()}-` +
-        `${String(date.getMonth() + 1).padStart(2, '0')}-` +
-        `${String(date.getDate()).padStart(2, '0')}`
+        `${date.getUTCFullYear()}-` +
+        `${String(date.getUTCMonth() + 1).padStart(2, '0')}-` +
+        `${String(date.getUTCDate()).padStart(2, '0')}`
       )
     default:
-      return date.toLocaleDateString(locale)
+      return date.toLocaleDateString(locale, { timeZone })
   }
 }
 
@@ -1208,12 +1245,14 @@ export function expandCollectionRelated<
       return {
         title: entry.title ?? '',
         url: `/${source.slug}/${entry.slug ?? ''}`,
+        // Through the one formatter (AGL-1926), not a second inline
+        // `toLocaleDateString()`. It produced the same bytes only because
+        // this runs on the server, where the implicit locale and zone happen
+        // to be the ones `formatCollectionEntryDate` now pins; a related-post
+        // card is the same published date as the byline above it and must not
+        // be able to disagree with it.
         ...(entry.publishedAt?.seconds
-          ? {
-              date: new Date(
-                entry.publishedAt.seconds * 1000,
-              ).toLocaleDateString(),
-            }
+          ? { date: formatCollectionEntryDate(entry.publishedAt) }
           : {}),
         ...(entry.excerpt ? { excerpt: entry.excerpt } : {}),
         // AGL-1457: the block owns its markup, so there is no template to

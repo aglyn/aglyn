@@ -415,8 +415,25 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   // the collection page renders through the normal canvas path below).
   if (props.content?.collection && !nodes) {
     const { collection, entries, entry } = props.content
+    // Through the ONE shared formatter (AGL-1926), never a local
+    // `toLocaleDateString()`. This component is a client component that Next
+    // ALSO renders on the server, so a bare call ran twice against two
+    // different runtimes: `en-US` + UTC on Vercel, the visitor's own locale
+    // and zone in their browser. An entry published at 02:30 UTC was dated
+    // the 10th in the ISR HTML and the 9th by every visitor west of
+    // Greenwich, and a visitor outside the US got a differently SHAPED date
+    // whatever the instant — React reports both as a text mismatch (#418) and
+    // then reconciles against a DOM it no longer describes, which is the
+    // `removeChild`/`insertBefore` pair filed alongside it.
+    //
+    // `formatCollectionEntryDate` pins the locale and the zone, so this is a
+    // pure function of the timestamp and the two renders agree by
+    // construction rather than by the server and the visitor happening to
+    // share a locale. It is also the same function the canvas path stamps
+    // into `{{entry.date}}`, so the legacy surface and the composed one can
+    // no longer print one entry two ways.
     const formatDate = (value?: { seconds: number } | null) =>
-      value ? new Date(value.seconds * 1000).toLocaleDateString() : ''
+      Aglyn.formatCollectionEntryDate(value)
     // The cover through the ONE shared resolver (AGL-1407). A `media:`
     // reference becomes the CDN path for THIS site; a raw storage URL, an
     // AGL-175 relative CDN path and an author's own hotlinked URL all pass
