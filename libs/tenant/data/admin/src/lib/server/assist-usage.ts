@@ -132,9 +132,20 @@ export function assistExchangeExpiry(now = new Date()): Date {
 
 /**
  * Free-tier daily message cap (level-1 answers only). Env-tunable without a
- * deploy of new code paths; the default is deliberately small — a free org
- * at the cap costs well under a cent a day at Sonnet list rates, so the
- * free tier can never eat margin even fleet-wide.
+ * deploy of new code paths.
+ *
+ * What ten messages actually cost: about **$0.28 a day** at Sonnet list
+ * rates, taking the worst case the clamps allow (see
+ * {@link ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD} for the same arithmetic
+ * carried to the monthly ceiling). A typical question costs a fraction of
+ * that, because the worst case assumes a full 8,000-character history and a
+ * 4,000-character question on every one of the ten.
+ *
+ * This docstring used to claim "well under a cent a day", which was the
+ * pre-AGL-2441 figure and wrong by ~28x once the history clamp was measured
+ * rather than assumed. It is restated here because it is the stated
+ * justification for the size of this cap, and a justification that is off by
+ * that much is how a cap ends up set by a number nobody re-derived.
  */
 export function assistFreeDailyLimit(): number {
   const raw = process.env.ASSIST_FREE_DAILY_LIMIT
