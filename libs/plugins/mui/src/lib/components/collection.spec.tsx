@@ -368,6 +368,227 @@ describe('Collection entries search (AGL-1516)', () => {
   })
 })
 
+/**
+ * The suggestion dropdown (AGL-1525, Figma 496:1218).
+ *
+ * The mode's whole promise is that the list the reader is looking at STAYS
+ * THERE while they type — so nearly every test below asserts the grid as
+ * well as the panel. A panel that opens correctly over a list it quietly
+ * emptied is the exact failure this mode exists to prevent, and it is
+ * invisible to any test that only looks at the panel.
+ */
+describe('Collection entries search — suggestions (AGL-1525)', () => {
+  const index = [
+    {
+      title: 'Design it live',
+      excerpt: 'how besigner renders the page',
+      url: '/blog/design-it-live',
+      date: 'Nov 14, 2023',
+      category: 'Guides',
+    },
+    {
+      title: 'One platform, not a stack',
+      excerpt: 'commerce forms media',
+      url: '/blog/one-platform',
+      date: 'Jan 2, 2024',
+    },
+  ]
+  const cards = [
+    <article key="a">First card</article>,
+    <article key="b">Second card</article>,
+  ]
+  const suggesting = (props: Record<string, unknown> = {}) =>
+    render(
+      <CollectionEntries search searchMode="suggest" searchIndex={index} {...props}>
+        {cards}
+      </CollectionEntries>,
+    )
+  const type = (value: string) =>
+    fireEvent.change(screen.getByRole('textbox'), { target: { value } })
+  const viewAll = () =>
+    screen
+      .queryAllByRole('link')
+      .find((link) => link.textContent?.startsWith('View all results'))
+
+  it('keeps FILTER as the reading of an absent mode (regression pin)', () => {
+    // Every block published before AGL-1525 has no `searchMode` at all. If
+    // absence ever started meaning "suggest", each of them would silently
+    // stop filtering — the feature they were actually switched on for.
+    render(
+      <CollectionEntries search searchIndex={index}>
+        {cards}
+      </CollectionEntries>,
+    )
+    type('platform')
+    expect(screen.queryByText('First card')).toBeNull()
+    expect(screen.getByText('Second card')).toBeTruthy()
+    expect(viewAll()).toBeUndefined()
+  })
+
+  it('leaves the card grid ALONE while suggesting', () => {
+    suggesting()
+    type('platform')
+    // Both cards still there — the reader did not lose their place.
+    expect(screen.getByText('First card')).toBeTruthy()
+    expect(screen.getByText('Second card')).toBeTruthy()
+  })
+
+  it('opens a panel of matching entries with chip, date and excerpt', () => {
+    suggesting()
+    type('besigner')
+    expect(screen.getByText('Design it live')).toBeTruthy()
+    expect(screen.getByText('Guides')).toBeTruthy()
+    expect(screen.getByText('Nov 14, 2023')).toBeTruthy()
+    expect(screen.getByText('how besigner renders the page')).toBeTruthy()
+    // …and only the matching one.
+    expect(screen.queryByText('One platform, not a stack')).toBeNull()
+  })
+
+  it('makes each suggestion a real link to the entry', () => {
+    suggesting()
+    type('besigner')
+    const row = screen
+      .queryAllByRole('link')
+      .find((link) => link.textContent?.includes('Design it live'))
+    expect(row?.getAttribute('href')).toBe('/blog/design-it-live')
+  })
+
+  it('renders a url-less suggestion as TEXT, never as a dead link', () => {
+    // A page cached before AGL-1525 stamped urls, or a slugless entry. A row
+    // that navigates nowhere — or worse, to the listing — is a broken
+    // promise; showing the title without a link is not.
+    suggesting({
+      searchIndex: [{ title: 'Design it live', excerpt: 'besigner' }],
+    })
+    type('besigner')
+    expect(screen.getByText('Design it live')).toBeTruthy()
+    expect(
+      screen
+        .queryAllByRole('link')
+        .some((link) => link.textContent?.includes('Design it live')),
+    ).toBe(false)
+    // The site-wide escape hatch still has to be there.
+    expect(viewAll()).toBeTruthy()
+  })
+
+  it('always offers "View all results", encoded, EVEN with no matches', () => {
+    suggesting()
+    type('zzzz nothing')
+    // No rows…
+    expect(screen.queryByText('Design it live')).toBeNull()
+    expect(
+      screen.getByText('No matches for “zzzz nothing” on this page.'),
+    ).toBeTruthy()
+    // …which is exactly when the reader most needs the site-wide search:
+    // this block only ever held one page of one collection.
+    expect(viewAll()?.getAttribute('href')).toBe(
+      '/search?q=zzzz%20nothing',
+    )
+    // The grid is STILL intact behind the empty panel.
+    expect(screen.getByText('First card')).toBeTruthy()
+  })
+
+  it('opens nothing until the reader actually types', () => {
+    suggesting()
+    expect(viewAll()).toBeUndefined()
+    // Whitespace is not a query.
+    type('   ')
+    expect(viewAll()).toBeUndefined()
+  })
+
+  it('closes on Escape, and TYPING brings it back', () => {
+    suggesting()
+    type('besigner')
+    expect(screen.getByText('Design it live')).toBeTruthy()
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Escape' })
+    expect(screen.queryByText('Design it live')).toBeNull()
+    // Escape dismissed one answer, it did not switch the feature off.
+    type('besigner renders')
+    expect(screen.getByText('Design it live')).toBeTruthy()
+  })
+
+  it('suggests even when the children do NOT divide by the index', () => {
+    // `groupSize` is the filter mode's precondition: it maps clone groups to
+    // index entries. Suggestions read the index directly, so an uneven
+    // template — the very case the filter fails open on — must still
+    // suggest. Three children over two entries: no whole group size.
+    render(
+      <CollectionEntries search searchMode="suggest" searchIndex={index}>
+        <article key="a">First card</article>
+        <aside key="b">Stray</aside>
+        <article key="c">Second card</article>
+      </CollectionEntries>,
+    )
+    type('besigner')
+    expect(screen.getByText('Design it live')).toBeTruthy()
+    expect(screen.getByText('Stray')).toBeTruthy()
+  })
+
+  it('submits to the site search, so Enter works without the panel', () => {
+    // The panel is an enhancement over a working search box. With scripting
+    // broken or slow, the field is still a GET form pointed at the reserved
+    // /search route under the name that route reads.
+    const { container } = suggesting()
+    const form = container.querySelector('form')
+    expect(form?.getAttribute('action')).toBe('/search')
+    expect(form?.getAttribute('method')).toBe('get')
+    expect(form?.querySelector('input')?.getAttribute('name')).toBe('q')
+    // One search landmark, not two.
+    expect(screen.getAllByRole('search')).toHaveLength(1)
+  })
+
+  it('caps the panel at five rows rather than growing into a page', () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({
+      title: `Platform post ${i}`,
+      excerpt: 'platform',
+      url: `/blog/post-${i}`,
+    }))
+    suggesting({ searchIndex: many })
+    type('platform')
+    const rows = screen
+      .queryAllByRole('link')
+      .filter((link) => link.textContent?.startsWith('Platform post'))
+    expect(rows).toHaveLength(5)
+  })
+
+  it('stays INERT on an editing surface — no panel, no form', () => {
+    // Same contract as the filter mode's inert field and the pills: the
+    // canvas has no stamped index, and a floating panel over the author's
+    // template would cover the thing they are editing.
+    const { container } = render(
+      <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>
+        <CollectionEntries search searchMode="suggest">
+          <article>{'{{entry.title}}'}</article>
+        </CollectionEntries>
+      </Aglyn.ScreenLinkContext.Provider>,
+    )
+    const input = screen.getByRole('textbox') as HTMLInputElement
+    expect(input.readOnly).toBe(true)
+    expect(container.querySelector('form')).toBeNull()
+    fireEvent.change(input, { target: { value: 'anything' } })
+    expect(viewAll()).toBeUndefined()
+    expect(screen.getByText('{{entry.title}}')).toBeTruthy()
+  })
+
+  it('offers the mode as a select, gated behind the search switch', () => {
+    // Zach's rule: a capability that only exists in code is not shipped. The
+    // author reaches this by clicking, in the Attributes panel.
+    const attribute = (collectionEntriesSchema.attributes ?? []).find(
+      (item) => item.name === 'searchMode',
+    )
+    expect(attribute?.component).toBe(Aglyn.FieldComponentType.SELECT)
+    expect(attribute?.condition).toEqual({ when: 'search', is: true })
+    const values = (attribute?.options ?? []).map((option: any) => option.value)
+    expect(values).toEqual(['filter', 'suggest'])
+    // AGL-1453: `''` cannot survive a save, so an option valued `''` is a
+    // one-way door — the author picks it once and can never pick back.
+    for (const value of values) expect(value).toBeTruthy()
+    for (const option of (attribute?.options ?? []) as any[]) {
+      expect(String(option.label ?? '').trim()).toBeTruthy()
+    }
+  })
+})
+
 describe('Entry body block (AGL-551)', () => {
   it('renders markdown-lite as themed elements', () => {
     const markdown =

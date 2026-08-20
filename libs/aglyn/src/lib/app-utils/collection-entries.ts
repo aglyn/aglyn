@@ -932,12 +932,33 @@ export function expandCollectionEntries<
           ...container,
           props: {
             ...(container.props as any),
-            searchIndex: windowed.map(
-              (entry): CollectionEntrySearchItem => ({
+            searchIndex: windowed.map((entry): CollectionEntrySearchItem => {
+              // The suggestion panel (AGL-1525) draws ROWS from the index
+              // rather than filtering clones, so the row's link, date and
+              // category chip have to be here — the component only holds
+              // rendered markup by then. Through the same three resolvers
+              // Related posts uses (AGL-1926 for the date especially): a
+              // suggestion for a post is the same post as the card below it
+              // and must not be able to disagree with it about its date.
+              const categoryName = resolveEntryCategoryName(
+                entry,
+                source.categories,
+              )
+              return {
                 title: entry.title ?? '',
                 excerpt: entry.excerpt ?? '',
-              }),
-            ),
+                // Absent keys rather than empty strings, so the row asks one
+                // question per field instead of two — the shape Related
+                // posts settled on (AGL-1457).
+                ...(entry.slug
+                  ? { url: `/${source.slug}/${entry.slug}` }
+                  : {}),
+                ...(entry.publishedAt?.seconds
+                  ? { date: formatCollectionEntryDate(entry.publishedAt) }
+                  : {}),
+                ...(categoryName ? { category: categoryName } : {}),
+              }
+            }),
             // How many entries the window above was drawn FROM (AGL-1516).
             //
             // The component has to tell the reader whether a miss means "not
@@ -1127,6 +1148,18 @@ function reformattableEntryDate(
 export interface CollectionEntrySearchItem {
   title: string
   excerpt: string
+  /**
+   * Entry permalink (AGL-1525). The `filter` mode never needs it — it hides
+   * and shows clones that already carry their own links — but a suggestion
+   * row IS the link, and the panel is drawn from the index, not from the
+   * clones. Optional because a page cached before this shipped has an index
+   * without it; the panel degrades to plain text rather than to a dead link.
+   */
+  url?: string
+  /** Published date, through {@link formatCollectionEntryDate} (AGL-1525). */
+  date?: string
+  /** Category display name for the suggestion row's chip (AGL-1525). */
+  category?: string
 }
 
 /** One related post as stamped onto a Related posts block (AGL-582). */

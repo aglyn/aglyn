@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import type { CollectionEntriesSource } from './collection-entries'
+import type {
+  CollectionEntriesSource,
+  CollectionEntrySearchItem,
+} from './collection-entries'
 import {
   COLLECTION_ALL_PILL_DEFAULT,
   COLLECTION_ALL_PILL_NONE,
@@ -1068,8 +1071,15 @@ describe('expandCollectionEntries search index (AGL-1516)', () => {
     const expanded = expandCollectionEntries(nodes, { blog }, 'blog')
     expect(expanded['list'].nodes).toHaveLength(2)
     expect(expanded['list'].props.searchIndex).toEqual([
-      { title: 'Hello world', excerpt: 'First post' },
-      { title: 'Second', excerpt: '' },
+      {
+        title: 'Hello world',
+        excerpt: 'First post',
+        url: '/blog/hello-world',
+        date: formatCollectionEntryDate({ seconds: 1_700_000_000 }),
+      },
+      // No `publishedAt`, so no `date` key at all — an absent field is
+      // absent, not an empty string (AGL-1525).
+      { title: 'Second', excerpt: '', url: '/blog/second' },
     ])
   })
 
@@ -1091,8 +1101,8 @@ describe('expandCollectionEntries search index (AGL-1516)', () => {
     // The index covers exactly the window the reader can see; the block's
     // empty state owns saying so.
     expect(expanded['list'].props.searchIndex).toEqual([
-      { title: 'Post 2', excerpt: 'About 2' },
-      { title: 'Post 3', excerpt: 'About 3' },
+      { title: 'Post 2', excerpt: 'About 2', url: '/blog/post-2' },
+      { title: 'Post 3', excerpt: 'About 3', url: '/blog/post-3' },
     ])
   })
 
@@ -1109,8 +1119,94 @@ describe('expandCollectionEntries search index (AGL-1516)', () => {
     nodes['list'].props.filterCategory = 'guides'
     const expanded = expandCollectionEntries(nodes, { blog: tagged }, 'blog')
     expect(expanded['list'].props.searchIndex).toEqual([
-      { title: 'B', excerpt: '' },
+      { title: 'B', excerpt: '', url: '/blog/b', category: 'Guides' },
     ])
+  })
+
+  // ── Suggestion-row fields (AGL-1525, frame 496:1218) ──────────────────
+  //
+  // The panel is drawn from the INDEX, not from the clones: the component
+  // holds only rendered markup by then, so a row's link, date and chip can
+  // only reach it from here. Each is asserted against the resolver the rest
+  // of the collection surfaces use, because a suggestion for a post that
+  // disagrees with the card below it about its date or its category is worse
+  // than no suggestion.
+
+  it('stamps the entry permalink so a suggestion row can be a real link', () => {
+    const nodes = baseNodes()
+    nodes['list'].props.search = true
+    const expanded = expandCollectionEntries(nodes, { blog }, 'blog')
+    const index = expanded['list'].props
+      .searchIndex as CollectionEntrySearchItem[]
+    expect(index.map((item) => item.url)).toEqual([
+      '/blog/hello-world',
+      '/blog/second',
+    ])
+  })
+
+  it('omits the url for a slugless entry rather than linking to /blog/', () => {
+    // A slugless entry has no permalink to offer. `/blog/` is not a smaller
+    // version of that fact, it is a link to the LISTING wearing the post's
+    // title — the reader clicks their result and lands somewhere else.
+    const slugless = {
+      slug: 'blog',
+      entries: [{ $id: 'e1', title: 'Draft-ish', excerpt: 'No slug' }],
+    }
+    const nodes = baseNodes()
+    nodes['list'].props.search = true
+    const expanded = expandCollectionEntries(nodes, { blog: slugless }, 'blog')
+    const index = expanded['list'].props
+      .searchIndex as CollectionEntrySearchItem[]
+    expect(index).toHaveLength(1)
+    expect('url' in index[0]).toBe(false)
+  })
+
+  it('dates a suggestion through the ONE formatter (AGL-1926)', () => {
+    // Not a second inline `toLocaleDateString()`: the suggestion row and the
+    // card it points at are the same published date and must not be able to
+    // disagree. Compared against the formatter itself rather than a literal,
+    // so a change to the site-wide format moves both together.
+    const nodes = baseNodes()
+    nodes['list'].props.search = true
+    const expanded = expandCollectionEntries(nodes, { blog }, 'blog')
+    const index = expanded['list'].props
+      .searchIndex as CollectionEntrySearchItem[]
+    expect(index[0].date).toBe(
+      formatCollectionEntryDate({ seconds: 1_700_000_000 }),
+    )
+    expect('date' in index[1]).toBe(false)
+  })
+
+  it('resolves the category chip through the taxonomy, so a rename lands', () => {
+    // `categoryId` is the stored form; the chip must show the CURRENT name,
+    // exactly as Category Pills and Related posts resolve it. Stamping the
+    // raw id would put "guides" on a chip the site calls "Playbooks".
+    const renamed = {
+      slug: 'blog',
+      categories: [{ id: 'guides', name: 'Playbooks' }],
+      entries: [
+        { $id: 'e1', title: 'New', slug: 'new', categoryId: 'guides' },
+        { $id: 'e2', title: 'Bare', slug: 'bare' },
+      ],
+    }
+    const nodes = baseNodes()
+    nodes['list'].props.search = true
+    const expanded = expandCollectionEntries(nodes, { blog: renamed }, 'blog')
+    const index = expanded['list'].props
+      .searchIndex as CollectionEntrySearchItem[]
+    expect(index[0].category).toBe('Playbooks')
+    // Uncategorized stays uncategorized — no empty chip.
+    expect('category' in index[1]).toBe(false)
+  })
+
+  it('still stamps NOTHING on a block that never asked for search', () => {
+    // The row fields must not become a back door around the opt-in: the
+    // regression pin above asserts the same props OBJECT, and this asserts
+    // the new keys specifically, so a future `searchIndex` built outside the
+    // `searchEnabled` branch cannot pass by leaving `search` alone.
+    const nodes = baseNodes()
+    const expanded = expandCollectionEntries(nodes, { blog }, 'blog')
+    expect(expanded['list'].props.searchIndex).toBeUndefined()
   })
 
   it('still fails open on an UNKNOWN collection, search or not', () => {
