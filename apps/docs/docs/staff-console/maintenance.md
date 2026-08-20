@@ -112,5 +112,5 @@ surfaces come to disagree:
 ## Related
 
 - [Platform health](platform-health.md)
-- [Audit log](audit.md)
+- [Audit log](overview.md#audit-log)
 - [Staff console overview](overview.md)

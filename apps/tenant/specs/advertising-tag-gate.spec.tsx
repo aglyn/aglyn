@@ -579,7 +579,20 @@ describe('the advertising-tag gate', () => {
       const root = resolve(__dirname, '../../..')
       const mounts = execFileSync(
         'git',
-        ['grep', '-l', '-e', '<AdvertisingTags', '--', 'apps', 'libs'],
+        // `:!*.spec.*` excludes THIS file. `git grep` searches only TRACKED
+        // files, so while the spec was new-and-untracked it matched nothing and
+        // this guard passed — then went red the moment it was committed. Scope
+        // is about production mount points, not the test that polices them.
+        [
+          'grep',
+          '-l',
+          '-e',
+          '<AdvertisingTags',
+          '--',
+          'apps',
+          'libs',
+          ':!*.spec.*',
+        ],
         { cwd: root, encoding: 'utf8' },
       )
         .split('\n')
