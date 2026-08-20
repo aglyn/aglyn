@@ -64,24 +64,20 @@
  * carry an eslint-disable line saying why.
  */
 
-/** Spreads of a props bag — `{...rest}`, `{...props.slotProps}`. */
-function isPropsSpread(attribute) {
-  if (attribute.type !== 'JSXSpreadAttribute') return false
-  const argument = attribute.argument
-  return (
-    argument.type === 'Identifier' ||
-    argument.type === 'MemberExpression' ||
-    // `{...(rest as Record<string, unknown>)}` — the cast is not the point.
-    argument.type === 'TSAsExpression'
-  )
-}
-
-/** Unwraps casts and parentheses so the shape below is the real one. */
+/**
+ * Unwraps casts and optional chains so the shape below is the real one.
+ *
+ * `ChainExpression` belongs here for the same reason the TS wrappers do: it
+ * is a node the parser puts *around* the expression that matters. `node?.sx`
+ * is a `ChainExpression` wrapping the `MemberExpression`, and reading its
+ * `.type` answers a question nobody asked (AGL-2030).
+ */
 function unwrap(node) {
   let current = node
   while (
     current &&
-    (current.type === 'TSAsExpression' ||
+    (current.type === 'ChainExpression' ||
+      current.type === 'TSAsExpression' ||
       current.type === 'TSSatisfiesExpression' ||
       current.type === 'TSNonNullExpression' ||
       current.type === 'TSTypeAssertion')
@@ -89,6 +85,24 @@ function unwrap(node) {
     current = current.expression
   }
   return current
+}
+
+/**
+ * Spreads of a props bag — `{...rest}`, `{...props.slotProps}`,
+ * `{...node?.icon}`.
+ *
+ * The optional-chained form used to read as "not a props spread" and take
+ * the rule out of the element before it ever looked at the `sx` beside it,
+ * which hid 24 violations inside the rule's own configured scope — the exact
+ * bug it exists for, in the files it was already policing (AGL-2030).
+ */
+function isPropsSpread(attribute) {
+  if (attribute.type !== 'JSXSpreadAttribute') return false
+  // `{...(rest as Record<string, unknown>)}`, `{...node?.icon}` — neither the
+  // cast nor the chain is the point.
+  const argument = unwrap(attribute.argument)
+  if (!argument) return false
+  return argument.type === 'Identifier' || argument.type === 'MemberExpression'
 }
 
 /**

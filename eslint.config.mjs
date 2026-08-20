@@ -373,6 +373,19 @@ export default [
     // five shipped instances before anything in the toolchain noticed
     // (AGL-1240/1284). Scoped here because this is where node props are
     // spread; widen it the first time the shape appears outside.
+    //
+    // `basePath` is what makes any of that true (AGL-2030). This is the only
+    // block in the file scoped by PATH rather than by extension, and eslint
+    // resolves `files` against the directory of the config that OWNS the
+    // block — which, once nx lints a project through its own
+    // `libs/plugins/<name>/eslint.config.mjs`, is that project directory.
+    // `libs/plugins/**/*.tsx` re-based to `libs/plugins/mui/libs/plugins/**`
+    // and matched nothing, so the rule resolved to NO severity in all 13
+    // plugin projects and CI has never once run it. Anchoring with `**/`
+    // cannot fix this the way it does elsewhere: relative to the project
+    // directory the paths do not contain `libs/plugins` at all. Pinning the
+    // base to this file's own directory does.
+    basePath: import.meta.dirname,
     files: ['libs/plugins/**/*.tsx'],
     rules: { 'aglyn/no-sx-after-spread': 'error' },
   },
