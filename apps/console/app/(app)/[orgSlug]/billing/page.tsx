@@ -156,7 +156,32 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   // monthly and annual side by side, so it commits to neither). Honoring that
   // default would silently flip an annual org to monthly on arrival, so only an
   // interval the URL actually stated is allowed to move the toggle.
-  const intervalStated = Boolean(searchParams?.get('interval'))
+  //
+  // ASK THE PARSER, do not re-derive it (AGL-1864). This was
+  // `Boolean(searchParams?.get('interval'))`, which reads "the param was
+  // present" where the intent means "the param said something we understood".
+  // `OnboardingPlanIntent.intervalStated` is the model's own answer and its
+  // docblock names this page as the reader that honours it — the two disagree
+  // on exactly the links that are broken:
+  //
+  //   - `?interval=yearly` / `?interval=monthly` / `?interval=decade` — junk
+  //     the parser refuses (only `month`, `year`, `annual` are known). It
+  //     falls back to the safe 'month' AND flags `intervalStated: false` so a
+  //     reader can tell that apart from a real statement. The old expression
+  //     saw a non-empty string, called it stated, and pushed the toggle to
+  //     monthly — so an ANNUAL org following a mis-serialized link had every
+  //     card re-quoted at the monthly price and, because `interval` is what
+  //     `handleUpgrade` posts, an Upgrade from that page would have moved them
+  //     off the annual billing they were already on.
+  //   - `?plan=enterprise&interval=year` — a custom-priced plan, for which the
+  //     parser returns `interval: 'month', intervalStated: false` because
+  //     Enterprise is quoted rather than bought. The old expression flipped an
+  //     annual org to monthly off a link that said the word "year".
+  //
+  // The console half of AGL-1989: whichever interval the visitor was quoted,
+  // the console must not be the hop that loses it. No price moved here — this
+  // only decides which of the two already-published prices is on screen.
+  const intervalStated = planIntent?.intervalStated === true
   // The toggle starts on the live subscription's interval (AGL-532) so
   // annual orgs see their real prices and switches keep their interval.
   //
