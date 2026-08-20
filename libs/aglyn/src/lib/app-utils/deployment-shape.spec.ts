@@ -26,10 +26,12 @@
  */
 
 import {
+  deploymentCommitRef,
   deploymentEnvironmentLabel,
   isDeployedRuntime,
   isDevelopmentRuntime,
   isProductionDeployment,
+  platformVersion,
 } from './deployment-shape'
 
 /** Exactly what docker/tenant.Dockerfile and docker/console.Dockerfile set. */
@@ -182,5 +184,78 @@ describe('deploymentEnvironmentLabel', () => {
         NODE_ENV: 'production',
       }),
     ).not.toBe('development')
+  })
+})
+
+/**
+ * What BUILD this is, in a shape the operator of it can actually read
+ * (AGL-2091).
+ *
+ * Every `/api/health*` route answered `commit` from `VERCEL_GIT_COMMIT_SHA`
+ * alone, so off Vercel — which is every self-host container — the one endpoint
+ * whose job is to say what is running answered `null`. An operator who wants
+ * to report a bug, or to ask whether a fix has reached them, had no version to
+ * quote: the console footer was the only surface that stated one, and the
+ * tenant app stated none at all.
+ *
+ * These take the environment as a parameter for the same reason the
+ * predicates above do: jest's own environment is not any of the three
+ * deployment shapes, so a spec that reads `process.env` proves nothing about
+ * a container.
+ */
+describe('deploymentCommitRef (AGL-2091)', () => {
+  it('reports the commit on Aglyn cloud, shortened the way it always was', () => {
+    expect(
+      deploymentCommitRef({ ...VERCEL, VERCEL_GIT_COMMIT_SHA: 'cbf8125a3aacb6a1658e476c83fe618f3cafed3b' }),
+    ).toBe('cbf8125')
+  })
+
+  it('reports COMMIT_REF on a self-host container', () => {
+    // The AGL-2091 assertion. Before this existed the container had no
+    // VERCEL_GIT_COMMIT_SHA, so this returned null and the health body said
+    // `"commit": null` on every self-hosted install.
+    expect(
+      deploymentCommitRef({ ...CONTAINER, COMMIT_REF: 'f9d997329ee008553be081ba46ded95e9b7eb309' }),
+    ).toBe('f9d9973')
+  })
+
+  it('prefers an explicitly stamped BUILD_ID over anything derived', () => {
+    // Same precedence the console footer uses (AGL-2181), so the footer and
+    // the health endpoint cannot disagree about which build answered.
+    expect(
+      deploymentCommitRef({
+        ...CONTAINER,
+        BUILD_ID: 'release7',
+        COMMIT_REF: 'f9d997329ee0',
+        VERCEL_GIT_COMMIT_SHA: 'cbf8125a3aac',
+      }),
+    ).toBe('release')
+  })
+
+  it('is null when nothing stamped the build — never the NULL sentinel', () => {
+    // `global.ts` renders unset build metadata as the literal string 'NULL',
+    // and a Docker ARG with no default hands the same text through. A health
+    // body claiming to run commit "NULL" is worse than one admitting it does
+    // not know.
+    expect(deploymentCommitRef(CONTAINER)).toBeNull()
+    expect(deploymentCommitRef({ ...CONTAINER, COMMIT_REF: 'NULL' })).toBeNull()
+    expect(deploymentCommitRef({ ...CONTAINER, BUILD_ID: '   ' })).toBeNull()
+  })
+})
+
+describe('platformVersion (AGL-2091)', () => {
+  it('reports the package version on a self-host container', () => {
+    // The number a self-hoster can put in a bug report. It needs no operator
+    // configuration at all: `with-aglyn.nextjs.config.js` reads it out of
+    // package.json and inlines it, so it is correct in a container the first
+    // time one is built.
+    expect(platformVersion({ ...CONTAINER, PACKAGE_VERSION: '1.0.0-beta.6' })).toBe(
+      '1.0.0-beta.6',
+    )
+  })
+
+  it('is null when the build missed the define, never the string NULL', () => {
+    expect(platformVersion(CONTAINER)).toBeNull()
+    expect(platformVersion({ ...CONTAINER, PACKAGE_VERSION: 'NULL' })).toBeNull()
   })
 })

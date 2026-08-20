@@ -79,12 +79,14 @@ import { getFirestore, Timestamp } from 'firebase-admin/firestore'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
   billingWebhookHealth,
+  deploymentCommitRef,
   healthBody,
   healthHeaders,
   healthHttpStatus,
   healthStatus,
   memoizeWithTtl,
   meteredPricingHealth,
+  platformVersion,
   unsubscribedRequiredEvents,
   WEBHOOK_FAILURE_WINDOW_MINUTES,
   type BillingWebhookCheck,
@@ -335,7 +337,12 @@ export async function GET(): Promise<Response> {
     healthBody({
       service: 'console-billing',
       checks,
-      commit: process.env['VERCEL_GIT_COMMIT_SHA']?.slice(0, 7) ?? null,
+      commit: deploymentCommitRef(),
+      // Which VERSION of the platform answered. The commit above is only
+      // set off Vercel if the operator stamped it; this one is inlined
+      // from package.json by every build, so a self-hoster always has
+      // something to quote in a bug report (AGL-2091).
+      version: platformVersion(),
       environment: process.env['VERCEL_ENV'] ?? 'development',
       region: process.env['VERCEL_REGION'] ?? null,
     }),

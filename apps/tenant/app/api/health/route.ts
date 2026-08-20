@@ -35,12 +35,14 @@
  */
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
+  deploymentCommitRef,
   deploymentEnvironmentLabel,
   healthBody,
   healthHeaders,
   healthHttpStatus,
   healthStatus,
   memoizeWithTtl,
+  platformVersion,
   type HealthCheck,
 } from '@aglyn/aglyn/server'
 
@@ -90,7 +92,12 @@ export async function GET(): Promise<Response> {
       checks,
       // Which build answered. Without it a probe cannot tell a recovered
       // deploy from a rolled-back one, and an incident timeline has no anchor.
-      commit: process.env['VERCEL_GIT_COMMIT_SHA']?.slice(0, 7) ?? null,
+      commit: deploymentCommitRef(),
+      // Which VERSION of the platform answered. The commit above is only
+      // set off Vercel if the operator stamped it; this one is inlined
+      // from package.json by every build, so a self-hoster always has
+      // something to quote in a bug report (AGL-2091).
+      version: platformVersion(),
       // Not `VERCEL_ENV ?? 'development'`: off Vercel that reported a
       // self-hoster's production container as "development" — to them and to
       // whatever monitoring reads this (AGL-2436).

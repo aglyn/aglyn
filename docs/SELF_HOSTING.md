@@ -239,6 +239,45 @@ docker compose up --build
 The first account you create is yours; grant yourself staff access with
 `node tools/scripts/set-staff-claim.mjs` if you want the admin surfaces.
 
+### Which version am I running? (AGL-2091)
+
+Ask either container. `version` is the platform release your image was built
+from, and it is the number to quote in a bug report or to check a fix against:
+
+```bash
+curl -s http://localhost:4200/api/health | jq '{version, commit, environment}'
+curl -s http://localhost:4500/api/health | jq '{version, commit, environment}'
+```
+
+```json
+{ "version": "1.0.0-beta.6", "commit": null, "environment": "production" }
+```
+
+`version` needs nothing from you — it is read out of the repo's `package.json`
+at build time and inlined, so it is correct the first time you build. Before
+AGL-2091 the health body carried no version field at all and answered
+`"commit": null`, because the commit was read from a variable only Aglyn's own
+hosting sets; an operator had no way to say what they were running.
+
+`commit` stays `null` unless you stamp the build, which is worth doing if you
+build from a fork or from an untagged tree:
+
+```bash
+COMMIT_REF=$(git rev-parse HEAD) docker compose up --build
+```
+
+That also lands on the image as the standard
+`org.opencontainers.image.revision` label, so you can identify an image without
+starting it:
+
+```bash
+docker image inspect aglyn-console --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'
+```
+
+The console footer prints the same version, and `COMMIT_REF` may equally be set
+in `.env.selfhost` if a fixed value suits you better than one per build — the
+build argument wins where both are present.
+
 ### Optional: require SSO for your company's email domain
 
 If you run SAML SSO and want to guarantee that nobody on your company domain can

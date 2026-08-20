@@ -52,11 +52,13 @@
 import { BEACON_HEARTBEAT_LOG_ID, writeBeaconHeartbeat } from '@aglyn/tenant-data-admin'
 import {
   beaconHealth,
+  deploymentCommitRef,
   healthBody,
   healthHeaders,
   healthHttpStatus,
   healthStatus,
   memoizeWithTtl,
+  platformVersion,
   type BeaconCheck,
 } from '@aglyn/aglyn/server'
 
@@ -103,7 +105,12 @@ export async function GET(): Promise<Response> {
     healthBody({
       service: 'console-error-beacon',
       checks,
-      commit: process.env['VERCEL_GIT_COMMIT_SHA']?.slice(0, 7) ?? null,
+      commit: deploymentCommitRef(),
+      // Which VERSION of the platform answered. The commit above is only
+      // set off Vercel if the operator stamped it; this one is inlined
+      // from package.json by every build, so a self-hoster always has
+      // something to quote in a bug report (AGL-2091).
+      version: platformVersion(),
       environment: process.env['VERCEL_ENV'] ?? 'development',
       region: process.env['VERCEL_REGION'] ?? null,
     }),

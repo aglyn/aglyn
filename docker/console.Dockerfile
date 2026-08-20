@@ -40,7 +40,21 @@ RUN npm ci
 # ── build: nx production build with standalone output ────────────────────────
 FROM deps AS build
 COPY . .
+# Which build this is, so the container can say so (AGL-2091).
+#
+# `/api/health` reports `commit`, and it read VERCEL_GIT_COMMIT_SHA — unset in
+# every container, so a self-hosted install answered `"commit": null` and its
+# operator had no way to state what they were running when reporting a bug.
+# Pass it at build time:
+#
+#   COMMIT_REF=$(git rev-parse HEAD) docker compose up --build
+#
+# Optional. Left empty the health body reports `commit: null` honestly rather
+# than inventing an id, and `version` still answers from package.json, which
+# needs no argument at all.
+ARG COMMIT_REF=""
 ENV AGLYN_STANDALONE=1 \
+    COMMIT_REF=${COMMIT_REF} \
     NX_DAEMON=false \
     NEXT_TELEMETRY_DISABLED=1
 # Next.js loads .env.production during a production build; the secret mount
@@ -50,6 +64,10 @@ RUN --mount=type=secret,id=selfhost_env,target=/workspace/.env.production \
 
 # ── runner: standalone server, no node_modules install ───────────────────────
 FROM node:24-slim AS runner
+ARG COMMIT_REF=""
+LABEL org.opencontainers.image.title="Aglyn console" \
+      org.opencontainers.image.source="https://github.com/aglyn/aglyn" \
+      org.opencontainers.image.revision="${COMMIT_REF}"
 # AGLYN_STANDALONE marks "this is a deployment" for code that used to key off
 # Vercel's own variable (AGL-2221). It is set in the build stage too, but ENV
 # does not cross a stage boundary and the middleware reads it at REQUEST time,

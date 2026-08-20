@@ -165,10 +165,18 @@ A bump feeds:
 - The `PACKAGE_VERSION` build-time env, re-exported as
   `PACKAGE_VERSION` from `@aglyn/shared-data-enums`.
 - The console footer: `Version 1.0.0-beta.1 (<build-id>)`.
+- Every `/api/health*` body on both apps, as `version` — nine routes, all
+  through `platformVersion()` (AGL-2091). This is the surface a self-host
+  operator reads, and it needs no configuration from them.
 
-The `/api/health` bodies report `commit` (from `VERCEL_GIT_COMMIT_SHA`) but no
-version, and that env is empty off Vercel — so a self-host operator's only
-version signal today is the console footer. See AGL-2091.
+Those bodies also report `commit`, now resolved by `deploymentCommitRef()`
+from `BUILD_ID`, then `COMMIT_REF`, then `VERCEL_GIT_COMMIT_SHA` — the same
+precedence the footer's build id uses (AGL-2181), so the two surfaces cannot
+disagree about the build that answered. Off Vercel it is `null` until an
+operator stamps it; `docs/SELF_HOSTING.md` says how.
+
+`libs/aglyn/src/lib/app-utils/health-version-coverage.spec.ts` fails the build
+if a tenth health route forgets either field.
 
 ## Self-hosting
 

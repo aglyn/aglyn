@@ -52,6 +52,16 @@ export interface HealthReport {
   service: string
   checks: Record<string, HealthCheck>
   commit?: string | null
+  /**
+   * Which VERSION of the platform answered (AGL-2091).
+   *
+   * `commit` alone could only ever be answered on Aglyn's own cloud, so a
+   * self-host operator had nothing to quote in a bug report and no way to ask
+   * whether a fix had reached them. This is the field that answers it, and
+   * unlike the commit it needs no operator configuration —
+   * `platformVersion()` reads the number the build inlined from package.json.
+   */
+  version?: string | null
   environment?: string | null
   region?: string | null
   /** Injected so the body is deterministic in tests. */
@@ -72,6 +82,7 @@ export function healthBody(report: HealthReport): Record<string, unknown> {
     service: report.service,
     checks: report.checks,
     commit: report.commit ?? null,
+    version: report.version ?? null,
     environment: report.environment ?? null,
     region: report.region ?? null,
     at: report.at ?? new Date().toISOString(),

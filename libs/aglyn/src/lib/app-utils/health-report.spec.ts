@@ -106,6 +106,7 @@ describe('healthBody', () => {
       service: 'console',
       checks: { firestore: OK },
       commit: 'abc1234',
+      version: '1.0.0-beta.6',
       environment: 'production',
       region: 'iad1',
       at: '2026-08-02T00:00:00.000Z',
@@ -115,6 +116,9 @@ describe('healthBody', () => {
       service: 'console',
       checks: { firestore: OK },
       commit: 'abc1234',
+      // The field a self-host operator reads to know what they are running
+      // (AGL-2091). `commit` alone could only ever be answered on Vercel.
+      version: '1.0.0-beta.6',
       environment: 'production',
       region: 'iad1',
       at: '2026-08-02T00:00:00.000Z',
@@ -126,6 +130,7 @@ describe('healthBody', () => {
     // from "unknown value" — the shape is the same every sample.
     const body = healthBody({ service: 'tenant', checks: {}, at: 'now' })
     expect(body['commit']).toBeNull()
+    expect(body['version']).toBeNull()
     expect(body['environment']).toBeNull()
     expect(body['region']).toBeNull()
   })
