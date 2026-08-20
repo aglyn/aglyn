@@ -172,6 +172,11 @@ jobs:
       # while themselves unguarded.
       - run: npm run test:deploy-guard
       - run: npm run test:erase-cli
+      # The contentSha256 backfill decides what gets REWRITTEN on real
+      # customer media. Its rules are the reason it is safe to run at all —
+      # `contentHash` untouched, additive only, gated behind --confirm — so
+      # they are asserted here rather than trusted (AGL-1630).
+      - run: npm run test:media-sha256-backfill
       # Also run in rules-drift.yml and index-drift.yml. This workflow is
       # ACTIVE and runs it too; an older comment here claimed it was
       # `disabled_manually`, which was false (AGL-2381). Kept in all three on

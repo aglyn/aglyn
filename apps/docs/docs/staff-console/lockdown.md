@@ -409,7 +409,9 @@ interchangeable. Send the strong one.
 
 Documents with no `contentSha256` are every asset uploaded before the field
 existed, plus **video larger than 50 MB** that came in through the
-signed-upload route.
+signed-upload route. The first of those two groups is finite and
+shrinking: `tools/scripts/backfill-media-content-sha256.mjs` fills it in, one
+media tree per run, and its header carries the measured cost of doing so.
 
 That second class used to be *everything except SVG* on the signed route,
 because the browser PUTs straight to storage and the server never held the
