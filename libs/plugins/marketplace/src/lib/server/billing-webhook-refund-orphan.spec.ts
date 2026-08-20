@@ -517,7 +517,11 @@ describe('a lost dispute arriving before its purchase (AGL-2148)', () => {
     stubStripe({ charge: { ok: false, status: 503, body: {} } })
     await expect(
       marketplaceBillingWebhookHandler(disputeLostEvent() as any),
-    ).resolves.toBeUndefined()
+    ).resolves.toEqual({ claimed: false })
+    // AGL-2429: it did not throw AND it did not claim. A charge read that
+    // failed leaves us unable to say the dispute is ours, so the console
+    // route must still see it as unattributed and alert on it — claiming
+    // here would swallow the one dispute nobody can classify.
     expect(orphan()).toBeUndefined()
   })
 

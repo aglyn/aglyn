@@ -3763,6 +3763,16 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
     if (lookup.kind === 'unresolved') {
       await reportUnresolvedDispute(lookup.reason, paymentIntentId, dispute)
     }
+    // TELL THE ROUTE WE RECOGNISED IT (AGL-2429). A storefront chargeback is
+    // the ORDINARY answer to "no platform revenue row matched", and the route
+    // could not tell it apart from a dispute that nothing at all handled —
+    // so it stayed silent about both. Claiming here is what buys the route
+    // the right to alert on the ones nobody claimed.
+    //
+    // `unresolved` claims too: the lookup could not run, which
+    // `reportUnresolvedDispute` has just raised with staff by name. A second,
+    // vaguer alert from the route would describe the same incident twice.
+    const claimed = lookup.kind === 'order' || lookup.kind === 'unresolved'
     const snapshot = lookup.kind === 'order' ? lookup.snapshot : null
     if (snapshot) {
       const hostId = String(snapshot.ref.parent.parent?.id ?? '')
@@ -3868,5 +3878,6 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         }
       }
     }
+    return { claimed }
   }
 }

@@ -1042,6 +1042,17 @@ async function handler(request: Request): Promise<Response> {
     // none — it is recorded purely so staff learn about an open dispute while
     // the evidence window is still open, which is the only window in which
     // anything can be done about it.
+    //
+    // WHAT THIS BRANCH CANNOT DECIDE ON ITS OWN (AGL-2429). "No
+    // `platformRevenue` row matched" has two completely different meanings —
+    // a storefront or marketplace chargeback the plugins own (routine, and
+    // the overwhelmingly common one), or a dispute that NOTHING handles.
+    // Until the handlers could say which, this endpoint answered 200 and
+    // wrote nothing for both, so the second was invisible: money left the
+    // account, no revenue row moved, no tax figure changed, and no surface
+    // said so. A dispute set here is decided AFTER dispatch, where the
+    // handlers' claim is finally known.
+    let unattributedDispute: Record<string, unknown> | null = null
     if (type === 'charge.dispute.created' || type === 'charge.dispute.closed') {
       dispatchEntered = true // AGL-2157
       const disputeId = String(object?.id ?? '')
@@ -1165,26 +1176,50 @@ async function handler(request: Request): Promise<Response> {
             at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
           })
           .catch(() => undefined)
-      } else if (lost && (paymentIntentId || chargeId)) {
+      } else if (paymentIntentId || chargeId) {
         // No row matched. This is the ORDINARY answer for a storefront or
         // marketplace chargeback — the plugins below own those, and their
-        // handlers self-select on the same charge — so it is deliberately
-        // NOT written to `adminAudit`, which staff read: an entry per
-        // storefront chargeback would bury the platform ones this branch
-        // exists to surface. Handlers return `void`, so this route cannot
-        // ask whether a plugin claimed the dispute.
+        // handlers self-select on the same charge — so nothing is written to
+        // `adminAudit` HERE: an entry per storefront chargeback would bury
+        // the platform ones this branch exists to surface, and a muted alert
+        // is worth less than no alert at all.
         //
-        // It is still logged, because one shape here is genuinely ours: an
-        // invoice paid before AGL-2120 stored no `chargeId`/`paymentIntentId`
-        // and so can never be matched, however plainly it is a subscription
-        // charge. The log line is the only trace such a dispute leaves —
-        // that window closes on its own as those invoices renew.
-        console.warn('[billing/webhook] lost dispute matched no revenue row', {
-          disputeId,
-          paymentIntentId: paymentIntentId || null,
-          chargeId: chargeId || null,
-          disputedCents,
-        })
+        // But one shape here is genuinely ours and gets no owner anywhere:
+        // an invoice paid before AGL-2120 stored no `chargeId` /
+        // `paymentIntentId` and can never be matched however plainly it is a
+        // subscription charge, and a chargeback against a paid BOOKING is
+        // claimed by no handler at all (the bookings plugin subscribes no
+        // `charge.dispute.*`). Those used to leave nothing but a log line
+        // that no alerting reads.
+        //
+        // So the decision is DEFERRED rather than made here: the plugins now
+        // report whether they recognised the event (AGL-2429), and the
+        // resolution happens after dispatch, once that answer exists. Only
+        // the two ACTIONABLE outcomes are parked — `lost`, where the money
+        // is already gone, and `created`, where the evidence window is still
+        // open. A `won` or `warning_closed` dispute nobody claimed moved no
+        // money and needs no one woken up.
+        if (lost || type === 'charge.dispute.created') {
+          unattributedDispute = {
+            disputeId,
+            paymentIntentId: paymentIntentId || null,
+            chargeId: chargeId || null,
+            disputedCents,
+            currency: String(object?.currency ?? 'usd'),
+            status: String(object?.status ?? ''),
+            disputeReason: String(object?.reason ?? ''),
+            evidenceDueBy: Number(object?.evidence_details?.due_by ?? 0) || null,
+            lost,
+          }
+        }
+        if (lost) {
+          console.warn('[billing/webhook] lost dispute matched no revenue row', {
+            disputeId,
+            paymentIntentId: paymentIntentId || null,
+            chargeId: chargeId || null,
+            disputedCents,
+          })
+        }
       }
     }
 
@@ -1200,12 +1235,73 @@ async function handler(request: Request): Promise<Response> {
     // claim is safe to release. The flag flips only once dispatch is about
     // to begin.
     dispatchEntered = true
-    await runBillingWebhookHandlers({
+    const dispatch = await runBillingWebhookHandlers({
       type,
       object,
       event,
       requestHost: headers['host'],
     })
+
+    // THE PLATFORM-FAULT BRANCH (AGL-2429). A dispute that matched no
+    // `platformRevenue` row AND that no plugin recognised is money moving
+    // with nothing in the system recording it. Every other outcome above is
+    // silent by design; this one is the residue after all of them, which is
+    // what makes it worth an alert staff will still read in six months.
+    //
+    // BEST-EFFORT, and awaited rather than deferred: dispatch has already
+    // committed its side effects by this point, so a throw here would 500 a
+    // webhook whose work is done and — by the AGL-2157 claim rule — would
+    // hold the idempotency claim so the redelivery short-circuits. Failing to
+    // write a WARNING must never cost a delivery. The `console.error` is the
+    // floor under it, so the failure is not itself silent.
+    if (unattributedDispute && dispatch?.claimed !== true) {
+      const lost = unattributedDispute.lost === true
+      const disputeId = String(unattributedDispute.disputeId ?? '')
+      const amount = `$${(
+        Number(unattributedDispute.disputedCents ?? 0) / 100
+      ).toFixed(2)}`
+      const reason = lost
+        ? `A card dispute was LOST and nothing in the platform claimed it — no revenue row, no storefront order, no marketplace purchase. ${amount} has already been taken back and no ledger records it. Find the charge in Stripe and reconcile it by hand.`
+        : `A card dispute was opened and nothing in the platform claimed it — no revenue row, no storefront order, no marketplace purchase. Nobody has been told to answer it, and an unanswered dispute is decided for the cardholder. Find the charge in Stripe and respond before the evidence deadline.`
+      // TWO surfaces, because they fail differently. The audit row is the
+      // durable record and the one a reconciliation reads back months later;
+      // the staff notification is the push, and it is the half that survives
+      // `adminAudit` filling its window with high-frequency system actions
+      // (AGL-2324). Neither can throw: `notifyStaff` never does, and the
+      // audit add is caught.
+      await firebaseAdmin
+        .app()
+        .firestore()
+        .collection('adminAudit')
+        .add({
+          actorUid: 'system:stripe-webhook',
+          action: 'billing.disputeUnattributed',
+          target: `disputes/${disputeId}`,
+          reason,
+          before: null,
+          after: { ...unattributedDispute, eventType: type },
+          at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+        })
+        .catch((error: unknown) => {
+          console.error(
+            '[billing/webhook] could not record an unattributed dispute',
+            { disputeId, error },
+          )
+          return undefined
+        })
+      await notifyStaff({
+        type: 'system.disputeUnattributed',
+        title: lost
+          ? `Card dispute LOST with no owner — ${amount}`
+          : `Card dispute opened with no owner — ${amount}`,
+        body: `${reason} Dispute ${disputeId}${
+          unattributedDispute.chargeId
+            ? `, charge ${String(unattributedDispute.chargeId)}`
+            : ''
+        }.`,
+        link: buildRoute(Route.ADMIN_OVERVIEW),
+      })
+    }
     return Response.json({ received: true }, { status: 200 })
   } catch (error) {
     console.error(error)

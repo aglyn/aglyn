@@ -801,10 +801,10 @@ async function recordDisputeOrphanIfMarketplace(
   firestore: FirebaseFirestore.Firestore,
   object: any,
   paymentIntentId: string,
-): Promise<void> {
+): Promise<boolean> {
   const chargeId = String(object?.charge ?? '')
   const stripeKey = process.env.STRIPE_SECRET_KEY
-  if (!chargeId || !stripeKey) return
+  if (!chargeId || !stripeKey) return false
   const charge = await stripeGet(
     `https://api.stripe.com/v1/charges/${chargeId}`,
     stripeKey,
@@ -814,9 +814,9 @@ async function recordDisputeOrphanIfMarketplace(
       'Could not classify a dispute with no matching purchase — orphan NOT parked (AGL-2148)',
       { chargeId, paymentIntentId, status: charge.status },
     )
-    return
+    return false
   }
-  if (charge.body?.metadata?.type !== 'marketplace-purchase') return
+  if (charge.body?.metadata?.type !== 'marketplace-purchase') return false
   await recordRefundOrphan(firestore, {
     kind: 'dispute',
     id: String(object?.id ?? ''),
@@ -826,6 +826,11 @@ async function recordDisputeOrphanIfMarketplace(
     currency: String(object?.currency ?? 'usd'),
     stripeCustomerId: '',
   })
+  // Parked, so it IS marketplace's — the route must not also alert on it
+  // (AGL-2429). The three early exits above return false on purpose: two of
+  // them mean "could not classify", and a dispute nobody could classify is
+  // exactly what the route's unattributed alert exists to catch.
+  return true
 }
 
 /**
@@ -1125,6 +1130,11 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
   if (type === 'charge.dispute.created' || type === 'charge.dispute.closed') {
     const disputeId = String(object?.id ?? '')
     const paymentIntentId = String(object?.payment_intent ?? '')
+    // Reported to the route so it can tell "marketplace handled it" from
+    // "nothing handled it" (AGL-2429). Left false by the guard below on
+    // purpose: a dispute carrying no payment intent cannot be joined to a
+    // purchase, which is a fault, not a routine miss.
+    let claimed = false
     if (disputeId && paymentIntentId) {
       const firestore = firebaseAdmin.app().firestore()
       const purchases = await firestore
@@ -1133,6 +1143,7 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
         .limit(1)
         .get()
       if (!purchases.empty) {
+        claimed = true
         const purchase = purchases.docs[0]
         const status = String(object?.status ?? '')
         if (type === 'charge.dispute.created') {
@@ -1181,8 +1192,13 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
         // parking. A `created` landing in the same window loses nothing but
         // the staff flag — the `closed` that follows days later always finds
         // the purchase document.
-        await recordDisputeOrphanIfMarketplace(firestore, object, paymentIntentId)
+        claimed = await recordDisputeOrphanIfMarketplace(
+          firestore,
+          object,
+          paymentIntentId,
+        )
       }
     }
+    return { claimed }
   }
 }

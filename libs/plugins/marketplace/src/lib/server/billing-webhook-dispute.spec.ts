@@ -275,13 +275,30 @@ describe('charge.dispute.created flags without revoking (AGL-1554)', () => {
   })
 
   it('an unknown payment intent writes nothing', async () => {
-    await marketplaceBillingWebhookHandler(
+    const result = await marketplaceBillingWebhookHandler(
       disputeEvent('charge.dispute.created', {
         payment_intent: 'pi_other',
       }) as any,
     )
     expect(adminMock.__writes).toHaveLength(0)
     expect(fetchMock).not.toHaveBeenCalled()
+    // AGL-2429: "wrote nothing" and "this is not mine" have to be
+    // distinguishable to the console route, which raises a staff alert for a
+    // dispute NOTHING claimed. Silence alone cannot carry that.
+    expect(result).toEqual({ claimed: false })
+  })
+
+  /**
+   * The positive control for the bit above. Without it, hardwiring `claimed`
+   * to false would pass every "not mine" assertion in this file while making
+   * the route alert on every marketplace chargeback there is.
+   */
+  it('claims a dispute whose purchase it found', async () => {
+    await expect(
+      marketplaceBillingWebhookHandler(
+        disputeEvent('charge.dispute.created') as any,
+      ),
+    ).resolves.toEqual({ claimed: true })
   })
 })
 

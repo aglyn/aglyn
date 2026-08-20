@@ -40,9 +40,39 @@ export interface BillingWebhookEvent {
   requestHost?: string
 }
 
+/**
+ * What a handler may tell the route about the event it just saw (AGL-2429).
+ *
+ * Handlers have always returned `void`, which made "a plugin handled this"
+ * and "every plugin ignored this" the same observation from the route's side.
+ * On most events that is harmless — the route does not care who consumed a
+ * `checkout.session.completed`. On a CHARGEBACK it is the whole question: an
+ * event nobody claimed is money that moved with nothing recording it, and it
+ * is indistinguishable from the ordinary case where a plugin quietly did its
+ * job. See the `charge.dispute.*` section of the console's webhook route.
+ *
+ * `claimed` is deliberately opt-in and deliberately narrow. A handler sets it
+ * when it RECOGNISED the event as its own — found the order, the purchase,
+ * the booking — not when it merely ran. Returning nothing keeps the old
+ * meaning, so every handler that does not care is unaffected.
+ */
+export interface BillingWebhookHandlerResult {
+  /** True when this handler recognised the event as belonging to it. */
+  claimed?: boolean
+}
+
 export type BillingWebhookHandler = (
   event: BillingWebhookEvent,
-) => Promise<void> | void
+) =>
+  | Promise<void | BillingWebhookHandlerResult>
+  | void
+  | BillingWebhookHandlerResult
+
+/** What `runBillingWebhookHandlers` reports back about a whole dispatch. */
+export interface BillingWebhookDispatchResult {
+  /** True when ANY handler claimed the event. */
+  claimed: boolean
+}
 
 const handlers: BillingWebhookHandler[] = []
 
@@ -56,11 +86,27 @@ export function registerBillingWebhookHandler(
   handlers.push(handler)
 }
 
-/** Runs every registered handler sequentially; the first throw propagates. */
+/**
+ * Runs every registered handler sequentially; the first throw propagates.
+ *
+ * EVERY handler runs even after one has claimed the event: two plugins may
+ * legitimately care about the same event, and short-circuiting on the first
+ * claim would turn a reporting signal into a dispatch rule and silently drop
+ * side effects. The claim is a fold over all of them, never a break.
+ */
 export async function runBillingWebhookHandlers(
   event: BillingWebhookEvent,
-): Promise<void> {
+): Promise<BillingWebhookDispatchResult> {
+  let claimed = false
   for (const handler of handlers) {
-    await handler(event)
+    // Narrowed through the union rather than read off it: the handler's
+    // return type includes `void` — the shape every handler that does not
+    // care still returns — and a property read on `void` is a type error even
+    // with `strictNullChecks` off.
+    const result = (await handler(event)) as
+      | BillingWebhookHandlerResult
+      | undefined
+    if (result?.claimed === true) claimed = true
   }
+  return { claimed }
 }

@@ -79,6 +79,9 @@ const BASE_ENV = { STRIPE_WEBHOOK_SECRET: 'whsec_fake' }
 
 const mockGa4Refunds: Ga4PurchaseInput[] = []
 
+/** Every `notifyStaff` payload, in order (AGL-2429). */
+const mockStaffNotifications: Record<string, unknown>[] = []
+
 /** Every document, keyed by `collection/id`. */
 let docs = new Map<string, Record<string, unknown>>()
 
@@ -171,6 +174,14 @@ function mockMakeFirestore() {
     collection: (name: string) => ({
       doc: (id: string) => doc(`${name}/${id}`),
       add: async (data: Record<string, unknown>) => {
+        // A REAL Firestore `add` can reject — quota, a rules change, a
+        // transient outage — and the route's last write happens after the
+        // plugin handlers have already committed. `__fail_<collection>__`
+        // makes that rejection reachable from a test; without it the
+        // `.catch` on that write is unexecutable code asserting nothing.
+        if (docs.has(`__fail_${name}__`)) {
+          throw new Error(`8 RESOURCE_EXHAUSTED: ${name}`)
+        }
         const id = `auto-${docs.size}`
         docs.set(`${name}/${id}`, { ...data })
         return { id }
@@ -198,11 +209,21 @@ jest.mock('next/server', () => ({
   },
 }))
 
+/**
+ * What the plugin dispatch reports back (AGL-2429). A dispute the plugins
+ * RECOGNISED is a storefront or marketplace chargeback and must stay silent;
+ * one nobody recognised is the platform fault this file now also covers. The
+ * default is `false` because that is the shape of every dispute that is not a
+ * plugin's — and because a default of "claimed" would make every new
+ * unattributed-alert assertion pass for the wrong reason.
+ */
+let mockDispatchClaimed = false
+
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   buildRoute: () => '/acme/manage/billing',
-  Route: { MANAGE_BILLING: 'MANAGE_BILLING' },
-  runBillingWebhookHandlers: async () => undefined,
+  Route: { MANAGE_BILLING: 'MANAGE_BILLING', ADMIN_OVERVIEW: 'ADMIN_OVERVIEW' },
+  runBillingWebhookHandlers: async () => ({ claimed: mockDispatchClaimed }),
   SELF_SERVE_PLANS: [
     'free',
     'starter',
@@ -231,6 +252,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   findOrgIdByStripeCustomer: async (customerId: string) =>
     customerId === 'cus_own_1' ? 'org-real' : null,
   notifyOrgAdmins: async () => undefined,
+  // Captured, not stubbed: whether staff were PUSHED at (as opposed to a row
+  // being filed where someone may or may not look) is the subject of the
+  // AGL-2429 cases below.
+  notifyStaff: async (payload: Record<string, unknown>) => {
+    mockStaffNotifications.push(payload)
+  },
   sendGa4Purchase: async (): Promise<Ga4SendResult> => ({
     sent: true,
     synthesizedClientId: true,
@@ -320,10 +347,21 @@ describe('a platform subscription chargeback is handled (AGL-2120)', () => {
       paymentIntentId: 'pi_own_1',
     })
     mockGa4Refunds.length = 0
-    global.fetch = jest.fn(async () => ({
-      ok: true,
-      json: async () => ({}),
-    })) as never
+    mockStaffNotifications.length = 0
+    mockDispatchClaimed = false
+    // NO STRIPE CALL MAY LEAVE THIS SUITE. `nx test` leaks the root `.env`,
+    // whose key on this machine is `sk_live_`, so a mock that quietly answers
+    // 200 to anything would let a real write reach real customers and still
+    // go green. Anything aimed at Stripe throws by name instead.
+    global.fetch = jest.fn(async (input: unknown) => {
+      const url = String(
+        typeof input === 'string' ? input : (input as { url?: string })?.url,
+      )
+      if (url.includes('api.stripe.com')) {
+        throw new Error(`REFUSED: this spec must never call Stripe — ${url}`)
+      }
+      return { ok: true, json: async () => ({}) }
+    }) as never
     jest.spyOn(console, 'warn').mockImplementation(() => undefined)
   })
 
@@ -466,6 +504,11 @@ describe('a platform subscription chargeback is handled (AGL-2120)', () => {
   })
 
   it('a STOREFRONT chargeback matches no row, writes nothing, and still answers 200', async () => {
+    // The commerce plugin found the order and says so (AGL-2429). Before that
+    // signal existed this assertion was vacuous: "no audit row" was true for
+    // a chargeback the plugins handled AND for one nothing handled, so it
+    // could not tell the boundary it claims to test.
+    mockDispatchClaimed = true
     const post = loadWebhook()
     const response = await post(
       signed(
@@ -490,6 +533,9 @@ describe('a platform subscription chargeback is handled (AGL-2120)', () => {
     )
     expect(auditEntries()).toHaveLength(0)
     expect(mockGa4Refunds).toHaveLength(0)
+    // ...and staff are NOT woken for a routine merchant chargeback. This is
+    // the half that keeps the new alert worth reading.
+    expect(mockStaffNotifications).toHaveLength(0)
   })
 
   it('a lost dispute on a PRE-AGL-2120 row (no charge linkage) is logged, not guessed at', async () => {
@@ -516,12 +562,29 @@ describe('a platform subscription chargeback is handled (AGL-2120)', () => {
     expect(docs.get('platformRevenue/in_legacy')).not.toHaveProperty(
       'refundedCents',
     )
-    // The only trace such a dispute leaves — asserted so that removing it
-    // fails here rather than going quietly silent in production.
+    // The log line is still written — asserted so that removing it fails here
+    // rather than going quietly silent in production.
     expect(warn).toHaveBeenCalledWith(
       '[billing/webhook] lost dispute matched no revenue row',
       expect.objectContaining({ disputeId: 'dp_own_1', disputedCents: 28900 }),
     )
+    // ...but a log line is no longer the ONLY trace (AGL-2429). Nothing
+    // claimed this dispute, so it reaches the two surfaces staff actually
+    // read. This is the shape the issue is about: a real subscription
+    // chargeback that can never be matched to its invoice.
+    expect(auditEntries()).toEqual([
+      expect.objectContaining({
+        action: 'billing.disputeUnattributed',
+        actorUid: 'system:stripe-webhook',
+        target: 'disputes/dp_own_1',
+      }),
+    ])
+    expect(mockStaffNotifications).toEqual([
+      expect.objectContaining({
+        type: 'system.disputeUnattributed',
+        title: 'Card dispute LOST with no owner — $289.00',
+      }),
+    ])
   })
 
   it('matches on the CHARGE id when the row carries no payment intent', async () => {
@@ -543,5 +606,174 @@ describe('a platform subscription chargeback is handled (AGL-2120)', () => {
     expect(docs.get('platformRevenue/in_disputed')).toMatchObject({
       chargedBackCents: 28900,
     })
+  })
+
+  /*==========================================
+   * A DISPUTE NOBODY OWNS (AGL-2429).
+   *
+   * The route used to make one decision — "did a `platformRevenue` row
+   * match?" — and treat every miss the same way: answer 200 and write
+   * nothing. That collapsed two opposite outcomes into one silence. A
+   * storefront or marketplace chargeback missing is CORRECT, because the
+   * plugins own it. A dispute missing that no plugin owns either is money
+   * moving with nothing recording it — and it produced exactly the same
+   * 200 and the same empty `adminAudit`.
+   *
+   * The plugins now report whether they recognised the event, so the
+   * decision can be deferred until after dispatch, when the answer exists.
+   * These cases pin BOTH directions: the fault is loud, the routine case
+   * stays silent. A test for only the first would pass just as happily on a
+   * route that alerted on every chargeback in the system, which is the
+   * version that gets muted in a week and helps nobody.
+   *=========================================*/
+  const UNOWNED_DISPUTE = {
+    id: 'dp_orphan_1',
+    charge: 'ch_orphan_1',
+    payment_intent: 'pi_orphan_1',
+    amount: 12500,
+    currency: 'usd',
+    reason: 'fraudulent',
+    evidence_details: { due_by: 1_760_000_000 },
+  }
+
+  it('an OPEN dispute nobody claims alerts staff while the evidence window is open', async () => {
+    const post = loadWebhook()
+    const response = await post(
+      signed(disputeEvent('charge.dispute.created', UNOWNED_DISPUTE)),
+    )
+    expect(response.status).toBe(200)
+
+    expect(auditEntries()).toEqual([
+      expect.objectContaining({
+        action: 'billing.disputeUnattributed',
+        target: 'disputes/dp_orphan_1',
+        after: expect.objectContaining({
+          disputeId: 'dp_orphan_1',
+          chargeId: 'ch_orphan_1',
+          disputedCents: 12500,
+          eventType: 'charge.dispute.created',
+          evidenceDueBy: 1_760_000_000,
+          lost: false,
+        }),
+      }),
+    ])
+    // The copy has to say what to DO, and the two outcomes need different
+    // instructions: an open dispute can still be answered, a lost one can
+    // only be reconciled. Asserted on the text because a staff alert whose
+    // body is generic is one nobody acts on.
+    expect(mockStaffNotifications).toHaveLength(1)
+    expect(mockStaffNotifications[0]).toMatchObject({
+      type: 'system.disputeUnattributed',
+      title: 'Card dispute opened with no owner — $125.00',
+    })
+    expect(String(mockStaffNotifications[0].body)).toContain(
+      'before the evidence deadline',
+    )
+  })
+
+  it('a LOST dispute nobody claims names the money as already gone', async () => {
+    const post = loadWebhook()
+    await post(
+      signed(
+        disputeEvent('charge.dispute.closed', {
+          ...UNOWNED_DISPUTE,
+          status: 'lost',
+        }),
+      ),
+    )
+
+    expect(auditEntries()).toHaveLength(1)
+    expect(auditEntries()[0]).toMatchObject({
+      action: 'billing.disputeUnattributed',
+      after: expect.objectContaining({ lost: true, status: 'lost' }),
+    })
+    expect(String(auditEntries()[0].reason)).toContain(
+      '$125.00 has already been taken back',
+    )
+    expect(mockStaffNotifications).toHaveLength(1)
+    expect(String(mockStaffNotifications[0].body)).toContain('ch_orphan_1')
+  })
+
+  it('a WON dispute nobody claims alerts nobody — no money moved', async () => {
+    const post = loadWebhook()
+    const response = await post(
+      signed(
+        disputeEvent('charge.dispute.closed', {
+          ...UNOWNED_DISPUTE,
+          status: 'won',
+        }),
+      ),
+    )
+    expect(response.status).toBe(200)
+
+    // Unclaimed, but harmless: the cardholder lost, the money stayed, and
+    // there is nothing for a human to reconcile. Alerting here would put a
+    // steady trickle of no-ops in front of the one message that matters.
+    expect(auditEntries()).toHaveLength(0)
+    expect(mockStaffNotifications).toHaveLength(0)
+  })
+
+  it('a dispute a PLUGIN claims is never double-reported by the route', async () => {
+    mockDispatchClaimed = true
+    const post = loadWebhook()
+    await post(
+      signed(
+        disputeEvent('charge.dispute.created', {
+          ...UNOWNED_DISPUTE,
+          id: 'dp_store_1',
+        }),
+      ),
+    )
+
+    expect(auditEntries()).toHaveLength(0)
+    expect(mockStaffNotifications).toHaveLength(0)
+  })
+
+  it('a MATCHED platform dispute reports once, as itself, not as unattributed', async () => {
+    const post = loadWebhook()
+    await post(
+      signed(
+        disputeEvent('charge.dispute.closed', {
+          ...OWN_DISPUTE,
+          status: 'lost',
+        }),
+      ),
+    )
+
+    // The row matched, so this is the AGL-2120 path and the AGL-2429 branch
+    // must stay out of it — one incident, one entry, under the action that
+    // says which kind it was.
+    const actions = auditEntries().map((entry) => entry.action)
+    expect(actions).toEqual(['billing.disputeClosed'])
+    expect(mockStaffNotifications).toHaveLength(0)
+  })
+
+  it('a failed audit write still answers 200 and still pushes the staff alert', async () => {
+    // The alert is the LAST thing this route does, after the plugin handlers
+    // have already committed their side effects. A throw here would 500 a
+    // webhook whose work is done, and by the AGL-2157 claim rule the
+    // redelivery would then short-circuit as a duplicate — so failing to
+    // write a warning would cost the delivery it was warning about.
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    const post = loadWebhook()
+    docs.set('__fail_adminAudit__', {})
+
+    const response = await post(
+      signed(
+        disputeEvent('charge.dispute.closed', {
+          ...UNOWNED_DISPUTE,
+          status: 'lost',
+        }),
+      ),
+    )
+
+    expect(response.status).toBe(200)
+    expect(error).toHaveBeenCalledWith(
+      '[billing/webhook] could not record an unattributed dispute',
+      expect.objectContaining({ disputeId: 'dp_orphan_1' }),
+    )
+    // The push is independent of the record, which is the point of having
+    // both — one surface failing must not take the other with it.
+    expect(mockStaffNotifications).toHaveLength(1)
   })
 })

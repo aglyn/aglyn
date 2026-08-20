@@ -399,7 +399,11 @@ function disputeEvent(overrides: Record<string, any> = {}) {
 }
 
 async function deliver(type: string, object: any) {
-  await commerceBillingWebhookHandler({
+  // The RESULT is returned, not discarded (AGL-2429): what this handler tells
+  // the route about whether it recognised the event is now part of its
+  // contract, and the console's dispute branch decides whether to alert staff
+  // from nothing else.
+  return await commerceBillingWebhookHandler({
     type,
     object,
     event: { id: `evt_${type}` },
@@ -841,12 +845,33 @@ describe('finding the order the dispute is against', () => {
    */
   it('writes nothing for a dispute against another product', async () => {
     const before = new Map(docs)
-    await deliver(
+    const result = await deliver(
       'charge.dispute.closed',
       disputeEvent({ status: 'lost', payment_intent: 'pi_marketplace_9' }),
     )
     expect([...docs.entries()]).toEqual([...before.entries()])
     expect(managerNotices).toHaveLength(0)
+    // ...and says so out loud (AGL-2429). "Wrote nothing" is the same
+    // observation for a dispute that is not ours and for one this handler
+    // failed to process, and the console route used to have only that
+    // observation to go on. Not claiming is what lets the route decide
+    // whether ANYTHING owned this dispute.
+    expect(result).toEqual({ claimed: false })
+  })
+
+  /**
+   * The other side of the same bit, and the reason the assertion above is not
+   * passing because `claimed` is hardwired off: a dispute that DOES match an
+   * order must claim, or every storefront chargeback raises a platform-fault
+   * alert and staff learn to ignore the one that matters.
+   */
+  it('claims a dispute it recognises, on open and on close', async () => {
+    await expect(
+      deliver('charge.dispute.created', disputeEvent({})),
+    ).resolves.toEqual({ claimed: true })
+    await expect(
+      deliver('charge.dispute.closed', disputeEvent({ status: 'lost' })),
+    ).resolves.toEqual({ claimed: true })
   })
 
   /** An old charge with no payment intent cannot be joined to anything. */
@@ -941,7 +966,11 @@ describe('the failure that no redelivery can fix', () => {
     }
     await expect(
       deliver('charge.dispute.closed', disputeEvent({ status: 'lost' })),
-    ).resolves.toBeUndefined()
+    ).resolves.toEqual({ claimed: true })
+    // Claimed even though nothing was written (AGL-2429): the lookup could
+    // not RUN, which `reportUnresolvedDispute` has already raised with
+    // staff by name. A second, vaguer alert from the console route would
+    // describe the same incident twice.
     expect(order().refundedCents ?? 0).toBe(0)
     expect(consoleError).toHaveBeenCalledWith(
       expect.stringContaining('orders.paymentIntentId'),
@@ -1415,7 +1444,7 @@ describe('the seller share of a lost dispute (AGL-1794)', () => {
     happyStripe({ transfer: { amount_reversed: TRANSFER_CENTS } })
     await expect(
       deliver('charge.dispute.closed', disputeEvent({ status: 'lost' })),
-    ).resolves.toBeUndefined()
+    ).resolves.toEqual({ claimed: true })
     expect(reversalPosts()).toHaveLength(0)
     expect(order().dispute.reversedTransferCents).toBe(0)
     expect(order().dispute.transferReversalId).toBeUndefined()
@@ -1433,7 +1462,7 @@ describe('the seller share of a lost dispute (AGL-1794)', () => {
     })
     await expect(
       deliver('charge.dispute.closed', disputeEvent({ status: 'lost' })),
-    ).resolves.toBeUndefined()
+    ).resolves.toEqual({ claimed: true })
     expect(reversalPosts()).toHaveLength(0)
     expect(order().dispute.reversedTransferCents).toBe(0)
     expect(disputeEvents().at(-1).detail).toContain('no transfer on the charge')
@@ -1446,7 +1475,7 @@ describe('the seller share of a lost dispute (AGL-1794)', () => {
     })
     await expect(
       deliver('charge.dispute.closed', disputeEvent({ status: 'lost' })),
-    ).resolves.toBeUndefined()
+    ).resolves.toEqual({ claimed: true })
     expect(order().dispute.reversedTransferCents).toBe(0)
     expect(order().dispute.transferReversalId).toBeUndefined()
     expect(disputeEvents().at(-1).detail).toContain('Stripe refused')
