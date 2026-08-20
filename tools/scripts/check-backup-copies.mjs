@@ -165,7 +165,9 @@ async function getJson(url, what) {
       cache: 'no-store',
     })
   } catch (error) {
-    throw new Error(`${what}: request failed (${error.message})`)
+    throw new Error(`${what}: request failed (${error.message})`, {
+      cause: error,
+    })
   }
   if (!response.ok) {
     throw new Error(`${what}: HTTP ${response.status}`)

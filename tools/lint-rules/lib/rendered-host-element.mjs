@@ -104,7 +104,7 @@ function createFileReader() {
   const cache = new Map()
   return (path) => {
     if (cache.has(path)) return cache.get(path)
-    let source = null
+    let source
     try {
       source = stripComments(readFileSync(path, 'utf8'))
     } catch {

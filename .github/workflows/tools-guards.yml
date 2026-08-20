@@ -555,3 +555,24 @@ jobs:
       - run: npm run test:nul-bytes
 
       - run: npm run check:nul-bytes
+
+      # AGL-2480 — eslint over `tools/` itself. There is no `tools/project.json`,
+      # so `tools/` is in NO nx project and `nx affected -t lint` has never
+      # reached one of its 214 `.mjs` files. That is the whole tree this
+      # workflow's other twenty-odd guards are WRITTEN IN: the drift checkers,
+      # the deploy tooling, the erase-org CLI, all eight local lint rules.
+      #
+      # The root config already has a `**/*.mjs` block written for exactly
+      # these files — AGL-1815 added it, and its comment names
+      # `tools/scripts/**` by hand as the reason. Nothing has ever run it over
+      # them. It found 18 real errors on the first pass, six of them
+      # `preserve-caught-error` in the network and filesystem paths of the
+      # deploy tooling, where the discarded `cause` is the ENOENT or the
+      # connect-timeout an operator needs to see.
+      #
+      # Here rather than in a `tools/project.json` on purpose: adding an nx
+      # project to hold a lint target would put `tools/` in the project graph
+      # and subject it to `@nx/enforce-module-boundaries`, which is a much
+      # larger change than running a linter. This workflow is already the
+      # unconditional home for every other pure-node `tools/` guard.
+      - run: npm run check:lint-tools

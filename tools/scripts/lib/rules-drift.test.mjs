@@ -779,6 +779,11 @@ describe('the checker is wired (workflow + package.json)', () => {
       // place the verdict's success branch is ever executed, because no
       // off-project copy exists for production to demonstrate it with.
       'test:backup-copies',
+      // AGL-2480 — eslint over `tools/` itself. `tools/` is in no nx project
+      // (there is no `tools/project.json`), so `nx affected -t lint` has never
+      // reached any of its 214 `.mjs` files — the tree every other guard on
+      // this list is written in. This step is the only thing that lints them.
+      'check:lint-tools',
     ]) {
       // Match the STEP syntax, not the bare script name — the workflow's own
       // comments mention these scripts, and an assertion a comment can
@@ -821,6 +826,7 @@ describe('the checker is wired (workflow + package.json)', () => {
       'check:provider-key-exposure', // AGL-2379 / AGL-2240
       'test:nul-bytes', // AGL-1890
       'check:nul-bytes', // AGL-1890
+      'check:lint-tools', // AGL-2480
     ]) {
       assert.ok(
         typeof pkg.scripts[script] === 'string' && pkg.scripts[script] !== '',

@@ -127,6 +127,7 @@
     "check:app-router-graph": "node tools/scripts/check-app-router-graph.mjs",
     "check:provider-key-exposure": "node tools/scripts/check-provider-key-exposure.mjs",
     "check:nul-bytes": "node tools/scripts/check-nul-bytes.mjs",
+    "check:lint-tools": "eslint tools",
     "test:nul-bytes": "node --test tools/scripts/lib/nul-bytes.test.mjs",
     "check:shipped-not-closed": "node tools/scripts/check-shipped-not-closed.mjs",
     "release:prepare": "node tools/scripts/release-prepare.mjs",

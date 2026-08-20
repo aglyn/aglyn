@@ -220,7 +220,9 @@ export function renderUnifiedDiff(
       if (error.status === 1 && typeof error.stdout === 'string') {
         out = error.stdout
       } else {
-        throw new Error(`git diff --no-index failed: ${error.message}`)
+        throw new Error(`git diff --no-index failed: ${error.message}`, {
+          cause: error,
+        })
       }
     }
     return out
