@@ -168,9 +168,78 @@ and what a supervisory authority will ask first.
    Most breaches will be both, because most of our surfaces hold both.
 3. **How many, and where are they.** Jurisdiction drives the clock. Count EU/UK
    data subjects and count Texas residents specifically — both have their own
-   threshold (§4).
+   threshold (§4). **Do not derive this by hand under time pressure — see §3.3.**
 4. **Is it contained, and can it recur.** A notification that cannot say the
    hole is closed invites the next question immediately.
+
+### 3.3 Which Member States are the affected people in? (AGL-2008)
+
+Every filing route in §4 opens with this question, and there is no
+one-stop-shop to absorb a wrong answer. Run this **first**, and run it cold
+once before you ever need it so the shape of the answer is not a surprise:
+
+```
+GET /api/admin/member-state-exposure      # staff claim required
+```
+
+It returns one bucket per supervisory authority — the Member State, the
+authority's name, the filing URL — plus `unknown`, `ambiguous` and
+`outsideScope`. The buckets and those three **sum to the population**: nobody
+is dropped, because a report that silently omits the people it could not place
+reads as completeness and is the first thing an authority will probe.
+
+**What it is built from.** Three signals we already hold for other stated
+purposes. Nothing is collected for this.
+
+| Signal | Where | Strength |
+| --- | --- | --- |
+| Declared country | `orgs/{orgId}.contact.address.country` | Authoritative — but measured **unset on every production org** (2026-07-31), so today it contributes almost nothing |
+| Billing country | `platformRevenue.customerAddress.country`, from Stripe `invoice.customer_address`, retained permanently under Art. 17(3)(b) | Good. Covers every org that ever paid an invoice, and survives that org's erasure |
+| Sign-in country | trailing token of `users/{uid}/devices.location`, written by the sign-in alerting on every console sign-in | Weakest, widest. Covers non-payers too |
+
+**What these cannot support, and you must not let a filing imply otherwise:**
+
+* **Billing country is not residence.** It is the payer's address, and on an
+  org it is frequently a company address in a country no member lives in. It
+  is a lawful proxy for *which authority plausibly has an interest*, never a
+  finding of fact about where a person resides.
+* **A sign-in location is where somebody WAS**, once, at a moment. VPNs and
+  travel are not edge cases. Where a user's devices disagree the report says
+  `ambiguous` and places them nowhere, rather than picking the most recent and
+  manufacturing a confident answer.
+* **A bucket marked `inferredOnly` rests on sign-in IP alone.** Filing with
+  that authority on that basis is a decision to make knowingly, not a number
+  to read off.
+* **Members have no country of their own.** `orgs/{orgId}/members/{uid}` has
+  no address, phone or locale field, so a member is placed by their own
+  devices or by their org — never by anything they declared.
+* **Site visitors and site members cannot be bucketed at all.** For those we
+  are **processor**: the customer notifies, and their visitors' consent record
+  carries a country that never leaves the visitor's own browser (AGL-1498).
+  Tell the customer what was exposed and let them place their own people. A
+  count from this report must never be offered as a count of theirs.
+
+**So: can we answer it in 72 hours?** For account holders, yes — approximately,
+with the provenance attached, and that is a defensible Art. 33 position given
+Art. 33(1) expects notification even where facts are still being established
+and Art. 33(4) allows information in phases. For a customer's visitors, no,
+and we should not pretend otherwise: that answer belongs to the customer.
+
+**The open decision (Zach).** The only per-natural-person country signal we
+hold is a **security** record — `users/{uid}/devices.location` — used here for
+a **different purpose**, and it currently has **unbounded retention** (no cron,
+no `expiresAt`; `DEVICE_LIMIT = 50` caps the read, not the stored set). Two
+things follow and they pull in opposite directions:
+
+1. Using it for breach bucketing is a secondary purpose that should be written
+   down rather than assumed compatible.
+2. Pruning it — which data minimisation argues for on its own merits — would
+   shrink the only signal that covers users who never paid.
+
+Recorded rather than resolved, because it is a trade-off, not a bug. **The
+alternative — asking every user for a residence country at signup — was
+considered and rejected: it creates a standing obligation over every user every
+day to improve reporting for an incident that may never happen.**
 
 ## 4. Notify — who, and by when
 
@@ -399,7 +468,7 @@ survived.
 | --- | --- |
 | **We would very likely not detect a data breach ourselves.** No server-error-rate monitoring; runtime logs retain ~60 minutes and drain nowhere. Detection is primarily an inbound report. | AGL-1921, AGL-1799 |
 | ~~We cannot name the regulator to notify inside 72 hours.~~ **Answered 2026-08-18 (AGL-1980)** — there is no lead authority and never will be without an EU establishment; §4 now carries the per-Member-State route and the real filing URLs. Residual: whether to appoint an Art. 27 representative is a live decision with costed options, awaiting counsel. | AGL-1980 |
-| **We may not be able to say which Member States affected people are in**, which is the step every per-authority filing starts with. The URLs in §4 are unusable without it. | AGL-2008 |
+| ~~We may not be able to say which Member States affected people are in.~~ **Answered 2026-08-20 (AGL-2008)** — §3.3 and `GET /api/admin/member-state-exposure` bucket account holders by supervisory authority from three signals we already hold, with provenance attached and the unplaceable counted rather than dropped. No new collection. Residual: (a) a customer's site visitors cannot be bucketed at all and that answer belongs to the customer; (b) the only per-person signal is a security record with unbounded retention, used here for a secondary purpose — a live decision for Zach. | AGL-2008 |
 | ~~`security@aglyn.com` — the published disclosure address, and therefore our primary detection channel — is **not confirmed to receive mail**.~~ **Answered 2026-08-19 (AGL-1911)** — it is a Google Group, *Who can post* = Anyone on the web, unmoderated, `zach@aglyn.com` subscribed Each email; verified from Workspace configuration rather than a test send, because AGL-1577's bounce-suppressing default routing makes a delivered probe indistinguishable from a missing mailbox. Residual: one member, no auto-acknowledgement, so "received" is not "read" — and the 72-hour clock runs from awareness. | AGL-1911, AGL-2400 |
 | ~~Deletion does not survive a restore automatically.~~ **Closed 2026-08-18 (AGL-1975)** — `replay-erasures.mjs` is a numbered step of the restore procedures. Residual: it reads the 90-day hot `adminAudit` window and cannot see the Storage archive, so a restore from the oldest GCS export is reported `incomplete` rather than clean. | AGL-1975 |
 | No credential-rotation runbook. The list in §2.3 is the closest thing. | — |
