@@ -288,6 +288,39 @@ describe('every role-refusing admin route has a role-aware surface', () => {
     expect(offenders).toEqual([])
   })
 
+  it('no console SOURCE file defaults a missing staffRole to super (AGL-2024)', () => {
+    // WIDER THAN THE ROUTE GUARD ABOVE, because the route guard is what let
+    // this through. AGL-2131 brought the last two fail-OPEN defaults down to
+    // `support` and pinned both — but it pinned them where the gates are, and
+    // `app/(app)/admin/users/[uid]/page.tsx` was still rendering
+    // `staffRole ?? 'super'` into the chip that TELLS a staff member what a
+    // claim-less account can do. Not a gate, so no guard looked at it; the one
+    // surface that reports the answer gave the opposite of the real one.
+    //
+    // Walks the console tree rather than /api/admin so any spelling in any
+    // file is caught. Specs are excluded because they must be free to quote
+    // the string they forbid — this very file does.
+    const offenders: string[] = []
+    const walk = (dir: string, prefix = '') => {
+      for (const entry of readdirSync(dir)) {
+        if (entry === 'node_modules' || entry === '.next') continue
+        const full = join(dir, entry)
+        if (statSync(full).isDirectory()) {
+          walk(full, `${prefix}${entry}/`)
+          continue
+        }
+        if (!/\.tsx?$/.test(entry) || /\.spec\.tsx?$/.test(entry)) continue
+        if (/staffRole['"\]]* \?\? 'super'/.test(readFileSync(full, 'utf8'))) {
+          offenders.push(`${prefix}${entry}`)
+        }
+      }
+    }
+    for (const top of ['app', 'components', 'hooks', 'utils']) {
+      walk(join(CONSOLE_ROOT, top), `${top}/`)
+    }
+    expect(offenders).toEqual([])
+  })
+
   it('the Firestore rules do not either', () => {
     const rules = readFileSync(
       join(CONSOLE_ROOT, '../../cloud/firebase-firestore.rules'),
