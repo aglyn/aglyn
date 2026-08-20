@@ -128,6 +128,11 @@ jest.mock('firebase/remote-config', () => ({
   }),
 }))
 
+// The billing page is org-scoped (`/[orgSlug]/billing`), so the URL names a
+// workspace and the per-org overrides below are in scope (AGL-1935). Without
+// a route naming one, the provider deliberately resolves the global set.
+jest.mock('../hooks/use-url-names-org', () => ({ useUrlNamesOrg: () => true }))
+
 jest.mock('firebase/firestore', () => ({
   __esModule: true,
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),

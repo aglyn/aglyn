@@ -31,49 +31,33 @@ import useIsStaff from './use-is-staff'
 import useOrgNavTabItems from './use-org-nav-tabs'
 import { useOrgReach } from './use-org-reach'
 import { useOrgScope } from './use-org-scope'
+import {
+  type NavSection,
+  type NavSectionKind,
+  resolveNavSection,
+  segmentsOf,
+  urlNamesOrg,
+  useUrlNamesOrg,
+} from './use-url-names-org'
+
+/**
+ * Re-exported so every existing `use-secondary-nav` import site keeps working;
+ * the definitions moved to `use-url-names-org` (AGL-1937) so the console
+ * plugins gate and `use-release-flags` can read the predicate without closing
+ * a module cycle back through this file's `useEnabledPluginIds` import.
+ */
+export {
+  type NavSection,
+  type NavSectionKind,
+  resolveNavSection,
+  urlNamesOrg,
+  useUrlNamesOrg,
+}
 
 export interface NavTabItem {
   id?: string
   label?: string
   href?: string
-}
-
-export type NavSectionKind = 'host' | 'org' | 'admin' | 'manage' | 'none'
-
-export interface NavSection {
-  kind: NavSectionKind
-  /** The path the section's tab hrefs are relative to ('' when none). */
-  base: string
-  orgSlug?: string
-  host?: string
-}
-
-const segmentsOf = (path: string) => path.split('/').filter(Boolean)
-
-/**
- * Which tab strip a path belongs to (AGL-754). Every `navTabItems=` variant
- * the pages used to pass corresponds to exactly one route subtree, so the
- * secondary app bar can derive its own strip from the URL instead of being
- * fed by whichever page happens to be mounted.
- *
- * `/[orgSlug]/hosts` is the org "Sites" tab, but `/[orgSlug]/hosts/[host]` is
- * a site — the host branch needs the third segment, not just `hosts`.
- */
-export function resolveNavSection(pathname: string | null): NavSection {
-  const segments = segmentsOf(pathname ?? '')
-  const [first, second, third] = segments
-  if (!first) return { kind: 'none', base: '' }
-  if (first === 'admin') return { kind: 'admin', base: '/admin' }
-  if (first === 'manage') return { kind: 'manage', base: '/manage' }
-  if (second === 'hosts' && third) {
-    return {
-      kind: 'host',
-      base: `/${first}/hosts/${third}`,
-      orgSlug: first,
-      host: third,
-    }
-  }
-  return { kind: 'org', base: `/${first}`, orgSlug: first }
 }
 
 /**
@@ -109,45 +93,6 @@ export function resolveActiveTab(
   const segment = relative(pathname)
   return items.find((item) => item.href && relative(item.href) === segment)
     ?.href
-}
-
-/**
- * Whether the URL itself names a workspace — the only honest basis for the
- * chrome to CLAIM one (AGL-1130).
- *
- * `useOrgScope().currentOrg` deliberately falls back to a remembered
- * selection and then to the user's first org, because org-less pages still
- * need an org to ACT on (Manage Account browses that org's media library, the
- * menu's Billing row has to land somewhere). That fallback is fine for an
- * action and wrong for a label: on `/manage/user` and `/admin/*` it chromed
- * the page "Zach Gover Personal · Starter" — a workspace the page has nothing
- * to do with, complete with its plan badge and an Upgrade CTA for it.
- *
- * Deliberately derived from the URL alone, not from the resolved org: a check
- * that waited on the membership read would blink the switchers out on every
- * cold load, which is the exact regression AGL-745/755 exist to prevent.
- *
- * The staff console is org-less on ANY hostname — it is the platform's own
- * view, not a workspace's — so it answers false even on a workspace
- * subdomain. Everywhere else a subdomain IS the workspace, so
- * `business1.aglyn.com/manage/user` legitimately names one.
- */
-export function urlNamesOrg(
-  section: NavSection,
-  subdomainSlug: string | null,
-): boolean {
-  if (section.kind === 'admin') return false
-  return Boolean(section.orgSlug) || Boolean(subdomainSlug)
-}
-
-/** `urlNamesOrg` for the current route. */
-export function useUrlNamesOrg(): boolean {
-  const pathname = usePathname()
-  const { orgSlug } = useOrgScope()
-  return useMemo(
-    () => urlNamesOrg(resolveNavSection(pathname), orgSlug),
-    [pathname, orgSlug],
-  )
 }
 
 /** What the route's org/site segments have resolved to, so far. */

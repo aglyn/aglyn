@@ -123,6 +123,11 @@ jest.mock('next/navigation', () => ({
 }))
 
 jest.mock('../hooks/use-org-scope', () => ({ useOrgSlug: () => 'acme' }))
+// This page lives at `/[orgSlug]/hosts/[host]/[pluginSlug]`, so the URL names
+// a workspace and the flags provider resolves against it (AGL-1935). Mocked
+// rather than driven through `usePathname` because the router mock above is
+// deliberately partial.
+jest.mock('../hooks/use-url-names-org', () => ({ useUrlNamesOrg: () => true }))
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ org: { $id: ORG_ID, plan: 'pro' }, orgId: ORG_ID, ready: true }),
