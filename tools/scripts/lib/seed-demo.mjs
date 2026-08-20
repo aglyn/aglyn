@@ -38,6 +38,7 @@
 
 import { FieldValue } from 'firebase-admin/firestore'
 import { buildHomeNodes } from './demo-brands.mjs'
+import { putMediaDocument } from './media-counter.mjs'
 
 /** Every host subcollection the seeder writes into. Order is cosmetic. */
 export const HOST_SEEDED_COLLECTIONS = [
@@ -257,17 +258,30 @@ export async function seedBrand({ firestore, hostRef, brand, log, prune = true }
   }
 
   // ── Media ────────────────────────────────────────────────────────────────
+  // Through the shared writer, so `counters/media` moves with the document
+  // (AGL-1488). It used to be a bare `put`, and a demo seed therefore landed
+  // bytes the host's storage counter never saw — a counter that gates the
+  // quota and, since AGL-1473, bills. Re-running this seed is expected and
+  // must not double-count, which is why the helper moves the counter by the
+  // delta it actually causes rather than by an unconditional increment.
   for (const media of brand.media ?? []) {
-    await put(hostRef.collection('media').doc(media.id), {
-      fileName: media.fileName,
-      contentType: 'image/jpeg',
-      sizeBytes: 120000,
-      url: `https://picsum.photos/seed/${media.seed}`,
-      folder: media.folder,
-      tags: media.tags,
-      alt: media.fileName.replace(/\.[a-z]+$/, ''),
-      createdAt: now,
+    await putMediaDocument({
+      firestore,
+      scopeRef: hostRef,
+      mediaId: media.id,
+      data: {
+        fileName: media.fileName,
+        contentType: 'image/jpeg',
+        sizeBytes: 120000,
+        url: `https://picsum.photos/seed/${media.seed}`,
+        folder: media.folder,
+        tags: media.tags,
+        alt: media.fileName.replace(/\.[a-z]+$/, ''),
+        createdAt: now,
+        updatedAt: now,
+      },
     })
+    written += 1
   }
 
   // ── Leads / site members ─────────────────────────────────────────────────

@@ -231,6 +231,28 @@ jobs:
 
       - run: npm run test:erase-cli
 
+      # AGL-1889. The finder that decides whether a persisted synthetic `$id`
+      # is still in production, and — the part worth a CI step — the gate that
+      # stops it reporting a vacuous zero. A sweep for a key that is MISSING
+      # fails by saying "none", which is the same word a clean database
+      # produces, so `assertPositiveControl` throws unless the sweep can
+      # demonstrate it saw the key nested in besigner node maps where it
+      # legitimately lives. Pure logic, no credentials.
+      - run: npm run test:synthetic-id
+
+      # AGL-1488. The shared writer every seed and migration script now uses
+      # to land a media document, so the document and `counters/media` cannot
+      # come apart. That counter gates the storage quota and, since AGL-1473,
+      # is a billing input — four script call sites wrote media documents past
+      # it independently, and the drift always runs one way: the counter reads
+      # LOW, so the customer is under-limited and the metered plans under-bill.
+      #
+      # The test's Firestore double models read-before-write, which is not
+      # decoration: the first version of the helper read the counter AFTER
+      # setting the document, which the real Admin SDK rejects outright, and a
+      # laxer double reported it green.
+      - run: npm run test:media-counter
+
       # AGL-1734. The demo org has to be several visibly different businesses:
       # the founding demo spends its largest block switching between sites in
       # one org, and a switcher showing one bakery three times argues the

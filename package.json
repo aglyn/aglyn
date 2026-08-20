@@ -93,6 +93,7 @@
     "test:money-back-book": "node --test tools/scripts/lib/money-back-book.test.mjs",
     "test:shipped-not-closed": "node --test tools/scripts/lib/shipped-not-closed.test.mjs",
     "test:synthetic-id": "node --test tools/scripts/lib/persisted-synthetic-id.test.mjs",
+    "test:media-counter": "node --test tools/scripts/lib/media-counter.test.mjs",
     "check:rules-drift": "node tools/scripts/check-rules-drift.mjs",
     "check:legal-drift": "node tools/scripts/legal-doc-diff.mjs",
     "check:index-drift": "node tools/scripts/check-index-drift.mjs",
