@@ -23,6 +23,7 @@ import {
   notifyStaff,
 } from '@aglyn/tenant-data-admin'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
+import { recordCronBeat } from '../../../../utils/cron-beat'
 import {
   addPlan,
   describeScopeDrift,
@@ -114,6 +115,14 @@ async function handler(request: Request): Promise<Response> {
       : undefined
   if (!scheduled && !idToken) {
     return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+  }
+  // AGL-1955 — the mark `/api/health/crons` reads to notice this job going
+  // AWAY. This route is detect-only by construction and writes nothing, so
+  // there is no output whose age could have stood in for the mark: an age
+  // rule on what it produces would watch a job that never produces anything.
+  // Only the scheduler's POST counts; a staff dry run is not the cron.
+  if (method === 'POST' && scheduled) {
+    await recordCronBeat('backfill-scope')
   }
 
   try {

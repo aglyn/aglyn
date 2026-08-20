@@ -19,6 +19,7 @@ import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import { brandMergeTokens, resolveBrandingProfile } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
+import { recordCronBeat } from '../../../../utils/cron-beat'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 import {
@@ -97,6 +98,13 @@ async function handler(request: Request): Promise<Response> {
   const actor = await authorizeActor(headers)
   if (!actor) {
     return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+  }
+  // AGL-1955 — the mark `/api/health/crons` reads to notice this job going
+  // AWAY. Only the SCHEDULER's POST counts: a staff member opening the
+  // pending-erasures card is not the cron, and a run with nothing due still
+  // beats, because the question is whether the job is still scheduled.
+  if (method === 'POST' && actor.kind === 'cron') {
+    await recordCronBeat('run-erasures')
   }
 
   try {

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { SCHEDULED_JOBS } from '@aglyn/aglyn/server'
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -130,6 +131,73 @@ describe('scheduled-crons.yml wiring', () => {
     const everyNMinutes = /^\*\/(\d+)$/.exec(minuteField)
     expect(everyNMinutes).not.toBeNull()
     expect(Number(everyNMinutes?.[1])).toBeLessThanOrEqual(15)
+  })
+
+  /**
+   * AGL-1955 — a FOURTH place, and the one that notices a job going away.
+   *
+   * The three edits above keep a cron REACHABLE. None of them notices a
+   * `- cron:` line being deleted: remove the schedule and its case arm
+   * together and every assertion here still passes, because the invariant
+   * they hold is internal consistency, not existence. That deletion is the
+   * whole of AGL-1955 — the job stops firing, nothing runs, nothing fails,
+   * nothing says anything.
+   *
+   * `SCHEDULED_JOBS` is what `/api/health/crons` judges against, so it is the
+   * copy that has to stay true to the workflow. These tests hold it in both
+   * directions: a schedule with no inventory row would be a job nobody
+   * watches, and an inventory row with no schedule is the alarm firing —
+   * correctly — for a job that really did stop being scheduled.
+   */
+  describe('the absence detector inventory (AGL-1955)', () => {
+    const inventoryByCron = new Map<string, (typeof SCHEDULED_JOBS)[number]>(
+      SCHEDULED_JOBS.filter((job) => job.runner === 'github-actions').map(
+        (job) => [`${job.cron} ${job.target}`, job] as const,
+      ),
+    )
+
+    it('watches EVERY schedule in the workflow', () => {
+      const unwatched = scheduled
+        .map((cron) => `${cron} ${caseArms.get(cron)}`)
+        .filter((key) => !inventoryByCron.has(key))
+      expect(unwatched).toEqual([])
+    })
+
+    it('has no inventory row for a schedule that no longer exists', () => {
+      // Deliberately the direction that FAILS THE BUILD when someone deletes
+      // a `- cron:` line. The health check would have gone red in production
+      // a day later; this makes it a red test at the commit instead, and
+      // makes removing a job a two-place decision somebody has to mean.
+      const workflowKeys = new Set(
+        scheduled.map((cron) => `${cron} ${caseArms.get(cron)}`),
+      )
+      const orphaned = [...inventoryByCron.keys()].filter(
+        (key) => !workflowKeys.has(key),
+      )
+      expect(orphaned).toEqual([])
+    })
+
+    it('watches the Cloud Scheduler beat, which is in no workflow at all', () => {
+      // `firebase-schedule-pluginJobsBeat-us-central1` — the project's only
+      // real Cloud Scheduler job, deployed from `cloud/functions` and
+      // invisible to every assertion above.
+      const beat = SCHEDULED_JOBS.find((job) => job.id === 'plugin-jobs-beat')
+      expect(beat?.runner).toBe('cloud-scheduler')
+      expect(scheduled).not.toContain(beat?.cron)
+    })
+
+    it('gives every job a stable id, a grace and a consequence', () => {
+      for (const job of SCHEDULED_JOBS) {
+        expect(job.id).toMatch(/^[a-z][a-z0-9-]*$/)
+        expect(job.graceMinutes).toBeGreaterThan(0)
+        // The board renders this. A row with no consequence on it is a red
+        // light with a code, which is a puzzle rather than an instruction.
+        expect(job.drives.length).toBeGreaterThan(40)
+      }
+      expect(new Set(SCHEDULED_JOBS.map((job) => job.id)).size).toBe(
+        SCHEDULED_JOBS.length,
+      )
+    })
   })
 
   /**

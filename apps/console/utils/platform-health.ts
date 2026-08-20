@@ -102,6 +102,16 @@ export const HEALTH_PROBES: readonly HealthProbeDescriptor[] = [
       'Read the state histogram: NOT_AVAILABLE backups are the Google-managed ones failing, a stale export age means the weekly export job stopped running.',
   },
   {
+    id: 'crons',
+    label: 'Scheduled jobs',
+    path: '/api/health/crons',
+    auth: 'public',
+    meaning:
+      'Every scheduled job is still BEING SCHEDULED. Degraded means one of them stopped firing and said nothing — the failure everything else here is blind to, because every other cron signal is triggered by a run. Downstream of these rows are metered billing, GDPR erasures, the audit archive and scheduled publishing: a silently unscheduled job means customers are not billed, or data is not reaped, with the rest of this board green.',
+    remedy:
+      "Read the row. job-silent names a job that has run before and missed its window — check `.github/workflows/scheduled-crons.yml` still carries its `- cron:` line, then the workflow's recent runs (GitHub disables scheduled workflows on a repo with no activity for 60 days, which produces exactly this). job-never-reported means it has not run ONCE since we started watching: usually a route that 404s in production because the promotion never happened. plugin-jobs-beat is the only real Cloud Scheduler job — `gcloud scheduler jobs list --project=aglyn-main` — and it also reads silent when AGLYN_JOB_RUNNER_URL points at another deployment. beats-unavailable is our own Firestore read, not the jobs. A job in a legitimately idle stretch is green on purpose and never counts here.",
+  },
+  {
     id: 'rateLimits',
     label: 'Rate limiters',
     path: '/api/health/rate-limits',
@@ -245,6 +255,39 @@ function checkFacts(name: string, check: Record<string, unknown>): string[] {
   } else if ('unsubscribedEvents' in check) {
     facts.push('the destination did not state its subscriptions')
   }
+  /*==========================================
+   * A JOB THAT STOPPED BEING SCHEDULED, WORDED (AGL-1955).
+   *
+   * The row's name is the job id, which says nothing about when it was
+   * supposed to run — and the whole point of the check is that "quiet" and
+   * "healthy" look identical until you know the schedule. So the board says
+   * the cadence, the last time it reported, and, when it is red, the run it
+   * missed. Someone reading this at 3am should be able to go straight to the
+   * workflow file without opening the issue history.
+   *=========================================*/
+  const schedule = check['schedule']
+  if (typeof schedule === 'string') {
+    const runner = check['runner']
+    facts.push(
+      `${runner === 'cloud-scheduler' ? 'Cloud Scheduler' : 'GitHub Actions'} · ${schedule} UTC`,
+    )
+  }
+  if ('lastBeatAgeMinutes' in check) {
+    const age = num(check['lastBeatAgeMinutes'])
+    facts.push(
+      age === null
+        ? 'has NEVER reported a run'
+        : age < 120
+          ? `last ran ${age} min ago`
+          : `last ran ${Math.round((age / 60) * 10) / 10} h ago`,
+    )
+  }
+  const dueAt = check['dueAt']
+  if (typeof dueAt === 'string' && check['ok'] !== true) {
+    facts.push(`should have run at ${dueAt}`)
+  }
+  const graceMinutes = num(check['graceMinutes'])
+  if (graceMinutes !== null) facts.push(`grace ${graceMinutes} min`)
   const windowMinutes = num(check['windowMinutes'])
   if (windowMinutes !== null) facts.push(`window ${windowMinutes} min`)
   const threshold = num(check['threshold'])

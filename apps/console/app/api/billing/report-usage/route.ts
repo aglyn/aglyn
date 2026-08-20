@@ -17,6 +17,7 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
+import { recordCronBeat } from '../../../../utils/cron-beat'
 import {
   checkApiRequestQuota,
   checkContactQuota,
@@ -545,6 +546,24 @@ async function handler(request: Request): Promise<Response> {
       : /^\d{4}-\d{2}$/.test(monthParam)
         ? monthParam
         : previousMonth()
+  /*==========================================
+   * THE MARK THIS SWEEP LEAVES (AGL-1955).
+   *
+   * TWO jobs share this route and they fail independently: the 02:00 run
+   * rolls up the CLOSED month and is the only run that ever reaches Stripe,
+   * and the 07:00 `?month=current` run writes the in-progress figure every
+   * usage budget reads. One can stop while the other keeps going, so they
+   * stamp separate ids — folding them into one row would hide exactly that.
+   *
+   * A manual backfill naming a literal `YYYY-MM` stamps NEITHER. It is not
+   * the schedule, and letting a hand-run curl stand in for the cron is how a
+   * dead job reads healthy for another day.
+   *=========================================*/
+  if (method === 'POST' && (monthParam === '' || monthParam === 'current')) {
+    await recordCronBeat(
+      monthParam === 'current' ? 'report-usage-current' : 'report-usage',
+    )
+  }
   // Computed ONCE for the sweep, not per org: a run straddling midnight UTC
   // on the 1st must not decide that August is open for one org and closed for
   // the next, which would report half the platform and freeze the other half.

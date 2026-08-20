@@ -743,6 +743,23 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Scheduled-job heartbeats (AGL-1955): one doc per cron job, stamped by
+    // the run itself through the Admin SDK, read by /api/health/crons to
+    // notice a job that STOPPED being scheduled. Deny ALL client access — a
+    // client that could write one could forge a heartbeat for a job that is
+    // not running, which is precisely the silence the check exists to break;
+    // a client that could read them could enumerate the platform's job
+    // schedule and when each last ran.
+    //
+    // Unmatched paths deny anyway; this match exists to carry the record.
+    // The health endpoint is PUBLIC and reports these, so what it exposes was
+    // a deliberate decision: job ids, cron expressions and ages, every one of
+    // which is already in the open-source repo. The documents themselves stay
+    // closed because the collection is the write side.
+    match /platformCronBeats/{jobId} {
+      allow read, write: if false;
+    }
+
     // Stripe customer -> org reverse index (AGL-1028), written by the webhook
     // beside `orgs/{orgId}/billing/stripe`. It exists because moving
     // `stripeCustomerId` into a subcollection broke the webhook's

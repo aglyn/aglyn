@@ -178,6 +178,14 @@ function isNonCallReference(content: string, route: string): boolean {
   ) {
     return true
   }
+  // An INVENTORY ROW naming what a scheduler invokes, not a client fetching
+  // it (AGL-1955). `SCHEDULED_JOBS` in `health-report.ts` lists each cron
+  // job's `target` so the health board can say what stopped running; that is
+  // the same provenance-not-a-call shape as the `source:` catalog row above,
+  // and counting it would make three routes look like they had grown a
+  // customer surface overnight. Bounded to a property named `target` whose
+  // value is the whole path, so a real fetch cannot slip through it.
+  if (new RegExp(`^target:\\s*'/api/[^']*',?$`).test(trimmed)) return true
   // A reference to the route's own MODULE, not its URL.
   const path = `/api/billing/${route}`
   return (
@@ -239,6 +247,21 @@ describe('every customer-facing billing route has a surface (AGL-1947)', () => {
       isNonCallReference(
         `  const r = fetch('/api/billing/addons') // note`,
         'addons',
+      ),
+    ).toBe(false)
+    // AGL-1955's cron inventory row — provenance, like `source:` above.
+    expect(
+      isNonCallReference(
+        `    target: '/api/billing/usage-alerts',`,
+        'usage-alerts',
+      ),
+    ).toBe(true)
+    // And the exemption is bounded: anything that is not exactly a `target`
+    // property holding a whole path is still a caller.
+    expect(
+      isNonCallReference(
+        `    fetch(target + '/api/billing/usage-alerts')`,
+        'usage-alerts',
       ),
     ).toBe(false)
   })

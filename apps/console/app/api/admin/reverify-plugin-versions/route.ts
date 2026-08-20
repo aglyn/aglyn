@@ -26,6 +26,7 @@ import {
 import { firebaseAdmin, notifyStaff } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
+import { recordCronBeat } from '../../../../utils/cron-beat'
 import {
   reverifyOutcome,
   summariseReverify,
@@ -70,6 +71,11 @@ async function handler(request: Request): Promise<Response> {
   if (!isCronAuthorized(headers)) {
     return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   }
+  // AGL-1955 — the mark `/api/health/crons` reads to notice this job going
+  // AWAY. Stamped on the invocation, not on the work, so a run that finds
+  // nothing to do still proves the schedule is alive; POST only, because a
+  // human's GET is not the scheduler and must not stand in for it.
+  if (method === 'POST') await recordCronBeat('reverify-plugin-versions')
   const bucketName = process.env.PLUGIN_ARTIFACTS_BUCKET
   if (!bucketName) {
     return Response.json(

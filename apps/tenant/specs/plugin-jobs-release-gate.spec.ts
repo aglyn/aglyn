@@ -82,6 +82,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual(
     '../../../libs/aglyn/src/lib/plugin-manager/plugin-jobs',
   ),
+  // The route stamps the Cloud Scheduler beat's mark before it does anything
+  // else (AGL-1955). The REAL one, not a stub: an unfaithful double here
+  // would fabricate a green for a beat that never lands, and this suite's
+  // Firestore fake is what it would be writing through.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/health-report'),
 }))
 
 jest.mock('../utils/server-plugin-loader', () => ({

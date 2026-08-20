@@ -17,6 +17,7 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
+import { recordCronBeat } from '../../../../utils/cron-beat'
 import { getApp } from 'firebase-admin/app'
 // Imported for its side effect too: guarantees the firebase-admin default app
 // is initialized before `getApp()` runs, same as the health/backups route.
@@ -65,6 +66,11 @@ async function handler(request: Request): Promise<Response> {
   if (!isCronAuthorized(headers)) {
     return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   }
+  // AGL-1955 — the mark `/api/health/crons` reads to notice this job going
+  // AWAY. Stamped on the invocation, not on the work, so a run that finds
+  // nothing to do still proves the schedule is alive; POST only, because a
+  // human's GET is not the scheduler and must not stand in for it.
+  if (method === 'POST') await recordCronBeat('firestore-export')
 
   try {
     void firebaseAdmin

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { type PluginApiHandler } from '@aglyn/aglyn/server'
+import { writeCronBeat, type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
   CampaignSendDeferredError,
@@ -50,6 +50,15 @@ export const campaignProcessScheduledHandler: PluginApiHandler = async (
 
   try {
     const firestore = firebaseAdmin.app().firestore()
+    // AGL-1955 — the mark `/api/health/crons` reads to notice this job going
+    // AWAY. This is the one route in the set that has already been sold,
+    // wired and completely inert once (AGL-2134): the composer wrote
+    // `status: 'scheduled'` and nothing ever POSTed here, so a customer's
+    // campaign sat in the collection until somebody cancelled it. Nothing
+    // downstream ages when this stops — a fortnight with no due campaign
+    // produces exactly the same silence as a deleted schedule — so the
+    // invocation itself is the only honest thing to watch.
+    await writeCronBeat(firestore, 'campaigns-process-scheduled')
     const due = await firestore
       .collectionGroup('campaigns')
       .where('status', '==', 'scheduled')
