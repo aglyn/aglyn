@@ -72,12 +72,30 @@ describe('api-keys (pure helpers)', () => {
       ])
     })
 
-    it('still refuses a scope no endpoint enforces (the AGL-899 rule)', () => {
-      // The guard AGL-899 installed, kept alive against a real absentee: no
-      // handler asks for `sites:write`, so nobody may mint it.
-      expect(isApiScope('sites:write')).toBe(false)
-      expect(normalizeScopes(['sites:read', 'sites:write'])).toEqual([
+    it('admits sites:write, now that endpoints enforce it (AGL-2465)', () => {
+      // The `contacts:write` case above, one scope over. AGL-2465 shipped
+      // `POST /v1/sites` and gated it on `requireScope(ctx, 'sites:write')`
+      // (`apps/console/utils/api-v1-resources.ts`), in the same change that
+      // added the scope — which is exactly what AGL-899 asked for. It did not
+      // update this case, so the suite has been red on `main` since; found by
+      // the AGL-1881 pre-launch review.
+      expect(isApiScope('sites:write')).toBe(true)
+      expect(normalizeScopes(['sites:write', 'sites:read'])).toEqual([
         'sites:read',
+        'sites:write',
+      ])
+    })
+
+    it('still refuses a scope no endpoint enforces (the AGL-899 rule)', () => {
+      // The guard AGL-899 installed, kept alive against a real absentee: the
+      // orders resource is read-only over /v1, no handler asks for
+      // `orders:write`, so nobody may mint it. Re-point this at another
+      // genuine absentee if `orders:write` ever ships — do not delete it. A
+      // mintable scope that grants nothing reads to a customer as a
+      // permission they have and cannot use.
+      expect(isApiScope('orders:write')).toBe(false)
+      expect(normalizeScopes(['orders:read', 'orders:write'])).toEqual([
+        'orders:read',
       ])
     })
   })

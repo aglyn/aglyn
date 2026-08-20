@@ -42,7 +42,7 @@ import {
   tombstoneIsExpired,
   SESSION_TOMBSTONE_TTL_MS,
 } from './session-tombstone'
-import { readCookie } from '../read-cookie'
+import { readCookie, requestIsHttps } from '../read-cookie'
 import {
   hostnameOf,
   isWorkspaceDomainHost,
@@ -81,23 +81,6 @@ const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000
  * Revocation-aware: the exchange rejects cookies minted before the
  * user's tokens were revoked.
  */
-/**
- * Is this request actually on HTTPS?
- *
- * Behind Vercel's proxy the runtime sees the forwarded header; the URL is the
- * fallback for a direct connection and for local dev. A comma-joined list is
- * possible through more than one proxy — the first entry is the client's leg,
- * which is the one `Secure` is about.
- */
-function requestIsHttps(request: Request): boolean {
-  const forwarded = request.headers.get('x-forwarded-proto')
-  if (forwarded) return forwarded.split(',')[0].trim().toLowerCase() === 'https'
-  try {
-    return new URL(request.url).protocol === 'https:'
-  } catch {
-    return false
-  }
-}
 
 function cookieAttributes(request: Request, maxAgeSeconds: number) {
   const onWorkspaceDomain = isWorkspaceDomainHost(request.headers.get('host'))

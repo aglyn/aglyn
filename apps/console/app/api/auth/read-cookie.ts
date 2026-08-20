@@ -99,3 +99,28 @@ export function readCookieValues(request: Request, name: string): string[] {
   }
   return values
 }
+
+/**
+ * Is this request actually on HTTPS?
+ *
+ * Behind Vercel's proxy the runtime sees the forwarded header; the URL is the
+ * fallback for a direct connection and for local dev. A comma-joined list is
+ * possible through more than one proxy — the first entry is the client's leg,
+ * which is the one `Secure` is about.
+ *
+ * Shared for the same reason `readCookie` above is (AGL-1881). It lived as a
+ * private function in the session route, and the activity route answered the
+ * question a different way — by folding `Secure` into the same ternary as
+ * `Domain`, so a custom console domain got the cookie over HTTPS with no
+ * `Secure` at all. That is the second time this pair has drifted: the note on
+ * `readCookie` records the first. Two callers, one definition.
+ */
+export function requestIsHttps(request: Request): boolean {
+  const forwarded = request.headers.get('x-forwarded-proto')
+  if (forwarded) return forwarded.split(',')[0].trim().toLowerCase() === 'https'
+  try {
+    return new URL(request.url).protocol === 'https:'
+  } catch {
+    return false
+  }
+}

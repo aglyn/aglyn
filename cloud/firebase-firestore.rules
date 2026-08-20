@@ -1305,6 +1305,36 @@ service cloud.firestore {
       // slot the cap has not already granted).
       match /webhooks/{webhookId} {
         allow read: if isStaff() || canReadHostSensitive(hostId);
+        // Update/delete ask the SENSITIVE role, not the write role (AGL-1881).
+        //
+        // `webhooks` sat in the catch-all's CREATE exclusion only, so update
+        // and delete fell through to it — and the catch-all asks
+        // `canWriteHostContent`, which admits `author`. An author could not
+        // READ this document (the rule above refuses, and the suite proves
+        // it) yet could repoint its `url` at an endpoint they control and
+        // overwrite its `secret`. That is the order payload leaving the site
+        // through the one role AGL-2334 added so an agency could hand a
+        // client LESS. The read gate was never the boundary on its own:
+        // writing the destination is reading the data, one delivery later.
+        //
+        // The comment above this block said update/delete "stay client-side"
+        // and the suite asserted it for an EDITOR, which stayed true; the
+        // role that arrived afterwards is what nobody re-asked. The same
+        // omission as `components` in AGL-2334, one collection over.
+        //
+        // The name now sits in the catch-all's update and delete exclusions
+        // too, because a dedicated block cannot narrow a sibling — rules OR
+        // their allows and the LOOSER one wins. This block is the re-grant,
+        // and it keeps every write the console legitimately makes from the
+        // browser: the soft delete that frees a capped slot (AGL-1360) and
+        // the card's enable/disable. `canReadHostSensitive` is admin/editor
+        // — exactly who can already read the secret off that card — so no
+        // existing surface loses a write. `hostWritesFrozen` carries over
+        // from the catch-all: a suspended site must not keep editing its
+        // webhooks, and dropping it here would have been a quiet re-grant of
+        // its own.
+        allow update, delete: if isStaff() ||
+          (canReadHostSensitive(hostId) && !hostWritesFrozen(hostId));
       }
       // Order STATUS is server-owned (AGL-1827). Every transition goes
       // through an Admin-SDK route that re-asks ORDER_TRANSITIONS inside the
@@ -1628,6 +1658,7 @@ service cloud.firestore {
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components', 'installs',
               'templates', 'collections', 'datasets', 'orders', 'registers',
+              'webhooks',
               'counters', 'analytics', 'screenAnalytics', 'members',
               'mediaTombstones', 'inventoryAdjustments', 'carts', 'checkouts',
               'giftCards', 'stripeTaxRates', 'restockAlerts',
@@ -1652,7 +1683,8 @@ service cloud.firestore {
         allow delete: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components',
-              'collections', 'datasets', 'orders', 'registers', 'counters',
+              'collections', 'datasets', 'orders', 'registers', 'webhooks',
+              'counters',
               'analytics', 'screenAnalytics', 'members', 'mediaTombstones',
               'inventoryAdjustments', 'carts', 'checkouts', 'giftCards',
               'stripeTaxRates', 'restockAlerts',

@@ -28,10 +28,13 @@ const members = new Map<string, Record<string, unknown>>()
 /** `orgs/{orgId}/roles/{roleId}` — custom roles (AGL-243), keyed `org:id`. */
 const roles = new Map<string, Record<string, unknown>>()
 let hostOrg: string | null = 'org-1'
+/** Set to make the membership lookup throw, exercising the catch (AGL-506). */
+let membershipThrows = false
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   resolveOrgIdForHost: jest.fn(async () => hostOrg),
   resolveOrgMembership: jest.fn(async (uid: string, orgId?: string | null) => {
+    if (membershipThrows) throw new Error('firestore unavailable')
     if (!orgId) return null
     const member = members.get(`${orgId}:${uid}`)
     return member ? { orgId, member: { $id: uid, ...member } } : null
@@ -69,6 +72,7 @@ beforeEach(() => {
   members.clear()
   roles.clear()
   hostOrg = 'org-1'
+  membershipThrows = false
 })
 
 describe('resolveOrgPermissions — org-wide members', () => {
@@ -192,6 +196,43 @@ describe('resolveOrgPermissions — non-members and failures', () => {
     expect(resolved.orgId).toBeNull()
     expect(resolved.isOwner).toBe(true)
     expect(resolved.orgWide).toBe(true)
+    expect(resolved.permissions.manageMembers).toBe(true)
+  })
+
+  it('fails CLOSED when a lookup throws and an org was targeted', async () => {
+    membershipThrows = true
+    const resolved = await resolveOrgPermissions('someone', { orgId: 'org-1' })
+    expect(resolved.isOwner).toBe(false)
+    expect(resolved.permissions.publishToMarketplace).toBe(false)
+    expect(resolved.permissions.manageMembers).toBe(false)
+  })
+
+  it('fails CLOSED when the targeted org key is present but UNDEFINED (AGL-1881)', async () => {
+    // The publish-plugin shape: `orgId: String(body?.orgId ?? '').trim() ||
+    // undefined`. A body that omits `orgId` made the old truthiness test
+    // false, so a transient Firestore error resolved through the open branch
+    // and handed the caller `publishToMarketplace: true`.
+    membershipThrows = true
+    const resolved = await resolveOrgPermissions('someone', {
+      orgId: undefined,
+    })
+    expect(resolved.isOwner).toBe(false)
+    expect(resolved.permissions.publishToMarketplace).toBe(false)
+  })
+
+  it('fails CLOSED for an empty-string org id too', async () => {
+    membershipThrows = true
+    const resolved = await resolveOrgPermissions('someone', { orgId: '' })
+    expect(resolved.isOwner).toBe(false)
+    expect(resolved.permissions.publishToMarketplace).toBe(false)
+  })
+
+  it('POSITIVE CONTROL — a context-free call still opens for a fresh account', async () => {
+    // Without this, failing closed unconditionally would pass everything
+    // above and lock every brand-new account out of creating its first org.
+    membershipThrows = true
+    const resolved = await resolveOrgPermissions('newcomer')
+    expect(resolved.isOwner).toBe(true)
     expect(resolved.permissions.manageMembers).toBe(true)
   })
 })

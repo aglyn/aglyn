@@ -352,6 +352,204 @@ describe('servePluginFetch — the private-address refusal (AGL-515)', () => {
   })
 })
 
+/**
+ * The redirect hole (AGL-1881).
+ *
+ * Every control in front of the transport ran on the FIRST url only, and
+ * `fetch` defaults to `redirect: 'follow'`. An allowlisted, genuinely public
+ * origin answering `302 Location: http://169.254.169.254/...` therefore had
+ * its redirect followed by the runtime, outside the allowlist, outside the
+ * https check, and outside the IP pin — Node skips a custom `connect.lookup`
+ * for an IP literal, so the pinned dispatcher was consulted once, for the
+ * original hostname, and the metadata body came back to an unauthenticated
+ * caller.
+ *
+ * Layer 1 (real sockets) proves the runtime no longer follows on its own.
+ * Layer 2 (stubbed fetch) proves the handler's own loop re-runs both gates on
+ * every hop.
+ */
+describe('servePluginFetch — redirects are re-validated, not followed (AGL-1881)', () => {
+  const METADATA = 'http://169.254.169.254/latest/meta-data/iam/'
+
+  describe('layer 1 — the runtime does not follow on its own', () => {
+    let origin: Server
+    let secret: Server
+    let originPort: number
+    let secretPort: number
+
+    const listen = (server: Server, host: string) =>
+      new Promise<number>((resolve, reject) => {
+        server.once('error', reject)
+        server.listen(0, host, () =>
+          resolve((server.address() as AddressInfo).port),
+        )
+      })
+
+    beforeAll(async () => {
+      secret = createServer((_req, res: any) => {
+        res.writeHead(200, { 'Content-Type': 'text/plain' })
+        res.end('INTERNAL-ONLY')
+      })
+      secretPort = await listen(secret, '127.0.0.1')
+      origin = createServer((_req, res: any) => {
+        res.writeHead(302, { Location: `http://127.0.0.1:${secretPort}/` })
+        res.end()
+      })
+      originPort = await listen(origin, '127.0.0.1')
+    })
+
+    afterAll(async () => {
+      await new Promise<void>((resolve) => origin.close(() => resolve()))
+      await new Promise<void>((resolve) => secret.close(() => resolve()))
+    })
+
+    it('THE BUG — the default `follow` reaches the second server', async () => {
+      // The negative control. Without it, layer 1 below would pass just as
+      // well against a pair of servers that were never reachable at all.
+      const dispatcher = createPinnedDispatcher('127.0.0.1')
+      try {
+        const response = await fetch(`http://pinned.invalid:${originPort}/`, {
+          dispatcher,
+        } as RequestInit)
+        expect(await response.text()).toBe('INTERNAL-ONLY')
+      } finally {
+        await dispatcher.close()
+      }
+    })
+
+    it('THE FIX — `redirect: manual` hands the hop back instead', async () => {
+      const dispatcher = createPinnedDispatcher('127.0.0.1')
+      try {
+        const response = await fetch(`http://pinned.invalid:${originPort}/`, {
+          dispatcher,
+          redirect: 'manual',
+        } as RequestInit)
+        expect(response.status).toBe(302)
+        expect(await response.text()).not.toContain('INTERNAL-ONLY')
+        expect(response.headers.get('location')).toBe(
+          `http://127.0.0.1:${secretPort}/`,
+        )
+      } finally {
+        await dispatcher.close()
+      }
+    })
+  })
+
+  describe('layer 2 — the handler re-runs both gates per hop', () => {
+    const realFetch = globalThis.fetch
+    /** Every url the handler actually issued, in order. */
+    let calls: string[]
+    /** Queued upstream answers, one per hop. */
+    let answers: Response[]
+
+    beforeEach(() => {
+      calls = []
+      answers = []
+      globalThis.fetch = (async (url: string, init: any) => {
+        calls.push(url)
+        // The loop is worthless if the runtime is still allowed to follow.
+        expect(init.redirect).toBe('manual')
+        return answers.shift() ?? new Response('final-body', { status: 200 })
+      }) as unknown as typeof fetch
+    })
+
+    afterEach(() => {
+      globalThis.fetch = realFetch
+    })
+
+    const redirectTo = (location: string) =>
+      new Response(null, { status: 302, headers: { location } })
+
+    it('refuses a redirect to the cloud metadata service and never issues it', async () => {
+      answers = [redirectTo(METADATA)]
+      const { res, captured } = makeRes()
+      await servePluginFetch(
+        makeReq({ hostId: 'h', listingId: 'l', url: `${ALLOWED_ORIGIN}/x` }),
+        res,
+      )
+      expect(captured.status).toBe(403)
+      expect(captured.body).toMatchObject({
+        ok: false,
+        error: 'Redirect target not in allowlist',
+      })
+      // The assertion that matters: the second request was never made.
+      expect(calls).toEqual([`${ALLOWED_ORIGIN}/x`])
+      expect(calls).not.toContain(METADATA)
+    })
+
+    it('refuses an http downgrade, even back to the allowlisted host', async () => {
+      answers = [redirectTo('http://api.example.com/x')]
+      const { res, captured } = makeRes()
+      await servePluginFetch(
+        makeReq({ hostId: 'h', listingId: 'l', url: `${ALLOWED_ORIGIN}/x` }),
+        res,
+      )
+      expect(captured.status).toBe(403)
+      expect(calls).toHaveLength(1)
+    })
+
+    it('re-resolves each hop, so an allowlisted host that resolves privately is refused', async () => {
+      // Same origin, so the allowlist cannot be what refuses this one — only
+      // the second `resolvePublicIp` can.
+      answers = [redirectTo(`${ALLOWED_ORIGIN}/inner`)]
+      const { res, captured } = makeRes()
+      const originalFetch = globalThis.fetch
+      globalThis.fetch = (async (url: string, init: any) => {
+        resolved = [{ address: '169.254.169.254', family: 4 }]
+        return (originalFetch as any)(url, init)
+      }) as unknown as typeof fetch
+      await servePluginFetch(
+        makeReq({ hostId: 'h', listingId: 'l', url: `${ALLOWED_ORIGIN}/x` }),
+        res,
+      )
+      expect(captured.status).toBe(403)
+      expect(captured.body).toMatchObject({
+        error: 'URL resolves to a non-public address',
+      })
+      expect(calls).toEqual([`${ALLOWED_ORIGIN}/x`])
+    })
+
+    it('caps a redirect chain rather than looping', async () => {
+      answers = [
+        redirectTo(`${ALLOWED_ORIGIN}/1`),
+        redirectTo(`${ALLOWED_ORIGIN}/2`),
+        redirectTo(`${ALLOWED_ORIGIN}/3`),
+        redirectTo(`${ALLOWED_ORIGIN}/4`),
+        redirectTo(`${ALLOWED_ORIGIN}/5`),
+      ]
+      const { res, captured } = makeRes()
+      await servePluginFetch(
+        makeReq({ hostId: 'h', listingId: 'l', url: `${ALLOWED_ORIGIN}/x` }),
+        res,
+      )
+      expect(captured.status).toBe(403)
+      expect(captured.body).toMatchObject({ error: 'Too many redirects' })
+      expect(calls.length).toBeLessThanOrEqual(5)
+    })
+
+    it('POSITIVE CONTROL — an allowlisted, public redirect is still followed', async () => {
+      // Without this, refusing every redirect outright would pass everything
+      // above, and host-mediated fetch would be quietly broken for plugins.
+      answers = [redirectTo(`${ALLOWED_ORIGIN}/moved`)]
+      const { res, captured } = makeRes()
+      await servePluginFetch(
+        makeReq({ hostId: 'h', listingId: 'l', url: `${ALLOWED_ORIGIN}/x` }),
+        res,
+      )
+      expect(captured.status).toBe(200)
+      expect(captured.body).toEqual({
+        ok: true,
+        status: 200,
+        body: 'final-body',
+      })
+      expect(calls).toEqual([
+        `${ALLOWED_ORIGIN}/x`,
+        `${ALLOWED_ORIGIN}/moved`,
+      ])
+    })
+  })
+})
+
 describe('servePluginFetch — what reaches the network', () => {
   const realFetch = globalThis.fetch
   let seen: { url: string; init: any } | undefined

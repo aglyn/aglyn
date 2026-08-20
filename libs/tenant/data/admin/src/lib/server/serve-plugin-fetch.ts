@@ -26,6 +26,14 @@ import { Agent } from 'undici'
 import { firebaseAdmin } from './firebase-admin'
 
 const FETCH_TIMEOUT_MS = 8000
+/**
+ * Redirect hops the proxy will follow, each one re-validated (AGL-1881).
+ * Small on purpose: a legitimate API redirects once (http->https is refused
+ * outright by the allowlist, so in practice this is a path or host alias).
+ */
+const MAX_REDIRECT_HOPS = 3
+/** The statuses `redirect: 'manual'` hands back instead of following. */
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
 
 /** True for loopback / private / link-local / CGNAT / ULA addresses. */
 function isPrivateIp(ip: string): boolean {
@@ -36,13 +44,21 @@ function isPrivateIp(ip: string): boolean {
     if (a === 172 && b >= 16 && b <= 31) return true
     if (a === 192 && b === 168) return true
     if (a === 100 && b >= 64 && b <= 127) return true // CGNAT
+    // The ranges AGL-1881 found missing. None is routable on the public
+    // internet, so refusing them costs a plugin nothing:
+    if (a === 192 && b === 0) return true // 192.0.0.0/24 IETF protocol
+    if (a === 198 && (b === 18 || b === 19)) return true // 198.18/15 benchmark
+    if (a >= 224) return true // 224/4 multicast, 240/4 reserved, broadcast
     return false
   }
   if (isIPv6(ip)) {
     const low = ip.toLowerCase()
     if (low === '::1' || low === '::') return true
     if (low.startsWith('fc') || low.startsWith('fd')) return true // ULA
-    if (low.startsWith('fe80')) return true // link-local
+    // Link-local is fe80::/10 — fe80 through febf, not the fe80 prefix
+    // alone (AGL-1881). `fec0::/10` site-local is deprecated but inside the
+    // same span, so one test covers both.
+    if (/^fe[89ab]/.test(low)) return true // link-local fe80::/10
     if (low.startsWith('::ffff:')) return isPrivateIp(low.slice(7)) // v4-mapped
     return false
   }
@@ -164,34 +180,91 @@ export async function servePluginFetch(
         .json({ ok: false, status: 0, error: 'URL not in allowlist' })
       return
     }
-    const pinnedIp = await resolvePublicIp(new URL(url).hostname)
-    if (!pinnedIp) {
-      res
-        .status(403)
-        .json({ ok: false, status: 0, error: 'URL resolves to a non-public address' })
-      return
-    }
-
-    // Pin the socket to the address we just validated (AGL-515).
-    const dispatcher = createPinnedDispatcher(pinnedIp)
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-    // `dispatcher` is an undici extension not in the DOM RequestInit type;
-    // assigning to a variable first avoids the object-literal excess-property
-    // check while still passing it through to the (undici) global fetch.
-    const requestInit = {
-      method,
-      signal: controller.signal,
-      dispatcher,
-      headers: { Accept: 'application/json, text/*;q=0.9, */*;q=0.1' },
-      ...(method === 'POST' && requestBody ? { body: requestBody } : {}),
-    }
+    // Follow redirects OURSELVES, re-validating every hop (AGL-1881).
+    //
+    // `fetch` defaults to `redirect: 'follow'`, and every control above runs
+    // on the FIRST url only: the allowlist, the https-only check and the
+    // pinned dispatcher. A declared, allowlisted, genuinely public origin
+    // answering `302 Location: http://169.254.169.254/...` therefore reached
+    // the cloud metadata service and returned its body to the caller — on an
+    // unauthenticated route. The IP pin did not stop it: Node skips a custom
+    // `connect.lookup` when the target is an IP literal, so the redirect
+    // connected directly and the pinned lookup was consulted exactly once,
+    // for the original hostname.
+    //
+    // `redirect: 'manual'` hands us each hop instead. Every one re-enters the
+    // same two gates the first url passed — the manifest allowlist (which is
+    // also what enforces https and the exact origin) and a fresh
+    // `resolvePublicIp` with its own pinned dispatcher — so a redirect can
+    // only ever reach somewhere the plugin could have named directly.
+    let currentUrl = url
     let upstream: Response
-    try {
-      upstream = await fetch(url, requestInit)
-    } finally {
-      clearTimeout(timeout)
-      await dispatcher.close().catch(() => undefined)
+    for (let hop = 0; ; hop++) {
+      if (hop > MAX_REDIRECT_HOPS) {
+        res
+          .status(403)
+          .json({ ok: false, status: 0, error: 'Too many redirects' })
+        return
+      }
+      const pinnedIp = await resolvePublicIp(new URL(currentUrl).hostname)
+      if (!pinnedIp) {
+        res.status(403).json({
+          ok: false,
+          status: 0,
+          error: 'URL resolves to a non-public address',
+        })
+        return
+      }
+
+      // Pin the socket to the address we just validated (AGL-515).
+      const dispatcher = createPinnedDispatcher(pinnedIp)
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+      // `dispatcher` is an undici extension not in the DOM RequestInit type;
+      // assigning to a variable first avoids the object-literal excess-property
+      // check while still passing it through to the (undici) global fetch.
+      const requestInit = {
+        method,
+        signal: controller.signal,
+        dispatcher,
+        redirect: 'manual' as const,
+        headers: { Accept: 'application/json, text/*;q=0.9, */*;q=0.1' },
+        ...(method === 'POST' && requestBody ? { body: requestBody } : {}),
+      }
+      try {
+        upstream = await fetch(currentUrl, requestInit)
+      } finally {
+        clearTimeout(timeout)
+        await dispatcher.close().catch(() => undefined)
+      }
+
+      if (!REDIRECT_STATUSES.has(upstream.status)) break
+
+      const location = upstream.headers.get('location')
+      if (!location) break // a redirect status with no target is just a body
+      let nextUrl: string
+      try {
+        nextUrl = new URL(location, currentUrl).toString()
+      } catch {
+        res
+          .status(403)
+          .json({ ok: false, status: 0, error: 'Redirect target is not a URL' })
+        return
+      }
+      if (
+        !isPluginNetworkAllowed(
+          nextUrl,
+          (install.manifest as { capabilities?: any }).capabilities,
+        )
+      ) {
+        res.status(403).json({
+          ok: false,
+          status: 0,
+          error: 'Redirect target not in allowlist',
+        })
+        return
+      }
+      currentUrl = nextUrl
     }
 
     const text = await upstream.text()
