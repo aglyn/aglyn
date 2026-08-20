@@ -22,7 +22,14 @@ import {
   validationError,
   type ExtendedFieldMeta,
 } from '@aglyn/shared-ui-jsx-forms'
-import { Box, TextField as MuiTextField } from '@mui/material'
+import { mdiImageSearch } from '@aglyn/shared-data-mdi'
+import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import {
+  Box,
+  IconButton,
+  InputAdornment,
+  TextField as MuiTextField,
+} from '@mui/material'
 import {
   forwardRef,
   memo,
@@ -425,7 +432,50 @@ export interface TokenTextFieldProps {
   tokenOptions?: BindingOption[]
   tokenLabelContext?: TokenLabelContext
   FormFieldGridProps?: FormFieldGridProps
+  /**
+   * Opens the host app's media browser for THIS field (AGL-2236). Supplied
+   * by the attributes panel for media-bearing attributes only, so a field
+   * that cannot hold an asset never grows a control that would write one.
+   */
+  onBrowseMedia?: () => void
 }
+
+/**
+ * The "Browse media" end adornment (AGL-2236).
+ *
+ * The control every `src` field's helper text has named since AGL-1215 —
+ * "Pick from your media library with 'Browse media'" — and which, until now,
+ * lived at the BOTTOM of the Attributes panel, below the Save Element
+ * button, separated from the field it fills by every other attribute the
+ * element declares. On the Image element that is six fields and a submit
+ * button of scroll, and with a single media attribute the button read only
+ * "Browse media", naming no field. Authors reported it as missing, which for
+ * a no-code product it effectively was: the documented way to change an
+ * image was to hand-type a `media:org:…/…` reference.
+ *
+ * Mousedown is prevented so the field keeps focus while the dialog opens —
+ * the same reason {@link InsertTokenAdornment} does it. Losing focus here
+ * would flush the AGL-567 debounce and commit a half-typed value on the way
+ * to picking a different one.
+ */
+export function BrowseMediaAdornment(props: { onBrowse: () => void }) {
+  const { onBrowse } = props
+  return (
+    <InputAdornment position="end">
+      <IconButton
+        aria-label="Browse media"
+        title="Browse media"
+        size="small"
+        edge="end"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => onBrowse()}
+      >
+        <MdiIcon path={mdiImageSearch.path} fontSize="small" />
+      </IconButton>
+    </InputAdornment>
+  )
+}
+BrowseMediaAdornment.displayName = 'BrowseMediaAdornment'
 
 /**
  * The data-driven-forms field (registered as
@@ -450,6 +500,9 @@ export const TokenTextField = (props: TokenTextFieldProps) => {
     tokenOptions = [],
     tokenLabelContext = {},
     FormFieldGridProps = {},
+    // Destructured, never spread onto the input: it is a function, and
+    // `...rest` lands on a DOM element.
+    onBrowseMedia,
     // Swallowed: htmlInput props from legacy schemas don't apply to a
     // contentEditable surface.
     inputProps: _inputProps,
@@ -582,9 +635,16 @@ export const TokenTextField = (props: TokenTextFieldProps) => {
               disabled: isDisabled || isReadOnly,
             },
             endAdornment: (
-              <InsertTokenAdornment
-                onOpen={(anchor) => handleOpenInsert(anchor)}
-              />
+              <>
+                {/* Media-bearing attributes only (AGL-2236) — the control
+                    the field's own helper text names, on the field. */}
+                {onBrowseMedia ? (
+                  <BrowseMediaAdornment onBrowse={onBrowseMedia} />
+                ) : null}
+                <InsertTokenAdornment
+                  onOpen={(anchor) => handleOpenInsert(anchor)}
+                />
+              </>
             ),
           },
         }}

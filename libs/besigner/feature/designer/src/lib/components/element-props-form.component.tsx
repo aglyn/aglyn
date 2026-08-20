@@ -876,6 +876,49 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       [onPickMedia, node],
     )
 
+    /**
+     * Hang the media browser off the FIELDS it fills (AGL-2236).
+     *
+     * The picker has existed since AGL-341, but as full-width buttons after
+     * the form — below `Save Element`, past every attribute the element
+     * declares. The `src` field's own helper text says to "Pick from your
+     * media library with 'Browse media'", so an author who read it looked
+     * beside the field, found nothing, and concluded the only way to change
+     * an image was to hand-type a `media:org:…/…` reference. Attaching the
+     * control to the field makes the instruction true.
+     *
+     * Only fields the token editor renders get one: a read-only attribute
+     * keeps no picker, because a control that writes an unwritable field is
+     * the same class of lie this issue is about.
+     */
+    const fieldsWithMediaPickers = useMemo(() => {
+      if (!onPickMedia) return formFieldSchema
+      const browse = new Map<string, () => void>()
+      for (const field of mediaAttributes) {
+        browse.set(field.name, handleBrowseMedia(field.name))
+      }
+      for (const field of instanceMediaProps) {
+        browse.set(
+          `${Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY}.${field.name}`,
+          handleBrowseInstanceMedia(field.name),
+        )
+      }
+      if (!browse.size) return formFieldSchema
+      return formFieldSchema.map((field: any) =>
+        browse.has(field.name) &&
+        field.component === TOKEN_TEXT_FIELD_COMPONENT
+          ? { ...field, onBrowseMedia: browse.get(field.name) }
+          : field,
+      )
+    }, [
+      formFieldSchema,
+      mediaAttributes,
+      instanceMediaProps,
+      onPickMedia,
+      handleBrowseMedia,
+      handleBrowseInstanceMedia,
+    ])
+
     const handleFormCancel = useCallback((e: SyntheticEvent, reason?: string) => {}, [])
     const handleElementSave = useCallback(
       (values: Record<string, unknown>) => {
@@ -934,7 +977,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
             onCancel={handleFormCancel}
             onSubmit={handleElementSave}
             initialValues={nodeProps}
-            schema={{ fields: formFieldSchema }}
+            schema={{ fields: fieldsWithMediaPickers }}
             {...rest}
           >
             {({ formFields, schema, ...rest }) => (
@@ -1041,38 +1084,10 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                     />
                   </FormControl>
                 ) : null}
-                {onPickMedia && mediaAttributes.length
-                  ? mediaAttributes.map((field: any) => (
-                      <FormControl key={field.name} margin="none" fullWidth>
-                        <Button
-                          color="primary"
-                          onClick={handleBrowseMedia(field.name)}
-                          sx={{ mt: 2 }}
-                          fullWidth
-                        >
-                          {mediaAttributes.length > 1
-                            ? `Browse media — ${field.label ?? field.name}`
-                            : 'Browse media'}
-                        </Button>
-                      </FormControl>
-                    ))
-                  : null}
-                {onPickMedia && instanceMediaProps.length
-                  ? instanceMediaProps.map((field) => (
-                      <FormControl key={field.name} margin="none" fullWidth>
-                        <Button
-                          color="primary"
-                          onClick={handleBrowseInstanceMedia(field.name)}
-                          sx={{ mt: 2 }}
-                          fullWidth
-                        >
-                          {instanceMediaProps.length > 1
-                            ? `Browse media — ${field.label}`
-                            : 'Browse media'}
-                        </Button>
-                      </FormControl>
-                    ))
-                  : null}
+                {/* The "Browse media" buttons that used to sit here — after
+                    the form, below Save Element — now ride on the fields
+                    themselves as end adornments (AGL-2236). See
+                    `fieldsWithMediaPickers`. */}
                 {interactions.onCreateInteraction && node?.$id ? (
                   <FormControl margin="none" fullWidth>
                     {/* Interactions (AGL-258): automations bound to this
