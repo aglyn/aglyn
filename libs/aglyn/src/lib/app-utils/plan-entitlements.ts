@@ -1182,6 +1182,23 @@ export const NET_MARGIN_WARN_BAND_PCT = 0.1
 export const INFRA_COGS_PER_SITE_USD = 2
 
 /**
+ * Platform markup on passed-through infrastructure costs (AGL-41).
+ *
+ * DEFINED HERE, not in `apps/console/utils/usage-metering.ts`, and re-exported
+ * from there — the same move AGL-2155 made for `pageViewsFromBandwidthGb`, and
+ * for the same reason (AGL-2194). The published `/pricing` pass-through table
+ * states both a cost column and a "you pay (+30%)" column, and
+ * `tools/marketing/build-pricing-tables.mts` must generate both from code so
+ * `npm run check:pricing-tables` can fail on drift. That generator resolves no
+ * `@aglyn/*` path alias, so it can import `plan-entitlements.ts` and nothing
+ * under `apps/console`. A constant the published page depends on must live
+ * where the page's generator can read it.
+ *
+ * The console keeps importing it from `usage-metering` unchanged.
+ */
+export const METERED_MARKUP = 1.3
+
+/**
  * Monthly unit costs for the meters the rollup already records (AGL-1134).
  *
  * These are OUR costs, not prices — the org is billed at cost × 1.30

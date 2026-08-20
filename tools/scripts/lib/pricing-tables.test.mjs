@@ -87,6 +87,12 @@ const featureTable = (data) =>
     .find((s) => s.name === 'Compare features')
     .groups.find((g) => g.name === 'Feature table')
 
+/** The metered pass-through strip inside a parsed frame (AGL-2194). */
+const passThrough = (data) =>
+  data.sections
+    .find((s) => s.name === 'Usage pricing')
+    .groups.find((g) => g.name === 'pass-through')
+
 /** Restores both fixtures to the committed originals between cases. */
 const resetFixtures = () => {
   writeFileSync(framePath(), readFileSync(FRAME))
@@ -237,6 +243,115 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     const run = check()
     assert.equal(run.status, 1)
     assert.match(run.stderr, /is STALE/)
+  })
+
+  /*==========================================
+   * THE PASS-THROUGH STRIP (AGL-2194).
+   *
+   * These three rows were reconciled by nothing at all until AGL-2194 — the
+   * compare table had every case above and the metered infrastructure table
+   * beside it had none, which is how `/pricing` came to advertise $0.65 / 1k
+   * form submissions against a charged $0.065 / 1k for weeks. Two of the six
+   * cells are DECLARED stale in `FRAME_STALE_METERED` because the page is
+   * besigner-published content this repo cannot edit; the cases below are what
+   * stop that declaration from becoming a blanket exemption.
+   *========================================*/
+
+  it('fails when a pass-through cell disagrees and nothing declares it', () => {
+    resetFixtures()
+    const data = readFrame()
+    const row = passThrough(data).records.find(
+      (r) => r.cells[0] === 'Page views (bandwidth + reads)',
+    )
+    assert.ok(row, 'fixture no longer carries the row this case perturbs')
+    // The one pass-through row that currently AGREES with the code, chosen on
+    // purpose: perturbing a declared-stale row would test the declaration
+    // rather than the comparison.
+    row.cells[2] = '$9.99 / 1k views'
+    writeFrame(data)
+
+    const run = check()
+    assert.equal(run.status, 1)
+    assert.match(run.stderr, /PASS-THROUGH disagreements not declared/)
+    assert.match(run.stderr, /\$9\.99 \/ 1k views/)
+  })
+
+  it('fails when a DECLARED-stale row drifts to a third value', () => {
+    // The failure mode a plain "these two are known-wrong" exemption would
+    // miss entirely: the page is edited, lands on neither the code's figure
+    // nor the recorded stale one, and the declaration silently absorbs it.
+    resetFixtures()
+    const data = readFrame()
+    const row = passThrough(data).records.find(
+      (r) => r.cells[0] === 'Form submissions',
+    )
+    row.cells[2] = '$1.20 / 1k'
+    writeFrame(data)
+
+    const run = check()
+    assert.equal(run.status, 1)
+    assert.match(run.stderr, /PASS-THROUGH disagreements not declared/)
+    assert.match(run.stderr, /declared stale value was/)
+  })
+
+  it('fails when a DECLARED-stale row is fixed on the page', () => {
+    // The direction that matters most: the moment Zach corrects the published
+    // page and the copy is re-extracted, the declaration has to come out. A
+    // guard that only fired on regressions would leave the exemption behind to
+    // pre-excuse the next one.
+    resetFixtures()
+    const data = readFrame()
+    const row = passThrough(data).records.find(
+      (r) => r.cells[0] === 'Media & file storage',
+    )
+    row.cells[1] = '$0.026 / GB-mo'
+    row.cells[2] = '$0.0338 / GB-mo'
+    writeFrame(data)
+
+    const run = check()
+    assert.equal(run.status, 1)
+    assert.match(
+      run.stderr,
+      /declared in FRAME_STALE_METERED but the frame now AGREES/,
+    )
+    assert.match(run.stderr, /Media & file storage/)
+  })
+
+  it('fails when the pass-through group disappears from the frame', () => {
+    resetFixtures()
+    const data = readFrame()
+    const section = data.sections.find((s) => s.name === 'Usage pricing')
+    section.groups = section.groups.filter((g) => g.name !== 'pass-through')
+    writeFrame(data)
+
+    const run = check()
+    assert.equal(run.status, 1)
+    assert.match(run.stderr, /no "Usage pricing \/ pass-through" group/)
+    assert.match(run.stderr, /pass-through rows the frame does not carry/)
+  })
+
+  it('publishes the LOCKED metered rates, to four decimals where needed', () => {
+    // Zach locked "$0.0338/GB-mo · $0.13/1k page views · $0.065/1k form
+    // submissions" on 2026-08-18. Asserted on the generator's OUTPUT rather
+    // than on the constants, because two-decimal formatting would round the
+    // cost and the +30% columns into agreement and publish a table that looks
+    // internally consistent while stating neither figure.
+    resetFixtures()
+    const run = check()
+    assert.equal(run.status, 0)
+    const tables = JSON.parse(readFileSync(TABLES, 'utf8'))
+    assert.deepEqual(
+      tables.metered.rows.map((r) => [r.label, r.ourCost, r.youPay]),
+      [
+        ['Media & file storage', '$0.026 / GB-mo', '$0.0338 / GB-mo'],
+        [
+          'Page views (bandwidth + reads)',
+          '$0.10 / 1k views',
+          '$0.13 / 1k views',
+        ],
+        ['Form submissions', '$0.05 / 1k', '$0.065 / 1k'],
+      ],
+    )
   })
 
   it('leaves the COMMITTED fixtures byte-identical throughout', () => {

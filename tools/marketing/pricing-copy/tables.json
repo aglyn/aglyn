@@ -978,6 +978,36 @@
     ],
     "note": "The Free plan has no paid add-ons. Annual billing does not change these rates."
   },
+  "metered": {
+    "heading": "Metered infrastructure — passed through at cost + 30%",
+    "markupPct": 30,
+    "columns": [
+      "Metered item",
+      "Our cost",
+      "You pay (+30%)"
+    ],
+    "rows": [
+      {
+        "label": "Media & file storage",
+        "unit": "/ GB-mo",
+        "ourCost": "$0.026 / GB-mo",
+        "youPay": "$0.0338 / GB-mo"
+      },
+      {
+        "label": "Page views (bandwidth + reads)",
+        "unit": "/ 1k views",
+        "ourCost": "$0.10 / 1k views",
+        "youPay": "$0.13 / 1k views"
+      },
+      {
+        "label": "Form submissions",
+        "unit": "/ 1k",
+        "ourCost": "$0.05 / 1k",
+        "youPay": "$0.065 / 1k"
+      }
+    ],
+    "note": "Applies only to plans with `meteredInfraPassThrough`. Dataset storage over the included amount is a separate retail rate ($0.25 / GB-mo), not this pass-through."
+  },
   "fees": {
     "rows": [
       {
