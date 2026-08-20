@@ -767,6 +767,24 @@
       ]
     },
     {
+      "collectionGroup": "hostMemberships",
+      "fieldPath": "orgId",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "messages",
       "fieldPath": "authorId",
       "indexes": [
