@@ -521,6 +521,28 @@ async function handler(request: Request): Promise<Response> {
             seatAddons: addonQuantitiesFromItems(canceled ? [] : items),
             subscription: {
               status: canceled ? 'canceled' : (object?.status ?? 'active'),
+              // WHY it ended (AGL-1877). Stripe states it on the deleted
+              // event and nothing here read it, so a workspace Stripe gave
+              // up on after a month of failed retries and one that clicked
+              // Cancel were the same row: same `status: 'canceled'`, same
+              // `plan: 'free'`, no way to tell them apart afterwards.
+              //
+              // Measured on the test account with a test clock rather than
+              // assumed: a failed renewal retries five times over 21.08 days
+              // and then Stripe CANCELS, sending
+              // `cancellation_details.reason: 'payment_failed'`. It never
+              // passes through `unpaid`, which is why the delinquent state
+              // this field names could not be observed any other way.
+              //
+              // Explicitly `null` when not cancelled so a resubscribe
+              // CONVERGES — `writeOrgBilling` merge-sets, and a stale
+              // `'payment_failed'` surviving a new subscription would make
+              // the auto-lock predicate read a paying org as delinquent.
+              canceledReason: canceled
+                ? (typeof object?.cancellation_details?.reason === 'string'
+                    ? object.cancellation_details.reason
+                    : null)
+                : null,
               priceId: priceId ?? null,
               // Billing interval (AGL-532): the Billing page's monthly/
               // annual toggle initializes from this mirror.
@@ -577,6 +599,35 @@ async function handler(request: Request): Promise<Response> {
             clientId: object?.metadata?.ga_client_id,
             stripeCustomerId,
           }).catch(() => undefined))
+
+          // TELL THEM (AGL-1877). A dunning-exhaustion cancellation was the
+          // one lifecycle transition that reached the customer through no
+          // channel at all: the `past_due` banner reads `billingStatus ===
+          // 'past_due'` and therefore DISAPPEARS the moment Stripe cancels,
+          // the org silently drops to Free entitlements in the same write
+          // above, and `notifyOrgAdmins` was never called on this branch.
+          // Measured end to end on a test clock: five failed attempts over
+          // 21.08 days, then the plan is simply gone.
+          //
+          // Only for `payment_failed`. A customer who cancelled on purpose
+          // has already been told — by themselves — and mailing them "your
+          // subscription was canceled" as if it were news is the shape that
+          // trains people to mute the billing category.
+          //
+          // Fire-and-forget through `after()`, like every other notification
+          // on this route: a notification failure must never 500 the webhook
+          // into redelivering the mirrors above.
+          if (object?.cancellation_details?.reason === 'payment_failed') {
+            const canceledSlug = orgSnapshot.get('slug') as string | undefined
+            after(() => notifyOrgAdmins(String(orgId), {
+              type: 'billing.subscriptionCanceled',
+              title: 'Your subscription was canceled — payment kept failing',
+              orgId: String(orgId),
+              link: canceledSlug
+                ? buildRoute(Route.MANAGE_BILLING, { orgSlug: canceledSlug })
+                : '/org/billing',
+            }))
+          }
         }
 
         // Back-fill the metered usage item (AGL-1352).

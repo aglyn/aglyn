@@ -254,4 +254,85 @@ describe('social card image resolution (AGL-1337)', () => {
       expect(resolved).toMatchObject({ width: 1600, height: 900 })
     })
   })
+
+  /**
+   * `og:image:alt` (AGL-2417).
+   *
+   * No tenant page emitted one, ever: the resolved type had nowhere to hold
+   * an alt, so every shared card announced itself to a screen reader as an
+   * undescribed image. The load-bearing property is the SAME one the
+   * dimensions have — the description must come from the source the URL came
+   * from — because an alt taken from a level that lost the precedence list
+   * describes a picture the card does not show, which is worse than none.
+   */
+  describe('alt', () => {
+    it('emits the winning source’s description', () => {
+      const resolved = resolveSocialImage({
+        sources: [
+          { image: 'media:host-1/screen-img', imageAlt: 'The Q3 report cover' },
+          { image: 'media:host-1/host-img', imageAlt: 'The Acme logo' },
+        ],
+        host: HOST,
+      })
+
+      expect(resolved).toMatchObject({
+        url: 'https://custom.example/api/media/cdn/host-1/screen-img',
+        alt: 'The Q3 report cover',
+      })
+    })
+
+    it('never mixes one source’s image with another’s description', () => {
+      // The reason a pick-time default on ONE storage site would not have
+      // closed this: the screen's image beside the host default's sentence is
+      // a confident description of the wrong picture.
+      const resolved = resolveSocialImage({
+        sources: [
+          { image: 'media:host-1/screen-img' },
+          { image: 'media:host-1/host-img', imageAlt: 'The Acme logo' },
+        ],
+        host: HOST,
+      })
+
+      expect(resolved?.url).toBe(
+        'https://custom.example/api/media/cdn/host-1/screen-img',
+      )
+      expect(resolved?.alt).toBeUndefined()
+    })
+
+    it('omits a blank description rather than emitting an empty one', () => {
+      // `og:image:alt=""` is a positive assertion that the image conveys
+      // nothing — the decorative case. A share card is by definition not
+      // decorative, so the empty string is a WORSE claim than the absent tag.
+      for (const imageAlt of ['', '   ', null, undefined]) {
+        const resolved = resolveSocialImage({
+          sources: [{ image: 'media:host-1/img', imageAlt }],
+          host: HOST,
+        })
+        expect(resolved?.url).toBeTruthy()
+        expect(resolved).not.toHaveProperty('alt')
+      }
+    })
+
+    it('caps the description at the length the DAM stores', () => {
+      // So an alt that reaches a card is one the media library would also
+      // have accepted, rather than a multi-kilobyte meta tag.
+      const resolved = resolveSocialImage({
+        sources: [{ image: 'media:host-1/img', imageAlt: 'a'.repeat(400) }],
+        host: HOST,
+      })
+
+      expect(resolved?.alt).toHaveLength(300)
+    })
+
+    it('the alt does not resurrect an image that resolved to nothing', () => {
+      // Anti-vacuity: a source with a description and no usable URL must
+      // still produce no card at all.
+      expect(
+        resolveSocialImage({
+          sources: [{ image: '', imageAlt: 'The Acme logo' }],
+          host: HOST,
+        }),
+      ).toBeUndefined()
+    })
+  })
 })

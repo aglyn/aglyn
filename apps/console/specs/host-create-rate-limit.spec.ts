@@ -21,6 +21,8 @@
  * limitations under the License.
  */
 
+import { hasOrgPermission as mockHasOrgPermission } from '@aglyn/aglyn'
+
 /**
  * AGL-1968 — `/api/hosts/create` is rate limited.
  *
@@ -112,6 +114,18 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     typeof decoded['impersonatedBy'] === 'string',
   lockdownRefusal: (...args: unknown[]) => mockLockdownRefusal(...args),
   registerOrgHost: (...args: unknown[]) => mockRegisterOrgHost(...args),
+  /**
+   * Models the REAL function (AGL-2350): it delegates to the same granular
+   * resolver production calls, so a member's role, custom role and overrides
+   * decide the answer rather than a convenient constant. `null` custom role
+   * because this spec stores no `orgs/{id}/roles` docs and its members carry
+   * no `roleId`.
+   */
+  memberHasOrgPermission: async (
+    _orgId: string,
+    member: Record<string, unknown> | null | undefined,
+    permission: string,
+  ) => mockHasOrgPermission(member as never, permission as never, null),
   resolveOrgMembership: (...args: unknown[]) => mockResolveOrgMembership(...args),
 }))
 

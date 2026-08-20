@@ -88,9 +88,61 @@ export interface StockDecrementOutcome {
 }
 
 /**
+ * What the ledger row joins this movement to (AGL-2161).
+ *
+ * Passing this is what makes the count and the row ONE write. Omitting it
+ * decrements without a row, which only `reserve-stock`'s own specs do — every
+ * production caller passes it, and `stock-decrement-race.spec.ts` fails the
+ * build if one stops.
+ */
+export interface StockLedgerJoin {
+  /** Why the count moved. Every sale path passes `sale`. */
+  reason: CommerceModel.InventoryAdjustmentReason
+  /**
+   * The document this movement is answerable to. `cancel-order.ts` queries
+   * `where('orderId','==',…)` to decide whether to restock at all, so a row
+   * that names the wrong id is as bad as a missing one.
+   */
+  orderId: string
+}
+
+/**
  * Decrements one variant's stock inside a transaction and reports what the
  * shelf could actually give up. Never throws: a stock write must not fail a
  * webhook, because Stripe would redeliver and the order would be minted twice.
+ *
+ * ## THE LEDGER ROW RIDES INSIDE THE TRANSACTION (AGL-2161)
+ *
+ * The count and its `inventoryAdjustments` row used to be two separate writes
+ * at six call sites, the second one a bare
+ * `.add({…}).catch(() => undefined)`. Either could land without the other and
+ * nothing anywhere said so:
+ *
+ * - **row lost, count moved** — `cancel-order.ts:206-224` reads the rows for
+ *   an order to decide whether a POS card sale was ever decremented, and reads
+ *   `appliedDelta ?? delta` to cap the restock. No row means it refuses to
+ *   release that stock at all, so the units are stranded permanently.
+ * - **count lost, row written** — the reverse hands back units nobody has, the
+ *   failure `StockDecrementOutcome.failed` already exists to prevent.
+ *
+ * Both targets hang off the same `hostRef`, so nothing ever stopped them
+ * sharing one transaction; they simply did not. They do now, and the divergence
+ * is not made *loud*, it is made **impossible** — which is the stronger of the
+ * two options, and available here only because the helper already owned the
+ * transaction the count was written in.
+ *
+ * Consequences worth stating, because they change five call sites at once:
+ *
+ * - A ledger failure now ROLLS BACK the decrement instead of being swallowed.
+ *   That is the direction that keeps the two readings in agreement: the sale
+ *   is still paid, the shelf is untouched, and `reconcile-stock.ts` reports a
+ *   missing decrement — which is true, and was previously a false positive
+ *   whenever only the row was lost.
+ * - The row is still auto-id'd. A deterministic id keyed on the order would
+ *   make redelivery idempotent, but two lines of one product in one order are
+ *   two legitimate rows (`billing-webhook-low-stock.spec.ts`, "logs both sale
+ *   rows"), and a deterministic key would silently fold them into one and
+ *   under-cap the restock. Redelivery stays bounded upstream, where it was.
  */
 export async function decrementVariantStock(options: {
   firestore: any
@@ -101,6 +153,11 @@ export async function decrementVariantStock(options: {
   /** Units sold; sign is ignored. */
   quantity: number
   locationId?: string
+  /**
+   * The ledger row to write in the SAME transaction as the count (AGL-2161).
+   * Omit only where no movement should be recorded.
+   */
+  ledger?: StockLedgerJoin
 }): Promise<StockDecrementOutcome> {
   const {
     firestore,
@@ -110,6 +167,7 @@ export async function decrementVariantStock(options: {
     variantId,
     quantity,
     locationId,
+    ledger,
   } = options
   const requested = -Math.abs(Math.round(Number(quantity) || 0))
   const nothing: StockDecrementOutcome = {
@@ -154,6 +212,25 @@ export async function decrementVariantStock(options: {
         },
         { merge: true },
       )
+      // Same transaction, so the count and the row commit together or neither
+      // does (AGL-2161). `applied` is the figure computed above from the read
+      // this write is derived from, so `appliedDelta` tells the truth under
+      // contention exactly as it does for the count.
+      if (ledger) {
+        transaction.set(
+          hostRef.collection('inventoryAdjustments').doc(),
+          {
+            productId,
+            variantId,
+            delta: requested,
+            ...(applied !== requested ? { appliedDelta: applied } : {}),
+            reason: ledger.reason,
+            orderId: ledger.orderId,
+            ...(locationId ? { locationId } : {}),
+            atMs: Date.now(),
+          } satisfies CommerceModel.InventoryAdjustment,
+        )
+      }
       return { applied, requested, before, after, failed: false }
     })
   } catch (error) {

@@ -50,11 +50,17 @@ Every field is optional. **Leave one blank and it keeps the Aglyn default for
 that field** — the greyed-out placeholder text in each box is that default, so
 a blank box is showing you exactly what will be used.
 
+Two fields are the exception, and both fall back to **nothing** rather than to
+an Aglyn value: **Support URL** and **Email logo URL**. Their placeholders say
+so. Leaving Support URL blank means no support link is shown anywhere — your
+customers are never sent to Aglyn's support desk, which could not help them
+and would name us to someone who was never told we exist.
+
 | Field | Helper text under it | What it replaces |
 | --- | --- | --- |
 | **Product name** | Shown in the console chrome, site badge, and emails. | The word "Aglyn" wherever the product names itself |
 | **Email from-name** | Display name on transactional email (the verified sending address is unchanged). | The display name in the recipient's inbox |
-| **Support URL** | Linked from branded surfaces and email footers. | Where a "need help?" link points |
+| **Support URL** | Linked from branded surfaces and email footers. Leave it blank and no support link appears at all — your customers are never sent to Aglyn. | Where a "need help?" link points, or nothing |
 | **Primary color** | CSS hex color used for the console primary and site badge. | The console's primary color, live |
 | **Logo URL** | Console chrome + site badge. Browse the org media library or paste an https URL. | The Aglyn wordmark in the console header |
 | **Favicon URL** | Browser tab icon for branded console surfaces. | The browser-tab icon |
@@ -113,12 +119,20 @@ Every system email resolves three brand tokens, for every organization:
 | --- | --- |
 | `{{brand.productName}}` | Your **Product name**, or `Aglyn` |
 | `{{brand.fromName}}` | Your **Email from-name**, or `Aglyn` |
-| `{{brand.supportUrl}}` | Your **Support URL**, or Aglyn's support page |
+| `{{brand.supportUrl}}` | Your **Support URL**, or **empty** |
 
 They resolve on Aglyn's own organizations too, which is what lets one email
 template be correct for both populations instead of hard-coding the majority
 case. If your organization is not white-labeled, the tokens render the Aglyn
 values.
+
+`{{brand.supportUrl}}` is the one that can render as nothing, and only for a
+white-labeled organization that left the field blank. Aglyn's own support page
+is never substituted — the email your customer receives reads as you
+throughout, and a link to our desk in it would be the one thing on the page
+that is not. Aglyn's built-in emails drop the whole "Need help?" line rather
+than leave a dangling phrase; a template you design places the token yourself,
+so put it somewhere a blank reads cleanly.
 
 ### The email logo {#email-logo}
 
@@ -131,7 +145,7 @@ square mark both land at a sensible size without you supplying dimensions.
 Two details are deliberate and quiet:
 
 - **A blank Email logo URL emits nothing at all** — not an empty row, not a
-  spacer. An email with a gap where a logo should be reads as broken; an email
+  spacer. (Support URL behaves the same way, for the same reason.) An email with a gap where a logo should be reads as broken; an email
   with no logo reads as plain, which is the right appearance for an
   organization that has not set one.
 - **The image's `alt` text is your product name.** Most inboxes block remote

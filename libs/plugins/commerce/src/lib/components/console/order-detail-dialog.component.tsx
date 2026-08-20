@@ -372,15 +372,41 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
     attemptKey.current = ''
   }, [orderId])
 
-  const handleRefund = useCallback(async () => {
+  /**
+   * `lineItemIds` scopes the refund to named lines (AGL-2454).
+   *
+   * Without it a partial refund is an AMOUNT and nothing else, so the product
+   * cannot know which goods came back and revokes nothing — a 99%-refunded
+   * order kept its downloads, licence keys, gated pages and verified review.
+   * Naming the lines is the only way that question gets an honest answer, and
+   * the route derives the amount FROM the lines rather than trusting a figure
+   * typed beside them.
+   */
+  const handleRefund = useCallback(async (lineItemIds?: number[]) => {
     if (!order || !orderId) return
+    const lines = order.lineItems ?? []
+    const scoped = (lineItemIds ?? []).length > 0
+    const scopedCents = (lineItemIds ?? []).reduce(
+      (sum, index) =>
+        sum +
+        (lines[index]?.unitAmountCents ?? 0) * (lines[index]?.quantity ?? 1),
+      0,
+    )
     const confirmed = await confirm({
-      title: 'Refund this order?',
+      title: scoped ? 'Refund this line?' : 'Refund this order?',
       description:
-        `Refunds ${usd(
-          (order.totals?.totalCents ?? order.amountCents ?? 0) -
-            (order.refundedCents ?? 0),
-        )} to the buyer through Stripe.` +
+        (scoped
+          ? `Refunds ${usd(scopedCents)} for ${(lineItemIds ?? [])
+              .map((index) => lines[index]?.name ?? `line ${index}`)
+              .join(', ')} through Stripe, and withdraws that line's ` +
+            'downloads, licence keys and gated content. A licence key already ' +
+            'sent to the buyer is retired, not returned to your pool — they ' +
+            'still hold the string, so reissuing it would give two people one ' +
+            'working key.'
+          : `Refunds ${usd(
+              (order.totals?.totalCents ?? order.amountCents ?? 0) -
+                (order.refundedCents ?? 0),
+            )} to the buyer through Stripe.`) +
         // An open INQUIRY keeps this button live on purpose (AGL-1820):
         // Stripe names a full refund as the way to resolve one before it
         // escalates to a chargeback. Said here so the admin reads the refund
@@ -413,7 +439,11 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
           'Idempotency-Key': attemptKey.current,
           ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         },
-        body: JSON.stringify({ hostId, orderId }),
+        body: JSON.stringify({
+          hostId,
+          orderId,
+          ...(scoped ? { lineItemIds } : {}),
+        }),
       })
       const payload = await response.json()
       // A definitive answer ends this attempt either way: the next refund is a
@@ -634,17 +664,52 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
             .filter(Boolean)
             .join(' · ') || 'Guest buyer'}
         </Typography>
-        {(order.lineItems ?? []).map((line, index) => (
-          <Stack key={index} direction="row" spacing={1}>
-            <Typography variant="body2" sx={{ flex: 1 }}>
-              {`${line.quantity}× ${line.name}` +
-                (line.variantLabel ? ` — ${line.variantLabel}` : '')}
-            </Typography>
-            <Typography variant="body2">
-              {usd(line.unitAmountCents * line.quantity)}
-            </Typography>
-          </Stack>
-        ))}
+        {(order.lineItems ?? []).map((line, index) => {
+          // WHAT THIS LINE IS STILL ENTITLED TO, per line (AGL-2454). A refund
+          // used to be a number on the order and nothing more, so the merchant
+          // could not see — and the product could not enforce — which goods had
+          // come back.
+          const withdrawn = CommerceModel.orderLineRefunded(order, index)
+          return (
+            <Stack key={index} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  flex: 1,
+                  ...(withdrawn ? { textDecoration: 'line-through' } : {}),
+                }}
+                color={withdrawn ? 'text.secondary' : 'text.primary'}
+              >
+                {`${line.quantity}× ${line.name}` +
+                  (line.variantLabel ? ` — ${line.variantLabel}` : '')}
+              </Typography>
+              {withdrawn ? (
+                <Chip label="refunded" size="small" color="error" variant="outlined" />
+              ) : can('refunded') &&
+                !CommerceModel.orderDisputeBlocksRefund(order) ? (
+                <Button
+                  size="small"
+                  color="error"
+                  disabled={busy}
+                  onClick={() => handleRefund([index])}
+                >
+                  {'Refund line'}
+                </Button>
+              ) : null}
+              <Typography variant="body2">
+                {usd(line.unitAmountCents * line.quantity)}
+              </Typography>
+            </Stack>
+          )
+        })}
+        {CommerceModel.orderRefundState(order) !== 'none' ? (
+          // The state, said in words (AGL-2454). "Partially refunded, no lines
+          // withdrawn" is the honest reading of an amount-only refund, and it
+          // is what tells a merchant their buyer still has the downloads.
+          <Typography variant="caption" color="error">
+            {CommerceModel.orderRefundSummary(order)}
+          </Typography>
+        ) : null}
         {totals ? (
           <>
             <Divider />
@@ -848,7 +913,11 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
               </span>
             </Tooltip>
           ) : (
-            <Button color="error" disabled={busy} onClick={handleRefund}>
+            <Button
+              color="error"
+              disabled={busy}
+              onClick={() => handleRefund()}
+            >
               {'Refund'}
             </Button>
           )

@@ -18,6 +18,7 @@
 
 import {
   resolveOrgPermissions,
+  toLegacyPermissions,
   type AglynOrgCustomRole,
   type AglynOrgMember,
   type OrgPermission,
@@ -43,20 +44,6 @@ const ALL_TRUE: OrgPermissions = {
 
 const ALL_GRANTED = resolveOrgPermissions({ role: 'owner' })
 
-/** Legacy boolean map derived from the granular permission set. */
-function toLegacyPermissions(
-  granted: Record<OrgPermission, boolean>,
-  role: OrgRole | undefined,
-): OrgPermissions {
-  return {
-    createHosts: granted['hosts.create'],
-    editHosts: role !== 'viewer',
-    editBilling: granted['billing.manage'],
-    publishToMarketplace: granted['marketplace.publish'],
-    installPlugins: granted['plugins.install'],
-    manageMembers: granted['members.manage'],
-  }
-}
 
 /**
  * Signed-in user's permissions in the current org workspace: the org role

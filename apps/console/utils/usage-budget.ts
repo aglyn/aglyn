@@ -397,6 +397,35 @@ export function assistMarginBreach(input: {
   return true
 }
 
+/**
+ * Whether this org has newly crossed the HARD spend ceiling — the one that
+ * refuses (AGL-2264), as distinct from {@link assistMarginBreach}'s review
+ * threshold, which only warns.
+ *
+ * It needs its own guard and its own announcement because the margin alert
+ * cannot carry this news. That alert speaks in WHOLE MULTIPLES of its $25
+ * threshold, so an org that climbs from $25 to the $40 ceiling is still at
+ * 1x and stays silent — staff would learn that the assistant had stopped
+ * answering for a customer only when someone complained. A ceiling that
+ * refuses quietly is the same defect as a ceiling that does not refuse.
+ *
+ * Once per org per month: crossing is a state, not an escalating figure, and
+ * the org is refused from here to the month boundary regardless of how far
+ * past it the recorded spend sits.
+ */
+export function assistCeilingBreach(input: {
+  assistUsd: number
+  ceilingUsd: number | null
+  guard: UsageAlertGuard | null | undefined
+  month: string
+}): boolean {
+  const { assistUsd, ceilingUsd, guard, month } = input
+  if (ceilingUsd === null) return false
+  if (!Number.isFinite(assistUsd) || !Number.isFinite(ceilingUsd)) return false
+  if (ceilingUsd <= 0 || assistUsd < ceilingUsd) return false
+  return guard?.month !== month
+}
+
 /** The multiple {@link assistMarginBreach} would record. */
 export function assistMarginMultiple(
   assistUsd: number,

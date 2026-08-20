@@ -155,6 +155,72 @@ export function assistEntitledMonthlyLimit(): number {
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1000
 }
 
+/**
+ * The repo default spend ceiling: **$40 per org per month** (Zach,
+ * 2026-08-19, closing AGL-2264).
+ *
+ * The number is arithmetic rather than pricing. After AGL-2441 the
+ * 1,000-message entitled guard bounds roughly $28/org/month of worst-case
+ * spend at Sonnet, and the staff margin alert already fires at $25. $40
+ * therefore sits ABOVE anything the message cap can produce at the current
+ * model, so it changes no charged amount and no plan's behaviour — it is a
+ * ceiling on OUR cost, not a customer price, which is why it is outside the
+ * Sept-1 pricing lock. It binds only when an assumption behind that
+ * arithmetic has moved: an `ASSIST_MODEL` swap to an Opus-class tier, a
+ * longer prompt, or a caller finding another way to inflate input. That is
+ * the failure it exists for.
+ *
+ * It ships as a DEFAULT rather than as an environment variable someone must
+ * remember, because an unset ceiling is the fail-open this issue was opened
+ * about: a fresh deployment and a self-hoster both inherit a sane bound
+ * without knowing the variable exists.
+ *
+ * The free tier gets no separate figure and needs none — its 10 messages a
+ * UTC day bound it at roughly $0.28/day, so this is a backstop it cannot
+ * reach rather than a cap it runs into.
+ */
+export const ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD = 40
+
+/**
+ * The per-org monthly PROVIDER-SPEND ceiling in USD — the dollar half of
+ * the cap (AGL-2264). Defaults to
+ * {@link ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD}; `off` removes it.
+ *
+ * The message caps above bound spend only through an assumed cost per
+ * message, and that assumption is exactly what drifts: `ASSIST_MODEL` is an
+ * env override, prompts grow, and a client controls how much history it
+ * posts. This reads the measured figure instead: the running `estCostUsd`
+ * on the month's assist usage document, which `writeSignalAndRollup`
+ * already increments at the SERVING model's rates. So it bounds the actual
+ * bill rather than a forecast of it.
+ *
+ * The refusal is deliberately the same shape as the message refusal (a
+ * reservation that did not move the counter), so an org at the ceiling
+ * spends nothing at all rather than spending less. It refuses — it does
+ * NOT quietly swap to a cheaper model. A silent quality drop is worse than
+ * an honest stop, because nobody can tell it happened.
+ *
+ * ⚠️ **Fails to the DEFAULT, never to “no ceiling”.** An empty, negative or
+ * unparseable value reads as unconfigured and takes the repo default, so a
+ * typo cannot reopen the fail-open this exists to close. It cannot become a
+ * ceiling of `$0` either — a value of zero is not “refuse everyone”, it is
+ * “not a number I will honour” — because an outage across every workspace
+ * would be worse than the overspend being guarded.
+ *
+ * Removing the ceiling therefore takes a WORD rather than a number:
+ * `ASSIST_ORG_MONTHLY_COGS_LIMIT_USD=off`. A deployment paying its own
+ * provider bill may genuinely want none, and that is a decision someone
+ * should have to write down rather than reach by mistyping a digit.
+ */
+export function assistOrgMonthlyCostLimitUsd(): number | null {
+  const raw = String(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD ?? '').trim()
+  if (raw.toLowerCase() === 'off') return null
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD
+}
+
 export interface AssistTokenRates {
   inputPerToken: number
   outputPerToken: number
@@ -247,6 +313,31 @@ export interface AssistReservation extends AssistQuotaVerdict {
   dayKey: string
   /** Month the `assistUsage` doc was incremented for (`YYYY-MM`). */
   monthKey: string
+  /**
+   * Which ceiling refused, or `null` when the message was reserved. The two
+   * refusals need different words at the surface: a message cap resets on a
+   * clock the user can be told about, and a spend ceiling does not.
+   *
+   * Only on the reservation, not on `AssistQuotaVerdict` — `checkAssistQuota`
+   * is a reporting read that never consults the spend ceiling, and widening
+   * the shared type would let a caller believe it had.
+   */
+  refusedBy: 'messages' | 'budget' | null
+  /**
+   * Measured provider spend for `monthKey` in USD as read inside the
+   * transaction, or `null` when the transaction did not consult it.
+   *
+   * Nullable rather than defaulted to 0, and the difference is the whole
+   * point: an entitled reservation reads the monthly document anyway (it is
+   * the gate), but a free one gates on the daily counter and only opens the
+   * monthly document when a ceiling is configured — so there is a path with
+   * no figure to report. Reporting `0` there would be a constant wearing a
+   * measurement's name, and a caller could not tell "this org has spent
+   * nothing" from "nobody looked".
+   */
+  costUsd: number | null
+  /** The configured ceiling, or `null` when none is set (the default). */
+  costLimitUsd: number | null
 }
 
 /**
@@ -296,20 +387,54 @@ export async function reserveAssistMessage(
   const gateRef = entitled ? monthlyRef : dailyRef
   const gateField = entitled ? 'messages' : day
 
+  const costLimitUsd = assistOrgMonthlyCostLimitUsd()
+
   return firestore.runTransaction(async (tx) => {
-    // The one read, before any write — Firestore requires that ordering, and
-    // it is also what makes check-and-increment a single atomic step.
+    // Every read before any write — Firestore requires that ordering, and it
+    // is also what makes check-and-increment a single atomic step.
     const snapshot = await tx.get(gateRef)
+    // The spend ceiling reads the SAME monthly document the entitled gate
+    // already read, so an entitled reservation costs no extra read at all
+    // and a free one costs a second read only when a ceiling is configured.
+    const monthlySnapshot = entitled
+      ? snapshot
+      : costLimitUsd === null
+        ? null
+        : await tx.get(monthlyRef)
     const used = Number(snapshot.get(gateField) ?? 0)
+    const costUsd = monthlySnapshot
+      ? Number(monthlySnapshot.get('estCostUsd') ?? 0)
+      : null
     if (!(used < limit)) {
       return {
         allowed: false,
+        refusedBy: 'messages' as const,
         period,
         dayKey: day,
         monthKey: month,
         used,
         limit,
         remaining: 0,
+        costUsd,
+        costLimitUsd,
+      }
+    }
+    // The dollar ceiling, checked AFTER the message cap so the cheaper and
+    // more explicable refusal wins when both apply. Refusing here leaves both
+    // counters untouched, exactly like the message refusal above: the point
+    // of a spend ceiling is that the org above it spends nothing more.
+    if (costLimitUsd !== null && costUsd !== null && !(costUsd < costLimitUsd)) {
+      return {
+        allowed: false,
+        refusedBy: 'budget' as const,
+        period,
+        dayKey: day,
+        monthKey: month,
+        used,
+        limit,
+        remaining: Math.max(0, limit - used),
+        costUsd,
+        costLimitUsd,
       }
     }
     // `set(…, { merge: true })` and never `update()`: the counter document
@@ -323,12 +448,15 @@ export async function reserveAssistMessage(
     )
     return {
       allowed: true,
+      refusedBy: null,
       period,
       dayKey: day,
       monthKey: month,
       used: used + 1,
       limit,
       remaining: Math.max(0, limit - (used + 1)),
+      costUsd,
+      costLimitUsd,
     }
   })
 }

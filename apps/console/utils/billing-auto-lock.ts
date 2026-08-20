@@ -41,7 +41,33 @@
 
 export const BILLING_LOCK_GRACE_DAYS = 30
 
+/**
+ * The statuses that mean the money stopped WHILE the subscription still
+ * exists.
+ *
+ * These alone are not enough, and the reason is measured rather than
+ * reasoned about (AGL-1877). A test-clock drill of a failed renewal on the
+ * test account: the subscription sat `past_due` through five attempts over
+ * **21.08 days** and Stripe then CANCELLED it — `canceled`, with
+ * `cancellation_details.reason: 'payment_failed'`. It never became `unpaid`.
+ *
+ * So with a 30-day grace and this set alone the predicate could not fire for
+ * any org, ever: nine days before the clock ran out the status had already
+ * left the set. A guard with no reachable true branch, shipped behind an env
+ * flag nobody had turned on, so nothing ever noticed.
+ */
 const DELINQUENT_STATUSES = new Set(['past_due', 'unpaid'])
+
+/**
+ * Stripe's word for "I gave up retrying", on
+ * `customer.subscription.deleted.cancellation_details.reason`.
+ *
+ * This is the whole difference between a workspace that left and one that
+ * stopped paying: both arrive as `status: 'canceled'` with the same
+ * `plan: 'free'` mirror, and locking the first would be suspending a
+ * customer for the crime of cancelling.
+ */
+const DUNNING_CANCELLATION_REASON = 'payment_failed'
 const MONTH_PATTERN = /^\d{4}-\d{2}$/
 
 /** Is the sweep armed for this month? Fails CLOSED on any malformed value. */
@@ -67,13 +93,26 @@ export function shouldAutoLockOrgForBilling(
   },
   billingSubscription: {
     status?: string
+    canceledReason?: string | null
     currentPeriodEnd?: { seconds?: number } | null
   } | null,
   nowMs: number,
 ): boolean {
   if (org.suspendedAt != null) return false
   const status = billingSubscription?.status ?? org.billingStatus
-  if (!status || !DELINQUENT_STATUSES.has(status)) return false
+  if (!status) return false
+  // A subscription Stripe cancelled for non-payment is the terminal form of
+  // exactly the state the two statuses above describe, and on this account it
+  // is the ONLY form the org ever reaches (see `DELINQUENT_STATUSES`). Read
+  // off the subdoc only: `billingStatus` is a bare status string with no room
+  // for a reason, so an org known only through the mirror can never satisfy
+  // this — which is the right way round. An unknown reason is not a proven
+  // payment failure, so every pre-AGL-1877 cancellation, and every voluntary
+  // one, fails closed here.
+  const dunningCanceled =
+    status === 'canceled' &&
+    billingSubscription?.canceledReason === DUNNING_CANCELLATION_REASON
+  if (!dunningCanceled && !DELINQUENT_STATUSES.has(status)) return false
   const periodEndSeconds = billingSubscription?.currentPeriodEnd?.seconds
   if (typeof periodEndSeconds !== 'number' || !Number.isFinite(periodEndSeconds)) {
     // No period end on record: we cannot prove 30 days have passed, and a

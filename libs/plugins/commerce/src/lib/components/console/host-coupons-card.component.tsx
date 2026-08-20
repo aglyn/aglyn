@@ -16,6 +16,7 @@
  */
 'use client'
 
+import * as CommerceModel from '../../model'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -128,9 +129,9 @@ export function HostCouponsCard(props: HostCouponsCardProps) {
             >
               <Typography variant="body2" sx={{ flex: 1 }} noWrap>
                 {`${coupon.$id} · ${coupon.percentOff}% off · ` +
-                  `${coupon.redemptions ?? 0}${
-                    coupon.maxRedemptions ? `/${coupon.maxRedemptions}` : ''
-                  } used` +
+                  // Held slots are named separately (AGL-2453) — see the
+                  // discounts card for why the used figure alone now misleads.
+                  CommerceModel.promotionUsageLabel(coupon, Date.now()) +
                   (coupon.enabled === false ? ' · disabled' : '')}
               </Typography>
               <Button size="small" onClick={handleCouponToggle(coupon)}>

@@ -125,6 +125,7 @@ import usePresence from '../../../../../../../../../../hooks/use-presence'
 import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
+import useHostRole from '../../../../../../../../../../hooks/use-host-role'
 
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
@@ -160,6 +161,13 @@ function BesignerPage(props) {
   const host = useHostSubdomain()
   const {queueLoading} = useLoading()
   const logActivity = useHostActivityLogger(hostId)
+  // The `author` host role edits content and may NOT publish it (AGL-2334).
+  // Disabled with a reason rather than hidden, so the console says no instead
+  // of the rules answering with a bare `permission-denied`.
+  const { canPublish, loaded: hostRoleLoaded } = useHostRole(hostId)
+  const publishBlock = hostRoleLoaded
+    ? 'Your role on this site can edit content but not publish it'
+    : 'Checking your access…'
   // Who else is in this document (AGL-675). Fails quiet — an editor that
   // will not open because nobody could be listed is far worse than an
   // empty avatar stack.
@@ -955,7 +963,9 @@ function BesignerPage(props) {
           <>
           <Tooltip
             title={
-              publishedPath && isCollectionTemplate
+              !canPublish
+                ? publishBlock
+                : publishedPath && isCollectionTemplate
                 ? templateRoutes
                   ? `Live — this template renders ${templateRoutes}`
                   : 'Live as a collection template — no path of its own'
@@ -964,15 +974,18 @@ function BesignerPage(props) {
                   : 'Publish this version to your site'
             }
           >
+            <span>
             <Button
               size="small"
               variant={publishedPath ? 'outlined' : 'contained'}
               color="primary"
+              disabled={!canPublish}
               onClick={handleTogglePublish}
               sx={{ mr: 1, whiteSpace: 'nowrap', flexShrink: 0 }}
             >
               {publishedPath ? 'Unpublish' : 'Publish'}
             </Button>
+            </span>
           </Tooltip>
           <BesignerFunctionsButton hostId={hostId} />
           <BesignerVersionsComponent
@@ -1321,6 +1334,10 @@ function BesignerPage(props) {
           <ScreenSocialImageField
             hostId={hostId}
             saved={screenResult?.data?.seo?.image}
+            // See the twin on the screen detail page (AGL-2417).
+            savedAlt={screenResult?.data?.seo?.imageAlt}
+            savedWidth={screenResult?.data?.seo?.imageWidth}
+            savedHeight={screenResult?.data?.seo?.imageHeight}
             value={seoImage}
             onChange={setSeoImage}
           />

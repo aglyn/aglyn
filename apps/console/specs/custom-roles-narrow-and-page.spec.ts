@@ -290,7 +290,7 @@ describe('a custom role can NARROW, not only widen (AGL-2334)', () => {
     expect(narrowed['data.manage']).toBe(false)
     // …and the rest of the base role is untouched, so it is a key-by-key
     // layer rather than a replacement in either direction.
-    expect(narrowed['marketing.manage']).toBe(true)
+    expect(narrowed['marketplace.publish']).toBe(true)
   })
 
   it('a custom role can also GRANT what the base role lacks', () => {

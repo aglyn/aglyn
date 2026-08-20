@@ -22,6 +22,7 @@
 // (AGL-405). The specific modules underneath are safe in both.
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation'
 import {
+  METERED_MARKUP,
   bandwidthGbFromPageViews,
   pageViewsFromBandwidthGb,
   planMetersInfraOverage,
@@ -43,8 +44,20 @@ import {
  * already-published overage meters read, so the two can't drift.
  */
 
-/** Platform markup on passed-through infra costs. */
-export const METERED_MARKUP = 1.3
+/**
+ * Platform markup on passed-through infra costs — RE-EXPORTED, not defined
+ * here (AGL-2194), the same move AGL-2155 made for the bandwidth helpers
+ * below.
+ *
+ * The definition moved down to `@aglyn/aglyn/app-utils/plan-entitlements`
+ * because `/pricing` publishes both a cost column and a "you pay (+30%)"
+ * column for the three meters, and `tools/marketing/build-pricing-tables.mts`
+ * has to generate both from code for `npm run check:pricing-tables` to be able
+ * to fail on drift. That generator resolves no `@aglyn/*` alias, so it cannot
+ * import this module. Re-exported so every console caller keeps importing it
+ * from the module it always did — one definition, no drift, no import churn.
+ */
+export { METERED_MARKUP } from '@aglyn/aglyn/app-utils/plan-entitlements'
 
 /**
  * Unit rates in USD — OUR marginal cost, before `METERED_MARKUP`.

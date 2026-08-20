@@ -68,15 +68,46 @@ describe('marketplace listing social card (AGL-876)', () => {
       const meta = card(LISTING)
 
       expect(meta.openGraph?.images).toEqual([
-        { url: 'https://cdn.example/preview.png' },
+        {
+          url: 'https://cdn.example/preview.png',
+          alt: 'Preview image for Northwind Pricing Table',
+        },
+      ])
+    })
+
+    /**
+     * `og:image:alt` / `twitter:image:alt` (AGL-2417).
+     *
+     * Derived from the listing rather than stored — neither `previewImageUrl`
+     * nor `logoUrl` has anywhere to hold an authored alt, since a publisher
+     * supplies a URL rather than making a DAM pick. That is the exception to
+     * AGL-1896's "never fabricate an alt", not a breach of it: that rule
+     * refuses a FILE NAME, which says nothing about the picture, and this
+     * says which listing the image belongs to and which role it is playing.
+     */
+    it('gives the Twitter card the DESCRIPTOR, so its alt is emitted too', () => {
+      const meta = card(LISTING)
+
+      // A bare URL string is what left the Twitter half undescribed even
+      // after the OG half was not.
+      expect((meta.twitter as { images?: unknown })?.images).toEqual([
+        {
+          url: 'https://cdn.example/preview.png',
+          alt: 'Preview image for Northwind Pricing Table',
+        },
       ])
     })
 
     it('falls back to the logo when there is no preview', () => {
       const meta = card({ ...LISTING, previewImageUrl: undefined })
 
+      // The alt names the LOGO role, not the preview one — it travels with
+      // whichever source won (AGL-2417).
       expect(meta.openGraph?.images).toEqual([
-        { url: 'https://cdn.example/logo.png' },
+        {
+          url: 'https://cdn.example/logo.png',
+          alt: 'Northwind Pricing Table logo',
+        },
       ])
     })
 
@@ -85,7 +116,10 @@ describe('marketplace listing social card (AGL-876)', () => {
       const meta = card({ ...LISTING, previewImageUrl: '' })
 
       expect(meta.openGraph?.images).toEqual([
-        { url: 'https://cdn.example/logo.png' },
+        {
+          url: 'https://cdn.example/logo.png',
+          alt: 'Northwind Pricing Table logo',
+        },
       ])
     })
 
@@ -96,7 +130,10 @@ describe('marketplace listing social card (AGL-876)', () => {
       })
 
       expect(meta.openGraph?.images).toEqual([
-        { url: 'https://app.aglyn.com/api/media/cdn/org:org-9/preview.png' },
+        {
+          url: 'https://app.aglyn.com/api/media/cdn/org:org-9/preview.png',
+          alt: 'Preview image for Northwind Pricing Table',
+        },
       ])
     })
 
@@ -261,6 +298,7 @@ describe('marketplace listing social card (AGL-876)', () => {
       ).toEqual([
         {
           url: 'https://console.example.com/api/media/cdn/org:org-9/preview.png',
+          alt: 'Preview image for Northwind Pricing Table',
         },
       ])
     })

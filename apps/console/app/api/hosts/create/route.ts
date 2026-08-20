@@ -20,7 +20,6 @@ import {
   resolveIdpDisplayName,
 } from '@aglyn/aglyn/server'
 import {
-  canManageOrg,
   checkQuota,
   createResourceUid,
   isBlockedSubdomain,
@@ -34,6 +33,7 @@ import {
   firebaseAdmin,
   isImpersonationSession,
   lockdownRefusal,
+  memberHasOrgPermission,
   registerOrgHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
@@ -98,7 +98,17 @@ async function handler(request: Request): Promise<Response> {
     if (!orgMembership) {
       return Response.json({ error: 'You are not a member of that organization' }, { status: 403 })
     }
-    if (!canManageOrg(orgMembership.member.role)) {
+    // The granular permission, not the raw role (AGL-2350). Identical for the
+    // built-in roles — `hosts.create` is in ALL_PERMISSIONS for owner/admin
+    // and absent from the editor and viewer defaults, exactly what
+    // `canManageOrg` answered — but it additionally honours a custom role or
+    // a per-member override, which is the narrowing
+    // `run-an-agency-workspace.md` sells and this gate silently ignored.
+    if (!(await memberHasOrgPermission(
+        orgMembership.orgId,
+        orgMembership.member,
+        'hosts.create',
+      ))) {
       return Response.json({ error: 'Your organization role does not allow creating sites' }, { status: 403 })
     }
     const firestore = firebaseAdmin.app().firestore()

@@ -16,9 +16,15 @@
  */
 
 import {
+  ORG_COGS_UNIT_RATES_USD,
+  METERED_MARKUP as MARKUP_FROM_LIB,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
+import {
   billsOrgLibraryStorage,
   ESTIMATED_PAGE_TRANSFER_BYTES,
   estimateMonthlyUsageCost,
+  METERED_MARKUP,
+  METERED_UNIT_RATES_USD,
   meteredIncludedAllowance,
 } from './usage-metering'
 
@@ -206,5 +212,69 @@ describe('estimateMonthlyUsageCost', () => {
         starter,
       ).billedCents,
     ).toBe(0)
+  })
+})
+
+/**
+ * The drift both files forbid in prose and nothing checked (AGL-2194).
+ *
+ * `METERED_UNIT_RATES_USD` here is the table a customer is BILLED against;
+ * `ORG_COGS_UNIT_RATES_USD` in `plan-entitlements.ts` is the same three
+ * figures used for COGS and the discount guardrail. Both docstrings say they
+ * "MUST be changed together" / "must never drift" — and until this suite there
+ * was no assertion anywhere in the repo that they had not. AGL-1280 moved both
+ * on the same day by hand; the next correction had nothing to catch a
+ * half-applied one, and a COGS table quietly holding the OLD rate would make
+ * the discount guardrail underwrite against a price nobody is charged.
+ *
+ * Keyed off `METERED_UNIT_RATES_USD` rather than a literal list, so a fourth
+ * billed meter added here without a COGS entry fails instead of being skipped.
+ */
+describe('the billed rate table and the COGS rate table (AGL-2194)', () => {
+  it('carries identical figures for every meter that is billed', () => {
+    const billed = Object.keys(METERED_UNIT_RATES_USD) as Array<
+      keyof typeof METERED_UNIT_RATES_USD
+    >
+    // The guard is worthless if the key set it iterates is empty or has
+    // silently shrunk — assert the shape before asserting the values.
+    expect(billed.sort()).toEqual([
+      'perFormSubmission',
+      'perPageView',
+      'storagePerGbMonth',
+    ])
+    for (const key of billed) {
+      expect(ORG_COGS_UNIT_RATES_USD).toHaveProperty(key)
+      expect(METERED_UNIT_RATES_USD[key]).toBe(
+        ORG_COGS_UNIT_RATES_USD[key as keyof typeof ORG_COGS_UNIT_RATES_USD],
+      )
+    }
+  })
+
+  /**
+   * The Sept-1 lock, pinned (Zach, 2026-08-18): "$0.0338/GB-mo · $0.13/1k page
+   * views · $0.065/1k form submissions". Those are the CUSTOMER-facing figures,
+   * so they are asserted post-markup — the form the published page states and
+   * the form a customer can check. `published-pricing-table-parity.spec.ts`
+   * pins the same three figures from the other direction, as transcribed off
+   * the live page on 2026-08-19; this one pins them against the COGS table, so
+   * neither a code-side drift nor a half-applied rate correction can move what
+   * a customer is billed without a red.
+   */
+  it('prices the locked Sept-1 rate set after markup', () => {
+    const per1k = (rate: number) =>
+      Math.round(rate * METERED_MARKUP * 1000 * 10_000) / 10_000
+    expect(
+      Math.round(
+        METERED_UNIT_RATES_USD.storagePerGbMonth * METERED_MARKUP * 10_000,
+      ) / 10_000,
+    ).toBe(0.0338)
+    expect(per1k(METERED_UNIT_RATES_USD.perPageView)).toBe(0.13)
+    expect(per1k(METERED_UNIT_RATES_USD.perFormSubmission)).toBe(0.065)
+  })
+
+  /** The re-export is the same binding, not a second 1.3 that can drift. */
+  it('re-exports the one markup constant', () => {
+    expect(METERED_MARKUP).toBe(MARKUP_FROM_LIB)
+    expect(METERED_MARKUP).toBe(1.3)
   })
 })

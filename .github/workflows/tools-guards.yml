@@ -186,11 +186,11 @@ jobs:
       # check:standalone-installs only needs `git ls-files`; this is for the
       # drift self-test. rules-drift.yml has always fetched full history for
       # the same reason.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: 'npm'
@@ -220,6 +220,13 @@ jobs:
       # a self-host install gets TTL policies, and it had drifted to one of the
       # documented eight. Triggered by the `docs/FIRESTORE_MANUAL_CONFIG.md`
       # path added above, so editing the doc alone still runs it.
+      # test:firebase-credential-message  the message a self-hoster gets when
+      #                             Firebase refuses their service account
+      #                             (AGL-2447). The three rules-deploy scripts
+      #                             are the FIRST commands the runbook has an
+      #                             operator run, and a wrong account printed
+      #                             230 lines of GaxiosError naming no variable.
+      - run: npm run test:firebase-credential-message
       - run: npm run test:ttl-policies
 
       - run: npm run test:erase-cli
@@ -236,6 +243,20 @@ jobs:
       - run: npm run test:standalone-installs
 
       - run: npm run check:standalone-installs
+
+      # AGL-1882. The comparator behind `check:backup-copies`, which asks the
+      # one question `/api/health/backups` structurally cannot: does ANY copy
+      # of production data live outside the production GCP project? Every
+      # probe that endpoint makes is a probe from inside the thing that would
+      # be lost, and on 2026-08-19 it reported **ok** while all three copies
+      # sat in `aglyn-main`.
+      #
+      # Only the pure half runs here — the live half needs a Storage
+      # credential and is scheduled in backup-copies.yml. This half matters on
+      # its own because the verdict's GREEN branch is one production cannot
+      # currently produce: with no off-project copy in existence, a check run
+      # only against reality would never once execute its own success path.
+      - run: npm run test:backup-copies
 
       # AGL-2089. The versioning rules that decide what number a release
       # carries. Pure string logic, no git — so it runs anywhere, and its
@@ -434,6 +455,38 @@ jobs:
       # self-test needs nothing, and a comparator that has stopped comparing
       # reports "no drift", which is indistinguishable from convergence.
       - run: npm run test:legal-drift
+
+      # AGL-2036. The reconciler behind `check:shipped-not-closed`, which lists
+      # open Linear issues whose implementing commits are already live.
+      #
+      # On 2026-08-18 the `awaiting-smoke` label queue was EMPTY while five
+      # issues sat labelled `awaiting-promotion` after they had already
+      # shipped, and ~30 more In Review issues whose commits were in production
+      # carried no blocking label at all — invisible to every label-defined
+      # sweep. A label-defined queue only holds while somebody remembers to
+      # apply the label, so the queue has to be defined by STATE and
+      # re-derived. This is the code that re-derives it.
+      #
+      # Only the SELF-TEST runs here. The check itself needs the list of
+      # started-state issues, which comes from an argument (or LINEAR_API_KEY,
+      # which is set nowhere) — and a guard gated on a credential nobody has
+      # set is a guard that never runs, which is how legal-drift spent its
+      # first day (AGL-2379). The self-test is pure node and pins the four
+      # traps that each produced a wrong answer by hand: attributing a commit
+      # that merely MENTIONS an issue, double-counting a rebase twin, calling a
+      # part-promoted issue shipped, and reading ancestry as deployment.
+      - run: npm run test:shipped-not-closed
+
+      # AGL-1877. The Texas data-processing tax code (`txcd_10103001`) on
+      # Aglyn's own Stripe products — the single input that decides how much
+      # sales tax is collected and remitted from Sep 1. It was set by hand in
+      # the Dashboard and appeared NOWHERE in this repository, so a tier added
+      # by `setup-stripe.mjs` shipped taxed on the full base while every tier
+      # before it was taxed on 20%, and no TEST-mode product carried it at all
+      # — meaning the one environment safe to rehearse tax in was rehearsing a
+      # different position. This pins the string and the detector; the live
+      # account is checked by `setup-stripe.mjs --dry-run`, which needs a key.
+      - run: npm run test:stripe-tax-code
 
       # AGL-2379 / AGL-2240. A SECURITY control that ran in no workflow: it
       # walks the Next app-router module graph and proves no model-provider key

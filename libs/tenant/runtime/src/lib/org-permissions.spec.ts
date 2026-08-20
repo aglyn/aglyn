@@ -25,6 +25,8 @@
  */
 
 const members = new Map<string, Record<string, unknown>>()
+/** `orgs/{orgId}/roles/{roleId}` — custom roles (AGL-243), keyed `org:id`. */
+const roles = new Map<string, Record<string, unknown>>()
 let hostOrg: string | null = 'org-1'
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
@@ -34,12 +36,36 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     const member = members.get(`${orgId}:${uid}`)
     return member ? { orgId, member: { $id: uid, ...member } } : null
   }),
+  /**
+   * Models the REAL function rather than returning a convenient constant
+   * (AGL-2350): it delegates to the same granular resolver the production
+   * implementation calls, and looks a custom role up the same way — by the
+   * member's `roleId`, resolving a dangling id to `null` so it falls back to
+   * the role defaults instead of denying.
+   *
+   * This double did not exist, and its absence was not inert. The module
+   * under test calls it inside a `try`, and the resolver FAILS CLOSED on
+   * error by design (AGL-506), so a missing mock did not throw a helpful
+   * `is not a function` — it silently turned four org-wide members into
+   * denied ones. A closed-world mock that omits a function is the same
+   * hazard as one that returns the wrong value.
+   */
+  resolveMemberOrgPermissions: jest.fn(
+    async (orgId: string, member: Record<string, unknown> | null) => {
+      const roleId = member?.['roleId'] as string | undefined
+      const customRole = roleId ? (roles.get(`${orgId}:${roleId}`) ?? null) : null
+      return mockResolveGranular(member as never, customRole as never)
+    },
+  ),
 }))
+
+import { resolveOrgPermissions as mockResolveGranular } from '@aglyn/aglyn'
 
 import { resolveOrgPermissions } from './org-permissions'
 
 beforeEach(() => {
   members.clear()
+  roles.clear()
   hostOrg = 'org-1'
 })
 
@@ -163,6 +189,61 @@ describe('resolveOrgPermissions — non-members and failures', () => {
     const resolved = await resolveOrgPermissions('newcomer')
     expect(resolved.orgId).toBeNull()
     expect(resolved.isOwner).toBe(true)
+    expect(resolved.orgWide).toBe(true)
+    expect(resolved.permissions.manageMembers).toBe(true)
+  })
+})
+
+/**
+ * The custom role and the per-member override reach the flag map the
+ * marketplace gates read (AGL-2350).
+ *
+ * This resolver used to build `permissions` from the built-in role tier
+ * alone, so both refinements were dropped server-side while the console
+ * applied them — the console showed a button that 403'd, and hid one whose
+ * POST still succeeded.
+ */
+describe('resolveOrgPermissions — custom roles and overrides', () => {
+  it('honours an override that REVOKES a permission the role grants', async () => {
+    members.set('org-1:ed', {
+      role: 'editor',
+      allHosts: true,
+      permissions: { 'plugins.install': false },
+    })
+    const resolved = await resolveOrgPermissions('ed', { orgId: 'org-1' })
+    expect(resolved.orgWide).toBe(true)
+    expect(resolved.permissions.installPlugins).toBe(false)
+  })
+
+  it('the same editor WITHOUT the override still has it', async () => {
+    // The premise, so the test above cannot pass because editors simply lack
+    // the permission.
+    members.set('org-1:ed', { role: 'editor', allHosts: true })
+    const resolved = await resolveOrgPermissions('ed', { orgId: 'org-1' })
+    expect(resolved.permissions.installPlugins).toBe(true)
+  })
+
+  it('honours a custom role that GRANTS what the base role lacks', async () => {
+    roles.set('org-1:publisher', {
+      name: 'Publisher',
+      permissions: { 'marketplace.publish': true },
+    })
+    members.set('org-1:view', {
+      role: 'viewer',
+      allHosts: true,
+      roleId: 'publisher',
+    })
+    const resolved = await resolveOrgPermissions('view', { orgId: 'org-1' })
+    expect(resolved.permissions.publishToMarketplace).toBe(true)
+  })
+
+  it('a dangling roleId falls back to the role defaults, it does not deny', async () => {
+    members.set('org-1:view', {
+      role: 'admin',
+      allHosts: true,
+      roleId: 'deleted-role',
+    })
+    const resolved = await resolveOrgPermissions('view', { orgId: 'org-1' })
     expect(resolved.orgWide).toBe(true)
     expect(resolved.permissions.manageMembers).toBe(true)
   })

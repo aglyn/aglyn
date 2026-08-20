@@ -110,11 +110,31 @@ export function decodeHtmlEntities(text) {
 }
 
 /**
+ * The document's OWN closing copyright notice — the end of the content block.
+ *
+ * Deliberately not anchored to the start of the line: `/legal/terms` closes
+ * with `Aglyn LLC · aglyn.com · © 2026 Aglyn LLC. All rights reserved.` on
+ * both sides, and a `/^©/` rule walked straight past it into the site footer,
+ * pulling seventeen lines of nav/footer chrome into the LIVE side of the diff
+ * (the tagline, the beta banner, and the Product/Solutions/Use cases/
+ * Resources/Company link lists). Three Docs (Cookies, Privacy, Terms) also
+ * italicise the line as `*© …*`, which is why the same rule reported "Doc has
+ * no closing © line" for documents that plainly have one.
+ *
+ * It IS anchored to `© <year> Aglyn`, not to a bare `©`, so a body paragraph
+ * that merely discusses copyright cannot truncate the block early. Measured
+ * against all nine published pages and all eleven Legal Docs on 2026-08-19:
+ * exactly two matches per live page (content block, then footer) and exactly
+ * one per Doc.
+ */
+const CLOSING_COPYRIGHT = /©\s*\d{4}\s+Aglyn\b/
+
+/**
  * Reduce served HTML to text with one line per block-level element.
  *
- * Table cells become their own lines (the plain-text export of a Docs table
- * also emits one cell per line, so the two sides align). Inline tags vanish
- * without inserting whitespace — their surrounding text carries the spaces.
+ * Table cells become their own lines; {@link docToBlockLines} splits the Doc
+ * side's rows to match. Inline tags vanish without inserting whitespace —
+ * their surrounding text carries the spaces.
  */
 export function htmlToBlockLines(html) {
   let s = String(html)
@@ -122,6 +142,18 @@ export function htmlToBlockLines(html) {
     .replace(/<script\b[\s\S]*?<\/script\s*>/gi, ' ')
     .replace(/<style\b[\s\S]*?<\/style\s*>/gi, ' ')
     .replace(/<(?:noscript|template|svg|iframe)\b[\s\S]*?<\/(?:noscript|template|svg|iframe)\s*>/gi, ' ')
+  // An ordered list's numbers are rendered by CSS counters, so `<ol><li>`
+  // carries no digit in the markup — but the reader sees "1.", and the Docs
+  // export writes "1." literally. Restore the ordinal the page displays, so
+  // the two sides line up WITHOUT folding the numbers away: a renumbered
+  // clause (which cross-references depend on) must still read as drift.
+  // markdown-lite has no list nesting, so a non-greedy `<ol>…</ol>` span is
+  // the whole list.
+  s = s.replace(/<ol\b([^>]*)>([\s\S]*?)<\/ol\s*>/gi, (_, attrs, inner) => {
+    const start = Number.parseInt(/\bstart\s*=\s*"(\d+)"/i.exec(attrs)?.[1], 10)
+    let n = Number.isFinite(start) ? start : 1
+    return inner.replace(/<li\b[^>]*>/gi, () => `<li>${n++}. `)
+  })
   // Block-level boundaries become newlines; everything else is inline.
   s = s.replace(
     /<\/?(?:p|h[1-6]|li|ul|ol|tr|td|th|table|thead|tbody|div|section|article|main|aside|header|footer|nav|blockquote|figure|figcaption|pre|dt|dd|dl)\b[^>]*>|<(?:br|hr)\s*\/?>/gi,
@@ -134,14 +166,43 @@ export function htmlToBlockLines(html) {
     .filter(Boolean)
 }
 
-/** Split a Drive plain-text export into trimmed, non-empty lines. */
+/**
+ * Split a Drive plain-text export into trimmed, non-empty lines, with table
+ * ROWS broken into one line per CELL.
+ *
+ * A Docs export emits a whole table row on ONE line \u2014 TAB-separated for a real
+ * Docs table (Subprocessors), pipe-delimited for a Doc that still holds a
+ * literal markdown table (Cookies, never converted on the 2026-08-13 import).
+ * The live side emits one cell per line, because `htmlToBlockLines` breaks on
+ * `<td>`/`<th>`. Left unsplit, every row of every table read as a difference:
+ * the Cookie Policy alone showed 96 live-only lines whose words were identical
+ * to the Doc's, purely because the two sides packed them differently.
+ */
 export function docToBlockLines(plainText) {
-  return String(plainText)
+  const out = []
+  for (const raw of String(plainText)
     .replace(/^\uFEFF/, '')
     .replace(/\r\n?/g, '\n')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
+    .split('\n')) {
+    const line = raw.trim()
+    if (!line) continue
+    const cells = line.includes('\t')
+      ? line.split('\t')
+      : /^\|.*\|$/.test(line)
+        ? line.slice(1, -1).split('|')
+        : null
+    if (!cells) {
+      out.push(line)
+      continue
+    }
+    for (const cell of cells) {
+      const value = cell.trim()
+      // A markdown separator row (`|---|---|`) contributes only drawing;
+      // `normalizeLegalLine` erases what survives here.
+      if (value) out.push(value)
+    }
+  }
+  return out
 }
 
 /**
@@ -174,22 +235,29 @@ export function normalizeLegalLine(line) {
   // Markdown table separator rows (|---|---|) and horizontal rules are
   // layout, not content.
   if (/^[-: ]+$/.test(s) && s.includes('-')) return ''
+  // A Docs export renders a page break / section divider as a run of
+  // underscores on its own line. Same category: drawing, not words, and it
+  // appears in six of the nine Legal Docs where the live page has nothing.
+  if (/^_{3,}$/.test(s)) return ''
   return s
 }
 
 /**
  * Slice a line list down to the document's content block: the first
- * `Last updated:` line through the first following `©` line, inclusive.
- * Missing markers degrade gracefully (start of text / end of text) and are
- * reported so the verdict can carry the caveat.
+ * `Last updated:` line through the first following copyright line, inclusive
+ * ({@link CLOSING_COPYRIGHT} — which is what keeps the site's nav and footer
+ * out of the LIVE side). Missing markers degrade gracefully (start of text /
+ * end of text) and are reported so the verdict can carry the caveat.
  *
  * @returns {{ lines: string[], foundStart: boolean, foundEnd: boolean }}
  */
 export function sliceContentBlock(lines) {
-  const start = lines.findIndex((l) => /^\**\s*Last updated:/i.test(l))
+  const start = lines.findIndex((l) => /^[*_\s]*Last updated:/i.test(l))
   const foundStart = start >= 0
   const from = foundStart ? start : 0
-  const end = lines.findIndex((l, i) => i > from && /^©/.test(l.trim()))
+  const end = lines.findIndex(
+    (l, i) => i > from && CLOSING_COPYRIGHT.test(l.trim()),
+  )
   const foundEnd = end >= 0
   const to = foundEnd ? end : lines.length - 1
   return { lines: lines.slice(from, to + 1), foundStart, foundEnd }
@@ -258,9 +326,10 @@ export function compareLegalDocument(liveHtml, docPlainText) {
 export function sliceMarkdownContentBlock(lines) {
   const isStart = (line) => /^[#>\s*_]*Last updated:/i.test(line.trim())
   // A Docs markdown export renders the copyright line italic (`*© …*`,
-  // measured on the real EULA Doc, 2026-08-17), so leading emphasis markers
-  // and escapes are looked through.
-  const isEnd = (line) => /^©/.test(line.trim().replace(/^[\\*_]+/, ''))
+  // measured on the real EULA Doc, 2026-08-17), and the Terms Doc prefixes it
+  // with `Aglyn LLC · aglyn.com · ` — so the notice is matched wherever it
+  // sits in the line, exactly as {@link sliceContentBlock} does.
+  const isEnd = (line) => CLOSING_COPYRIGHT.test(line.trim())
   const start = lines.findIndex(isStart)
   const foundStart = start >= 0
   const from = foundStart ? start : 0

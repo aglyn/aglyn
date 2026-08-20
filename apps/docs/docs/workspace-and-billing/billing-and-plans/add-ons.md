@@ -29,6 +29,9 @@ pick a plan first).
   your plan (12× the monthly price) — a subscription has one billing interval.
 - **POS registers** also require a plan with POS (Pro and above), and each one is
   assigned to a specific site — see [Assigning register seats](#assigning-register-seats).
+- **Collaborator seats** work the same way as POS registers: bought once for the
+  workspace, then assigned to a site — see
+  [Assigning collaborator seats](#assigning-collaborator-seats).
 - **Event Calendar** is a single workspace-wide toggle, not a per-site charge — see
   [Events calendar](../../content-and-data/events/overview.md).
 
@@ -58,6 +61,40 @@ many are **unassigned**, then lets you add or remove seats per site.
 
 If every purchased seat is already assigned and a site needs another register, either
 move a seat off a site that isn't using it, or buy another seat under Plan add-ons.
+
+## Assigning collaborator seats
+
+Collaborator seats work exactly like register seats: a seat is bought **once for your
+workspace** and then **assigned to one site**. Buying a seat does not raise the
+collaborator limit on every site — it adds one site's worth of capacity that you place
+where you need it.
+
+Your plan already gives every site a collaborator allowance on its own. A purchased
+seat is added on top of that, for the one site you assign it to, up to your plan's
+per-site maximum. Past that maximum, more seats can't raise the limit and the only
+path is a plan upgrade.
+
+To assign one, go to **Billing → Site collaborator seats**, directly under Plan
+add-ons. The card shows how many seats you've **purchased**, how many are
+**assigned**, and how many are **unassigned**, then lets you add or remove seats per
+site. The same numbers appear on each site's own Collaborators card.
+
+- **Seats are reassignable.** Moving a seat between sites is immediate and costs
+  nothing — you're not buying or cancelling anything, just relocating capacity.
+- **Nobody is ever removed for being over the limit.** If a site has more
+  collaborators than its limit — because a seat moved, a plan changed, or the limit
+  was corrected — everyone on it keeps their access and stays signed in. The only
+  effect is that the site can't take on *another* collaborator until it's back under.
+  The console warns you before a move that would leave a site over, with the number
+  affected.
+- **Deleting a site returns its seats to the pool** automatically, in the same action
+  that removes the site. There's nothing to reclaim by hand.
+- **You need the Manage billing permission** to move seats, the same permission that
+  buys them.
+
+If every purchased seat is already assigned and a site needs another collaborator,
+either move a seat off a site that isn't using it, or buy another seat under Plan
+add-ons.
 
 ## How changes bill
 

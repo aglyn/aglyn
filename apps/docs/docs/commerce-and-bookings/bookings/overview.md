@@ -48,7 +48,25 @@ card on the Products hub; see [Commerce](../commerce/overview.md).
 - Visitors pick a slot through the booking widget; the **booking API** records it.
 - For paid services, Stripe collects payment and a **slot hold** prevents double-booking
   during checkout.
-- **Reminder emails** go out automatically ahead of the appointment.
+- **Reminder emails** go out automatically ahead of the appointment — see below.
+
+### 24-hour reminders {#reminders}
+
+Every confirmed booking gets one reminder email roughly a day before it starts. A
+background pass runs each hour and mails the bookings that are then 23–25 hours out,
+so a reminder lands about 24 hours ahead rather than at an exact minute.
+
+A booking is reminded once. The pass records that it has sent, so a booking is never
+mailed twice, and these do not go out for cancelled bookings or for bookings taken
+without an email address.
+
+The reminder uses your designed **booking reminder** email template if you have one,
+and your own brand if your plan includes white-labelling; otherwise it sends a plain
+text reminder naming the service and the time.
+
+**Where to see it.** The **Upcoming bookings** card shows `24-hour reminders · N due in
+the next pass · N already sent`, counted with the same rule the sender uses — so it is
+the queue that will actually be drained, not an estimate.
 
 ## Payments and fees {#payments-and-fees}
 

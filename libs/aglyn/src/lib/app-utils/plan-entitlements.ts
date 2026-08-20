@@ -1182,6 +1182,23 @@ export const NET_MARGIN_WARN_BAND_PCT = 0.1
 export const INFRA_COGS_PER_SITE_USD = 2
 
 /**
+ * Platform markup on passed-through infrastructure costs (AGL-41).
+ *
+ * DEFINED HERE, not in `apps/console/utils/usage-metering.ts`, and re-exported
+ * from there — the same move AGL-2155 made for `pageViewsFromBandwidthGb`, and
+ * for the same reason (AGL-2194). The published `/pricing` pass-through table
+ * states both a cost column and a "you pay (+30%)" column, and
+ * `tools/marketing/build-pricing-tables.mts` must generate both from code so
+ * `npm run check:pricing-tables` can fail on drift. That generator resolves no
+ * `@aglyn/*` path alias, so it can import `plan-entitlements.ts` and nothing
+ * under `apps/console`. A constant the published page depends on must live
+ * where the page's generator can read it.
+ *
+ * The console keeps importing it from `usage-metering` unchanged.
+ */
+export const METERED_MARKUP = 1.3
+
+/**
  * Monthly unit costs for the meters the rollup already records (AGL-1134).
  *
  * These are OUR costs, not prices — the org is billed at cost × 1.30
@@ -1829,6 +1846,168 @@ export function resolveHostRegisterCap(
 }
 
 /**
+ * The org's COLLABORATOR seat pool (AGL-2439): how many per-site collaborator
+ * seats were purchased, how many are assigned to a site, and how many are
+ * left to assign.
+ *
+ * The AGL-1775 register mechanism, applied to the key it was never applied to.
+ * `seatAddons.members` is bought once, org-wide; `membersPerHost` is enforced
+ * PER SITE. Adding one to the other handed the whole purchase to every site,
+ * so an org with 20 sites that bought ONE extra collaborator seat received 20.
+ * The quantity is now the size of an org-level pool and
+ * `org.collaboratorAllocations` says which site holds each seat.
+ *
+ * Everything about the resolution is deliberately identical to
+ * `resolveRegisterSeatPool` — the same clamp, the same sorted-id determinism,
+ * the same coercion of a non-number / `NaN` / `Infinity` / negative to zero.
+ * This is ONE mechanism used twice, not a second mechanism that happens to
+ * rhyme: a reader who has understood the register pool has understood this,
+ * and a fix to one is a fix to both.
+ *
+ * `purchased` runs through `resolvePurchasedAddons`, so a dead subscription
+ * empties the pool exactly as it empties every other add-on.
+ */
+export function resolveCollaboratorSeatPool(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): {
+  purchased: number
+  allocated: number
+  available: number
+  byHost: Record<string, number>
+} {
+  const rawPurchased = resolvePurchasedAddons(org).members
+  const purchased =
+    Number.isFinite(rawPurchased) && (rawPurchased as number) > 0
+      ? Math.floor(rawPurchased as number)
+      : 0
+  const raw = org?.collaboratorAllocations
+  const byHost: Record<string, number> = {}
+  let allocated = 0
+  if (raw && typeof raw === 'object') {
+    for (const hostId of Object.keys(raw).sort()) {
+      if (allocated >= purchased) break
+      const value = Number((raw as Record<string, unknown>)[hostId])
+      if (!Number.isFinite(value) || value <= 0) continue
+      const seats = Math.min(Math.floor(value), purchased - allocated)
+      if (seats <= 0) continue
+      byHost[hostId] = seats
+      allocated += seats
+    }
+  }
+  return { purchased, allocated, available: purchased - allocated, byHost }
+}
+
+/**
+ * How many console COLLABORATORS one SITE may hold (AGL-2439): the plan's
+ * per-site allowance plus whatever the org has assigned to that site out of
+ * the pool, clamped to the plan's hard `maxMembersPerHost`.
+ *
+ * THE GUARD, and the reason this is a function rather than a lookup. An
+ * unallocated host — no entry in `collaboratorAllocations`, a missing map, a
+ * missing org, an org still loading — resolves to the PLAN's `membersPerHost`
+ * and nothing else. Never the pooled total, and never `Infinity` unless the
+ * plan itself is `UNLIMITED` (enterprise, where an unbounded cap is what was
+ * sold). `checkQuota(undefined)` resolving to the Free tier is the lesson
+ * this inverts: the absent input answers in the direction of the plan, which
+ * is the conservative one.
+ *
+ * The clamp is what `checkSeatQuota` always did and is kept: collaborator
+ * seats are sold up to a BAND (`maxMembersPerHost`), unlike registers, which
+ * are sold flat. Assigning more pool seats to a site than the band allows
+ * cannot lift it past the band — the org must upgrade the plan.
+ *
+ * There is deliberately no separate read: the allocation lives on the org doc
+ * beside the entitlements, so a caller holding one holds the other.
+ */
+export function resolveHostCollaboratorCap(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  hostId: string | null | undefined,
+): number {
+  const entitlements = resolveOrgEntitlements(org)
+  const included = entitlements.membersPerHost
+  const maxSeats = entitlements.maxMembersPerHost
+  if (!hostId) return Math.min(included, maxSeats)
+  // An UNLIMITED plan cap plus anything is still UNLIMITED; short-circuit so
+  // `Infinity + n` never has to be reasoned about downstream.
+  if (included === UNLIMITED) return UNLIMITED
+  const assigned = resolveCollaboratorSeatPool(org).byHost[hostId] ?? 0
+  return Math.min(included + assigned, maxSeats)
+}
+
+/**
+ * Quota answer for a site's console COLLABORATORS (AGL-2439) — the
+ * host-scoped `checkSeatQuota`, in the same `SeatQuotaResult` shape so the
+ * existing call sites and refusal copy read identically.
+ *
+ * `checkSeatQuota(org, 'members', …)` is WRONG for a site now and this exists
+ * so nobody has to remember why: since AGL-2439 that helper no longer folds
+ * the org-wide purchase into a per-site number, so it answers the PLAN's cap
+ * and would refuse a site the seats it holds.
+ *
+ * ## THE GRANDFATHER BOUNDARY — explicit, and this field is it
+ *
+ * Zach's decision, 2026-08-19: fix the cap, and do NOT evict or lock out any
+ * org that is currently above the corrected cap.
+ *
+ * The boundary is drawn between two different questions, and they are
+ * different lines of code rather than one number used for two purposes:
+ *
+ *   `allowed`           — may this site take on ANOTHER collaborator? Bound
+ *                         by `limit`, the corrected cap. This is the ONLY
+ *                         thing the cap decides.
+ *   `retainedOverCap`   — how many seats this site holds ABOVE `limit`. They
+ *                         are RETAINED. Nothing in this repo revokes a
+ *                         collaborator for being over a cap, and nothing may
+ *                         be added that does: the cap binds ALLOCATION, never
+ *                         ACCESS.
+ *
+ * So an over-cap site keeps every collaborator it has, cannot add another,
+ * and returns to normal by attrition, by buying pool seats and assigning them
+ * here, or by upgrading — at which point `limit` recomputes from the new plan
+ * or allocation and the retention lapses on its own. That is what "they keep
+ * what they have until they next change plan or seat count" means, resolved
+ * rather than stored: a stored floor would need a backfill over live orgs and
+ * would be a defaulted field on a `merge`-written document, which is the
+ * converter hazard that destroys the real value it was meant to protect.
+ *
+ * `retainedOverCap` is non-zero ONLY when the site is already over. It is not
+ * headroom and cannot be spent: it is a count the console says out loud so
+ * the customer sees why the next Add is refused while nobody loses access.
+ */
+export function checkHostCollaboratorQuota(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  hostId: string | null | undefined,
+  currentUsage: number,
+): SeatQuotaResult & {
+  /** Seats held ABOVE `limit`, retained and never revoked (the grandfather). */
+  retainedOverCap: number
+  /** Pool seats the org has assigned to THIS site. */
+  assignedSeats: number
+} {
+  const entitlements = resolveOrgEntitlements(org)
+  const pricing = PLAN_PRICING[resolvePlan(org)]
+  const included = entitlements.membersPerHost
+  const maxSeats = entitlements.maxMembersPerHost
+  const addonPriceUsd = pricing.extraCollaboratorMonthlyUsd
+  const assignedSeats = resolveCollaboratorSeatPool(org).byHost[hostId ?? ''] ?? 0
+  const limit = resolveHostCollaboratorCap(org, hostId)
+  return {
+    allowed: currentUsage < limit,
+    limit,
+    remaining: Math.max(0, limit - currentUsage),
+    included,
+    purchased: assignedSeats,
+    maxSeats,
+    upgradeRequired: addonPriceUsd === null || limit >= maxSeats,
+    addonPriceUsd,
+    // THE GRANDFATHER. `Math.max(0, …)` so a site under its cap reports zero
+    // rather than a negative that a caller could add and turn into headroom.
+    retainedOverCap: Math.max(0, currentUsage - limit),
+    assignedSeats,
+  }
+}
+
+/**
  * Quota answer for a site's POS registers (AGL-1775) — the register-shaped
  * `checkQuota`, in the same `{ allowed, limit, remaining }` shape so callers
  * read identically.
@@ -2179,15 +2358,20 @@ export function checkEntitlement(
 /**
  * A branding profile with every field present — what a branded surface
  * renders. Image/color/domain fields are nullable (Aglyn's own surfaces
- * bake those in rather than carry a URL); the text fields always have a
- * value so callers never string-concatenate `undefined`.
+ * bake those in rather than carry a URL); the remaining text fields always
+ * have a value so callers never string-concatenate `undefined`.
+ *
+ * `supportUrl` is nullable too, and it is the one field where null carries a
+ * decision rather than an absence — see {@link resolveBrandingProfile}. A
+ * caller must render NOTHING for it, never a placeholder and never a
+ * substitute.
  */
 export interface ResolvedBrandingProfile {
   productName: string
   logoUrl: string | null
   faviconUrl: string | null
   primaryColor: string | null
-  supportUrl: string
+  supportUrl: string | null
   fromName: string
   emailLogoUrl: string | null
   customConsoleDomain: string | null
@@ -2258,8 +2442,22 @@ export function resolveBrandingProfile(
     primaryColor:
       cleanBrandString(profile.primaryColor) ??
       PLATFORM_BRANDING_PROFILE.primaryColor,
-    supportUrl:
-      cleanBrandString(profile.supportUrl) ?? PLATFORM_BRANDING_PROFILE.supportUrl,
+    // NO FALLBACK, and this is the one field that gets none (AGL-2428).
+    //
+    // Only a white-label org reaches this line — the guard above hands every
+    // other org the platform profile whole. So a blank here belongs to an
+    // organization whose transactional mail reads as *theirs* to a recipient
+    // who is *their* customer, and filling the gap with Aglyn's desk sends
+    // that person to a support team that cannot help them, while disclosing
+    // a vendor they were never told about. `platform-brand.ts` calls the
+    // same substitution in the self-host case "a trap dressed as a default";
+    // this is that trap with a different victim.
+    //
+    // Blank therefore means NO LINK, exactly as `emailLogoUrl` one field
+    // down already means no logo. An email with a gap where a link should be
+    // reads as broken; an email with no support line reads as plain, which
+    // is the right appearance for an organization that has not set one.
+    supportUrl: cleanBrandString(profile.supportUrl) ?? null,
     fromName:
       cleanBrandString(profile.fromName) ?? PLATFORM_BRANDING_PROFILE.fromName,
     emailLogoUrl:
@@ -2303,7 +2501,16 @@ export function brandMergeTokens(
   return {
     'brand.productName': branding.productName,
     'brand.fromName': branding.fromName,
-    'brand.supportUrl': branding.supportUrl,
+    // EMPTY, never omitted, when the org has no Support URL (AGL-2428).
+    //
+    // `renderLoadedSystemEmail` merges these OVER `DEFAULT_BRAND_TOKENS`,
+    // which carries the platform's own support URL for the genuinely
+    // org-less senders. Dropping the key here would let that default show
+    // through and mail a white-label org's customer a link to Aglyn — the
+    // exact leak this closes — so the key must be present and empty in order
+    // to overwrite it. A designed template that interpolates the token
+    // renders nothing where it sits.
+    'brand.supportUrl': branding.supportUrl ?? '',
   }
 }
 
@@ -2423,6 +2630,13 @@ export interface SeatQuotaResult {
  * (`hosts/{id}/members`, viewer/editor/admin — legacy key name, AGL-888).
  * End-user member accounts (`siteMembers`) are unlimited and never pass
  * through here.
+ *
+ * SINCE AGL-2439 THIS IS THE PLAN'S CAP FOR `members`, with no purchased
+ * seats in it — see the comment at the add below. A per-site answer must come
+ * from `checkHostCollaboratorQuota(org, hostId, used)`, which is the only
+ * thing that knows which site holds which pool seat. Every caller that has a
+ * `hostId` must use that one; this stays correct for a plan-level readout
+ * (what the plan includes per site, before anything is assigned).
  */
 export function checkSeatQuota(
   org: Partial<AglynOrgBilling> | null | undefined,
@@ -2443,7 +2657,26 @@ export function checkSeatQuota(
     kind === 'managers'
       ? pricing.extraSeatMonthlyUsd
       : pricing.extraCollaboratorMonthlyUsd
-  const purchased = Math.max(0, resolvePurchasedAddons(org)[kind] ?? 0)
+  // `members` IS NOT ADDED HERE, and this is the fix, not an omission
+  // (AGL-2439, Zach's 2026-08-19 decision) — the AGL-1775 shape, applied to
+  // the key that never got it. `seatAddons.members` is an ORG-LEVEL purchased
+  // quantity and `membersPerHost` is enforced PER SITE, so folding one into
+  // the other handed every site the whole purchase: an org with 20 sites that
+  // bought ONE extra collaborator seat received 20 seats for one seat's price.
+  // The quantity is now a POOL and `org.collaboratorAllocations` says which
+  // site holds each seat. What this function returns for `members` is
+  // therefore **the plan's cap alone** — exactly what an unallocated site must
+  // resolve to. Per-site capacity comes from `checkHostCollaboratorQuota`;
+  // nothing else may add the pool back in.
+  //
+  // `managers` is unaffected and still adds: `managersPerOrg` really is
+  // org-level, so an org-level purchase raising an org-level cap is correct
+  // there. That difference is the whole reason this is a `kind` switch rather
+  // than one rule.
+  const purchased =
+    kind === 'managers'
+      ? Math.max(0, resolvePurchasedAddons(org)[kind] ?? 0)
+      : 0
   const limit = Math.min(included + purchased, maxSeats)
   return {
     allowed: currentUsage < limit,
@@ -2846,10 +3079,10 @@ export const BANDWIDTH_ABUSE_CEILING_MULTIPLE = 10
  * small plans get real headroom instead of a second, tighter plan limit
  * wearing a different name.
  *
- * Free includes 5 GB ≈ 8,948 views; 10× would be ~89,500, which a genuinely
+ * Free includes 5 GB ≈ 8,738 views; 10× would be ~87,381, which a genuinely
  * successful hobby site (a post that lands on Hacker News) reaches in an
  * afternoon and would be a miserable first experience of the platform.
- * 100,000 views/month ≈ 58.6 GB ≈ **$10 of real COGS** at
+ * 100,000 views/month ≈ 57.2 GB ≈ **$10 of real COGS** at
  * `METERED_UNIT_RATES_USD.perPageView` — an order of magnitude above the free
  * band, and an order of magnitude below the $100 a million views costs. It is
  * the number that makes "free stays free" true without making it stingy.
@@ -2859,8 +3092,8 @@ export const BANDWIDTH_ABUSE_CEILING_FLOOR = 100_000
 /**
  * Ceiling for plans whose bandwidth band is UNLIMITED (Enterprise), where a
  * multiple has nothing to multiply. Kept at or above the ceiling of every
- * finite plan below it — Agency includes 20,000 GB ≈ 35.8M views, so its
- * ceiling is ~358M — so the ladder never inverts and a bigger plan never
+ * finite plan below it — Agency includes 20,000 GB ≈ 35.0M views, so its
+ * ceiling is ~350M — so the ladder never inverts and a bigger plan never
  * inherits a smaller ceiling.
  */
 export const BANDWIDTH_ABUSE_CEILING_UNLIMITED = 500_000_000

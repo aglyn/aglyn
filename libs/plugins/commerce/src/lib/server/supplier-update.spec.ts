@@ -203,7 +203,15 @@ describe('the happy path still works', () => {
     })
 
     expect(result.status).toBe(200)
-    expect(result.body).toEqual({ ok: true })
+    // The response now names WHAT was closed (AGL-2455). A supplier who ships
+    // part of a multi-supplier order needs to see that their lines — not the
+    // whole order — are what moved, and `orderStatus` is how an integration
+    // learns the order is still `partially_fulfilled` after their POST.
+    expect(result.body).toEqual({
+      ok: true,
+      lineItemIds: [0],
+      orderStatus: 'fulfilled',
+    })
     expect(storedOrder().status).toBe('fulfilled')
     expect(storedOrder().fulfillments[0]).toMatchObject({
       carrier: 'UPS',

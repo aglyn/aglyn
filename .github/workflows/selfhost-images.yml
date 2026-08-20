@@ -1,0 +1,190 @@
+name: Self-host images
+
+# Builds the two Docker images a self-hoster actually runs, and drives one
+# request through the tenant container (AGL-2433).
+#
+# ## Why this workflow exists
+#
+# Nothing in this repository has ever built `docker/console.Dockerfile` or
+# `docker/tenant.Dockerfile`. Not nx-ci.yml, not tools-guards.yml, not a
+# release job — `grep -rl docker .github/workflows` returned nothing at all.
+# The self-host distribution is the one shipped artefact with no build signal,
+# and every defect in it has been found by a person reading files rather than
+# by a machine running them:
+#
+#  - AGL-2177  the tenant container served no site and 307'd every visitor to
+#              Aglyn's console. Found by hand-driving the middleware.
+#  - AGL-2221  AGLYN_STANDALONE was set only in the build stage, so AGL-2177's
+#              fix was inert in every shipped container. Found by reading.
+#  - AGL-2423  the deps stage did not copy `.npmrc`, so `npm ci` exited EUSAGE
+#              and NO self-hoster could build either image at all. Found by
+#              finally running `docker compose up --build`.
+#
+# AGL-2423 settles the argument: a first-line, total, reproducible failure that
+# a build job catches in two minutes, sitting on `main` because no build job
+# existed. Review cannot catch it — the Dockerfile reads correctly, and the
+# file it omits is invisible precisely because a developer's own `npm ci`
+# always finds it in the working directory.
+#
+# ## Why it also starts a container
+#
+# Building proves the images compile. It does not prove the container serves
+# anything, which is what AGL-2177 and AGL-2221 actually broke. So the tenant
+# image is started and asked for a host under the operator's configured apex,
+# and the answer must not be a redirect to a console — the precise response
+# both issues produced. No Firebase is involved on purpose: host resolution
+# happens in middleware, ahead of any data read, so the assertion holds with no
+# project and no credentials.
+#
+# ## Placeholder configuration, never secrets
+#
+# `tools/scripts/selfhost-ci-env.mjs` fills `.env.selfhost.example` with an
+# imaginary operator's values. That is not a way around a secret — it is the
+# point. The images must build for someone who has none of Aglyn's
+# configuration, so inventing that person is the test.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docker/**'
+      - 'docker-compose.yml'
+      - '.dockerignore'
+      - '.npmrc'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.env.selfhost.example'
+      - 'apps/tenant/next.config.js'
+      - 'tools/scripts/selfhost-ci-env.mjs'
+      - '.github/workflows/selfhost-images.yml'
+  pull_request:
+    paths:
+      - 'docker/**'
+      - 'docker-compose.yml'
+      - '.dockerignore'
+      - '.npmrc'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.env.selfhost.example'
+      - 'apps/tenant/next.config.js'
+      - 'tools/scripts/selfhost-ci-env.mjs'
+      - '.github/workflows/selfhost-images.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: selfhost-images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build both images and serve one request
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      DOCKER_BUILDKIT: '1'
+      COMPOSE_DOCKER_CLI_BUILD: '1'
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # No `docker/setup-buildx-action`: this repository's Actions policy is
+      # `allowed_actions: selected` with `verified_allowed: false` and only
+      # `nrwl/*` permitted alongside GitHub-owned ones, so a `docker/*` action
+      # makes the whole run a `startup_failure` with no jobs and no log — which
+      # is how this was found. It is not needed either: BuildKit is the default
+      # builder on `ubuntu-latest`, and compose v2 uses it, which is what the
+      # `--secret` mount requires. The variable below states that rather than
+      # relying on it.
+
+      - name: Synthesise an operator's env file
+        run: node tools/scripts/selfhost-ci-env.mjs
+
+      - name: Build both images, with the command the runbook gives
+        run: docker compose build
+
+      - name: The tenant container serves its own apex instead of redirecting
+        run: |
+          set -euo pipefail
+          # `docker compose up`, never `docker run --env-file`: only compose
+          # strips the quotes around a value, and FIREBASE_PRIVATE_KEY has to be
+          # quoted in the file (AGL-2443). This is also simply the command the
+          # runbook gives, which is the command that should be under test.
+          docker compose up -d tenant
+
+          # A container that never listens must FAIL this step, not slip past
+          # it: every assertion below is about the response, and no response is
+          # not a passing one.
+          listening=no
+          for _ in $(seq 1 60); do
+            if curl -sS -o /dev/null -m 5 http://127.0.0.1:4500/ 2>/dev/null; then
+              listening=yes
+              break
+            fi
+            sleep 2
+          done
+          if [ "$listening" != "yes" ]; then
+            docker compose logs tenant || true
+            echo "::error::the tenant container never answered on :4500"
+            exit 1
+          fi
+
+          code=$(curl -s -o /dev/null -w '%{http_code}' -m 15 \
+            -H 'Host: acme.sites.example.com' http://127.0.0.1:4500/)
+          location=$(curl -s -o /dev/null -w '%{redirect_url}' -m 15 \
+            -H 'Host: acme.sites.example.com' http://127.0.0.1:4500/)
+          echo "status=$code location=${location:-<none>}"
+          docker compose logs tenant || true
+
+          # Aglyn's own host in the redirect is the sharpest form of the
+          # failure and is named separately, because "self-host deployment
+          # sends its visitors to us" is a different sentence from "redirected".
+          case "${location:-}" in
+            *aglyn.com*|*aglyn.app*|*aglyn.io*)
+              echo "::error::the tenant sent a request for its OWN apex to an Aglyn host ($location) — AGL-2177: host resolution matched nothing and fell through."
+              exit 1
+              ;;
+          esac
+
+          # Any redirect at all for a host under the configured apex means the
+          # host-resolution branch did not match. A 404 or a 500 does not: those
+          # mean the request got past middleware and into a project that has no
+          # such site, which is the correct outcome for placeholder Firebase.
+          case "$code" in
+            30[1278])
+              echo "::error::the tenant redirected ($code → ${location:-unknown}) a request for a host under its own AGLYN_TENANT_HOST_CNAME apex instead of resolving it to a site."
+              exit 1
+              ;;
+          esac
+
+          # The status alone is too weak, and this was measured rather than
+          # assumed: with placeholder Firebase, a host the apex branch resolves
+          # and a host that falls through to the custom-domain branch BOTH
+          # answer 404. A check that only reads the status cannot tell them
+          # apart, which is a check that certifies its own subject.
+          #
+          # `x-middleware-rewrite` can. Resolved through the apex it is the bare
+          # subdomain — `/acme/`; fallen through it is the custom-domain form,
+          # `/cname--acme.sites.example.com/`.
+          rewrite=$(curl -s -o /dev/null -D- -m 15 \
+            -H 'Host: acme.sites.example.com' http://127.0.0.1:4500/ \
+            | tr -d '\r' | awk 'tolower($1) == "x-middleware-rewrite:" { print $2 }')
+          echo "x-middleware-rewrite=${rewrite:-<none>}"
+          case "${rewrite:-}" in
+            /acme/*|/acme)
+              ;;
+            '')
+              echo "::error::no x-middleware-rewrite on a request for the operator's own apex — middleware did not route it at all."
+              exit 1
+              ;;
+            *)
+              echo "::error::a host under the operator's own AGLYN_TENANT_HOST_CNAME apex was routed as '${rewrite}' instead of to the site 'acme'. Anything of the form /cname--… means the apex branch matched nothing and the request fell through to the custom-domain path (AGL-2177/AGL-2424)."
+              exit 1
+              ;;
+          esac
+
+      - name: Stop the smoke container
+        if: always()
+        run: docker compose down || true

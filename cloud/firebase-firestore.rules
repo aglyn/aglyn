@@ -223,11 +223,20 @@ service cloud.firestore {
       // `eraseHost`, both Admin SDK. A client that could write it would assign
       // itself the whole purchased pool on every site, which is precisely the
       // over-entitlement the pool was introduced to close.
+      //
+      // `collaboratorAllocations` joins them for the identical reason
+      // (AGL-2439) — the same pool mechanism on the `members` key. It decides
+      // how many console collaborators a site may hold on top of the plan
+      // cap, and is written only by /api/billing/collaborator-allocations
+      // (billing.manage) and by `eraseHost`, both Admin SDK. A client that
+      // could write it would hand itself the whole purchased pool on every
+      // site — the exact over-entitlement AGL-2439 closes.
       allow update: if (isSuperStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'hosts', 'sso',
              'plan', 'entitlements', 'releaseFlags',
-             'seatAddons', 'registerAllocations', 'storageOverage',
+             'seatAddons', 'registerAllocations', 'collaboratorAllocations',
+             'storageOverage',
              'bandwidthCap', 'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
@@ -236,7 +245,8 @@ service cloud.firestore {
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'hosts', 'enabledPlugins', 'sso',
              'plan', 'entitlements', 'releaseFlags',
-             'seatAddons', 'registerAllocations', 'storageOverage',
+             'seatAddons', 'registerAllocations', 'collaboratorAllocations',
+             'storageOverage',
              'bandwidthCap', 'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
@@ -247,7 +257,7 @@ service cloud.firestore {
             ['slug', 'ownerUid', 'hosts', 'plan', 'entitlements',
              'releaseFlags',
              'enabledPlugins', 'seatAddons', 'registerAllocations',
-             'storageOverage', 'bandwidthCap',
+             'collaboratorAllocations', 'storageOverage', 'bandwidthCap',
              'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'sso', 'discount',
              'enterprise',
@@ -571,13 +581,25 @@ service cloud.firestore {
         allow write: if false;
       }
 
-      // Org activity log: mirrors hosts/{hostId}/activity. Org-wide readers
-      // only (AGL-1026) — it names who did what across every site, which is
-      // both a roster leak and a map of work on sites the reader cannot see.
-      // A collaborator still gets their own sites' log at
-      // `hosts/{hostId}/activity`.
+      // Org activity log: mirrors hosts/{hostId}/activity. It names who did
+      // what across every site, which is both a roster leak and a map of work
+      // on sites the reader cannot see (AGL-1026). A collaborator still gets
+      // their own sites' log at `hosts/{hostId}/activity`.
+      //
+      // NO CUSTOMER READS IT FROM A CLIENT (AGL-2444). This was
+      // `isOrgWideMember()`, which is the ROSTER question and knows nothing
+      // about the granular permission catalog — so `org.auditLog` was a
+      // display gate on the team page and nothing else: a member whose custom
+      // role revoked it read the feed straight out of any Firestore client.
+      // `/api/orgs/activity` is now the only door, and it checks the
+      // permission with the Admin SDK, which bypasses these rules. Denying
+      // here is therefore what makes that check the access control rather
+      // than a second opinion.
+      //
+      // Staff keep the direct read: the staff console reads across orgs by
+      // design and is gated by the `staff` claim, not by a customer's role.
       match /activity/{entryId} {
-        allow read: if isStaff() || isOrgWideMember();
+        allow read: if isStaff();
         allow write: if false;
       }
 
@@ -1409,6 +1431,57 @@ service cloud.firestore {
         // subcollection anywhere in the repo must be server-owned here or
         // named in its classification map, so the NEXT one fails the build
         // rather than inheriting write access quietly.
+        //
+        // SIX SERVER-WRITTEN COLLECTIONS JOIN ALL THREE LISTS (AGL-2042).
+        //
+        // `carts`, `checkouts`, `giftCards`, `stripeTaxRates`,
+        // `restockAlerts` and `inventoryReconciliation` were parked in the
+        // coverage guard's SERVER_WRITTEN_NOT_YET_DENIED because nothing
+        // writes any of them from a client. That was re-checked here rather
+        // than taken on the parking note's word: no `'hosts', hostId,
+        // '<name>'` client path in `apps` or `libs` produces a write, and the
+        // repo contains no `addDoc`/`setDoc`/`updateDoc`/`deleteDoc` against
+        // one. The three client-SDK references that DO exist are READS —
+        // `recovery-queue-card` queries `checkouts` and `restockAlerts`,
+        // `gift-cards-card` queries `giftCards` — and `allow read` above is
+        // untouched, so all three console panels keep working.
+        //
+        // Denying them costs the product nothing because the catch-all only
+        // ever grants EDITORS (`canWriteHostContent`). Every shopper-facing
+        // write to these — add to cart, start a checkout, redeem a gift card,
+        // subscribe to a restock alert — is an Admin-SDK route that these
+        // rules do not govern at all. There is no storefront flow to break.
+        //
+        // What it buys, worst first:
+        //  • `giftCards` is STORED VALUE. An editor who can write one can mint
+        //    balance, which is the AGL-1367 shape with money in it rather than
+        //    on the invoice.
+        //  • `inventoryReconciliation` is the per-order idempotency marker
+        //    that stops a stock decrement being applied twice; writing one by
+        //    hand makes a lost decrement permanent.
+        //  • `restockAlerts` holds shopper email addresses captured by an
+        //    UNAUTHENTICATED storefront endpoint — third-party PII an editor
+        //    had no reason to be able to rewrite.
+        //  • `carts` and `checkouts` are pre-purchase state the checkout reads
+        //    back; `stripeTaxRates` is a cache of Stripe rate ids, where a
+        //    forged id is a wrong tax on a real order.
+        //
+        // NOT `suppressions`, which AGL-2042's description also names. That
+        // premise went stale on AGL-2410: the Emails console page's
+        // Suppressions tab now removes an entry with a plain client
+        // `deleteDoc` (`suppressions-card.tsx:176`) — the only way to undo a
+        // suppression a link prescanner caused (AGL-2408). It has moved to
+        // EDITOR_WRITABLE_HOST_SUBCOLLECTIONS in the coverage guard, and
+        // denying it here would break a shipped surface. Recorded because the
+        // issue text still reads the other way.
+        //
+        // All THREE lists, not one: one list is not denial, and a dedicated
+        // `allow write: if false` block would not close it either, because
+        // sibling match blocks are OR'd and the LOOSER one wins — the trap
+        // that left `components` publishable by an author for as long as it
+        // did. Checked for these six specifically: the rules file contains no
+        // dedicated `match` block for any of the names, so nothing re-grants
+        // them one line below.
         allow create: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'variables',
@@ -1416,7 +1489,9 @@ service cloud.firestore {
               'locations', 'products', 'components', 'registers', 'installs',
               'templates', 'collections', 'datasets', 'webhooks', 'orders',
               'counters', 'analytics', 'screenAnalytics', 'members',
-              'mediaTombstones', 'formSubmissions']));
+              'mediaTombstones', 'formSubmissions', 'carts', 'checkouts',
+              'giftCards', 'stripeTaxRates', 'restockAlerts',
+              'inventoryReconciliation']));
         // `templates` is excluded from update as well as create: its
         // dedicated block above freezes `source`, and leaving it here would
         // re-grant the unrestricted update this catch-all allows (AGL-666).
@@ -1470,7 +1545,9 @@ service cloud.firestore {
             !(subcollection in ['screens', 'layouts', 'components', 'installs',
               'templates', 'collections', 'datasets', 'orders', 'registers',
               'counters', 'analytics', 'screenAnalytics', 'members',
-              'mediaTombstones', 'inventoryAdjustments']));
+              'mediaTombstones', 'inventoryAdjustments', 'carts', 'checkouts',
+              'giftCards', 'stripeTaxRates', 'restockAlerts',
+              'inventoryReconciliation']));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.
@@ -1493,7 +1570,9 @@ service cloud.firestore {
             !(subcollection in ['screens', 'layouts', 'components',
               'collections', 'datasets', 'orders', 'registers', 'counters',
               'analytics', 'screenAnalytics', 'members', 'mediaTombstones',
-              'inventoryAdjustments']));
+              'inventoryAdjustments', 'carts', 'checkouts', 'giftCards',
+              'stripeTaxRates', 'restockAlerts',
+              'inventoryReconciliation']));
       }
       // Editors keep full client control of a collection doc EXCEPT the two
       // identity keys. `slug` is its public address (uniqueness is claimed in
@@ -2041,6 +2120,25 @@ service cloud.firestore {
     // the request was honoured while it was in force, and a deleted record
     // cannot show that.
     match /contactSuppressions/{phoneKey} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
+    // The PLATFORM email suppression list (AGL-2407): addresses that hard
+    // bounced or complained, on any send, with or without a site to attribute
+    // it to. Same posture as `contactSuppressions` above and for the same
+    // reasons — staff may read it to answer "why did this person stop getting
+    // mail", and nothing but the Admin SDK may write it, because every writer
+    // is a signed Resend webhook or a staff action that has already been
+    // authorized server-side.
+    //
+    // Delete stays closed. Putting an address back in circulation is
+    // `releasedAt` on the existing document, not a delete: the record is the
+    // evidence that the suppression was honoured while it stood.
+    //
+    // Note this is NOT `hosts/{hostId}/suppressions`, which is a merchant's
+    // own list of their own unsubscribes and is governed by the host rules.
+    match /emailSuppressions/{emailKey} {
       allow read: if isStaff();
       allow write: if false;
     }

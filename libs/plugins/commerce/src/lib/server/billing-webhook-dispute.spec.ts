@@ -275,6 +275,7 @@ const fakeFirestore = {
 }
 
 const managerNotices: any[] = []
+const staffNotices: any[] = []
 
 jest.mock('@aglyn/tenant-data-admin', () => {
   // The REAL `updateExisting`, from its leaf path: it is what distinguishes
@@ -302,6 +303,11 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     meterHostEmail: async () => undefined,
     notifyHostManagers: async (hostId: string, payload: any) => {
       managerNotices.push({ hostId, ...payload })
+    },
+    // AGL-2161: an unrouted chargeback is a PLATFORM fault, so it is reported
+    // to staff rather than to a merchant nobody could identify.
+    notifyStaff: async (payload: any) => {
+      staffNotices.push(payload)
     },
     upsertHostContact: async () => undefined,
     renderHostEmailWithTokens: async () => null,
@@ -437,6 +443,7 @@ afterAll(() => {
 beforeEach(() => {
   docs.clear()
   managerNotices.length = 0
+  staffNotices.length = 0
   collectionGroupFailure = null
   deleteOrderDuringQuery = false
   transactionQueue = Promise.resolve()
@@ -900,6 +907,11 @@ describe('finding the order the dispute is against', () => {
     expect(docs.get('hosts/host-1/orders/order-dupe')?.refundedCents ?? 0).toBe(
       0,
     )
+    // AND IT SAYS SO (AGL-2161). Reversing neither used to be indistinguishable
+    // from "not a commerce dispute", so the money stayed disputed and
+    // unrecorded with nothing but a `console.error` to show for it.
+    expect(staffNotices).toHaveLength(1)
+    expect(String(staffNotices[0].body)).toContain('more than one order')
   })
 
   /**
@@ -935,6 +947,29 @@ describe('the failure that no redelivery can fix', () => {
       expect.stringContaining('orders.paymentIntentId'),
       expect.anything(),
     )
+    // AGL-2161: NOT the same answer as "not our dispute". A missing index
+    // means every commerce chargeback on the platform is being ignored, and
+    // that is the fact staff have to be handed — a `console.error` in a
+    // serverless log is not a signal anybody receives.
+    expect(staffNotices).toHaveLength(1)
+    expect(String(staffNotices[0].title)).toContain('could not be routed')
+    expect(String(staffNotices[0].body)).toContain('orders.paymentIntentId')
+  })
+
+  /**
+   * THE NEGATIVE CONTROL, and the reason the three answers had to become
+   * three: a dispute against a marketplace, booking or platform-billing charge
+   * reaches this handler too, and is the COMMON case. Alerting on it would fire
+   * on every marketplace dispute AGL-1554 handles, which is how an alert
+   * becomes noise and then becomes muted.
+   */
+  it('says NOTHING when the query ran and simply matched no order', async () => {
+    await deliver(
+      'charge.dispute.closed',
+      disputeEvent({ status: 'lost', payment_intent: 'pi_not_commerce' }),
+    )
+    expect(staffNotices).toHaveLength(0)
+    expect(managerNotices).toHaveLength(0)
   })
 
   /**

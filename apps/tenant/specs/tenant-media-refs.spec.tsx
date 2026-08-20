@@ -150,4 +150,45 @@ describe('white-label badge: the brand logo (AGL-1407)', () => {
       LEGACY_CDN_PATH,
     ])
   })
+
+  /**
+   * With no support URL the badge is a LABEL, not a link (AGL-2428).
+   *
+   * `supportUrl` resolves to null for a white-label org that left the field
+   * blank, and an `<a>` with no href is still announced as a link and still
+   * takes focus — a promise of a destination that does not exist. Substituting
+   * Aglyn's own support page instead is the leak the issue is about.
+   */
+  const renderBadgeWith = async (supportUrl: string | null) =>
+    renderSettled(
+      <CatchAllPage
+        data={{ host: { $id: HOST_ID } as never }}
+        nodes={{}}
+        showBranding
+        branding={{ productName: 'Acme', logoUrl: null, supportUrl } as never}
+      />,
+    )
+
+  /** The badge anchor specifically — the page also carries a Report abuse link. */
+  const badgeAnchors = (container: HTMLElement) =>
+    [...container.querySelectorAll('a')].filter((anchor) =>
+      (anchor.textContent ?? '').includes('Made with'),
+    )
+
+  it('renders NO anchor when the org has no support URL', async () => {
+    const container = await renderBadgeWith(null)
+    expect(container.textContent).toContain('Made with Acme')
+    expect(badgeAnchors(container)).toHaveLength(0)
+    expect(container.innerHTML).not.toContain('aglyn.com/support')
+  })
+
+  it('THE CONTROL: it IS an anchor when there is somewhere to send them', async () => {
+    // Without this the case above is satisfied by a badge that stopped
+    // linking for everybody, which would take the link off Aglyn's own
+    // customers too.
+    const container = await renderBadgeWith('https://acme.test/support')
+    const anchors = badgeAnchors(container)
+    expect(anchors).toHaveLength(1)
+    expect(anchors[0].getAttribute('href')).toBe('https://acme.test/support')
+  })
 })

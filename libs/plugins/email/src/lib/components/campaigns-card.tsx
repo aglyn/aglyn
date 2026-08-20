@@ -16,8 +16,9 @@
  */
 'use client'
 
-import { buildRoute, pluginDocsHelp, Route } from '@aglyn/aglyn'
+import { buildRoute, checkQuota, pluginDocsHelp, Route } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
@@ -27,7 +28,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, limit, query } from 'firebase/firestore'
+import { collection, doc, limit, query } from 'firebase/firestore'
 import { createEmailScreen } from '../utils/create-email-screen'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
@@ -35,7 +36,9 @@ import {
   useConsoleHostRoute,
   useFirestore,
   useFirestoreCollection,
+  useFirestoreDoc,
   useOrgDataScope,
+  useOrgPlan,
   useHostResourceApi,
   useHostVersionApi,
   useUser,
@@ -121,6 +124,44 @@ export function HostCampaignsCard(props: { hostId: string }) {
   const lists = [...(listDocs ?? [])].sort((a, b) =>
     String(a.name ?? '').localeCompare(String(b.name ?? '')),
   )
+  /**
+   * The monthly campaign allowance, standing rather than only on refusal.
+   *
+   * `emailSendsPerMonth` is enforced in `campaign-send.ts` against
+   * `hosts/{hostId}/counters/campaignEmailSends[YYYY-MM]` and nothing else,
+   * and until now that number reached the customer in exactly two places:
+   * the 403 that refuses a send, and the usage-alert email that fires at
+   * 80%. The composer showed `Recipients 1,240` with no hint that the plan
+   * allows 500 a month — so the cap arrived as a rejection after the
+   * campaign was written, which is the defect AGL-2113 fixed for five
+   * per-site quotas and AGL-2246 for `templatesPerHost`.
+   *
+   * READ THE ENFORCEABLE METER, NOT THE COST ONE. `emailSends` beside it
+   * counts every receipt, booking reminder and password reset the site sent
+   * (AGL-1438); showing that total against this cap would tell a merchant
+   * they had spent their campaign allowance on order confirmations.
+   *
+   * Per HOST because enforcement is per host — `campaign-send.ts` reads this
+   * host's counter. The usage-alert cron sums the org's hosts against the
+   * same cap, so on a multi-site org the alert can fire while no single site
+   * has been refused; that discrepancy is the cron's, and a readout that
+   * quietly averaged the two would agree with neither.
+   */
+  const { org, ready: orgReady } = useOrgPlan(hostId)
+  const campaignMonthKey = new Date().toISOString().slice(0, 7)
+  const { data: campaignSendCounter } = useFirestoreDoc<
+    Record<string, unknown>
+  >(
+    () => doc(firestore, 'hosts', hostId, 'counters', 'campaignEmailSends'),
+    [firestore, hostId],
+  )
+  // A host that has never sent a campaign has no counter document at all;
+  // that is a settled zero, and the same zero `campaignEmailSendsForMonth`
+  // resolves it to on the server.
+  const campaignSendsUsed = Number(
+    campaignSendCounter?.[campaignMonthKey] ?? 0,
+  )
+
   // Email A/B experiments (AGL-255): running (or winner-decided) email
   // experiments the composer can attach.
   const { data: experimentDocs } = useFirestoreCollection<any>(
@@ -503,6 +544,26 @@ export function HostCampaignsCard(props: { hostId: string }) {
                   ? ` · ${preview.suppressed.toLocaleString()} unsubscribed`
                   : '')}
         </Typography>
+        {/*
+          The monthly campaign cap, standing rather than only on refusal.
+          `campaignSendsUsed` is the same counter+month `campaign-send.ts`
+          reads, and the limit comes from the same `checkQuota` call, so
+          the readout and the gate cannot disagree — the AGL-2113 rule.
+          `period` says "this month" because this allowance resets; without
+          it the shared readout says "on your plan", which for a monthly
+          quota reads as a lifetime allowance.
+         */}
+        <QuotaReadoutComponent
+          ready={orgReady}
+          used={campaignSendsUsed}
+          limit={
+            checkQuota(org as never, 'emailSendsPerMonth', campaignSendsUsed)
+              .limit
+          }
+          noun="campaign email"
+          nounPlural="campaign emails"
+          period="this month"
+        />
         <Stack direction="row" spacing={1}>
           {emailExperiments.length ? (
             // Email A/B (AGL-255): variant subject/body overrides apply

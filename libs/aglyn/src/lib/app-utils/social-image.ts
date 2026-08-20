@@ -65,9 +65,31 @@
  * The pair travels WITH its image and is never mixed across sources — taking
  * a screen's image and the host's dimensions would describe a card that does
  * not exist, which is worse than emitting no dimensions at all.
+ *
+ * ## `og:image:alt` (AGL-2417)
+ *
+ * `imageAlt` is stored and carried by exactly the same rule, and for a
+ * stronger version of the same reason. Until this, NO tenant page emitted an
+ * alt at all: the type had nowhere to hold one, so every shared card
+ * announced itself to a screen reader as an undescribed image.
+ *
+ * The alt is captured at PICK time from the chosen DAM asset
+ * (`inheritedMediaAlt`, AGL-1896) and is editable per surface, rather than
+ * looked up at render — the cold-start argument above applies unchanged, and
+ * a per-surface override is what lets "our logo" become "the Q3 report cover"
+ * on the one page where that is what the card shows.
+ *
+ * Defaulting at pick time on ONE of the three storage sites would NOT have
+ * been enough, and this is the objection worth recording: the resolver picks
+ * whichever source wins for a given page, so an alt stored only on the host
+ * default would be emitted beside a SCREEN's image — a description of a
+ * picture the card does not show, which is worse than no description. It is
+ * therefore stored beside the reference at all three sites and read off the
+ * SAME source the URL came from, exactly as the dimensions are.
  */
 
 import { hostPublicOrigin } from './host-naming'
+import { MEDIA_ALT_MAX_LENGTH } from './media-metadata'
 import { absoluteMediaSrc } from './media-ref'
 
 /**
@@ -80,13 +102,28 @@ export interface SocialImageSource {
   /** Pixel dimensions copied from the media record at pick time. */
   imageWidth?: number | null
   imageHeight?: number | null
+  /**
+   * What the card SHOWS, for `og:image:alt` (AGL-2417). Defaulted from the
+   * chosen asset's own alt at pick time and overridable per surface. Read off
+   * the same source as `image`, never mixed across the precedence list.
+   */
+  imageAlt?: string | null
 }
 
-/** What the head emits. `width`/`height` are present only as a valid pair. */
+/**
+ * What the head emits. `width`/`height` are present only as a valid pair, and
+ * `alt` only when the winning source actually carries one.
+ *
+ * Next's OpenGraph/Twitter image DESCRIPTOR accepts exactly these keys, and
+ * both tenant branches already spread this object into `images: [ … ]` — so
+ * `og:image:alt` and `twitter:image:alt` start being emitted with no change
+ * at either emit site.
+ */
 export interface ResolvedSocialImage {
   url: string
   width?: number
   height?: number
+  alt?: string
 }
 
 /** The host fields the resolver needs: scope qualification and origin. */
@@ -100,6 +137,21 @@ export interface SocialImageHost {
  * A dimension pair is emitted only when BOTH sides are positive integers.
  * Half a pair tells a crawler nothing and invites it to infer the other.
  */
+/**
+ * The alt, trimmed, or nothing.
+ *
+ * Blank is never emitted. `og:image:alt=""` is a positive assertion that the
+ * image conveys nothing — the decorative case — and a share card is by
+ * definition not decorative, so an empty string here would be a worse claim
+ * than the absent tag it replaced. It is also capped at the same length the
+ * DAM saves through, so an alt that reaches a card is one the library would
+ * also have stored.
+ */
+function alt(source: SocialImageSource) {
+  const value = typeof source.imageAlt === 'string' ? source.imageAlt.trim() : ''
+  return value ? { alt: value.slice(0, MEDIA_ALT_MAX_LENGTH) } : {}
+}
+
 function dimensions(source: SocialImageSource) {
   const width = Number(source.imageWidth)
   const height = Number(source.imageHeight)
@@ -157,5 +209,5 @@ export function resolveSocialImage(options: {
     origin: origin || hostPublicOrigin(host),
   })
   if (!url) return undefined
-  return { url, ...dimensions(source) }
+  return { url, ...dimensions(source), ...alt(source) }
 }

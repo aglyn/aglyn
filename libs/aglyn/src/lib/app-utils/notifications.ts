@@ -27,6 +27,15 @@ import type { ITimestamp } from '@aglyn/shared-util-timestamp'
 export type AglynNotificationType =
   | 'billing.invoice'
   | 'billing.paymentFailed'
+  // Stripe gave up on a failed renewal and CANCELLED the subscription
+  // (AGL-1877). Distinct from `paymentFailed`, which announces one failed
+  // attempt inside a retry window the customer can still recover from; this
+  // one is the window having closed. Measured on the test account with a
+  // test clock: five attempts over 21.08 days, then
+  // `cancellation_details.reason: 'payment_failed'` — and until this existed
+  // the org went silently to Free at that moment, with the `past_due` banner
+  // disappearing at exactly the instant the consequence arrived.
+  | 'billing.subscriptionCanceled'
   | 'billing.usage'
   | 'team.invite'
   | 'team.roleChanged'
@@ -106,6 +115,14 @@ export type AglynNotificationType =
   // one category where the message is literally never about money — and it is
   // exactly the free-tier trip that changes what visitors see.
   | 'system.bandwidthCeilingTripped'
+  // A free site crossed its PLAN's included bandwidth and is now serving the
+  // capped notice (AGL-2413). Distinct from the ceiling above on purpose: that
+  // one is an incident at 10x the band and goes to staff first; this one is an
+  // ordinary quota at 1x, concerns only the site's own managers, and its
+  // remedy is an upgrade rather than an investigation. Sending both under one
+  // type would tell an owner their traffic was being treated as suspected
+  // abuse when it is simply a successful free site.
+  | 'system.bandwidthCapEngaged'
   // A Stripe billing webhook threw AFTER its handlers had begun (AGL-2157),
   // so its side effects may be half applied and its idempotency claim is
   // being HELD — Stripe will not retry it. Staff audience: this is the one
@@ -131,6 +148,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> =
   {
     'billing.invoice': 'Invoice available',
     'billing.paymentFailed': 'Payment failed',
+    'billing.subscriptionCanceled': 'Subscription canceled',
     'billing.usage': 'Usage threshold',
     'team.invite': 'Team invite',
     'team.roleChanged': 'Role changed',
@@ -151,6 +169,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> =
     'system.abuseReportUrgent': 'Urgent abuse report',
     'system.dmcaCounterNotice': 'DMCA counter-notice',
     'system.bandwidthCeilingTripped': 'Bandwidth ceiling reached',
+    'system.bandwidthCapEngaged': 'Monthly traffic limit reached',
     'system.billingWebhookHalfApplied': 'Billing webhook half applied',
   }
 

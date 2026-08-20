@@ -113,7 +113,91 @@ export async function getServiceAccountToken({
     { credential: cert({ projectId, clientEmail, privateKey }) },
     `rules-api-${appCounter++}`,
   )
-  return (await app.options.credential.getAccessToken()).access_token
+  try {
+    return (await app.options.credential.getAccessToken()).access_token
+  } catch (error) {
+    throw credentialError(error, { projectId, clientEmail })
+  }
+}
+
+/**
+ * What a self-hoster is told when their service account is rejected
+ * (AGL-2447).
+ *
+ * These three scripts are the FIRST commands the self-hosting runbook has an
+ * operator run, before anything is built, and a mistyped or wrong-project
+ * service account is the likeliest thing to go wrong in the whole runbook.
+ * What it produced was **230 lines** of `GaxiosError` with a gaxios config
+ * dump, a retry policy, a `Response internals` object and no sentence naming a
+ * variable — for a failure whose entire content is "these credentials were
+ * refused".
+ *
+ * Pure, exported and tested: the classification is the part that can be wrong,
+ * and it must not need a rejected credential to exercise.
+ */
+export function credentialFailureMessage(error, { projectId, clientEmail }) {
+  const raw = String(error?.message ?? error ?? '')
+  const account = clientEmail || '(FIREBASE_CLIENT_EMAIL is empty)'
+  const lines = [
+    `Firebase refused the service account for project "${projectId || '(unset)'}".`,
+    `  service account: ${account}`,
+    '',
+  ]
+
+  if (/invalid_grant|account not found/i.test(raw)) {
+    lines.push(
+      'The credentials were rejected outright — the account does not exist, or',
+      'the key has been revoked, or it belongs to a different project.',
+      '',
+      'Check, in this order:',
+      `  • FIREBASE_PROJECT_ID (${projectId || 'unset'}) is the project the key was issued from.`,
+      '  • FIREBASE_CLIENT_EMAIL matches the `client_email` in the JSON you downloaded.',
+      '  • FIREBASE_PRIVATE_KEY is the whole key, quoted, with its \\n escapes intact.',
+      '    Re-download from Firebase console → Project settings → Service accounts',
+      '    → Generate new private key rather than re-typing it.',
+    )
+  } else if (/private key|DECODER|PEM|asn1|unsupported/i.test(raw)) {
+    lines.push(
+      'The private key could not be parsed at all, so nothing was sent to Google.',
+      '',
+      'FIREBASE_PRIVATE_KEY must keep the literal \\n escapes from the JSON and stay',
+      'QUOTED in the env file — `set -a && source .env` eats the escapes otherwise,',
+      'and an unquoted value silently becomes a key with the newlines removed.',
+    )
+  } else if (/permission|forbidden|403|IAM/i.test(raw)) {
+    lines.push(
+      'The credentials are valid but the account lacks permission on this project.',
+      '',
+      'Grant the service account the Firebase Rules Admin role (or Editor) in',
+      'Google Cloud console → IAM, then re-run. Rules deploys are idempotent.',
+    )
+  } else {
+    lines.push('The underlying error is below.')
+  }
+
+  lines.push('', `underlying error: ${raw || '(no message)'}`)
+  return lines.join('\n')
+}
+
+/**
+ * The same message as an Error that prints as ONLY that message.
+ *
+ * Two things have to go, and both were measured rather than assumed:
+ *
+ *  - the `stack`, because Node prints `err.stack` for an uncaught rejection,
+ *    which reinstates the wall of frames this exists to remove;
+ *  - the `cause`, because Node prints that too — attaching the original
+ *    `GaxiosError` left the output at 227 lines, since the dump is a gzip
+ *    stream object and a 16 KB byte array, not the error text. The underlying
+ *    message is already the last line of the message itself, which is the part
+ *    anyone debugging actually reads.
+ */
+function credentialError(error, account) {
+  const message = credentialFailureMessage(error, account)
+  const wrapped = new Error(message)
+  wrapped.name = 'FirebaseCredentialError'
+  wrapped.stack = `${wrapped.name}: ${message}`
+  return wrapped
 }
 
 /** The header set every firebaserules call sends. */

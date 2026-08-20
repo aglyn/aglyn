@@ -44,8 +44,10 @@
  *    `breadcrumb` and anything else stored beside them.
  * 3. **Emptied means removed**, not stored blank — same reason as (1), and it
  *    is what lets the head fall back to the site default.
- * 4. **The image and its dimensions move as ONE group.** An image beside the
- *    previous image's size describes a card that does not exist.
+ * 4. **The image, its dimensions and its alt move as ONE group.** An image
+ *    beside the previous image's size describes a card that does not exist,
+ *    and an image beside the previous image's DESCRIPTION describes one that
+ *    does — wrongly, to the reader least able to check (AGL-2417).
  *
  * Carrying keys forward is what makes both call sites the AGL-1358 shape:
  * `existing` comes off a Firestore LISTENER, so the write must still be
@@ -65,6 +67,13 @@ export interface ScreenSocialImageDraft {
   image: string
   imageWidth: number
   imageHeight: number
+  /**
+   * `og:image:alt` (AGL-2417). Defaults from the chosen asset's own alt at
+   * pick time and is editable; optional because a screen saved before this
+   * existed simply has none, and an absent key must stay absent rather than
+   * becoming a stored `''`.
+   */
+  imageAlt?: string
 }
 
 /**
@@ -84,8 +93,13 @@ export interface ScreenSeoEdits {
 /** The text fields, which share their emptied-means-removed rule. */
 const TEXT_FIELDS = ['title', 'description'] as const
 
-/** The social image and its dimensions, written and removed together. */
-const IMAGE_FIELDS = ['image', 'imageWidth', 'imageHeight'] as const
+/** The social image, its dimensions and its alt: written and removed together. */
+const IMAGE_FIELDS = [
+  'image',
+  'imageWidth',
+  'imageHeight',
+  'imageAlt',
+] as const
 
 /**
  * Apply `edits` over the stored `seo` map.
@@ -112,6 +126,13 @@ export function buildScreenSeoUpdate(
       seo.image = edits.image.image
       seo.imageWidth = edits.image.imageWidth
       seo.imageHeight = edits.image.imageHeight
+      // Rule 1 again, for the newest member of the group: a blank alt is
+      // REMOVED rather than stored. `og:image:alt=""` asserts the image
+      // conveys nothing, which is not what an undescribed card means — and a
+      // stored `''` would make a screen look as though somebody had answered.
+      const staged = String(edits.image.imageAlt ?? '').trim()
+      if (staged) seo.imageAlt = staged
+      else delete seo.imageAlt
     } else {
       for (const field of IMAGE_FIELDS) delete seo[field]
     }

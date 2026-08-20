@@ -66,9 +66,15 @@ interface SeededHost {
 
 let mockOrgs: SeededOrg[]
 let mockHosts: SeededHost[]
+/** `get()` calls against the `hosts` collection, i.e. pages read. */
+let hostsPagesRead = 0
 let mockNotifications: Array<{ orgId: string; title: string; body: string }>
 /** Every merge written back to an org doc, in order. */
-let mockOrgWrites: Array<{ orgId: string; data: Record<string, unknown> }>
+let mockOrgWrites: Array<{
+  orgId: string
+  data: Record<string, unknown>
+  options?: { merge?: boolean }
+}>
 
 const mockNotifyOrgAdmins = jest.fn(
   async (orgId: string, payload: { title: string; body: string }) => {
@@ -132,8 +138,17 @@ function fakeOrgDoc(org: SeededOrg) {
     get: (field: string) => data[field],
     ref: {
       id: org.id,
-      set: async (value: Record<string, unknown>) => {
-        mockOrgWrites.push({ orgId: org.id, data: value })
+      // The OPTIONS argument is captured too (AGL-2413). It was dropped until
+      // then, which made the merge flag unassertable: a regression from
+      // `set(updates, { merge: true })` to a bare `set(updates)` would wipe
+      // `plan`, `subscription` and `slug` off every org this sweep caps — the
+      // withConverter-on-partial-writes bug class, without the converter —
+      // and every assertion in this file would still have been green.
+      set: async (
+        value: Record<string, unknown>,
+        options?: { merge?: boolean },
+      ) => {
+        mockOrgWrites.push({ orgId: org.id, data: value, options })
       },
       collection: () => emptyCollection(),
     },
@@ -182,21 +197,65 @@ const fakeFirestore = {
       return build(null, null)
     }
     if (name === 'hosts') {
-      let orgId = ''
-      const api: any = {
-        where: (_field: string, _op: string, value: string) => {
-          orgId = value
-          return api
-        },
-        limit: () => api,
-        get: async () => {
-          const docs = mockHosts
-            .filter((host) => host.orgId === orgId)
-            .map(fakeHostDoc)
-          return { docs, size: docs.length }
-        },
+      /**
+       * ORDER, LIMIT and an EXCLUSIVE START-AFTER, modelled here too
+       * (AGL-2421).
+       *
+       * This branch used to be `limit: () => api` — a stub that accepted the
+       * call and dropped it — over a plain `filter`. That is why the 100-host
+       * truncation could not be caught by a test: the double handed back
+       * every seeded host no matter what the route asked for, so the shipped
+       * `.limit(100)` and a correct paging loop were INDISTINGUISHABLE. The
+       * limit has to be real before an assertion about it can fail.
+       *
+       * `hostsPagesRead` counts `get()` calls so the loop is observable: a
+       * fix that raised the ceiling to one big `.limit(10000)` instead of
+       * paging would pass the totals assertions and fail this one.
+       */
+      const build = (limit: number | null, startAfter: string | null): any => {
+        let orgId = ''
+        const api: any = {
+          where: (_field: string, _op: string, value: string) => {
+            orgId = value
+            return api
+          },
+          orderBy: () => api,
+          limit: (size: number) => {
+            const next = build(size, startAfter)
+            next.where('orgId', '==', orgId)
+            return next
+          },
+          startAfter: (ref: any) => {
+            const next = build(
+              limit,
+              typeof ref === 'string' ? ref : ref?.id,
+            )
+            next.where('orgId', '==', orgId)
+            return next
+          },
+          get: async () => {
+            hostsPagesRead += 1
+            const ordered = [...mockHosts]
+              .filter((host) => host.orgId === orgId)
+              .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+            // Strictly greater than: the cursor names a host the previous
+            // page already summed, so including it would DOUBLE-COUNT that
+            // site's page views — the failure mode opposite to the undercount
+            // being fixed, and one the totals assertions would catch.
+            const remaining = startAfter
+              ? ordered.filter((host) => host.id > startAfter)
+              : ordered
+            const page = limit == null ? remaining : remaining.slice(0, limit)
+            const docs = page.map(fakeHostDoc)
+            return { docs, size: docs.length }
+          },
+          // `startAfter` is handed a DocumentReference built from this same
+          // collection.
+          doc: (hostId: string) => ({ id: hostId }),
+        }
+        return api
       }
-      return api
+      return build(null, null)
     }
     return emptyCollection()
   },
@@ -210,6 +269,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   notifyOrgAdmins: (...args: unknown[]) =>
     (mockNotifyOrgAdmins as any)(...args),
+  // The REAL spend ceiling (AGL-2264), not a stand-in: this sweep also
+  // announces that an org's assistant has been refused, and a `jest.mock`
+  // factory is a CLOSED WORLD — omitting it fails as "not a function" inside
+  // the sweep, which reads as a broken suite rather than a missing export.
+  assistOrgMonthlyCostLimitUsd: (
+    jest.requireActual(
+      '../../../libs/tenant/data/admin/src/lib/server/assist-usage',
+    ) as typeof import('../../../libs/tenant/data/admin/src/lib/server/assist-usage')
+  ).assistOrgMonthlyCostLimitUsd,
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -244,7 +312,10 @@ jest.mock('../utils/screen-cap-reconciliation', () => ({
   screenCapReading: async () => ({ maxBillable: 0, overCapHostIds: [] }),
 }))
 
-import { POST } from '../app/api/billing/usage-alerts/route'
+import {
+  hostsForOrg,
+  POST,
+} from '../app/api/billing/usage-alerts/route'
 import { pageViewsFromBandwidthGb } from '../utils/usage-metering'
 import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/server'
 
@@ -276,6 +347,12 @@ const capWrite = (orgId: string) =>
     | { month: string; pageViews?: number; includedPageViews?: number }
     | undefined
 
+/** The full write record the cap rode on, options included. */
+const capWriteRecord = (orgId: string) =>
+  mockOrgWrites.find(
+    (write) => write.orgId === orgId && 'bandwidthCap' in write.data,
+  )
+
 const bandwidthAlert = () =>
   mockNotifications.find((entry) =>
     /bandwidth/i.test(`${entry.title} ${entry.body}`),
@@ -288,9 +365,23 @@ beforeEach(() => {
   mockHosts = []
   mockOrgs = []
   mockOrgWrites = []
+  hostsPagesRead = 0
 })
 
 describe('the sweep engages the cap on a free org past its band', () => {
+  it('MERGES the write — it does not replace the org document', async () => {
+    // The one assertion this suite could not make until the double captured
+    // the options argument (AGL-2413). `set(updates)` without `{ merge: true }`
+    // REPLACES the document: every capped org would lose `plan`,
+    // `subscription`, `entitlements` and `hosts` — which resolves them to the
+    // free tier, which engages the cap, which is unrecoverable without a
+    // restore. Nothing else in this file can see the difference.
+    mockOrgs = [{ id: 'org-1', plan: 'free' }]
+    mockHosts = [{ id: 'site-a', orgId: 'org-1', pageViews: VIRAL }]
+    await run()
+    expect(capWriteRecord('org-1')?.options).toEqual({ merge: true })
+  })
+
   it('writes the marker, stamped with the CURRENT month', async () => {
     mockOrgs = [{ id: 'org-1', plan: 'free' }]
     mockHosts = [{ id: 'site-a', orgId: 'org-1', pageViews: VIRAL }]
@@ -410,5 +501,104 @@ describe('the alert says which of the two actually happens (AGL-2070)', () => {
     expect(alert?.body).not.toMatch(/raise the limit/i)
     // And it is NOT capped — the words and the behaviour agree.
     expect(capWrite('org-1')).toBeUndefined()
+  })
+})
+
+/**
+ * The inner host query is PAGED (AGL-2421).
+ *
+ * `hosts` was `.limit(100).get()` with no order and no cursor, and every
+ * per-org total in this sweep — page views (and so `bandwidthGb`, and so
+ * whether the cap engages), email sends, workflow and action runs, media
+ * bytes, and the site count the `hosts` quota alert reports — was summed over
+ * that single page. An org past 100 sites was undercounted with no flag and
+ * no log.
+ *
+ * Every case below is seeded so the FIRST HUNDRED HOSTS ARE INSIDE THE BAND
+ * and the whole org is outside it. That is the shape that separates the fix
+ * from the defect; a fixture whose first page already crossed the band would
+ * pass against both.
+ */
+describe('an org with more sites than one page (AGL-2421)', () => {
+  /** Per-site views such that 100 sites are under the band and 250 are over. */
+  const PER_SITE = Math.floor(FREE_BAND_VIEWS / 150)
+
+  /** `site-000` … so document-id order and array order agree. */
+  const seedHosts = (count: number, orgId = 'org-1'): SeededHost[] =>
+    Array.from({ length: count }, (_, index) => ({
+      id: `site-${String(index).padStart(5, '0')}`,
+      orgId,
+      pageViews: PER_SITE,
+    }))
+
+  it('sums EVERY site, not the first hundred', async () => {
+    mockOrgs = [{ id: 'org-1', plan: 'free' }]
+    mockHosts = seedHosts(250)
+
+    // Guard the premise both ways, or the assertion below proves nothing:
+    // one page must be INSIDE the band and the whole org OUTSIDE it.
+    expect(100 * PER_SITE).toBeLessThan(FREE_BAND_VIEWS)
+    expect(250 * PER_SITE).toBeGreaterThan(FREE_BAND_VIEWS)
+
+    await run()
+    const cap = capWrite('org-1')
+    expect(cap).toBeDefined()
+    // The figure the customer would be quoted. Truncated at 100 it would read
+    // `100 * PER_SITE` and the cap would not have engaged at all.
+    expect(cap?.pageViews).toBe(250 * PER_SITE)
+  })
+
+  it('pages rather than raising the ceiling to one huge limit', async () => {
+    mockOrgs = [{ id: 'org-1', plan: 'free' }]
+    mockHosts = seedHosts(250)
+    await run()
+    // 100 + 100 + 50: the short third page ends the loop. A single
+    // `.limit(10000)` would read one page and still total correctly, so this
+    // is what separates "paged" from "a bigger number".
+    expect(hostsPagesRead).toBe(3)
+  })
+
+  it('does not double-count the host a cursor names', async () => {
+    // An INCLUSIVE cursor is the natural mistake, and it inflates rather than
+    // truncates — the same customer, told the opposite wrong number.
+    mockOrgs = [{ id: 'org-1', plan: 'free' }]
+    mockHosts = seedHosts(201)
+    await run()
+    expect(capWrite('org-1')?.pageViews).toBe(201 * PER_SITE)
+  })
+
+  it('reads exactly one page for an org that fits in one', async () => {
+    mockOrgs = [{ id: 'org-1', plan: 'free' }]
+    mockHosts = seedHosts(1)
+    await run()
+    expect(hostsPagesRead).toBe(1)
+  })
+
+  it('STOPS at the ceiling and says so', async () => {
+    // The positive control for `hostsTruncated`. Driven through `hostsForOrg`
+    // with an injected ceiling rather than through the route, because
+    // reaching the shipped 10,000 would mean ten thousand fixtures and sixty
+    // thousand counter reads to observe one boolean — and a flag with only a
+    // negative control is a flag nothing proves can ever fire.
+    mockHosts = seedHosts(250)
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const result = await hostsForOrg(fakeFirestore as any, 'org-1', 200)
+    expect(result.truncated).toBe(true)
+    expect(result.docs).toHaveLength(200)
+    // Logged as well as flagged: the response reaches the cron workflow, the
+    // log reaches whoever is reading them when an org's numbers look wrong.
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('org-1'))
+    warn.mockRestore()
+  })
+
+  it('reports nothing truncated for an ordinary org', async () => {
+    mockOrgs = [{ id: 'org-1', plan: 'free' }]
+    mockHosts = seedHosts(250)
+    const response = await run()
+    // The negative control for the flag: it must not fire for every org that
+    // merely needed a second page.
+    await expect(response.json()).resolves.toMatchObject({
+      hostsTruncated: [],
+    })
   })
 })

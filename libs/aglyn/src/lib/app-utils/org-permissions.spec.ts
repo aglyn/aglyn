@@ -30,7 +30,7 @@ describe('org permissions (AGL-243)', () => {
     expect(editor['members.manage']).toBe(false)
     expect(editor['hosts.create']).toBe(false)
     expect(editor['data.manage']).toBe(true)
-    expect(editor['marketing.manage']).toBe(true)
+    expect(editor['marketplace.publish']).toBe(true)
     const viewer = resolveOrgPermissions({ role: 'viewer' })
     expect(Object.values(viewer).some(Boolean)).toBe(false)
     // Missing member (not in the org) has no permissions at all.
@@ -67,6 +67,12 @@ describe('org permissions (AGL-243)', () => {
   it('hasOrgPermission convenience matches the resolved map', () => {
     expect(hasOrgPermission({ role: 'owner' }, 'org.settings')).toBe(true)
     expect(hasOrgPermission({ role: 'viewer' }, 'org.settings')).toBe(false)
-    expect(ORG_PERMISSION_KEYS.length).toBeGreaterThan(8)
+    // The catalog is TEN after AGL-2444 removed `marketing.manage`, which
+    // named a host-scoped action no org-level boundary governs. Asserted
+    // exactly rather than as a floor: the point of that issue is that a key
+    // nobody enforces must not sit here quietly, and a `>` bound is exactly
+    // the assertion an unenforced addition would slip past.
+    expect(ORG_PERMISSION_KEYS.length).toBe(10)
+    expect(ORG_PERMISSION_KEYS).not.toContain('marketing.manage')
   })
 })

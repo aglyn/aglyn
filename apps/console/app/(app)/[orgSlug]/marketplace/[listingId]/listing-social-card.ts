@@ -172,8 +172,26 @@ export function listingSocialCard(
   // Neither field carries dimensions (nothing records them at write time), so
   // no `og:image:width/height` is emitted. Stated rather than silent: adding
   // them means capturing the pair when the image is set, not guessing here.
+  //
+  // `og:image:alt` (AGL-2417) is DERIVED here rather than stored, and that is
+  // the exception to AGL-1896's "never fabricate an alt" rule rather than a
+  // breach of it. That rule refuses a FILE NAME — "IMG_4021.jpg" read aloud
+  // is worse than silence — because a file name says nothing about the
+  // picture. This says something true and useful: which listing the image
+  // belongs to and which of the two roles it is playing. Neither field has
+  // anywhere to store an authored alt (a publisher supplies a URL, not a DAM
+  // pick), so the alternative is the undescribed card we had.
+  //
+  // Per SOURCE, so the description matches whichever image actually won —
+  // the same discipline the dimensions follow everywhere else.
   const image = resolveSocialImage({
-    sources: [{ image: listing.previewImageUrl }, { image: listing.logoUrl }],
+    sources: [
+      {
+        image: listing.previewImageUrl,
+        imageAlt: `Preview image for ${name}`,
+      },
+      { image: listing.logoUrl, imageAlt: `${name} logo` },
+    ],
     origin: options?.origin ?? consoleOrigin(),
   })
   const title = resolveSeoTitle({ name, fallback: LISTING_TITLE_FALLBACK })
@@ -196,7 +214,10 @@ export function listingSocialCard(
       card: image ? 'summary_large_image' : 'summary',
       title,
       ...(description ? { description } : {}),
-      ...(image ? { images: [image.url] } : {}),
+      // The DESCRIPTOR, not the bare URL (AGL-2417): `twitter:image:alt` is
+      // emitted only for the object form, and a bare string is what left the
+      // Twitter half of every card undescribed even once the OG half was not.
+      ...(image ? { images: [image] } : {}),
     },
   }
 }

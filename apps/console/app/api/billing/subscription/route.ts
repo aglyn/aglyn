@@ -44,6 +44,7 @@ import {
 import {
   buildTargetItems,
   preservePhaseTerms,
+  restateExistingPhase,
   writePhaseItems,
 } from '../../../../utils/server/billing-schedule'
 import { RETENTION_COLLECTION, RETENTION_KINDS } from '../../_lib/retention'
@@ -658,38 +659,28 @@ async function handler(request: Request): Promise<Response> {
           // starts a clean period at the new price.
           proration_behavior: 'none',
         })
-        // Phase 0: the current items, verbatim, over the current phase's
-        // window. Updating a schedule replaces the whole phase list, so the
-        // present has to be restated to be preserved.
-        const currentPhase = schedule?.phases?.[0] ?? {}
-        const currentItems: any[] = currentPhase.items ?? []
-        currentItems.forEach((item: any, index: number) => {
-          params.set(`phases[0][items][${index}][price]`, String(item.price))
-          if (item.quantity != null) {
-            params.set(
-              `phases[0][items][${index}][quantity]`,
-              String(item.quantity),
-            )
-          }
-        })
-        if (currentPhase.start_date) {
-          params.set('phases[0][start_date]', String(currentPhase.start_date))
-        }
-        if (currentPhase.end_date) {
-          params.set('phases[0][end_date]', String(currentPhase.end_date))
-        }
-        // Everything else Stripe put on phase 0 from `from_subscription` has to
-        // be restated too (AGL-2146). Replacing the phase list with price,
-        // quantity and dates alone silently dropped the customer's DISCOUNT,
-        // their trial, and the tax configuration — a downgrade quietly cancelling
-        // a coupon nobody said anything about, including the winback the
-        // retention funnel had just minted to keep them.
+        // Phase 0: the present, restated in full. Updating a schedule REPLACES
+        // the whole phase list, so anything not written back is gone — and
+        // writing back price, quantity and the window alone silently dropped
+        // the customer's DISCOUNT, their trial, and the tax configuration
+        // (AGL-2146): a downgrade quietly cancelling a coupon nobody said
+        // anything about, including the winback the retention funnel had just
+        // minted to keep them.
         //
-        // Carried onto BOTH phases, which is the parity that matters: an instant
-        // upgrade never touches the subscription's discounts, so a downgrade must
-        // not end one either. A time-boxed coupon keeps running its remaining
-        // months across the plan change, exactly as it would have without one.
-        preservePhaseTerms(params, 0, currentPhase, { current: true })
+        // `restateExistingPhase` is that restatement, shared with the add-on
+        // path (AGL-2150) so there is ONE definition of "preserve this phase"
+        // and a term added to it cannot be preserved on one path and dropped on
+        // the other. It carries the two this branch had open-coded past: each
+        // item's `tax_rates`, and the phase `metadata`.
+        const currentPhase = schedule?.phases?.[0] ?? {}
+        restateExistingPhase(params, 0, currentPhase)
+        // Onto the TARGET phase, the terms that outlive a plan change. This is
+        // the parity that matters: an instant upgrade never touches the
+        // subscription's discounts, so a downgrade must not end one either — a
+        // time-boxed coupon keeps running its remaining months across the plan
+        // change, exactly as it would have without a schedule. `current: false`
+        // withholds the trial (it must not restart at the flip) and the tax
+        // flag (phase 1 sets its own, below).
         preservePhaseTerms(params, 1, currentPhase, { current: false })
         // Phase 1: the target plan. Add-ons re-price to the target's rates
         // exactly as an instant switch would (AGL-528); kinds it doesn't sell

@@ -60,8 +60,44 @@ export interface SendEmailOptions {
   /**
    * Short label for logs, e.g. `'invite'` or `'usage-summary'`. Makes a
    * failure in the runtime logs traceable to the feature that caused it.
+   *
+   * Since AGL-2407 it is also stamped as a Resend `context` TAG on every
+   * send — see `contextTag` below.
    */
   context?: string
+}
+
+/**
+ * The `context` tag, attached to every send (AGL-2407).
+ *
+ * ## Why this is here and not at 37 call sites
+ *
+ * Until now `tags` were set by exactly one sender, `campaign-send.ts`, which
+ * stamps `hostId` and `campaignId` for the opens/clicks webhook. Everything
+ * else went out with NO tags at all, so a bounce on an invite, a password
+ * reset, a receipt or a usage summary reached the webhook carrying nothing to
+ * identify it, and was dropped.
+ *
+ * The obvious fix — thread an identifier through every call site — asks 37
+ * places to remember, which is the shape that produces the 38th that does
+ * not. But `context` is ALREADY threaded through 35 of the 37 for logging,
+ * and it is exactly the right value: it names the sender. So the tag is
+ * derived here, once, and no caller changes.
+ *
+ * Resend tag values are restricted to ASCII letters, digits, `_` and `-`;
+ * anything else is rejected and would fail the whole send. Every `context` in
+ * the tree is already a plain slug, but this is mail delivery — a value that
+ * makes the send fail is far worse than a value that is sanitised — so the
+ * label is normalised rather than trusted, and a context that sanitises to
+ * nothing yields no tag rather than an invalid one.
+ */
+export function contextTag(context: string | undefined): EmailTag[] {
+  const value = String(context ?? '')
+    .trim()
+    .replace(/[^A-Za-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64)
+  return value ? [{ name: 'context', value }] : []
 }
 
 /**
@@ -195,7 +231,18 @@ export async function sendEmail(
         ...(options.text ? { text: options.text } : {}),
         ...(options.html ? { html: options.html } : {}),
         ...(options.headers ? { headers: options.headers } : {}),
-        ...(options.tags ? { tags: options.tags } : {}),
+        // The caller's tags plus the `context` tag (AGL-2407). Caller-first
+        // so a sender that stamps its own `context` keeps it: a tag list with
+        // two entries of one name is not a shape worth discovering in
+        // production, and the explicit one is the more specific.
+        ...(() => {
+          const caller = options.tags ?? []
+          const derived = caller.some((tag) => tag?.name === 'context')
+            ? []
+            : contextTag(options.context)
+          const tags = [...caller, ...derived]
+          return tags.length ? { tags } : {}
+        })(),
         ...(options.replyTo ? { reply_to: options.replyTo } : {}),
       }),
     })

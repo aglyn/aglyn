@@ -44,6 +44,36 @@ node tools/scripts/set-firestore-ttl.mjs
 docker compose up --build
 ```
 
+:::caution There is no image to pull — you build it
+Aglyn publishes **no** Docker images, on any registry. `docker compose up
+--build` from a clone is the only supported path, and that is deliberate
+rather than pending: Next inlines every `NEXT_PUBLIC_*` value into the client
+bundles when the image is **built**, and this deployment has 27 of them — your
+Firebase client config, your console URL and tenant apex, your brand name, and
+the operator and DMCA-agent details shown on your public abuse intake. An
+image built by someone else would ship their answers to all of those inside
+your bundles. If you find something claiming Aglyn offers prebuilt images, it
+is wrong.
+:::
+
+:::caution Give Docker more memory than it starts with
+Docker Desktop allocates **2 CPUs and 4 GB** by default on macOS and Windows,
+and the Next production build does not fit in it — it is killed by the
+out-of-memory killer about ninety seconds in, with a message that never
+mentions memory:
+
+```
+Build process exited due to code 128 and signal SIGKILL
+```
+
+Raise it to **8 GB or more** under Settings → Resources before you build. If
+you cannot, build the two images one at a time (`docker compose build console`,
+then `docker compose build tenant`) — `up --build` builds them concurrently and
+roughly doubles peak demand. Capping Node's heap does not help: Next builds
+with Turbopack, which allocates outside the heap `--max-old-space-size` bounds.
+Measured: 4 GB fails, 12 GB builds both in about six minutes (AGL-2437).
+:::
+
 - **Console** (the management app) on `http://localhost:4200`
 - **Tenant runtime** on `http://localhost:4500` — a specific site is served at
   `<site-subdomain>.localhost:4500`; the bare port serves the demo tenant.
@@ -165,9 +195,11 @@ There is a second, similarly-named variable, and they are not the same one:
 | `AGLYN_TENANT_HOST_CNAME` | The tenant runtime, to resolve incoming hosts | No apex matches, and every visitor falls through |
 | `NEXT_PUBLIC_AGLYN_TENANT_HOST_CNAME` | The console, as the CNAME target it displays and verifies in the custom-domain wizard | Defaults to `sites.aglyn.app` |
 
-`.env.selfhost.example` ships only the second. **Set both, to the same value.**
-The first is consumed at image-build time, so it has to be in the env file
-before `docker compose build`.
+`.env.selfhost.example` carries both, on adjacent lines. **Set both, to the
+same value.** The first is consumed at image-build time, so it has to be in the
+env file before `docker compose build`, not merely before `up` — a container
+started with it in `env_file` but built without it still runs the compiled-in
+`undefined`.
 
 ### `NEXT_PUBLIC_CONSOLE_URL` {#console-url}
 
@@ -188,14 +220,23 @@ The variable that tells the software it is a real deployment rather than a
 developer's laptop, and it must be exactly `1`. Two things key on it: the
 tenant runtime's host resolution, and the canonical custom-domain redirect.
 
-Both Dockerfiles set it while **building** the image. That value does not
-survive into the running container — a Docker build stage's environment does
-not carry across to the runner stage — and neither `.env.selfhost.example` nor
-`docker-compose.yml` supplies it at runtime.
+**You do not set this one — the images do.** Both Dockerfiles set it in the
+stage that *runs*, so a stock container has it and host resolution works out of
+the box.
 
-**Add `AGLYN_STANDALONE=1` to your `.env.selfhost`.** Compose passes that file
-to both containers as runtime environment, which is where the host-resolution
-branch reads it.
+It is deliberately absent from `.env.selfhost.example`, and that is not an
+oversight: compose `env_file` values *override* an image's `ENV`, so a line in
+your env file would give you a way to delete the setting and silently break
+serving for every visitor, while image `ENV` survives an env file that simply
+does not mention it.
+
+Worth knowing because of what came before: the Dockerfiles once set it only
+while **building**, and a build stage's environment does not carry into the
+runner stage. Every image shipped before that fix ran with it unset, read
+itself as a developer's laptop, matched no host, and redirected every visitor
+to the configured console. **If you are running an image built before that
+fix, rebuild** — you cannot patch it from the outside without also taking on
+the override hazard above.
 
 ### Reverse proxy: one wildcard is enough {#reverse-proxy}
 
@@ -300,6 +341,34 @@ count you steer by.
 
 Both are **server-only**. Never prefix either with `NEXT_PUBLIC_`, which would
 inline a workspace-wide credential into the browser bundle.
+
+### Request geo: sanctions screening and consent region {#request-geo}
+
+Two features read the visitor's country off a request header: the embargo gate
+in front of the console, and the storefront's consent-region endpoint. On
+Aglyn's cloud that header comes from Vercel's edge. **A container has no edge**,
+so before this was configurable every request looked like "no country" and the
+embargo gate failed open on all of them — announcing it once per instance in
+your logs and then blocking nothing:
+
+```
+[sanctions-geo] FAILING OPEN: no x-vercel-ip-country on 1 request(s) since instance start
+```
+
+Your proxy already has the signal under its own name. Name it:
+
+| Variable | Default | Example |
+| --- | --- | --- |
+| `AGLYN_GEO_COUNTRY_HEADER` | `x-vercel-ip-country` | `cf-ipcountry` behind Cloudflare |
+| `AGLYN_GEO_REGION_HEADER` | `x-vercel-ip-country-region` | whatever your GeoIP module sets |
+
+Country is ISO 3166-1 alpha-2; region is ISO 3166-2, bare or prefixed. Leave
+the region one blank if your proxy sends no subdivision — Cloudflare does not.
+
+Baked in at **build** time, because the console's middleware runs in the edge
+runtime and has no request-time environment: set it before
+`docker compose build`, not before `up`. Left blank, sanctions screening is not
+running on your deployment (AGL-2436).
 
 ### Bucket CORS is not a file you can use as-is {#bucket-cors}
 

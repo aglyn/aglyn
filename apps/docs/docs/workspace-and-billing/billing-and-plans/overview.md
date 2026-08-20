@@ -322,6 +322,15 @@ Selling requires a paid plan with commerce.
 - If a payment fails, the console shows a **past-due banner** during Stripe's retry
   window; access continues while you fix the card, and entitlements only downgrade if
   the subscription dies.
+- **What "the retry window" actually is.** Stripe retries a failed renewal **five
+  times over about three weeks** — the first retry roughly five days after the
+  failure, then weekly — and if none succeeds it **cancels the subscription** and the
+  workspace moves to **Free**. Measured end to end with a Stripe test clock on
+  2026-08-19: the subscription sat `past_due` through every retry and was cancelled
+  at **21.08 days**. The workspace is emailed by Stripe on each failed attempt, and
+  the console notifies the workspace's owners and admins once the subscription is
+  cancelled for non-payment. Paying the outstanding invoice at any point during the
+  window restores the plan with no further action.
 
 ## Related
 

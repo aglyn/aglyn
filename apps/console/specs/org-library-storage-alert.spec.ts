@@ -188,21 +188,50 @@ const fakeFirestore = {
       return build(null, null)
     }
     if (name === 'hosts') {
-      let orgId = ''
-      const api: any = {
-        where: (_field: string, _op: string, value: string) => {
-          orgId = value
-          return api
-        },
-        limit: () => api,
-        get: async () => {
-          const docs = mockHosts
-            .filter((host) => host.orgId === orgId)
-            .map(fakeHostDoc)
-          return { docs, size: docs.length }
-        },
+      /**
+       * ORDER, LIMIT and an EXCLUSIVE START-AFTER (AGL-2421). The route pages
+       * this query now, so a double that answers `where().get()` and nothing
+       * else throws "orderBy is not a function" and the whole sweep 500s —
+       * which is what happened when only `bandwidth-cap-engages` was updated.
+       *
+       * Modelled properly rather than stubbed to `() => api`, even though
+       * these fixtures never fill a page: an un-modelled limit is exactly
+       * what hid the truncation this issue was filed for.
+       */
+      const build = (limit: number | null, startAfter: string | null): any => {
+        let orgId = ''
+        const api: any = {
+          where: (_field: string, _op: string, value: string) => {
+            orgId = value
+            return api
+          },
+          orderBy: () => api,
+          limit: (size: number) => {
+            const next = build(size, startAfter)
+            next.where('orgId', '==', orgId)
+            return next
+          },
+          startAfter: (ref: any) => {
+            const next = build(limit, typeof ref === 'string' ? ref : ref?.id)
+            next.where('orgId', '==', orgId)
+            return next
+          },
+          get: async () => {
+            const ordered = [...mockHosts]
+              .filter((host) => host.orgId === orgId)
+              .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+            const remaining = startAfter
+              ? ordered.filter((host) => host.id > startAfter)
+              : ordered
+            const page = limit == null ? remaining : remaining.slice(0, limit)
+            const docs = page.map(fakeHostDoc)
+            return { docs, size: docs.length }
+          },
+          doc: (hostId: string) => ({ id: hostId }),
+        }
+        return api
       }
-      return api
+      return build(null, null)
     }
     return emptyCollection()
   },
@@ -215,6 +244,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     firestore: { FieldPath: { documentId: () => '__name__' } },
   },
   notifyOrgAdmins: (...args: unknown[]) => (mockNotifyOrgAdmins as any)(...args),
+  // The REAL spend ceiling (AGL-2264), not a stand-in: this sweep also
+  // announces that an org's assistant has been refused, and a `jest.mock`
+  // factory is a CLOSED WORLD — omitting it fails as "not a function" inside
+  // the sweep, which reads as a broken suite rather than a missing export.
+  assistOrgMonthlyCostLimitUsd: (
+    jest.requireActual(
+      '../../../libs/tenant/data/admin/src/lib/server/assist-usage',
+    ) as typeof import('../../../libs/tenant/data/admin/src/lib/server/assist-usage')
+  ).assistOrgMonthlyCostLimitUsd,
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({

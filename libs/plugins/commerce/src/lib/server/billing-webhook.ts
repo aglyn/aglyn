@@ -23,6 +23,7 @@ import {
   getOrgForHost,
   meterHostEmail,
   notifyHostManagers,
+  notifyStaff,
   upsertHostContact,
   renderHostEmailWithTokens,
   syncConnectAccountStatus,
@@ -38,6 +39,10 @@ import { recordContactRefund } from './contact-refund'
 import { mintDownloadToken, tokenSigningSecret } from './download'
 import { alertLowStockCrossing } from './low-stock'
 import { decrementVariantStock } from './reserve-stock'
+import {
+  releasePromotionHold,
+  settlePromotionSlot,
+} from './promotion-hold'
 import { flagOrderRestock } from './restock-flag'
 import { recordStorefrontTax } from './storefront-tax-record'
 
@@ -193,10 +198,27 @@ async function redeemExistingOrRecord(
   })
   if (applied !== false) return
   console.error('Redemption against a missing document', ref.path)
-  // `update()`, not a merge-set: the order was created by the transaction a few
-  // lines above (a redelivery returns before here), so it exists — and writing
-  // this note through the very call being fixed would mint an order stub on the
-  // one path where it does not.
+  await recordRedemptionOrphan(orderRef, detail)
+}
+
+/**
+ * Stamps a redemption that could not be recorded onto the order's own timeline.
+ *
+ * Split out of `redeemExistingOrRecord` (AGL-2449) so the gift-card settlement
+ * — which is a transaction rather than an `updateExisting`, and so cannot go
+ * through that helper — reports a missing card in exactly the same words, on
+ * exactly the same surface, as every other redemption. Two ways of telling a
+ * merchant the same fact is how one of them ends up never being built.
+ *
+ * `update()`, not a merge-set: the order was created by the transaction
+ * upstream (a redelivery returns before here), so it exists — and writing this
+ * note through a merge would mint an order stub on the one path where it does
+ * not.
+ */
+async function recordRedemptionOrphan(
+  orderRef: FirebaseFirestore.DocumentReference,
+  detail: string,
+): Promise<void> {
   await orderRef
     .update({
       timeline: firebaseAdmin.firestore.FieldValue.arrayUnion({
@@ -206,6 +228,57 @@ async function redeemExistingOrRecord(
       }),
     })
     .catch(() => undefined)
+}
+
+/**
+ * Count one promotion redemption (AGL-2453), settling the slot it reserved.
+ *
+ * This used to be a bare `redeemExistingOrRecord(ref, { redemptions:
+ * increment(1) }, …)` at three call sites, and it was the counting half of a
+ * cap that nothing re-checked: the increment always landed, minutes after a
+ * plain `.get()` at checkout had already let the shopper through. The counter
+ * told the truth afterwards and the discount was already given.
+ *
+ * Now the checkout HOLDS a slot and this settles it. Two properties matter:
+ *
+ *  - **Idempotent under redelivery.** The redemption is owed by the presence of
+ *    the hold, so a second delivery of the same event finds none and counts
+ *    nothing. `reconcile-stock.ts:52-58` names these counters as sitting behind
+ *    one non-idempotent `created` flag and defers the per-effect sweep — this
+ *    is the per-effect answer for redemptions, not a reliance on that flag.
+ *  - **A session with no hold still counts.** An UNCAPPED promotion reserves
+ *    nothing (there is no slot to reserve), and a session minted before this
+ *    deploy reserved nothing either. Both carry no `holdKey` and both take the
+ *    original unconditional increment — dropping them would under-count real
+ *    redemptions, which is the merchant's own record of their promotion.
+ */
+async function settleRedemption(options: {
+  firestore: FirebaseFirestore.Firestore
+  ref: FirebaseFirestore.DocumentReference
+  holdKey: string
+  orderRef: FirebaseFirestore.DocumentReference
+  label: string
+  detail: string
+}): Promise<void> {
+  const { firestore, ref, holdKey, orderRef, label, detail } = options
+  if (!holdKey) {
+    await redeemExistingOrRecord(
+      ref,
+      { redemptions: firebaseAdmin.firestore.FieldValue.increment(1) },
+      orderRef,
+      detail,
+    )
+    return
+  }
+  const settled = await settlePromotionSlot({ firestore, ref, holdKey, label })
+  // `missing` alone is the orphan: the merchant deleted the promotion between
+  // checkout and payment, so the redemption cannot be recorded anywhere and the
+  // order's own timeline is where that fact belongs. `already-settled` is a
+  // redelivery and is silent by design; `error` is transient — the hold stands,
+  // lapses on its own, and a note claiming the document is gone would be false.
+  if (settled === 'missing') {
+    await recordRedemptionOrphan(orderRef, detail)
+  }
 }
 
 /** gRPC `Status.FAILED_PRECONDITION` — Firestore's "this query needs an index". */
@@ -242,9 +315,19 @@ const GRPC_FAILED_PRECONDITION = 9
  * loop. Every other failure is transient and rethrows on purpose, because there
  * a redelivery is exactly the right answer.
  */
+type DisputeLookup =
+  | { kind: 'order'; snapshot: FirebaseFirestore.QueryDocumentSnapshot }
+  /** No commerce order matched. The COMMON case, and correctly silent. */
+  | { kind: 'not-ours' }
+  /**
+   * The lookup could not run or could not be trusted (AGL-2161). A PLATFORM
+   * fault, and the one outcome that must never be reported as `not-ours`.
+   */
+  | { kind: 'unresolved'; reason: 'missing-index' | 'ambiguous' }
+
 async function findOrderForDispute(
   paymentIntentId: string,
-): Promise<FirebaseFirestore.QueryDocumentSnapshot | null> {
+): Promise<DisputeLookup> {
   const matches = await firebaseAdmin
     .app()
     .firestore()
@@ -261,15 +344,64 @@ async function findOrderForDispute(
       )
       return null
     })
-  if (!matches || matches.empty) return null
+  // THE THREE ANSWERS ARE NOW THREE (AGL-2161). All three used to be `null`,
+  // and the caller read `null` as "not a commerce dispute" and did nothing —
+  // so a collection-group index that had not deployed meant EVERY chargeback
+  // on the platform got no flag, no seller-share reversal and no merchant
+  // notification, while looking byte-for-byte like the routine case of a
+  // dispute against a marketplace or booking charge.
+  //
+  // Distinguishing them needs no knowledge of whether the index is in fact
+  // deployed, which is why this did not have to wait on a production probe:
+  // "the query could not run" and "the query ran and matched nothing" are
+  // different facts at the point they happen, and only one of them is ours to
+  // fix.
+  if (!matches) return { kind: 'unresolved', reason: 'missing-index' }
+  if (matches.empty) return { kind: 'not-ours' }
   if (matches.docs.length > 1) {
     console.error(
       'Dispute matched more than one order; reversing none',
       paymentIntentId,
     )
-    return null
+    return { kind: 'unresolved', reason: 'ambiguous' }
   }
-  return matches.docs[0]
+  return { kind: 'order', snapshot: matches.docs[0] }
+}
+
+/**
+ * Tells STAFF that a chargeback could not be routed (AGL-2161).
+ *
+ * Staff, not the merchant: on the missing-index path there is no merchant to
+ * tell — the whole point is that the order could not be found — and a missing
+ * platform index is a platform fault affecting every host at once. `notifyStaff`
+ * is the same channel the analytics and abuse routes use for exactly this
+ * class, and it never throws.
+ *
+ * `system.announcement` rather than a new type: the AGL-1088 rule is that
+ * category is the prefix and `system` is the bucket nobody mutes to reduce
+ * noise, which is the property an alert about unrouted money needs.
+ */
+async function reportUnresolvedDispute(
+  reason: 'missing-index' | 'ambiguous',
+  paymentIntentId: string,
+  dispute: StripeDispute,
+): Promise<void> {
+  const amount = `$${((dispute.amount ?? 0) / 100).toFixed(2)}`
+  await notifyStaff({
+    type: 'system.announcement',
+    title: 'Chargeback could not be routed to an order',
+    body:
+      reason === 'missing-index'
+        ? `A ${amount} chargeback (${paymentIntentId}) could not be looked ` +
+          'up: the collection-group index on orders.paymentIntentId is not ' +
+          'deployed, so EVERY commerce chargeback is currently being ignored ' +
+          '— no flag, no seller-share reversal, no merchant notification. ' +
+          'Deploy cloud/firebase-firestore.indexes.json.'
+        : `A ${amount} chargeback (${paymentIntentId}) matched more than one ` +
+          'order, so none was reversed. The dispute is durable in Stripe and ' +
+          'needs reconciling by hand.',
+    link: '/admin',
+  })
 }
 
 /** The fields of a Stripe Dispute this handler reads. */
@@ -1278,6 +1410,72 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
     return
   }
 
+  // A DEAD SESSION GIVES ITS RESERVATIONS BACK (AGL-2453).
+  //
+  // Stripe expires a Checkout Session 24 hours after creation, and emits this
+  // when the shopper abandons it or cancels out of it — there is no separate
+  // "cancelled" event, because `cancel_url` is a redirect and not a state
+  // change. This is therefore the explicit release path for everything a
+  // checkout reserved before the money moved.
+  //
+  // Holds also carry `expiresAtMs` and every read prunes them, so correctness
+  // does NOT depend on this handler firing (and it will not fire at all unless
+  // the endpoint subscribes to the event). But a merchant watching a cap of 100
+  // sit at 100 for a day after one abandoned cart, with nothing in the product
+  // able to explain why, is the failure the TTL alone leaves standing — an
+  // invisible expiry is not a release anyone can reason about.
+  //
+  // Same early return as `account.updated`: this event carries no order and
+  // shares nothing with the `checkout.session.completed` sections below.
+  if (type === 'checkout.session.expired') {
+    const expiredHostId = String(object?.metadata?.hostId ?? '')
+    if (!expiredHostId) return
+    const expiredHostRef = firebaseAdmin
+      .app()
+      .firestore()
+      .collection('hosts')
+      .doc(expiredHostId)
+    const couponHoldKey = String(object?.metadata?.couponHoldKey ?? '')
+    const couponCode = String(object?.metadata?.couponCode ?? '')
+    if (couponHoldKey && couponCode) {
+      await releasePromotionHold(
+        expiredHostRef.collection('coupons').doc(couponCode),
+        couponHoldKey,
+      )
+    }
+    const discountHoldKey = String(object?.metadata?.discountHoldKey ?? '')
+    const discountId = String(object?.metadata?.discountId ?? '')
+    if (discountHoldKey && discountId) {
+      await releasePromotionHold(
+        expiredHostRef.collection('discounts').doc(discountId),
+        discountHoldKey,
+      )
+    }
+    // The gift-card hold rides along, because it is the same act on the same
+    // event and AGL-2449 left it to the TTL alone. A shopper whose abandoned
+    // checkout stands their own balance off for a day cannot be told why
+    // either, and the release is the identical delete sentinel.
+    const giftCardHoldKey = String(object?.metadata?.giftCardHoldKey ?? '')
+    const giftCardCode = String(object?.metadata?.giftCardCode ?? '')
+    if (giftCardHoldKey && giftCardCode) {
+      await expiredHostRef
+        .collection('giftCards')
+        .doc(giftCardCode)
+        .set(
+          {
+            holds: {
+              [giftCardHoldKey]: firebaseAdmin.firestore.FieldValue.delete(),
+            },
+          },
+          { merge: true },
+        )
+        .catch((error: unknown) => {
+          console.error('Gift card hold release failed', giftCardCode, error)
+        })
+    }
+    return
+  }
+
   // White-label brand per host (White-Label Phase 3): every storefront email
   // this webhook sends — receipts, gift cards, reservation and sale notices,
   // supplier notices — reads as the store's brand. Resolved once per host from
@@ -2001,22 +2199,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 productId,
                 variantId: stockVariantId,
                 quantity: cycleQuantity,
+                ledger: { reason: 'sale', orderId: invoiceId },
               })
               if (moved.before && moved.after) {
-                await hostRef
-                  .collection('inventoryAdjustments')
-                  .add({
-                    productId,
-                    variantId: stockVariantId,
-                    delta: -cycleQuantity,
-                    ...(moved.applied !== -cycleQuantity
-                      ? { appliedDelta: moved.applied }
-                      : {}),
-                    reason: 'sale',
-                    orderId: invoiceId,
-                    atMs: Date.now(),
-                  } satisfies CommerceModel.InventoryAdjustment)
-                  .catch(() => undefined)
                 alertLowStockCrossing(invoiceHostId, moved.before, moved.after)
               }
             }
@@ -2556,23 +2741,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             productId: line.productId,
             variantId,
             quantity: line.quantity,
+            ledger: { reason: 'sale', orderId: String(object.id) },
           })
           if (!moved.before || !moved.after) continue
           productsById.set(line.productId, moved.after)
-          await hostRef
-            .collection('inventoryAdjustments')
-            .add({
-              productId: line.productId,
-              variantId,
-              delta: -line.quantity,
-              ...(moved.applied !== -line.quantity
-                ? { appliedDelta: moved.applied }
-                : {}),
-              reason: 'sale',
-              orderId: String(object.id),
-              atMs: Date.now(),
-            } satisfies CommerceModel.InventoryAdjustment)
-            .catch(() => undefined)
           // Low-stock crossing alert (AGL-1826): the cart — the channel that
           // sells MORE units per order than the buy-now button — used to
           // cross the threshold silently. Same check, per product, on the
@@ -2602,31 +2774,112 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           },
         })
         if (couponCode) {
-          await redeemExistingOrRecord(
-            hostRef.collection('coupons').doc(String(couponCode)),
-            { redemptions: firebaseAdmin.firestore.FieldValue.increment(1) },
+          await settleRedemption({
+            firestore,
+            ref: hostRef.collection('coupons').doc(String(couponCode)),
+            holdKey: String(object.metadata?.couponHoldKey ?? ''),
             orderRef,
-            `Coupon ${couponCode} was applied to this order but no longer ` +
+            label: `coupon ${couponCode}`,
+            detail:
+              `Coupon ${couponCode} was applied to this order but no longer ` +
               'exists, so the redemption is uncounted against its limit.',
-          )
+          })
         }
-        // Gift card balance decrement (AGL-322).
+        // Gift card balance settlement (AGL-322, made a settlement by AGL-2449).
         if (object.metadata?.giftCardCode) {
           const giftCardCents = Number(object.metadata?.giftCardCents ?? 0)
-          await redeemExistingOrRecord(
-            hostRef
-              .collection('giftCards')
-              .doc(String(object.metadata.giftCardCode)),
-            {
-              balanceCents:
-                firebaseAdmin.firestore.FieldValue.increment(-giftCardCents),
-              lastUsedAtMs: Date.now(),
-            },
-            orderRef,
+          const holdKey = String(object.metadata?.giftCardHoldKey ?? '')
+          const cardRef = hostRef
+            .collection('giftCards')
+            .doc(String(object.metadata.giftCardCode))
+          const orphanNote =
             `$${(giftCardCents / 100).toFixed(2)} was applied from gift card ` +
-              `${object.metadata.giftCardCode}, which no longer exists. The ` +
-              'balance was not deducted from any card.',
-          )
+            `${object.metadata.giftCardCode}, which no longer exists. The ` +
+            'balance was not deducted from any card.'
+          if (!holdKey) {
+            // A session minted BEFORE holds existed. It reserved nothing, so
+            // the old unconditional decrement is still the only thing that can
+            // settle it — the shopper was given the discount and the merchant
+            // must be paid out of the card. Kept deliberately rather than
+            // refusing: in-flight sessions outlive the deploy by up to 24h, and
+            // dropping them would hand out free money instead of double-spent
+            // money. It ages out on its own once the last pre-deploy session
+            // completes.
+            await redeemExistingOrRecord(
+              cardRef,
+              {
+                balanceCents:
+                  firebaseAdmin.firestore.FieldValue.increment(-giftCardCents),
+                lastUsedAtMs: Date.now(),
+              },
+              orderRef,
+              orphanNote,
+            )
+          } else {
+            // The hold IS the authority, not the metadata: `giftCardCents` is
+            // a copy the session carries for the receipt, and settling against
+            // the reservation is what makes this idempotent under redelivery —
+            // the second delivery finds no hold and takes nothing.
+            const settled = await firestore
+              .runTransaction(async (transaction) => {
+                const fresh = await transaction.get(cardRef)
+                if (!fresh.exists) return null
+                const card = (fresh.data() ??
+                  {}) as CommerceModel.HostGiftCard
+                const take = CommerceModel.giftCardSettlementCents(
+                  card,
+                  holdKey,
+                  Date.now(),
+                )
+                transaction.set(
+                  cardRef,
+                  {
+                    balanceCents: Math.max(
+                      0,
+                      Number(card.balanceCents ?? 0) - take,
+                    ),
+                    // `FieldValue.delete()`, NOT a locally-pruned copy of the
+                    // map. `set(…, { merge: true })` merges nested maps rather
+                    // than replacing them, so writing back an object with the
+                    // key removed leaves the stored key exactly where it was —
+                    // and a redelivery would then find the hold still standing
+                    // and settle it a SECOND time, taking the balance twice for
+                    // one payment. The sentinel is what makes this settlement
+                    // idempotent.
+                    holds: {
+                      [holdKey]: firebaseAdmin.firestore.FieldValue.delete(),
+                    },
+                    ...(take > 0 ? { lastUsedAtMs: Date.now() } : {}),
+                  },
+                  { merge: true },
+                )
+                return take
+              })
+              .catch((error) => {
+                console.error('Gift card settlement failed', holdKey, error)
+                // Undefined, not null: null means "the card is gone", which is
+                // the orphan note below. A transport failure is neither — the
+                // hold stands and lapses on its own, and the merchant is short
+                // rather than the customer double-charged.
+                return undefined
+              })
+            if (settled === null) {
+              await recordRedemptionOrphan(orderRef, orphanNote)
+            } else if (settled != null && settled < giftCardCents) {
+              // The card could not cover what the session discounted, which
+              // after a hold means the merchant voided or hand-adjusted it
+              // mid-flight. Money moved on a discount the card did not fund,
+              // so it is recorded where the merchant reads it rather than
+              // quietly absorbed.
+              await recordRedemptionOrphan(
+                orderRef,
+                `$${(giftCardCents / 100).toFixed(2)} was discounted against ` +
+                  `gift card ${object.metadata.giftCardCode}, but only $${(
+                    settled / 100
+                  ).toFixed(2)} could be taken from its balance.`,
+              )
+            }
+          }
         }
         // Gift card issuance (AGL-322): each purchased gift-card line
         // mints a code for its unit price and emails it to the buyer.
@@ -2651,7 +2904,20 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               .digest('hex')
               .slice(0, 12)
               .toUpperCase()}`
-            await hostRef
+            // THE EMAIL IS GATED ON THE WRITE (AGL-2161). This `.set()` used
+            // to `.catch(() => undefined)` and fall straight through to the
+            // send below, so a failed write shipped the buyer a real-looking
+            // `GC-XXXXXXXXXXXX` for a document that does not exist — and
+            // `meterHostEmail` billed the merchant for delivering it. The
+            // buyer only discovers it at checkout, where `cart-checkout.ts`
+            // finds `!fresh.exists`, places no hold, and applies nothing.
+            //
+            // The redemption side already went transactional (AGL-2449); this
+            // is the minting side catching up, and it deliberately EXTENDS
+            // that path rather than adding a second mechanism: a card that was
+            // never written is the same "card that isn't there" the settlement
+            // orphan note describes, reached from the other end.
+            const issued = await hostRef
               .collection('giftCards')
               .doc(code)
               .set({
@@ -2661,7 +2927,34 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 orderId: String(object.id),
                 createdAtMs: Date.now(),
               })
-              .catch(() => undefined)
+              .then(() => true)
+              .catch((error: unknown) => {
+                console.error('Gift card issuance failed', hostId, code, error)
+                return false
+              })
+            if (!issued) {
+              // LOUD, and on the surface a merchant already watches. The buyer
+              // has paid, so somebody must act: the console's hand-issue route
+              // (`gift-cards.ts`) is how they make it right. Sending nothing is
+              // the recoverable half — an unissued card is a support ticket, a
+              // phantom code is a customer who thinks they hold value.
+              // `content.order` and `/products`: the Gift cards card lives on
+              // the commerce console page the `/products` nav item opens, and
+              // this is an order-shaped fact. A new notification type would
+              // need a label, a category and a mute of its own for one edge —
+              // reuse is the AGL-1088 call, same as `content.lowStock` is for
+              // the oversell alert next door.
+              void notifyHostManagers(String(hostId), {
+                type: 'content.order',
+                title: 'Gift card paid for but not issued',
+                body:
+                  `A $${(line.unitAmountCents / 100).toFixed(2)} gift card on ` +
+                  `order ${String(object.id)} could not be written, so no code ` +
+                  'was emailed to the buyer. Issue one by hand from Gift cards.',
+                link: `/${hostId}/products`,
+              })
+              continue
+            }
             const giftTo = object?.customer_details?.email
             if (giftTo) {
               const giftValue = `$${(line.unitAmountCents / 100).toFixed(2)}`
@@ -2692,16 +2985,19 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         }
         // Discounts engine redemptions (AGL-305).
         if (object.metadata?.discountId) {
-          await redeemExistingOrRecord(
-            hostRef
+          await settleRedemption({
+            firestore,
+            ref: hostRef
               .collection('discounts')
               .doc(String(object.metadata.discountId)),
-            { redemptions: firebaseAdmin.firestore.FieldValue.increment(1) },
+            holdKey: String(object.metadata?.discountHoldKey ?? ''),
             orderRef,
-            `Discount ${object.metadata.discountId} was applied to this order ` +
-              'but no longer exists, so the redemption is uncounted against ' +
-              'its limit.',
-          )
+            label: `discount ${object.metadata.discountId}`,
+            detail:
+              `Discount ${object.metadata.discountId} was applied to this ` +
+              'order but no longer exists, so the redemption is uncounted ' +
+              'against its limit.',
+          })
         }
       }
     }
@@ -2957,34 +3253,17 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 productId: String(productId),
                 variantId: soldVariantId,
                 quantity,
+                ledger: { reason: 'sale', orderId: String(orderId) },
               })
               // `before`/`after` absent means nothing was written — a missing
               // product, an untracked variant, or a failed commit — and a
               // ledger row would then claim a movement the count never made.
               if (moved.before && moved.after) {
-                // Adjustment ledger (AGL-1807): this was the one stock writer
-                // of four that moved the count and logged nothing, so a
-                // draft-link sale read as stock vanishing in the products hub's
-                // history — and the reason AGL-1797 could not derive its
-                // restock flag from this collection. Same shape and same
-                // swallowed failure as the cart and buy-now siblings;
-                // `orderId` is the ORDER doc id from the metadata, not
-                // `object.id` — unlike the siblings, this branch's session id
-                // names no order document.
-                await hostRef
-                  .collection('inventoryAdjustments')
-                  .add({
-                    productId: String(productId),
-                    variantId: soldVariantId,
-                    delta: -quantity,
-                    ...(moved.applied !== -quantity
-                      ? { appliedDelta: moved.applied }
-                      : {}),
-                    reason: 'sale',
-                    orderId: String(orderId),
-                    atMs: Date.now(),
-                  } satisfies CommerceModel.InventoryAdjustment)
-                  .catch(() => undefined)
+                // The AGL-1807 ledger row now rides inside the decrement's
+                // own transaction (AGL-2161), so the `orderId` above is the
+                // ORDER doc id from the metadata rather than `object.id` —
+                // unlike the siblings, this branch's session id names no order
+                // document, and `cancel-order.ts` looks the row up by that id.
                 // Low-stock crossing alert (AGL-1826): a merchant-sent payment
                 // link used to sell a product down to its threshold in
                 // silence. The `pending` -> `paid` flip bounds redelivery.
@@ -3060,31 +3339,17 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 variantId: soldVariantId,
                 quantity: soldQty,
                 locationId: order.locationId || undefined,
+                ledger: { reason: 'sale', orderId: String(orderId) },
               })
               if (!moved.before || !moved.after) continue
               paidProducts.set(lineProductId, moved.after)
-              // The AGL-1807 ledger row, from this decrement's first day —
-              // joined to the ORDER doc (the session id names no order) and
-              // carrying the location the units left, which is what lets
-              // `cancel-order.ts` tell a decremented card sale from one that
-              // predates this fix.
-              await hostRef
-                .collection('inventoryAdjustments')
-                .add({
-                  productId: lineProductId,
-                  variantId: soldVariantId,
-                  delta: -soldQty,
-                  ...(moved.applied !== -soldQty
-                    ? { appliedDelta: moved.applied }
-                    : {}),
-                  reason: 'sale',
-                  orderId: String(orderId),
-                  ...(order.locationId
-                    ? { locationId: order.locationId }
-                    : {}),
-                  atMs: Date.now(),
-                } satisfies CommerceModel.InventoryAdjustment)
-                .catch(() => undefined)
+              // The AGL-1807 ledger row is written by the decrement itself
+              // now (AGL-2161), joined to the ORDER doc (the session id names
+              // no order) and carrying the location the units left. That join
+              // is what lets `cancel-order.ts` tell a decremented card sale
+              // from one that predates it — and, because the row can no longer
+              // be lost on its own, absence of a row is now proof the count
+              // never moved rather than a coin flip.
               // Low-stock crossing alert (AGL-1826): the register is the
               // channel most likely to be selling down the last few units of
               // physical shelf stock, and crossed in silence. The compounded
@@ -3256,17 +3521,27 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             }
             if (supplier.webhookUrl) {
               const body = JSON.stringify(payload)
-              const signature = createHmac(
-                'sha256',
-                supplier.webhookSecret ?? '',
-              )
-                .update(body)
-                .digest('hex')
+              // NO SECRET, NO SIGNATURE HEADER (AGL-2455). This was
+              // `createHmac('sha256', supplier.webhookSecret ?? '')` — an
+              // empty-key HMAC over a body whose every field is public, which
+              // any party can compute. A supplier who also left their secret
+              // unset would verify it successfully and believe the delivery was
+              // authenticated, which is worse than no header at all: an absent
+              // header fails their check closed, a forgeable one passes it.
+              // A supplier WITH a secret rejects either way, so nothing that
+              // worked stops working.
+              const webhookSecret = String(supplier.webhookSecret ?? '')
               await fetch(supplier.webhookUrl, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
-                  'x-aglyn-signature': signature,
+                  ...(webhookSecret
+                    ? {
+                        'x-aglyn-signature': createHmac('sha256', webhookSecret)
+                          .update(body)
+                          .digest('hex'),
+                      }
+                    : {}),
                 },
                 body,
               }).catch(() => undefined)
@@ -3335,22 +3610,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               productId: String(productId),
               variantId: soldVariantId,
               quantity: soldQuantity,
+              ledger: { reason: 'sale', orderId: String(object.id) },
             })
             if (moved.before && moved.after) {
-              await hostRef
-                .collection('inventoryAdjustments')
-                .add({
-                  productId: String(productId),
-                  variantId: soldVariantId,
-                  delta: -soldQuantity,
-                  ...(moved.applied !== -soldQuantity
-                    ? { appliedDelta: moved.applied }
-                    : {}),
-                  reason: 'sale',
-                  orderId: String(object.id),
-                  atMs: Date.now(),
-                } satisfies CommerceModel.InventoryAdjustment)
-                .catch(() => undefined)
               // Low-stock alert (AGL-281): fires on the crossing sale only,
               // so managers get one nudge per threshold breach, not one per
               // order after it. The check lived inline here — the one branch
@@ -3361,13 +3623,16 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           }
         }
         if (couponCode) {
-          await redeemExistingOrRecord(
-            hostRef.collection('coupons').doc(String(couponCode)),
-            { redemptions: firebaseAdmin.firestore.FieldValue.increment(1) },
+          await settleRedemption({
+            firestore,
+            ref: hostRef.collection('coupons').doc(String(couponCode)),
+            holdKey: String(object.metadata?.couponHoldKey ?? ''),
             orderRef,
-            `Coupon ${couponCode} was applied to this order but no longer ` +
+            label: `coupon ${couponCode}`,
+            detail:
+              `Coupon ${couponCode} was applied to this order but no longer ` +
               'exists, so the redemption is uncounted against its limit.',
-          )
+          })
         }
         // Receipt + seller notification (AGL-96): env-gated like every
         // other outbound email; failures never fail the webhook.
@@ -3488,11 +3753,17 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
   if (type === 'charge.dispute.created' || type === 'charge.dispute.closed') {
     const dispute = (object ?? {}) as StripeDispute
     const paymentIntentId = String(dispute.payment_intent ?? '')
-    const snapshot = paymentIntentId
+    const lookup: DisputeLookup = paymentIntentId
       ? await findOrderForDispute(paymentIntentId)
-      : null
-    // Not a commerce order: a marketplace, booking or platform-billing charge
-    // was disputed. Silence is the correct answer, see `findOrderForDispute`.
+      : { kind: 'not-ours' }
+    // UNRESOLVED IS NOT NOT-OURS (AGL-2161). A lookup that could not run is
+    // the platform's problem and is reported; a lookup that ran and matched
+    // nothing is a marketplace, booking or platform-billing dispute, and
+    // silence is the correct answer — see `findOrderForDispute`.
+    if (lookup.kind === 'unresolved') {
+      await reportUnresolvedDispute(lookup.reason, paymentIntentId, dispute)
+    }
+    const snapshot = lookup.kind === 'order' ? lookup.snapshot : null
     if (snapshot) {
       const hostId = String(snapshot.ref.parent.parent?.id ?? '')
       if (type === 'charge.dispute.created') {

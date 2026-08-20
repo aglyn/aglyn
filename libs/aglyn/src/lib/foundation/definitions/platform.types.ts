@@ -201,6 +201,17 @@ export interface AglynHost extends AglynDocument {
     imageWidth?: number
     imageHeight?: number
     /**
+     * `og:image:alt` (AGL-2417) — what the card SHOWS, for the screen
+     * readers that announce a social preview. Defaulted from the chosen DAM
+     * asset's own alt at pick time and editable per surface; stored beside
+     * the reference so `resolveSocialImage` emits the description belonging
+     * to the image that actually won the precedence list.
+     *
+     * Blank is never stored: `og:image:alt=""` asserts the image conveys
+     * nothing, which is not what an undescribed card means.
+     */
+    imageAlt?: string
+    /**
      * Site-wide "discourage search engines" (AGL-1263): `robots.txt` refuses
      * everything, the sitemap goes empty, and every page carries `noindex`.
      * The staged-launch control — a site that is live but not ready to be
@@ -654,6 +665,17 @@ export interface AglynScreen extends AglynDocument {
     /** Copied from the media record at pick time; see `resolveSocialImage`. */
     imageWidth?: number
     imageHeight?: number
+    /**
+     * `og:image:alt` (AGL-2417) — what the card SHOWS, for the screen
+     * readers that announce a social preview. Defaulted from the chosen DAM
+     * asset's own alt at pick time and editable per surface; stored beside
+     * the reference so `resolveSocialImage` emits the description belonging
+     * to the image that actually won the precedence list.
+     *
+     * Blank is never stored: `og:image:alt=""` asserts the image conveys
+     * nothing, which is not what an undescribed card means.
+     */
+    imageAlt?: string
   }
 
   // CONCEPT: Scheduling
@@ -944,6 +966,8 @@ export interface AglynTemplate<N = AglynNodeSchema> extends AglynDocument {
     image?: string
     imageWidth?: number
     imageHeight?: number
+    /** Mirrors `AglynScreen.seo.imageAlt` (AGL-2417). */
+    imageAlt?: string
   }
   placeholders?: Array<TemplatePlaceholder>
   /**

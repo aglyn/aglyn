@@ -243,7 +243,16 @@ describe('the DAM accepts documents and meters their bytes (AGL-1465)', () => {
     // Pro: documents ride the `videoMedia` entitlement, same as video/PDF/ZIP.
     state.org = { plan: 'pro' }
     state.usedBytes = 0
+    // Unset, i.e. production today (AGL-2003): the org-library meter is off
+    // and its ceiling is therefore shut. Only the two cases that assert an
+    // overage name a month, and they restore nothing precisely because this
+    // deletes it for every test.
+    delete process.env.BILL_ORG_LIBRARY_STORAGE_FROM
     mockVerifyIdToken.mockResolvedValue({ uid: 'user-1', email_verified: true })
+  })
+
+  afterAll(() => {
+    delete process.env.BILL_ORG_LIBRARY_STORAGE_FROM
   })
 
   describe('acceptance', () => {
@@ -324,6 +333,16 @@ describe('the DAM accepts documents and meters their bytes (AGL-1465)', () => {
       // Free would also refuse, but on free the entitlement gate above rejects
       // documents before storage is ever consulted — the check under test
       // would never run.
+      //
+      // AGL-2161/AGL-2003: this scope is `orgs`, the ORG LIBRARY, and since
+      // AGL-2003 its ceiling is shut while `BILL_ORG_LIBRARY_STORAGE_FROM`
+      // names no month — a metered plan is refused with `plan_limit_reached`
+      // before the customer's own cap is ever consulted. Naming the month is
+      // what puts the cap path back in reach, and it is the honest fixture:
+      // the customer cap only exists to bound a charge that is actually made.
+      process.env.BILL_ORG_LIBRARY_STORAGE_FROM = new Date()
+        .toISOString()
+        .slice(0, 7)
       state.org = {
         plan: 'pro',
         // The customer asked to be stopped at one cent of storage overage.
@@ -358,6 +377,14 @@ describe('the DAM accepts documents and meters their bytes (AGL-1465)', () => {
       // the helper: past the included band a metered org keeps uploading. If
       // the opt-in gate is ever restored, this is the case that goes red on
       // the route itself.
+      //
+      // The org-library meter is named ON for the same reason as above
+      // (AGL-2003): "served, and billed" is only true of a scope that reaches
+      // an invoice, and asserting it while the rollup drops these bytes would
+      // pin the exact undercharge that issue was filed about.
+      process.env.BILL_ORG_LIBRARY_STORAGE_FROM = new Date()
+        .toISOString()
+        .slice(0, 7)
       state.org = { plan: 'pro' }
       // At the org-wide band exactly (AGL-2075), so the next byte is overage.
       state.usedBytes =
@@ -369,6 +396,25 @@ describe('the DAM accepts documents and meters their bytes (AGL-1465)', () => {
       expect(response.status).toBe(200)
       // The bytes landed, so the rollup will find and bill them.
       expect(mockCounterSet).toHaveBeenCalled()
+    })
+
+    it('but with the org-library METER OFF, the same byte is refused (AGL-2003)', async () => {
+      // The pairing, on the route rather than only on the helper: a customer
+      // who consented to metered storage could be let past the band into a
+      // scope `report-usage` excludes from `billedEstimate`, and be invoiced
+      // nothing. The consent makes it worse, not better.
+      delete process.env.BILL_ORG_LIBRARY_STORAGE_FROM
+      state.org = { plan: 'pro' }
+      state.usedBytes =
+        Math.max(1, resolveOrgEntitlements(state.org).hostLimit) *
+        resolveOrgEntitlements(state.org).storagePerHostMb *
+        1024 *
+        1024
+      const response = await upload(DOCUMENT_TYPES[0][0], 'contract.docx')
+      expect(response.status).toBe(403)
+      expect((await response.json()).code).toBe('plan_limit_reached')
+      // Nothing was stored, so nothing needs billing for.
+      expect(mockCounterSet).not.toHaveBeenCalled()
     })
 
     it('gates documents behind the same paid entitlement as video, PDF and ZIP', async () => {

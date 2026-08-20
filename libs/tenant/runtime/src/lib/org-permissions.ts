@@ -21,9 +21,11 @@ import {
   isOrgWideMember,
   type OrgRole,
   resolveRolePermissions,
+  toLegacyPermissions,
   type OrgPermissionSet,
 } from '@aglyn/aglyn/server'
 import {
+  resolveMemberOrgPermissions,
   resolveOrgIdForHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
@@ -169,11 +171,28 @@ export async function resolveOrgPermissions(
         hostRole,
       }
     }
+    // Custom role + per-member overrides, which this resolver used to drop
+    // (AGL-2350). `resolveRolePermissions(tier)` alone is the BUILT-IN role's
+    // defaults, so every refinement `custom-roles.md` sells was invisible to
+    // the server while the console applied it — a permission granted by a
+    // custom role showed in the UI and 403'd on POST, and one revoked by an
+    // override was hidden in the UI and still succeeded on POST.
+    //
+    // OVERLAID, never substituted: `resolveRolePermissions` also mixes in
+    // plugin-declared keys (AGL-435) that the granular catalog knows nothing
+    // about, so replacing the map wholesale would silently strip them.
+    const granular = await resolveMemberOrgPermissions(
+      membership.orgId,
+      membership.member,
+    )
     return {
       orgId: membership.orgId,
       role,
       isOwner: role === 'owner' || role === 'admin',
-      permissions: resolveRolePermissions(ORG_ROLE_PERMISSION_BASE[role]),
+      permissions: {
+        ...resolveRolePermissions(ORG_ROLE_PERMISSION_BASE[role]),
+        ...toLegacyPermissions(granular, role),
+      },
       orgWide: true,
       hostRole: hostRole ?? ORG_ROLE_PERMISSION_BASE[role],
     }

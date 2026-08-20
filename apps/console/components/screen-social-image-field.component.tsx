@@ -17,7 +17,11 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
-import { Box, Button, Stack, Typography } from '@mui/material'
+import {
+  MEDIA_ALT_MAX_LENGTH,
+  inheritedMediaAlt,
+} from '@aglyn/aglyn/app-utils/media-metadata'
+import { Box, Button, Stack, TextField, Typography } from '@mui/material'
 import { useState } from 'react'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 import type { ScreenSocialImageDraft } from '../constants/screen-seo'
@@ -35,6 +39,16 @@ export interface ScreenSocialImageFieldProps {
   hostId: string
   /** What the screen doc currently holds at `seo.image`. */
   saved?: string | null
+  /** What the screen doc currently holds at `seo.imageAlt` (AGL-2417). */
+  savedAlt?: string | null
+  /**
+   * The stored dimensions, needed because editing the ALT alone still has to
+   * restage the whole group — `buildScreenSeoUpdate` writes `image`,
+   * `imageWidth`, `imageHeight` and `imageAlt` together on purpose, so a
+   * draft carrying the alt and zeroes would silently drop the card's size.
+   */
+  savedWidth?: number | null
+  savedHeight?: number | null
   /** The staged edit; `null` means the author has not touched it. */
   value: ScreenSocialImageDraft | null
   onChange: (draft: ScreenSocialImageDraft) => void
@@ -61,13 +75,19 @@ export interface ScreenSocialImageFieldProps {
  * mounting it here is safe inside a drawer or a dialog.
  */
 export function ScreenSocialImageField(props: ScreenSocialImageFieldProps) {
-  const { hostId, saved, value, onChange } = props
+  const { hostId, saved, savedAlt, savedWidth, savedHeight, value, onChange } =
+    props
   const [pickerOpen, setPickerOpen] = useState(false)
 
   // The draft if the author has touched it, otherwise what the doc holds. A
   // staged `''` is a pending CLEAR and must win over the saved value, which
   // is why this reads the draft's PRESENCE rather than its truthiness.
   const current = value != null ? value.image : (saved ?? '')
+  // Same PRESENCE rule as the image: a staged `''` is a pending clear of the
+  // description and must beat what the doc holds, or clearing it appears to
+  // do nothing until reload.
+  const currentAlt =
+    value != null ? (value.imageAlt ?? '') : (savedAlt ?? '')
   // Stored as a `media:` reference; the preview needs the CDN path. Relative
   // is right here — the console is same-origin. Only the tenant head has to
   // absolutise it.
@@ -106,12 +126,49 @@ export function ScreenSocialImageField(props: ScreenSocialImageFieldProps) {
           <Button
             size="small"
             color="error"
-            onClick={() => onChange({ image: '', imageWidth: 0, imageHeight: 0 })}
+            onClick={() =>
+              onChange({
+                image: '',
+                imageWidth: 0,
+                imageHeight: 0,
+                imageAlt: '',
+              })
+            }
           >
             {'Clear'}
           </Button>
         ) : null}
       </Stack>
+      {/*
+        `og:image:alt` (AGL-2417). Shown only beside an image, because a
+        description with nothing to describe is a field nobody can answer.
+        Pre-filled from the chosen asset's own alt at pick time and editable
+        here — the asset's generic sentence is the default, and the sentence
+        about THIS card is the one worth having.
+      */}
+      {current ? (
+        <TextField
+          label="Image description"
+          placeholder="What the picture shows"
+          value={currentAlt}
+          onChange={(event) =>
+            onChange({
+              image: current,
+              imageWidth:
+                value != null ? value.imageWidth : (savedWidth ?? 0),
+              imageHeight:
+                value != null ? value.imageHeight : (savedHeight ?? 0),
+              imageAlt: event.target.value.slice(0, MEDIA_ALT_MAX_LENGTH),
+            })
+          }
+          size="small"
+          fullWidth
+          helperText={
+            'Read aloud by screen readers in a social preview. Describe the ' +
+            'picture, not the page.'
+          }
+        />
+      ) : null}
       <MediaPickerDialog
         hostId={hostId}
         open={pickerOpen}
@@ -125,6 +182,15 @@ export function ScreenSocialImageField(props: ScreenSocialImageFieldProps) {
             image: src,
             imageWidth: media.width ?? 0,
             imageHeight: media.height ?? 0,
+            // The asset's own alt, through the ONE shared rule (AGL-1896).
+            // Never the file name: "IMG_4021.jpg" read aloud in a share
+            // preview is worse than the silence it replaced, and an asset
+            // with no alt leaves the field empty and honest.
+            imageAlt:
+              inheritedMediaAlt({
+                placementAlt: currentAlt,
+                assetAlt: (media as { alt?: unknown }).alt,
+              }) ?? currentAlt,
           })
         }}
       />

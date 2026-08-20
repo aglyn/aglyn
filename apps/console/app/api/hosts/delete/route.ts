@@ -23,6 +23,8 @@ import {
   getOrgForHost,
   isImpersonationSession,
   lockdownRefusal,
+  memberHasOrgPermission,
+  resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 
 /**
@@ -64,6 +66,47 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({
         error: 'Deleting a site requires the site admin role',
       }, { status: 403 })
+    }
+
+    /*==========================================
+     * AND the ORG permission on top of it (AGL-2444).
+     *
+     * `hosts.delete` is one of eleven permissions a custom role advertises,
+     * and until now it had ZERO consumers anywhere: an owner could build a
+     * role with "Delete sites" unticked, assign it, and the member deleted
+     * sites. The console did not even dim the control, because nothing read
+     * the key. A permission a customer can toggle that changes nothing is
+     * worse than its absence — it implies a control that does not exist.
+     *
+     * It is checked IN ADDITION to the site-admin role above, never instead
+     * of it, because the two answer different questions. The host role says
+     * whether this person runs that site; the org permission says whether
+     * their seat in the organization may destroy sites at all. Replacing the
+     * role check with this one would widen deletion to any org member who
+     * happens to hold the permission — the opposite of the narrowing the
+     * agency guide sells.
+     *
+     * The org is resolved from the HOST rather than from the request, so a
+     * caller cannot name a workspace where their seat is more generous than
+     * it is in the one that actually owns the site.
+     *=========================================*/
+    if (decoded['staff'] !== true) {
+      const owning = await getOrgForHost(hostId)
+      const membership = owning
+        ? await resolveOrgMembership(decoded.uid, owning.orgId)
+        : null
+      if (
+        !membership ||
+        !(await memberHasOrgPermission(
+          membership.orgId,
+          membership.member,
+          'hosts.delete',
+        ))
+      ) {
+        return Response.json({
+          error: 'Your organization role does not allow deleting sites',
+        }, { status: 403 })
+      }
     }
 
     // Lockdown verdict (AGL-1506): platform/org/host/user scopes; distinct

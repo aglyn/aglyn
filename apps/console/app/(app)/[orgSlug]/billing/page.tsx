@@ -75,6 +75,7 @@ import BillingPlanCardsComponent, {
   PLAN_LABELS,
 } from '../../../../components/billing/billing-plan-cards.component'
 import BillingRegisterAllocationsCardComponent from '../../../../components/billing/billing-register-allocations-card.component'
+import BillingCollaboratorAllocationsCardComponent from '../../../../components/billing/billing-collaborator-allocations-card.component'
 import BillingStorageOverageCardComponent from '../../../../components/billing/billing-storage-overage-card.component'
 import BillingUsageBudgetCardComponent from '../../../../components/billing/billing-usage-budget-card.component'
 import BillingMeteredEstimateComponent from '../../../../components/billing/billing-metered-estimate.component'
@@ -1239,6 +1240,38 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                         contentGutterY
                       >
                         <BillingRegisterAllocationsCardComponent
+                          orgId={orgId}
+                          canManage={can('billing.manage')}
+                        />
+                      </CardDisplay>
+                    </Box>
+                  ),
+                },
+                {
+                  size: { xs: 12 },
+                  children: (
+                    // Where purchased COLLABORATOR seats get deployed
+                    // (AGL-2439) — the register card's twin, on the key that
+                    // never got the AGL-1775 fix. `seatAddons.members` is an
+                    // org-level pool now, so buying the add-on above is again
+                    // only half the transaction. Shipped in the SAME pass as
+                    // the pool for exactly the reason AGL-1947 exists: a pool
+                    // whose seats have nowhere to go is money taken for
+                    // capacity the product gives no way to use.
+                    <Box id="collaborator-seats">
+                      <CardDisplay
+                        header={'Site collaborator seats'}
+                        subheader={
+                          'Each purchased seat lets one site have one more ' +
+                          'collaborator. Move seats between sites at any time.'
+                        }
+                        help={docsHelp('addOns', {
+                          anchor: '#assigning-collaborator-seats',
+                        })}
+                        contentGutterX
+                        contentGutterY
+                      >
+                        <BillingCollaboratorAllocationsCardComponent
                           orgId={orgId}
                           canManage={can('billing.manage')}
                         />

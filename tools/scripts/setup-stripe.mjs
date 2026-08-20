@@ -19,7 +19,7 @@
 //
 //   STRIPE_SECRET_KEY=sk_... node tools/scripts/setup-stripe.mjs \
 //     [--webhook-url https://app.aglyn.com/api/billing/webhook] [--dry-run] \
-//     [--reconcile-events]
+//     [--reconcile-events] [--reconcile-tax-code]
 //
 // --reconcile-events subscribes an EXISTING endpoint to any event in
 // WEBHOOK_EVENTS it is missing (adds only, never removes, never touches the
@@ -42,6 +42,10 @@ import {
   isConnectEndpoint,
   WEBHOOK_EVENTS,
 } from './lib/stripe-webhook-health.mjs'
+import {
+  PLATFORM_TAX_CODE,
+  productsMissingTaxCode,
+} from './lib/stripe-tax-code.mjs'
 
 const SECRET = process.env.STRIPE_SECRET_KEY
 if (!SECRET) {
@@ -82,6 +86,21 @@ const DRY_RUN = args.includes('--dry-run')
  * Ignored under --dry-run, which reports the gap and writes nothing.
  */
 const RECONCILE_EVENTS = args.includes('--reconcile-events')
+
+/**
+ * `--reconcile-tax-code` stamps `tax_code` on every product this account owns
+ * that is missing it or carrying a different one (AGL-1877).
+ *
+ * ADDS ONLY, on the PRODUCT — it never touches a price, an amount, or a
+ * subscription, so it cannot change what anyone is charged. What it changes is
+ * how much TAX is computed on top, which is the state's money and is supposed
+ * to have been this all along: every live product already carries the code and
+ * every test-mode one was missing it, so test-mode rehearsals were computing a
+ * different tax position from production.
+ *
+ * Ignored under --dry-run, which reports the gap and writes nothing.
+ */
+const RECONCILE_TAX_CODE = args.includes('--reconcile-tax-code')
 
 /** Set when a dry run finds a lookup key with no price behind it. */
 let dryRunMissing = 0
@@ -150,6 +169,11 @@ async function ensurePrice({
     : await stripe('products', {
         name: productName,
         'metadata[plan]': planMetadata,
+        // The Texas data-processing base (AGL-1877/1811). Without it a newly
+        // provisioned tier is taxed on the FULL charge while every tier
+        // before it is taxed on 20% — a wrong return whose only symptom is
+        // the filing.
+        tax_code: PLATFORM_TAX_CODE,
       })
   const price = await stripe('prices', {
     product: product.id,
@@ -483,6 +507,8 @@ async function ensureMeteredPrice(lookupKey, interval) {
     await stripe('products', {
       name: 'Aglyn metered usage',
       'metadata[plan]': 'metered',
+      // Usage overage is the same service, taxed the same way (AGL-1877).
+      tax_code: PLATFORM_TAX_CODE,
     })
   ).id
   const price = await stripe('prices', {
@@ -504,6 +530,57 @@ env['STRIPE_PRICE_METERED'] = (
 env['STRIPE_PRICE_METERED_YEARLY'] = (
   await ensureMeteredPrice('aglyn_metered_usage_yearly', 'year')
 ).id
+
+/**
+ * THE TAX POSITION, checked on every run (AGL-1877).
+ *
+ * The products this account already had were tagged by hand in the Stripe
+ * Dashboard and the string lived nowhere in this repository, so nothing could
+ * tell a correctly-taxed account from one where a tier had been added since.
+ * Measured 2026-08-19: every LIVE product carried `txcd_10103001`; every
+ * TEST-mode product carried none, which is why a test-mode rehearsal computed
+ * `standard_rated` on the full charge where production computes
+ * `taxable_basis_reduced` on 20% of it.
+ *
+ * Reported ALWAYS, reconciled only behind the flag. The write is a PATCH on
+ * the product — no price, no amount, no subscription — so it changes what tax
+ * is computed and never what anyone is charged.
+ */
+const allProducts = []
+let productPage = await stripe('products?limit=100')
+allProducts.push(...(productPage?.data ?? []))
+while (productPage?.has_more && allProducts.length) {
+  const last = allProducts[allProducts.length - 1]
+  productPage = await stripe(
+    `products?limit=100&starting_after=${last.id}`,
+  )
+  allProducts.push(...(productPage?.data ?? []))
+}
+const untaxed = productsMissingTaxCode(allProducts)
+if (untaxed.length) {
+  console.log(
+    `\n! ${untaxed.length} product(s) are not on ${PLATFORM_TAX_CODE} ` +
+      '(the Texas data-processing base):',
+  )
+  for (const product of untaxed) {
+    console.log(`  - ${product.id}  ${product.name}  tax_code=${product.taxCode}`)
+  }
+  if (RECONCILE_TAX_CODE && !DRY_RUN) {
+    for (const product of untaxed) {
+      await stripe(`products/${product.id}`, { tax_code: PLATFORM_TAX_CODE })
+      console.log(`  + ${product.id} -> ${PLATFORM_TAX_CODE}`)
+    }
+  } else {
+    console.log(
+      '  Re-run with --reconcile-tax-code to stamp them (products only; no ' +
+        'price and no charged amount is touched).',
+    )
+  }
+} else if (allProducts.length) {
+  console.log(
+    `\n= all ${allProducts.length} product(s) carry ${PLATFORM_TAX_CODE}`,
+  )
+}
 
 console.log(
   DRY_RUN

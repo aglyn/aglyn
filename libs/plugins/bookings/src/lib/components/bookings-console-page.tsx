@@ -18,8 +18,8 @@
 
 import { checkQuota, pluginDocsHelp } from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
-import { type HostBookingService } from '../model'
-import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { type HostBookingService, isBookingReminderDue } from '../model'
+import { CardDisplay, HelpTip, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -141,6 +141,33 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
   const upcoming = [...(bookingDocs ?? [])]
     .filter((booking: any) => booking.endsAtMs >= Date.now())
     .sort((a: any, b: any) => a.startsAtMs - b.startsAtMs)
+
+  /**
+   * The 24-hour reminder queue (AGL-2431).
+   *
+   * Reminders are sent by the `booking-reminders` beat, not by anything on
+   * this page, and until that beat existed they were never sent at all — the
+   * feature had a designed email template, white-label branding and an
+   * `x-cron-secret` door, and no scheduler pointed at it. So the merchant had
+   * no way to tell working from broken, and still would not if this card
+   * merely asserted that reminders happen.
+   *
+   * READ-ONLY, and deliberately no "send now" button: the beat runs hourly
+   * and stamps `reminderSentAt`, so a manual sender would race it for a
+   * reminder nobody can un-send. Same call AGL-2227 made for the recovery
+   * queue.
+   *
+   * `isBookingReminderDue` is the sender's own predicate, against one instant
+   * shared by both counts, so this is the queue the next pass will drain
+   * rather than an approximation of it.
+   */
+  const reminderNowMs = Date.now()
+  const reminderQueue = (bookingDocs ?? []).filter((booking: any) =>
+    isBookingReminderDue(booking, reminderNowMs),
+  ).length
+  const remindersSent = (bookingDocs ?? []).filter(
+    (booking: any) => booking.reminderSentAt,
+  ).length
 
   const [draft, setDraft] = useState<ServiceDraft | null>(null)
 
@@ -464,6 +491,26 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
         contentGutterX
         contentGutterY
       >
+        {/* What the reminder beat will do next, and what it has done. Named
+            "24-hour reminders" rather than "emails" because that is the only
+            mail this queue governs — confirmations go out on booking. */}
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          component="div"
+          sx={{ mb: 1 }}
+        >
+          {`24-hour reminders · ${reminderQueue} due in the next pass · ` +
+            `${remindersSent} already sent`}
+          {/* Its OWN heading, not the card's `#manage`: a merchant reading
+              this line wants the timing and the once-only rule, and landing
+              them on "manage your bookings" is the presence-not-correctness
+              failure a help-coverage check cannot see. */}
+          <HelpTip
+            {...pluginDocsHelp('bookings', { anchor: '#reminders' })}
+            sx={{ ml: 0.5, fontSize: '0.9em' }}
+          />
+        </Typography>
         {upcoming.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
             {'No upcoming bookings.'}

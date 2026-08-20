@@ -21,18 +21,11 @@ import * as CommerceModel from '../model'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { readActiveMemberSession, setMemberCookie } from './membership'
 
-/**
- * Subscription statuses that grant access (trialing pays later).
- *
- * AGL-1715-EXEMPT: these are the TENANT's own site members' subscriptions to
- * the TENANT's products (`hosts/{hostId}/subscriptions`) — a different Stripe
- * account, a different buyer and a different decision from
- * `isLiveSubscriptionStatus`, which is about the Aglyn org's subscription to
- * US. The words coincide only because both are Stripe subscription statuses.
- * Converging them would tie a visitor's content access to our own billing
- * rules.
- */
-const LIVE_STATUSES = new Set(['active', 'trialing', 'past_due'])
+// Subscription statuses that grant access (trialing pays later). The list
+// moved to the model as `isTenantSubscriptionLive` (AGL-1849), where the
+// checkout duplicate guard reads the same one rather than transcribing it a
+// third time; the reasoning for keeping it apart from the org-side
+// `isLiveSubscriptionStatus` travels with it.
 
 /**
  * Is the HOST's org on a plan that includes the content paywall (AGL-481)?
@@ -73,7 +66,8 @@ export async function checkMemberEntitlement(
     .limit(10)
     .get()
   for (const docSnapshot of subscriptions.docs) {
-    if (!LIVE_STATUSES.has(String(docSnapshot.get('status')))) continue
+    if (!CommerceModel.isTenantSubscriptionLive(docSnapshot.get('status')))
+      continue
     if (productId === 'any' || docSnapshot.get('productId') === productId) {
       return true
     }
@@ -86,11 +80,10 @@ export async function checkMemberEntitlement(
     .get()
   for (const docSnapshot of orders.docs) {
     const order = CommerceModel.liftLegacyOrder(docSnapshot.data() as any)
-    if (['pending', 'cancelled', 'refunded'].includes(order.status)) continue
-    const owns =
-      (order.lineItems ?? []).some((line) => line.productId === productId) ||
-      order.productId === productId
-    if (owns) return true
+    // The shared entitlement test (AGL-2454), which is where the partial-refund
+    // case lives. The inline status literal this replaced only ever moved on a
+    // FULL refund, so a buyer refunded for the gated product kept their access.
+    if (CommerceModel.orderEntitlesProduct(order, productId)) return true
   }
   return false
 }

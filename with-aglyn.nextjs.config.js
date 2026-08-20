@@ -270,6 +270,30 @@ const AGLYN_CONFIG = {
      */
     esmExternals: false,
 
+    /**
+     * MUST stay false while `typescript` is pinned as an npm ALIAS.
+     *
+     * Next 16.3 added a TypeScript CLI type-check path and defaults
+     * `useTypeScriptCli` to TRUE. That path resolves the compiler through
+     * `package.json` -> `bin.tsc`. Our `typescript` is an alias for
+     * `@typescript/typescript6`, whose bin is `{"tsc6": "./bin/tsc6"}` — there
+     * is no `tsc` key — so the lookup returns undefined and Next reports the
+     * package as missing entirely:
+     *
+     *     It looks like you're trying to use TypeScript but do not have the
+     *     required package(s) installed.
+     *
+     * which is a confusing way to say "your tsc is called something else". It
+     * killed console:build:production and tenant:build:production on the
+     * Next 16.2.11 -> 16.3.1 bump AFTER a successful compile, so the compile
+     * log looks clean right up to the failure.
+     *
+     * False selects the compiler-API path instead, which resolves
+     * `typescript/lib/typescript.js` — a file the aliased package does ship.
+     * Revisit when the alias goes away or grows a `tsc` bin. (AGL-2466)
+     */
+    useTypeScriptCli: false,
+
     // optimizeCss: true,
   },
 

@@ -20,8 +20,12 @@ import * as Aglyn from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useHost } from '@aglyn/tenant-feature-instance'
-import { Box, Button, Stack, Typography } from '@mui/material'
-import { useState } from 'react'
+import { Box, Button, Stack, TextField, Typography } from '@mui/material'
+import {
+  MEDIA_ALT_MAX_LENGTH,
+  inheritedMediaAlt,
+} from '@aglyn/aglyn/app-utils/media-metadata'
+import { useEffect, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 
@@ -46,7 +50,10 @@ export interface SocialImageCardProps {
  *
  * The pixel dimensions are copied off the media record at pick time so the
  * head can emit `og:image:width`/`height` without a per-render lookup — see
- * `resolveSocialImage`.
+ * `resolveSocialImage`. Since AGL-2417 the DESCRIPTION rides along the same
+ * way: defaulted from the chosen asset's own alt and editable here, because
+ * until then no tenant page emitted `og:image:alt` at all and every shared
+ * card announced itself to a screen reader as an undescribed image.
  */
 export function SocialImageCard(props: SocialImageCardProps) {
   const { hostId } = props
@@ -59,10 +66,28 @@ export function SocialImageCard(props: SocialImageCardProps) {
   const image = data?.seo?.image
   const width = data?.seo?.imageWidth
   const height = data?.seo?.imageHeight
+  const savedAlt = data?.seo?.imageAlt ?? ''
   const preview = Aglyn.resolveMediaSrc(image, { hostId })
+  /*
+   * The alt is edited locally and committed on BLUR, unlike the image, which
+   * is a pick and saves on the spot. A per-keystroke `setDoc` would be a
+   * Firestore write per character on a field people type sentences into.
+   *
+   * Seeded from the doc and RE-SEEDED whenever the stored value changes, so a
+   * pick — which writes the asset's own alt — is reflected in the field
+   * instead of leaving a stale local string that the next blur would write
+   * back over the default.
+   */
+  const [altDraft, setAltDraft] = useState(savedAlt)
+  useEffect(() => setAltDraft(savedAlt), [savedAlt])
 
   const save = (
-    seo: { image: string; imageWidth?: number; imageHeight?: number },
+    seo: {
+      image: string
+      imageWidth?: number
+      imageHeight?: number
+      imageAlt?: string
+    },
     message: string,
   ) =>
     setDoc({ seo }, { merge: true })
@@ -116,6 +141,35 @@ export function SocialImageCard(props: SocialImageCardProps) {
               : ' — 1200×630 is the size every network crops well'}
           </Typography>
         ) : null}
+        {image ? (
+          <TextField
+            label="Image description"
+            placeholder="What the picture shows"
+            value={altDraft}
+            onChange={(event) =>
+              setAltDraft(event.target.value.slice(0, MEDIA_ALT_MAX_LENGTH))
+            }
+            onBlur={() => {
+              const next = altDraft.trim()
+              if (next === savedAlt) return
+              void save(
+                {
+                  image,
+                  imageWidth: width ?? 0,
+                  imageHeight: height ?? 0,
+                  imageAlt: next,
+                },
+                'Image description saved',
+              )
+            }}
+            size="small"
+            fullWidth
+            helperText={
+              'Read aloud by screen readers in a social preview. Screens can ' +
+              'override it in their own SEO panel.'
+            }
+          />
+        ) : null}
         <Stack direction="row" spacing={1}>
           <Button size="small" color="primary" onClick={() => setPickerOpen(true)}>
             {image ? 'Replace from media' : 'Choose from media'}
@@ -129,7 +183,7 @@ export function SocialImageCard(props: SocialImageCardProps) {
                   // `''`, not a missing key: a merge write ignores absent
                   // fields, so "no image" has to be a value that is actually
                   // sent. It reads as falsy everywhere downstream.
-                  { image: '', imageWidth: 0, imageHeight: 0 },
+                  { image: '', imageWidth: 0, imageHeight: 0, imageAlt: '' },
                   'Social image removed',
                 )
               }
@@ -155,6 +209,15 @@ export function SocialImageCard(props: SocialImageCardProps) {
               // that declares none.
               imageWidth: media.width ?? 0,
               imageHeight: media.height ?? 0,
+              // The asset's own alt, through the ONE shared rule (AGL-1896).
+              // An existing description wins — it is the sentence somebody
+              // wrote about this card — and an asset with no alt leaves the
+              // field empty rather than fabricating one from a file name.
+              imageAlt:
+                inheritedMediaAlt({
+                  placementAlt: savedAlt,
+                  assetAlt: (media as { alt?: unknown }).alt,
+                }) ?? savedAlt,
             },
             'Social image saved',
           )

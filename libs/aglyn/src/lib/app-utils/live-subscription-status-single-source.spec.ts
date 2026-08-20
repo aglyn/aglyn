@@ -117,15 +117,18 @@ const DOCUMENTED_COPIES: Record<string, string> = {
     'money-back-book.mjs below. Answering with the "may this org subscribe" ' +
     'triple would withhold from every org in dunning and 207 the cron daily ' +
     'for the length of the dunning. Pinned by report-usage/route.spec.ts.',
-  'libs/plugins/commerce/src/lib/server/gate.ts':
-    "A TENANT's own site members' subscriptions to the TENANT's products " +
+  'libs/plugins/commerce/src/lib/model/commerce-subscription-status.ts':
+    "The TENANT side's own single source (AGL-1849) — the tenant's site " +
+    "members' subscriptions to the TENANT's products " +
     '(`hosts/{hostId}/subscriptions`), not an Aglyn org subscription. ' +
-    'Different Stripe account, different buyer, different decision — this one ' +
-    'grants access to gated content (AGL-309/AGL-481). The words coincide ' +
-    'because both are Stripe subscription statuses.',
-  'libs/plugins/commerce/src/lib/server/member-post.ts':
-    'Same as gate.ts — the tenant\'s live member subscribers, for who gets ' +
-    'the member-post email (AGL-316). Not an Aglyn org subscription.',
+    'Different Stripe account, different buyer, different decision, so it is ' +
+    'deliberately NOT `isLiveSubscriptionStatus`; the words coincide because ' +
+    'both are Stripe subscription statuses. This entry replaced two: ' +
+    'server/gate.ts (gated content, AGL-309/AGL-481) and server/member-post.ts ' +
+    '(who gets the member-post email, AGL-316) each held a private copy, and ' +
+    "the checkout duplicate guard would have made a third. They now all import " +
+    '`isTenantSubscriptionLive` from here, so the tenant side has one copy ' +
+    'exactly as the org side does.',
   'tools/scripts/lib/money-back-book.mjs':
     'A deliberate SUPERSET — it adds `unpaid`. The question is "will this ' +
     'subscription bill AGAIN", so the set is forward exposure rather than ' +

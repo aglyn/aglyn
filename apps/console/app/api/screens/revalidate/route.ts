@@ -36,7 +36,11 @@
  * we had before.
  */
 
-import { pluginRequestFromWeb, screenRoutePathToUrl } from '@aglyn/aglyn/server'
+import {
+  hostRoleCanPublish,
+  pluginRequestFromWeb,
+  screenRoutePathToUrl,
+} from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -53,8 +57,6 @@ import { readUsageCandidates } from '../../../../utils/server/read-usage-candida
 
 export const dynamic = 'force-dynamic'
 
-/** Roles that may publish, and therefore may bust a cache. */
-const EDITORS = new Set(['admin', 'editor'])
 
 /**
  * May this caller drop cached pages for this site? (AGL-1326)
@@ -81,6 +83,14 @@ const EDITORS = new Set(['admin', 'editor'])
  * Deliberately not a hand-rolled roster read. `hostRoleFor` is the single
  * predicate the rules projection, the org gate and this route have to agree
  * on; a fourth copy of "may this person write this site" is how they drift.
+ *
+ * The role SET was such a copy, and this docblock argued against it while a
+ * local `new Set(['admin', 'editor'])` sat six lines above (AGL-2350). It is
+ * `hostRoleCanPublish` now — the same predicate over `HOST_PUBLISH_ROLES`,
+ * whose own comment requires the rules' `canPublishHostContent()` to move
+ * with it. Identical today, and it stays identical when the set changes: the
+ * `author` role (AGL-2334) is exactly the kind of addition a private copy
+ * would have silently mis-answered.
  */
 async function mayRevalidate(
   decoded: { uid: string; [claim: string]: unknown },
@@ -88,11 +98,11 @@ async function mayRevalidate(
 ): Promise<boolean> {
   if (decoded['staff']) return true
   const projected = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-  if (EDITORS.has(String(projected))) return true
+  if (hostRoleCanPublish(projected)) return true
   const { hostRole } = await resolveOrgPermissions(decoded.uid, {
     hostId: hostSnapshot.id,
   })
-  return EDITORS.has(String(hostRole))
+  return hostRoleCanPublish(hostRole)
 }
 
 /**

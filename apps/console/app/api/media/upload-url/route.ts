@@ -19,7 +19,10 @@ import {
   defaultScopeForNewResource,
   pluginRequestFromWeb,
 } from '@aglyn/aglyn/server'
-import { mediaStorageGate } from '../../../../utils/storage-overage'
+import {
+  mediaStorageGate,
+  scopeBillsStorageOverage,
+} from '../../../../utils/storage-overage'
 import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band'
 import {
   checkEntitlement,
@@ -190,6 +193,7 @@ async function handler(request: Request): Promise<Response> {
           org: org as any,
           usedMb,
           allowanceMb: band.allowanceMb,
+          billsOverage: scopeBillsStorageOverage(scope.collection),
         })
         if (!gate.allowed) {
           return Response.json(
@@ -363,6 +367,7 @@ async function handler(request: Request): Promise<Response> {
         org: org as any,
         usedMb,
         allowanceMb: band.allowanceMb,
+        billsOverage: scopeBillsStorageOverage(scope.collection),
       })
       if (!gate.allowed) {
         await file.delete().catch(() => undefined)

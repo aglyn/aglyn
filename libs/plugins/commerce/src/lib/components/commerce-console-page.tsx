@@ -36,6 +36,7 @@ import ReviewsModerationCard from './console/reviews-moderation-card.component'
 import ShippingSettingsCard from './console/shipping-settings-card.component'
 import StockMovementsCard from './console/stock-movements-card.component'
 import StoreSettingsCard from './console/store-settings-card.component'
+import StorefrontTaxSummaryCard from './console/storefront-tax-summary-card.component'
 import SuppliersCard from './console/suppliers-card.component'
 import TaxSettingsCard from './console/tax-settings-card.component'
 
@@ -147,7 +148,26 @@ export function CommerceConsolePage(props: ConsolePluginPageProps) {
         {
           id: 'analytics',
           label: 'Analytics',
-          content: <CommerceAnalyticsCard hostId={hostId} />,
+          content: (
+            // Two cards since AGL-2440. The tax summary lives here rather
+            // than under Settings → Tax because that tab CONFIGURES tax and
+            // this REPORTS what was collected — a merchant reading a figure
+            // they may file from should not be one field away from changing
+            // the rate that produced it.
+            <GridItems
+              spacing={3}
+              items={[
+                {
+                  size: { xs: 12 },
+                  children: <CommerceAnalyticsCard hostId={hostId} />,
+                },
+                {
+                  size: { xs: 12 },
+                  children: <StorefrontTaxSummaryCard hostId={hostId} />,
+                },
+              ]}
+            />
+          ),
         },
       ]}
     />

@@ -21,7 +21,7 @@ import { checkEntitlement,
   resolveBrandingProfile,
   resolveTransactionFeePct,
 } from '@aglyn/aglyn/server'
-import { type BookedInterval, BOOKING_MAX_DAYS_AHEAD, computeOpenSlots, type HostBookingService, isSlotOpen } from './model'
+import { type BookedInterval, BOOKING_MAX_DAYS_AHEAD, computeOpenSlots, type HostBookingService, isBookingReminderDue, isSlotOpen, REMINDER_WINDOW_END_HOURS, REMINDER_WINDOW_START_HOURS } from './model'
 import {
   registerBillingWebhookHandler,
   registerPluginApiRoute,
@@ -605,12 +605,154 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
 }
 
 /**
- * Booking reminder emails (AGL-160): invoke hourly from the scheduler with
- * `x-cron-secret`. Finds confirmed bookings starting 23–25 hours out
- * (collection-group query, so one call covers every host), emails each
- * visitor through the env-gated Resend path, and stamps `reminderSentAt`
- * so re-runs are idempotent. 501 without the email config, matching
- * report-usage/usage-email.
+ * One reminder pass (AGL-160), extracted from its HTTP door in AGL-2431.
+ *
+ * Finds confirmed bookings starting 23–25 hours out (collection-group query,
+ * so one call covers every host), emails each visitor through the env-gated
+ * Resend path, and stamps `reminderSentAt` so re-runs are idempotent.
+ *
+ * WHY THIS IS A FUNCTION NOW. It only ever existed as `POST bookings/reminders`
+ * behind `x-cron-secret`, and nothing anywhere POSTed to it — not
+ * `scheduled-crons.yml`, not `vercel.json` (which has no `crons` key), not
+ * `registerPluginJob`. The route's own docblock said "invoke hourly from the
+ * scheduler" for as long as it has existed. It never ran, for anyone. Same
+ * shape as the two commerce beats in AGL-2227, one plugin over.
+ */
+export async function scanBookingReminders(): Promise<{
+  scanned: number
+  sent: number
+  skipped: number
+}> {
+  const firestore = firebaseAdmin.app().firestore()
+  // ONE instant for the query bounds and for the per-booking predicate. Two
+  // `Date.now()` calls would put a booking sitting on an edge inside the
+  // query and outside the test, so the pass would fetch it, skip it, and
+  // report a `skipped` the console could not explain.
+  const nowMs = Date.now()
+  const windowStart = nowMs + REMINDER_WINDOW_START_HOURS * 60 * 60 * 1000
+  const windowEnd = nowMs + REMINDER_WINDOW_END_HOURS * 60 * 60 * 1000
+  const upcoming = await firestore
+    .collectionGroup('bookings')
+    .where('startsAtMs', '>=', windowStart)
+    .where('startsAtMs', '<=', windowEnd)
+    .limit(500)
+    .get()
+
+  let sent = 0
+  let skipped = 0
+  // Resolve each host's designed reminder template once per run (AGL-770),
+  // not once per booking — a busy site has many bookings in the window.
+  const templateCache = new Map<string, LoadedHostEmail | null>()
+  // White-label brand per host (White-Label Phase 3): resolved once per host
+  // from the owning org doc through the one shared resolver, so a reminder
+  // reads as the store's brand.
+  const brandingByHost = new Map<
+    string,
+    ReturnType<typeof resolveBrandingProfile>
+  >()
+  for (const doc of upcoming.docs) {
+    const data = doc.data()
+    // The shared predicate, not a local copy of it (AGL-2431): the console
+    // card counts what is waiting with this same function, so the number a
+    // merchant reads is the number this loop will act on.
+    if (!isBookingReminderDue(data as never, nowMs)) {
+      skipped += 1
+      continue
+    }
+    const when = new Date(Number(data['startsAtMs'])).toLocaleString(
+      'en-US',
+      { dateStyle: 'full', timeStyle: 'short' },
+    )
+    // bookings live at hosts/{hostId}/bookings/{id}, so the grandparent is
+    // the host.
+    const hostId = doc.ref.parent.parent?.id ?? ''
+    let loaded = templateCache.get(hostId)
+    if (loaded === undefined) {
+      loaded = hostId
+        ? await loadHostEmail(firestore, hostId, 'booking-reminder')
+        : null
+      templateCache.set(hostId, loaded)
+      brandingByHost.set(
+        hostId,
+        resolveBrandingProfile(
+          (hostId
+            ? await getOrgForHost(hostId).catch(() => null)
+            : null
+          )?.org as never,
+        ),
+      )
+    }
+    const serviceName = String(data['serviceName'] ?? 'your booking')
+    const designed = loaded
+      ? renderLoadedHostEmail(loaded, {
+          name: String(data['name'] ?? ''),
+          'service.name': serviceName,
+          when,
+        })
+      : null
+    const result = await sendEmail({
+      to: String(data['email']),
+      subject: designed?.subject ?? `Reminder: ${serviceName} tomorrow`,
+      text:
+        designed?.text ||
+        `Hi ${data['name'] ?? ''},\n\nA reminder that "${serviceName}" is ` +
+          `scheduled for ${when}.\n\nReference: ${doc.id}`,
+      ...(designed?.html ? { html: designed.html } : {}),
+      fromName: brandingByHost.get(hostId)?.fromName,
+      context: 'booking reminder',
+    })
+    if (result.sent) {
+      // Cost meter (AGL-1438). Transactional: a reminder a quota refused is
+      // a missed appointment for the site's own customer.
+      await meterHostEmail(hostId)
+      sent += 1
+      await doc.ref
+        .set(
+          {
+            reminderSentAt:
+              firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        )
+        .catch(() => undefined)
+    }
+  }
+  return { scanned: upcoming.size, sent, skipped }
+}
+
+/**
+ * The reminder beat (AGL-2431).
+ *
+ * MODULE SCOPE, like `expire-stale-holds` above and the three commerce beats:
+ * the runner route reaches jobs through `ensureAll(['tenantApi'])`, so a
+ * registration inside a `register*` function would depend on which entry
+ * point happened to be loaded — the AGL-2227 lesson.
+ *
+ * HOURLY, matching the window's own resolution. The scan mails a two-hour
+ * band 23–25h out, so a beat faster than the band buys nothing; a beat slower
+ * than 2h could step over the band entirely and skip a day's reminders. An
+ * hour sits inside that with room, and the pass is bounded (500 docs) and
+ * idempotent — `reminderSentAt` is stamped on send — so an overlapping or
+ * repeated beat cannot double-mail anybody.
+ */
+registerPluginJob({
+  pluginId: BUNDLE_ID,
+  name: 'booking-reminders',
+  intervalMinutes: 60,
+  description: 'Email a 24-hour reminder for each upcoming confirmed booking.',
+  handler: async () => {
+    // Quietly, not as an error: email is optional per deployment, and a beat
+    // that logs hourly on a self-host without Resend buries everything else.
+    if (!isEmailConfigured()) return
+    const { sent } = await scanBookingReminders()
+    if (sent) console.info(`bookings: sent ${sent} booking reminders`)
+  },
+})
+
+/**
+ * The manual door, kept for ops (AGL-2431): the scheduling now lives in the
+ * `booking-reminders` job above, and this stays so a pass can be forced
+ * without waiting for the beat.
  */
 const remindersHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
@@ -630,99 +772,8 @@ const remindersHandler: PluginApiHandler = async (req, res) => {
       error: 'Reminders are not configured (RESEND_API_KEY, USAGE_EMAIL_FROM).',
     })
   }
-
   try {
-    const firestore = firebaseAdmin.app().firestore()
-    const windowStart = Date.now() + 23 * 60 * 60 * 1000
-    const windowEnd = Date.now() + 25 * 60 * 60 * 1000
-    const upcoming = await firestore
-      .collectionGroup('bookings')
-      .where('startsAtMs', '>=', windowStart)
-      .where('startsAtMs', '<=', windowEnd)
-      .limit(500)
-      .get()
-
-    let sent = 0
-    let skipped = 0
-    // Resolve each host's designed reminder template once per run (AGL-770),
-    // not once per booking — a busy site has many bookings in the window.
-    const templateCache = new Map<string, LoadedHostEmail | null>()
-    // White-label brand per host (White-Label Phase 3): resolved once per host
-    // from the owning org doc through the one shared resolver, so a reminder
-    // reads as the store's brand.
-    const brandingByHost = new Map<
-      string,
-      ReturnType<typeof resolveBrandingProfile>
-    >()
-    for (const doc of upcoming.docs) {
-      const data = doc.data()
-      if (
-        data['status'] === 'canceled' ||
-        data['reminderSentAt'] ||
-        !data['email']
-      ) {
-        skipped += 1
-        continue
-      }
-      const when = new Date(Number(data['startsAtMs'])).toLocaleString(
-        'en-US',
-        { dateStyle: 'full', timeStyle: 'short' },
-      )
-      // bookings live at hosts/{hostId}/bookings/{id}, so the grandparent is
-      // the host.
-      const hostId = doc.ref.parent.parent?.id ?? ''
-      let loaded = templateCache.get(hostId)
-      if (loaded === undefined) {
-        loaded = hostId
-          ? await loadHostEmail(firestore, hostId, 'booking-reminder')
-          : null
-        templateCache.set(hostId, loaded)
-        brandingByHost.set(
-          hostId,
-          resolveBrandingProfile(
-            (hostId
-              ? await getOrgForHost(hostId).catch(() => null)
-              : null
-            )?.org as never,
-          ),
-        )
-      }
-      const serviceName = String(data['serviceName'] ?? 'your booking')
-      const designed = loaded
-        ? renderLoadedHostEmail(loaded, {
-            name: String(data['name'] ?? ''),
-            'service.name': serviceName,
-            when,
-          })
-        : null
-      const result = await sendEmail({
-        to: String(data['email']),
-        subject: designed?.subject ?? `Reminder: ${serviceName} tomorrow`,
-        text:
-          designed?.text ||
-          `Hi ${data['name'] ?? ''},\n\nA reminder that "${serviceName}" is ` +
-            `scheduled for ${when}.\n\nReference: ${doc.id}`,
-        ...(designed?.html ? { html: designed.html } : {}),
-        fromName: brandingByHost.get(hostId)?.fromName,
-        context: 'booking reminder',
-      })
-      if (result.sent) {
-        // Cost meter (AGL-1438). Transactional: a reminder a quota refused is
-        // a missed appointment for the site's own customer.
-        await meterHostEmail(hostId)
-        sent += 1
-        await doc.ref
-          .set(
-            {
-              reminderSentAt:
-                firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-            },
-            { merge: true },
-          )
-          .catch(() => undefined)
-      }
-    }
-    return res.status(200).json({ scanned: upcoming.size, sent, skipped })
+    return res.status(200).json(await scanBookingReminders())
   } catch (error) {
     console.error(error)
     return res.status(500).json({ error: 'Reminders failed' })

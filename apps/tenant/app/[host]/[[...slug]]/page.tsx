@@ -202,7 +202,14 @@ function buildMetadata(props: Props): Metadata {
     // dimensions; before it, a cover stored as a `media:` reference reached
     // `og:image` as the literal string `media:…`.
     const socialImage = Aglyn.resolveSocialImage({
-      sources: [{ image: entry?.coverImage }, screen?.seo, host?.seo],
+      // The alt travels WITH the reference (AGL-2417) — never taken from a
+      // level the image did not come from, which would describe a picture the
+      // card does not show.
+      sources: [
+        { image: entry?.coverImage, imageAlt: entry?.coverImageAlt },
+        screen?.seo,
+        host?.seo,
+      ],
       host,
     })
     const fullTitle = titleFor({ title: authoredTitle, name })

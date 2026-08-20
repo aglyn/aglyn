@@ -218,7 +218,7 @@ jobs:
 
       # Only for tools/scripts/cron-deploy-state.sh — the POST below needs no
       # checkout and does not get one.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           sparse-checkout: tools/scripts/cron-deploy-state.sh
           sparse-checkout-cone-mode: false

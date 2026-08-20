@@ -99,6 +99,29 @@ export function isProductionDeployment(
 }
 
 /**
+ * What to call this deployment's environment in a health report (AGL-2436).
+ *
+ * Both health routes read `process.env.VERCEL_ENV ?? 'development'`, so an
+ * operator's production container reported `"environment": "development"` —
+ * to them, and to whatever monitoring they point at it. A health endpoint is
+ * the one surface whose entire job is to say what is running, and it was
+ * saying the opposite for every deployment that is not ours.
+ *
+ * `VERCEL_ENV` still wins where it exists, because it distinguishes a preview
+ * from production and nothing else can. Off Vercel the answer comes from the
+ * predicates above rather than from the absence of a vendor's variable.
+ */
+export function deploymentEnvironmentLabel(
+  env: Record<string, string | undefined> = process.env,
+): string {
+  const vercel = env['VERCEL_ENV']
+  if (vercel) return vercel
+  if (isProductionDeployment(env)) return 'production'
+  if (isDeployedRuntime(env)) return 'deployment'
+  return 'development'
+}
+
+/**
  * True only on a development runtime.
  *
  * The predicate a relaxation is allowed to key on. `NODE_ENV` is set to

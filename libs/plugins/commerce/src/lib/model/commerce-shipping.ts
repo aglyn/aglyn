@@ -332,7 +332,7 @@ export interface CheckoutShippingPlan {
    *   Ask the shopper where they are shipping and plan again.
    * - `destination-unserved` — the merchant ships somewhere, but not there.
    * - `cart-unpriceable` — the merchant priced shipping, but no rate of theirs
-   *   resolves for THIS cart at ANY destination (AGL-2230). A tier table that
+   *   resolves for THIS cart at ANY destination (AGL-2232). A tier table that
    *   stops at 2 kg says nothing about a 3 kg parcel, and the honest answer is
    *   to refuse rather than to ship it for nothing.
    */
@@ -340,7 +340,7 @@ export interface CheckoutShippingPlan {
 }
 
 /**
- * Whether this merchant prices shipping AT ALL (AGL-2230).
+ * Whether this merchant prices shipping AT ALL (AGL-2232).
  *
  * A pure question about the SETTINGS, deliberately taking no cart, and that is
  * the whole point of it existing. `planCheckoutShipping` used to ask "does any
@@ -370,7 +370,7 @@ export function merchantPricesShipping(
 }
 
 /**
- * What a shopper is told when `cart-unpriceable` refuses (AGL-2230).
+ * What a shopper is told when `cart-unpriceable` refuses (AGL-2232).
  *
  * One string, shared by all three doors, because the three used to phrase the
  * two existing refusals identically and drifting here would make the same
@@ -465,7 +465,7 @@ export function planCheckoutShipping(
     }
     if (options.length > 0) return { countries: [destination], options }
     // NOTHING resolves anywhere for this cart, and the two reasons that can be
-    // true of are opposite (AGL-2230). Asked of the SETTINGS rather than of
+    // true of are opposite (AGL-2232). Asked of the SETTINGS rather than of
     // this cart, because the probe above cannot tell them apart: a merchant
     // who priced shipping and whose table simply does not reach this order is
     // refusing, and used to be handed the "never set shipping up" branch.
@@ -486,7 +486,7 @@ export function planCheckoutShipping(
   }
   const union = resolveCheckoutShippingOptions(settings, countries, cart)
   // Every destination agrees, and what they agree on is NOTHING. The same
-  // fork as the declared-destination branch above (AGL-2230): a store with no
+  // fork as the declared-destination branch above (AGL-2232): a store with no
   // shipping settings completes untouched, a store whose rates cannot reach
   // this cart refuses instead of carrying the parcel for free.
   if (union.length === 0 && merchantPricesShipping(settings)) {

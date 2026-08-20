@@ -69,6 +69,22 @@ export interface QuotaReadoutProps
   noun: string
   /** Plural, when it is not `noun + 's'` — e.g. `entries` for `entry`. */
   nounPlural?: string
+  /**
+   * For a quota that RESETS, the period it counts over — e.g. `this month`.
+   *
+   * Omitted, the readout says "on your plan", which is true of a standing
+   * count (products, redirects) and a lie about a monthly one: `340/500
+   * campaign emails on your plan` reads as a lifetime allowance, so a
+   * customer at 340 believes they have 160 left forever rather than until
+   * the 1st. Supplied, it replaces that tail — `340/500 campaign emails
+   * this month`.
+   *
+   * A string rather than a boolean because the reset window is the caller's
+   * fact, not this component's: every monthly counter in the product is
+   * keyed `YYYY-MM`, but nothing here reads the counter and a component that
+   * hardcoded "month" would be asserting a period it cannot see.
+   */
+  period?: string
 }
 
 /** `∞` for an unlimited cap, the number otherwise. */
@@ -80,9 +96,13 @@ export const QuotaReadoutComponent = forwardRef<
   HTMLDivElement,
   QuotaReadoutProps
 >((props, ref) => {
-  const { ready, used, limit, noun, nounPlural, ...rest } = props
+  const { ready, used, limit, noun, nounPlural, period, ...rest } = props
   const plural = nounPlural ?? `${noun}s`
   const word = used === 1 ? noun : plural
+  // A resetting quota says WHEN it resets; a standing one says the count is
+  // the plan's. Both tails are about the denominator, so neither renders
+  // while `ready` is false and there is no denominator to qualify.
+  const tail = period ?? 'on your plan'
   return (
     <Typography
       variant="caption"
@@ -92,7 +112,7 @@ export const QuotaReadoutComponent = forwardRef<
       {...rest}
     >
       {ready
-        ? `${used}/${formatLimit(limit)} ${plural} on your plan`
+        ? `${used}/${formatLimit(limit)} ${plural} ${tail}`
         : `${used} ${word} · checking your plan…`}
     </Typography>
   )

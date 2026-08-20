@@ -74,6 +74,18 @@ updates:
       # name rather than the target and would propose a bump to the wrong
       # package. Remove this entry when the pin becomes a plain version.
       - dependency-name: typescript
+      # @base-ui/react >= 1.7.0 cannot pass the console suite. 1.7.0 added
+      # utils/dispatchClickWithModifiers.js (absent in 1.6.0), which on keydown
+      # synthesises the click via `new (ownerWindow(el).PointerEvent)(...)`.
+      # jest does not run in the repo's jsdom 29 — jest-environment-jsdom pins
+      # its own nested jsdom 26.1.0, which has NO PointerEvent — so every
+      # keyboard-activated base-ui button throws "PointerEvent is not a
+      # constructor". Browser and production builds are unaffected; it is the
+      # test environment alone. Patch releases of the 1.6 line still arrive.
+      # Remove this together with the jest PointerEvent polyfill. (AGL-2470)
+      - dependency-name: '@base-ui/react'
+        versions:
+          - '>=1.7.0'
     groups:
       # A dependency lands in the FIRST group whose patterns match, so the
       # order of these blocks is load-bearing: `eslint-config-next` belongs
@@ -183,6 +195,24 @@ updates:
       prefix: chore
       prefix-development: chore
       include: scope
+    ignore:
+      # THE SAME npm ALIAS THE ROOT ENTRY IGNORES. cloud/functions/package.json
+      # pins `typescript` to `npm:@typescript/typescript6@6.0.2` exactly as the
+      # root does, so Dependabot would resolve the alias name instead of the
+      # target here too. The root was guarded and this manifest was not; it
+      # simply had not misfired yet. Remove when the pin becomes a plain
+      # version — in both places at once. (AGL-2458)
+      - dependency-name: typescript
+      # firebase-admin v14 CANNOT be installed here. firebase-functions-test
+      # (devDependency) peers on ^8 || ^9 || ^10 || ^11 || ^12 || ^13 with no
+      # ^14, and 3.5.0 is the latest release, so there is nothing to upgrade it
+      # to; with admin ^14 `npm ci` dies on ERESOLVE. No workflow runs an
+      # install in this directory, so CI would not catch it. Minor and patch
+      # bumps of the v13 line still arrive. Drop this the moment
+      # firebase-functions-test ships a peer range including ^14. (AGL-2457)
+      - dependency-name: firebase-admin
+        update-types:
+          - version-update:semver-major
     groups:
       firebase:
         patterns:

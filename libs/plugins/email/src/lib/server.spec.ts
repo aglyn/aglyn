@@ -1,0 +1,324 @@
+/**
+ * @jest-environment node
+ *
+ * Must stay the FIRST block comment in the file — Jest reads the pragma only
+ * from the opening docblock, so a license header above it silently leaves the
+ * suite on jsdom.
+ *
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * The unsubscribe link is SAFE on GET (AGL-2408).
+ *
+ * The assertion that matters is `docs.size` after a GET with a perfectly
+ * valid signature: zero. That is the prescanner case — Safe Links, Proofpoint
+ * and friends fetch every URL in a message before the recipient sees it, and
+ * against the old handler each of those fetches unsubscribed someone.
+ *
+ * THE DOUBLE MODELS WHAT THE HANDLER DEPENDS ON, stated so a false green is
+ * visible:
+ *
+ *  1. `set({ merge: true })` merges into the existing document and CREATES it
+ *     when absent — the write path.
+ *  2. `runTransaction` buffers `tx.set` until the callback resolves, and
+ *     `tx.get` sees committed state — which is what makes "stamp `createdAt`
+ *     only when new" mean anything. Contention/retry are NOT modelled: the
+ *     callback runs exactly once, faithful to the uncontended path here.
+ *  3. `serverTimestamp()` is a sentinel resolved on write, so a re-stamped
+ *     `createdAt` is DISTINGUISHABLE from a preserved one — the double keeps
+ *     a monotonic clock rather than one constant string, or the "does not
+ *     restamp" assertion could not fail.
+ */
+
+// ---------------------------------------------------------------------------
+// The store
+// ---------------------------------------------------------------------------
+
+let clock = 0
+
+interface ServerTimestampSentinel {
+  __serverTimestamp: true
+}
+
+const isServerTimestamp = (value: unknown): value is ServerTimestampSentinel =>
+  (value as ServerTimestampSentinel)?.__serverTimestamp === true
+
+jest.mock('firebase-admin/firestore', () => ({
+  FieldValue: { serverTimestamp: () => ({ __serverTimestamp: true }) },
+}))
+
+const docs = new Map<string, Record<string, unknown>>()
+
+function mergeInto(
+  target: Record<string, unknown>,
+  patch: Record<string, unknown>,
+): Record<string, unknown> {
+  const out = { ...target }
+  for (const [key, value] of Object.entries(patch)) {
+    out[key] = isServerTimestamp(value) ? `t${(clock += 1)}` : value
+  }
+  return out
+}
+
+/** Forced failure for the next transaction, to model an outage. */
+let transactionFailure: Error | null = null
+
+function makeDocRef(path: string): any {
+  return {
+    id: path.split('/').pop(),
+    path,
+    get: async () => ({
+      exists: docs.has(path),
+      data: () => docs.get(path),
+    }),
+  }
+}
+
+function makeCollectionRef(path: string): any {
+  return {
+    doc: (id: string) => {
+      const full = `${path}/${id}`
+      // A document path has an EVEN component count; `.doc()` throws outright
+      // when the argument makes it odd — SYNCHRONOUSLY, not as a rejection.
+      if (full.split('/').length % 2 !== 0) {
+        throw new Error(
+          `Value for argument "documentPath" must point to a document, ` +
+            `but was "${id}".`,
+        )
+      }
+      return { ...makeDocRef(full), collection: (name: string) => makeCollectionRef(`${full}/${name}`) }
+    },
+  }
+}
+
+async function runTransaction<T>(body: (tx: any) => Promise<T>): Promise<T> {
+  if (transactionFailure) {
+    const failure = transactionFailure
+    transactionFailure = null
+    throw failure
+  }
+  const pending: Array<() => void> = []
+  const tx = {
+    get: (ref: any) => ref.get(),
+    set: (
+      ref: any,
+      value: Record<string, unknown>,
+      options?: { merge?: boolean },
+    ) => {
+      pending.push(() => {
+        docs.set(
+          ref.path,
+          options?.merge
+            ? mergeInto(docs.get(ref.path) ?? {}, value)
+            : mergeInto({}, value),
+        )
+      })
+      return tx
+    },
+  }
+  const result = await body(tx)
+  for (const write of pending) write()
+  return result
+}
+
+const fakeFirestore = {
+  collection: (name: string) => makeCollectionRef(name),
+  runTransaction,
+}
+
+jest.mock('@aglyn/tenant-data-admin', () => ({
+  __esModule: true,
+  firebaseAdmin: { app: () => ({ firestore: () => fakeFirestore }) },
+}))
+
+import { resolvePluginApiRoute } from '@aglyn/aglyn/server'
+import { createHash, createHmac } from 'crypto'
+import { registerEmailApi } from './server'
+
+registerEmailApi()
+
+// ---------------------------------------------------------------------------
+// Fixtures
+// ---------------------------------------------------------------------------
+
+const SECRET = 'unsubscribe-secret'
+const HOST = 'host-1'
+const RECIPIENT = 'dana@example.com'
+const SUPPRESSION_PATH = `hosts/${HOST}/suppressions/${createHash('sha256')
+  .update(RECIPIENT)
+  .digest('hex')}`
+
+const sign = (hostId: string, email: string) =>
+  createHmac('sha256', SECRET).update(`${hostId}:${email}`).digest('hex')
+
+interface Reply {
+  status: number
+  body: string
+  headers: Record<string, string>
+}
+
+async function call(options: {
+  method: string
+  query?: Record<string, string>
+  body?: Record<string, string>
+}): Promise<Reply> {
+  const handler = resolvePluginApiRoute('email/unsubscribe')
+  expect(handler).toBeDefined()
+  const reply: Reply = { status: 200, body: '', headers: {} }
+  const res: any = {
+    status: (code: number) => {
+      reply.status = code
+      return res
+    },
+    setHeader: (name: string, value: unknown) => {
+      reply.headers[String(name).toLowerCase()] = String(value)
+    },
+    send: (value: unknown) => {
+      reply.body = String(value ?? '')
+    },
+    json: (value: unknown) => {
+      reply.body = JSON.stringify(value)
+    },
+  }
+  await handler!(
+    {
+      method: options.method,
+      query: options.query ?? {},
+      body: options.body,
+      headers: {},
+      cookies: {},
+      socket: {},
+    } as any,
+    res,
+  )
+  return reply
+}
+
+const validQuery = () => ({
+  hostId: HOST,
+  email: RECIPIENT,
+  sig: sign(HOST, RECIPIENT),
+})
+
+describe('email/unsubscribe', () => {
+  beforeEach(() => {
+    docs.clear()
+    clock = 0
+    transactionFailure = null
+    process.env.EMAIL_UNSUBSCRIBE_SECRET = SECRET
+  })
+
+  it('does NOT write on GET — a link prescanner unsubscribes nobody', async () => {
+    const reply = await call({ method: 'GET', query: validQuery() })
+    expect(reply.status).toBe(200)
+    expect(docs.size).toBe(0)
+  })
+
+  it('offers a same-URL POST form carrying the signature', async () => {
+    const reply = await call({ method: 'GET', query: validQuery() })
+    expect(reply.body).toContain('method="post"')
+    expect(reply.body).toContain(`sig=${sign(HOST, RECIPIENT)}`)
+    // `&` inside an attribute must be escaped or the second and third
+    // parameters are lost and the POST answers "Invalid unsubscribe link".
+    expect(reply.body).toContain('&amp;email=')
+    expect(reply.body).not.toMatch(/action="[^"]*[^p;]&email=/)
+  })
+
+  it('writes the suppression on POST, with an explicit reason', async () => {
+    const reply = await call({ method: 'POST', query: validQuery() })
+    expect(reply.status).toBe(200)
+    expect(reply.body).toContain("You're unsubscribed")
+    expect(docs.get(SUPPRESSION_PATH)).toEqual({
+      email: RECIPIENT,
+      reason: 'unsubscribe',
+      // `suppressedAt` is written before the conditional `createdAt`, so it
+      // takes the earlier tick. Both are asserted by exact value so a
+      // sentinel that stopped resolving would fail rather than pass as
+      // "some object".
+      suppressedAt: 't1',
+      createdAt: 't2',
+    })
+  })
+
+  it('accepts the RFC 8058 one-click POST body', async () => {
+    // What Gmail sends: the header URL verbatim, `List-Unsubscribe=One-Click`
+    // as the urlencoded body. The handler must not require anything else.
+    const reply = await call({
+      method: 'POST',
+      query: validQuery(),
+      body: { 'List-Unsubscribe': 'One-Click' },
+    })
+    expect(reply.status).toBe(200)
+    expect(docs.has(SUPPRESSION_PATH)).toBe(true)
+  })
+
+  it('reads the parameters from a form body when the query is bare', async () => {
+    const reply = await call({ method: 'POST', body: validQuery() })
+    expect(reply.status).toBe(200)
+    expect(docs.has(SUPPRESSION_PATH)).toBe(true)
+  })
+
+  it('does not restamp createdAt on a second POST', async () => {
+    await call({ method: 'POST', query: validQuery() })
+    await call({ method: 'POST', query: validQuery() })
+    const entry = docs.get(SUPPRESSION_PATH) as Record<string, unknown>
+    // Stamped once, on the first POST, and left alone by the second.
+    expect(entry['createdAt']).toBe('t2')
+    // The clock moved, so a restamp would be visible rather than a tie.
+    expect(entry['suppressedAt']).toBe('t3')
+  })
+
+  it('refuses a bad signature on POST without writing', async () => {
+    const reply = await call({
+      method: 'POST',
+      query: { ...validQuery(), sig: 'deadbeef' },
+    })
+    expect(reply.status).toBe(403)
+    expect(docs.size).toBe(0)
+  })
+
+  it('refuses another recipient signed for a different address', async () => {
+    const reply = await call({
+      method: 'POST',
+      query: {
+        hostId: HOST,
+        email: 'someone-else@example.com',
+        sig: sign(HOST, RECIPIENT),
+      },
+    })
+    expect(reply.status).toBe(403)
+    expect(docs.size).toBe(0)
+  })
+
+  it('answers 405 to a verb that is neither', async () => {
+    const reply = await call({ method: 'DELETE', query: validQuery() })
+    expect(reply.status).toBe(405)
+    expect(reply.headers['allow']).toBe('GET, POST')
+    expect(docs.size).toBe(0)
+  })
+
+  it('answers 500 when the write fails, and writes nothing', async () => {
+    transactionFailure = new Error('firestore down')
+    const consoleError = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined)
+    const reply = await call({ method: 'POST', query: validQuery() })
+    expect(reply.status).toBe(500)
+    expect(docs.size).toBe(0)
+    consoleError.mockRestore()
+  })
+})

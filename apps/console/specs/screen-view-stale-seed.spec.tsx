@@ -145,6 +145,21 @@ jest.mock('../components/host-id-provider', () => ({
   useHostSubdomain: () => 'shop',
 }))
 jest.mock('../hooks/use-org-scope', () => ({ useOrgSlug: () => 'acme' }))
+// AGL-2334 gave the editor pages a host-role read, purely to disable the
+// publish controls for an `author` and say why. This spec drives the RENAME
+// and SEO save paths, which that role does not gate, so the hook is stubbed
+// at the owner's answer — the standing these cases had before AGL-2334, and
+// the one that leaves the seed guard the only thing deciding the write.
+//
+// Stubbed at the hook rather than widened at '@aglyn/tenant-feature-instance':
+// that mock is a closed world and the real `useHostRole` reaches through
+// `useHostOrgId` into `getDoc`, so feeding it there would put a Firestore
+// read behind every case to no purpose. The symptom was
+// `(0, _useHostOrgId.default) is not a function`.
+jest.mock('../hooks/use-host-role', () => ({
+  __esModule: true,
+  default: () => ({ hostRole: 'owner', canPublish: true, loaded: true }),
+}))
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ org: { plan: 'business' } }),

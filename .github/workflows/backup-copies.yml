@@ -1,0 +1,145 @@
+name: Backup copies
+
+# Does ANY copy of production data live outside the production GCP project?
+# (AGL-1882.)
+#
+# `/api/health/backups` already watches whether backups exist and are fresh,
+# and it reported **ok** on 2026-08-19 — one READY managed backup 3.3 days old,
+# one completed GCS export 1.9 days old — while the true state was three copies
+# of production data and all three inside `aglyn-main`. That endpoint cannot
+# see this and never will: every probe it makes is a probe from inside the
+# thing that would be lost. A compromised service account, a billing
+# suspension, or a project deletion takes the data and every copy of it in one
+# action, and the measured 19m09s restore (AGL-1490) applies to none of them.
+#
+# So this workflow watches an invariant with no other home:
+#   at least one FRESH copy of production data sits in a project that is not
+#   the production project — proven by `projectNumber`, never by bucket name.
+#
+# ## What it does today, and why that is not a muted alarm
+#
+# The invariant does NOT hold right now. `tools/scripts/lib/backup-copies.mjs`
+# carries an ACKNOWLEDGED entry for `no-off-project-copy` — owned by AGL-1882,
+# expiring **2026-09-01** — so this job prints the gap in full every run and
+# still exits 0, because a job that is red every day until one person does one
+# thing gets muted, and then it is worth nothing on the day something ELSE
+# breaks. On 2026-09-01 the acknowledgement expires and this job goes red with
+# no edit to any file: launching public beta with paying customers and zero
+# off-project copies is a different decision from carrying the gap pre-revenue,
+# and a date in a data structure is the only kind of deadline a repo can keep.
+#
+# Everything else it can find is unconditionally red from the first run: an
+# off-project bucket that is empty or stale, a bucket appearing in production
+# that nobody classified as needing a copy, a declared store that has vanished.
+#
+# ## Triggers
+#  - daily schedule: the failure this watches arrives with no commit attached.
+#    A lifecycle rule edited in the console, an export cron that quietly stops,
+#    a mirror bucket deleted — none of them touch the repo. (GitHub schedules
+#    are best-effort and pause on 60-day-quiet repos; a green history is not
+#    proof of continuous coverage.)
+#  - push touching the checker or the declared inventory: the moment the
+#    statement of what-copies-what changes, re-measure it against live.
+#  - manual dispatch, for the run right after the off-project bucket is created
+#    — that is the acceptance test, and it should be run with --strict.
+#
+# Requires the SAME repo secrets rules-drift.yml and index-drift.yml already
+# use; the checker reads Cloud Storage with the console service account, whose
+# project-level `roles/storage.admin` already covers
+# `storage.buckets.list/get` and `storage.objects.list`. No new credential.
+#   gh secret set FIREBASE_CLIENT_EMAIL --body '<client_email>'
+#   gh secret set FIREBASE_PRIVATE_KEY --body "$(jq -r .private_key service-account.json)"
+# Optional repo var: FIREBASE_PROJECT_ID (default aglyn-main). NOTE repo
+# variables survive domain/org migrations (AGL-786) — if the project ever
+# moves, update them, don't trust them.
+#
+# ⚠️ When the off-project bucket lands in a project the console service account
+# cannot read, the checker exits 2 (cannot-check) rather than 0 — grant that
+# account `roles/storage.objectViewer` on the mirror bucket as part of creating
+# it. Never "fix" a cannot-check by removing the step: an unread bucket is not
+# an absent one, and a skipped check that renders green is the exact silent
+# failure this whole file exists to prevent.
+
+on:
+  push:
+    branches:
+      - main
+      - production
+    paths:
+      - tools/scripts/check-backup-copies.mjs
+      - tools/scripts/lib/backup-copies.mjs
+      - tools/scripts/lib/backup-copies.test.mjs
+      - .github/workflows/backup-copies.yml
+  schedule:
+    # Daily, 08:07 UTC — off the top of the hour, where GitHub's scheduler
+    # congestion is worst, and after rules-drift (07:23), index-drift (07:41)
+    # and tools-guards (07:53) so the four do not contend for one npm cache.
+    - cron: '7 8 * * *'
+  workflow_dispatch:
+
+concurrency:
+  # A push is grouped by its own COMMIT and never cancelled — a cancelled push
+  # run leaves that commit with no verdict, and the newest run is measuring a
+  # different tree (AGL-2378). Schedule and dispatch keep the ref-scoped group
+  # and still supersede, which is right for them: only the newest measurement
+  # of live state matters.
+  group: backup-copies-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Refuse to no-op without credentials
+        env:
+          CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+        run: |
+          if [ -z "$CLIENT_EMAIL" ] || [ -z "$PRIVATE_KEY" ]; then
+            echo "FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY repo secrets are not set." >&2
+            echo "" >&2
+            echo "This job reads the LIVE Cloud Storage inventory to decide whether any" >&2
+            echo "copy of production data sits outside the production project. Without" >&2
+            echo "credentials it cannot see live, and passing anyway would report calm" >&2
+            echo "about the one thing no in-project probe can observe (AGL-1882)." >&2
+            echo "Create the secrets once, from the service-account JSON:" >&2
+            echo "  gh secret set FIREBASE_CLIENT_EMAIL --body '<client_email>'" >&2
+            echo "  gh secret set FIREBASE_PRIVATE_KEY --body \"\$(jq -r .private_key service-account.json)\"" >&2
+            exit 2
+          fi
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      # firebase-admin mints the service-account token — the same auth path the
+      # rules deploy and both drift checkers use, shared via
+      # tools/scripts/lib/firebase-rules-api.mjs.
+      - run: npm ci
+
+      # Guard the guard (AGL-1778), BEFORE the live read: everything below
+      # trusts this comparator's verdict about where production data lives, and
+      # a comparator that wrongly reports "off-project copy present" is
+      # indistinguishable from one. This suite also runs in tools-guards.yml,
+      # which is what stops the claim from being circular.
+      - run: npm run test:backup-copies
+
+      - name: Locate every copy of production data
+        env:
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          # Set these the moment an off-project target exists — the checker
+          # follows whichever is present, and FIRESTORE_EXPORT_BUCKET is the
+          # SAME variable /api/admin/firestore-export and /api/health/backups
+          # read, so pointing the export off-project moves all three at once.
+          FIRESTORE_EXPORT_BUCKET: ${{ vars.FIRESTORE_EXPORT_BUCKET }}
+          OFFSITE_BACKUP_BUCKET: ${{ vars.OFFSITE_BACKUP_BUCKET }}
+        run: npm run check:backup-copies

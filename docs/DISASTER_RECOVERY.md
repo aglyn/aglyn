@@ -20,7 +20,14 @@ Related: `docs/FIRESTORE_MANUAL_CONFIG.md` (how the protections were set up),
 | Scheduled backups | Weekly, Sunday, 98-day (14-week) retention | Restore a Sunday snapshot up to 14 weeks back — **only backups whose `state` is `READY`** |
 | Delete protection | ENABLED on `(default)` | Blocks accidental/hostile database deletion |
 | Independent GCS export | Weekly (Mondays 05:00 UTC), `gs://aglyn-main-firestore-exports`, 90-day lifecycle | A portable snapshot **not** subject to the managed-backup `NOT_AVAILABLE` flip; restorable by import into any database (Procedure D). Added 2026-08-17 (AGL-1843) |
-| Off-project copy | **NONE** | Nothing survives loss of the `aglyn-main` project itself — the export bucket lives IN `aglyn-main` (see gaps) |
+| Off-project copy | **NONE** (re-verified live 2026-08-19, AGL-1882) | Nothing survives loss of the `aglyn-main` project itself — the export bucket lives IN `aglyn-main` (see gaps) |
+| Cloud Storage copy | **NONE** (AGL-2422) | Customer media, `adminAudit-archive/` and plugin bundles are copied by nothing, in-project or out. The weekly export is **Firestore only** |
+
+Run `npm run check:backup-copies` for the current answer to "where does every
+copy live" rather than trusting this table — it reads the live bucket
+inventory, resolves each copy target's owning `projectNumber`, and exits 2
+rather than 0 when it cannot see. `--strict` is the acceptance test for the
+off-project gap below.
 
 **Backups can fail silently — and a READY backup can STOP being restorable.**
 (AGL-1490, AGL-1843.) As of 2026-08-17, **every backup this project has taken
@@ -340,16 +347,103 @@ dated so this never matters.
 
 ## Remaining gaps (open, honest)
 
-1. **No off-project copy.** The weekly export (AGL-1843) creates an
-   independent copy, but its bucket lives inside `aglyn-main` — loss of the
-   project still loses everything. The remaining move is deliberately left
-   as a human decision (it means creating and paying for a second GCP
-   project): create a bucket in a SEPARATE project, grant this project's
-   Firestore service agent write on it, and either point
-   `FIRESTORE_EXPORT_BUCKET` (console env) at it or add a second export/copy
-   step. The exact steps are written on AGL-1843. Everything else about the
-   export path — IAM, route, cron, health check — carries over unchanged;
-   only the bucket's project changes.
+1. **No off-project copy — AGL-1882, premise re-verified against live GCP on
+   2026-08-19.** The weekly export (AGL-1843) creates an independent copy, but
+   its bucket lives inside `aglyn-main`, and so does everything else. The full
+   audit, because "no off-project copy" was worth confirming rather than
+   inheriting:
+
+   | Copy of production data | Project | Location | State on 2026-08-19 |
+   | --- | --- | --- | --- |
+   | Firestore managed backups (weekly, SUNDAY, 98-day retention) | `aglyn-main` | `nam5` | 3 backups: `2026-08-16` **READY**, `2026-08-09` and `2026-08-02` **NOT_AVAILABLE** — the ~day-7 flip continues |
+   | `gs://aglyn-main-firestore-exports` | `aglyn-main` (543499566626) | US multi-region | 1 completed export (`2026-08-17T23-43-04Z`, 4.3 MiB), 90-day lifecycle |
+   | `gs://aglyn-main.appspot.com` | `aglyn-main` | US multi-region | ~47 MiB of **primary** data, no copy anywhere (gap 6) |
+   | `gs://aglyn-main-plugin-artifacts` | `aglyn-main` | US multi-region | ~28 KiB of **primary** data, no copy anywhere (gap 6) |
+
+   The sibling projects were checked too, in case a copy had quietly landed in
+   one: `aglyn-app` and `aglyn-org` hold only their own default
+   `*.appspot.com` buckets in `US-WEST2` and contain nothing from
+   `aglyn-main`. **Every copy is inside one project**, and
+   `GET /api/health/backups` returned `status: ok` that same morning — it
+   watches backup *state* and export *freshness* from inside the project that
+   would be lost, so it is structurally incapable of reporting this. That is
+   what `npm run check:backup-copies` exists for.
+
+   ### What closing it takes (Zach — these create/modify cloud resources)
+
+   Order matters: the bucket and its IAM must exist **before** anything is
+   pointed at it, or the first scheduled export fails and the health probe
+   goes red for the wrong reason.
+
+   ```bash
+   # 1. A SEPARATE project. Free to create; it is the resources that cost.
+   #    Same billing account keeps this to one invoice — read the trade-off
+   #    below before deciding that is what you want.
+   gcloud projects create aglyn-dr --name="Aglyn - DR"
+   gcloud beta billing projects link aglyn-dr --billing-account=<BILLING_ACCOUNT_ID>
+
+   # 2. The bucket. US multi-region matches nam5 (no cross-region egress);
+   #    uniform access + public-access prevention match the existing export
+   #    bucket, and both matter more here — this copy is the last one.
+   gcloud storage buckets create gs://aglyn-dr-firestore-exports \
+     --project=aglyn-dr --location=US \
+     --uniform-bucket-level-access --public-access-prevention
+
+   # 3. Lifecycle: same 90-day depth as the in-project export. Set it BEFORE
+   #    the first write, so no object is ever retained under no policy.
+   gcloud storage buckets update gs://aglyn-dr-firestore-exports \
+     --lifecycle-file=<(echo '{"rule":[{"action":{"type":"Delete"},"condition":{"age":90}}]}')
+
+   # 4. IAM — TWO principals, and the one people forget is the second:
+   #    a) the caller, which starts the export;
+   #    b) the FIRESTORE SERVICE AGENT, which is what actually writes the
+   #       objects (AGL-1843 established this the hard way).
+   gcloud storage buckets add-iam-policy-binding gs://aglyn-dr-firestore-exports \
+     --member=serviceAccount:firebase-adminsdk-fcgi3@aglyn-main.iam.gserviceaccount.com \
+     --role=roles/storage.objectAdmin
+   gcloud storage buckets add-iam-policy-binding gs://aglyn-dr-firestore-exports \
+     --member=serviceAccount:service-543499566626@gcp-sa-firestore.iam.gserviceaccount.com \
+     --role=roles/storage.admin
+   #    c) and read, so the guard can see it. objectAdmin above covers objects;
+   #       the guard also does a buckets.get:
+   gcloud storage buckets add-iam-policy-binding gs://aglyn-dr-firestore-exports \
+     --member=serviceAccount:firebase-adminsdk-fcgi3@aglyn-main.iam.gserviceaccount.com \
+     --role=roles/storage.legacyBucketReader
+
+   # 5. Point the export at it. ONE variable, already read by
+   #    /api/admin/firestore-export, /api/health/backups and the guard:
+   #      Vercel (console, production): FIRESTORE_EXPORT_BUCKET=aglyn-dr-firestore-exports
+   #      GitHub repo variable (so backup-copies.yml follows): same name, same value
+   #    Redeploy console afterwards — an env change alone does not reach a
+   #    running deployment (AGL-1874's lesson, verify with GET /v13/deployments/{id}).
+
+   # 6. Prove it, do not assume it. Run the export by hand once, then:
+   npm run check:backup-copies -- --strict     # must exit 0
+   curl -s https://app.aglyn.com/api/health/backups | jq .checks.exports
+   ```
+
+   Then delete the `no-off-project-copy` entry from `ACKNOWLEDGED` in
+   `tools/scripts/lib/backup-copies.mjs` — that is what turns the guard from
+   "known gap" into "regression if it ever comes back".
+
+   ### The three shapes, and what each actually buys
+
+   | Option | Cost/month at today's ~51 MiB | Survives | Does NOT survive |
+   | --- | --- | --- | --- |
+   | Second GCP project, **same** billing account | ~$0.01 (standard US multi-region is $0.026/GB-mo; GCS→GCS in-region transfer is free) | Project deletion, a compromised `aglyn-main` service account, a bad script or lifecycle rule | **Billing suspension**, a compromised billing/org admin, a Google account-level action |
+   | Second GCP project, **separate** billing account + separate owner login | Same ~$0.01, plus a second card | All of the above **and** a billing kill | A Google-account-level ban that reaches both |
+   | Different cloud (Cloudflare R2 / Backblaze B2) | $0 at this size (R2 free tier 10 GB, no egress fees) | Everything above, including all-of-Google | Needs a second credential, a second vendor relationship, and a copy step that is not `gcloud firestore export` — the export writes to GCS only, so this is export-then-`rclone` |
+   | Offline/cold copy (periodic download to encrypted local/NAS) | $0 | Everything, including every online credential | Manual, therefore forgotten; and it puts a full copy of customer PII on a laptop — a **DPA and breach-notification** consideration before a technical one |
+
+   **Recommendation, given $20/month and pre-revenue:** the second GCP project
+   is right for now — it is ~1 cent a month, it closes the failure modes that
+   actually happen to small projects (a bad script, a stray delete, a
+   compromised key), and it requires no new vendor. Be honest in writing that
+   it does **not** cover a billing suspension, because the same billing
+   account is the single point that remains. A separate billing account is the
+   cheap upgrade if that risk ever feels real; a different cloud is the
+   expensive one, and its real cost is the second credential to manage, not the
+   storage.
 2. **Alert on backup state — CLOSED 2026-08-13 (AGL-1502).**
    `GET https://app.aglyn.com/api/health/backups` returns 503 when any
    backup is in a failed state, no READY backup exists, or the newest READY
@@ -378,3 +472,50 @@ dated so this never matters.
    `THIS ANSWER IS INCOMPLETE` and exits 1 — but the honest fix is one of two
    things, neither done: grow the hot window past the longest restore point, or
    teach the script to read the Storage archive.
+6. **Cloud Storage is copied by NOTHING — AGL-2422, found 2026-08-19 while
+   auditing gap 1.** Every procedure above restores *Firestore*. The weekly
+   export calls `exportDocuments`, which touches no bucket contents, so these
+   have no copy at all — not off-project, not in-project:
+   - `gs://aglyn-main.appspot.com` (~47 MiB) — live customer media
+     (`orgs/{orgId}/media/`), `adminAudit-archive/`, `erasures/`. No object
+     versioning. The only safety net is the bucket's default **7-day soft
+     delete**, which a mis-scoped lifecycle rule outlives comfortably — and
+     lifecycle rules were last edited on this bucket in AGL-1496.
+   - `gs://aglyn-main-plugin-artifacts` (~28 KiB) — published plugin bundles
+     the marketplace serves. Small, but not reconstructible: a
+     publisher-signed artifact cannot be rebuilt from our source.
+
+   This matters beyond media loss in two specific places. Firestore documents
+   reference media by path, so a Firestore restore into a bucket that lost its
+   objects yields a consistent database full of broken references — the
+   restore reports success. And `adminAudit-archive/` is what gap 5 says the
+   erasure replay must consult when the hot window has aged out, so the DPA
+   §11 promise leans on a bucket nothing copies.
+
+   Not fixable in the repo — it needs a bucket and a transfer job, i.e. cloud
+   resources. What IS here: `PRODUCTION_DATA_STORES` in
+   `tools/scripts/lib/backup-copies.mjs` records `copiedBy: 'none'` for both,
+   `npm run check:backup-copies` prints it every run, and a new bucket
+   appearing in production fails the check until somebody answers the same
+   question about it.
+
+## Who restores what, from where
+
+One table, because during an incident the expensive minutes go to working out
+which of five artifacts is the right one.
+
+| What was lost | Restore from | Procedure | Who |
+| --- | --- | --- | --- |
+| Firestore documents, damage < 7 days old | PITR clone of `(default)` | B, then C | Zach (needs `datastore.owner`; no agent has it) |
+| Firestore documents, damage older than 7 days | Newest **READY** managed backup — check state first, they flip | A, then C | Zach |
+| Firestore documents, backup flipped `NOT_AVAILABLE` | `gs://aglyn-main-firestore-exports/<prefix>` (weekly Monday) | D | Zach |
+| Firestore, whole `aglyn-main` project lost | **Nothing today.** Total loss | — | — (gap 1) |
+| Customer media, audit archive, plugin bundles | **Nothing today**, beyond 7-day soft delete | — | — (gap 6) |
+| Erasures resurrected by any import | `adminAudit` rows at/after the snapshot | `replay-erasures.mjs`, C step 4 / D step 4 | Any staff actor with a uid; **required**, not optional |
+
+Every row above that says "Zach" says so because the restore commands need
+project-level Firestore admin, which is deliberately not delegated. The
+verification half is not gated that way: `firestore-inventory.mjs` and
+`check-backup-copies.mjs` read with the console service account, so an agent
+can confirm a restore's contents and confirm where the copies live without
+holding a credential that can destroy anything.

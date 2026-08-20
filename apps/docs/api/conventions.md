@@ -49,11 +49,21 @@ error either: you'll get an empty or arbitrary page rather than a `400`, so chec
 **`data.length < limit` never means you've reached the end.** Only
 `has_more === false` means that.
 
-Some endpoints filter rows out after reading a page — deleted
-[products](resources/products.md) and [media](resources/media.md) are dropped that
-way, and so is `?channel=online` on [orders](resources/orders.md), which has to match
-older rows that carry no channel field at all. A page of 100 can therefore come back
-with 60 rows and `has_more: true`.
+Some endpoints filter rows out after reading a page. A page of 100 can therefore come
+back with 60 rows — or with none — and `has_more: true`. The full list:
+
+| Endpoint | What is dropped after the read |
+| --- | --- |
+| [Products](resources/products.md), [media](resources/media.md) | Rows deleted since they were written. |
+| [Orders](resources/orders.md) `?channel=online` | `online` is the default rather than a stored value, so older orders carry no `channel` field to match. |
+| [Contacts](resources/contacts.md#combined-filter) `?email=` **with** `?tag=` | `email` narrows the query; `tag` is checked on the result. |
+| [Form submissions](resources/form-submissions.md#read-filter) `?form=` **with** `?read=` | `form` narrows the query; `read` is checked on the result. |
+
+The last two share one cause, and it is worth knowing because it predicts the next
+one: **only one filter can narrow the query itself.** Every list here is ordered by
+record id, so a second filter would need a composite index built specifically for that
+pair. Used alone, each of those filters narrows the query directly and pages come back
+full.
 
 The loop that gets this right is the one that stops on the cursor, not on the count:
 
@@ -68,6 +78,31 @@ do {
 
 A loop written as `while (page.data.length === limit)` will silently stop early on
 these endpoints, and it will look like it worked.
+
+### Filters
+
+Filters are per-resource — each resource page lists the params it accepts — but they
+behave the same way everywhere:
+
+- **An unknown param is ignored**, not rejected. `?colour=red` on any list is the
+  unfiltered list. Check the resource page rather than assuming a filter took effect.
+- **An empty value means the filter is absent.** `?email=`, `?tag=` and `?read=` all
+  give the unfiltered list, so a client that serializes an unset field doesn't have to
+  strip it from the query string first.
+- **A malformed value for a param that IS supported is a `400`**, with
+  `code: "validation_failed"` naming the param — an unusable `?email=` on
+  [contacts](resources/contacts.md#lookup), a `?read=` that is neither `true` nor
+  `false` on [form submissions](resources/form-submissions.md#read-filter). These
+  refuse rather than guess, because a guess returns a plausible page and a plausible
+  page is the one you don't check.
+- **A `400` reads no data.** The request still spends its
+  [rate-limit](rate-limits.md) budget and still counts as a
+  [billed request](usage.md) — every authenticated call does — but the collection is
+  never queried, so retrying with a corrected param costs no more than any other call.
+- **Values are normalized the same way the write path normalizes them.** A filter that
+  matched raw input could disagree with a write about whether a record exists.
+- **Filters never change ordering or the cursor contract.** A filtered list is still
+  ordered by record id, and pages the same way.
 
 ### Ordering
 

@@ -73,6 +73,8 @@ export interface CollectionEntrySummary {
   authorName?: string
   body?: string
   coverImage?: string
+  /** `og:image:alt` for the cover (AGL-2417); travels WITH `coverImage`. */
+  coverImageAlt?: string
   /** Search-result title override (AGL-582); falls back to `title`. */
   seoTitle?: string
   /** Meta description override (AGL-582); falls back to `excerpt`. */
@@ -96,6 +98,7 @@ function mapEntryFields(
   CollectionEntrySummary,
   | 'excerpt'
   | 'coverImage'
+  | 'coverImageAlt'
   | 'seoTitle'
   | 'seoDescription'
   | 'categoryId'
@@ -105,6 +108,7 @@ function mapEntryFields(
   return {
     excerpt: value['excerpt'] ?? '',
     coverImage: value['coverImage'] ?? '',
+    coverImageAlt: value['coverImageAlt'] ?? '',
     seoTitle: value['seoTitle'] ?? '',
     seoDescription: value['seoDescription'] ?? '',
     categoryId: value['categoryId'] ?? '',

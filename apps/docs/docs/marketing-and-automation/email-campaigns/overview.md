@@ -32,6 +32,28 @@ your plan.
 2. Compose the campaign from the **Marketing** page.
 3. Send — subject to your plan's **send cap**.
 
+### Your monthly send cap {#monthly-send-cap}
+
+Every plan includes a number of **campaign** emails per calendar month. The count resets
+on the 1st; it does not roll over.
+
+**Only campaigns count against it.** Transactional mail — order confirmations, booking
+reminders, password resets, teammate invites, workflow notifications — is never refused
+by this cap on any plan. A busy month of orders cannot use up your campaign allowance,
+and reaching the cap never stops a receipt from reaching a buyer.
+
+You can see where you stand in two places, without having to be refused first:
+
+- **In the composer**, under the recipient count: `340/500 campaign emails this month`.
+- **On the Billing page**, as the **Campaign emails (this month)** meter, per site.
+
+The cap is counted **per site**, so each site in your organization has its own allowance.
+One recipient is one email: a campaign to 200 people spends 200.
+
+When a send would take you past the cap, the composer says so while you are still writing
+rather than after you press Send. [Upgrade your plan](../../workspace-and-billing/billing-and-plans/overview.md)
+or shrink the audience.
+
 ### Personalize with merge tags
 
 Use `{{name}}`, `{{firstName}}`, or `{{email}}` anywhere in the subject or body — they
@@ -123,8 +145,34 @@ experiment results table fills in by itself.
 
 ## Compliance
 
-- Every send includes an **unsubscribe** link.
+- Every send includes an **unsubscribe** link, and the header mailbox
+  providers look for — Gmail and Yahoo's one-click `List-Unsubscribe`.
+- Clicking it opens a confirmation page; only confirming actually
+  unsubscribes. That matters because corporate mail scanners open every link
+  in a message before the recipient sees it, and a link that unsubscribed on
+  open would quietly shrink your list.
 - Unsubscribes are honored automatically so you stay compliant.
+
+### Suppressions
+
+**Emails ▸ Suppressions** lists every address your campaigns skip, with the
+reason and the date:
+
+| Reason | What happened |
+| --- | --- |
+| **Unsubscribed** | They clicked the unsubscribe link. |
+| **Bounced** | The mailbox does not exist. Recorded only for a *permanent* bounce — a full mailbox or a temporary server problem never suppresses anybody. |
+| **Marked as spam** | They reported a message. |
+
+This is where the gap between a campaign's recipient count and what it
+actually sent comes from, and a rising **Bounced** count is the earliest sign
+a list is going stale.
+
+**Remove** puts an address back on your list — use it when somebody asks to
+be re-added, or when a suppression was recorded by mistake. Removing a
+*bounced* address means your next campaign will try a mailbox that has
+already said it does not exist, which mailbox providers hold against your
+sending reputation, so the confirmation names the reason before you do it.
 
 ## Related
 

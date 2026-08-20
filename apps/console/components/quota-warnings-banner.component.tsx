@@ -342,10 +342,23 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   // backfill has not reached.
   const billingStatus =
     (org as any)?.billingStatus ?? (org?.subscription as any)?.status
-  if (billingStatus === 'past_due') {
+  // `unpaid` is NOT another shade of `past_due` — it is the grace window
+  // having closed (AGL-1877). `DEAD_SUBSCRIPTION_STATUSES` in
+  // plan-entitlements.ts contains `unpaid` and deliberately does not contain
+  // `past_due`, so at the moment Stripe flips to it the workspace loses every
+  // paid entitlement: hosts, seats, datasets, features. Matching `past_due`
+  // alone meant this banner VANISHED on that flip — the warning disappearing
+  // at precisely the instant the consequence arrived, leaving a workspace
+  // running on Free with nothing on screen saying why.
+  //
+  // Same treatment, different sentence: the `past_due` copy promises "access
+  // continues during the retry window", which is exactly the thing that is no
+  // longer true here, and repeating it would be worse than saying nothing.
+  const lapsed = billingStatus === 'unpaid'
+  if (billingStatus === 'past_due' || lapsed) {
     return (
       <Alert
-        severity="warning"
+        severity={lapsed ? 'error' : 'warning'}
         sx={{ borderRadius: 0 }}
         action={
           orgWideViewer ? (
@@ -355,17 +368,24 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
               size="small"
               href={buildRoute(Route.MANAGE_BILLING, { orgSlug })}
             >
-              {'Fix payment'}
+              {lapsed ? 'Fix billing' : 'Fix payment'}
             </AppLink>
           ) : undefined
         }
       >
-        {scopedViewer
-          ? "This workspace's last payment failed. A workspace admin needs " +
-            'to update the payment method — access continues during the ' +
-            'retry window.'
-          : 'Your last payment failed. Update your payment method to keep ' +
-            'your plan — access continues during the retry window.'}
+        {lapsed
+          ? scopedViewer
+            ? "This workspace's payments failed and its plan has stopped. " +
+              'A workspace admin needs to fix billing to restore paid ' +
+              'features.'
+            : 'Your payments failed and your plan has stopped — this ' +
+              'workspace is running on Free until billing is fixed.'
+          : scopedViewer
+            ? "This workspace's last payment failed. A workspace admin needs " +
+              'to update the payment method — access continues during the ' +
+              'retry window.'
+            : 'Your last payment failed. Update your payment method to keep ' +
+              'your plan — access continues during the retry window.'}
       </Alert>
     )
   }

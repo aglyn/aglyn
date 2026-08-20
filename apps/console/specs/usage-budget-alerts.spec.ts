@@ -255,9 +255,18 @@ const fakeFirestore = {
       return build(null, null)
     }
     if (name === 'hosts') {
+      // This suite is about budgets, not sites, so the org owns none. It
+      // still has to answer the full chain the route issues since AGL-2421
+      // (`where().orderBy().limit().get()`, with a `.doc()` for the cursor) —
+      // a missing `orderBy` throws and the sweep 500s before a budget is ever
+      // evaluated, and every assertion below goes red for a reason that has
+      // nothing to do with budgets.
       const api: any = {
         where: () => api,
+        orderBy: () => api,
         limit: () => api,
+        startAfter: () => api,
+        doc: (hostId: string) => ({ id: hostId }),
         get: async () => ({ docs: [], size: 0 }),
       }
       return api
@@ -281,6 +290,18 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // reads as a broken suite rather than as a missing recipient.
   findUserByUidAcrossPools: async (uid: string) =>
     mockPooledEmails[uid] ? { record: { email: mockPooledEmails[uid] } } : null,
+  // The REAL spend ceiling (AGL-2264), not a stand-in. This sweep announces
+  // that an org's assistant has been refused, and the figure it announces has
+  // to be the one the reservation transaction actually enforces — a fake here
+  // would let the alert and the refusal disagree about the number, which is
+  // the whole defect the alert exists to make visible. Required through the
+  // implementation module rather than the barrel because the barrel's other
+  // half drags the default Firebase app in.
+  assistOrgMonthlyCostLimitUsd: (
+    jest.requireActual(
+      '../../../libs/tenant/data/admin/src/lib/server/assist-usage',
+    ) as typeof import('../../../libs/tenant/data/admin/src/lib/server/assist-usage')
+  ).assistOrgMonthlyCostLimitUsd,
 }))
 
 jest.mock('@aglyn/shared-util-email', () => ({
@@ -388,6 +409,7 @@ beforeEach(() => {
   delete process.env.USAGE_ALERT_APPROACH_PCT
   delete process.env.BILL_ASSIST_TOKENS_FROM
   delete process.env.ASSIST_ORG_MONTHLY_COGS_ALERT_USD
+  delete process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD
   delete process.env.AUTO_LOCK_BILLING_FROM
   delete process.env.STAFF_ALERT_EMAIL
   jest.clearAllMocks()
@@ -692,9 +714,14 @@ describe('an alert that reaches nobody says so (AGL-2234)', () => {
 
 describe('the Assist margin alert reaches staff by EMAIL too (AGL-2234)', () => {
   function bigAssistSpend() {
+    // Over the $25 REVIEW threshold and under the $40 refusal ceiling, so
+    // these tests exercise the margin alert's plumbing and only that. At $40
+    // the org would also trip AGL-2264's ceiling announcement, and a test
+    // that counted two notifications while claiming to check one would stop
+    // telling you which of them broke.
     return [
       seededOrg({
-        assistEstCostUsd: 40,
+        assistEstCostUsd: 30,
         monthRollup: { month: MONTH, billedCents: 0 },
       }),
     ]
@@ -879,7 +906,13 @@ describe('the Assist margin guard is staff-facing (AGL-1528)', () => {
       seededOrg({
         rollup: null,
         assistEstCostUsd: 260,
-        usageAlerts: { assistCogs: { month: MONTH, threshold: 1 } },
+        usageAlerts: {
+          assistCogs: { month: MONTH, threshold: 1 },
+          // An org this far over has long since crossed the $40 refusal
+          // ceiling, and that announcement fires once a month — seeded as
+          // already spoken so this test counts margin alerts alone.
+          assistCeiling: { month: MONTH, threshold: 1 },
+        },
       }),
     ]
     await run()
@@ -901,5 +934,118 @@ describe('the Assist margin guard is staff-facing (AGL-1528)', () => {
     ]
     await run()
     expect(mockStaffNotifications).toHaveLength(0)
+  })
+})
+
+/**
+ * The HARD ceiling's announcement (AGL-2264).
+ *
+ * The alert above warns about a cost; this one reports a STOP. Past $40 the
+ * reservation transaction refuses every further Assist request from the org,
+ * at both entrypoints, so a customer's assistant has gone silent — and the
+ * margin alert cannot be the thing that says so, because it speaks in whole
+ * multiples of $25 and an org at $40 is still at 1x.
+ *
+ * The ceiling function is NOT faked in this suite. It is required through the
+ * real implementation module in the `@aglyn/tenant-data-admin` mock above, so
+ * the figure announced here and the figure enforced in the reservation cannot
+ * drift apart.
+ */
+describe('the REFUSAL is announced to staff in its own words (AGL-2264)', () => {
+  it('fires at the shipped default with nothing configured', async () => {
+    // No environment variable: the ceiling ships armed at $40, so a fresh
+    // deployment announces the refusal without anyone opting in.
+    expect(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD).toBeUndefined()
+    mockOrgs = [seededOrg({ rollup: null, assistEstCostUsd: 41 })]
+    await run()
+    const ceiling = mockStaffNotifications.filter((entry) =>
+      entry.title.includes('REFUSING'),
+    )
+    expect(ceiling).toHaveLength(1)
+    // The words have to name the stop, not merely the money — the margin
+    // alert already reports money and staff read both.
+    expect(ceiling[0].body).toContain('refused until the month rolls over')
+    expect(ceiling[0].body).toContain('$40')
+    expect(mockGuardWrites.at(-1)?.['assistCeiling']).toEqual({
+      month: MONTH,
+      threshold: 1,
+    })
+  })
+
+  it('THE NEGATIVE CONTROL: an org under the ceiling is not announced', async () => {
+    // Without this, the test above is satisfied by a build that announces a
+    // refusal for every org with any Assist cost at all. $39 is over the $25
+    // review threshold — so the margin alert DOES fire — and under $40.
+    mockOrgs = [seededOrg({ rollup: null, assistEstCostUsd: 39 })]
+    await run()
+    expect(
+      mockStaffNotifications.filter((entry) => entry.title.includes('REFUSING')),
+    ).toHaveLength(0)
+    expect(mockStaffNotifications).toHaveLength(1)
+  })
+
+  it('is NOT silenced by the margin alert having already spoken', async () => {
+    // The case the margin guard cannot carry. $41 is 1x of the $25 threshold,
+    // and 1x was announced at $25 earlier in the month — so `assistCogs` is
+    // quiet on the very reading where the assistant went off.
+    mockOrgs = [
+      seededOrg({
+        rollup: null,
+        assistEstCostUsd: 41,
+        usageAlerts: { assistCogs: { month: MONTH, threshold: 1 } },
+      }),
+    ]
+    await run()
+    expect(mockStaffNotifications).toHaveLength(1)
+    expect(mockStaffNotifications[0].title).toContain('REFUSING')
+  })
+
+  it('announces ONCE a month, however far past the ceiling it climbs', async () => {
+    mockOrgs = [
+      seededOrg({
+        rollup: null,
+        assistEstCostUsd: 4_000,
+        usageAlerts: { assistCeiling: { month: MONTH, threshold: 1 } },
+      }),
+    ]
+    await run()
+    expect(
+      mockStaffNotifications.filter((entry) => entry.title.includes('REFUSING')),
+    ).toHaveLength(0)
+  })
+
+  it('says nothing at all when an operator turned the ceiling OFF', async () => {
+    // Nothing is refused, so there is nothing to report. This also proves the
+    // announcement reads the REAL resolver rather than a hardcoded 40.
+    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = 'off'
+    try {
+      mockOrgs = [seededOrg({ rollup: null, assistEstCostUsd: 10_000 })]
+      await run()
+      expect(
+        mockStaffNotifications.filter((entry) =>
+          entry.title.includes('REFUSING'),
+        ),
+      ).toHaveLength(0)
+    } finally {
+      delete process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD
+    }
+  })
+
+  it('follows the operator’s number when one is configured', async () => {
+    // A deployment that raised the ceiling must not be told about a refusal
+    // that is not happening — the announcement and the enforcement read the
+    // same function, so this cannot drift.
+    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '500'
+    try {
+      mockOrgs = [seededOrg({ rollup: null, assistEstCostUsd: 100 })]
+      await run()
+      expect(
+        mockStaffNotifications.filter((entry) =>
+          entry.title.includes('REFUSING'),
+        ),
+      ).toHaveLength(0)
+    } finally {
+      delete process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD
+    }
   })
 })

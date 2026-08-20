@@ -20,6 +20,8 @@
  * limitations under the License.
  */
 
+import { hasOrgPermission as mockHasOrgPermission } from '@aglyn/aglyn'
+
 /**
  * The free plan's `hostLimit: 1` must be a HARD CAP under concurrency, not
  * only in the sequential case (AGL-2063).
@@ -194,6 +196,18 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ensureOrgForUser: async () => ({ orgId: 'org-1', member: { role: 'owner' } }),
   lockdownRefusal: async () => null,
   registerOrgHost: async () => undefined,
+  /**
+   * Models the REAL function (AGL-2350): it delegates to the same granular
+   * resolver production calls, so a member's role, custom role and overrides
+   * decide the answer rather than a convenient constant. `null` custom role
+   * because this spec stores no `orgs/{id}/roles` docs and its members carry
+   * no `roleId`.
+   */
+  memberHasOrgPermission: async (
+    _orgId: string,
+    member: Record<string, unknown> | null | undefined,
+    permission: string,
+  ) => mockHasOrgPermission(member as never, permission as never, null),
   // The AGL-1968 rate limiter. Always allows here: this spec is about the
   // AGL-2063 quota transaction, and a limiter that could refuse would make
   // the concurrency assertions below depend on which racer burnt the last

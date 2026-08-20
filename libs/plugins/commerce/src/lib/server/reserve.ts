@@ -127,15 +127,15 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
     // "500 bookings in this resource's lifetime", but it is not zero, and the
     // sweep that would keep expired `pending` holds from filling those slots
     // is a scheduled job this change does not add (see the commit).
+    const availabilityQuery = hostRef
+      .collection('reservations')
+      .where('resourceId', '==', resourceId)
+      .where('checkOutDayMs', '>', checkInDayMs)
+      .orderBy('checkOutDayMs')
+      .limit(500)
     const [resourceSnapshot, reservationsSnapshot] = await Promise.all([
       hostRef.collection('resources').doc(resourceId).get(),
-      hostRef
-        .collection('reservations')
-        .where('resourceId', '==', resourceId)
-        .where('checkOutDayMs', '>', checkInDayMs)
-        .orderBy('checkOutDayMs')
-        .limit(500)
-        .get(),
+      availabilityQuery.get(),
     ])
     const resource = resourceSnapshot.data() as CommerceModel.HostResource | undefined
     if (!resource) {
@@ -145,19 +145,31 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
 
     // Pending holds block for 30 minutes only, so abandoned checkouts
     // release the dates.
+    //
+    // Extracted so the pre-read below and the re-read inside the booking
+    // transaction cannot drift apart (AGL-2450). Two copies of a filter that
+    // decides whether a room is free is exactly the shape where one of them
+    // quietly stops matching the other.
+    const readLive = (
+      snapshot: { docs: any[] },
+      nowMs: number,
+    ): CommerceModel.HostReservation[] =>
+      snapshot.docs
+        .map((docSnapshot) => ({
+          checkInDayMs: Number(docSnapshot.get('checkInDayMs')),
+          checkOutDayMs: Number(docSnapshot.get('checkOutDayMs')),
+          status: String(
+            docSnapshot.get('status'),
+          ) as CommerceModel.ReservationStatus,
+          createdAtMs: Number(docSnapshot.get('createdAtMs') ?? 0),
+        }))
+        .filter(
+          (reservation) =>
+            reservation.status !== 'pending' ||
+            nowMs - reservation.createdAtMs < 30 * 60 * 1000,
+        ) as CommerceModel.HostReservation[]
     const now = Date.now()
-    const live = reservationsSnapshot.docs
-      .map((docSnapshot) => ({
-        checkInDayMs: Number(docSnapshot.get('checkInDayMs')),
-        checkOutDayMs: Number(docSnapshot.get('checkOutDayMs')),
-        status: String(docSnapshot.get('status')) as CommerceModel.ReservationStatus,
-        createdAtMs: Number(docSnapshot.get('createdAtMs') ?? 0),
-      }))
-      .filter(
-        (reservation) =>
-          reservation.status !== 'pending' ||
-          now - reservation.createdAtMs < 30 * 60 * 1000,
-      )
+    const live = readLive(reservationsSnapshot, now)
     if (
       !CommerceModel.isRangeAvailable(resource, live, checkInDayMs, checkOutDayMs)
     ) {
@@ -185,20 +197,67 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
     const feeCents =
       feePct > 0 ? Math.max(1, Math.round((chargeCents * feePct) / 100)) : 0
 
+    // THE HOLD IS TAKEN IN A TRANSACTION (AGL-2450).
+    //
+    // The check above is a fast refusal on a stale read, and on its own that is
+    // all it ever was: the availability query ran, the quote and the fee were
+    // computed, and only then did the hold land — so two guests requesting the
+    // same dates both read a reservation set that lacked the other's booking,
+    // both passed, and both got a `pending` row and a real payment. Nothing
+    // downstream caught it. The webhook's transaction guards double-CONFIRMATION
+    // of one booking against Stripe redelivery; it never re-asks availability,
+    // so both holds confirmed cleanly into two guests in one room.
+    //
+    // `claimAttempt` does not help either, and it is worth being explicit about
+    // why: it is keyed on the guest's own `Idempotency-Key`, so it dedupes
+    // retries of ONE attempt. Two different guests carry two different keys and
+    // never contend.
+    //
+    // Re-asking inside the transaction that writes is the whole guard — the
+    // same shape as `decrementVariantStock` (AGL-2320), and easier to justify
+    // here: the conflicting write lands BEFORE Stripe is contacted, so this
+    // door can legitimately refuse rather than take the money and withhold the
+    // room.
     const reservationRef = hostRef.collection('reservations').doc()
-    await reservationRef.set({
-      resourceId,
-      status: 'pending',
-      checkInDayMs,
-      checkOutDayMs,
-      guestName: guestName || null,
-      guestEmail: guestEmail || null,
-      nights: quote.nights,
-      totalCents: quote.totalCents,
-      depositCents: quote.depositCents,
-      paidCents: 0,
-      createdAtMs: now,
-    } satisfies CommerceModel.HostReservation)
+    const booked = await firestore.runTransaction(async (transaction: any) => {
+      const fresh = await transaction.get(availabilityQuery)
+      // Re-timed, not reusing `now`: a transaction that retries under
+      // contention may run appreciably later, and the 30-minute pending window
+      // has to be measured from when this attempt actually commits.
+      if (
+        !CommerceModel.isRangeAvailable(
+          resource,
+          readLive(fresh, Date.now()),
+          checkInDayMs,
+          checkOutDayMs,
+        )
+      ) {
+        return false
+      }
+      // `create()`, not `set()`: the ref is freshly minted, so an id collision
+      // is a bug rather than an overwrite to absorb silently.
+      transaction.create(reservationRef, {
+        resourceId,
+        status: 'pending',
+        checkInDayMs,
+        checkOutDayMs,
+        guestName: guestName || null,
+        guestEmail: guestEmail || null,
+        nights: quote.nights,
+        totalCents: quote.totalCents,
+        depositCents: quote.depositCents,
+        paidCents: 0,
+        createdAtMs: now,
+      } satisfies CommerceModel.HostReservation)
+      return true
+    })
+    if (!booked) {
+      // Lost the race for these dates. Same refusal as the pre-read's, and the
+      // key survives it for the same reason: the guest picks other dates or the
+      // blocking stay is cancelled.
+      await claim.release()
+      return res.status(409).json({ error: 'Those dates just sold out' })
+    }
 
     // TAX: a reservation deliberately computes NONE, in either mode
     // (AGL-1953). This is a stated decision, not the omission it looks like.

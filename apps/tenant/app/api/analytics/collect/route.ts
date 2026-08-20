@@ -239,6 +239,14 @@ const MAX_TRACKED_BANDWIDTH_HOSTS = 5_000
  */
 const bandwidthTripped = new Map<string, string>()
 
+/**
+ * The same memo for the PLAN CAP (AGL-2413), kept separate from the ceiling's
+ * on purpose. The two settle at wildly different traffic — free's band is
+ * ~8,700 views and its abuse ceiling is 100,000 — so one shared flag would let
+ * whichever settled first suppress the evaluation of the other.
+ */
+const bandwidthCapMemo = new Map<string, string>()
+
 /** True on the instance's first beacon for a host, then every Nth. */
 function bandwidthSampleDue(hostId: string): boolean {
   if (bandwidthSeen.size > MAX_TRACKED_BANDWIDTH_HOSTS) bandwidthSeen.clear()
@@ -248,16 +256,163 @@ function bandwidthSampleDue(hostId: string): boolean {
 }
 
 /**
- * Sum the month, ask the ceiling, and on a trip stamp the host + escalate.
+ * Engage the free plan's bandwidth cap for this org, if this month's traffic
+ * has passed its band (AGL-2413).
+ *
+ * The SECOND writer of `orgs/{id}.bandwidthCap`, alongside the daily
+ * `api/billing/usage-alerts` sweep, and deliberately identical to it in every
+ * observable way: the same `bandwidthCapShouldEngage` predicate (the writer's
+ * half of `bandwidthCapEngaged`, kept beside the reader so the two cannot
+ * drift), the same marker fields, the same UTC month key, the same
+ * engage-once-per-month guard, and the same `{ merge: true }` write. A reader
+ * cannot tell which writer stamped a marker, and must not be able to.
+ *
+ * ## It needs no `plan` field, which is the entire point
+ *
+ * `resolveEffectivePlan` answers `'free'` for an org with no `plan`, an
+ * unknown plan, or a dead subscription — so `bandwidthCapShouldEngage` already
+ * treated a never-subscribed org correctly. It was never asked. This asks it.
+ *
+ * ## Own try/catch
+ *
+ * So a failure here cannot cost the abuse ceiling its evaluation, and vice
+ * versa. Both are best-effort bookkeeping on a beacon that always 204s.
+ */
+async function engageFreePlanBandwidthCap(options: {
+  hostId: string
+  orgId: string
+  org: Record<string, unknown> | null
+  pageViews: number
+}): Promise<void> {
+  const { hostId, orgId, org, pageViews } = options
+  const month = Aglyn.bandwidthCapMonthKey()
+  if (bandwidthCapMemo.get(hostId) === month) return
+  try {
+    const entitlements = Aglyn.resolveOrgEntitlements(org as never)
+    if (
+      !Aglyn.bandwidthCapShouldEngage({
+        org: org as never,
+        usedBandwidthGb: Aglyn.bandwidthGbFromPageViews(pageViews),
+        includedBandwidthGb: entitlements.bandwidthGb,
+      })
+    ) {
+      return
+    }
+    // Memoized on the ENGAGE decision, not on the write, and only once the
+    // band is actually crossed — an org still inside its band must keep being
+    // evaluated on every sample or the cap would only ever fire on the one
+    // beacon that happened to straddle the boundary.
+    if (bandwidthCapMemo.size > MAX_TRACKED_BANDWIDTH_HOSTS) {
+      bandwidthCapMemo.clear()
+    }
+    bandwidthCapMemo.set(hostId, month)
+    // Already engaged this month, by either writer. Nothing to do and nothing
+    // to re-notify: the marker names its month, so the sweep's own guard and
+    // this one are the same guard reading the same field.
+    const existing = org?.['bandwidthCap'] as { month?: string } | undefined
+    if (existing?.month === month) return
+    await firebaseAdmin
+      .app()
+      .firestore()
+      .collection('orgs')
+      .doc(orgId)
+      .set(
+        {
+          // Byte-identical to what `usage-alerts` writes. `merge: true`
+          // because this is one field on a document that carries `plan`,
+          // `subscription`, `entitlements` and `hosts` — a non-merging `set`
+          // here would delete the org.
+          bandwidthCap: {
+            month,
+            engagedAt: Date.now(),
+            pageViews: Math.round(pageViews),
+            includedPageViews: Math.round(
+              Aglyn.pageViewsFromBandwidthGb(entitlements.bandwidthGb),
+            ),
+          },
+        },
+        { merge: true },
+      )
+    // The owner has to hear it from us. The sweep pairs its cap with a 100%
+    // bandwidth alert email — but the sweep is exactly what never ran for
+    // these orgs, so without this the first a never-subscribed owner would
+    // know of their site being paused is a visitor telling them.
+    await notifyHostManagers(hostId, {
+      type: 'system.bandwidthCapEngaged',
+      title: 'Site paused — monthly traffic limit reached',
+      body: `This site has used the ${Math.round(
+        Aglyn.pageViewsFromBandwidthGb(entitlements.bandwidthGb),
+      ).toLocaleString()} page views included with the free plan this month, so it is serving a temporary notice until the start of next month. Upgrade in Billing to bring it straight back.`,
+      link: `/${hostId}`,
+    })
+  } catch (error) {
+    console.error('bandwidth cap evaluation failed', error)
+  }
+}
+
+/**
+ * Sum the month once, then ask BOTH bandwidth questions of it (AGL-2413).
+ *
+ * 1. the free plan's **band** — `bandwidthCapShouldEngage`, ~8,700 views; and
+ * 2. the **abuse ceiling** — 10x the band, floor 100,000 views.
+ *
+ * ## Why the plan cap moved here (AGL-2413)
+ *
+ * The cap's marker (`orgs/{id}.bandwidthCap`) had exactly ONE writer: the
+ * daily `api/billing/usage-alerts` sweep. That sweep skips every org with no
+ * `plan` field — a guard written for *alerting*, which the cap block inherited
+ * ~650 lines further down the same loop body — and `createOrganization` writes
+ * no `plan`. So the cap had never engaged for a single never-subscribed org:
+ * the entire organic free tier.
+ *
+ * ZACH's fix, and the reason it is here rather than in the sweep's skip
+ * condition: **a cap that lives only in a scheduled sweep stops existing the
+ * moment the sweep does not run, is skipped, or errors.** Every other free
+ * dimension — media ingress, form submissions, contacts, datasets, API
+ * requests — refuses at the point of use. Bandwidth now does too. The sweep
+ * keeps its writer; this is a second, independent one that needs no cron, no
+ * `plan` field and no backfill, and the month guard on the marker means
+ * whichever runs first simply wins.
+ *
+ * ## Why this is the right chokepoint, and why it costs nothing
+ *
+ * `bandwidth-cap.ts` argues at length against reading the page-view counter in
+ * the RENDER path, and that argument still holds — it would put a Firestore
+ * read on the hot path of every public page on the platform to answer a
+ * question only free orgs can fail. This is not the render path. It is the
+ * beacon that WRITES the counter, already sampled 1-in-200, and it already
+ * sums exactly this month with exactly this query and already loads exactly
+ * this org doc for the ceiling. The plan cap therefore adds **zero reads** —
+ * only a write, and only on the beacon that engages it.
+ *
+ * ## Per-host sum vs the org-wide band
+ *
+ * The band is org-wide and this sums ONE host. That is exact for every org the
+ * cap can apply to: `PLAN_ENTITLEMENTS.free.hostLimit` is 1, and every plan
+ * that allows a second site meters its infra overage, which
+ * `bandwidthCapShouldEngage` refuses first. An org carrying an `entitlements`
+ * override that raises `hostLimit` while leaving it on free is the one shape
+ * this under-counts, and it under-counts in the safe direction: a per-host sum
+ * is never larger than the org's, so this can be LATE but can never refuse a
+ * site that is inside its band. The sweep remains the org-wide backstop.
  *
  * Best-effort throughout, and it must stay that way: this runs after the
  * pageview has already been recorded, on a fire-and-forget beacon that always
  * 204s. A bookkeeping failure here must never cost the customer their
  * analytics.
  */
-async function evaluateBandwidthCeiling(hostId: string): Promise<void> {
+async function evaluateBandwidthLimits(hostId: string): Promise<void> {
   const month = Aglyn.bandwidthCeilingMonthKey()
-  if (bandwidthTripped.get(hostId) === month) return
+  const capMonth = Aglyn.bandwidthCapMonthKey()
+  // Both, not either: a host whose ceiling tripped must still be evaluated for
+  // the cap, and vice versa. Deriving this from one flag was the shape of the
+  // bug this whole change exists to close.
+  if (
+    bandwidthTripped.get(hostId) === month &&
+    bandwidthCapMemo.get(hostId) === capMonth
+  ) {
+    return
+  }
   try {
     const hostRef = firebaseAdmin
       .app()
@@ -289,6 +444,19 @@ async function evaluateBandwidthCeiling(hostId: string): Promise<void> {
       0,
     )
     const org = orgForHost?.org ?? null
+    // THE PLAN BAND FIRST (AGL-2413), because it is the lower of the two by an
+    // order of magnitude — free's band is ~8,700 views against a 100,000-view
+    // ceiling — so a host that reaches the ceiling has always crossed the band
+    // first, and evaluating the ceiling first would let its `return` below
+    // suppress the cap forever on a site that is already past it.
+    if (orgForHost) {
+      await engageFreePlanBandwidthCap({
+        hostId,
+        orgId: orgForHost.orgId,
+        org,
+        pageViews,
+      })
+    }
     const ceiling = Aglyn.checkBandwidthAbuseCeiling(org as any, pageViews)
     if (!ceiling.exceeded) return
     bandwidthTripped.set(hostId, month)
@@ -556,13 +724,14 @@ export async function POST(request: Request): Promise<Response> {
           { merge: true },
         )
     }
-    // Bandwidth abuse ceiling (AGL-2155). AFTER the counter write, so the
-    // view being evaluated is included, and awaited only on the sampled
-    // beacon — 1-in-200 pays ~31 reads, the other 199 pay nothing. Never
-    // before the write: a ceiling evaluated on a stale count would refuse a
-    // view it had not yet counted.
+    // Bandwidth limits — the free plan's BAND (AGL-2413) and the abuse
+    // ceiling (AGL-2155). AFTER the counter write, so the view being
+    // evaluated is included, and awaited only on the sampled beacon —
+    // 1-in-200 pays ~31 reads, the other 199 pay nothing. Never before the
+    // write: a limit evaluated on a stale count would refuse a view it had
+    // not yet counted.
     if (bandwidthSampleDue(hostId)) {
-      await evaluateBandwidthCeiling(hostId)
+      await evaluateBandwidthLimits(hostId)
     }
     // Event trigger (AGL-128/148): fire-and-forget — never delays the
     // beacon; alerts have no response channel here and are dropped.

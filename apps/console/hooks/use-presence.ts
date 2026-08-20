@@ -27,7 +27,10 @@ import {
   FIREBASE_FIRESTORE_EMULATOR_ENABLED,
 } from '@aglyn/shared-data-enums'
 import { FIREBASE_CLIENT_APP_NAME } from '@aglyn/tenant-feature-instance'
-import { RECAPTCHA_API_KEY } from '@aglyn/tenant-feature-instance'
+import {
+  APP_CHECK_KEY_MISSING_MESSAGE,
+  appCheckSiteKey,
+} from '@aglyn/tenant-feature-instance'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
   createAuthInstance,
@@ -203,9 +206,21 @@ function startPresenceAppCheck(app: FirebaseApp): void {
     presenceAppCheckStarted = true
     return
   }
+  // No site key means no provider (AGL-2049). `new ReCaptchaV3Provider(
+  // undefined)` does not throw — it fails asynchronously inside the SDK, past
+  // this catch — so registering one anyway would leave the presence app in the
+  // state this whole function exists to avoid: holding a provider that can
+  // never mint a token, which enforcement rejects exactly like having none,
+  // but silently.
+  const siteKey = appCheckSiteKey()
+  if (!siteKey) {
+    console.warn(APP_CHECK_KEY_MISSING_MESSAGE)
+    presenceAppCheckStarted = true
+    return
+  }
   try {
     initializeAppCheck(app, {
-      provider: new ReCaptchaV3Provider(RECAPTCHA_API_KEY),
+      provider: new ReCaptchaV3Provider(siteKey),
       isTokenAutoRefreshEnabled: true,
     })
   } catch (error) {

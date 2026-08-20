@@ -71,12 +71,57 @@ wrote. The interaction timeline shown in the console isn't exposed over the API.
 `GET /v1/contacts` — scope `contacts:read`. [Paginated](../conventions.md#pagination),
 ordered by contact id (see [ordering](../conventions.md#ordering) — not newest-first).
 
+| Param | Notes |
+| --- | --- |
+| `email` | Exact lookup. Normalized the same way a stored address is, so case and surrounding spaces don't matter. Returns 0 or 1 contact. |
+| `tag` | Contacts carrying this tag. Exact match on one entry of the `tags` array — not a prefix or a substring. |
+| `limit`, `cursor` | [Standard pagination](../conventions.md#pagination). |
+
 ```bash
+# the whole audience, a page at a time
 curl "https://app.aglyn.com/api/v1/contacts?limit=50" \
+  -H "Authorization: Bearer aglyn_sk_…"
+
+# one person
+curl "https://app.aglyn.com/api/v1/contacts?email=robin%40example.com" \
+  -H "Authorization: Bearer aglyn_sk_…"
+
+# one segment
+curl "https://app.aglyn.com/api/v1/contacts?tag=newsletter" \
   -H "Authorization: Bearer aglyn_sk_…"
 ```
 
-There's no filter by email, tag, or source — page and filter client-side.
+#### Look a contact up before you create it {#lookup}
+
+`?email=` is the call a sync should start with. Contacts are **organization-wide**, so
+without it "do I already have this person?" means paging your entire audience — and
+every page is a [billed request](../usage.md) against your
+[per-minute limit](../rate-limits.md). On a 50,000-contact audience that is ~500
+requests to answer one question, and the answer is stale by the time you finish.
+
+The address is **normalized before it is matched**, using the same rule that
+normalizes a stored one. `?email=%20Robin@Example.COM%20` and
+`?email=robin@example.com` find the same contact. This matters more than it looks:
+without it, a lookup could answer "no such contact" for an address that
+[`POST` refuses as a duplicate](#contact-exists), and you would have two endpoints
+disagreeing about whether a person exists.
+
+An address that isn't a usable email at all is a `400 bad_request`
+(`code: "validation_failed"`, `fields: { "email": … }`) rather than an empty page.
+No stored contact can match one, so an empty page would be true and useless — it reads
+exactly like "we don't have them" and sends you looking for a missing person instead
+of a typo.
+
+There is still no filter by `source`. Provenance is set by whichever capture point
+recorded the contact, and it's on the object — page and filter client-side for that
+one.
+
+#### Combining `email` and `tag` {#combined-filter}
+
+You can send both. `email` does the narrowing and `tag` is applied to the result, so
+the answer is "this person, if they carry that tag" — a 0- or 1-row page. That makes
+it a [short page](../conventions.md#short-pages) by the standard rule: check
+`has_more`, not the row count.
 
 ### Retrieve a contact
 
@@ -129,9 +174,11 @@ If a contact with that address already exists you get `409 conflict` with
 }
 ```
 
-`PATCH` that id instead. We don't silently upsert here: two upstream systems both
-claiming to own a record is a real integration bug, and quietly merging them would
-hide it and make `POST` and `PATCH` the same call.
+`PATCH` that id instead — or avoid the round trip entirely by
+[looking the address up first](#lookup) with `GET /v1/contacts?email=`, which returns
+the whole contact rather than an id embedded in a sentence. We don't silently upsert
+here: two upstream systems both claiming to own a record is a real integration bug,
+and quietly merging them would hide it and make `POST` and `PATCH` the same call.
 
 Because the address is **normalized first**, `Robin@Example.com` and
 `robin@example.com` are the same contact. That is the same rule the capture points on
@@ -215,7 +262,7 @@ those are separate records with their own endpoints.
 
 | Status | `type` | When |
 | --- | --- | --- |
-| `400` | `bad_request` | `code: "validation_failed"` — a missing or unusable `email`, a non-boolean `marketingConsent`, or an attempt to write `email`/`sources`. `fields` names each offending key. |
+| `400` | `bad_request` | `code: "validation_failed"` — on a write, a missing or unusable `email`, a non-boolean `marketingConsent`, or an attempt to write `email`/`sources`. On the list, an `?email=` that isn't a usable address. `fields` names each offending key. |
 | `403` | `plan_required` | `code: "contact_quota"` — the audience band is full on a plan that doesn't meter the overage. |
 | `403` | `insufficient_scope` | Key lacks `contacts:read` / `contacts:write`. Checked before the method, so a write attempt with a read-only key returns `403`, not `405`. |
 | `404` | `not_found` | `"No such contact"`. |

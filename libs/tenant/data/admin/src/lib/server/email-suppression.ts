@@ -1,0 +1,315 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * The PLATFORM-WIDE email suppression list, `emailSuppressions/{emailKey}`
+ * (AGL-2407).
+ *
+ * ## What was missing
+ *
+ * AGL-1918 (`7a8f3cd68`) made `email.bounced` (permanent) and
+ * `email.complained` write a suppression — into `hosts/{hostId}/suppressions`,
+ * found from a Resend tag that only `campaign-send.ts` stamped. That closed
+ * the campaign half and could close no other, because there was nowhere to
+ * file the rest:
+ *
+ * Every other sender in the product goes through the shared `sendEmail` —
+ * invites,
+ * password resets, verification, receipts, booking confirmations, the monthly
+ * usage summary, the usage-alert fan-out, restock and abandoned-cart mail, the
+ * merchant-authored workflow `sendEmail` step. A bounce on any of those
+ * arrived at the webhook with no site to place it against and was answered
+ * `200 {ignored:true}`. A dead address was re-mailed on every subsequent send,
+ * forever, and a spam complaint had no effect on anything.
+ *
+ * That matters most exactly when it is hardest to fix: on Sept 1 the signup
+ * door opens, and verification and invite mail — addressed by strangers typing
+ * addresses — is the highest-bounce-rate mail we send, on the same Resend key
+ * and the same From address as everything else.
+ *
+ * ## Why a sibling of `contactSuppressions` and not a channel on it
+ *
+ * `contact-suppression.ts` is the same idea for phones and every argument it
+ * makes holds here: keyed on the identifier because that is what the sender
+ * holds at send time; one `get()` by document id, no query and no composite
+ * index that could go missing and fail the lookup open; a revocation is a
+ * FIELD and not a delete, because the record is the evidence that the
+ * suppression was honoured while it was in force.
+ *
+ * It is a separate collection for one concrete reason: the document id. That
+ * list's key is the E.164 digits, and its docblock argues at length that a
+ * phone number must NOT be hashed (NANP is ~10^10 values, so a hash buys the
+ * appearance of de-identification and none of the substance). An email address
+ * is not enumerable, `hosts/{hostId}/suppressions` already keys on
+ * `sha256(email)`, and one collection holding two incompatible key spaces is
+ * how a lookup comes to be performed against the wrong derivation. The
+ * address is stored in the document in the clear regardless, exactly as the
+ * per-host list stores it, so a staff reader still shows a human something
+ * they can act on.
+ *
+ * ## Who reads it, and who deliberately does NOT
+ *
+ * AGL-1438's rule is that a QUOTA may only ever refuse a campaign, because
+ * refusing a receipt or a password reset converts a billing event into an
+ * outage on a customer's business. A suppression is not a quota, but the same
+ * proportionality applies and lands in the same place:
+ *
+ *  - **Bulk mail consults this list.** The monthly usage summary and the
+ *    usage-alert fan-out go to a LIST of people who did not ask for that
+ *    particular message, on a schedule, forever. They are the sends that
+ *    re-hit a dead mailbox every month and teach a mailbox provider that
+ *    `aglyn.com` does not listen.
+ *  - **Transactional mail does NOT.** A password reset, a verification, an
+ *    invite, a receipt or a booking confirmation answers something the human
+ *    just did. Refusing one because an address bounced or because somebody
+ *    once pressed "report spam" on an unrelated message would lock a real
+ *    customer out of their own account. The shared sender is therefore left
+ *    unconditional on purpose, and this is the note that says so.
+ *
+ * (Written throughout without a literal call expression, on purpose:
+ * `email-send-metering-coverage.spec.ts` enumerates senders by grepping the
+ * tree for one, and a prose mention here would enrol a module that sends
+ * nothing into the AGL-1438 cost-meter sweep.)
+ */
+
+import { createHash } from 'crypto'
+import { FieldValue } from 'firebase-admin/firestore'
+import firebaseAdmin from './firebase-admin'
+
+const defaultFirestore = () => firebaseAdmin.app().firestore()
+
+export const EMAIL_SUPPRESSIONS_COLLECTION = 'emailSuppressions'
+
+/**
+ * Why an address is suppressed.
+ *
+ * `bounce` means PERMANENT only. Resend reports `data.bounce.type` as
+ * `Permanent` or `Transient`, and a transient bounce is a full mailbox or a
+ * greylisting server — recording one here would suppress a real recipient over
+ * a temporary condition at their provider. The webhook makes that distinction;
+ * this type only names the outcome.
+ */
+export type EmailSuppressionReason =
+  /** Permanent bounce — the mailbox does not exist. */
+  | 'bounce'
+  /** The recipient pressed "report spam". */
+  | 'complaint'
+  /** Recorded by staff (a written request, a court order, a correction). */
+  | 'staff'
+
+export interface EmailSuppressionRecord {
+  /** The address, in the clear, lowercased. The id is its hash. */
+  email: string
+  reason: EmailSuppressionReason
+  /**
+   * The `context` tag the send carried (`'invite'`, `'usage-summary'`,
+   * `'campaign'`, …), so a human reading the list can tell which of our
+   * senders produced the address that died. Null when the send carried none.
+   */
+  context: string | null
+  /** The site the failure was attributed to, when the send named one. */
+  hostId: string | null
+  /** Non-null once released. A released record does not suppress. */
+  releasedAt: unknown | null
+}
+
+/**
+ * Document id for an address: `sha256` of the lowercased, trimmed form.
+ *
+ * The SAME derivation `campaign-send.ts` uses for `hosts/{hostId}/suppressions`
+ * — deliberately, so the two lists can never disagree about which document
+ * describes which person.
+ *
+ * @returns the id, or `null` for anything that is not an address. Never a
+ *          best-guess id: suppressing the wrong person and believing you
+ *          suppressed the right one is worse than refusing.
+ */
+export function emailSuppressionKey(
+  email: string | null | undefined,
+): string | null {
+  const normalized = String(email ?? '')
+    .trim()
+    .toLowerCase()
+  if (!normalized.includes('@') || /\s/.test(normalized)) return null
+  return createHash('sha256').update(normalized).digest('hex')
+}
+
+export interface SuppressEmailInput {
+  email: string
+  reason: EmailSuppressionReason
+  /** The `context` tag the failed send carried, when it carried one. */
+  context?: string | null
+  /** The site the failed send was attributed to, when it named one. */
+  hostId?: string | null
+  /** Injectable for tests; defaults to the admin app's Firestore. */
+  firestore?: any
+}
+
+/**
+ * Record a platform-wide suppression. Idempotent by document id.
+ *
+ * `createdAt` is stamped only when the document is new, matching the per-host
+ * list: a second bounce must not overwrite the moment the address first went
+ * bad, because that is the date a human is told when they ask. `suppressedAt`
+ * moves every time, so "when did we last see this fail" stays answerable.
+ *
+ * A previously released record is un-released — a fresh failure is a fresh
+ * failure.
+ *
+ * @returns `created: false` when the address was already on the list.
+ */
+export async function suppressEmail(input: SuppressEmailInput): Promise<{
+  key: string
+  created: boolean
+}> {
+  const key = emailSuppressionKey(input.email)
+  if (!key) {
+    throw new Error('[email-suppression] cannot key a suppression for that value')
+  }
+  const db = input.firestore ?? defaultFirestore()
+  const ref = db.collection(EMAIL_SUPPRESSIONS_COLLECTION).doc(key)
+  const snapshot = await ref.get()
+  await ref.set(
+    {
+      email: String(input.email).trim().toLowerCase(),
+      reason: input.reason,
+      context: input.context ?? null,
+      hostId: input.hostId ?? null,
+      releasedAt: null,
+      suppressedAt: FieldValue.serverTimestamp(),
+      ...(snapshot.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
+    },
+    { merge: true },
+  )
+  return { key, created: !snapshot.exists }
+}
+
+/**
+ * Put an address back in circulation (a staff correction, or the person asking
+ * to be re-added). The record is kept and marked released, never deleted —
+ * same reasoning as `releasePhoneContact`: a deleted record cannot show that
+ * the suppression was honoured while it stood.
+ *
+ * @returns false when there was no live record to release.
+ */
+export async function releaseEmail(input: {
+  email: string
+  releasedByUid?: string | null
+  note?: string | null
+  firestore?: any
+}): Promise<boolean> {
+  const key = emailSuppressionKey(input.email)
+  if (!key) return false
+  const db = input.firestore ?? defaultFirestore()
+  const ref = db.collection(EMAIL_SUPPRESSIONS_COLLECTION).doc(key)
+  const snapshot = await ref.get()
+  if (!snapshot.exists || snapshot.get('releasedAt')) return false
+  await ref.set(
+    {
+      releasedAt: FieldValue.serverTimestamp(),
+      releasedByUid: input.releasedByUid ?? null,
+      releasedNote: input.note ?? null,
+    },
+    { merge: true },
+  )
+  return true
+}
+
+/**
+ * The BULK-SEND gate. See the module note for which senders must call this and
+ * which must not.
+ *
+ * FAILS CLOSED, like `isPhoneContactSuppressed`: a read that throws answers
+ * `true`, meaning "treat as suppressed". The cost of failing closed here is
+ * one delayed informational email — every caller is a cron that runs again —
+ * and it is nearly free besides, because every one of them is already deep
+ * inside a Firestore-backed sweep that a Firestore outage has stopped anyway.
+ * The cost of failing open is another delivery attempt at a mailbox that has
+ * already told us permanently that it does not exist, which is precisely the
+ * behaviour a provider scores a sending domain on. Never "fix" a flaky read
+ * here by returning false.
+ */
+export async function isEmailSuppressed(
+  email: string | null | undefined,
+  injectedFirestore?: any,
+): Promise<boolean> {
+  const key = emailSuppressionKey(email)
+  // An unusable value is one we cannot check against the list, so it is one we
+  // must not send to. Same fail-closed rule.
+  if (!key) return true
+  try {
+    const db = injectedFirestore ?? defaultFirestore()
+    const snapshot = await db
+      .collection(EMAIL_SUPPRESSIONS_COLLECTION)
+      .doc(key)
+      .get()
+    if (!snapshot.exists) return false
+    return !snapshot.get('releasedAt')
+  } catch (error) {
+    console.error('[email-suppression] lookup failed; failing closed', error)
+    return true
+  }
+}
+
+/**
+ * The sendable subset of a recipient list, for the bulk senders.
+ *
+ * One `get()` per DISTINCT address rather than a query, so the check needs no
+ * index and cannot fail open on a missing one. The list is deduplicated first
+ * because the callers build it by fanning out over an org's owners and admins,
+ * which routinely names the same person twice.
+ */
+export async function filterSuppressedEmails(
+  emails: readonly string[],
+  injectedFirestore?: any,
+): Promise<string[]> {
+  const seen = new Set<string>()
+  const candidates: string[] = []
+  for (const email of emails) {
+    const normalized = String(email ?? '')
+      .trim()
+      .toLowerCase()
+    if (!normalized || seen.has(normalized)) continue
+    seen.add(normalized)
+    candidates.push(normalized)
+  }
+  const verdicts = await Promise.all(
+    candidates.map((email) => isEmailSuppressed(email, injectedFirestore)),
+  )
+  return candidates.filter((_email, index) => !verdicts[index])
+}
+
+/**
+ * The staff queue, newest first, ordered by `suppressedAt` so a re-recorded or
+ * released entry surfaces again — the operator's question is "what changed",
+ * not "what was first written". Mirrors `listContactSuppressions`.
+ */
+export async function listEmailSuppressions(options?: {
+  limit?: number
+  firestore?: any
+}): Promise<Array<EmailSuppressionRecord & { $id: string }>> {
+  const db = options?.firestore ?? defaultFirestore()
+  const snapshot = await db
+    .collection(EMAIL_SUPPRESSIONS_COLLECTION)
+    .orderBy('suppressedAt', 'desc')
+    .limit(Math.min(Math.max(options?.limit ?? 100, 1), 500))
+    .get()
+  return snapshot.docs.map((doc: any) => ({
+    $id: doc.id,
+    ...(doc.data() as EmailSuppressionRecord),
+  }))
+}

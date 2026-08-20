@@ -21,7 +21,11 @@ import {
   UNLIMITED,
   type AglynOrgBilling,
 } from '@aglyn/aglyn/server'
-import { METERED_MARKUP, METERED_UNIT_RATES_USD } from './usage-metering'
+import {
+  billsOrgLibraryStorage,
+  METERED_MARKUP,
+  METERED_UNIT_RATES_USD,
+} from './usage-metering'
 
 /**
  * Metered storage: what bills, what warns, and what a customer may cap
@@ -368,6 +372,9 @@ export interface MediaStorageGateResult {
  * - **Metered plan, past the customer's own cap → REFUSED**, citing their
  *   number. The one refusal a paying org can hit, and only because it asked
  *   for it.
+ * - **Metered plan, but the SCOPE has no meter behind it → REFUSED**
+ *   (AGL-2003). The first rule applied to a second way of having no price to
+ *   attach: see `billsOverage`.
  *
  * Enterprise resolves `UNLIMITED` and never reaches any of the three.
  */
@@ -389,8 +396,38 @@ export function mediaStorageGate(input: {
    * fallback.
    */
   allowanceMb?: number
+  /**
+   * Whether the SCOPE these bytes land in reaches an invoice this month
+   * (AGL-2003). Defaults to `true`; pass `scopeBillsStorageOverage(...)`.
+   *
+   * The plan can meter infra overage while the particular counter being
+   * written to is excluded from the rollup. That is exactly the org library
+   * today: ingress pools its bytes into the org-wide band (AGL-2075) and
+   * `report-usage` drops them from `billedEstimate` until
+   * `BILL_ORG_LIBRARY_STORAGE_FROM` names a month. So a customer could
+   * consent to metered storage, be shown a projected charge, be allowed past
+   * the band, and be invoiced nothing — an undercharge with a paper trail
+   * saying they expected to pay.
+   *
+   * `billed` already documents the invariant this restores: it "is that same
+   * predicate evaluated at the moment the bytes are accepted. If one is ever
+   * true where the other is false, that is the bug." Nothing asserted the
+   * pairing, so the two halves diverged silently.
+   *
+   * Refusing is the same call the unmetered-plan arm already makes for the
+   * same reason — no metered price to attach means accepting the bytes is
+   * cost with no invoice — and it loses no revenue, because the revenue was
+   * never being collected. It is also self-healing: the day the env var names
+   * a month this returns true and the gate opens on its own, with no code
+   * change and no second decision to remember.
+   */
+  billsOverage?: boolean
 }): MediaStorageGateResult {
   const { org, usedMb } = input
+  // Explicit `!== false` rather than `?? true`: with `strictNullChecks` off,
+  // a caller that forgets the field must keep today's behaviour, and only a
+  // deliberate `false` may close the gate.
+  const billsOverage = input.billsOverage !== false
   // The historical convention, kept verbatim so this is not also a rounding
   // change: `usedMb` includes the incoming file and the cap is inclusive.
   const perScope = checkQuota(org as any, 'storagePerHostMb', Math.ceil(usedMb) - 1)
@@ -419,8 +456,11 @@ export function mediaStorageGate(input: {
   // The `planMetersInfraOverage` arm is the free/hobby hard band. It is
   // deliberately the SECOND thing checked and not folded into the cap logic
   // below: an unmetered plan must never reach code that can return
-  // `billed: true`, whatever a forged `storageOverage` field says.
-  if (quota.limit === UNLIMITED || !planMetersInfraOverage(org)) {
+  // `billed: true`, whatever a forged `storageOverage` field says. The
+  // `billsOverage` arm rides with it for the identical reason — a scope with
+  // no meter behind it must not reach code that can return `billed: true`
+  // either (AGL-2003).
+  if (quota.limit === UNLIMITED || !planMetersInfraOverage(org) || !billsOverage) {
     return {
       allowed: false,
       status: 403,
@@ -450,4 +490,31 @@ export function mediaStorageGate(input: {
     projectedOverageUsd: verdict.projectedOverageUsd,
     monthlyCapUsd: verdict.monthlyCapUsd,
   }
+}
+
+/**
+ * Whether the media SCOPE receiving these bytes reaches an invoice this month
+ * (AGL-2003) — the value to hand `mediaStorageGate` as `billsOverage`.
+ *
+ * One expression, in one place, so the four ingress routes cannot disagree
+ * about it the way they could disagree about the band before AGL-2075. It
+ * reads the same env var through the same `billsOrgLibraryStorage` the rollup
+ * calls, so the fail-closed month parsing cannot fork — `usage-config` already
+ * takes that shape for the same reason.
+ *
+ * `hosts` is unconditionally true: site media has been in `billedEstimate`
+ * since it existed. `orgs` is the org library, which is not.
+ *
+ * Both non-defaults are parameters rather than reads so a test can drive the
+ * pairing directly. The env default is a default PARAMETER, evaluated per
+ * call, so setting the var mid-process takes effect without a module reload.
+ */
+export function scopeBillsStorageOverage(
+  collection: 'orgs' | 'hosts' | string | null | undefined,
+  month: string = new Date().toISOString().slice(0, 7),
+  configuredStart: string | null | undefined = process.env
+    .BILL_ORG_LIBRARY_STORAGE_FROM,
+): boolean {
+  if (collection !== 'orgs') return true
+  return billsOrgLibraryStorage(month, configuredStart)
 }

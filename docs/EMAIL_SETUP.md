@@ -254,9 +254,25 @@ Why it is not met:
 
 What matters more than a ramp, and is tracked separately:
 
-- Bounces and complaints on **campaign** mail now suppress the address
-  (AGL-1918); the same on **transactional** mail is AGL-2407.
-- One-click `List-Unsubscribe` — AGL-2408.
+- Bounces and complaints suppress the address on **every** send, campaign and
+  transactional alike (AGL-1918, then AGL-2407). `sendEmail()` stamps its
+  `context` as a Resend tag on every message, so a bounce on an invite,
+  a password reset or a receipt is placeable; a permanent bounce or a
+  complaint that names no site is filed on the platform-wide
+  `emailSuppressions` list, and one that names a site is filed on both. The
+  list is consulted by the **bulk** senders only — the monthly usage summary
+  and the usage-alert fan-out. Transactional mail is deliberately NOT gated
+  on it: refusing a password reset over a stale bounce locks a real customer
+  out of their own account (the AGL-1438 line, drawn again).
+- One-click `List-Unsubscribe` is **shipped** (AGL-2408): campaign mail
+  carries the RFC 8058 pair — `List-Unsubscribe: <https://…>` plus
+  `List-Unsubscribe-Post: List-Unsubscribe=One-Click` — and
+  `/api/email/unsubscribe` writes only on POST. The GET is a
+  confirmation page, so a Safe Links / Proofpoint prescanner following
+  the link no longer unsubscribes the recipient. Still open: no
+  `mailto:` fallback in the header, because it needs a monitored
+  inbox (see "Later hardening" below), and nothing outside campaigns
+  carries an unsubscribe at all.
 - There is no send-rate governor anywhere, so if volume ever does need a ramp
   there is nothing to turn — AGL-2409.
 

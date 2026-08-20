@@ -76,8 +76,12 @@ export async function eraseHost(hostId: string): Promise<void> {
     .delete()
     .catch(() => undefined)
   if (orgId) {
-    // The routing entry and the site's POS register seats go in the SAME
-    // write (AGL-1775). `registerAllocations[hostId]` is capacity the org has
+    // The routing entry and the site's POOLED SEATS go in the SAME write —
+    // POS registers (AGL-1775) and collaborators (AGL-2439), which are the
+    // same mechanism on two keys and must be released together or a deleted
+    // site strands one pool while returning the other.
+    //
+    // `registerAllocations[hostId]` is capacity the org has
     // paid for and assigned here; a deleted site must return it to the pool
     // or the org keeps paying $89/mo for a seat pinned to a site that no
     // longer exists and cannot be reassigned from any surface. Releasing it
@@ -91,6 +95,7 @@ export async function eraseHost(hostId: string): Promise<void> {
         {
           hosts: { [hostId]: FieldValue.delete() },
           registerAllocations: { [hostId]: FieldValue.delete() },
+          collaboratorAllocations: { [hostId]: FieldValue.delete() },
         },
         { merge: true },
       )

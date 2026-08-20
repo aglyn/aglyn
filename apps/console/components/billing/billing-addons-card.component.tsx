@@ -295,10 +295,35 @@ export default function BillingAddonsCardComponent({
               delete next[row.kind]
               return next
             })
-            enqueueSnackbar(`${row.label} updated`, {
-              variant: 'success',
-              persist: false,
-            })
+            /*
+             * The purchase succeeded and the card was charged, but the
+             * PENDING plan change's item list could not be refreshed — so
+             * at the period end the schedule applies its stale list and
+             * this add-on silently disappears while the customer keeps
+             * being billed for the plan they scheduled.
+             *
+             * The route reports this deliberately ("loudly, because the
+             * consequence is silent and deferred") and the card threw the
+             * flag away, which made the loud report a server log nobody
+             * reads. A success toast here is worse than no toast: it tells
+             * the customer the one thing that is about to stop being true.
+             *
+             * `persist: true` because it is the only notice of a change
+             * that lands weeks later, and there is a real action to take.
+             */
+            if (applied.scheduleRefreshFailed) {
+              enqueueSnackbar(
+                `${row.label} was purchased, but your scheduled plan ` +
+                  'change did not pick it up — it will be dropped at the ' +
+                  'end of this billing period. Contact support to keep it.',
+                { variant: 'warning', persist: true },
+              )
+            } else {
+              enqueueSnackbar(`${row.label} updated`, {
+                variant: 'success',
+                persist: false,
+              })
+            }
           }
         } finally {
           dequeueSet()

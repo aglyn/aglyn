@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn'
+import {
+  brandMergeTokens,
+  CANVAS_ROOT_ELEMENT_ID,
+  PLATFORM_BRANDING_PROFILE,
+  resolveBrandingProfile,
+} from '@aglyn/aglyn'
 import { EMAIL_NODE_ROOT_ID } from '@aglyn/shared-util-email'
 import {
   loadSystemEmail,
@@ -292,6 +297,67 @@ describe('renderSystemEmail', () => {
       expect(await loadSystemEmail('stripe-receipt')).toBeNull()
       expect(await loadSystemEmail('stripe-card-expiring')).toBeNull()
       expect(mockGet).not.toHaveBeenCalled()
+    })
+
+    /**
+     * A white-label org's blank Support URL must not be filled in by the
+     * PLATFORM token map underneath it (AGL-2428).
+     *
+     * `renderLoadedSystemEmail` merges the caller's tokens over
+     * `DEFAULT_BRAND_TOKENS`, which carries Aglyn's own support URL for the
+     * genuinely org-less senders — password reset, verification, the
+     * security alerts. That default is correct for them and catastrophic
+     * here: the recipient of this mail is the white-label org's customer,
+     * and a link to Aglyn's desk names their vendor to someone who was never
+     * told one exists.
+     */
+    it('a blank brand support URL BLANKS the token, never inherits Aglyn’s', async () => {
+      mockGet.mockResolvedValue(snapshot({ versionId: 'v1', subject: 'Hi' }))
+      mockVersionGet.mockResolvedValue(
+        snapshot({
+          nodes: {
+            '_@_': { $id: '_@_', componentId: 'div', nodes: ['t1'] },
+            t1: {
+              $id: 't1',
+              componentId: 'emailText',
+              pluginId: 'email',
+              parentId: '_@_',
+              props: {
+                children: 'Need help? [{{brand.supportUrl}}]',
+                variant: 'body',
+              },
+            },
+          },
+        }),
+      )
+      const loaded = await loadSystemEmail('org-invite')
+
+      const whiteLabelled = renderLoadedSystemEmail(loaded!, {
+        ...brandMergeTokens(
+          resolveBrandingProfile({
+            plan: 'agency',
+            brandingProfile: { productName: 'Acme Sites' },
+          } as never),
+        ),
+      })
+      expect(whiteLabelled?.html).toContain('Need help? []')
+      expect(whiteLabelled?.html).not.toContain('aglyn.com/support')
+
+      // THE CONTROL, twice over. An org that DID set one still gets it, and
+      // an org-less sender still gets Aglyn's — without both, this passes for
+      // a build that has simply stopped resolving the token for anybody.
+      const configured = renderLoadedSystemEmail(loaded!, {
+        ...brandMergeTokens(
+          resolveBrandingProfile({
+            plan: 'agency',
+            brandingProfile: { supportUrl: 'https://acme.test/help' },
+          } as never),
+        ),
+      })
+      expect(configured?.html).toContain('Need help? [https://acme.test/help]')
+
+      const platform = renderLoadedSystemEmail(loaded!, {})
+      expect(platform?.html).toContain(PLATFORM_BRANDING_PROFILE.supportUrl)
     })
   })
 

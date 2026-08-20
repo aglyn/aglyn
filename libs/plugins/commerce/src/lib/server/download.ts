@@ -101,13 +101,27 @@ export const downloadHandler: PluginApiHandler = async (req, res) => {
     ])
     if (!orderSnapshot.exists) return res.status(404).send('Unknown order')
     const order = CommerceModel.liftLegacyOrder(orderSnapshot.data() as any)
-    if (['pending', 'cancelled', 'refunded'].includes(order.status)) {
+    // ONE ENTITLEMENT TEST, AND IT KNOWS ABOUT PARTIAL REFUNDS (AGL-2454).
+    //
+    // This used to be a status test against the literal `'refunded'` followed
+    // by an ownership test, and `refund.ts` writes that literal only when the
+    // order is FULLY refunded — so a 99%-refunded order stayed `paid` and this
+    // gate went on serving the files. The two questions are now one call, and
+    // it also answers "was THIS line refunded by name", which is the case a
+    // line-scoped refund creates.
+    //
+    // The order-level refusal is kept separate from the ownership one so the
+    // shopper is told which of the two happened; collapsing them would answer
+    // "not part of this order" to a buyer whose own order was cancelled.
+    if (!CommerceModel.orderEntitlesProduct(order, 'any')) {
       return res.status(403).send('This order cannot download files')
     }
-    const owns =
-      (order.lineItems ?? []).some((line) => line.productId === productId) ||
-      order.productId === productId
-    if (!owns) return res.status(403).send('Not part of this order')
+    if (!CommerceModel.orderContainsProduct(order, productId)) {
+      return res.status(403).send('Not part of this order')
+    }
+    if (!CommerceModel.orderEntitlesProduct(order, productId)) {
+      return res.status(403).send('This purchase was refunded')
+    }
     const product = CommerceModel.liftLegacyProduct(
       (productSnapshot.data() as any) ?? {},
     )
@@ -156,6 +170,29 @@ export const downloadHandler: PluginApiHandler = async (req, res) => {
         .send('Download limit reached — contact the seller for help')
     }
     res.setHeader('Cache-Control', 'no-store')
+    // ⚠️ THE REDIRECT TARGET IS A PERMANENT PUBLIC URL, AND THIS ROUTE CANNOT
+    // MAKE IT OTHERWISE (AGL-2454).
+    //
+    // Everything above is real: the token is HMAC'd and expiring, the
+    // entitlement test now honours partial refunds, and the attempt counter is
+    // transactional (AGL-2275). But `file.url` is the media asset's public CDN
+    // path, so one legitimate download yields a link that keeps working for
+    // anyone it is forwarded to — after a refund, after the token expires,
+    // after the download limit is spent. What is metered here is the REDIRECT,
+    // not the bytes.
+    //
+    // The specific blocker, so the next reader does not re-derive it: signing
+    // this URL would change nothing, because the CDN route only demands a
+    // signature for assets marked `private` (`serve-media-cdn.ts:805`), and a
+    // private asset carries NO `cdnPath` and is refused by the media pickers
+    // outright (`platform.types.ts:535`) — a merchant cannot attach one as a
+    // digital file today. Making the cap real therefore needs either private
+    // digital assets end to end (picker, upload, storage) or this route to
+    // proxy the bytes, which puts file transfer on a serverless execution
+    // budget. Both are delivery-architecture changes, not a fix to this
+    // handler.
+    //
+    // What IS closed here: a revoked entitlement no longer gets a NEW link.
     return res.redirect(302, file.url)
   } catch (error) {
     console.error(error)

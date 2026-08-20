@@ -26,6 +26,7 @@
  */
 
 import {
+  deploymentEnvironmentLabel,
   isDeployedRuntime,
   isDevelopmentRuntime,
   isProductionDeployment,
@@ -123,5 +124,63 @@ describe('isDevelopmentRuntime — the predicate a relaxation may key on', () =>
     // keyed on the wrong one is exactly how a container got dev rules.
     expect(!isDeployedRuntime({})).toBe(true)
     expect(isDevelopmentRuntime({})).toBe(true)
+  })
+})
+
+/**
+ * What a health report calls this deployment (AGL-2436).
+ *
+ * Both health routes read `process.env.VERCEL_ENV ?? 'development'`, so a
+ * self-hoster's production container answered `"environment": "development"`.
+ * A health endpoint exists to say what is running; ours said the opposite for
+ * every deployment that is not Aglyn's.
+ */
+describe('deploymentEnvironmentLabel', () => {
+  it("AGLYN-OPERATED: Vercel's own label wins where it exists", () => {
+    // It is the only signal that separates a preview from production, so
+    // nothing derived may override it.
+    expect(deploymentEnvironmentLabel({ VERCEL_ENV: 'production' })).toBe(
+      'production',
+    )
+    expect(deploymentEnvironmentLabel({ VERCEL_ENV: 'preview' })).toBe(
+      'preview',
+    )
+  })
+
+  it('SELF-HOST: a production container reports production, not development', () => {
+    expect(
+      deploymentEnvironmentLabel({
+        AGLYN_STANDALONE: '1',
+        NODE_ENV: 'production',
+      }),
+    ).toBe('production')
+  })
+
+  it('a non-production container is a deployment, and says so', () => {
+    // Neither "production" (it is not) nor "development" (it is not a laptop).
+    expect(
+      deploymentEnvironmentLabel({
+        AGLYN_STANDALONE: '1',
+        NODE_ENV: 'development',
+      }),
+    ).toBe('deployment')
+  })
+
+  it("a developer's machine is still development", () => {
+    expect(deploymentEnvironmentLabel({})).toBe('development')
+    expect(deploymentEnvironmentLabel({ NODE_ENV: 'development' })).toBe(
+      'development',
+    )
+  })
+
+  it('the negative control: the exact answer every self-host container gave', () => {
+    // With the old expression this environment produced 'development'. If this
+    // ever reads 'development' again, the regression is back.
+    expect(
+      deploymentEnvironmentLabel({
+        AGLYN_STANDALONE: '1',
+        NODE_ENV: 'production',
+      }),
+    ).not.toBe('development')
   })
 })

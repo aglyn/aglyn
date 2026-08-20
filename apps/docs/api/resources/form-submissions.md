@@ -64,9 +64,11 @@ decides how you should write a sync:
 // Process everything unhandled, exactly once.
 let cursor = null
 do {
-  const page = await get(`/v1/sites/${siteId}/form-submissions`, { cursor })
+  const page = await get(
+    `/v1/sites/${siteId}/form-submissions?read=false`,
+    { cursor },
+  )
   for (const submission of page.data) {
-    if (submission.read) continue
     await pushToCrm(submission)
     await patch(
       `/v1/sites/${siteId}/form-submissions/${submission.id}`,
@@ -76,6 +78,11 @@ do {
   cursor = page.next_cursor
 } while (cursor)
 ```
+
+`?read=false` is what keeps that loop cheap. Without it the run pages the site's
+entire history every time — and every page is a [billed request](../usage.md) against
+your [per-minute limit](../rate-limits.md), so the cost of finding today's three leads
+grows with every lead you ever collected.
 
 Mark **after** the downstream write succeeds, not before. `PATCH` is safe to repeat
 (see below), so a crash between the two means one duplicate downstream at worst — the
@@ -91,10 +98,12 @@ other order means a lead you never sent and never will.
 | Param | Notes |
 | --- | --- |
 | `form` | Filter to one form by exact name. Omit for every form on the site. |
+| `read` | `true` or `false`. Omit for both. Any other value is a `400` — see [below](#read-filter). |
 | `limit`, `cursor` | [Standard pagination](../conventions.md#pagination). |
 
 ```bash
-curl "https://app.aglyn.com/api/v1/sites/host_demo/form-submissions?form=contact" \
+# the unread queue for one form
+curl "https://app.aglyn.com/api/v1/sites/host_demo/form-submissions?form=contact&read=false" \
   -H "Authorization: Bearer aglyn_sk_…"
 ```
 
@@ -107,7 +116,24 @@ curl "https://app.aglyn.com/api/v1/sites/host_demo/form-submissions?form=contact
 }
 ```
 
-There is no `?read=` filter — filter the page yourself, as the loop above does.
+#### `?read=` and the unread queue {#read-filter}
+
+`?read=false` is the query a lead sync actually wants: it returns the submissions
+nobody has processed, which is usually a handful of rows out of a site's entire
+history.
+
+`read` is strictly `true` or `false`. `?read=1` and `?read=yes` are
+`400 bad_request` with `code: "validation_failed"` naming `read`, rather than being
+quietly treated as one of the two — a filter that guesses is worse than one that
+refuses, because guessing wrong returns a *plausible* page. An **empty** `?read=` is
+the [absent filter](../conventions.md#filters), not an error, so a client serializing
+an unset field gets the unfiltered list.
+
+**Combining `?form=` with `?read=` gives [short pages](../conventions.md#short-pages).**
+Only `form` narrows the query itself; `read` is applied to each page after it is read.
+So a page of 100 can come back with 3 rows, or with none at all, while `has_more` is
+still `true`. Stop on `next_cursor`, never on a page's length. Used on its own,
+`?read=` narrows the query directly and pages come back full.
 
 ### Retrieve a form submission
 
@@ -185,7 +211,7 @@ the submission later, export it before you call this.
 
 | Status | `type` | When |
 | --- | --- | --- |
-| `400` | `bad_request` | `code: "validation_failed"` — `read` missing or not a boolean, or the body names a field that isn't writable. |
+| `400` | `bad_request` | `code: "validation_failed"` — on `PATCH`, `read` missing or not a boolean, or the body names a field that isn't writable. On the list, a `?read=` that is neither `true` nor `false`. |
 | `403` | `insufficient_scope` | Key lacks `forms:read` (reads) or `forms:write` (mark/delete). |
 | `404` | `not_found` | `"No such site"` — unknown or unowned site. `"No such form submission"` — unknown submission id. |
 | `405` | `method_not_allowed` | The `Allow` header lists what is supported: `GET` on the collection, `GET, PATCH, DELETE` on one submission. |

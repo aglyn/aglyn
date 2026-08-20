@@ -21,6 +21,61 @@ export const RECAPTCHA_API_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_PUBLIC_KEY
 export const FIREBASE_CLIENT_APP_NAME = 'DEFAULT_AGLYN'
 
 /**
+ * The App Check reCAPTCHA site key, or `null` when it is unset or blank
+ * (AGL-2049).
+ *
+ * ## Why a guard, when `new ReCaptchaV3Provider(undefined)` does not throw
+ *
+ * That is precisely the problem. It does not throw — it stores the value and
+ * returns, `initializeAppCheck` returns normally, and the SDK then requests
+ * `https://www.google.com/recaptcha/api.js?render=undefined`. The failure is
+ * ASYNCHRONOUS, so the `try/catch` both call sites wrap this in never sees it.
+ * What the operator gets is a provider registered against an app it can never
+ * mint a token for, plus console errors on every page, and nothing anywhere
+ * that says the key is missing.
+ *
+ * Two configurations reach it:
+ *
+ *  - **Self-host.** `.env.selfhost.example` ships the variable EMPTY, so the
+ *    documented self-host path lands here by default. AGL-2049 named this and
+ *    deliberately left it; this is that fix.
+ *  - **A misconfigured deployment.** On the `aglyn-tenant` Vercel project this
+ *    variable was misspelled `NEXT_PUBLIC_RECPATCHA_PUBLIC_KEY` for three
+ *    years and eleven months, so `RECAPTCHA_API_KEY` was `undefined` in every
+ *    tenant build ever made. Nothing in the repo read the misspelling, so no
+ *    lint rule, schema or review could have found it — and nothing at runtime
+ *    said so either, which is the part this changes.
+ *
+ * Skipping registration is strictly better than registering a broken one: an
+ * app with no App Check provider is a known, visible state (calls are
+ * unattested and enforcement refuses them with a clear code), whereas an app
+ * with a provider that cannot mint tokens looks configured and is not.
+ *
+ * ## Read at CALL time, not at module load
+ *
+ * `NEXT_PUBLIC_*` is inlined textually by webpack's DefinePlugin wherever the
+ * expression appears, so this is exactly as static in a production bundle as
+ * the module-level constant above. Reading it inside the function is what
+ * lets a test drive both directions — with a key and without — instead of
+ * asserting the guard exists and never running it.
+ */
+export function appCheckSiteKey(): string | null {
+  const key = String(
+    process.env.NEXT_PUBLIC_RECAPTCHA_PUBLIC_KEY ?? '',
+  ).trim()
+  // The literal string 'undefined' is included on purpose: an env var
+  // interpolated from an unset shell variable arrives that way, and it is the
+  // exact value the SDK would otherwise put in `?render=`.
+  return !key || key === 'undefined' ? null : key
+}
+
+/** The one message both call sites log, so a search finds either. */
+export const APP_CHECK_KEY_MISSING_MESSAGE =
+  '[app-check] NEXT_PUBLIC_RECAPTCHA_PUBLIC_KEY is not set — App Check is ' +
+  'DISABLED for this app. Firebase client calls will be unattested, and ' +
+  'will be refused wherever App Check enforcement is on.'
+
+/**
  * On deployed workspace hosts the OAuth handshake is funnelled through one
  * dedicated same-site auth origin — `auth.<workspaceDomain>` (e.g.
  * auth.aglyn.com), which reverse-proxies the Firebase auth helpers under

@@ -172,7 +172,21 @@ export async function composeCollectionTemplatePage(options: {
         ...screenSeo,
         title: entry.seoTitle || entry.title,
         description: entry.seoDescription || entry.excerpt || undefined,
-        image: entry.coverImage || screenSeo.image || undefined,
+        // The image and its companions move as ONE group (AGL-2417). The
+        // spread above carries the SCREEN's `imageWidth`/`imageHeight`/
+        // `imageAlt`, so an entry that supplies its own cover was describing
+        // it with the screen default's size and — once alts existed — with
+        // the screen default's DESCRIPTION: a sentence about a picture this
+        // card does not show, delivered to the reader least able to check.
+        // When the entry wins, its own companions win with it.
+        ...(entry.coverImage
+          ? {
+              image: entry.coverImage,
+              imageWidth: undefined,
+              imageHeight: undefined,
+              imageAlt: entry.coverImageAlt || undefined,
+            }
+          : { image: screenSeo.image || undefined }),
       }
     : // A LIST passes its screen's own SEO through UNTOUCHED (AGL-1345).
       //

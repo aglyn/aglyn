@@ -10,7 +10,16 @@
 # The env file is mounted as a BuildKit secret so Next.js can inline the
 # NEXT_PUBLIC_* client config at build time WITHOUT the file (or your keys)
 # ending up in an image layer. The same file is passed again at runtime
-# (--env-file / compose env_file) for the server-side secrets.
+# (compose `env_file`) for the server-side secrets.
+#
+# Use compose, not `docker run --env-file`. Compose strips surrounding quotes
+# from a value; `docker run --env-file` does NOT, so FIREBASE_PRIVATE_KEY —
+# which the template quotes, and must, because `set -a && source .env` in the
+# setup steps eats the `\n` escapes otherwise — arrives with literal quote
+# characters. The Admin SDK then throws `Failed to parse private key` under an
+# OpenSSL `DECODER routines::unsupported` stack at module evaluation, the
+# console serves pages anyway, and `/api/health` answers 500 rather than the
+# 503 it should (AGL-2443).
 #
 # See docs/SELF_HOSTING.md for the full runbook.
 
@@ -19,7 +28,13 @@ FROM node:24-slim AS deps
 WORKDIR /workspace
 # husky's prepare hook needs a git repo; HUSKY=0 turns it into a no-op.
 ENV HUSKY=0
-COPY package.json package-lock.json ./
+# .npmrc carries `legacy-peer-deps=true`, and WITHOUT it `npm ci` resolves a
+# peer-inclusive ideal tree that the lockfile does not encode and exits
+# EUSAGE ("can only install packages when your package.json and
+# package-lock.json ... are in sync"). Omitting it here failed EVERY
+# `docker compose up --build` at the first build step (AGL-2423). The build
+# stage's `COPY . .` brings it, but that is after this install.
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci
 
 # ── build: nx production build with standalone output ────────────────────────

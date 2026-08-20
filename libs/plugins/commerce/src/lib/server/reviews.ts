@@ -127,11 +127,11 @@ export const reviewsHandler: PluginApiHandler = async (req, res) => {
         .get()
       for (const docSnapshot of orders.docs) {
         const order = CommerceModel.liftLegacyOrder(docSnapshot.data() as any)
-        if (['pending', 'cancelled', 'refunded'].includes(order.status)) continue
-        if (
-          (order.lineItems ?? []).some((line) => line.productId === productId) ||
-          order.productId === productId
-        ) {
+        // Through the shared entitlement test (AGL-2454). "Verified buyer" on a
+        // purchase that was refunded line by line is a badge for goods the
+        // buyer no longer has — and the inline status literal this replaced
+        // only moved on a FULL refund.
+        if (CommerceModel.orderEntitlesProduct(order, productId)) {
           verified = true
           break
         }

@@ -32,11 +32,13 @@ import {
   registerSitePageEnricher,
   registerSitePageResolver,
   registerPluginPermissions,
+  registerPluginConfigSchema,
 } from '@aglyn/aglyn/server'
 import { isEmailConfigured } from '@aglyn/shared-util-email'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { commerceBillingWebhookHandler } from './server/billing-webhook'
 import { COMMERCE_PERMISSIONS } from './model/plugin-permissions'
+import { COMMERCE_CONFIG_SCHEMA } from './plugin-config'
 import { commerceSitePageEnricher } from './server/site-page-enricher'
 import { commerceSitePageResolver } from './server/site-page-resolver'
 import { cartCheckoutHandler } from './server/cart-checkout'
@@ -175,6 +177,10 @@ registerPluginJob({
 /** Registers the commerce plugin's storefront API routes. */
 export function registerCommerceApi(): void {
   registerPluginPermissions(COMMERCE_PERMISSIONS)
+  // Merchant-settable register discount ceiling (AGL-2161). Registered on
+  // BOTH surfaces, like the permissions above: the POS route reads it
+  // server-side, and the settings card renders it from the same schema.
+  registerPluginConfigSchema(COMMERCE_CONFIG_SCHEMA)
   // PDP/PLP template pages (AGL-418): /products/* + /collections/*.
   registerSitePageResolver(commerceSitePageResolver)
   // Seeds product grids on ordinary screens (AGL-659) — the resolver above

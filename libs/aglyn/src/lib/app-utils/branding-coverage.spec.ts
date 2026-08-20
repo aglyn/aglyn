@@ -304,6 +304,131 @@ describe('white-label branding coverage (Phase 2/3)', () => {
   })
 
   /**
+   * PRE-AUTH surfaces (AGL-2322) — the other class this guard could not see.
+   *
+   * `white-label.md` sells "the console your team signs in to". These render
+   * BEFORE the org is known, so none of them can reach `useBranding` — which
+   * deliberately returns the platform profile off org-scoped routes, because
+   * `useUrlNamesOrg` has no org to name. They were simply ABSENT from every
+   * list above, and absence reads as coverage: the guard was green on all
+   * seven auth screens, the boot splash, the PWA manifest and the OS
+   * credential prompt.
+   *
+   * ## The blocker, named rather than estimated
+   *
+   * Branding these needs the org resolved from the REQUEST HOST, i.e.
+   * `brandingProfile.customConsoleDomain` actually routing. `FIELD_EXEMPT`
+   * below already records why that is not a render gap: serving the console
+   * from an agency hostname needs the domain provisioned, a certificate, and
+   * **the session cookie scoped to it — the auth cookie is the hard part**,
+   * because a console on a second origin either cannot read the session or
+   * has to be ISSUED one. That is an authentication-boundary decision
+   * (AGL-1099d) gating console-domain routing (AGL-1099c), and it is owed
+   * before any of this is buildable. Everything here unblocks together the
+   * moment a host→org branding lookup exists.
+   *
+   * ## What this block DOES assert
+   *
+   *  1. the brand still arrives from CONFIGURATION — `PLATFORM_BRAND_NAME`,
+   *     which is what makes a SELF-HOST rename cleanly — and never from fresh
+   *     hand-written copy. That half is genuinely fixed and must not regress;
+   *     it is also the half a reader most easily mistakes for the whole.
+   *  2. the exemption stays a REAL gap. A file that starts resolving a
+   *     per-org brand must MOVE into `RENDER_SURFACES`, not sit here
+   *     half-wired — the same discipline `ACCOUNT_SCOPED_SENDERS` applies.
+   */
+  const PRE_AUTH_SURFACES: string[] = [
+    'apps/console/app/(auth)/signin/page.tsx',
+    'apps/console/app/(auth)/signup/page.tsx',
+    'apps/console/app/(auth)/verify-email/page.tsx',
+    'apps/console/app/(auth)/reset-password/page.tsx',
+    'apps/console/app/(auth)/account-recovery/page.tsx',
+    'apps/console/app/(auth)/sso/page.tsx',
+    'apps/console/app/(auth)/signout/page.tsx',
+    // The installed home-screen / desktop app name for a white-label org's
+    // staff. `ConsoleBrandingEffects` patches the tab title and favicon at
+    // runtime (AGL-2270) and CANNOT patch a manifest.
+    'apps/console/app/manifest.ts',
+    // `RP_NAME` — the OS credential prompt ("Save a passkey for …?").
+    'apps/console/app/api/_lib/passkeys.ts',
+    // The maintenance screen, which by construction shows to non-staff only,
+    // i.e. exactly this population.
+    'apps/console/components/platform-lockdown-gate.component.tsx',
+  ]
+
+  it.each(PRE_AUTH_SURFACES)(
+    'pre-auth surface names the brand only from configuration: %s',
+    (file) => {
+      // A DISJUNCTION, not a required token. Four of these seven screens —
+      // reset-password, account-recovery, sso, signout — never name the
+      // product at all, and requiring `PLATFORM_BRAND_NAME` of them would be
+      // demanding a brand mention where none belongs. (The first draft of
+      // this block did exactly that and went red on all four; the failure was
+      // the assertion's, not the code's.) The real rule is that the brand,
+      // WHERE named, arrives from configuration — so a self-host rename
+      // reaches it — and never from a fresh literal.
+      const source = stripComments(read(file))
+      expect(source).not.toContain('Aglyn')
+    },
+  )
+
+  it.each(PRE_AUTH_SURFACES)(
+    'pre-auth exemption is still a real gap: %s',
+    (file) => {
+      // If this goes red, the AGL-1099d auth-boundary decision was made and
+      // wired — which is the win. Move the row into `RENDER_SURFACES` so the
+      // resolver rule applies to it, rather than deleting this assertion.
+      const source = stripComments(read(file))
+      expect(source).not.toContain('useBranding')
+      expect(source).not.toContain('resolveBrandingProfile')
+    },
+  )
+
+  /**
+   * The list is CLOSED, so a new auth screen cannot be invisible the way
+   * these seven were. Same `git ls-files` enumeration as the sender check,
+   * for the same reason: untracked scratch files must neither satisfy nor
+   * escape a guard.
+   */
+  it('every (auth) screen is classified as a pre-auth surface', () => {
+    const tracked = execFileSync(
+      'git',
+      ['ls-files', '--', 'apps/console/app/(auth)'],
+      { cwd: REPO_ROOT, encoding: 'utf8' },
+    )
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => /\/page\.tsx$/.test(line))
+
+    // Guard the premise: an enumeration that found nothing classifies nothing
+    // and passes. Seven screens exist today.
+    expect(tracked.length).toBeGreaterThanOrEqual(7)
+
+    const classified = new Set(PRE_AUTH_SURFACES)
+    expect(tracked.filter((file) => !classified.has(file))).toEqual([])
+  })
+
+  /**
+   * The WORDMARK, which carries the brand with no string at all (AGL-2350
+   * §3).
+   *
+   * `auth-form.component.tsx` renders `<AglynLogoFull>` on all seven screens
+   * above. No detector that greps source can see it: `check:brand-literals`
+   * reads string tokens, and this brand is a set of SVG paths. An agency
+   * routing its clients to `app.acme.com` lands them on the agency's own
+   * domain showing OUR logo before they type a password — and every
+   * string-based gate in the repo is green on it.
+   *
+   * Pinned by call site rather than by content, so the day the auth form
+   * learns a per-org logo this fails and the row moves up with the rest.
+   */
+  it('the shared auth form still renders the platform wordmark', () => {
+    const source = stripComments(read('apps/console/components/auth-form.component.tsx'))
+    expect(source).toContain('AglynLogoFull')
+    expect(source).not.toContain('useBranding')
+  })
+
+  /**
    * FIELD-LEVEL coverage (AGL-2139) — the half this guard was missing.
    *
    * Everything above asserts that each wired FILE reaches the resolver. That

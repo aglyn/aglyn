@@ -17,6 +17,7 @@
 
 import {
   PLATFORM_BRANDING_PROFILE,
+  brandMergeTokens,
   checkApiRequestQuota,
   checkContactQuota,
   checkDataStorageQuota,
@@ -1646,9 +1647,69 @@ describe('plan entitlements', () => {
       expect(brand.logoUrl).toBe('https://cdn.acme.com/logo.png')
       expect(brand.primaryColor).toBe('#ff5a00')
       // Unset fields fall back to the Aglyn defaults, not undefined.
-      expect(brand.supportUrl).toBe(PLATFORM_BRANDING_PROFILE.supportUrl)
       expect(brand.faviconUrl).toBeNull()
       expect(brand.customConsoleDomain).toBeNull()
+      // EXCEPT the support URL, which falls back to NOTHING (AGL-2428).
+      expect(brand.supportUrl).toBeNull()
+    })
+
+    /**
+     * A white-label org that blanks its Support URL must NOT be given
+     * Aglyn's (AGL-2428).
+     *
+     * The recipient of that organization's transactional mail is THEIR
+     * customer. Our desk cannot help that person with anything, and the link
+     * identifies their vendor to someone who was never told one exists. The
+     * platform default remains correct for every org WITHOUT the
+     * entitlement, which is the distinction these cases pin.
+     */
+    describe('the support URL falls back to nothing, never to Aglyn', () => {
+      const whiteLabelWithout = (profile: Record<string, unknown>) =>
+        resolveBrandingProfile({ plan: 'agency', brandingProfile: profile } as any)
+
+      it('is null when the field is absent, blank or whitespace', () => {
+        for (const profile of [
+          { productName: 'Acme Sites' },
+          { productName: 'Acme Sites', supportUrl: '' },
+          { productName: 'Acme Sites', supportUrl: '   ' },
+        ]) {
+          expect(whiteLabelWithout(profile).supportUrl).toBeNull()
+        }
+      })
+
+      it('is the org’s own when it set one — the field still works', () => {
+        // Without this the case above is satisfied by a build that never
+        // resolves a support URL for anybody.
+        expect(
+          whiteLabelWithout({ supportUrl: 'https://acme.test/help' }).supportUrl,
+        ).toBe('https://acme.test/help')
+      })
+
+      it('THE CONTROL: a NON-white-label org still gets Aglyn’s', () => {
+        // The platform default is not being deleted. An org with no
+        // concealment entitlement is an Aglyn customer whose support desk
+        // genuinely is ours, and it must keep pointing at us.
+        expect(resolveBrandingProfile({ plan: 'pro' } as any).supportUrl).toBe(
+          PLATFORM_BRANDING_PROFILE.supportUrl,
+        )
+        expect(PLATFORM_BRANDING_PROFILE.supportUrl).toBeTruthy()
+      })
+
+      it('the merge token is EMPTY rather than missing, so no default shows through', () => {
+        // `renderLoadedSystemEmail` merges these over a platform token map
+        // carrying Aglyn's support URL. An omitted key would let that show
+        // through and mail the org's customer a link to us — the leak this
+        // closes — so the key has to be present in order to overwrite it.
+        const tokens = brandMergeTokens(whiteLabelWithout({ productName: 'Acme' }))
+        expect(Object.keys(tokens)).toContain('brand.supportUrl')
+        expect(tokens['brand.supportUrl']).toBe('')
+        // And carries the real one when there is one.
+        expect(
+          brandMergeTokens(
+            whiteLabelWithout({ supportUrl: 'https://acme.test/help' }),
+          )['brand.supportUrl'],
+        ).toBe('https://acme.test/help')
+      })
     })
 
     it('is on by default for the Agency tier with no explicit override', () => {

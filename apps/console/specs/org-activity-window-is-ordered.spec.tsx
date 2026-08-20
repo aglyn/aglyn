@@ -20,61 +20,56 @@
  * limitations under the License.
  */
 
-import { render } from '@testing-library/react'
+import { render, waitFor } from '@testing-library/react'
 
 /**
- * The customer's audit feed must fetch an ORDERED window (AGL-2292).
+ * The customer's audit feed reads through the ROUTE, never the client SDK
+ * (AGL-2292 → AGL-2444).
+ *
+ * ## What this file used to guard, and where it went
  *
  * `OrgActivityCard` queried `orgs/{orgId}/activity` with `limit(200)` and no
- * `orderBy`. Firestore then returns documents in DOCUMENT-ID order, and
- * `logOrgActivity` writes entries with `.add()` — auto-ids, effectively
- * random. So the 200 rows fetched were a pseudo-random SAMPLE, and the
- * client-side sort below them ordered that sample and sliced 20 off the top.
- * The result looked correct and was wrong: past 200 entries a change made a
- * minute ago could never appear, and the member-detail page's `actorId` filter
- * — "what has this person done" — ran over the same sample.
+ * `orderBy`, so the window was a pseudo-random SAMPLE that the client sort
+ * then dutifully ordered — it looked correct and was wrong. That ordering
+ * property still matters and still has a guard, but the query moved into
+ * `/api/orgs/activity`, so the guard moved with it:
+ * `org-activity-route-enforces-auditlog.spec.ts` asserts the `orderBy` and
+ * the cap. Deleting the query and the assertion together would have retired
+ * the property along with the code.
  *
- * ## Why this asserts the QUERY and not the rendered list
+ * ## What it guards NOW
  *
- * The client sort is the trap. It makes the rendered output newest-first
- * whatever the fetch returned, so ANY test that only reads the DOM passes just
- * as happily against the broken version — the sample it sorted was still
- * sorted. The defect lives entirely in which 200 documents were asked for, so
- * that is what is asserted: `orderBy('createdAt', 'desc')` is built and handed
- * to `query`.
+ * That the component reads through that route at all. `org.auditLog` was a
+ * display gate — the team page decided whether to mount this card, while the
+ * security rule let any org-wide member read the collection directly. A
+ * component that went back to a client query would restore that hole while
+ * the route's own tests stayed green, because they never look at the caller.
  *
- * The DOM assertion is kept anyway, as the negative control that proves the
- * point: it is green in both directions, and it is labelled as such so nobody
- * later mistakes it for the guard.
+ * The DOM ordering assertion is kept as the NEGATIVE CONTROL it always was:
+ * it is green whatever the fetch returns, because the client tie-break sort
+ * runs either way.
  */
 
-/** Every `orderBy(...)` the component built, in call order. */
-const orderByCalls: Array<[string, string]> = []
-/** Every argument list handed to `query(...)`. */
-const queryCalls: unknown[][] = []
+/** Every `fetch` the component made, in call order. */
+let fetches: Array<{ url: string; authorization: string | null }> = []
+/** What the fake route answers with. */
+let response: { ok: boolean; entries: unknown[] } = { ok: true, entries: [] }
 
-jest.mock('firebase/firestore', () => ({
-  collection: (...args: unknown[]) => ({ __kind: 'collection', args }),
-  limit: (n: number) => ({ __kind: 'limit', n }),
-  orderBy: (field: string, direction: string) => ({
-    __kind: 'orderBy',
-    field,
-    direction,
-  }),
-  query: (...args: unknown[]) => {
-    queryCalls.push(args)
-    for (const one of args) {
-      const clause = one as { __kind?: string; field?: string; direction?: string }
-      if (clause?.__kind === 'orderBy') {
-        orderByCalls.push([String(clause.field), String(clause.direction)])
-      }
-    }
-    return { __kind: 'query', args }
-  },
-}))
+const ENTRIES = [
+  { $id: 'b', action: 'Middle action', actorId: 'u1', createdAt: { seconds: 200 } },
+  { $id: 'c', action: 'Newest action', actorId: 'u1', createdAt: { seconds: 300 } },
+  { $id: 'a', action: 'Oldest action', actorId: 'u1', createdAt: { seconds: 100 } },
+]
 
+/**
+ * A FRESH object every call, deliberately — that is what the real provider
+ * hands back, and a stable double would hide the bug this modelled: keying
+ * the effect on the user object re-ran it on every render, so the card
+ * fetched its own feed in a loop. An unfaithful fake manufactures a false
+ * green; here it would have manufactured a shipped one.
+ */
 jest.mock('@aglyn/tenant-feature-instance', () => ({
-  useFirestore: () => ({ __kind: 'firestore' }),
+  useUser: () => ({ data: { uid: 'u1', getIdToken: async () => 'id-token' } }),
 }))
 
 jest.mock('next/navigation', () => ({
@@ -82,70 +77,91 @@ jest.mock('next/navigation', () => ({
 }))
 
 /**
- * Entries handed back DELIBERATELY OUT OF ORDER — the shape a `limit()` with
- * no `orderBy` produces. The component must still render them newest-first
- * (its client sort), which is exactly why that rendering proves nothing about
- * the bug.
+ * A client query must FAIL this suite, not slip past it. `firebase/firestore`
+ * is stubbed to throw so a component that reached for it explodes rather than
+ * quietly rendering an empty card — the shape a reinstated hole would take.
  */
-const ENTRIES = [
-  { $id: 'b', action: 'Middle action', actorId: 'u1', createdAt: { seconds: 200 } },
-  { $id: 'c', action: 'Newest action', actorId: 'u1', createdAt: { seconds: 300 } },
-  { $id: 'a', action: 'Oldest action', actorId: 'u1', createdAt: { seconds: 100 } },
-]
-
-jest.mock('../hooks/use-firestore-collection', () => ({
-  __esModule: true,
-  default: (factory: () => unknown) => {
-    // Invoking the factory is what makes the query actually get BUILT — the
-    // real hook calls it too, so skipping it would leave `queryCalls` empty
-    // and every assertion below vacuous.
-    factory()
-    return { data: ENTRIES, status: 'success' }
-  },
-}))
+jest.mock('firebase/firestore', () => {
+  const refuse = () => {
+    throw new Error('the activity card must not read Firestore directly')
+  }
+  return {
+    collection: refuse,
+    query: refuse,
+    orderBy: refuse,
+    limit: refuse,
+    onSnapshot: refuse,
+    getDocs: refuse,
+  }
+})
 
 import OrgActivityCard from '../components/org-activity-card.component'
 
-describe('the org activity window (AGL-2292)', () => {
-  beforeEach(() => {
-    orderByCalls.length = 0
-    queryCalls.length = 0
+beforeEach(() => {
+  fetches = []
+  response = { ok: true, entries: ENTRIES }
+  ;(global as any).fetch = jest.fn(async (url: string, init?: RequestInit) => {
+    fetches.push({
+      url: String(url),
+      authorization:
+        ((init?.headers ?? {}) as Record<string, string>)['Authorization'] ?? null,
+    })
+    return {
+      ok: response.ok,
+      json: async () => ({ entries: response.entries }),
+    }
   })
+})
 
-  it('builds a query at all', () => {
-    // The instrument. Every assertion below reads `orderByCalls`, and an empty
-    // one would make `not.toHaveLength(0)`-style checks the only thing
-    // standing between a broken mock and a green run.
+describe('the org activity card reads the permission-gated route (AGL-2444)', () => {
+  it('fetches /api/orgs/activity for its org, with the caller’s token', async () => {
     render(<OrgActivityCard orgId="org-1" />)
-    expect(queryCalls).toHaveLength(1)
-    expect(queryCalls[0].length).toBeGreaterThanOrEqual(3)
+    await waitFor(() => expect(fetches.length).toBeGreaterThan(0))
+    expect(fetches[0].url).toContain('/api/orgs/activity')
+    expect(fetches[0].url).toContain('orgId=org-1')
+    // Unauthenticated, the route answers 401 and the card would be
+    // permanently empty for everybody — the token is not optional.
+    expect(fetches[0].authorization).toBe('Bearer id-token')
   })
 
-  it('orders the window by createdAt descending', () => {
-    render(<OrgActivityCard orgId="org-1" />)
-    expect(orderByCalls).toContainEqual(['createdAt', 'desc'])
-  })
-
-  it('passes the ordering into query(), not merely constructs it', () => {
-    // `orderBy(...)` on its own line that nothing consumes would satisfy a
-    // laxer check and change nothing about what Firestore returns.
-    render(<OrgActivityCard orgId="org-1" />)
-    const clauses = queryCalls[0] as Array<{ __kind?: string }>
-    expect(clauses.some((one) => one?.__kind === 'orderBy')).toBe(true)
-    expect(clauses.some((one) => one?.__kind === 'limit')).toBe(true)
-  })
-
-  it('still caps the window', () => {
-    render(<OrgActivityCard orgId="org-1" />)
-    const clauses = queryCalls[0] as Array<{ __kind?: string; n?: number }>
-    expect(clauses.find((one) => one?.__kind === 'limit')?.n).toBe(200)
-  })
-
-  it('NEGATIVE CONTROL — the rendered order proves nothing', () => {
-    // Green with and without the fix, because the client sort runs either
-    // way. Present so the difference between this and the real guard above is
-    // written down rather than rediscovered.
+  it('renders what the route returned', async () => {
     const view = render(<OrgActivityCard orgId="org-1" />)
+    await waitFor(() =>
+      expect(view.container.textContent).toContain('Newest action'),
+    )
+  })
+
+  it('a 403 renders an EMPTY feed rather than spinning forever', async () => {
+    // A refusal is a real answer: this member's role does not carry
+    // `org.auditLog`. Treating it as "still loading" would leave a permanent
+    // spinner where the honest result is nothing.
+    response = { ok: false, entries: [] }
+    const view = render(<OrgActivityCard orgId="org-1" />)
+    await waitFor(() => expect(fetches.length).toBeGreaterThan(0))
+    await waitFor(() =>
+      expect(view.container.textContent).not.toContain('Newest action'),
+    )
+  })
+
+  it('fetches ONCE, not on every render', async () => {
+    // The feed is not watched, it is fetched. Keying the effect on the user
+    // OBJECT rather than its uid re-ran it on every render and drove the card
+    // into a fetch loop — 1,183 requests before this assertion existed.
+    const view = render(<OrgActivityCard orgId="org-1" />)
+    await waitFor(() =>
+      expect(view.container.textContent).toContain('Newest action'),
+    )
+    expect(fetches).toHaveLength(1)
+  })
+
+  it('NEGATIVE CONTROL — the rendered order proves nothing', async () => {
+    // Green whatever the route returns, because the client tie-break sort
+    // runs either way. Present so the difference between this and the real
+    // ordering guard (now in the route's spec) is written down.
+    const view = render(<OrgActivityCard orgId="org-1" />)
+    await waitFor(() =>
+      expect(view.container.textContent).toContain('Newest action'),
+    )
     const text = view.container.textContent ?? ''
     expect(text.indexOf('Newest action')).toBeLessThan(text.indexOf('Oldest action'))
   })

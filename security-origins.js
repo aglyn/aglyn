@@ -131,11 +131,32 @@ function operatorDomains() {
   )
 }
 
-/** Our hostnames plus the operator's, de-duplicated. */
+/**
+ * Our hostnames plus the operator's, de-duplicated — except on a self-host
+ * container, which gets only its own (AGL-2446).
+ *
+ * AGL-2198 merged the operator's domains in and kept ours, on the reasoning
+ * that ours are "harmless on their deployment because nothing there resolves to
+ * it". That holds for `img-src`, where the entries name hosts a page might load
+ * FROM. It does not hold for `frame-ancestors`, which names hosts allowed to
+ * frame the page — and Aglyn's 26 origins are live servers we operate. Measured
+ * on a real self-host container: every published page answered with
+ * `frame-ancestors https://aglyn.io https://admin.aglyn.com … https://www.aglyn.io`
+ * plus the operator's three. An operator's pages were telling browsers that
+ * Aglyn may frame them, and there was no configuration that removed it.
+ *
+ * Gated on `AGLYN_STANDALONE` rather than on the presence of operator config,
+ * and the difference matters: Aglyn's own deployment DOES set the
+ * `NEXT_PUBLIC_*` values, so a "seed ours only when theirs is empty" rule —
+ * the AGL-2176 shape — would have dropped our 26 origins from our OWN policy
+ * and broken the `auth.aglyn.com` helper iframe. Keyed on the deployment shape
+ * this is provably a no-op everywhere except a container.
+ */
 function firstPartyDomains() {
   const operator = operatorDomains().filter(
     (name) => !PRODUCTION_DOMAINS.includes(name),
   )
+  if (process.env.AGLYN_STANDALONE === '1') return operator
   return PRODUCTION_DOMAINS.concat(operator)
 }
 
@@ -153,7 +174,13 @@ function baseCspDirectives(isProduction) {
   const remote = domains.map((domain) => `https://${domain}`)
   const local = domains.map((domain) => `http://${domain}`)
   const safe = isProduction ? remote : remote.concat(local)
-  return `object-src 'none'; base-uri 'self'; frame-ancestors ${safe.join(' ')}`
+  // A container that configured NO domains would otherwise emit
+  // `frame-ancestors ` with an empty source list. That is not a strict policy —
+  // it is an INVALID directive, which browsers drop, leaving the page framable
+  // by anyone. `'self'` is the strict reading of an empty allowlist and is
+  // never wrong: a page may always frame itself (AGL-2446).
+  const ancestors = safe.length ? safe.join(' ') : "'self'"
+  return `object-src 'none'; base-uri 'self'; frame-ancestors ${ancestors}`
 }
 
 /**

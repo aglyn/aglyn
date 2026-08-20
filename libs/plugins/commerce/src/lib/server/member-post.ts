@@ -20,17 +20,14 @@ import {
   getOrgForHost,
   meterHostEmail,
 } from '@aglyn/tenant-data-admin'
+import * as CommerceModel from '../model'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { type PluginApiHandler, resolveBrandingProfile } from '@aglyn/aglyn/server'
 
-/**
- * Which member subscribers are live enough to email (AGL-316).
- *
- * AGL-1715-EXEMPT: the TENANT's own site members' subscriptions to the
- * TENANT's products, not the Aglyn org's subscription to us — same reasoning
- * as `gate.ts`. Not `isLiveSubscriptionStatus`.
- */
-const LIVE_STATUSES = new Set(['active', 'trialing', 'past_due'])
+// Which member subscribers are live enough to email (AGL-316). The list itself
+// now lives in the model as `isTenantSubscriptionLive` (AGL-1849) — it was a
+// private copy here and a second private copy in `gate.ts`, which is the drift
+// AGL-1715 guards against on the org side.
 
 /**
  * Member post publish (AGL-316): manager-gated; writes the post and
@@ -85,7 +82,9 @@ export const memberPostHandler: PluginApiHandler = async (req, res) => {
           subscriptions.docs
             .filter(
               (docSnapshot) =>
-                LIVE_STATUSES.has(String(docSnapshot.get('status'))) &&
+                CommerceModel.isTenantSubscriptionLive(
+                  docSnapshot.get('status'),
+                ) &&
                 (!productId ||
                   docSnapshot.get('productId') === productId) &&
                 docSnapshot.get('customerEmail'),

@@ -39,6 +39,7 @@ import { useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
+import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import useIsStaff from '../../../../hooks/use-is-staff'
@@ -202,6 +203,7 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
           href: buildRoute(Route.ADMIN_ASSIST_SIGNALS),
         },
       ]}
+      help="assistSignals"
       header={{
         // The configured brand, not ours (AGL-2153/2260): a white-label
         // deployment and a self-host operator both read this header.
@@ -223,7 +225,12 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
               </Alert>
             )}
 
-            <CardDisplay header={'Fleet'} contentGutterX contentGutterY>
+            <CardDisplay
+              header={'Fleet'}
+              help={docsHelp('assistSignals', { anchor: '#fleet' })}
+              contentGutterX
+              contentGutterY
+            >
               {!totals ? (
                 <Typography variant="body2" color="text.secondary">
                   {loading ? 'Reading signals…' : 'No assist turns recorded yet.'}
@@ -280,7 +287,12 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
               )}
             </CardDisplay>
 
-            <CardDisplay header={'Where the money goes'} contentGutterX contentGutterY>
+            <CardDisplay
+              header={'Where the money goes'}
+              help={docsHelp('assistSignals', { anchor: '#where-the-money-goes' })}
+              contentGutterX
+              contentGutterY
+            >
               <Typography variant="body2" color="text.secondary" gutterBottom>
                 The same spend split two ways. By tier answers whether the free
                 cap or the paid price is the lever; by model answers whether a
@@ -311,6 +323,7 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
 
             <CardDisplay
               header={'Docs gaps'}
+              help={docsHelp('assistSignals', { anchor: '#docs-gaps' })}
               contentGutterX
               contentGutterY
             >
@@ -365,6 +378,7 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
 
             <CardDisplay
               header={'Questions the docs could not answer'}
+              help={docsHelp('assistSignals', { anchor: '#questions-the-docs-could-not-answer' })}
               contentGutterX
               contentGutterY
             >
@@ -423,6 +437,7 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
               */}
             <CardDisplay
               header={'What people actually asked'}
+              help={docsHelp('assistSignals', { anchor: '#what-people-actually-asked' })}
               contentGutterX
               contentGutterY
             >
@@ -505,6 +520,7 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
 
             <CardDisplay
               header={'What Assist costs, by workspace'}
+              help={docsHelp('assistSignals', { anchor: '#what-assist-costs-by-workspace' })}
               contentGutterX
               contentGutterY
             >
