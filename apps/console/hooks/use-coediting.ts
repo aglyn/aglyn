@@ -24,6 +24,7 @@ import {
   onValue,
   ref,
   update,
+  type DatabaseReference,
 } from 'firebase/database'
 import { autorun, runInAction } from 'mobx'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -89,6 +90,45 @@ import { TAB_SESSION_ID, type PresenceSession } from './use-presence'
 
 /** How long to coalesce local edits before publishing them. */
 export const COEDIT_PUBLISH_MS = 120
+
+/**
+ * How long an unsaved mirror entry survives before a joiner reaps it
+ * (AGL-1870 R4).
+ *
+ * Zach's call, 2026-08-20: reap on join by age. Not `onDisconnect().remove()`
+ * — that fires on any loss of connection, and because `shadowRef` still holds
+ * the JSON the tab published, `publish()` diffs clean on reconnect and never
+ * re-sends. A thirty-second blip would destroy unsaved work permanently and
+ * silently.
+ *
+ * ## Why seven days, against the measured distribution
+ *
+ * `coedit/` on production, 2026-08-20: 17 rooms, 383 entries, 159.9 KiB,
+ * oldest entry 15.6 days, growing monotonically because nothing has ever
+ * removed an entry. By ENTRY AGE — which is what this cutoff reads, not the
+ * save-to-publish gap — those entries are strikingly bimodal:
+ *
+ *   the 353-entry pre-AGL-1262 residue     15.3 days
+ *   unsaved work, room saved 2026-07-26    15.4 days  (published +9.5d)
+ *   unsaved work, room saved 2026-07-13    15.4 days  (published +22.8d)
+ *   ----------------------------- seven days ------------------------------
+ *   unsaved work, room saved 2026-08-13     2.5 days  (published +4.7d)
+ *   the one leftover each save leaves       minutes to days
+ *
+ * Nothing measured sits anywhere near seven days: the gap between 2.5 and
+ * 15.3 is empty. So the cutoff is robust — 4 days or 10 days would reap
+ * exactly the same entries — and the choice is really "which side of that gap
+ * do we land on", not "which number".
+ *
+ * Landing above it keeps the one genuinely recent abandoned edit, which is the
+ * whole reason A was rejected: a tab closed on Friday still replays on Monday,
+ * and over a week's holiday. Landing below it (24h, say) would drop that room
+ * too, which is a different product — it would say the mirror is a
+ * same-session convenience rather than a place unsaved work is safe. Seven
+ * days is the longest window that still refuses to hand someone a stranger's
+ * three-week-old edit on a document they have just opened.
+ */
+export const COEDIT_MIRROR_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
 /** One node's entry in the live mirror. */
 export interface MirrorEntry {
@@ -382,70 +422,103 @@ export function mirrorFloorMillis(storedStamp: unknown): number {
 /**
  * Whether a mirror entry is work this tab should apply on join.
  *
- * ## This one predicate IS the R4 product question (AGL-1870)
+ * Two bounds, and the R4 decision (AGL-1870) is the second one:
  *
- * The rule is "anything published at or after the last save". An entry older
- * than the save was folded into the document the canvas just loaded, so
- * replaying it is noise. An entry NEWER than the save is, by definition, the
- * unsaved work the mirror exists to carry — and it is applied no matter how
- * old it is, because nothing ever reaps it. The room is cleared only by a
- * successful save from a `canEdit` peer; an abandoned tab leaves its entries
- * behind forever.
+ * **Below** — an entry older than the last save was folded into the document
+ * the canvas has just loaded, so replaying it is noise. On production this
+ * refused 353 of 383 entries, the pre-AGL-1262 residue in two rooms, 136 KiB
+ * downloaded on every join and then discarded.
  *
- * ## Measured on production 2026-08-20, not reasoned about
+ * **Above** — an entry older than {@link COEDIT_MIRROR_MAX_AGE_MS} is not
+ * replayed either, and {@link reapableMirrorEntryIds} deletes exactly the
+ * entries this bound refuses. Before R4 there was no upper bound at all: the
+ * room is cleared only by a successful save from a `canEdit` peer, so an
+ * abandoned tab left its entries behind for ever and the next person to open
+ * that version had them applied to their canvas. Production held three such
+ * rooms, 18 entries published 4.7, 9.5 and 22.8 days after the last save.
  *
- * `coedit/` held 17 rooms, 383 node entries, 159.9 KiB, oldest entry 15.6
- * days. Joining each room against its stored version's `updatedAt`:
+ * The two bounds must agree, which is why the reaper reads this same cutoff
+ * rather than one of its own. A joiner that applied an entry and then deleted
+ * it would launder abandoned work into the next save — the reap would look
+ * like it worked while the content lived on in Firestore.
  *
- *   15 of 17 rooms hold at least one entry this predicate ADMITS;
- *    2 rooms (353 of the 383 entries, 136 KiB) are refused by the floor —
- *      downloaded on every join, then discarded. Both predate the AGL-1262
- *      clear-per-node fix, and nothing will ever remove them, because the
- *      only reaper is a save on a document nobody is editing.
+ * `nowMillis` is a parameter, not a `Date.now()` inside, so the boundary can
+ * be asserted at real production timestamps instead of relative to whenever
+ * the suite happens to run.
  *
- * Of the 15, twelve hold exactly one entry stamped within a minute of the
- * save that was supposed to clear the room — a last debounced publish landing
- * after `clearMirror` had already read the room, so its content matches the
- * saved document and replaying it is a no-op. Every editing session leaves
- * one behind: 14 distinct publishing tabs, 14 rooms, one entry each.
- *
- * The other three are the real question. They hold 18 entries published days
- * to WEEKS after the last save — genuinely unsaved work from tabs that closed
- * without saving, still live by this predicate:
- *
- *   saved 2026-07-26 → 15 entries from 2026-08-05  (+9.5 days)
- *   saved 2026-07-13 →  2 entries from 2026-08-05  (+22.8 days)
- *   saved 2026-08-13 →  1 entry  from 2026-08-18   (+4.7 days)
- *
- * Whoever next opens those three versions has that work applied to their
- * canvas. Preserving it is arguably the point of a live mirror; resurrecting
- * a stranger's three-week-old abandoned edit onto a document they have just
- * opened is arguably a bug. That is a call for the product owner, and R4 is
- * deliberately not making it here.
- *
- * By contrast `presence/` held ZERO orgs at the same moment — its
- * `onDisconnect().remove()` leaves nothing behind. Presence is the control
- * that proves the mechanism works; co-editing is where the mechanism has a
- * cost, because a presence entry is disposable and an unsaved edit is not.
- *
- * ## Why `onDisconnect().remove()` is not simply the answer
+ * ## Why `onDisconnect().remove()` is not the answer (option A, rejected)
  *
  * `onDisconnect` fires on ANY loss of connection — a closed tab, a slept
  * laptop, a thirty-second network blip — and the author's tab cannot undo it
  * on reconnect: `shadowRef` still holds the JSON it published, so `publish()`
  * diffs clean and never re-sends. The peers who already applied the edit keep
  * it, a joiner after the wipe does not, and whichever of them saves decides.
- * Any reaper considered here has to answer that, which is why the timer-based
- * options in AGL-1870 R4 are not merely the timid choice.
+ * It also cannot touch a room nobody is connected to, which is where all 136
+ * KiB of the residue lives. Reaping by age answers both.
  *
- * Kept pure and exported so whichever way that call goes lands as a change to
- * a tested predicate rather than to a closure inside an effect.
+ * By contrast `presence/` held ZERO orgs at the same moment — its
+ * `onDisconnect().remove()` leaves nothing behind. Presence is the control
+ * that proves the mechanism works; co-editing is where the mechanism has a
+ * cost, because a presence entry is disposable and an unsaved edit is not.
  */
 export function isMirrorEntryLive(
   entry: MirrorEntry,
   floorMillis: number,
+  nowMillis: number = Date.now(),
 ): boolean {
-  return (entry.at ?? 0) >= floorMillis
+  const at = entry.at ?? 0
+  return at >= floorMillis && nowMillis - at < COEDIT_MIRROR_MAX_AGE_MS
+}
+
+/**
+ * The ids in a mirror room that a joiner should delete: everything at least
+ * {@link COEDIT_MIRROR_MAX_AGE_MS} old (AGL-1870 R4, option C).
+ *
+ * The bound is the exact complement of the upper bound in
+ * {@link isMirrorEntryLive} — `now - at >= cutoff` here, `now - at < cutoff`
+ * there — so this only ever removes entries a joiner has already refused to
+ * apply. Nothing that would still replay is deleted; that is the property
+ * that makes reaping safe to run alongside the subscription.
+ *
+ * An entry with no `at` is reaped: it is stamped older than any floor, so it
+ * can never be applied to anything, and RTDB rules require `at` on a write —
+ * it can only be residue.
+ *
+ * Age, deliberately, and not "everything the floor refuses". Age is the one
+ * rule that is the same for a joiner who can only read as for one who is
+ * about to edit, and it is the one rule that does not depend on getting a
+ * usable `ms:` stamp — a document whose stamp crossed an RSC boundary yields
+ * floor 0 and would otherwise reap nothing at all.
+ */
+export function reapableMirrorEntryIds(
+  room: Record<string, MirrorEntry> | null | undefined,
+  nowMillis: number,
+): string[] {
+  if (!room) return []
+  return Object.entries(room)
+    .filter(
+      ([, entry]) => nowMillis - (entry?.at ?? 0) >= COEDIT_MIRROR_MAX_AGE_MS,
+    )
+    .map(([nodeId]) => nodeId)
+}
+
+/**
+ * Deletes named entries from a mirror room.
+ *
+ * Per NODE, not the room. The database rules grant `.write` at
+ * `…/nodes/$nodeId` and nothing above it, so `remove()` on the room was
+ * refused every time — measured on production 2026-08-05, where every room on
+ * the marketing host still held entries from saves hours earlier (AGL-1262).
+ * A multi-path update of nulls deletes the same children through the path the
+ * rules actually allow, so neither the save-time clear nor the join-time reap
+ * needs a rules change.
+ */
+function removeMirrorEntries(
+  roomRef: DatabaseReference,
+  ids: string[],
+): Promise<void> | undefined {
+  if (!ids.length) return undefined
+  return update(roomRef, Object.fromEntries(ids.map((id) => [id, null])))
 }
 
 export function useCoEditing(options: {
@@ -551,10 +624,12 @@ export function useCoEditing(options: {
       if (!nodeId || !value) return
       // Our own echo.
       if (value.by === TAB_SESSION_ID) return
-      // Already folded into the document we loaded — and see
-      // {@link isMirrorEntryLive} for what this admits, measured on
-      // production, and for the R4 decision that rests on it (AGL-1870).
-      if (!isMirrorEntryLive(value, floorMillis)) return
+      // Already folded into the document we loaded, or older than the reap
+      // cutoff — see {@link isMirrorEntryLive} for both bounds and the R4
+      // decision that rests on them (AGL-1870). `Date.now()` per entry, not
+      // captured at join: a session left open past the cutoff must still
+      // apply what a peer publishes into it now.
+      if (!isMirrorEntryLive(value, floorMillis, Date.now())) return
       applyingRef.current = true
       try {
         if (applyRemoteNode(nodeId, value)) {
@@ -615,25 +690,48 @@ export function useCoEditing(options: {
   // the next person who joins.
   const clearMirror = useCallback(() => {
     if (!roomPath || !session || !canWrite) return
-    // Per NODE, not the room. The database rules grant `.write` at
-    // `…/nodes/$nodeId` and nothing above it, so `remove()` on the room was
-    // refused every time — measured on production 2026-08-05, every room on
-    // the marketing host still held entries from saves hours earlier
-    // (AGL-1262). A multi-path update of nulls deletes the same children
-    // through the path the rules actually allow.
     const roomRef = ref(session.database, roomPath)
     void get(roomRef)
       .then((snapshot) => {
         const value = snapshot.val() as Record<string, unknown> | null
-        const ids = value ? Object.keys(value) : []
-        if (!ids.length) return undefined
-        return update(
-          roomRef,
-          Object.fromEntries(ids.map((id) => [id, null])),
-        )
+        return removeMirrorEntries(roomRef, value ? Object.keys(value) : [])
       })
       .catch((error) => console.warn('[coedit] could not clear', error))
   }, [roomPath, session, canWrite])
+
+  // Reap on join (AGL-1870 R4). The joiner is already downloading the whole
+  // room, so the only added cost is one `get` and, when there is anything to
+  // drop, one multi-path update — no scheduled job, no new infrastructure and
+  // no rules change, because the nulls go through the same per-node path
+  // `clearMirror` has used since AGL-1262.
+  //
+  // Deliberately once per room per mount, keyed on `roomPath`: this is a
+  // join-time sweep, not a timer. A tab left open past the cutoff keeps
+  // publishing and keeps applying, and reaps again the next time it joins.
+  //
+  // Only a `canWrite` peer reaps — a viewer holds `presenceOrg` but not
+  // `coeditHost`, so the rules refuse its nulls. That is the right shape
+  // anyway: a viewer never clears the mirror either. It does mean a room only
+  // reachable by viewers keeps its entries, which costs storage and nothing
+  // else, since they are refused on the way in regardless.
+  const reapedRoomRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!roomPath || !session || !loaded || !enabled || !canWrite) return
+    if (reapedRoomRef.current === roomPath) return
+    reapedRoomRef.current = roomPath
+    const roomRef = ref(session.database, roomPath)
+    void get(roomRef)
+      .then((snapshot) =>
+        removeMirrorEntries(
+          roomRef,
+          reapableMirrorEntryIds(
+            snapshot.val() as Record<string, MirrorEntry> | null,
+            Date.now(),
+          ),
+        ),
+      )
+      .catch((error) => console.warn('[coedit] could not reap', error))
+  }, [roomPath, session, loaded, enabled, canWrite])
 
   useEffect(() => {
     return () => {

@@ -19,10 +19,12 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import {
+  COEDIT_MIRROR_MAX_AGE_MS,
   applyRemoteNode,
   flushRemoteReconcile,
   isMirrorEntryLive,
   mirrorFloorMillis,
+  reapableMirrorEntryIds,
 } from './use-coediting'
 
 /**
@@ -619,73 +621,158 @@ describe('undo against a co-editor (AGL-1958)', () => {
 })
 
 /**
- * The join-time admission rule (AGL-1870 R4).
+ * The join-time admission rule and the join-time reap (AGL-1870 R4).
  *
  * These cases are the PRODUCTION rooms, measured 2026-08-20, not invented
- * fixtures: every number below came off `coedit/` on `aglyn-main`. They pin
- * what the mirror does today so that whichever way the R4 product call goes —
- * reap on disconnect, reap on a timer, or leave it — the change shows up here
- * as a red rather than as a silent shift in which unsaved work survives.
+ * fixtures: every number below came off `coedit/` on `aglyn-main`. `NOW` is
+ * the moment of that measurement, so the ages here are the real ones and the
+ * suite does not drift as the calendar moves.
+ *
+ * Zach's call, 2026-08-20: option C, reap on join by age. Option A
+ * (`onDisconnect().remove()`) was rejected because a network blip would
+ * silently and permanently destroy unsaved work.
  */
-describe('isMirrorEntryLive (AGL-1870 R4: what a joiner replays)', () => {
+describe('the co-edit mirror cutoff (AGL-1870 R4: reap on join by age)', () => {
   const at = (iso: string) => new Date(iso).getTime()
   /** What a live client-SDK `Timestamp` looks like to `versionStamp`. */
   const stamp = (iso: string) => ({ toMillis: () => at(iso) })
+  /** When production was measured. Every age below is relative to this. */
+  const NOW = at('2026-08-20T16:04:00Z')
 
-  it('refuses an entry older than the last save', () => {
-    // Production: 2 rooms, 353 of the 383 entries, 136 KiB — published a
-    // minute BEFORE the save that folded them in. Downloaded on every join
-    // and then discarded, for ever, because nothing reaps them.
-    const floor = mirrorFloorMillis(stamp('2026-08-05T05:43:00Z'))
-    expect(
-      isMirrorEntryLive({ at: at('2026-08-05T05:42:00Z') }, floor),
-    ).toBe(false)
+  describe('what a joiner replays', () => {
+    it('refuses an entry older than the last save', () => {
+      // Production: 2 rooms, 353 of the 383 entries, 136 KiB — published a
+      // minute BEFORE the save that folded them in. Downloaded on every join
+      // and then discarded.
+      const floor = mirrorFloorMillis(stamp('2026-08-05T05:43:00Z'))
+      expect(
+        isMirrorEntryLive({ at: at('2026-08-05T05:42:00Z') }, floor, NOW),
+      ).toBe(false)
+    })
+
+    it('still replays unsaved work from a tab that closed days ago', () => {
+      // Production: saved 2026-08-13, one entry from 2026-08-18 (+4.7 days),
+      // 2.5 days old at measurement. THIS is the room the cutoff is chosen to
+      // keep — a tab closed on Friday still replays on Monday. Reaping it is
+      // what option A would have done, and is a different product.
+      const floor = mirrorFloorMillis(stamp('2026-08-13T09:00:00Z'))
+      expect(
+        isMirrorEntryLive({ at: at('2026-08-18T00:00:00Z') }, floor, NOW),
+      ).toBe(true)
+    })
+
+    it('no longer replays work abandoned three weeks ago', () => {
+      // Production: saved 2026-07-13, two entries from 2026-08-05 (+22.8 days
+      // after the save, 15.4 days old at measurement). Before R4 the next
+      // person to open that version had this applied to their canvas. It is
+      // now refused on the way in, and reaped.
+      const floor = mirrorFloorMillis(stamp('2026-07-13T06:09:00Z'))
+      expect(
+        isMirrorEntryLive({ at: at('2026-08-05T01:57:04Z') }, floor, NOW),
+      ).toBe(false)
+    })
+
+    it('admits the leftover every save leaves behind, at the floor exactly', () => {
+      // Production: 12 rooms holding exactly one entry stamped at or just
+      // after the save meant to clear them. The lower boundary is inclusive —
+      // an entry written in the same millisecond as the save is live.
+      const floor = mirrorFloorMillis(stamp('2026-08-20T12:00:00Z'))
+      expect(isMirrorEntryLive({ at: floor }, floor, NOW)).toBe(true)
+      expect(isMirrorEntryLive({ at: floor - 1 }, floor, NOW)).toBe(false)
+    })
+
+    it('holds the upper boundary to the millisecond', () => {
+      // Both sides of seven days, with no floor in the way, so this asserts
+      // the age bound alone. Exactly the cutoff is refused; one millisecond
+      // inside it is admitted.
+      const old = NOW - COEDIT_MIRROR_MAX_AGE_MS
+      expect(isMirrorEntryLive({ at: old }, 0, NOW)).toBe(false)
+      expect(isMirrorEntryLive({ at: old + 1 }, 0, NOW)).toBe(true)
+    })
+
+    it('bounds a never-saved document by age even with no floor', () => {
+      // No stamp means no floor, so the lower bound admits everything. Before
+      // R4 that meant a never-saved document replayed its whole room however
+      // old; the age bound is now the only thing standing there.
+      expect(mirrorFloorMillis(undefined)).toBe(0)
+      expect(isMirrorEntryLive({ at: NOW - 1000 }, 0, NOW)).toBe(true)
+      expect(isMirrorEntryLive({ at: at('2020-01-01T00:00:00Z') }, 0, NOW)).toBe(
+        false,
+      )
+    })
+
+    it('treats a missing `at` as the oldest possible entry', () => {
+      const floor = mirrorFloorMillis(stamp('2026-08-12T22:57:17Z'))
+      expect(isMirrorEntryLive({}, floor, NOW)).toBe(false)
+      // And with no floor either, the age bound still refuses it.
+      expect(isMirrorEntryLive({}, 0, NOW)).toBe(false)
+    })
+
+    /**
+     * The lower bound is disabled — silently — by any stamp shape that is not
+     * `ms:`. A `{seconds, nanoseconds}` object is what a Firestore timestamp
+     * becomes once it crosses an RSC boundary, and it yields floor 0, which
+     * admits the whole room including the 353 entries the `ms:` form refuses.
+     * All five call sites pass a live `Timestamp` today; this is the guard on
+     * that staying true. R4 does not fix it — but note that the reaper reads
+     * age only, so it keeps working on a room whose floor has collapsed.
+     */
+    it('yields NO floor for the serialized timestamp shape', () => {
+      expect(mirrorFloorMillis({ seconds: 1_754_365_380, nanoseconds: 0 })).toBe(
+        0,
+      )
+      expect(mirrorFloorMillis('2026-08-05T05:43:00Z')).toBe(0)
+      // The live shape, by contrast, does produce one.
+      expect(mirrorFloorMillis(stamp('2026-08-05T05:43:00Z'))).toBeGreaterThan(0)
+    })
   })
 
-  it('admits genuinely unsaved work three weeks after the last save', () => {
-    // Production: saved 2026-07-13, two entries from 2026-08-05 (+22.8 days)
-    // from a tab that closed without saving. The next person to open that
-    // version has them applied. This is the case the R4 call is about.
-    const floor = mirrorFloorMillis(stamp('2026-07-13T06:09:00Z'))
-    expect(
-      isMirrorEntryLive({ at: at('2026-08-05T01:57:04Z') }, floor),
-    ).toBe(true)
-  })
+  describe('what a joiner reaps', () => {
+    it('reaps the pre-AGL-1262 residue and leaves the recent room alone', () => {
+      // The whole production corpus in miniature, by entry age at measurement:
+      // the 353-entry residue and the two multi-week abandoned rooms are 15.3
+      // to 15.4 days old; the one recent abandoned edit is 2.5 days; the
+      // save-time leftovers are minutes.
+      const room = {
+        residue: { at: at('2026-08-05T05:42:00Z') },
+        abandonedJuly: { at: at('2026-08-05T01:57:04Z') },
+        abandonedAugust: { at: at('2026-08-18T00:00:00Z') },
+        saveLeftover: { at: at('2026-08-20T12:00:00Z') },
+      }
+      expect(reapableMirrorEntryIds(room, NOW).sort()).toEqual([
+        'abandonedJuly',
+        'residue',
+      ])
+    })
 
-  it('admits the leftover every save leaves behind, at the floor exactly', () => {
-    // Production: 12 rooms holding exactly one entry stamped at or just after
-    // the save meant to clear them. The boundary is inclusive — an entry
-    // written in the same millisecond as the save is live, not stale.
-    const floor = mirrorFloorMillis(stamp('2026-08-12T22:57:17Z'))
-    expect(isMirrorEntryLive({ at: floor }, floor)).toBe(true)
-    expect(isMirrorEntryLive({ at: floor - 1 }, floor)).toBe(false)
-  })
+    it('holds the same boundary the admission rule does, to the millisecond', () => {
+      const old = NOW - COEDIT_MIRROR_MAX_AGE_MS
+      expect(
+        reapableMirrorEntryIds({ a: { at: old }, b: { at: old + 1 } }, NOW),
+      ).toEqual(['a'])
+    })
 
-  it('admits everything when the document has never been saved', () => {
-    // No stamp means no floor, so a never-saved document replays its whole
-    // room. Correct today — there is no saved state to be older than — but it
-    // is also the widest the rule ever gets.
-    expect(mirrorFloorMillis(undefined)).toBe(0)
-    expect(isMirrorEntryLive({ at: at('2020-01-01T00:00:00Z') }, 0)).toBe(true)
-  })
+    it('reaps exactly what the admission rule refuses on age, never more', () => {
+      // The safety property: nothing a joiner would still apply is deleted.
+      // If these two ever disagree, a joiner applies an entry and then deletes
+      // it, laundering abandoned work into the next save.
+      const room: Record<string, { at?: number }> = {}
+      for (let days = 0; days <= 20; days += 1) {
+        room[`d${days}`] = { at: NOW - days * 24 * 60 * 60 * 1000 }
+      }
+      room.noStamp = {}
+      const reaped = new Set(reapableMirrorEntryIds(room, NOW))
+      for (const [id, entry] of Object.entries(room)) {
+        // Floor 0, so admission turns on age alone.
+        expect(reaped.has(id)).toBe(!isMirrorEntryLive(entry, 0, NOW))
+      }
+      expect(reaped.size).toBe(15)
+    })
 
-  it('treats a missing `at` as the oldest possible entry', () => {
-    const floor = mirrorFloorMillis(stamp('2026-08-12T22:57:17Z'))
-    expect(isMirrorEntryLive({}, floor)).toBe(false)
-  })
-
-  /**
-   * The filter is disabled — silently — by any stamp shape that is not
-   * `ms:`. A `{seconds, nanoseconds}` object is what a Firestore timestamp
-   * becomes once it crosses an RSC boundary, and it yields floor 0, which
-   * admits the whole room including the 353 entries the `ms:` form refuses.
-   * All five call sites pass a live `Timestamp` today; this is the guard on
-   * that staying true.
-   */
-  it('yields NO floor for the serialized timestamp shape', () => {
-    expect(mirrorFloorMillis({ seconds: 1_754_365_380, nanoseconds: 0 })).toBe(0)
-    expect(mirrorFloorMillis('2026-08-05T05:43:00Z')).toBe(0)
-    // The live shape, by contrast, does produce one.
-    expect(mirrorFloorMillis(stamp('2026-08-05T05:43:00Z'))).toBeGreaterThan(0)
+    it('reaps nothing from an empty or absent room', () => {
+      expect(reapableMirrorEntryIds({}, NOW)).toEqual([])
+      expect(reapableMirrorEntryIds(null, NOW)).toEqual([])
+      expect(reapableMirrorEntryIds(undefined, NOW)).toEqual([])
+    })
   })
 })
