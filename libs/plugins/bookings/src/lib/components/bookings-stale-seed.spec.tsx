@@ -194,3 +194,54 @@ describe('BookingsConsolePage (AGL-1358)', () => {
     expect(setDoc).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * A merchant setting a booking price is told no tax is added (AGL-2028).
+ *
+ * ## Why this is the unambiguous half
+ *
+ * Whether a service is taxable is jurisdiction-specific and frequently the
+ * opposite answer from goods, so `bookings/server.ts` computes nothing by a
+ * stated decision (AGL-2000) and AGL-2028 holds the open question of what the
+ * right answer is. That question is a tax position and is not settled here.
+ *
+ * What IS unambiguous is that the merchant was never told. A service business
+ * is one of the three named ICPs; a merchant who configured a rate in
+ * Commerce → Settings → Taxes has every reason to assume it covers the
+ * appointments they sell on the same site, and nothing on this screen said
+ * otherwise. The decision was recorded in the source and in the tax ledger —
+ * both places the merchant cannot see — while the surface where they type the
+ * price stayed silent. An undisclosed decision about someone else's tax
+ * liability is the part that needed fixing regardless of how the rate question
+ * is eventually answered.
+ *
+ * It states the MECHANISM and makes no remittance determination, the same
+ * constraint `describeOrderTaxMode` ships under: who owes which authority what
+ * attaches by operation of law and belongs to counsel (AGL-1904/AGL-1956).
+ */
+describe('the booking price says what it does not include (AGL-2028)', () => {
+  it('tells the merchant no tax is added, on the field where they set it', () => {
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'Add service' }))
+
+    const disclosure = screen.getByText(/no tax is added/i)
+    expect(disclosure).toBeTruthy()
+    // Names the settings a merchant would otherwise assume covers this, and
+    // says the mechanism rather than making a remittance determination.
+    expect(disclosure.textContent).toEqual(expect.stringMatching(/tax/i))
+    expect(disclosure.textContent).toEqual(
+      expect.stringMatching(/commerce|store/i),
+    )
+  })
+
+  /**
+   * On the EDIT path too, not only on create. A merchant revisiting a service
+   * they priced months ago is the likelier reader of this, and a disclosure
+   * that only appears once is one most merchants never see.
+   */
+  it('says it on an existing service as well as a new one', () => {
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(screen.getByText(/no tax is added/i)).toBeTruthy()
+  })
+})

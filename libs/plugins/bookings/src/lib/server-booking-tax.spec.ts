@@ -342,6 +342,28 @@ describe('a paid booking states its tax decision (AGL-2000)', () => {
     expect(params.get('line_items[1][price_data][unit_amount]')).toBeNull()
     // …nor a metadata witness claiming a tax figure that was never charged.
     expect(params.get('metadata[taxCents]')).toBeNull()
+
+    // THE GUARD ITSELF, widened (AGL-2028).
+    //
+    // The four assertions above are an allowlist of four exact keys, and a
+    // change that adds tax by any other spelling walks straight past them:
+    // `automatic_tax[liability][type]`, `tax_id_collection[enabled]`,
+    // `line_items[0][price_data][tax_behavior]` and
+    // `subscription_data[default_tax_rates][0]` are all real Stripe
+    // parameters that this body would have carried silently.
+    //
+    // AGL-2028 exists because the AGL-2000 decision is a HOLDING position
+    // that someone will come back and change — so the test whose job is to
+    // make them come back here has to actually catch them. Stated as a
+    // property over the whole emitted body rather than as a longer
+    // allowlist, because the next spelling is by definition the one nobody
+    // listed.
+    //
+    // Asserted on the SAME session this test already built rather than in a
+    // test of its own: `bookHandler` holds the slot it books, so a second
+    // call against the same fixture is refused and every assertion after it
+    // would read an empty `stripePosts`.
+    expect([...params.keys()].filter((key) => /tax/i.test(key))).toEqual([])
   })
 
   it('charges the service price and nothing on top', async () => {
