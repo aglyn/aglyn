@@ -23,7 +23,6 @@ import {
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import {
   buildRoute,
-  canManageOrg,
   checkSeatQuota,
   countManagerSeats,
   createResourceUid,
@@ -46,6 +45,7 @@ import {
   isImpersonationSession,
   lockdownRefusal,
   logOrgActivity,
+  memberHasOrgPermission,
   meterOrgEmail,
   notifyOrgAdmins,
   resolveOrgMembership,
@@ -160,7 +160,39 @@ async function handler(request: Request): Promise<Response> {
       .doc(orgId)
       .collection('invites')
 
-    const actorManages = isStaff || canManageOrg(actor?.member.role)
+    /**
+     * The gate, resolved from the STORED permission model (AGL-2464).
+     *
+     * This asked `canManageOrg(actor?.member.role)`, which is
+     * `orgRoleAtLeast(role, 'admin')` and nothing else — it never reads
+     * `orgs/{orgId}/roles/{roleId}` and never applies `member.permissions`.
+     * One boolean gated the pending-invite list, `create`, `revoke` and
+     * `resend`, and it was wrong in both directions: an editor handed
+     * `members.manage` by a custom role could add members at
+     * `/api/orgs/members` and not invite one, and an admin whose
+     * `members.manage` a per-member override had CLEARED was refused there
+     * and kept inviting, revoking and resending here.
+     *
+     * The second is the one that mattered for launch. `members.manage` is
+     * effectively the root permission — a holder can edit a custom role's
+     * map and assign it — so the override that was supposed to take it away
+     * was decorative while the console hid the affordance and the server
+     * kept honouring the POST.
+     *
+     * `memberHasOrgPermission` is the same resolver `/api/orgs/members`,
+     * `/api/orgs/roles` and `/api/orgs/settings` ask, and it layers role
+     * defaults → custom role → per-member overrides. Awaited once here
+     * rather than at each of the four call sites: one read of the role doc
+     * per request, and no way for two branches of the same request to
+     * disagree about the same member.
+     *
+     * Staff still bypass. Support access is not a customer-configured
+     * permission and an org must not be able to revoke it by writing to its
+     * own member doc.
+     */
+    const actorManages =
+      isStaff ||
+      (await memberHasOrgPermission(orgId, actor?.member, 'members.manage'))
 
     // Lockdown verdict (AGL-1506): platform/org/user scopes — the action
     // branches below read the org doc lazily, so the org scope rides on the
@@ -313,7 +345,7 @@ async function handler(request: Request): Promise<Response> {
 
     if (method === 'GET') {
       if (!actorManages) {
-        return Response.json({ error: 'Listing invites requires the admin role' }, { status: 403 })
+        return Response.json({ error: 'Listing invites requires the members.manage permission' }, { status: 403 })
       }
       const snapshot = await invitesRef
         .where('acceptedAt', '==', null)
@@ -328,7 +360,7 @@ async function handler(request: Request): Promise<Response> {
 
     if (action === 'create') {
       if (!actorManages) {
-        return Response.json({ error: 'Inviting members requires the admin role' }, { status: 403 })
+        return Response.json({ error: 'Inviting members requires the members.manage permission' }, { status: 403 })
       }
       const email = String(body?.email ?? '')
         .trim()
@@ -471,7 +503,7 @@ async function handler(request: Request): Promise<Response> {
 
     if (action === 'revoke') {
       if (!actorManages) {
-        return Response.json({ error: 'Revoking invites requires the admin role' }, { status: 403 })
+        return Response.json({ error: 'Revoking invites requires the members.manage permission' }, { status: 403 })
       }
       const inviteId = String(body?.inviteId ?? '')
       if (!inviteId) return Response.json({ error: 'Missing inviteId' }, { status: 400 })
@@ -489,7 +521,7 @@ async function handler(request: Request): Promise<Response> {
 
     if (action === 'resend') {
       if (!actorManages) {
-        return Response.json({ error: 'Resending invites requires the admin role' }, { status: 403 })
+        return Response.json({ error: 'Resending invites requires the members.manage permission' }, { status: 403 })
       }
       const inviteId = String(body?.inviteId ?? '')
       if (!inviteId) return Response.json({ error: 'Missing inviteId' }, { status: 400 })

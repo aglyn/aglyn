@@ -140,8 +140,16 @@ describe('the console and the server resolve one permission model', () => {
     // a behavioural test of an ordinary admin could not have caught them —
     // this is the mechanical half, and the override case in
     // `app/api/orgs/settings/route.spec.ts` is the behavioural one.
+    //
+    // `apps/console/app/api/orgs/invites/route.ts` joined the list in
+    // AGL-2464. It was the sibling those three fixes did not reach: the
+    // guard above only fails when a permission key has NO server consumer,
+    // and `members.manage` had several — so a fourth route resolving the
+    // WRONG thing was invisible to it. Naming the route here is what makes
+    // "the right resolver" checkable rather than assumed.
     const ROUTES = [
       'apps/console/app/api/hosts/create/route.ts',
+      'apps/console/app/api/orgs/invites/route.ts',
       'apps/console/app/api/orgs/settings/route.ts',
       'apps/console/app/api/orgs/sso/route.ts',
     ]
@@ -152,6 +160,23 @@ describe('the console and the server resolve one permission model', () => {
       return code.includes('canManageOrg(') || !code.includes('memberHasOrgPermission(')
     })
     expect(offenders).toEqual([])
+
+    // The filter can FAIL — a file that gates on the tier is reported. Without
+    // this, a typo'd path list or a comment-stripper that ate the whole file
+    // would make the assertion above vacuous.
+    expect(
+      ['apps/console/components/org-members-card.component.tsx'].filter(
+        (route) => {
+          const code = read(route)
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/^\s*\/\/.*$/gm, '')
+          return (
+            code.includes('canManageOrg(') ||
+            !code.includes('memberHasOrgPermission(')
+          )
+        },
+      ),
+    ).toHaveLength(1)
   })
 
   it('a REVOKED permission is revoked in the legacy map the gates read', () => {

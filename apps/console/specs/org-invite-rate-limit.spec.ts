@@ -45,6 +45,8 @@
  * outage if it were wrong.
  */
 
+import { hasOrgPermission as mockHasOrgPermission } from '@aglyn/aglyn'
+
 const mockVerifyIdToken = jest.fn()
 const mockLockdownRefusal = jest.fn()
 const mockConsumeRateLimit = jest.fn()
@@ -111,6 +113,22 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       }),
     }),
   },
+  /*
+   * AGL-2464, and the same closed-world hazard as the two notes above. The
+   * route stopped gating on the built-in role tier and now asks the stored
+   * permission model, so this mock must carry the resolver or every case in
+   * this file dies before it asserts anything about rate limiting.
+   *
+   * Modelled, not constant: it delegates to the exported `hasOrgPermission`
+   * production resolves through, with no custom role because no member here
+   * carries a `roleId`. A `() => true` would make the "wrong role burns no
+   * token" case below pass while proving nothing.
+   */
+  memberHasOrgPermission: async (
+    _orgId: string,
+    member: Record<string, unknown> | null | undefined,
+    permission: string,
+  ) => (member ? mockHasOrgPermission(member as never, permission as never, null) : false),
   getOrgDoc: async () => ({ id: 'org-1', name: 'Acme' }),
   isImpersonationSession: () => false,
   lockdownRefusal: (...args: unknown[]) => mockLockdownRefusal(...args),
@@ -130,7 +148,12 @@ jest.mock('@aglyn/aglyn/server', () => ({
   }),
   buildRoute: () => '/',
   Route: {},
-  canManageOrg: () => true,
+  /*
+   * AGL-2464. Deliberately FALSE now that the route gates on
+   * `members.manage`: if anybody reinstates the tier gate, every admin case
+   * in this file goes 403 and says so, instead of passing on the old path.
+   */
+  canManageOrg: () => false,
   checkSeatQuota: () => ({ allowed: true, limit: 99 }),
   countManagerSeats: () => 0,
   createResourceUid: () => 'invite-new',
@@ -425,21 +448,17 @@ describe('AGL-1907 · the pinned refusal order is unchanged', () => {
     expect(mockConsumeRateLimit).not.toHaveBeenCalled()
   })
 
-  it('a 403 for the wrong role burns no token', async () => {
+  it('a 403 for a member without members.manage burns no token', async () => {
+    // AGL-2464: the gate moved off `canManageOrg` and onto the stored
+    // permission model, so this drives a viewer through the REAL resolver
+    // rather than monkey-patching the tier helper the route no longer calls.
     mockResolveOrgMembership.mockResolvedValue({
       member: { role: 'viewer' },
       isStaff: false,
     })
-    const aglynServer = jest.requireMock('@aglyn/aglyn/server')
-    const original = aglynServer.canManageOrg
-    aglynServer.canManageOrg = () => false
-    try {
-      const response = await post(siteScopedInvite('teammate@acme.test'))
-      expect(response.status).toBe(403)
-      expect(mockConsumeRateLimit).not.toHaveBeenCalled()
-    } finally {
-      aglynServer.canManageOrg = original
-    }
+    const response = await post(siteScopedInvite('teammate@acme.test'))
+    expect(response.status).toBe(403)
+    expect(mockConsumeRateLimit).not.toHaveBeenCalled()
   })
 
   it('a 400 for a malformed address burns no token', async () => {
