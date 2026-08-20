@@ -112,6 +112,44 @@ export const REQUIRED_WEBHOOK_EVENTS: readonly string[] = [
 ]
 
 /**
+ * How the CONNECT destination identifies itself (AGL-1948), mirroring
+ * `CONNECT_SCOPE_METADATA_KEY` / `CONNECT_SCOPE_METADATA_VALUE` in
+ * `tools/scripts/lib/stripe-webhook-health.mjs`.
+ *
+ * Connected-account events are delivered only to a destination created with
+ * `connect: true`, and Stripe's API does not report that flag back on the
+ * endpoint object — so the destination is identified by metadata we set at
+ * creation instead. Same copy-and-guard arrangement as the list above.
+ */
+export const CONNECT_SCOPE_METADATA_KEY = 'aglyn_scope'
+export const CONNECT_SCOPE_METADATA_VALUE = 'connect'
+
+/**
+ * What the Connect destination must carry, mirroring
+ * `CONNECT_WEBHOOK_EVENTS` in the same script lib.
+ *
+ * `account.updated` is the whole point of it: AGL-1997's `syncConnectAccountStatus`
+ * is what stops a merchant whose Stripe account was later restricted from
+ * going on selling against a stale `stripeChargesEnabled`, with the SHOPPER
+ * meeting the failure at payment time. Without this event the handler cannot
+ * run — which is exactly the state AGL-2122 found and fixed.
+ */
+export const REQUIRED_CONNECT_WEBHOOK_EVENTS: readonly string[] = ['account.updated']
+
+/**
+ * Does this Stripe endpoint object carry our Connect scope marker?
+ *
+ * Coverage for it reuses `unsubscribedRequiredEvents` with
+ * `REQUIRED_CONNECT_WEBHOOK_EVENTS` as the `required` argument — the wildcard
+ * and null handling are identical questions, and a second copy of that logic
+ * is a second place for it to drift.
+ */
+export function isConnectWebhookEndpoint(endpoint: unknown): boolean {
+  const metadata = (endpoint as { metadata?: Record<string, unknown> })?.metadata
+  return metadata?.[CONNECT_SCOPE_METADATA_KEY] === CONNECT_SCOPE_METADATA_VALUE
+}
+
+/**
  * A per-delivery record of what actually committed.
  *
  * Deliberately append-only and stringly-typed: the reasons are read by a

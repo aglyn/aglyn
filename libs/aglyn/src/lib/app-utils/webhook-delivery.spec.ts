@@ -28,7 +28,11 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import {
   classifyWebhookDelivery,
+  CONNECT_SCOPE_METADATA_KEY,
+  CONNECT_SCOPE_METADATA_VALUE,
   createWebhookEffectLedger,
+  isConnectWebhookEndpoint,
+  REQUIRED_CONNECT_WEBHOOK_EVENTS,
   REQUIRED_WEBHOOK_EVENTS,
   unsubscribedRequiredEvents,
 } from './webhook-delivery'
@@ -257,5 +261,133 @@ describe('REQUIRED_WEBHOOK_EVENTS drift guard (AGL-1954)', () => {
     expect(new Set(REQUIRED_WEBHOOK_EVENTS).size).toBe(
       REQUIRED_WEBHOOK_EVENTS.length,
     )
+  })
+})
+
+/*==========================================
+ * THE CONNECT MIRRORS (AGL-1948).
+ *
+ * Same copy-and-guard arrangement as the list above, and the same silent
+ * drift risk in the worst direction: the Connect destination is identified
+ * ONLY by this metadata stamp, because Stripe reports nothing about
+ * `connect: true` when an endpoint is read back. If the key or value drifted
+ * from the script that stamps it, the health probe would stop recognising a
+ * destination that exists — and would then read it as the PLATFORM one,
+ * since the two share a URL.
+ *=========================================*/
+describe('Connect mirrors drift guard (AGL-1948)', () => {
+  function scriptSource(): string {
+    let dir = __dirname
+    for (let hops = 0; hops < 12; hops += 1) {
+      try {
+        readFileSync(join(dir, 'nx.json'), 'utf8')
+        return readFileSync(
+          join(dir, 'tools/scripts/lib/stripe-webhook-health.mjs'),
+          'utf8',
+        )
+      } catch {
+        const parent = dirname(dir)
+        if (parent === dir) break
+        dir = parent
+      }
+    }
+    throw new Error('could not locate the workspace root from ' + __dirname)
+  }
+
+  function scriptConst(name: string): string {
+    const match = new RegExp(
+      `export const ${name} =\\s*'([^']+)'`,
+    ).exec(scriptSource())
+    if (!match) throw new Error(name + ' not found in the script lib')
+    return match[1]
+  }
+
+  it('the guard can actually read the script constants', () => {
+    // Fails LOUDLY if a rename breaks the regex, rather than turning the
+    // comparisons below into nothing-versus-nothing.
+    expect(scriptConst('CONNECT_SCOPE_METADATA_KEY')).toBeTruthy()
+    expect(scriptConst('CONNECT_SCOPE_METADATA_VALUE')).toBeTruthy()
+  })
+
+  it('the metadata stamp matches the one setup-stripe writes', () => {
+    expect(CONNECT_SCOPE_METADATA_KEY).toBe(
+      scriptConst('CONNECT_SCOPE_METADATA_KEY'),
+    )
+    expect(CONNECT_SCOPE_METADATA_VALUE).toBe(
+      scriptConst('CONNECT_SCOPE_METADATA_VALUE'),
+    )
+  })
+
+  it('the required Connect events match the script list', () => {
+    const block = /export const CONNECT_WEBHOOK_EVENTS = \[([\s\S]*?)\n\]/.exec(
+      scriptSource(),
+    )
+    if (!block) throw new Error('CONNECT_WEBHOOK_EVENTS not found')
+    const events = [...block[1].matchAll(/'([^']+)'/g)].map((m) => m[1])
+    expect(events.length).toBeGreaterThan(0)
+    expect([...REQUIRED_CONNECT_WEBHOOK_EVENTS].sort()).toEqual(events.sort())
+  })
+})
+
+describe('isConnectWebhookEndpoint (AGL-1948)', () => {
+  const stamped = {
+    url: 'https://app.aglyn.com/api/billing/webhook',
+    metadata: { [CONNECT_SCOPE_METADATA_KEY]: CONNECT_SCOPE_METADATA_VALUE },
+  }
+  const platform = {
+    url: 'https://app.aglyn.com/api/billing/webhook',
+    metadata: {},
+  }
+
+  it('separates the two destinations that share a URL', () => {
+    // The whole point: an identical url on both, so nothing else can.
+    expect(stamped.url).toBe(platform.url)
+    expect(isConnectWebhookEndpoint(stamped)).toBe(true)
+    expect(isConnectWebhookEndpoint(platform)).toBe(false)
+  })
+
+  it('does not guess from the subscribed events', () => {
+    // Inferring the type from `enabled_events` would conclude the very thing
+    // the audit is trying to verify.
+    expect(
+      isConnectWebhookEndpoint({ enabled_events: ['account.updated'] }),
+    ).toBe(false)
+  })
+
+  it('treats a missing or malformed endpoint as not-Connect', () => {
+    expect(isConnectWebhookEndpoint(undefined)).toBe(false)
+    expect(isConnectWebhookEndpoint(null)).toBe(false)
+    expect(isConnectWebhookEndpoint({})).toBe(false)
+    expect(
+      isConnectWebhookEndpoint({ metadata: { [CONNECT_SCOPE_METADATA_KEY]: 'other' } }),
+    ).toBe(false)
+  })
+})
+
+describe('unsubscribedRequiredEvents against the Connect list (AGL-1948)', () => {
+  it('reports account.updated missing from a bare destination', () => {
+    expect(
+      unsubscribedRequiredEvents([], REQUIRED_CONNECT_WEBHOOK_EVENTS),
+    ).toEqual(['account.updated'])
+  })
+
+  it('is satisfied by the event itself, and by the wildcard', () => {
+    expect(
+      unsubscribedRequiredEvents(['account.updated'], REQUIRED_CONNECT_WEBHOOK_EVENTS),
+    ).toEqual([])
+    expect(
+      unsubscribedRequiredEvents(['*'], REQUIRED_CONNECT_WEBHOOK_EVENTS),
+    ).toEqual([])
+  })
+
+  it('does NOT accept the platform subscription list as Connect coverage', () => {
+    // The two destinations share a URL; if this ever passed, a Connect
+    // destination could be declared covered by the platform's ten events.
+    expect(
+      unsubscribedRequiredEvents(
+        [...REQUIRED_WEBHOOK_EVENTS],
+        REQUIRED_CONNECT_WEBHOOK_EVENTS,
+      ),
+    ).toEqual(['account.updated'])
   })
 })

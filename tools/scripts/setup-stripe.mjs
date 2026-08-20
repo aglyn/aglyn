@@ -269,8 +269,15 @@ if (webhookUrl) {
   // rotate). Events are indexed [0..n] — mixing `[]` with `[1]`.. is
   // rejected by Stripe's form parser (AGL-533).
   const endpoints = await stripe('webhook_endpoints?limit=100')
+  // NOT by URL alone (AGL-1948). The Connect destination below is created at
+  // this SAME url, and `webhook_endpoints` lists newest first — so once it
+  // exists, a URL-only match returns the CONNECT destination as "the platform
+  // endpoint" and `--reconcile-events` would try to add the ten platform
+  // events to it. The metadata stamp is the only thing that separates them,
+  // because Stripe reports nothing about `connect` when reading an endpoint
+  // back.
   const existing = (endpoints.data ?? []).find(
-    (endpoint) => endpoint.url === webhookUrl,
+    (endpoint) => endpoint.url === webhookUrl && !isConnectEndpoint(endpoint),
   )
   if (existing) {
     // The DRIFT is the thing to report. Skipping an existing endpoint keeps

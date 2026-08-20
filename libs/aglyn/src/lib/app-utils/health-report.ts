@@ -833,6 +833,25 @@ export interface BillingWebhookFacts {
    * report its subscriptions and the coverage question is unanswered.
    */
   unsubscribedEvents: readonly string[] | null
+  /**
+   * The CONNECT destination, as Stripe currently holds it (AGL-1948).
+   *
+   * A SECOND destination, and the platform one being perfectly healthy says
+   * nothing about it: connected-account events are delivered only to a
+   * destination created with `connect: true`, so its absence is invisible to
+   * every count above. AGL-2122 found exactly that — `account.updated`
+   * handled in two plugins, and no destination that could ever deliver it,
+   * so every merchant's `stripeChargesEnabled` rotted silently.
+   *
+   * Null when the endpoint census itself could not be taken.
+   */
+  connectEndpoint: 'enabled' | 'disabled' | 'missing' | null
+  /**
+   * Required Connect events the Connect destination is NOT subscribed to.
+   * Empty is healthy; null means there was no destination to ask, or it did
+   * not state its subscriptions.
+   */
+  unsubscribedConnectEvents: readonly string[] | null
 }
 
 export interface BillingWebhookCheck extends HealthCheck {
@@ -842,6 +861,8 @@ export interface BillingWebhookCheck extends HealthCheck {
   processed: number | null
   inert: number | null
   unsubscribedEvents: readonly string[] | null
+  connectEndpoint: BillingWebhookFacts['connectEndpoint'] | null
+  unsubscribedConnectEvents: readonly string[] | null
   /** The trailing window the counts cover, so the body is self-describing. */
   windowMinutes: number
 }
@@ -909,6 +930,8 @@ export function billingWebhookHealth(
       processed: null,
       inert: null,
       unsubscribedEvents: null,
+      connectEndpoint: null,
+      unsubscribedConnectEvents: null,
       windowMinutes,
     }
   }
@@ -921,6 +944,8 @@ export function billingWebhookHealth(
     processed: facts.processed,
     inert: facts.inert,
     unsubscribedEvents: facts.unsubscribedEvents,
+    connectEndpoint: facts.connectEndpoint,
+    unsubscribedConnectEvents: facts.unsubscribedConnectEvents,
     windowMinutes,
   }
 
@@ -960,6 +985,44 @@ export function billingWebhookHealth(
   // which point "a delivery moved nothing" has no innocent explanation left.
   if (facts.inert !== null && facts.inert > inertThreshold) {
     return { ...base, ok: false, code: 'handlers-inert' }
+  }
+  /*==========================================
+   * THE CONNECT DESTINATION (AGL-1948, closing AGL-2122's blind spot).
+   *
+   * A SECOND destination, and every code above is about the first one. The
+   * platform destination can be enabled, fully subscribed, delivering and
+   * acting — the whole check green — while connected-account events reach
+   * nothing at all, because they are delivered only to a destination created
+   * with `connect: true`. AGL-2122 measured exactly that against the live
+   * account on 2026-08-18: one destination, correct URL, all ten events, and
+   * no Connect destination in existence. `account.updated` was handled in two
+   * plugins and could never be delivered, so `syncConnectAccountStatus` never
+   * ran and every merchant's charge-eligibility flag rotted where it stood.
+   *
+   * LAST on purpose, and for a different reason than `handlers-inert` above:
+   * not because the codes above explain it, but because they do not. It is an
+   * independent destination whose failure is slower — merchant readiness
+   * drifting out of date — while everything above is this hour's revenue. The
+   * facts ride in the body either way, so the staff board shows the Connect
+   * state even when a louder code takes the headline; only the single `code`
+   * is exclusive.
+   *
+   * `missing` IS red. Before AGL-2122 that would have been wrong, because
+   * nothing created the destination and a permanently-red check teaches
+   * people to ignore the board. Now that setup-stripe creates it, its absence
+   * is a real regression with a one-line remedy.
+   *=========================================*/
+  if (facts.connectEndpoint === 'missing') {
+    return { ...base, ok: false, code: 'connect-endpoint-missing' }
+  }
+  if (facts.connectEndpoint === 'disabled') {
+    return { ...base, ok: false, code: 'connect-endpoint-disabled' }
+  }
+  if (
+    facts.unsubscribedConnectEvents &&
+    facts.unsubscribedConnectEvents.length > 0
+  ) {
+    return { ...base, ok: false, code: 'connect-events-unsubscribed' }
   }
   return { ...base, ok: true }
 }

@@ -84,9 +84,11 @@ import {
   healthHeaders,
   healthHttpStatus,
   healthStatus,
+  isConnectWebhookEndpoint,
   memoizeWithTtl,
   meteredPricingHealth,
   platformVersion,
+  REQUIRED_CONNECT_WEBHOOK_EVENTS,
   unsubscribedRequiredEvents,
   WEBHOOK_FAILURE_WINDOW_MINUTES,
   type BillingWebhookCheck,
@@ -258,9 +260,32 @@ const billingProbe = memoizeWithTtl<BillingWebhookCheck>(
       }
 
       const url = webhookUrl()
-      const match = (endpoints.data.data ?? []).find(
+      /*==========================================
+       * TWO destinations share this URL (AGL-1948).
+       *
+       * AGL-2122's Connect destination is created at the SAME `webhookUrl`
+       * with `connect: true` and a separate event list, and Stripe's endpoint
+       * object states NOTHING about `connect` when read back — which is why
+       * it carries a metadata stamp. So a match on URL alone can return
+       * EITHER, and `webhook_endpoints` lists newest first, meaning it
+       * returns the Connect one as soon as that exists.
+       *
+       * That is not hypothetical breakage: reading the Connect destination as
+       * the platform one makes `unsubscribedRequiredEvents` compare the ten
+       * platform events against `['account.updated']` and report all ten
+       * missing — a FALSE `events-unsubscribed` red, on a destination that is
+       * perfectly healthy. The stamp is the only thing that can tell them
+       * apart, so both lookups go through it.
+       *=========================================*/
+      const atOurUrl = (endpoints.data.data ?? []).filter(
         (entry) => (entry as { url?: string })?.url === url,
-      ) as { status?: string; enabled_events?: string[] } | undefined
+      ) as ReadonlyArray<{
+        status?: string
+        enabled_events?: string[]
+        metadata?: Record<string, unknown>
+      }>
+      const match = atOurUrl.find((entry) => !isConnectWebhookEndpoint(entry))
+      const connect = atOurUrl.find((entry) => isConnectWebhookEndpoint(entry))
       const [processed, inert] = await Promise.all([
         processedInWindow(cutoffMs),
         inertInWindow(cutoffMs),
@@ -296,6 +321,31 @@ const billingProbe = memoizeWithTtl<BillingWebhookCheck>(
          *=========================================*/
         unsubscribedEvents: match?.enabled_events
           ? unsubscribedRequiredEvents(match.enabled_events)
+          : null,
+        /*==========================================
+         * THE CONNECT DESTINATION (AGL-1948, watching AGL-2122's fix).
+         *
+         * Comes off the SAME `webhook_endpoints` response the probe already
+         * fetched, so the whole leg costs no extra Stripe call.
+         *
+         * Worth watching rather than assuming: this destination was missing
+         * from the live account entirely until AGL-2122, while
+         * `account.updated` was handled in two plugins — so every connected
+         * merchant's charge-eligibility flag went stale with nothing to say
+         * so. Nothing above this line can see that, because a destination
+         * that does not exist produces no failed delivery, no rejected
+         * request and no inert handler.
+         *=========================================*/
+        connectEndpoint: !connect
+          ? 'missing'
+          : connect.status === 'enabled'
+            ? 'enabled'
+            : 'disabled',
+        unsubscribedConnectEvents: connect?.enabled_events
+          ? unsubscribedRequiredEvents(
+              connect.enabled_events,
+              REQUIRED_CONNECT_WEBHOOK_EVENTS,
+            )
           : null,
       }
       return billingWebhookHealth(facts, Date.now() - startedAt)
