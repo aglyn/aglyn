@@ -93,6 +93,28 @@ export const ApiErrors = {
     errorResponse(409, 'conflict', 'Conflicts with the current state', init),
   methodNotAllowed: (init?: ApiResponseInit) =>
     errorResponse(405, 'method_not_allowed', 'Method not allowed', init),
+  /**
+   * The three refusals an upload can produce that a JSON-only API never could
+   * (AGL-2463). Built here rather than at the call site so `/v1` keeps ONE
+   * error envelope — a client branching on `error.type` must not meet a bare
+   * `{ error: '<sentence>' }` on the one surface that handles bytes.
+   */
+  unsupportedMediaType: (init?: ApiResponseInit) =>
+    errorResponse(415, 'unsupported_media_type', 'Unsupported file type', init),
+  payloadTooLarge: (init?: ApiResponseInit) =>
+    errorResponse(413, 'payload_too_large', 'File too large', init),
+  /**
+   * 451, matching the console's own media chokepoints: the asset is refused
+   * because its content hash is on the takedown ledger, which is a legal
+   * verdict rather than a permission or a quota.
+   */
+  unavailableForLegalReasons: (init?: ApiResponseInit) =>
+    errorResponse(
+      451,
+      'unavailable_for_legal_reasons',
+      'This file has been removed and cannot be uploaded',
+      init,
+    ),
   rateLimited: (retryAfterSec: number, headers?: Record<string, string>) =>
     errorResponse(429, 'rate_limited', 'Too many requests', {
       headers: { 'Retry-After': String(Math.max(1, retryAfterSec)), ...headers },

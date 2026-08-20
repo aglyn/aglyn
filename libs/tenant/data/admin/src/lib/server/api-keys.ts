@@ -87,6 +87,20 @@ export const API_SCOPES = [
   'orders:read',
   'products:read',
   'media:read',
+  // AGL-2463. `media:read` was the only media scope, so an agency onboarding a
+  // client site could automate everything about that site except putting its
+  // images in it — an integration could LIST the library and never add to it,
+  // which stops the asset pipeline at the one step that matters.
+  //
+  // Create only: no replace, no delete, no edit of an existing file's metadata.
+  // A key handed to a migration tool should be able to fill a library and not
+  // to empty one, and the destructive half wants its own decision in the change
+  // that ships it — the same rule that kept this scope out until now.
+  //
+  // Charged, not free: the create goes through `mediaStorageGate`, the same
+  // helper the console's four ingress routes use, and consumes the existing
+  // per-GB storage dimension rather than inventing a per-upload one.
+  'media:write',
 ] as const
 
 export type ApiScope = (typeof API_SCOPES)[number]

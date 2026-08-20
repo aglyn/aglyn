@@ -188,7 +188,7 @@ site id for an hour; naming the plan is the answer they can act on.
 
 ## Idempotency
 
-Seven operations accept an **`Idempotency-Key`** header:
+Nine operations accept an **`Idempotency-Key`** header:
 
 | Operation | Key scoped to |
 | --- | --- |
@@ -199,13 +199,17 @@ Seven operations accept an **`Idempotency-Key`** header:
 | `DELETE /v1/sites/{siteId}/form-submissions/{submissionId}` | that site |
 | `POST /v1/contacts` | the organization |
 | `DELETE /v1/contacts/{contactId}` | the organization |
+| `POST /v1/media` | the organization |
+| `POST /v1/sites/{siteId}/media` | that site |
 
-Three rows are organization-scoped. `POST /v1/datasets` is because it is the only
+Four rows are organization-scoped. `POST /v1/datasets` is because it is the only
 dataset operation with no object to scope to yet. Both contact operations are because
 **contacts are organization-wide**: one list is shared by every site, so there is no
-narrower object to scope a key to. Every other row is scoped to the object named in
-its own path — including `DELETE /v1/datasets/{datasetId}`, where the dataset being
-removed is still the scope.
+narrower object to scope a key to. `POST /v1/media` is the same case — it writes the
+organization library, which every site shares; its site-scoped twin
+`POST /v1/sites/{siteId}/media` writes one site's own library and scopes to that site.
+Every other row is scoped to the object named in its own path — including
+`DELETE /v1/datasets/{datasetId}`, where the dataset being removed is still the scope.
 
 Send the same key to retry safely — if the original succeeded, the same response
 comes back instead of a duplicate or a `404`:

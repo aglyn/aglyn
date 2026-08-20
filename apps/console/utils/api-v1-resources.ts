@@ -36,6 +36,7 @@ import {
   newResourceScopeFields,
   normalizeContactEmail,
   ORG_SCOPE_TOKEN,
+  readImageDimensions,
   screenRoutePathToUrl,
   validateDocument,
 } from '@aglyn/aglyn/server'
@@ -46,12 +47,28 @@ import {
   dataStorageRefusal,
   decodeCursor,
   encodeCursor,
+  firebaseAdmin,
+  generateMediaVariants,
+  getMediaQuarantine,
   listResponse,
   parseLimit,
 } from '@aglyn/tenant-data-admin'
+import { createHash, randomUUID } from 'crypto'
 import { FieldPath, Timestamp } from 'firebase-admin/firestore'
 import { type ApiV1Context, apiUsageMonth, requireScope } from './api-v1'
+import {
+  directUploadMaxBytes,
+  isAllowedUploadType,
+  isImageUploadType,
+  normalizeUploadContentType,
+  requiresFileUploadEntitlement,
+  UPLOAD_TYPES_MESSAGE,
+} from './media-upload-limits'
+import { isSvgUploadType, sanitizeSvgBuffer } from './sanitize-svg'
+import { resolveOrgMediaBand } from './server/media-storage-band'
+import { folderStoragePath, mediaCdnPathUpdate } from './server/media-scope'
 import { postTenantRevalidate } from './server/tenant-revalidate'
+import { mediaStorageGate, scopeBillsStorageOverage } from './storage-overage'
 
 // ── Serialization ───────────────────────────────────────────────────────────
 
@@ -171,7 +188,8 @@ async function claimWrite(
     | 'dataset-deletes'
     | 'form-submission-deletes'
     | 'contacts'
-    | 'contact-deletes',
+    | 'contact-deletes'
+    | 'media',
 ): Promise<{ claim: AttemptClaim } | { replay: Response }> {
   const result = await claimAttempt(ctx.firestore, {
     kind,
@@ -893,7 +911,13 @@ async function handleSites(
 
   if (sub === 'orders') return handleOrders(request, ctx, segments, url)
   if (sub === 'products') return handleProducts(request, ctx, segments, url)
-  if (sub === 'media') return handleScopedMedia(request, ctx, url, hostRef(ctx, hostId))
+  if (sub === 'media')
+    return handleScopedMedia(request, ctx, url, hostRef(ctx, hostId), {
+      collection: 'hosts',
+      base: `hosts/${hostId}`,
+      hostId,
+      cdnScope: hostId,
+    })
   if (sub === 'publish') return handlePublish(request, ctx, hostId)
   // Kept below the sub-resources so an unknown one still 404s here.
 
@@ -1572,23 +1596,325 @@ function mediaView(doc: FirebaseFirestore.DocumentSnapshot, origin: string) {
   }
 }
 
+/**
+ * Which media library a write lands in. Mirrors the fields of `MediaScope`
+ * that a create actually needs — `resolveMediaScope` itself cannot be reused
+ * here because it resolves a console USER's membership from a uid, and an API
+ * key has none (the scope check and `orgOwnsHost` answer that question
+ * instead).
+ */
+interface MediaWriteScope {
+  collection: 'orgs' | 'hosts'
+  /** Storage prefix: `orgs/{orgId}` or `hosts/{hostId}`. */
+  base: string
+  hostId: string | null
+  /** `{hostId}` or `org:{orgId}` — the CDN route's scope segment. */
+  cdnScope: string
+}
+
+/**
+ * `POST /v1/media` and `POST /v1/sites/{siteId}/media` (AGL-2463).
+ *
+ * ## The wire format, and why it is not multipart
+ *
+ * A JSON body with base64 `data`, which is the SAME shape the console's own
+ * direct upload route takes — not a new contract invented for the API. It
+ * keeps `/v1` to one envelope, and it makes `Idempotency-Key` mean what
+ * `conventions.md` publishes: one call, one create, retriable. The signed-URL
+ * handshake was the alternative and is worse here on both counts — creation
+ * becomes a two-call, three-party operation whose middle leg is not ours, so
+ * an idempotency key has no coherent meaning across it.
+ *
+ * It is also the SAFER of the two, which decided it. The signed route hands
+ * the client a URL and never sees the bytes, so it can only record the size
+ * the caller declared and a digest derived from GCS's md5 (AGL-1629). Bytes
+ * through this path are measured, sanitized and hashed by us:
+ *
+ * - **Content type**: `isAllowedUploadType`, the same allowlist the console
+ *   uses. Refused with `415`.
+ * - **Size**: `directUploadMaxBytes` for the type, measured on the DECODED
+ *   bytes rather than on a declared `sizeBytes` a caller controls. `413`.
+ * - **SVG**: `sanitizeSvgBuffer`, so a stored SVG cannot carry script.
+ * - **Digest**: a full sha256 over the received bytes, which is what makes
+ *   the takedown check below able to match. `451` when it does.
+ * - **Quota**: `mediaStorageGate`, below.
+ *
+ * ## What this does NOT do, stated plainly
+ *
+ * There is **no malware or content scanning** at this chokepoint, because
+ * there is none at any of the console's four either (AGL-1475) — this
+ * endpoint inherits that gap rather than introducing it, and an operator
+ * should not read the allowlist as though it were a scanner. There is also
+ * **no magic-byte sniffing** anywhere in media ingress: the declared content
+ * type is trusted, corrected only by file extension. So `isAllowedUploadType`
+ * bounds what a file CLAIMS to be, not what it is, and a caller with a valid
+ * key can store arbitrary bytes under an allowed type. The residual risk is
+ * bounded by the same things that bound it for the console: uploads land in
+ * the customer's own library, and serving is `Content-Type`-pinned. The docs
+ * say this in the same words rather than repeating the "virus scanning" claim
+ * that was there before and was never true.
+ *
+ * ## The money
+ *
+ * `mediaStorageGate`, through `resolveOrgMediaBand` and
+ * `scopeBillsStorageOverage` — the SAME three helpers the console's ingress
+ * routes call, never a second copy. Storage is already a charged dimension
+ * (per-GB overage), so this consumes the existing meter and invents nothing.
+ * A second implementation of the band is exactly the drift that keeps
+ * `checkContactQuota` shared between capture and `POST /v1/contacts`.
+ *
+ * ## Ordering
+ *
+ * Deterministic refusals (415/413/400) sit ABOVE the idempotency claim, so a
+ * broken payload never takes the key and the integrator can fix it and retry
+ * with the same one. Everything conditional sits below and RELEASES the claim
+ * on refusal — `createContact`'s rule, and the reason a create that exactly
+ * fills the band stays retriable instead of replaying a `403` forever.
+ */
+async function createMedia(
+  request: Request,
+  ctx: ApiV1Context,
+  scopeRef: FirebaseFirestore.DocumentReference,
+  scope: MediaWriteScope,
+  origin: string,
+): Promise<Response> {
+  const body = (await readJsonBody(request)) as Record<string, unknown>
+  const fileName = String(body.fileName ?? 'upload').slice(0, 200)
+  const declaredType = String(body.contentType ?? '')
+  const contentType = normalizeUploadContentType(declaredType, fileName)
+
+  if (!isAllowedUploadType(contentType)) {
+    return ApiErrors.unsupportedMediaType({
+      message: UPLOAD_TYPES_MESSAGE,
+      code: 'unsupported_media_type',
+      headers: ctx.headers,
+    })
+  }
+
+  // Strict base64. `Buffer.from(x, 'base64')` is famously permissive — it
+  // silently drops anything it cannot decode — so a typo'd payload would
+  // otherwise be stored as a short, corrupt file that reports success.
+  const raw = String(body.data ?? '')
+  const decoded = Buffer.from(raw, 'base64')
+  if (!raw || !decoded.length || decoded.toString('base64').replace(/=+$/, '') !== raw.replace(/\s/g, '').replace(/=+$/, '')) {
+    return ApiErrors.badRequest({
+      message: '`data` must be the file\'s bytes, base64-encoded',
+      code: 'validation_failed',
+      fields: { data: 'not valid base64' },
+      headers: ctx.headers,
+    })
+  }
+
+  const maxBytes = Number(directUploadMaxBytes(contentType) ?? 0)
+  if (!maxBytes || decoded.length > maxBytes) {
+    return ApiErrors.payloadTooLarge({
+      message: `File is too large (${Math.round(maxBytes / 1024 / 1024)}MB max for ${contentType})`,
+      code: 'file_too_large',
+      headers: ctx.headers,
+    })
+  }
+
+  // Sanitize BEFORE hashing and before measuring what we store, so the digest
+  // and the counter both describe the bytes that actually landed.
+  const svg = isSvgUploadType(contentType) ? sanitizeSvgBuffer(decoded) : null
+  const buffer = svg ? svg.buffer : decoded
+  const contentSha256 = createHash('sha256').update(new Uint8Array(buffer)).digest('hex')
+  const contentHash = contentSha256.slice(0, 16)
+
+  const claimed = await claimWrite(
+    ctx,
+    scope.collection === 'hosts' ? (scope.hostId ?? '*') : '*',
+    request.headers.get('Idempotency-Key'),
+    'media',
+  )
+  if ('replay' in claimed) return claimed.replay
+  const { claim } = claimed
+
+  try {
+    // The takedown ledger, matched on the digest we just computed.
+    const quarantine = await getMediaQuarantine({ contentSha256, contentHash })
+    if (quarantine) {
+      await claim.release()
+      return ApiErrors.unavailableForLegalReasons({
+        code: 'media_quarantined',
+        headers: ctx.headers,
+      })
+    }
+
+    // Video and document uploads are a paid capability; images are not.
+    if (
+      requiresFileUploadEntitlement(contentType) &&
+      !checkEntitlement(ctx.org, 'videoMedia')
+    ) {
+      await claim.release()
+      return ApiErrors.planRequired({
+        message: 'Video and file uploads require a Pro plan',
+        code: 'media_type_plan',
+        headers: ctx.headers,
+      })
+    }
+
+    const band = await resolveOrgMediaBand({
+      firestore: ctx.firestore,
+      orgId: ctx.orgId,
+      org: ctx.org as never,
+      currentHostId: scope.collection === 'hosts' ? scope.hostId : null,
+    })
+    const gate = mediaStorageGate({
+      org: ctx.org as never,
+      // Includes the incoming file, and keeps the caller's `Math.ceil(x) - 1`
+      // convention (AGL-471) by handing the helper the same input the console
+      // does rather than a second rounding rule.
+      usedMb: (band.usedBytes + buffer.length) / (1024 * 1024),
+      allowanceMb: band.allowanceMb,
+      billsOverage: scopeBillsStorageOverage(scope.collection),
+    })
+    if (!gate.allowed) {
+      await claim.release()
+      return ApiErrors.planRequired({
+        message: gate.error ?? `Storage limit reached (${gate.limitMb} MB)`,
+        code: 'storage_quota',
+        headers: ctx.headers,
+      })
+    }
+
+    const mediaId = createResourceUid()
+    const token = randomUUID()
+    const folderId = body.folderId ? String(body.folderId).slice(0, 64) : null
+    const folderPath = await folderStoragePath(scopeRef, folderId)
+    // Built the same way the console's upload route builds it: the object
+    // lives INSIDE its folder's Storage prefix, so the bucket tree mirrors the
+    // library tree. (`mediaObjectPath` is the read-side helper — it derives a
+    // path from an EXISTING media document, which a create does not have.)
+    const objectPath =
+      `${scope.base}/media/` + (folderPath ? `${folderPath}/` : '') + mediaId
+    const bucket = firebaseAdmin
+      .app()
+      .storage()
+      .bucket(process.env['NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET'])
+    await bucket.file(objectPath).save(buffer, {
+      contentType,
+      metadata: {
+        cacheControl: 'public, max-age=31536000, immutable',
+        metadata: { firebaseStorageDownloadTokens: token },
+      },
+    })
+    const downloadUrl =
+      `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/` +
+      `${encodeURIComponent(objectPath)}?alt=media&token=${token}`
+
+    const dimensions = isImageUploadType(contentType)
+      ? (readImageDimensions(new Uint8Array(buffer)) ?? {})
+      : {}
+    const isPrivate = body.private === true
+    const cdnAllowed = checkEntitlement(ctx.org, 'mediaCdn') && !isPrivate
+    const variants = cdnAllowed
+      ? await generateMediaVariants({
+          buffer,
+          contentType,
+          sourceWidth: (dimensions as { width?: number }).width,
+          objectPath,
+          saveVariant: async (path: string, webp: Buffer) => {
+            await bucket.file(path).save(webp, { contentType: 'image/webp' })
+          },
+        }).catch(() => null)
+      : null
+
+    await scopeRef.collection('media').doc(mediaId).create({
+      fileName,
+      contentType,
+      sizeBytes: buffer.length,
+      url: downloadUrl,
+      storagePath: objectPath,
+      folderId,
+      ...dimensions,
+      ...(body.alt ? { alt: String(body.alt).slice(0, 500) } : {}),
+      contentHash,
+      contentSha256,
+      variants: (variants as { variants?: number[] })?.variants ?? [],
+      ...(svg?.removed?.length ? { svgSanitized: svg.removed } : {}),
+      // The org library is shared across sites, so a file written there needs
+      // a scope token or it matches no scoped read (AGL-1044).
+      ...(scope.collection === 'orgs'
+        ? { visibleTo: defaultScopeForNewResource({ hostId: null }) }
+        : {}),
+      // Stable, mediaId-keyed CDN URL (AGL-829). The helper applies the
+      // plan-and-private rule itself, so this is the same expression the
+      // console's three ingress routes write and cannot disagree with them.
+      cdnPath: mediaCdnPathUpdate({
+        billing: ctx.org as never,
+        cdnScope: scope.cdnScope,
+        mediaId,
+        isPrivate,
+      }),
+      ...(isPrivate ? { private: true } : {}),
+      // `sources.api`, beside the console's own uploads, so a merchant can see
+      // which files an integration put there.
+      uploadedBy: `api:${ctx.keyId}`,
+      createdAt: Timestamp.now(),
+    })
+
+    // The billed counter, LAST and by increment — the same write and the same
+    // exclusion of generated variant bytes the console ingress routes make, so
+    // ingress and `report-usage` keep describing one number.
+    await scopeRef
+      .collection('counters')
+      .doc('media')
+      .set(
+        {
+          bytes: firebaseAdmin.firestore.FieldValue.increment(buffer.length),
+          count: firebaseAdmin.firestore.FieldValue.increment(1),
+        },
+        { merge: true },
+      )
+
+    const view = mediaView(await scopeRef.collection('media').doc(mediaId).get(), origin)
+    // Stored as 200 so a replay is distinguishable from the fresh 201.
+    await claim.record(200, view)
+    return apiJson(view, { status: 201, headers: ctx.headers })
+  } catch (error) {
+    await claim.release()
+    throw error
+  }
+}
+
 async function handleScopedMedia(
   request: Request,
   ctx: ApiV1Context,
   url: URL,
   scopeRef: FirebaseFirestore.DocumentReference,
+  scope: MediaWriteScope,
 ): Promise<Response> {
+  const origin = url.origin
+  const segmentsAll = url.pathname.split('/').filter(Boolean)
+
+  // POST is a create on the COLLECTION only — never on `/media/{id}`, which
+  // would read as a replace. Checked before the read scope so a write-only key
+  // is not told it is missing `media:read` (AGL-900).
+  if (request.method === 'POST') {
+    if (segmentsAll[segmentsAll.length - 1] !== 'media') {
+      return ApiErrors.methodNotAllowed({
+        headers: { ...ctx.headers, Allow: 'GET' },
+      })
+    }
+    const deniedWrite = requireScope(ctx, 'media:write')
+    if (deniedWrite) return deniedWrite
+    return createMedia(request, ctx, scopeRef, scope, origin)
+  }
+
   const denied = requireScope(ctx, 'media:read')
   if (denied) return denied
   if (request.method !== 'GET') {
-    return ApiErrors.methodNotAllowed({ headers: ctx.headers })
+    return ApiErrors.methodNotAllowed({
+      headers: { ...ctx.headers, Allow: 'GET, POST' },
+    })
   }
-  const origin = url.origin
   const collection = scopeRef.collection('media')
-  const segments = url.pathname.split('/').filter(Boolean)
   // The trailing segment is the media id only on the `/media/{id}` shape.
   const mediaId =
-    segments[segments.length - 2] === 'media' ? segments[segments.length - 1] : ''
+    segmentsAll[segmentsAll.length - 2] === 'media'
+      ? segmentsAll[segmentsAll.length - 1]
+      : ''
 
   if (mediaId) {
     const snap = await collection.doc(mediaId).get()
@@ -2274,6 +2600,12 @@ export async function dispatchResource(
         ctx,
         url,
         ctx.firestore.collection('orgs').doc(ctx.orgId),
+        {
+          collection: 'orgs',
+          base: `orgs/${ctx.orgId}`,
+          hostId: null,
+          cdnScope: `org:${ctx.orgId}`,
+        },
       )
     default:
       return ApiErrors.notFound({
