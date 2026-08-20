@@ -35,8 +35,18 @@ let mockVerifyResult: Record<string, unknown> | Error = { uid: 'u1' }
 /** Which pool `revokeRefreshTokens` was called on — the AGL-2005 question. */
 let mockPoolAskedFor: unknown = '__never__'
 
+/**
+ * `${pool}:${uid}` for every revocation-cache drop (AGL-1881). Without this
+ * the process that just served the click keeps serving the revoked token from
+ * its own 15s cache — the one window the person clicking would SEE.
+ */
+const mockInvalidated: string[] = []
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  invalidateTokenRevocationCache: (uid: string, tenantId?: unknown) => {
+    mockInvalidated.push(`${String(tenantId)}:${uid}`)
+  },
   authForPool: (tenantId: unknown) => {
     mockPoolAskedFor = tenantId
     return {
@@ -141,6 +151,7 @@ beforeEach(() => {
   mockVerifyArgs = []
   mockVerifyResult = { uid: 'u1' }
   mockPoolAskedFor = '__never__'
+  mockInvalidated.length = 0
 })
 
 describe('it stamps the row rather than deleting it', () => {
@@ -173,6 +184,7 @@ describe('it revokes in the pool the account actually lives in', () => {
 
     expect(mockPoolAskedFor).toBeNull()
     expect(mockRevoked).toEqual(['null:u1'])
+    expect(mockInvalidated).toEqual(['null:u1'])
   })
 
   it('uses the GCIP tenant pool for an SSO account — the AGL-2005 trap', async () => {
@@ -185,6 +197,10 @@ describe('it revokes in the pool the account actually lives in', () => {
 
     expect(mockPoolAskedFor).toBe('sso-tenant-1')
     expect(mockRevoked).toEqual(['sso-tenant-1:u1'])
+    // The cache drop follows the revoke into the SAME pool (AGL-1881): the
+    // key is `${pool}\u0000${uid}`, so a project-pool drop here would clear a
+    // key nobody warmed and leave the SSO one serving the revoked token.
+    expect(mockInvalidated).toEqual(['sso-tenant-1:u1'])
   })
 })
 

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { authForPool, firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { authForPool, firebaseAdmin, invalidateTokenRevocationCache } from '@aglyn/tenant-data-admin'
 import { DEVICES_COLLECTION } from '../../../_lib/security-alerts'
 
 // lockdown-423: exempt — account-scoped, and the one action worth keeping
@@ -127,7 +127,12 @@ async function handler(request: Request): Promise<Response> {
     // storage. Firebase has no per-device revocation, so this ends every
     // session on the account — the card says so in those words rather than
     // implying a narrower effect than it has.
-    await authForPool(decoded.firebase?.tenant ?? null).revokeRefreshTokens(uid)
+    const tenantId = decoded.firebase?.tenant ?? null
+    await authForPool(tenantId).revokeRefreshTokens(uid)
+    // AGL-1881. Without this the process that just accepted the caller's own
+    // token would keep serving it from its own 15s cache — the one window a
+    // person watching the button flip would actually notice.
+    invalidateTokenRevocationCache(uid, tenantId)
 
     return Response.json(
       {

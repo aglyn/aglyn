@@ -78,6 +78,7 @@ import {
   invalidateDomainLockdownCache,
   invalidateFeatureLockdownCache,
   invalidatePlatformLockdownCache,
+  invalidateTokenRevocationCache,
   invalidateUserLockdownCache,
   isImpersonationSession,
   lockdownJsonResponse,
@@ -905,6 +906,7 @@ async function handler(request: Request): Promise<Response> {
         // project-pool revoke would silently miss an SSO-tenant account.
         await pool.updateUser(targetId, { disabled: true })
         await pool.revokeRefreshTokens(targetId)
+        invalidateTokenRevocationCache(targetId, found.tenantId ?? null)
       } else {
         await ref.delete()
         await pool.updateUser(targetId, { disabled: false })

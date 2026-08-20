@@ -143,10 +143,12 @@ button signs out **every device on your account, including the one you are
 using**, and you will be asked to sign in again. The confirmation says so
 before you click.
 
-Anything that goes through us stops immediately. A tab that is *already open*
-on the signed-out device can keep working for **up to an hour** — it holds a
-short-lived token it cannot renew — so if you believe someone else has access,
-sign out and then
+Anything that goes through us — every console page, every action, every API
+call — stops **within a few seconds**. What survives longer is narrower: a tab
+that is *already open* on the signed-out device can keep reading your
+workspace's data directly for **up to an hour**, because it holds a short-lived
+token it cannot renew. It cannot change anything, and it goes dark when that
+token expires. If you believe someone else has access, sign out and then
 [reset your password](#resetting-your-password) as well. The row stays in the
 list, marked with when it was signed out, rather than disappearing.
 

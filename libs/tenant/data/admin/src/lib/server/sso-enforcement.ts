@@ -53,6 +53,7 @@
 import type { UserRecord } from 'firebase-admin/auth'
 import { FieldValue } from 'firebase-admin/firestore'
 import { authForPool } from './auth-pools'
+import { invalidateTokenRevocationCache } from './token-revocation'
 import firebaseAdmin from './firebase-admin'
 import { notifyUsers } from './notifications'
 
@@ -220,6 +221,9 @@ export async function enforceSsoSignInMethods(
       // Only for accounts that actually changed (property 2 above). An
       // existing session outlives the unlink otherwise.
       await pool.revokeRefreshTokens(record.uid)
+      // This process refuses the old token NOW (AGL-1881); every other one
+      // converges within TOKEN_REVOCATION_TTL_MS.
+      invalidateTokenRevocationCache(record.uid, tenantId)
       await db.collection('adminAudit').add({
         actorUid,
         action: 'org.sso.enforceSignInMethods',

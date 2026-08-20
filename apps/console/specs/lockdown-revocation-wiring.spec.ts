@@ -60,6 +60,8 @@ export {}
  */
 
 const mockRevoked: string[] = []
+/** `${pool}:${uid}` per revocation-cache drop (AGL-1881). */
+const mockInvalidated: string[] = []
 const mockPools: string[] = []
 let mockMembers: Array<Record<string, unknown>> = []
 let mockClaims: Record<string, Record<string, unknown>> = {}
@@ -81,6 +83,12 @@ jest.mock('firebase-admin/firestore', () => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  // AGL-1881 — recorded, not stubbed: the fan-out revokes per member, and a
+  // revoke whose own process keeps serving the old token for another 15s is
+  // the half-done state this suite is named for.
+  invalidateTokenRevocationCache: (uid: string, tenantId?: unknown) => {
+    mockInvalidated.push(`${String(tenantId)}:${uid}`)
+  },
   listOrgMembers: async () => mockMembers,
   findUserByUidAcrossPools: async (uid: string) =>
     mockMissingAuth.has(uid)
@@ -228,6 +236,7 @@ beforeEach(() => {
     [`orgs/${ORG}`]: { name: 'Acme' },
   }
   mockRevoked.length = 0
+  mockInvalidated.length = 0
   mockPools.length = 0
   committedBatches = 0
   mockClaims = {}
@@ -258,6 +267,13 @@ describe('AGL-1724 · read-only never revokes member sessions', () => {
     // revocation path that is broken for every mode.
     const result = await lock('full', 'security')
     expect(mockRevoked.sort()).toEqual(['member-a', 'sso-member-b'])
+    // Each drop names the pool the member was revoked in — a project-pool
+    // drop for an SSO uid would clear the wrong key and leave that member's
+    // stale verdict warm.
+    expect(mockInvalidated.sort()).toEqual([
+      'null:member-a',
+      'pool-sso:sso-member-b',
+    ])
     expect(result.tokensRevoked).toBe(2)
     // Pool-aware: the SSO member's revoke goes to their own pool, not the
     // project pool, or an SSO org's "everyone out" would miss half the roster.
@@ -288,6 +304,7 @@ describe('AGL-1724 · read-only never revokes member sessions', () => {
   it('lifts the projection on unlock, and revokes nothing on the way out', async () => {
     await lock('full', 'security')
     mockRevoked.length = 0
+  mockInvalidated.length = 0
     await applyOrgLockdown({
       firestore,
       orgId: ORG,

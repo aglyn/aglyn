@@ -46,6 +46,7 @@ import { screenRoutePathToUrl } from '@aglyn/aglyn/server'
 import {
   authForPool,
   findUserByUidAcrossPools,
+  invalidateTokenRevocationCache,
   listOrgMembers,
   lockRotatesDownloadTokens,
   rotateScopeDownloadTokens,
@@ -232,6 +233,7 @@ export async function applyOrgLockdown(options: {
       // logout fan-out.
       if (found.record.customClaims?.['staff'] === true) continue
       await authForPool(found.tenantId).revokeRefreshTokens(member.$id)
+      invalidateTokenRevocationCache(member.$id, found.tenantId ?? null)
       tokensRevoked += 1
     } catch (error) {
       console.error('[lockdown] token revoke failed', member.$id, error)

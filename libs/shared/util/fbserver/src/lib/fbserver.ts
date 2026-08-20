@@ -56,8 +56,19 @@ export let fbAdminApp: App
   })
 })()
 
+/**
+ * `checkRevoked: true`, unconditionally (AGL-1881).
+ *
+ * This helper sits BELOW the nx boundary that holds the console's cached
+ * revocation check, so it cannot share it — and it is a bare `verifyIdToken`
+ * exported from a shared lib, which is the exact shape that spread the
+ * problem in the first place: 172 of 175 call sites had the flag off. Paying
+ * Firebase's own round trip here is the honest price of a door that cannot
+ * reach the cheap check. It has no callers today, so the price is zero and
+ * the next caller inherits the strict behaviour rather than the loose one.
+ */
 export function verifyIdToken(idToken: string) {
-  return getAuth(fbAdminApp).verifyIdToken(idToken)
+  return getAuth(fbAdminApp).verifyIdToken(idToken, true)
 }
 
 /**

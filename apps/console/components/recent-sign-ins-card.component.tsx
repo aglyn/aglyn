@@ -96,10 +96,18 @@ function formatSeen(ms: number | null): string {
  *    per-device refresh-token revocation, so the only lever that reaches the
  *    other browser's stored credential is account-wide. The confirmation says
  *    that in those words instead of implying a narrower effect.
- *  - **A tab that is already open can survive up to an hour.** Firestore rules
- *    key on the ID token, not on our cookie, and the revoked browser holds one
- *    until it expires. It cannot get another. Anything that goes through our
- *    server stops immediately.
+ *  - **A tab that is already open can keep READING for up to an hour.**
+ *    Firestore rules key on the ID token, not on our cookie, and the revoked
+ *    browser holds one until it expires. It cannot get another.
+ *
+ *    Everything that goes through our server stops within seconds — but only
+ *    since AGL-1881. This bullet used to end "anything that goes through our
+ *    server stops immediately", and that sentence was false when it shipped:
+ *    `checkRevoked` was set on 3 of 175 verifications, so the revoked token
+ *    kept opening all 117 console API routes for the rest of its hour. The
+ *    check now lives inside `firebaseAdmin.app().auth()` with a 15s cached
+ *    verdict, so the bound is ≤15s on any server and zero on the one that
+ *    took the click.
  */
 export function RecentSignInsCard() {
   const { data: user } = useUser()
@@ -143,8 +151,9 @@ export function RecentSignInsCard() {
         )
         setNotice(
           'Signed out. Every device has been signed out, including this ' +
-            'one — you will be asked to sign in again. A tab that is already ' +
-            'open may keep working for up to an hour.',
+            'one — you will be asked to sign in again. It takes effect ' +
+            'everywhere within a few seconds; a page already open on another ' +
+            'device may keep reading data for up to an hour.',
         )
       } catch {
         setError('Could not sign that device out')
@@ -283,8 +292,9 @@ export function RecentSignInsCard() {
             {`Signing out ${
               confirming?.deviceName || 'this device'
             } signs out every device on your account, including this one. ` +
-              'You will need to sign in again. A tab that is already open ' +
-              'may keep working for up to an hour.'}
+              'You will need to sign in again. It takes effect everywhere ' +
+              'within a few seconds; a page already open on another device ' +
+              'may keep reading data for up to an hour.'}
           </DialogContentText>
         </DialogContent>
         <DialogActions>

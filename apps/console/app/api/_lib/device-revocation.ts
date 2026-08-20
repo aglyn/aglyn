@@ -31,7 +31,7 @@
  * next sign-in, re-alerting the owner about the stranger they just tried to
  * evict. So the row is kept and stamped instead.
  *
- * Three gates, in the order they bite:
+ * Four gates, in the order they bite:
  *
  * 1. **`revokeRefreshTokens(uid)` in the owning pool.** The only lever that
  *    reaches the refresh token sitting in the other browser's IndexedDB.
@@ -50,6 +50,12 @@
  *    Firebase's own bookkeeping, so the refusal survives a future change that
  *    stops passing `checkRevoked`, and it is what lets the device row say
  *    "signed out" instead of vanishing.
+ * 4. **The server-wide revocation check (AGL-1881).** Gates 1-3 are all at the
+ *    session boundary. They did nothing for the 117 console API routes, which
+ *    take a Bearer ID token and — until AGL-1881 — verified it with a bare
+ *    `verifyIdToken`. `firebaseAdmin.app().auth()` now carries the check on
+ *    every door: see `libs/tenant/data/admin/src/lib/server/token-revocation.ts`
+ *    for why it is a 15s cached epoch rather than `checkRevoked: true`.
  *
  * ## Why `auth_time`, and why this cannot brick a browser
  *
@@ -70,11 +76,25 @@
  * Firestore security rules key on that token and not on our cookie. So direct
  * client reads from a tab that is already open survive until the token
  * expires; it cannot refresh past that, because gate 1 killed the refresh
- * token. The honest bound is "≤1 hour for an open tab, immediately for
- * everything that goes through our server", and the card says that in those
- * words. Closing the last hour would mean a Firestore rules change asserting
- * `request.auth.token.auth_time`, which is a hand-deployed change outside the
- * git pipeline and is not part of this.
+ * token.
+ *
+ * THE BOUND THIS PARAGRAPH USED TO STATE WAS WRONG. It said "≤1 hour for an
+ * open tab, immediately for everything that goes through our server", and the
+ * card and the published docs said it in those words. The second half was
+ * untrue: gate 2 is the session boundary, and the console's 117 API routes do
+ * not go through it — they verify a Bearer ID token directly, and the audit
+ * found `checkRevoked` set on 3 of 175 such call sites. A revoked token kept
+ * every one of those doors open for the rest of its hour, which is also what
+ * happened after a panic user-lock, a staff password reset and an SSO
+ * offboard. Gate 4 is that hole closed.
+ *
+ * The bound now, and the words the card and the docs use: **≤1 hour for an
+ * already-open tab's direct database READS, ≤15 seconds for everything that
+ * goes through our server** — and zero on the server that handled the click,
+ * which drops its own cached verdict before replying. Closing the last hour
+ * would mean a Firestore rules change asserting `request.auth.token.auth_time`,
+ * which is a hand-deployed change outside the git pipeline and is not part of
+ * this.
  */
 
 /** Field written on the device document when a session is revoked. */

@@ -59,6 +59,12 @@ const mockVerifyIdToken = jest.fn()
 
 jest.mock('@aglyn/tenant-data-admin', () => {
   const serverTimestamp = () => 'SERVER_TIMESTAMP'
+  // AGL-1881: recorded like every other pool-sensitive call here, because a
+  // cache drop aimed at the PROJECT pool for an SSO uid is the same silent
+  // miss AGL-2005 is about.
+  const invalidateTokenRevocationCache = (uid: string, tenantId?: unknown) => {
+    mockCalls.push(`${String(tenantId ?? 'PROJECT')}:invalidateRevocation:${uid}`)
+  }
   /** A recording auth surface. `pool` is null for the project pool. */
   const recordingPool = (pool: string | null) => {
     const tag = pool ?? 'PROJECT'
@@ -115,6 +121,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       uidAlsoInPools: [null],
     }),
     authForPool: (tenantId: string | null) => recordingPool(tenantId ?? null),
+    invalidateTokenRevocationCache,
     // AGL-1993 moved the route's staff grant onto this helper, after this spec
     // was written — a wholesale module mock is a closed world, so its absence
     // made the call `undefined` and the route answered 500 for every action.
