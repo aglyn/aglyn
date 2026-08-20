@@ -227,6 +227,45 @@ export function checkRateLimit(
   }
 }
 
+/**
+ * Report `key`'s window WITHOUT counting a request against it (AGL-2414).
+ *
+ * `checkRateLimit` fuses "is there budget" with "spend some", which is the
+ * right shape when every call is a request to be counted. It is the wrong
+ * shape when the budget meters something the caller has not done *yet* and
+ * may never do — `/api/v1` gates the Firestore key lookup on an IP's budget
+ * of *unproductive* lookups, so it has to ask before the lookup and only
+ * charge if the lookup came back empty. Asking with `checkRateLimit` would
+ * charge every request, including the successful ones, which is precisely the
+ * customer-visible cap that budget must not become.
+ *
+ * `allowed` answers "would the NEXT call be admitted", i.e. `count < limit` —
+ * one off from `checkRateLimit`'s post-increment `count <= limit`, and the
+ * same verdict for the same request. `remaining` is what is left now, so an
+ * untouched or expired window reports the full `limit` rather than
+ * `limit - 1`.
+ */
+export function peekRateLimit(
+  key: string,
+  options?: RateLimitOptions,
+): RateLimitResult {
+  const limit = options?.limit ?? DEFAULT_RATE_LIMIT
+  const windowMs = options?.windowMs ?? DEFAULT_RATE_WINDOW_MS
+  const now = options?.now ?? Date.now()
+  const store = options?.store ?? defaultStore
+
+  const state = store.get(key)
+  if (!state || now - state.windowStartMs >= windowMs) {
+    return { allowed: true, limit, remaining: limit, resetMs: now + windowMs }
+  }
+  return {
+    allowed: state.count < limit,
+    limit,
+    remaining: Math.max(0, limit - state.count),
+    resetMs: state.windowStartMs + windowMs,
+  }
+}
+
 /** Standard `X-RateLimit-*` headers (Reset is epoch seconds). */
 export function rateLimitHeaders(
   result: RateLimitResult,

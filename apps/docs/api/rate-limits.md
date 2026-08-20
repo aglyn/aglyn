@@ -40,6 +40,18 @@ Every response carries the current budget:
 The one exception is a `401` for a key we can't identify (missing or invalid) — there's
 no budget to report when we don't know whose it is.
 
+:::caution Repeatedly sending a key we don't recognise
+Looking up a key costs us work even when it turns out not to exist, so an IP address
+that sends a large number of **unrecognised** keys in a short time starts getting `429`
+instead of `401`. Wait `Retry-After` seconds and it clears.
+
+This is separate from the per-key limit above and does not consume it: a key that
+resolves never counts towards it, so normal traffic — however heavy — can't trigger
+it. In practice you only meet this if a client is looping on a key that was revoked or
+mistyped. Fix the key rather than retrying, and note that while an IP is in this state
+a *valid* key sent from the same address is refused too, because identifying it is the
+work we're declining to do.
+
 When you exceed the limit, the request returns `429` with a `Retry-After` header
 (seconds to wait):
 
