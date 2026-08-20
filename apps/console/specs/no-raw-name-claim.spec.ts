@@ -34,13 +34,21 @@ import { join } from 'node:path'
  * — including one that NAMES a workspace from it, and one that opened "Hi
  * there," to every enterprise owner.
  *
- * `resolveIdpDisplayName` / `resolveIdpPhotoUrl` / `resolveIdpPhone` read both
- * locations and accept the spellings different IdPs use.
+ * `resolveIdpDisplayName` / `resolveIdpPhotoUrl` / `resolveIdpPhone` /
+ * `resolveIdpAddress` read both locations and accept the spellings different
+ * IdPs use.
+ *
+ * `address` joined the list with AGL-1963. It is the same trap one field
+ * later: OIDC providers send a top-level `address` object and SAML never
+ * does, so a raw read works in every test account and is permanently empty
+ * for the customers who actually have SSO.
  */
 const FORBIDDEN = [
   /\bdecoded\[['"]name['"]\]/,
   /\bdecoded\[['"]picture['"]\]/,
   /\bdecoded\.name\b/,
+  /\bdecoded\[['"]address['"]\]/,
+  /\bdecoded\.address\b/,
 ]
 
 function* sourceFiles(dir: string): Generator<string> {

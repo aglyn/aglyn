@@ -97,6 +97,18 @@ jest.mock('@aglyn/aglyn/server', () => ({
   resolveIdpDisplayName: () => null,
   resolveIdpPhotoUrl: () => null,
   resolveIdpPhone: () => null,
+  // Every key present and blank, exactly as the real `resolveIdpAddress`
+  // returns when the assertion carries no address (AGL-1963). A mock that
+  // returned null or undefined would be easier to satisfy than the real
+  // function, which is how a double starts fabricating results.
+  resolveIdpAddress: () => ({
+    line1: '',
+    line2: '',
+    city: '',
+    state: '',
+    postalCode: '',
+    country: '',
+  }),
 }))
 
 import { DELETE, GET, POST } from '../app/api/auth/session/route'
