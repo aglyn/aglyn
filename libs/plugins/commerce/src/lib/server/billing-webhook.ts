@@ -23,6 +23,7 @@ import {
   getOrgForHost,
   meterHostEmail,
   notifyHostManagers,
+  notifyStaff,
   upsertHostContact,
   renderHostEmailWithTokens,
   syncConnectAccountStatus,
@@ -314,9 +315,19 @@ const GRPC_FAILED_PRECONDITION = 9
  * loop. Every other failure is transient and rethrows on purpose, because there
  * a redelivery is exactly the right answer.
  */
+type DisputeLookup =
+  | { kind: 'order'; snapshot: FirebaseFirestore.QueryDocumentSnapshot }
+  /** No commerce order matched. The COMMON case, and correctly silent. */
+  | { kind: 'not-ours' }
+  /**
+   * The lookup could not run or could not be trusted (AGL-2161). A PLATFORM
+   * fault, and the one outcome that must never be reported as `not-ours`.
+   */
+  | { kind: 'unresolved'; reason: 'missing-index' | 'ambiguous' }
+
 async function findOrderForDispute(
   paymentIntentId: string,
-): Promise<FirebaseFirestore.QueryDocumentSnapshot | null> {
+): Promise<DisputeLookup> {
   const matches = await firebaseAdmin
     .app()
     .firestore()
@@ -333,15 +344,64 @@ async function findOrderForDispute(
       )
       return null
     })
-  if (!matches || matches.empty) return null
+  // THE THREE ANSWERS ARE NOW THREE (AGL-2161). All three used to be `null`,
+  // and the caller read `null` as "not a commerce dispute" and did nothing —
+  // so a collection-group index that had not deployed meant EVERY chargeback
+  // on the platform got no flag, no seller-share reversal and no merchant
+  // notification, while looking byte-for-byte like the routine case of a
+  // dispute against a marketplace or booking charge.
+  //
+  // Distinguishing them needs no knowledge of whether the index is in fact
+  // deployed, which is why this did not have to wait on a production probe:
+  // "the query could not run" and "the query ran and matched nothing" are
+  // different facts at the point they happen, and only one of them is ours to
+  // fix.
+  if (!matches) return { kind: 'unresolved', reason: 'missing-index' }
+  if (matches.empty) return { kind: 'not-ours' }
   if (matches.docs.length > 1) {
     console.error(
       'Dispute matched more than one order; reversing none',
       paymentIntentId,
     )
-    return null
+    return { kind: 'unresolved', reason: 'ambiguous' }
   }
-  return matches.docs[0]
+  return { kind: 'order', snapshot: matches.docs[0] }
+}
+
+/**
+ * Tells STAFF that a chargeback could not be routed (AGL-2161).
+ *
+ * Staff, not the merchant: on the missing-index path there is no merchant to
+ * tell — the whole point is that the order could not be found — and a missing
+ * platform index is a platform fault affecting every host at once. `notifyStaff`
+ * is the same channel the analytics and abuse routes use for exactly this
+ * class, and it never throws.
+ *
+ * `system.announcement` rather than a new type: the AGL-1088 rule is that
+ * category is the prefix and `system` is the bucket nobody mutes to reduce
+ * noise, which is the property an alert about unrouted money needs.
+ */
+async function reportUnresolvedDispute(
+  reason: 'missing-index' | 'ambiguous',
+  paymentIntentId: string,
+  dispute: StripeDispute,
+): Promise<void> {
+  const amount = `$${((dispute.amount ?? 0) / 100).toFixed(2)}`
+  await notifyStaff({
+    type: 'system.announcement',
+    title: 'Chargeback could not be routed to an order',
+    body:
+      reason === 'missing-index'
+        ? `A ${amount} chargeback (${paymentIntentId}) could not be looked ` +
+          'up: the collection-group index on orders.paymentIntentId is not ' +
+          'deployed, so EVERY commerce chargeback is currently being ignored ' +
+          '— no flag, no seller-share reversal, no merchant notification. ' +
+          'Deploy cloud/firebase-firestore.indexes.json.'
+        : `A ${amount} chargeback (${paymentIntentId}) matched more than one ` +
+          'order, so none was reversed. The dispute is durable in Stripe and ' +
+          'needs reconciling by hand.',
+    link: '/admin',
+  })
 }
 
 /** The fields of a Stripe Dispute this handler reads. */
@@ -2139,22 +2199,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 productId,
                 variantId: stockVariantId,
                 quantity: cycleQuantity,
+                ledger: { reason: 'sale', orderId: invoiceId },
               })
               if (moved.before && moved.after) {
-                await hostRef
-                  .collection('inventoryAdjustments')
-                  .add({
-                    productId,
-                    variantId: stockVariantId,
-                    delta: -cycleQuantity,
-                    ...(moved.applied !== -cycleQuantity
-                      ? { appliedDelta: moved.applied }
-                      : {}),
-                    reason: 'sale',
-                    orderId: invoiceId,
-                    atMs: Date.now(),
-                  } satisfies CommerceModel.InventoryAdjustment)
-                  .catch(() => undefined)
                 alertLowStockCrossing(invoiceHostId, moved.before, moved.after)
               }
             }
@@ -2694,23 +2741,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             productId: line.productId,
             variantId,
             quantity: line.quantity,
+            ledger: { reason: 'sale', orderId: String(object.id) },
           })
           if (!moved.before || !moved.after) continue
           productsById.set(line.productId, moved.after)
-          await hostRef
-            .collection('inventoryAdjustments')
-            .add({
-              productId: line.productId,
-              variantId,
-              delta: -line.quantity,
-              ...(moved.applied !== -line.quantity
-                ? { appliedDelta: moved.applied }
-                : {}),
-              reason: 'sale',
-              orderId: String(object.id),
-              atMs: Date.now(),
-            } satisfies CommerceModel.InventoryAdjustment)
-            .catch(() => undefined)
           // Low-stock crossing alert (AGL-1826): the cart — the channel that
           // sells MORE units per order than the buy-now button — used to
           // cross the threshold silently. Same check, per product, on the
@@ -2870,7 +2904,20 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               .digest('hex')
               .slice(0, 12)
               .toUpperCase()}`
-            await hostRef
+            // THE EMAIL IS GATED ON THE WRITE (AGL-2161). This `.set()` used
+            // to `.catch(() => undefined)` and fall straight through to the
+            // send below, so a failed write shipped the buyer a real-looking
+            // `GC-XXXXXXXXXXXX` for a document that does not exist — and
+            // `meterHostEmail` billed the merchant for delivering it. The
+            // buyer only discovers it at checkout, where `cart-checkout.ts`
+            // finds `!fresh.exists`, places no hold, and applies nothing.
+            //
+            // The redemption side already went transactional (AGL-2449); this
+            // is the minting side catching up, and it deliberately EXTENDS
+            // that path rather than adding a second mechanism: a card that was
+            // never written is the same "card that isn't there" the settlement
+            // orphan note describes, reached from the other end.
+            const issued = await hostRef
               .collection('giftCards')
               .doc(code)
               .set({
@@ -2880,7 +2927,34 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 orderId: String(object.id),
                 createdAtMs: Date.now(),
               })
-              .catch(() => undefined)
+              .then(() => true)
+              .catch((error: unknown) => {
+                console.error('Gift card issuance failed', hostId, code, error)
+                return false
+              })
+            if (!issued) {
+              // LOUD, and on the surface a merchant already watches. The buyer
+              // has paid, so somebody must act: the console's hand-issue route
+              // (`gift-cards.ts`) is how they make it right. Sending nothing is
+              // the recoverable half — an unissued card is a support ticket, a
+              // phantom code is a customer who thinks they hold value.
+              // `content.order` and `/products`: the Gift cards card lives on
+              // the commerce console page the `/products` nav item opens, and
+              // this is an order-shaped fact. A new notification type would
+              // need a label, a category and a mute of its own for one edge —
+              // reuse is the AGL-1088 call, same as `content.lowStock` is for
+              // the oversell alert next door.
+              void notifyHostManagers(String(hostId), {
+                type: 'content.order',
+                title: 'Gift card paid for but not issued',
+                body:
+                  `A $${(line.unitAmountCents / 100).toFixed(2)} gift card on ` +
+                  `order ${String(object.id)} could not be written, so no code ` +
+                  'was emailed to the buyer. Issue one by hand from Gift cards.',
+                link: `/${hostId}/products`,
+              })
+              continue
+            }
             const giftTo = object?.customer_details?.email
             if (giftTo) {
               const giftValue = `$${(line.unitAmountCents / 100).toFixed(2)}`
@@ -3179,34 +3253,17 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 productId: String(productId),
                 variantId: soldVariantId,
                 quantity,
+                ledger: { reason: 'sale', orderId: String(orderId) },
               })
               // `before`/`after` absent means nothing was written — a missing
               // product, an untracked variant, or a failed commit — and a
               // ledger row would then claim a movement the count never made.
               if (moved.before && moved.after) {
-                // Adjustment ledger (AGL-1807): this was the one stock writer
-                // of four that moved the count and logged nothing, so a
-                // draft-link sale read as stock vanishing in the products hub's
-                // history — and the reason AGL-1797 could not derive its
-                // restock flag from this collection. Same shape and same
-                // swallowed failure as the cart and buy-now siblings;
-                // `orderId` is the ORDER doc id from the metadata, not
-                // `object.id` — unlike the siblings, this branch's session id
-                // names no order document.
-                await hostRef
-                  .collection('inventoryAdjustments')
-                  .add({
-                    productId: String(productId),
-                    variantId: soldVariantId,
-                    delta: -quantity,
-                    ...(moved.applied !== -quantity
-                      ? { appliedDelta: moved.applied }
-                      : {}),
-                    reason: 'sale',
-                    orderId: String(orderId),
-                    atMs: Date.now(),
-                  } satisfies CommerceModel.InventoryAdjustment)
-                  .catch(() => undefined)
+                // The AGL-1807 ledger row now rides inside the decrement's
+                // own transaction (AGL-2161), so the `orderId` above is the
+                // ORDER doc id from the metadata rather than `object.id` —
+                // unlike the siblings, this branch's session id names no order
+                // document, and `cancel-order.ts` looks the row up by that id.
                 // Low-stock crossing alert (AGL-1826): a merchant-sent payment
                 // link used to sell a product down to its threshold in
                 // silence. The `pending` -> `paid` flip bounds redelivery.
@@ -3282,31 +3339,17 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 variantId: soldVariantId,
                 quantity: soldQty,
                 locationId: order.locationId || undefined,
+                ledger: { reason: 'sale', orderId: String(orderId) },
               })
               if (!moved.before || !moved.after) continue
               paidProducts.set(lineProductId, moved.after)
-              // The AGL-1807 ledger row, from this decrement's first day —
-              // joined to the ORDER doc (the session id names no order) and
-              // carrying the location the units left, which is what lets
-              // `cancel-order.ts` tell a decremented card sale from one that
-              // predates this fix.
-              await hostRef
-                .collection('inventoryAdjustments')
-                .add({
-                  productId: lineProductId,
-                  variantId: soldVariantId,
-                  delta: -soldQty,
-                  ...(moved.applied !== -soldQty
-                    ? { appliedDelta: moved.applied }
-                    : {}),
-                  reason: 'sale',
-                  orderId: String(orderId),
-                  ...(order.locationId
-                    ? { locationId: order.locationId }
-                    : {}),
-                  atMs: Date.now(),
-                } satisfies CommerceModel.InventoryAdjustment)
-                .catch(() => undefined)
+              // The AGL-1807 ledger row is written by the decrement itself
+              // now (AGL-2161), joined to the ORDER doc (the session id names
+              // no order) and carrying the location the units left. That join
+              // is what lets `cancel-order.ts` tell a decremented card sale
+              // from one that predates it — and, because the row can no longer
+              // be lost on its own, absence of a row is now proof the count
+              // never moved rather than a coin flip.
               // Low-stock crossing alert (AGL-1826): the register is the
               // channel most likely to be selling down the last few units of
               // physical shelf stock, and crossed in silence. The compounded
@@ -3567,22 +3610,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               productId: String(productId),
               variantId: soldVariantId,
               quantity: soldQuantity,
+              ledger: { reason: 'sale', orderId: String(object.id) },
             })
             if (moved.before && moved.after) {
-              await hostRef
-                .collection('inventoryAdjustments')
-                .add({
-                  productId: String(productId),
-                  variantId: soldVariantId,
-                  delta: -soldQuantity,
-                  ...(moved.applied !== -soldQuantity
-                    ? { appliedDelta: moved.applied }
-                    : {}),
-                  reason: 'sale',
-                  orderId: String(object.id),
-                  atMs: Date.now(),
-                } satisfies CommerceModel.InventoryAdjustment)
-                .catch(() => undefined)
               // Low-stock alert (AGL-281): fires on the crossing sale only,
               // so managers get one nudge per threshold breach, not one per
               // order after it. The check lived inline here — the one branch
@@ -3723,11 +3753,17 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
   if (type === 'charge.dispute.created' || type === 'charge.dispute.closed') {
     const dispute = (object ?? {}) as StripeDispute
     const paymentIntentId = String(dispute.payment_intent ?? '')
-    const snapshot = paymentIntentId
+    const lookup: DisputeLookup = paymentIntentId
       ? await findOrderForDispute(paymentIntentId)
-      : null
-    // Not a commerce order: a marketplace, booking or platform-billing charge
-    // was disputed. Silence is the correct answer, see `findOrderForDispute`.
+      : { kind: 'not-ours' }
+    // UNRESOLVED IS NOT NOT-OURS (AGL-2161). A lookup that could not run is
+    // the platform's problem and is reported; a lookup that ran and matched
+    // nothing is a marketplace, booking or platform-billing dispute, and
+    // silence is the correct answer — see `findOrderForDispute`.
+    if (lookup.kind === 'unresolved') {
+      await reportUnresolvedDispute(lookup.reason, paymentIntentId, dispute)
+    }
+    const snapshot = lookup.kind === 'order' ? lookup.snapshot : null
     if (snapshot) {
       const hostId = String(snapshot.ref.parent.parent?.id ?? '')
       if (type === 'charge.dispute.created') {

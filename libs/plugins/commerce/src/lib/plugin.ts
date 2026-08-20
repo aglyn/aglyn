@@ -39,6 +39,7 @@ import * as RelatedProducts from './components/related-products'
 import * as Wishlist from './components/wishlist'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { COMMERCE_PERMISSIONS } from './model/plugin-permissions'
+import { COMMERCE_CONFIG_SCHEMA } from './plugin-config'
 
 /** Code-split: the Products console page only loads when opened. */
 const CommerceConsolePage = lazy(() => import('./components/commerce-console-page'))
@@ -143,6 +144,9 @@ export function registerCommerceConsole(): void {
   // Plugin-declared permissions (AGL-435): tier defaults ride every
   // resolved role set; custom roles override key-by-key.
   Aglyn.registerPluginPermissions(COMMERCE_PERMISSIONS)
+  // Register discount ceiling (AGL-2161) — the generic settings card renders
+  // it from this schema, so there is no bespoke UI to keep in sync.
+  Aglyn.registerPluginConfigSchema(COMMERCE_CONFIG_SCHEMA)
   Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'Commerce',

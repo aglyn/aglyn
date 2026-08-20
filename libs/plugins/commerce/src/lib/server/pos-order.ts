@@ -20,6 +20,7 @@ import * as CommerceModel from '../model'
 import {
   firebaseAdmin,
   getOrgForHost,
+  getPluginConfig,
   upsertHostContact,
 } from '@aglyn/tenant-data-admin'
 import {
@@ -31,6 +32,7 @@ import {
 } from '@aglyn/aglyn/server'
 import { alertLowStockCrossing } from './low-stock'
 import { decrementVariantStock } from './reserve-stock'
+import { posMaxDiscountPct } from '../plugin-config'
 
 /**
  * The settlement claim (AGL-1691) now lives in `@aglyn/aglyn/server`
@@ -69,17 +71,26 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
   const reservationId = String(body.reservationId ?? '')
   const registerId = String(body.registerId ?? '')
   const locationId = String(body.locationId ?? '')
-  // Clamped through a FINITENESS test, not by `Math.min`/`Math.max` alone
-  // (AGL-2224): both propagate `NaN`, so `discountPct: 'half'` from a register
-  // used to survive the clamp and turn every figure below it — the discount,
-  // the platform fee, the tax and `totals.totalCents` — into `NaN`. `NaN`
-  // defeats comparison rather than failing it, so the "cash received is short"
-  // guard below (`cashReceivedCents < totals.totalCents`) read false and rang
-  // up a sale that had taken no money.
+  // REFUSED, NOT CLAMPED (AGL-2161). This used to be
+  // `Math.min(100, Math.max(0, …))`, so a register asking for `150` rang up a
+  // 100% comp and a register asking for `-20` rang up full price — in both
+  // cases a sale the operator did not ask for, recorded as though they had,
+  // and indistinguishable afterwards from a deliberate one. A clamp is a
+  // silent correction of a request nobody can prove was made; the ceiling
+  // below is a refusal the register can show its operator.
+  //
+  // The finiteness test stays and is now also a refusal (AGL-2224 kept its
+  // teeth): `discountPct: 'half'` propagated `NaN` through the discount, the
+  // platform fee, the tax and `totals.totalCents`, and `NaN` defeats
+  // comparison rather than failing it — so the "cash received is short" guard
+  // below (`cashReceivedCents < totals.totalCents`) read false and rang up a
+  // sale that had taken no money. Answering that with `0` charged full price
+  // on a request the route could not read; answering with a 400 says so.
   const rawDiscountPct = Number(body.discountPct ?? 0)
-  const discountPct = Number.isFinite(rawDiscountPct)
-    ? Math.min(100, Math.max(0, rawDiscountPct))
-    : 0
+  if (!Number.isFinite(rawDiscountPct) || rawDiscountPct < 0) {
+    return res.status(400).json({ error: 'Invalid discount' })
+  }
+  const discountPct = rawDiscountPct
   const rawLines = Array.isArray(body.lines) ? body.lines : []
   // One settlement attempt, minted by the register (AGL-1691). Node lowercases
   // incoming headers, but read both spellings — the plugin API request type
@@ -113,6 +124,27 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       return res
         .status(403)
         .json({ error: 'POS requires the Pro plan or above' })
+    }
+    // THE DISCOUNT CEILING (AGL-2161), refused rather than clamped.
+    //
+    // Enforced here and not in the UI: `pos-page.component.tsx` mirrors the
+    // same bound on its input, but that field is a plain `TextField` and the
+    // number arrives in the request body — a client bound is a courtesy, and
+    // the route is where a discount stops being a suggestion.
+    //
+    // The ceiling defaults to 100 (see `plugin-config.ts` for why that number
+    // is the merchant's to lower and not this fix's to invent). What changed
+    // is that exceeding it is now an answer instead of a silent rounding.
+    const maxDiscountPct = posMaxDiscountPct(
+      await getPluginConfig(ownerOrg?.orgId, 'commerce'),
+    )
+    if (discountPct > maxDiscountPct) {
+      return res.status(403).json({
+        error:
+          `This register may discount up to ${maxDiscountPct}%. Ask a ` +
+          'manager to raise the limit in the commerce settings.',
+        maxDiscountPct,
+      })
     }
     // Register attribution + cap (AGL-472/482): a sale must run through a
     // named register that exists on this host. Creation is quota-gated by
@@ -426,6 +458,20 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           status: 'pending',
           channel: 'pos',
           registerId,
+          // WHO COMPED IT (AGL-2161). `totals.discountCents` recorded that
+          // a discount happened and nothing recorded who asked for it or on
+          // what basis — `decoded.uid` was read once, for the role gate, and
+          // written nowhere. A 100% comp was therefore indistinguishable from
+          // a correctly-priced sale after the fact, on the one channel where
+          // the operator is standing in front of the goods.
+          //
+          // Written only when there IS a discount, so ordinary sales keep
+          // their current shape: `gift-cards.ts` already audits this way
+          // (`issuedBy`, `voidedBy`), and this is the same field for the same
+          // reason.
+          ...(discountPct > 0
+            ? { discountPct, discountBy: decoded.uid }
+            : {}),
           // The bucket the sale comes out of (AGL-286). The cash write below
           // has stored this since AGL-1808; the card sale needs it MORE — its
           // decrement runs in the webhook (AGL-1825), where the register's
@@ -573,6 +619,20 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         status: 'paid',
         channel: 'pos',
         registerId,
+        // WHO COMPED IT (AGL-2161). `totals.discountCents` recorded that
+        // a discount happened and nothing recorded who asked for it or on
+        // what basis — `decoded.uid` was read once, for the role gate, and
+        // written nowhere. A 100% comp was therefore indistinguishable from
+        // a correctly-priced sale after the fact, on the one channel where
+        // the operator is standing in front of the goods.
+        //
+        // Written only when there IS a discount, so ordinary sales keep
+        // their current shape: `gift-cards.ts` already audits this way
+        // (`issuedBy`, `voidedBy`), and this is the same field for the same
+        // reason.
+        ...(discountPct > 0
+          ? { discountPct, discountBy: decoded.uid }
+          : {}),
         // The bucket the decrement below comes out of (AGL-1808). Without it
         // a cancellation can only put the units back on the flat total, which
         // the next location-aware write recomputes away.
@@ -685,24 +745,10 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         variantId,
         quantity: line.quantity,
         locationId: locationId || undefined,
+        ledger: { reason: 'sale', orderId: orderRef.id },
       })
       if (!moved.before || !moved.after) continue
       productsById.set(line.productId, moved.after)
-      await hostRef
-        .collection('inventoryAdjustments')
-        .add({
-          productId: line.productId,
-          variantId,
-          delta: -line.quantity,
-          ...(moved.applied !== -line.quantity
-            ? { appliedDelta: moved.applied }
-            : {}),
-          reason: 'sale',
-          orderId: orderRef.id,
-          ...(locationId ? { locationId } : {}),
-          atMs: Date.now(),
-        } satisfies CommerceModel.InventoryAdjustment)
-        .catch(() => undefined)
       // Low-stock crossing alert (AGL-1826): the register — the channel most
       // likely to be selling down the last few units of physical shelf
       // stock — used to cross the threshold silently while the buy-now

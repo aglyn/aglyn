@@ -257,6 +257,19 @@ export interface HostOrder {
    * erases the restock.
    */
   locationId?: string
+  /**
+   * The register discount that was applied, and the member who applied it
+   * (AGL-2161). Present only on a POS order that carries a discount.
+   *
+   * `totals.discountCents` records that money came off; these record who
+   * decided it should. Without them a full comp read exactly like a
+   * correctly-priced sale after the fact, on the one channel where a person is
+   * standing in front of the goods and can ring whatever they like. The
+   * ceiling that bounds `discountPct` is the org's `posMaxDiscountPct` plugin
+   * setting, enforced server-side in `pos-order.ts`.
+   */
+  discountPct?: number
+  discountBy?: string
   lineItems?: OrderLineItem[]
   totals?: OrderTotals
   customerEmail?: string | null

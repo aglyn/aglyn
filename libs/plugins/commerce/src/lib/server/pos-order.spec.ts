@@ -39,6 +39,18 @@ import { posOrderHandler } from './pos-order'
 // In-memory Firestore
 // ---------------------------------------------------------------------------
 
+import { mergePluginConfig } from '@aglyn/aglyn'
+import { COMMERCE_CONFIG_SCHEMA } from '../plugin-config'
+
+/**
+ * STATIC, aliased behind `mock`-prefixed names for the hoisted factory below.
+ * A `require('@aglyn/aglyn')` inside the factory reads to nx as a DYNAMIC edge
+ * and fails `@nx/enforce-module-boundaries` on every static import of `aglyn`
+ * in the repo (AGL-2161).
+ */
+const mockMergePluginConfig = mergePluginConfig
+const mockCommerceSchema = COMMERCE_CONFIG_SCHEMA
+
 const docs = new Map<string, Record<string, any>>()
 let autoIdCounter = 0
 
@@ -152,6 +164,13 @@ const contactUpserts: any[] = []
 const notifications: any[] = []
 
 const mockVerifyIdToken = jest.fn(async () => ({ uid: 'cashier-1' }))
+/**
+ * The org's stored commerce plugin settings (AGL-2161). `undefined` is the
+ * common case — no settings doc — and every test that sets it restores it in
+ * a `finally`, so the register's ceiling cannot leak between suites.
+ */
+let mockPluginSettings: Record<string, unknown> | undefined
+
 const mockOrg: any = {
   org: {
     id: 'org-1',
@@ -176,6 +195,16 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     },
   },
   getOrgForHost: async () => mockOrg,
+  // Modelled through the REAL `mergePluginConfig` against the REAL commerce
+  // schema (AGL-2161), not a hand-written `{ posMaxDiscountPct: n }`. The
+  // production read defaults, coerces and CLAMPS a stored value into the
+  // declared range, so a double that just handed the raw value back would
+  // report green for a ceiling that production would never have accepted —
+  // and would hide the schema going missing entirely.
+  getPluginConfig: async (_orgId: unknown, pluginId: string) => {
+    if (pluginId !== 'commerce') return {}
+    return mockMergePluginConfig(mockCommerceSchema, mockPluginSettings)
+  },
   notifyHostManagers: async (hostId: string, notification: any) => {
     notifications.push({ hostId, ...notification })
   },
@@ -318,6 +347,7 @@ beforeEach(() => {
   autoIdCounter = 0
   stripeSessionCounter = 0
   afterTransaction = null
+  mockPluginSettings = undefined
   fetchMock.mockClear()
   mockVerifyIdToken.mockClear()
 
@@ -505,6 +535,14 @@ describe('the register refuses a sale it cannot tax (AGL-2145)', () => {
  * was written `paid`.
  */
 describe('POS discount percent that is not a number (AGL-2229)', () => {
+  /**
+   * AGL-2161 STRENGTHENED THE ANSWER. This used to read the unusable
+   * percentage as `0` and ring the sale at full price — safe for the till,
+   * but it charged a customer full price on a request the route could not
+   * read, and told nobody. The `NaN` property these tests exist to protect is
+   * unchanged and is now protected earlier: the request never reaches
+   * `computeOrderTotals` at all.
+   */
   it('refuses the sale rather than taking no cash for it', async () => {
     const result = await post({
       payment: 'cash',
@@ -512,23 +550,32 @@ describe('POS discount percent that is not a number (AGL-2229)', () => {
       discountPct: 'half',
     })
     expect(result.status).toBe(400)
-    expect(String(result.body.error)).toContain('Cash received is short')
+    expect(String(result.body.error)).toContain('Invalid discount')
     expect(orderDocs()).toHaveLength(0)
   })
 
-  it('stores a finite total when the cash does cover it', async () => {
+  it('refuses it even when the cash WOULD have covered the sale', async () => {
+    // The cash covering it is exactly the case the old behaviour rang up: a
+    // full-price sale nobody asked for. Refusing regardless is what makes the
+    // guard about the unreadable request rather than about the tender.
     const result = await post({
       payment: 'cash',
       cashReceivedCents: 500,
       discountPct: 'half',
     })
-    expect(result.status).toBe(200)
-    // The unusable percentage reads as NO discount — never as a discount of
-    // an unknown size, and never as a total nothing can compare against.
-    const totals = orderDocs()[0]?.totals as any
-    expect(totals.discountCents).toBe(0)
-    expect(totals.totalCents).toBe(400)
-    expect(Number.isFinite(totals.totalCents)).toBe(true)
+    expect(result.status).toBe(400)
+    expect(String(result.body.error)).toContain('Invalid discount')
+    expect(orderDocs()).toHaveLength(0)
+  })
+
+  it('refuses a NEGATIVE percentage, which used to clamp to full price', async () => {
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 500,
+      discountPct: -20,
+    })
+    expect(result.status).toBe(400)
+    expect(orderDocs()).toHaveLength(0)
   })
 
   /**
