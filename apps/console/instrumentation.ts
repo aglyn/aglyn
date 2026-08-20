@@ -49,7 +49,14 @@ export async function onRequestError(
   if (process.env.NEXT_RUNTIME !== 'nodejs') return
 
   try {
-    const { reportServerError } = await import('@aglyn/tenant-data-admin')
+    // Deferred by RELATIVE path, never as `@aglyn/tenant-data-admin` directly
+    // (AGL-1921): nx treats a lib that is ever `import()`ed as lazy-loaded
+    // everywhere, and the lib specifier here made
+    // `@nx/enforce-module-boundaries` forbid all 181 static imports of it
+    // across this app. `utils/report-server-error.ts` holds the static import;
+    // deferring that file keeps firebase-admin out of the edge bundle just the
+    // same, and registers no lib-level lazy edge.
+    const { reportServerError } = await import('./utils/report-server-error')
     const err = error as { message?: unknown; stack?: unknown; digest?: unknown }
     await reportServerError(
       {

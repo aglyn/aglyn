@@ -98,7 +98,11 @@ export async function onRequestError(
   if (process.env.NEXT_RUNTIME !== 'nodejs') return
 
   try {
-    const { reportServerError } = await import('@aglyn/tenant-data-admin')
+    // Deferred by RELATIVE path for the same reason `register` above defers
+    // `./utils/boot-warmup` (AGL-1921) — the lib specifier that used to be
+    // here made `@nx/enforce-module-boundaries` forbid all 41 static imports
+    // of `@aglyn/tenant-data-admin` across this app.
+    const { reportServerError } = await import('./utils/report-server-error')
     const err = error as { message?: unknown; stack?: unknown; digest?: unknown }
     await reportServerError(
       {
