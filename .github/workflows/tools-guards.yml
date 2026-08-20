@@ -266,6 +266,18 @@ jobs:
 
       - run: npm run check:standalone-installs
 
+      # AGL-2090. `tools/gate.sh` provisions the pinned gate worktree, and the
+      # checks it makes before running anything are the difference between a
+      # verdict and an infrastructure crash wearing a verdict's exit code: a
+      # symlinked node_modules (Turbopack refuses it, so the production build
+      # cannot run), a nested node_modules/node_modules from a hard-link copy
+      # (two Reacts, 1000+ null-useState failures), and the two standalone
+      # trees whose absence fails docs:build and cloud-functions:lint. This
+      # builds each broken shape on purpose and asserts the refusal — the
+      # guard has to be seen failing to be worth anything. Pure bash + mktemp,
+      # no install, well under a second.
+      - run: npm run test:gate-script
+
       # AGL-1882. The comparator behind `check:backup-copies`, which asks the
       # one question `/api/health/backups` structurally cannot: does ANY copy
       # of production data live outside the production GCP project? Every
