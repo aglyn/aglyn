@@ -21,14 +21,13 @@ Related: `docs/FIRESTORE_MANUAL_CONFIG.md` (how the protections were set up),
 | Delete protection | ENABLED on `(default)` | Blocks accidental/hostile database deletion |
 | Independent GCS export | Weekly (Mondays 05:00 UTC), `gs://aglyn-main-firestore-exports`, 90-day lifecycle | A portable snapshot **not** subject to the managed-backup `NOT_AVAILABLE` flip; restorable by import into any database (Procedure D). Added 2026-08-17 (AGL-1843) |
 | Off-project copy | **NONE** (re-verified live 2026-08-19, AGL-1882) | Nothing survives loss of the `aglyn-main` project itself — the export bucket lives IN `aglyn-main` (see gaps) |
-| Cloud Storage copy | **NONE** (re-measured live 2026-08-20, AGL-2422) | Customer media (451 objects, 46.9 MiB, under `orgs/` AND the legacy `hosts/`), `adminAudit-archive/` and 7 plugin bundles are copied by nothing, in-project or out — versioning off on every bucket, Storage Transfer API not even enabled. The weekly export is **Firestore only**. None of it is reconstructible; gap 6 has the design, the cost and the runbook |
+| Cloud Storage copy | **NONE** (AGL-2422) | Customer media, `adminAudit-archive/` and plugin bundles are copied by nothing, in-project or out. The weekly export is **Firestore only** |
 
 Run `npm run check:backup-copies` for the current answer to "where does every
 copy live" rather than trusting this table — it reads the live bucket
-inventory, resolves each copy target's owning `projectNumber`, compares the
-object mirror's contents against each source bucket, and exits 2 rather than 0
-when it cannot see. `--strict` is the acceptance test for both the off-project
-gap and the Cloud Storage gap below.
+inventory, resolves each copy target's owning `projectNumber`, and exits 2
+rather than 0 when it cannot see. `--strict` is the acceptance test for the
+off-project gap below.
 
 **Backups can fail silently — and a READY backup can STOP being restorable.**
 (AGL-1490, AGL-1843.) As of 2026-08-17, **every backup this project has taken
@@ -474,215 +473,31 @@ dated so this never matters.
    things, neither done: grow the hot window past the longest restore point, or
    teach the script to read the Storage archive.
 6. **Cloud Storage is copied by NOTHING — AGL-2422, found 2026-08-19 while
-   auditing gap 1, premise re-measured against live GCP on 2026-08-20.** Every
-   procedure above restores *Firestore*. The weekly export calls
-   `exportDocuments`, which touches no bucket contents, so these have no copy
-   at all — not off-project, not in-project.
+   auditing gap 1.** Every procedure above restores *Firestore*. The weekly
+   export calls `exportDocuments`, which touches no bucket contents, so these
+   have no copy at all — not off-project, not in-project:
+   - `gs://aglyn-main.appspot.com` (~47 MiB) — live customer media
+     (`orgs/{orgId}/media/`), `adminAudit-archive/`, `erasures/`. No object
+     versioning. The only safety net is the bucket's default **7-day soft
+     delete**, which a mis-scoped lifecycle rule outlives comfortably — and
+     lifecycle rules were last edited on this bucket in AGL-1496.
+   - `gs://aglyn-main-plugin-artifacts` (~28 KiB) — published plugin bundles
+     the marketplace serves. Small, but not reconstructible: a
+     publisher-signed artifact cannot be rebuilt from our source.
 
-   ### What is actually there (measured 2026-08-20, read-only)
+   This matters beyond media loss in two specific places. Firestore documents
+   reference media by path, so a Firestore restore into a bucket that lost its
+   objects yields a consistent database full of broken references — the
+   restore reports success. And `adminAudit-archive/` is what gap 5 says the
+   erasure replay must consult when the hot window has aged out, so the DPA
+   §11 promise leans on a bucket nothing copies.
 
-   | Bucket | Objects | Size | Versioning | Soft delete | Lifecycle |
-   | --- | --- | --- | --- | --- | --- |
-   | `gs://aglyn-main.appspot.com` | 451 | 49,135,212 B (46.9 MiB) | **off** | 7 days (bucket default) | 2 prefix-scoped Delete rules |
-   | `gs://aglyn-main-plugin-artifacts` | 7 | 28,778 B | **off** | 7 days (bucket default) | AbortIncompleteMultipartUpload only |
-   | `gs://aglyn-main-firestore-exports` | — | 4,554,991 B | **off** | 7 days (bucket default) | Delete at 90 days |
-
-   No `versioning` key is present on any of the three (`GET
-   /storage/v1/b/<bucket>?fields=versioning` returns nothing), and the Storage
-   Transfer API is **not enabled on the project at all** — so "no scheduled
-   copy exists" is not an inference from an empty job list, it is that no job
-   list can exist. `gcloud storage du` by prefix on the media bucket:
-
-   | Prefix | Bytes | What it is |
-   | --- | --- | --- |
-   | `orgs/` | 37,432,368 (35.7 MiB) | Live customer media |
-   | `hosts/` | 11,702,844 (11.2 MiB) | The **legacy pre-AGL-237 media path**, still served |
-   | `adminAudit-archive/` | 0 | Empty — nothing has aged out of the 90-day Firestore window yet |
-   | `erasures/` | 0 | Empty, as AGL-1443 intends |
-
-   Two corrections to what was previously written down. `hosts/` is a
-   **quarter of the bucket** and was absent from the store description in
-   `PRODUCTION_DATA_STORES`, which said `orgs/{orgId}/media/` only — a mirror
-   scoped from that sentence would have silently omitted 11 MiB of live
-   customer media. And `adminAudit-archive/` is empty today, so the DPA §11
-   exposure in gap 5 is real but **not yet realised**: it becomes real the
-   first time the 03:00 archiver moves a row into Storage, which is the first
-   day any `adminAudit` row turns 90 days old.
-
-   ### What is unrecoverable, and what is not
-
-   | Store | If it is lost today | Reconstructible? |
-   | --- | --- | --- |
-   | `orgs/` + `hosts/` media | Every image and dataset asset in every workspace | **No.** Uploaded by customers; we hold the only copy |
-   | `adminAudit-archive/` | Nothing today (empty); after the first archive run, the audit trail past 90 days | **No**, and it is the record a compliance question is answered from |
-   | Plugin bundles | The marketplace serves 404s for every published version | **No.** A publisher-signed artifact cannot be rebuilt from our source; only the publisher can re-upload |
-   | `gcf-v2-*`, `staging.*` | A redeploy | Yes — reproducible from git |
-
-   ### Why the 7-day soft delete is not an answer
-
-   It recovers *deleted objects* for 7 days, it is the default on every bucket,
-   and nobody decided it. It does not survive a mis-scoped lifecycle rule (a
-   dropped `matchesPrefix` deletes on schedule, and a 30-day-old broken media
-   reference is noticed long after day 7), a delete loop under the
-   project-level `roles/storage.admin` the console service account holds, or
-   the loss of the project — where the soft-delete copy goes with everything
-   else.
-
-   ### ⚠️ Why "just turn on object versioning" is the WRONG one-command fix
-
-   Versioning on the source bucket looks like the cheap mitigation and is a
-   **DPA violation**. `libs/tenant/data/admin/src/lib/server/erase.ts` deletes
-   customer media with three `bucket.deleteFiles({ prefix })` calls —
-   `hosts/{hostId}/`, `orgs/{orgId}/`, `users/{uid}/` — and none passes
-   `versions: true`. The Node Storage client lists live versions only, so with
-   versioning ON every one of those calls leaves the erased object behind as a
-   noncurrent version, retained **forever** because no noncurrent-expiry rule
-   exists. The erasure would report success, the object would be invisible in
-   every listing, and DPA §11 would be false. Versioning on the source is
-   therefore not a config flip; it is a code change to `erase.ts` plus a
-   noncurrent lifecycle rule, and it still buys nothing against loss of the
-   project. **Do not do it as a shortcut.** The mirror below puts versioning
-   where it is safe — on the copy, where a bounded window is the correct
-   answer for a backup and the source stays a faithful record of what exists.
-
-   ### The design, and what it costs
-
-   One bucket in the DR project, `gs://aglyn-dr-storage-mirror`, holding both
-   sources under a prefix each (`media/`, `plugin-artifacts/`) — one bucket
-   rather than two so the versioning, lifecycle and IAM that make it safe are
-   written once instead of drifting apart. Filled by a **Storage Transfer
-   Service** job, nightly, with delete-propagation on and object versioning on
-   the destination.
-
-   Delete-propagation and versioning are one decision made in two places.
-   Without propagation an erased customer's media lives in the mirror forever
-   — the same DPA problem as above, moved. With propagation and no versioning,
-   the run that copies a mistaken deletion is the run that destroys the last
-   copy. With both, a delete makes the mirror copy noncurrent and
-   `cloud/storage-mirror-lifecycle.json` expires it 30 days later: an undo
-   window four times the source's, and a bounded retention an erasure reaches.
-   **Versioning must be on before the first sync ever runs**, which is why the
-   runbook below is ordered.
-
-   | Option | At today's 46.9 MiB | At 100 GB | Survives | Does NOT survive |
-   | --- | --- | --- | --- | --- |
-   | **STS → bucket in `aglyn-dr`, same billing account** (recommended) | **~$0.001/mo** — STS is free for GCS→GCS, in-region transfer is free, Standard US multi-region is $0.026/GB-mo; the Class A ops for 458 objects nightly are ~$0.07/mo and dominate | ~$2.60/mo | Project deletion, a compromised `aglyn-main` service account, a bad script, a mis-scoped lifecycle rule | Billing suspension; a compromised billing/org admin |
-   | Same, but destination **Nearline** | ~$0.0005/mo | ~$1.00/mo | Same | Same — plus a 30-day minimum-storage charge that makes the 30-day noncurrent window cost the same as keeping it |
-   | Same, but **separate billing account** | Same + a second card | Same | All of the above **and** a billing kill | A Google-account-level action reaching both |
-   | **In-project object versioning only** | ~$0.001/mo | ~$2.60/mo | Overwrites and stray deletes | Loss of the project — and it needs the `erase.ts` fix above first, so it is not the cheap option it looks like |
-   | Different cloud (R2 / B2) | $0 (free tiers) | ~$1.50/mo | Everything, including all-of-Google | Needs a second vendor, a second credential, and `rclone` rather than STS |
-
-   **Recommendation: the first row.** It is a rounding error against the
-   $20/month budget, it closes the failure modes that actually happen to small
-   projects, and it shares the DR project gap 1 already needs — so AGL-1882 and
-   AGL-2422 are one sitting, not two.
-
-   ### What closing it takes (Zach — creates cloud resources)
-
-   Assumes the `aglyn-dr` project from gap 1 exists. **Order matters**: steps 3
-   and 4 must both be done before step 6, or the first sync runs against a
-   bucket with no undo.
-
-   ```bash
-   # 1. Enable the API. It is NOT enabled on aglyn-main today — verified
-   #    2026-08-20, `gcloud transfer jobs list` returns SERVICE_DISABLED.
-   gcloud services enable storagetransfer.googleapis.com --project=aglyn-main
-
-   # 2. The mirror bucket. US multi-region matches both sources, so the
-   #    transfer is free; uniform access + public-access prevention because
-   #    this bucket holds every customer's media in one place.
-   gcloud storage buckets create gs://aglyn-dr-storage-mirror \
-     --project=aglyn-dr --location=US \
-     --uniform-bucket-level-access --public-access-prevention
-
-   # 3. Versioning ON — BEFORE any sync. Step 6 propagates deletes; this is
-   #    the undo, and enabling it afterwards does not retroactively protect
-   #    anything the first run already removed.
-   gcloud storage buckets update gs://aglyn-dr-storage-mirror --versioning
-
-   # 4. The noncurrent-version expiry. Also before the first sync, so no
-   #    version is ever retained under no policy. Every rule in this file acts
-   #    on isLive:false only — asserted by backup-copies.test.mjs, because a
-   #    rule here that can match a LIVE object is this bucket's own data-loss
-   #    event on a schedule.
-   gcloud storage buckets update gs://aglyn-dr-storage-mirror \
-     --lifecycle-file=cloud/storage-mirror-lifecycle.json --project=aglyn-dr
-
-   # 5. Read 2, 3 and 4 BACK. Do not trust the writes.
-   gcloud storage buckets describe gs://aglyn-dr-storage-mirror \
-     --project=aglyn-dr --format='json(versioning,lifecycle_config,uniform_bucket_level_access,public_access_prevention,location)'
-   #    Expect versioning.enabled=true and exactly one rule, isLive:false,
-   #    daysSinceNoncurrentTime:30. If versioning is absent, STOP — do not
-   #    create the transfer jobs.
-
-   # 6. IAM for the STS service agent (created by step 1; run `gcloud transfer
-   #    authorize` if it does not exist yet). READ on the sources, WRITE on
-   #    the mirror — never write on the sources.
-   STS=project-543499566626@storage-transfer-service.iam.gserviceaccount.com
-   for SRC in aglyn-main.appspot.com aglyn-main-plugin-artifacts; do
-     gcloud storage buckets add-iam-policy-binding gs://$SRC \
-       --member=serviceAccount:$STS --role=roles/storage.objectViewer
-     gcloud storage buckets add-iam-policy-binding gs://$SRC \
-       --member=serviceAccount:$STS --role=roles/storage.legacyBucketReader
-   done
-   gcloud storage buckets add-iam-policy-binding gs://aglyn-dr-storage-mirror \
-     --member=serviceAccount:$STS --role=roles/storage.objectAdmin \
-     --project=aglyn-dr
-   gcloud storage buckets add-iam-policy-binding gs://aglyn-dr-storage-mirror \
-     --member=serviceAccount:$STS --role=roles/storage.legacyBucketWriter \
-     --project=aglyn-dr
-
-   # 7. The two jobs. --delete-from finds objects in the destination that are
-   #    no longer in the source and deletes them THERE — never in the source.
-   #    Read that flag twice before running it; it is the one command in this
-   #    runbook that can destroy data, and step 3 is what makes it survivable.
-   gcloud transfer jobs create gs://aglyn-main.appspot.com \
-     gs://aglyn-dr-storage-mirror/media \
-     --name=media-mirror --project=aglyn-main \
-     --schedule-repeats-every=24h --schedule-starts='2026-09-01T09:30:00Z' \
-     --delete-from=destination-if-unique
-   gcloud transfer jobs create gs://aglyn-main-plugin-artifacts \
-     gs://aglyn-dr-storage-mirror/plugin-artifacts \
-     --name=plugin-artifact-mirror --project=aglyn-main \
-     --schedule-repeats-every=24h --schedule-starts='2026-09-01T09:45:00Z' \
-     --delete-from=destination-if-unique
-
-   # 8. Run both once by hand and wait for them to finish.
-   gcloud transfer jobs run media-mirror --project=aglyn-main
-   gcloud transfer jobs run plugin-artifact-mirror --project=aglyn-main
-
-   # 9. Prove it. The guard compares OBJECT COUNTS, source against mirror
-   #    prefix, and fails on any deficit — so this is the acceptance test, not
-   #    a formality. Expect 451/451 and 7/7.
-   gh variable set STORAGE_MIRROR_BUCKET --body aglyn-dr-storage-mirror
-   STORAGE_MIRROR_BUCKET=aglyn-dr-storage-mirror \
-     BACKUP_COPIES_ACCESS_TOKEN=$(gcloud auth print-access-token) \
-     npm run check:backup-copies -- --strict     # must exit 0
-   ```
-
-   Then flip `copiedBy` from `'none'` to `'storage-mirror'` for both stores in
-   `PRODUCTION_DATA_STORES` and delete the `no-storage-mirror` entry from
-   `ACKNOWLEDGED` — that is what turns the guard from "known gap" into
-   "regression if it ever comes back". Also grant the console service account
-   `roles/storage.objectViewer` + `roles/storage.legacyBucketReader` on the
-   mirror, or `backup-copies.yml` exits 2 (cannot-check) rather than 0.
-
-   ### What IS closed in the repo (AGL-2422, no cloud resources)
-
-   - `npm run check:backup-copies` now measures the object mirror, not just
-     the Firestore export: it reports the mirror's project (by `projectNumber`,
-     never by name), whether versioning is on, and — per store — how many of
-     the source's objects the mirror actually holds. Absent mirror, mirror in
-     the production project, unversioned mirror, missing objects, a sync that
-     stopped, a store nobody measured, and a truncated listing are all distinct
-     findings; a truncated listing can never render green.
-   - `cloud/storage-mirror-lifecycle.json` is the mirror's retention policy,
-     committed and **not applied** (step 4 applies it). Eleven mutations of the
-     comparator and of that document were run against the test suite on
-     2026-08-20 and all eleven go red.
-   - `PRODUCTION_DATA_STORES` now names `hosts/` and `users/` in the media
-     store, marks both primary stores with the `mirrorPrefix` they belong at,
-     and carries a `no-storage-mirror` acknowledgement expiring **2026-09-01**.
+   Not fixable in the repo — it needs a bucket and a transfer job, i.e. cloud
+   resources. What IS here: `PRODUCTION_DATA_STORES` in
+   `tools/scripts/lib/backup-copies.mjs` records `copiedBy: 'none'` for both,
+   `npm run check:backup-copies` prints it every run, and a new bucket
+   appearing in production fails the check until somebody answers the same
+   question about it.
 
 ## Who restores what, from where
 
@@ -695,7 +510,7 @@ which of five artifacts is the right one.
 | Firestore documents, damage older than 7 days | Newest **READY** managed backup — check state first, they flip | A, then C | Zach |
 | Firestore documents, backup flipped `NOT_AVAILABLE` | `gs://aglyn-main-firestore-exports/<prefix>` (weekly Monday) | D | Zach |
 | Firestore, whole `aglyn-main` project lost | **Nothing today.** Total loss | — | — (gap 1) |
-| Customer media, audit archive, plugin bundles | **Nothing today**, beyond 7-day soft delete. Unrecoverable after that — customers hold no second copy and a signed plugin bundle can only be re-uploaded by its publisher | — | — (gap 6) |
+| Customer media, audit archive, plugin bundles | **Nothing today**, beyond 7-day soft delete | — | — (gap 6) |
 | Erasures resurrected by any import | `adminAudit` rows at/after the snapshot | `replay-erasures.mjs`, C step 4 / D step 4 | Any staff actor with a uid; **required**, not optional |
 
 Every row above that says "Zach" says so because the restore commands need
