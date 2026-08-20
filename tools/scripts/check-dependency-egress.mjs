@@ -84,7 +84,9 @@ function productionClosure() {
   // is what the sweep needs, so the listing is read from stdout either way.
   // Throwing here would turn a peer-range warning into "the privacy sweep
   // cannot run", which is the wrong failure to inherit.
-  let out = ''
+  // No initialiser: BOTH paths below assign before anything reads `out`, so
+  // a `''` seed here is a dead store (`no-useless-assignment`, AGL-1692).
+  let out
   try {
     out = execFileSync('npm', ['ls', '--omit=dev', '--all', '--parseable'], {
       cwd: REPO_ROOT,
@@ -129,14 +131,16 @@ function* walk(dir) {
 function readPackage(dir) {
   const files = []
   for (const full of walk(dir)) {
-    let size = 0
+    // No initialiser: the catch `continue`s, so a seed value is never read.
+    let size
     try {
       size = statSync(full).size
     } catch {
       continue
     }
     if (size > MAX_FILE_BYTES) continue
-    let source = ''
+    // Same shape as `size` above — the catch `continue`s.
+    let source
     try {
       source = readFileSync(full, 'utf8')
     } catch {
