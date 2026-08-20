@@ -9,6 +9,112 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.5 — 2026-08-20
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.4...v1.0.0-beta.5)
+
+### Added
+
+- **console,docs:** a /v1 list can be searched, so a sync stops sweeping the whole collection ([AGL-2460](https://linear.app/aglyn/issue/AGL-2460), [AGL-76](https://linear.app/aglyn/issue/AGL-76), [AGL-2414](https://linear.app/aglyn/issue/AGL-2414))
+- **assist:** the monthly spend ceiling ships ARMED at $40 ([AGL-2264](https://linear.app/aglyn/issue/AGL-2264), [AGL-2441](https://linear.app/aglyn/issue/AGL-2441))
+- **console,commerce:** a merchant can see the sales tax their own storefront collected ([AGL-2440](https://linear.app/aglyn/issue/AGL-2440), [AGL-1904](https://linear.app/aglyn/issue/AGL-1904))
+- **tools:** derive the shipped-but-still-open queue by STATE, not by label ([AGL-2036](https://linear.app/aglyn/issue/AGL-2036), [AGL-2379](https://linear.app/aglyn/issue/AGL-2379))
+- **aglyn,console:** the collaborator seat add-on is a POOL, allocated per site ([AGL-2439](https://linear.app/aglyn/issue/AGL-2439), [AGL-1775](https://linear.app/aglyn/issue/AGL-1775), [AGL-1947](https://linear.app/aglyn/issue/AGL-1947))
+- **assist:** a monthly spend ceiling the reservation can refuse on ([AGL-2264](https://linear.app/aglyn/issue/AGL-2264), [AGL-2245](https://linear.app/aglyn/issue/AGL-2245))
+- **console:** the console tells an author they cannot publish, instead of the database ([AGL-2334](https://linear.app/aglyn/issue/AGL-2334), [AGL-2365](https://linear.app/aglyn/issue/AGL-2365))
+- **marketplace:** the abuse queue gets something that can feed it ([AGL-2435](https://linear.app/aglyn/issue/AGL-2435))
+- **email:** the suppression list gets a reader ([AGL-2410](https://linear.app/aglyn/issue/AGL-2410), [AGL-1918](https://linear.app/aglyn/issue/AGL-1918), [AGL-2408](https://linear.app/aglyn/issue/AGL-2408), [AGL-1367](https://linear.app/aglyn/issue/AGL-1367), [AGL-950](https://linear.app/aglyn/issue/AGL-950))
+- **seo:** a shared card says what it shows ([AGL-2417](https://linear.app/aglyn/issue/AGL-2417), [AGL-1896](https://linear.app/aglyn/issue/AGL-1896))
+- **console:** the campaign send cap gets an odometer, not just a ceiling ([AGL-2426](https://linear.app/aglyn/issue/AGL-2426), [AGL-2246](https://linear.app/aglyn/issue/AGL-2246), [AGL-1438](https://linear.app/aglyn/issue/AGL-1438))
+- **email:** a bounce on transactional mail stops dropping on the floor ([AGL-2407](https://linear.app/aglyn/issue/AGL-2407), [AGL-1918](https://linear.app/aglyn/issue/AGL-1918), [AGL-268](https://linear.app/aglyn/issue/AGL-268), [AGL-1438](https://linear.app/aglyn/issue/AGL-1438))
+- **tools:** a guard that asks whether ANY copy of production data is off-project ([AGL-1882](https://linear.app/aglyn/issue/AGL-1882), [AGL-1490](https://linear.app/aglyn/issue/AGL-1490), [AGL-2422](https://linear.app/aglyn/issue/AGL-2422))
+
+### Fixed
+
+- **ci:** the legal-drift comment stops tripping the retired-name sweep ([AGL-2475](https://linear.app/aglyn/issue/AGL-2475), [AGL-2467](https://linear.app/aglyn/issue/AGL-2467), [AGL-975](https://linear.app/aglyn/issue/AGL-975))
+- **commerce:** a stock movement and its ledger row cannot diverge ([AGL-2161](https://linear.app/aglyn/issue/AGL-2161), [AGL-428](https://linear.app/aglyn/issue/AGL-428))
+- **console:** the org-library ceiling closes while its meter is off ([AGL-2003](https://linear.app/aglyn/issue/AGL-2003), [AGL-1886](https://linear.app/aglyn/issue/AGL-1886))
+- **brand:** the tax summary and branding helper read the configured brand ([AGL-2153](https://linear.app/aglyn/issue/AGL-2153), [AGL-2428](https://linear.app/aglyn/issue/AGL-2428))
+- **tenant,console:** skip App Check registration when the site key is unset ([AGL-2049](https://linear.app/aglyn/issue/AGL-2049), [AGL-1404](https://linear.app/aglyn/issue/AGL-1404))
+- **rules:** deny the six host subcollections nothing writes from a client ([AGL-2042](https://linear.app/aglyn/issue/AGL-2042), [AGL-2410](https://linear.app/aglyn/issue/AGL-2410), [AGL-1367](https://linear.app/aglyn/issue/AGL-1367))
+- **commerce:** a signed-in member cannot double-subscribe on the storefront ([AGL-1849](https://linear.app/aglyn/issue/AGL-1849), [AGL-1697](https://linear.app/aglyn/issue/AGL-1697), [AGL-1715](https://linear.app/aglyn/issue/AGL-1715))
+- **tools,console:** generate the metered pass-through table from the billed rates ([AGL-2194](https://linear.app/aglyn/issue/AGL-2194), [AGL-1280](https://linear.app/aglyn/issue/AGL-1280), [AGL-2469](https://linear.app/aglyn/issue/AGL-2469), [AGL-2155](https://linear.app/aglyn/issue/AGL-2155))
+- **console:** the pricing-parity guard typechecks, not just runs ([AGL-2469](https://linear.app/aglyn/issue/AGL-2469))
+- **commerce:** membership/recover stops being an unauthenticated mail relay ([AGL-1966](https://linear.app/aglyn/issue/AGL-1966), [AGL-889](https://linear.app/aglyn/issue/AGL-889), [AGL-1918](https://linear.app/aglyn/issue/AGL-1918), [AGL-2407](https://linear.app/aglyn/issue/AGL-2407), [AGL-2404](https://linear.app/aglyn/issue/AGL-2404))
+- **docs:** give apps/docs the jest types its own tsconfig asks for ([AGL-2468](https://linear.app/aglyn/issue/AGL-2468), [AGL-2459](https://linear.app/aglyn/issue/AGL-2459), [AGL-2457](https://linear.app/aglyn/issue/AGL-2457))
+- **tools:** the legal-drift comparator stops counting page furniture as drift ([AGL-2467](https://linear.app/aglyn/issue/AGL-2467), [AGL-1647](https://linear.app/aglyn/issue/AGL-1647))
+- **build:** pin useTypeScriptCli off so the typescript alias resolves ([AGL-2466](https://linear.app/aglyn/issue/AGL-2466))
+- **commerce:** a supplier ships only their own lines, and the token model allows it ([AGL-2455](https://linear.app/aglyn/issue/AGL-2455), [AGL-2268](https://linear.app/aglyn/issue/AGL-2268))
+- **commerce:** a partial refund takes back exactly what it paid for ([AGL-2454](https://linear.app/aglyn/issue/AGL-2454))
+- **commerce:** a promotion slot is held at checkout, so N shoppers cannot pass a cap of one ([AGL-2453](https://linear.app/aglyn/issue/AGL-2453), [AGL-2449](https://linear.app/aglyn/issue/AGL-2449), [AGL-305](https://linear.app/aglyn/issue/AGL-305))
+- **repo:** restore the three commits AGL-2444 reverted by a moving parent ([AGL-2444](https://linear.app/aglyn/issue/AGL-2444), [AGL-2146](https://linear.app/aglyn/issue/AGL-2146), [AGL-2377](https://linear.app/aglyn/issue/AGL-2377), [AGL-2379](https://linear.app/aglyn/issue/AGL-2379))
+- **console:** every advertised org permission is enforced server-side ([AGL-2444](https://linear.app/aglyn/issue/AGL-2444), [AGL-2350](https://linear.app/aglyn/issue/AGL-2350), [AGL-435](https://linear.app/aglyn/issue/AGL-435))
+- **console:** a downgrade restates per-item tax_rates and phase-0 metadata ([AGL-2146](https://linear.app/aglyn/issue/AGL-2146), [AGL-2150](https://linear.app/aglyn/issue/AGL-2150))
+- **console:** the usage sweep stops skipping every never-subscribed org ([AGL-2420](https://linear.app/aglyn/issue/AGL-2420), [AGL-2413](https://linear.app/aglyn/issue/AGL-2413))
+- **branding:** a white-label org's blank Support URL links NOWHERE ([AGL-2428](https://linear.app/aglyn/issue/AGL-2428))
+- **commerce:** a draft payment link reports the stock it cannot cover ([AGL-2452](https://linear.app/aglyn/issue/AGL-2452), [AGL-2357](https://linear.app/aglyn/issue/AGL-2357))
+- **commerce:** a room is held in the transaction that checks it ([AGL-2450](https://linear.app/aglyn/issue/AGL-2450), [AGL-2320](https://linear.app/aglyn/issue/AGL-2320))
+- **commerce:** a gift card is held at checkout, so two carts cannot spend it ([AGL-2449](https://linear.app/aglyn/issue/AGL-2449), [AGL-2320](https://linear.app/aglyn/issue/AGL-2320))
+- **tools:** say which Firebase variable was refused instead of dumping a GaxiosError ([AGL-2447](https://linear.app/aglyn/issue/AGL-2447))
+- **selfhost:** a container's frame-ancestors names only the operator's hosts ([AGL-2446](https://linear.app/aglyn/issue/AGL-2446), [AGL-2443](https://linear.app/aglyn/issue/AGL-2443), [AGL-2198](https://linear.app/aglyn/issue/AGL-2198), [AGL-2176](https://linear.app/aglyn/issue/AGL-2176))
+- **permissions:** the SSO route reads the permission, not the raw role ([AGL-2350](https://linear.app/aglyn/issue/AGL-2350), [AGL-2297](https://linear.app/aglyn/issue/AGL-2297))
+- **assist:** the history budget is shared across turns, not granted to each ([AGL-2441](https://linear.app/aglyn/issue/AGL-2441), [AGL-2264](https://linear.app/aglyn/issue/AGL-2264))
+- **selfhost:** name the request-geo headers, and stop calling a container "development" ([AGL-2436](https://linear.app/aglyn/issue/AGL-2436), [AGL-2037](https://linear.app/aglyn/issue/AGL-2037), [AGL-2180](https://linear.app/aglyn/issue/AGL-2180))
+- **docker:** copy the .npmrc that npm ci reads into the deps stage ([AGL-2423](https://linear.app/aglyn/issue/AGL-2423), [AGL-2221](https://linear.app/aglyn/issue/AGL-2221))
+- **console:** a paid add-on the schedule will drop no longer reads as "updated" ([AGL-2438](https://linear.app/aglyn/issue/AGL-2438))
+- **console:** a site collaborator cannot list the workspace's API keys ([AGL-2350](https://linear.app/aglyn/issue/AGL-2350), [AGL-1026](https://linear.app/aglyn/issue/AGL-1026))
+- **console:** the revalidate gate reads HOST_PUBLISH_ROLES, not a private copy ([AGL-2350](https://linear.app/aglyn/issue/AGL-2350), [AGL-2334](https://linear.app/aglyn/issue/AGL-2334))
+- **permissions:** site creation and org settings read the permission, not the raw role ([AGL-2350](https://linear.app/aglyn/issue/AGL-2350))
+- **permissions:** the server honours custom roles and per-member overrides ([AGL-2350](https://linear.app/aglyn/issue/AGL-2350), [AGL-435](https://linear.app/aglyn/issue/AGL-435), [AGL-506](https://linear.app/aglyn/issue/AGL-506))
+- **bookings:** the reminder emails the docs promise now actually send ([AGL-2431](https://linear.app/aglyn/issue/AGL-2431), [AGL-160](https://linear.app/aglyn/issue/AGL-160), [AGL-2227](https://linear.app/aglyn/issue/AGL-2227))
+- **tools,ci:** the Texas tax code on our own products exists in the repo now ([AGL-1877](https://linear.app/aglyn/issue/AGL-1877))
+- **console,aglyn,docs:** dunning ends in a CANCEL, and three things now notice ([AGL-1877](https://linear.app/aglyn/issue/AGL-1877))
+- **console:** an org-scoped site list holds off instead of listing every client ([AGL-2350](https://linear.app/aglyn/issue/AGL-2350))
+- **brand:** the error and offline screens name no operator, lowercase included ([AGL-2350](https://linear.app/aglyn/issue/AGL-2350))
+- **console:** the other three usage-alerts doubles answer the paged host query ([AGL-2421](https://linear.app/aglyn/issue/AGL-2421))
+- **console:** an org-scoped route resolves the ORG brand, not the deployment brand ([AGL-2350](https://linear.app/aglyn/issue/AGL-2350), [AGL-2278](https://linear.app/aglyn/issue/AGL-2278), [AGL-2354](https://linear.app/aglyn/issue/AGL-2354))
+- **console:** the usage-alerts sweep pages an org's hosts ([AGL-2421](https://linear.app/aglyn/issue/AGL-2421), [AGL-2220](https://linear.app/aglyn/issue/AGL-2220))
+- **email:** the unsubscribe link stops firing on a prescanner's GET ([AGL-2408](https://linear.app/aglyn/issue/AGL-2408))
+- **tenant,aglyn,docs:** the free bandwidth cap engages at the beacon, not only in the cron ([AGL-2413](https://linear.app/aglyn/issue/AGL-2413))
+
+### Documentation
+
+- **commerce:** the reserve spec stops advertising a gap it closes ([AGL-1848](https://linear.app/aglyn/issue/AGL-1848), [AGL-2450](https://linear.app/aglyn/issue/AGL-2450))
+- **guides:** an API key never spans organizations ([AGL-2445](https://linear.app/aglyn/issue/AGL-2445))
+- **selfhost:** say plainly that no Docker images are published ([AGL-2434](https://linear.app/aglyn/issue/AGL-2434))
+- **commerce:** the shipping refusal cites the issue it came from ([AGL-2232](https://linear.app/aglyn/issue/AGL-2232), [AGL-2230](https://linear.app/aglyn/issue/AGL-2230))
+- **assist:** the Assist signal board gets the staff-console page it lacked ([AGL-2257](https://linear.app/aglyn/issue/AGL-2257))
+- **selfhost:** the template and the runbooks describe the deployment an operator actually gets ([AGL-2424](https://linear.app/aglyn/issue/AGL-2424), [AGL-2425](https://linear.app/aglyn/issue/AGL-2425), [AGL-2436](https://linear.app/aglyn/issue/AGL-2436), [AGL-2437](https://linear.app/aglyn/issue/AGL-2437), [AGL-2177](https://linear.app/aglyn/issue/AGL-2177), [AGL-2221](https://linear.app/aglyn/issue/AGL-2221))
+
+<details>
+<summary>Also in this release: 7 test, 9 chore, 7 ci</summary>
+
+- **deps:** hold @base-ui/react at the 1.6 line until jest has PointerEvent ([AGL-2470](https://linear.app/aglyn/issue/AGL-2470))
+- **deps:** bump five production minor/patch deps ([AGL-2470](https://linear.app/aglyn/issue/AGL-2470), [AGL-2472](https://linear.app/aglyn/issue/AGL-2472))
+- **console:** pin the published /pricing table to the constants that charge it ([AGL-2469](https://linear.app/aglyn/issue/AGL-2469), [AGL-2079](https://linear.app/aglyn/issue/AGL-2079))
+- **tools:** baseline the unsubscribe page's two email-HTML colours ([AGL-2408](https://linear.app/aglyn/issue/AGL-2408))
+- **deps:** bump @fontsource/roboto and roboto-mono in /apps/docs ([AGL-2459](https://linear.app/aglyn/issue/AGL-2459))
+- **deps:** bump the docusaurus group in /apps/docs ([AGL-2459](https://linear.app/aglyn/issue/AGL-2459))
+- **deps-dev:** bump @eslint/eslintrc from 2.1.4 to 3.3.6
+- **deps:** bump firebase in the firebase group across 1 directory
+- **deps:** bump the actions group across 1 directory with 5 updates
+- **deps-dev:** bump the nx-workspace group across 1 directory with 16 updates
+- **tools:** assert legal-drift.yml refuses to no-op without its Drive variable ([AGL-2379](https://linear.app/aglyn/issue/AGL-2379), [AGL-1778](https://linear.app/aglyn/issue/AGL-1778))
+- **docs,functions:** the two projects no repo-wide command could reach get real targets ([AGL-2377](https://linear.app/aglyn/issue/AGL-2377), [AGL-2363](https://linear.app/aglyn/issue/AGL-2363), [AGL-2124](https://linear.app/aglyn/issue/AGL-2124))
+- **deps:** bump the mui-emotion group across 1 directory with 9 updates
+- **deps-dev:** bump typescript-eslint to 8.67.0 in /cloud/functions ([AGL-2058](https://linear.app/aglyn/issue/AGL-2058))
+- **deps:** guard the functions manifest's typescript alias and admin major ([AGL-2458](https://linear.app/aglyn/issue/AGL-2458), [AGL-2457](https://linear.app/aglyn/issue/AGL-2457))
+- **deps:** bump firebase-functions to 7.3.2 in /cloud/functions ([AGL-2457](https://linear.app/aglyn/issue/AGL-2457))
+- **labeler:** migrate the label config to the schema v5+ requires ([AGL-2456](https://linear.app/aglyn/issue/AGL-2456))
+- **selfhost:** drop the buildx action the repo's Actions policy forbids ([AGL-2433](https://linear.app/aglyn/issue/AGL-2433))
+- **console:** the two stale-seed editor specs carry AGL-2334's host-role hook ([AGL-2334](https://linear.app/aglyn/issue/AGL-2334), [AGL-2365](https://linear.app/aglyn/issue/AGL-2365))
+- **selfhost:** assert what the tenant ROUTED the request to, not only its status ([AGL-2433](https://linear.app/aglyn/issue/AGL-2433), [AGL-2443](https://linear.app/aglyn/issue/AGL-2443))
+- **selfhost:** build both Docker images and serve one request through the tenant ([AGL-2433](https://linear.app/aglyn/issue/AGL-2433), [AGL-2423](https://linear.app/aglyn/issue/AGL-2423), [AGL-2177](https://linear.app/aglyn/issue/AGL-2177), [AGL-2221](https://linear.app/aglyn/issue/AGL-2221))
+- **aglyn:** the branding guard names its pre-auth gap instead of omitting it ([AGL-2322](https://linear.app/aglyn/issue/AGL-2322), [AGL-2350](https://linear.app/aglyn/issue/AGL-2350))
+- **console,aglyn:** the cap suite can see the merge flag, and the ceiling comment does its own arithmetic ([AGL-2413](https://linear.app/aglyn/issue/AGL-2413))
+
+</details>
+
 ## v1.0.0-beta.4 — 2026-08-19
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.3...v1.0.0-beta.4)
