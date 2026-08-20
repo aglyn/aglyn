@@ -20,6 +20,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { claimAttempt, deriveStripeObjectKey } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import { readActiveMemberSession } from './membership'
 import { resolveManualTaxRateId } from './manual-tax-rate'
 import {
   type PromotionSlotHold,
@@ -180,6 +181,70 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       return res
         .status(403)
         .json({ error: 'Subscription products require a Business plan' })
+    }
+    // ALREADY SUBSCRIBED? (AGL-1849)
+    //
+    // The idempotency key closes the RETRY shape: one attempt, one key, one
+    // subscription. What it cannot close is a deliberate second submit under a
+    // fresh key — `product-detail.tsx` mints a new UUID on every variant /
+    // quantity / billing change — which is two RECURRING charges on one card
+    // for one product, billed forever until someone notices.
+    //
+    // The issue filed this as impossible: the storefront buy-now path is
+    // anonymous, so there is no buyer to ask about. That was half right. The
+    // path admits anonymous buyers, but it is not ONLY anonymous — a signed-in
+    // site member's `aglyn_member_{hostId}` cookie is already on this request
+    // (same-origin `fetch` sends it, and `PluginApiRequest` exposes
+    // `cookies`), and the handler simply never read it. So the guard covers
+    // the case it can actually identify and, deliberately, no more.
+    //
+    // WHAT THIS DOES NOT COVER, stated rather than implied: a logged-out buyer
+    // who types any email at Stripe. There is no identity for them before the
+    // hosted page, and inventing one — forcing sign-in to buy — is a UX change
+    // that belongs to a product decision, not to a duplicate guard. The
+    // honest scope is "a member cannot silently double-subscribe", not "nobody
+    // can".
+    //
+    // Live-status, NOT existence. A member who cancelled must be able to
+    // re-subscribe; refusing on "a subscription row exists" would lock a
+    // returning customer out of paying us, which is the AGL-1715 lesson
+    // restated on the tenant side. `isTenantSubscriptionLive` is the shared
+    // tenant predicate, the same one `gate.ts` grants content access with.
+    if (isSubscription) {
+      const session = await readActiveMemberSession(req, hostId)
+      const memberEmail =
+        session.status === 'active'
+          ? String(session.member.get('email') ?? '')
+          : ''
+      if (memberEmail) {
+        // Scoped by email because that is the join `billing-webhook.ts` writes
+        // — `customerEmail` comes off Stripe's `customer_details` — and it is
+        // the same key `gate.ts` reads. The 10-doc cap matches gate.ts too: a
+        // member with more than ten subscriptions to ONE host is not the
+        // shape this refuses, and an unbounded scan on a checkout path is a
+        // cost with no matching benefit.
+        const existing = await hostRef
+          .collection('subscriptions')
+          .where('customerEmail', '==', memberEmail)
+          .limit(10)
+          .get()
+        const alreadySubscribed = existing.docs.some(
+          (docSnapshot) =>
+            docSnapshot.get('productId') === productId &&
+            CommerceModel.isTenantSubscriptionLive(docSnapshot.get('status')),
+        )
+        if (alreadySubscribed) {
+          // Above the claim, so the key is never burned: this is a
+          // deterministic refusal the buyer resolves by cancelling first, and
+          // a retry must get the same answer rather than a stale replay.
+          return res.status(409).json({
+            error:
+              'You already have an active subscription to this product — ' +
+              'manage it from your account.',
+            code: 'already_subscribed',
+          })
+        }
+      }
     }
     if (
       product.giftCard &&
