@@ -851,7 +851,7 @@
         "0% platform fees",
         "white-label",
         "SSO",
-        "SLA & dedicated support",
+        "dedicated support",
         "custom contracts"
       ],
       "cta": "CONTACT SALES"
@@ -1052,7 +1052,53 @@
         "digital": "0%",
         "physical": "0%"
       }
-    ]
+    ],
+    "marketplace": {
+      "heading": "Marketplace sales — what Aglyn keeps on a listing sale",
+      "rows": [
+        {
+          "plan": "free",
+          "label": "Free",
+          "takeRate": "30%"
+        },
+        {
+          "plan": "starter",
+          "label": "Starter",
+          "takeRate": "20%"
+        },
+        {
+          "plan": "pro",
+          "label": "Pro",
+          "takeRate": "20%"
+        },
+        {
+          "plan": "business",
+          "label": "Business",
+          "takeRate": "20%"
+        },
+        {
+          "plan": "scale",
+          "label": "Scale",
+          "takeRate": "20%"
+        },
+        {
+          "plan": "advanced",
+          "label": "Advanced",
+          "takeRate": "20%"
+        },
+        {
+          "plan": "agency",
+          "label": "Agency",
+          "takeRate": "20%"
+        },
+        {
+          "plan": "enterprise",
+          "label": "Enterprise",
+          "takeRate": "20%"
+        }
+      ],
+      "note": "Separate from the storefront transaction fee above and NOT reduced by plan: a publisher on a 0% storefront plan still pays the marketplace take rate on marketplace listing sales. Charged in `libs/plugins/marketplace/src/lib/server/checkout.ts`."
+    }
   },
   "addons": {
     "rows": [
@@ -1066,7 +1112,7 @@
         "label": "Extra POS register",
         "priceUsd": 89,
         "scope": "per site",
-        "maxQuantity": null,
+        "maxQuantity": 50,
         "included": {
           "free": 0,
           "starter": 0,
