@@ -25,12 +25,12 @@ import {
 import {
   browserLocalPersistence,
   setPersistence,
-  signInWithCustomToken,
   type Auth,
   type User,
 } from 'firebase/auth'
 import { useEffect, useState } from 'react'
 import { markInteractiveSignIn } from './interactive-signin'
+import { signInWithPooledCustomToken } from './pooled-custom-token'
 
 /**
  * Client half of the passkey ceremonies (AGL-662): the browser runs
@@ -230,7 +230,8 @@ export async function signInWithPasskey(auth: Auth): Promise<void> {
   markInteractiveSignIn()
   await setPersistence(auth, browserLocalPersistence)
   // Passkeys are project-pool only (AGL-662): make sure a leftover tenant
-  // selection from an SSO attempt cannot mis-route this sign-in.
-  auth.tenantId = null
-  await signInWithCustomToken(auth, token)
+  // selection from an SSO attempt cannot mis-route this sign-in. `null` is
+  // the pool, stated deliberately — the same helper every other exchange
+  // goes through (AGL-1993).
+  await signInWithPooledCustomToken(auth, token, null)
 }
