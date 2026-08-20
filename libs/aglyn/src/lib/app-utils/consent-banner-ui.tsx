@@ -50,7 +50,7 @@ import {
  * - **The prior-consent banner** (opt-in posture, undecided visitor):
  *   symmetric Allow / Decline plus Preferences — the peer benchmark's
  *   credible shape; Decline is never buried.
- * - **The "Privacy choices" pill**: a small, persistent, fixed control on
+ * - **The "Your Privacy Choices" pill**: a small, persistent, fixed control on
  *   EVERY page whenever the consent machinery is active. In the implied
  *   posture no banner and no notice ever renders (the Squarespace shape),
  *   which makes this pill the ONE discoverable opt-out surface — that is
@@ -64,6 +64,25 @@ import {
  * component under its region simulator — a preview that renders an
  * approximation would prove nothing about the real banner.
  */
+
+/**
+ * The title of the persistent opt-out control — **fixed by regulation, not a
+ * copy choice**.
+ *
+ * Once a business "shares" personal information for cross-context behavioral
+ * advertising, CCPA §1798.135(b) requires a clear and conspicuous opt-out
+ * link, and CCPA regs §7015 permit a SINGLE combined link only when it is
+ * titled with these exact words. Aglyn crossed that line when advertising
+ * technology went onto aglyn.com, so the pill's previous label — "Privacy
+ * choices" — stopped being compliant the moment the tag shipped.
+ *
+ * Capitalisation is part of the specified title. Do not sentence-case it to
+ * match the rest of the overlay copy, do not shorten it to fit a narrow
+ * viewport, and do not translate it away on a US-facing site: it is pinned by
+ * `consent-opt-out-title.spec.tsx`, which renders the real control and reads
+ * the text back.
+ */
+export const CONSENT_OPT_OUT_TITLE = 'Your Privacy Choices'
 
 const OVERLAY_FONT =
   'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
@@ -365,7 +384,7 @@ export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | nul
     return (
       <section
         role="region"
-        aria-label="Privacy choices"
+        aria-label={CONSENT_OPT_OUT_TITLE}
         data-aglyn-consent-preferences=""
         style={CARD_STYLE}
       >
@@ -514,7 +533,7 @@ export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | nul
       ref={pillRef}
       type="button"
       data-aglyn-consent-pill=""
-      aria-label="Privacy choices"
+      aria-label={CONSENT_OPT_OUT_TITLE}
       style={PILL_STYLE}
       onClick={() => {
         const current = onDecision ? stored : readStoredVisitorConsent(hostId)
@@ -523,7 +542,7 @@ export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | nul
         setPreferencesOpen(true)
       }}
     >
-      {'Privacy choices'}
+      {CONSENT_OPT_OUT_TITLE}
     </button>
   )
 }

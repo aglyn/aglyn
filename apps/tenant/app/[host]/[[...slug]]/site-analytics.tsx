@@ -441,7 +441,7 @@ export default function SiteAnalytics({
           site with no analytics has nothing to ask, so its visitors see
           nothing at all. What renders depends on the resolved state: the
           prior-consent banner (opt-in posture, undecided), or the
-          persistent "Privacy choices" pill — which in the implied posture
+          persistent "Your Privacy Choices" pill — which in the implied posture
           is the ONE opt-out surface, on every page, template-independent.
           `consent.ready` keeps all of it out of the server HTML (ISR) and
           the first client render. Published surface only here; the console

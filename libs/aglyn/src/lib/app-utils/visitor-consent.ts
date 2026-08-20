@@ -55,7 +55,7 @@
  *   versus pre-consent tracking of an EU visitor.
  * - **`opt-out`** — implied consent: gated features are live from first
  *   paint, no banner and no notice; the visitor's recorded state is
- *   `implied`, and the always-present "Privacy choices" control is the
+ *   `implied`, and the always-present "Your Privacy Choices" control is the
  *   opt-out surface. Applied outside prior-consent regions when the host
  *   mode is `geo`.
  *

@@ -168,7 +168,7 @@ export async function decideVisitorConsent(
   const posture = resolveConsentPosture(host, country)
   if (posture === 'opt-out') {
     // Implied consent, recorded as such — tracking is live from this first
-    // paint, and the persistent "Privacy choices" pill is the opt-out
+    // paint, and the persistent "Your Privacy Choices" pill is the opt-out
     // surface. No banner, no notice: the Squarespace shape.
     return {
       stored: storeVisitorConsent(hostId, { status: 'implied', country }),

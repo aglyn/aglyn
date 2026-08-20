@@ -270,7 +270,7 @@ export function ConsentBannerCard(props: ConsentBannerCardProps) {
               : 'Live: EU/UK and unknown-region visitors see the consent ' +
                 'banner; visitors elsewhere are tracked from first visit ' +
                 'and recorded as implied consent. For those visitors the ' +
-                'persistent "Privacy choices" control (shown on every ' +
+                'persistent "Your Privacy Choices" control (shown on every ' +
                 'page) is the opt-out — it cannot be removed by a ' +
                 'template. Global Privacy Control is honored as an ' +
                 'automatic opt-out.'}
