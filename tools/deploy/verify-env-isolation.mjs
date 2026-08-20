@@ -146,6 +146,34 @@ const ALLOW_SHARED = {
 }
 
 /**
+ * Sharing that is a DECISION rather than a defect, per environment.
+ *
+ * `development` and `preview` are different questions and are reported
+ * separately for that reason. A production credential in `preview` can be
+ * deliberate — a preview build that exercises the real payment path before
+ * release is a thing a team can reasonably choose. The same credential in
+ * `development` is a different claim entirely: that target is what
+ * `vercel env pull` writes to a laptop, so accepting it means accepting the
+ * value on every machine that ever ran the command.
+ *
+ * An entry silences the named environments for that key and nothing else — the
+ * other environment still fails the run. Each needs `who` and `why`, so that a
+ * year from now the entry reads as a decision somebody made rather than as an
+ * exception somebody needed.
+ *
+ * Deliberately EMPTY. The point of the mechanism is that accepting a shared
+ * credential is an explicit, attributed edit to this file, not a quiet
+ * allowlist entry, and not a finding everyone learns to scroll past.
+ */
+const ACCEPTED = {
+  // STRIPE_SECRET_KEY: {
+  //   environments: ['preview'],
+  //   who: 'Zach, 2026-08-__',
+  //   why: 'preview exercises the real payment path before release (AGL-2401)',
+  // },
+}
+
+/**
  * Findings whose remediation is already tracked. Purely presentational — they
  * still fail the run. The point is that a reader of the output can tell a
  * known, owned item from a new one.
@@ -265,10 +293,16 @@ async function projectRecords(token, project) {
   return body?.envs ?? []
 }
 
+/**
+ * Which non-production environments hold this record's production value, minus
+ * any that have been explicitly accepted for that key. Returns null when there
+ * is nothing left to report.
+ */
 const spansProduction = (record) => {
   const target = new Set(record?.target ?? [])
   if (!target.has('production')) return null
-  const also = NON_PRODUCTION.filter((env) => target.has(env))
+  const accepted = new Set(ACCEPTED[record.key]?.environments ?? [])
+  const also = NON_PRODUCTION.filter((env) => target.has(env) && !accepted.has(env))
   return also.length ? also : null
 }
 
@@ -285,6 +319,23 @@ function assertEveryAllowanceHasAReason() {
     .map(([key]) => key)
   if (bare.length) {
     throw new Fatal(`ALLOW_SHARED entries with no reason written: ${bare.join(', ')}`)
+  }
+  const unattributed = Object.entries(ACCEPTED)
+    .filter(
+      ([, d]) =>
+        !Array.isArray(d?.environments) ||
+        !d.environments.length ||
+        d.environments.some((e) => !NON_PRODUCTION.includes(e)) ||
+        typeof d?.who !== 'string' ||
+        d.who.trim().length < 3 ||
+        typeof d?.why !== 'string' ||
+        d.why.trim().length < 10,
+    )
+    .map(([key]) => key)
+  if (unattributed.length) {
+    throw new Fatal(
+      `ACCEPTED entries need environments (from ${NON_PRODUCTION.join('/')}), who and why: ${unattributed.join(', ')}`,
+    )
   }
 }
 
@@ -405,7 +456,10 @@ async function main() {
   }
 
   findings.sort((a, b) => a.key.localeCompare(b.key) || a.scope.localeCompare(b.scope))
-  const result = { ok: findings.length === 0, findings, controls, deployments }
+  // Waived sharing is REPORTED, never silent. An accepted decision that stops
+  // being visible is indistinguishable from one nobody ever made.
+  const accepted = Object.entries(ACCEPTED).map(([key, d]) => ({ key, ...d }))
+  const result = { ok: findings.length === 0, findings, accepted, controls, deployments }
 
   if (JSON_OUT) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`)
@@ -432,6 +486,12 @@ async function main() {
           'identical by construction. Split the record: keep production on its own,\n' +
           'and give development/preview their own record with a different value.\n',
       )
+    }
+    if (accepted.length) {
+      process.stdout.write('\naccepted by decision, not silenced:\n')
+      for (const a of accepted) {
+        process.stdout.write(`  ${a.key} in ${a.environments.join(', ')} — ${a.why} (${a.who})\n`)
+      }
     }
     for (const d of deployments ?? []) {
       process.stdout.write(`\nproduction deployment env keys — ${d.project}\n`)
