@@ -71,6 +71,7 @@ import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import ScopeDriftCard from '../../../../components/scope-drift-card.component'
 import PendingErasuresCard from '../../../../components/pending-erasures-card.component'
 import IdempotencyClaimsCard from '../../../../components/idempotency-claims-card.component'
+import ServerConfigCard from '../../../../components/server-config-card.component'
 import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
@@ -529,6 +530,14 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
                 fact, not a money one — the money did not move, which is
                 exactly the point. */}
             <IdempotencyClaimsCard />
+
+            {/* What this deployment actually resolved (AGL-2069). Last on
+                the board because it is the one card that is not a probe: it
+                answers "is production running the config we think it is",
+                which is the question every red tile above eventually
+                becomes. A var set on the Vercel PROJECT while the
+                DEPLOYMENT lacks it looks identical from outside. */}
+            <ServerConfigCard />
           </Stack>
         </StaffOnly>
       </Container>
