@@ -198,7 +198,13 @@ describe('the audience-overage caption follows what is billed', () => {
     expect(text).toContain(`${OVERAGE} over the included band`)
     // The monthly total is the part no invoice will carry.
     expect(text).not.toContain(ESTIMATE)
-    expect(text).not.toContain('this month')
+    // Tracks the billed branch's actual wording (AGL-2399). This used to read
+    // `not.toContain('this month')`, and once the billed caption stopped
+    // saying "this month" that assertion could no longer fail — it would have
+    // passed on a page rendering the BILLED sentence, which is the one thing
+    // it exists to catch. A negative control has to name a phrase the wrong
+    // branch really produces.
+    expect(text).not.toContain('ends the month at this size')
     // Worded to the docs pass (AGL-1601/1603): the PAGE is unavailable, and
     // the published rate is what applies once it opens.
     expect(text).toContain('not billed while the Contacts page is unavailable')
@@ -213,7 +219,9 @@ describe('the audience-overage caption follows what is billed', () => {
     await contactsMeter()
 
     await waitFor(() =>
-      expect(caption()?.textContent ?? '').toContain(`≈$${ESTIMATE} this month`),
+      expect(caption()?.textContent ?? '').toContain(
+        `≈$${ESTIMATE} if your audience ends the month at this size`,
+      ),
     )
     const text = caption()?.textContent ?? ''
     expect(text).toContain(`${OVERAGE} over the included band at $0.75/1,000`)
@@ -240,7 +248,9 @@ describe('the audience-overage caption follows what is billed', () => {
     await contactsMeter()
 
     await waitFor(() =>
-      expect(caption()?.textContent ?? '').toContain(`≈$${ESTIMATE} this month`),
+      expect(caption()?.textContent ?? '').toContain(
+        `≈$${ESTIMATE} if your audience ends the month at this size`,
+      ),
     )
     expect(caption()?.textContent ?? '').not.toContain('not billed')
   })

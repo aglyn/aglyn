@@ -623,6 +623,7 @@ async function handler(request: Request): Promise<Response> {
       // combine them, but only once all seven are in hand — so the sequencing
       // was incidental, and it made an org cost the SUM of its reads rather
       // than the slowest of them. That is most of why four orgs took ~10s.
+      const usageRef = orgRef.collection('usage').doc(month)
       const [
         usage,
         orgSnapshot,
@@ -633,6 +634,7 @@ async function handler(request: Request): Promise<Response> {
         counterTotals,
         assistUsageSnap,
         offlineFeesSnap,
+        existing,
       ] = await Promise.all([
         Promise.all(hostRefs.map(usageFor)),
         orgRef.get(),
@@ -677,6 +679,17 @@ async function handler(request: Request): Promise<Response> {
         // merchant's own plan already charges, collected on the one channel
         // where Stripe cannot collect it for us.
         orgRef.collection('offlineFees').doc(month).get(),
+        // THE ROLLUP DOCUMENT ITSELF (AGL-2399), moved into this batch from a
+        // sequential read further down.
+        //
+        // Two readers now. It has always answered "was this org-month already
+        // reported" (`reportedAt`); since AGL-2399 it also carries the last
+        // reading of the two STOCK meters taken INSIDE the month, which is
+        // what a closed sweep bills them on. Both questions are asked before
+        // anything is written, and the document is not touched in between, so
+        // the read belongs beside the other independent ones rather than on
+        // its own round trip per org.
+        usageRef.get(),
       ])
       // One read of the org doc for every quota decision below — the four
       // meters must agree about which plan they are pricing against.
@@ -773,8 +786,122 @@ async function handler(request: Request): Promise<Response> {
         ? 0
         : billedEstimateBeforeInbox.billableCostUsd -
           billedEstimate.billableCostUsd
-      const dataStorageMb =
+      /*==========================================
+       * THE TWO STOCK METERS ARE READ AT THE END OF THE MONTH THEY BILL
+       * (AGL-2399).
+       *
+       * ## The distinction the four meters divide on
+       *
+       * API requests and form submissions are FLOWS: `apiUsage/{month}.count`
+       * and `counters/formSubmissions.{month}` accumulate inside the period
+       * and nothing done afterwards can move them. Contacts and dataset bytes
+       * are STOCKS — a level, not a total — and the two measurements below
+       * (`contacts.count()`, `orgDatasetBytes`) read that level AS IT STANDS
+       * NOW. The closed-month sweep runs at 02:00 UTC on the 1st, so "now" was
+       * a moment strictly OUTSIDE the month being invoiced.
+       *
+       * That charged August for September's behaviour, in both directions: a
+       * bulk-delete on the 1st erased an overage already incurred, and an
+       * import on the 1st landed on the previous month's invoice. The daily
+       * re-sweep of an unreported org-month measured a third value again, so
+       * the amount was not stable across runs of the same month either — only
+       * `reportedAt` froze it, and only for whichever run reported first.
+       *
+       * ## The convention: the last reading taken INSIDE the period
+       *
+       * A stock has no single honest monthly figure. Period-end, peak and
+       * time-weighted mean are all defensible and each charges a DIFFERENT
+       * amount for identical behaviour, which is why AGL-2399 was raised as a
+       * decision rather than fixed in the pass that found it.
+       *
+       * This takes period-end, and takes it as the narrowest of the three on
+       * purpose, because pricing is locked for Sept 1:
+       *
+       *   1. The STATISTIC does not change — it is still a point-in-time
+       *      level. Only the instant moves, from just after the period to the
+       *      last moment inside it. Peak and mean are different statistics and
+       *      would move every bill; this moves only the bills that were
+       *      measuring the wrong month.
+       *   2. It is the number the customer was already shown. The console
+       *      meter and the budget card read `contactsCount`/`dataStorageMb`
+       *      off this document, written daily by the `?month=current` sweep,
+       *      so the invoice now equals the last figure the console displayed
+       *      instead of one that appeared on no surface anywhere.
+       *   3. It is computable for every month. A time-weighted mean needs a
+       *      complete daily series and months predating the in-progress sweep
+       *      have none — a basis that cannot be applied to the months already
+       *      on the books is not a basis, it is a cutover.
+       *   4. The platform's other level meters — host media bytes, org-library
+       *      bytes — are already billed as point-in-time levels. Period-end
+       *      keeps the four meters mutually consistent.
+       *
+       * PEAK is the only candidate that fully closes deleting on the 30th to
+       * duck the band, and it is left open deliberately: it would RAISE bills,
+       * which is the direction the locked-pricing rule reserves for Zach. The
+       * daily series this reads from is the same series a peak would need, so
+       * that decision costs a predicate here and no new writer.
+       *
+       * ## No new document, no new writer, no index
+       *
+       * The in-progress sweep is already the only writer of this document and
+       * already runs daily over every org. It now stamps its reading under a
+       * name that says WHEN it was taken, and a closed sweep reads it back.
+       * That is one field pair on a document already being read and written —
+       * no query, so no composite index, and nothing to go FAILED_PRECONDITION
+       * in production.
+       *=========================================*/
+      const dataStorageMbAtSweep =
         Math.round((datasetBytes / (1024 * 1024)) * 10) / 10
+      const contactsCountAtSweep = Number(contactsSnap.data().count ?? 0)
+      /**
+       * A stock reading recorded by an earlier sweep, or `null` when there is
+       * none to trust.
+       *
+       * Defensive because the value is read back off a document written by a
+       * previous deployment: a missing field, a `null`, a NaN or a stringly
+       * typed number must fall back to measuring, never bill as zero. Billing
+       * zero on a malformed field would forfeit the overage silently and look
+       * exactly like a customer who stayed inside the band.
+       */
+      const storedStock = (field: string): number | null => {
+        const value = Number(existing.get(field))
+        return Number.isFinite(value) && value >= 0 ? value : null
+      }
+      const contactsAtPeriodEnd = storedStock('contactsCountAtPeriodEnd')
+      const dataStorageMbAtPeriodEnd = storedStock('dataStorageMbAtPeriodEnd')
+      /**
+       * Which instant the billed stock figures describe.
+       *
+       * `in-progress` — an OPEN month, measured now, which is inside it by
+       *   definition. This sweep's reading is also what a later closed sweep
+       *   will bill, so it is the value stamped as the period-end one.
+       * `period-end` — a CLOSED month billing the last reading taken inside
+       *   it. The normal case, and the one that makes a re-sweep idempotent:
+       *   the closed sweep never writes the period-end fields, so every re-run
+       *   reads the same frozen input and arrives at the same `billedCents`.
+       * `sweep-time` — a CLOSED month with no in-period reading, measured now
+       *   and therefore after the fact. Months that ended before the
+       *   in-progress sweep existed, and orgs created after the month's last
+       *   07:00 run. Named rather than silent, so which months are comparable
+       *   is answerable from the audit rows instead of from a deploy date.
+       */
+      const stockBasis: 'in-progress' | 'period-end' | 'sweep-time' = !closed
+        ? 'in-progress'
+        : contactsAtPeriodEnd !== null || dataStorageMbAtPeriodEnd !== null
+          ? 'period-end'
+          : 'sweep-time'
+      // The two are resolved INDEPENDENTLY, so one missing field never drags
+      // the other back onto the post-period reading — an org with contacts and
+      // no datasets has no `dataStorageMbAtPeriodEnd` worth trusting either
+      // way, and must not lose its contacts basis over it.
+      const dataStorageMb =
+        closed && dataStorageMbAtPeriodEnd !== null
+          ? dataStorageMbAtPeriodEnd
+          : dataStorageMbAtSweep
+      const contactsCount =
+        closed && contactsAtPeriodEnd !== null
+          ? contactsAtPeriodEnd
+          : contactsCountAtSweep
       // Msgpack bytes of the decoded node maps — see `nodesBytes`. One unit
       // for all three storage forms, so this figure is comparable BETWEEN
       // sites rather than only with itself.
@@ -782,7 +909,6 @@ async function handler(request: Request): Promise<Response> {
       const dataQuota = checkDataStorageQuota(orgData, dataStorageMb)
       const apiRequests = Number(apiUsageSnap.get('count') ?? 0)
       const apiQuota = checkApiRequestQuota(orgData, apiRequests)
-      const contactsCount = Number(contactsSnap.data().count ?? 0)
       const contactQuota = checkContactQuota(orgData, contactsCount)
       // Audience-band overage is WITHHELD while `release_contacts` is off
       // (AGL-1604). The flag gates one surface — the console Contacts page and
@@ -900,8 +1026,9 @@ async function handler(request: Request): Promise<Response> {
         Math.round(apiQuota.overageMonthlyUsd * 100) +
         Math.round(contactsOverageUsd * 100) +
         offlinePosFeeCents
-      const usageRef = orgRef.collection('usage').doc(month)
-      const existing = await usageRef.get()
+      // `usageRef` / `existing` come from the batch above (AGL-2399) — the
+      // stock basis needs the same document this guard does, and reading it
+      // twice per org bought nothing.
       if (existing.get('reportedAt')) {
         orgResults[orgId] = { billedCents, skipped: true }
         continue
@@ -1043,6 +1170,12 @@ async function handler(request: Request): Promise<Response> {
           // ever does must refuse to bill from a truncated figure, and this
           // is how it can tell.
           siteSizeTruncated: siteSize.truncated,
+          // THE BILLED FIGURE, on the basis named by `stockBasis` (AGL-2399)
+          // — for a closed month, the last reading taken inside it. Written
+          // under the name every existing reader already uses, on purpose:
+          // the console meter, the budget card and `orgMonthlySpend` read
+          // these two fields, and they must show what the invoice charged. A
+          // meter that still explains the old basis is its own bug.
           dataStorageMb,
           dataOverageUsd: dataQuota.overageMonthlyUsd,
           apiRequests,
@@ -1050,6 +1183,42 @@ async function handler(request: Request): Promise<Response> {
           // COUNTED ALWAYS (AGL-1604) — the records are real and the count is
           // an entitlement input, so it stays truthful whatever the flag says.
           contactsCount,
+          /*==========================================
+           * THE STOCK BASIS, WRITTEN DOWN (AGL-2399).
+           *
+           * `stockBasis` names WHICH INSTANT `contactsCount` and
+           * `dataStorageMb` above describe, and the `AtSweep` pair records
+           * what this run actually measured. Three fields, and each earns its
+           * place on a billing audit row:
+           *
+           *  - without `stockBasis`, a month billed on the last in-period
+           *    reading and a month that fell back to a post-period one are
+           *    indistinguishable, and "is this month comparable to that one"
+           *    becomes a question about deploy dates.
+           *  - without the `AtSweep` pair, the size of the correction is
+           *    unrecoverable — the difference between them IS how much a
+           *    month moved by being measured honestly, which is the first
+           *    thing anyone auditing this change will ask for.
+           *
+           * The `AtPeriodEnd` pair is written ONLY while the month is open,
+           * and that conditional is the whole idempotency guarantee. A closed
+           * sweep that re-runs must read the same input it read yesterday; if
+           * it stamped its own post-period measurement here, the second
+           * re-sweep would bill from the first re-sweep's reading and the
+           * figure would walk forward a day at a time — the original defect
+           * wearing a new field name.
+           *=========================================*/
+          stockBasis,
+          contactsCountAtSweep,
+          dataStorageMbAtSweep,
+          ...(closed
+            ? {}
+            : {
+                contactsCountAtPeriodEnd: contactsCountAtSweep,
+                dataStorageMbAtPeriodEnd: dataStorageMbAtSweep,
+                stockMeasuredAt:
+                  firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+              }),
           // What actually entered `billedCents`: zero while the console page
           // is dark.
           contactsOverageUsd,

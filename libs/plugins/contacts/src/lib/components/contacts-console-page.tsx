@@ -637,10 +637,18 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
             releaseFlagsReady ? (
             <Alert severity="info">
               {contactsBilled
-                ? `${quota.overageContacts.toLocaleString()} contacts over ` +
+                ? // Same sentence as the billing page's caption, and the same
+                  // basis (AGL-2399): the count here is LIVE, the invoice
+                  // charges the last reading before the month closes, so the
+                  // dollar figure is a projection until the month ends. Staff
+                  // and customer must not read different sentences about the
+                  // same org's money — that applies to WHEN it is measured as
+                  // much as to how much.
+                  `${quota.overageContacts.toLocaleString()} contacts over ` +
                   `your plan's included ${quota.included.toLocaleString()} — ` +
                   `metered at $${quota.overageRateUsd}/1,000 per month ` +
-                  `(≈$${quota.overageMonthlyUsd.toFixed(2)} this month). ` +
+                  `(≈$${quota.overageMonthlyUsd.toFixed(2)} if your list ends ` +
+                  'the month at this size). ' +
                   'Upgrade in Billing for a larger included audience.'
                 : // The wording `db5ecdf2b` put on the billing page, which is
                   // itself the wording `1a2aed5cb` published to

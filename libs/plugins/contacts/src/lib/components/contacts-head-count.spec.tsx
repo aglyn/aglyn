@@ -203,7 +203,14 @@ describe('the Contacts head-count is a server aggregate (AGL-1706)', () => {
       /30,000 contacts over your plan's included 10,000/,
     )
     expect(alert.textContent).toContain('metered at $0.75/1,000 per month')
-    expect(alert.textContent).toContain('≈$22.50 this month')
+    // The figure, and the basis it is a figure ON (AGL-2399). This count is
+    // live while the invoice charges the last reading before the month closes,
+    // so the total is a projection — the assertion carries the qualifier so
+    // dropping it back to a flat "this month" reds here rather than shipping a
+    // settled-sounding claim about an unsettled month.
+    expect(alert.textContent).toContain(
+      '≈$22.50 if your list ends the month at this size',
+    )
   })
 
   it('reads the count ONCE, from the contacts collection', async () => {

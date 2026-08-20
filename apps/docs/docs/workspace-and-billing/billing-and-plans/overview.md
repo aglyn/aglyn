@@ -195,6 +195,11 @@ one people list — is priced as an **audience band**, not a hard cap:
 - On **Free**, the band is a hard limit: new visitors past 100 keep their member
   accounts and orders, but no CRM record is kept. The count of missed sign-ups is
   recorded and will be shown on the contacts page once it opens.
+- **The billed count is your list size at the end of the month**, not its size on any
+  other day. Your list is a running total rather than a monthly tally, so a month has
+  to be charged on one moment in it, and that moment is the last daily reading taken
+  before the month closes. Contacts added after a month ends belong to the new month;
+  contacts deleted after it ends do not undo the month that already ran.
 
 ## Organization data
 
@@ -205,6 +210,10 @@ one people list — is priced as an **audience band**, not a hard cap:
 - Extra datasets are a monthly **[add-on](add-ons.md)** ($2/mo on Starter and Pro, $1/mo
   on Business); storage beyond the included size is **metered overage** at $0.25 per
   GB-month on your monthly invoice.
+- **The billed size is what you were storing at the end of the month**, on the same
+  basis as the audience band above: the last daily reading taken before the month
+  closes. Clearing datasets after a month has ended lowers the next invoice, not the
+  one for the month that just finished.
 
 ## API access
 

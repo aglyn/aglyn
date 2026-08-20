@@ -177,7 +177,14 @@ describe('the Contacts overage alert follows what is billed (AGL-1662)', () => {
     mount({ released: true, ready: true })
 
     const text = alertText()
-    expect(text).toContain(`metered at $1/1,000 per month (≈$${ESTIMATE} this month)`)
+    // The basis rides along with the figure (AGL-2399). The count above is a
+    // LIVE head count and the invoice charges the last reading before the month
+    // closes, so the dollar total is a projection — "this month" alone asserted
+    // a settled charge on the 3rd, which is the claim this suite exists to keep
+    // honest in the other direction.
+    expect(text).toContain(
+      `metered at $1/1,000 per month (≈$${ESTIMATE} if your list ends the month at this size)`,
+    )
     expect(text).toContain('Upgrade in Billing for a larger included audience')
     expect(text).not.toContain('not billed')
   })
