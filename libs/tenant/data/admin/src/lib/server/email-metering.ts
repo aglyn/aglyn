@@ -264,6 +264,196 @@ export async function campaignEmailSendsForMonth(
 }
 
 /**
+ * The org-level campaign meter, and the ONLY figure `emailSendsPerMonth` is
+ * enforced against since AGL-2267.
+ *
+ * ## Why a second counter and not the per-host one
+ *
+ * `hosts/{hostId}/counters/campaignEmailSends` is per SITE. `emailSendsPerMonth`
+ * is an ORG entitlement. An org with N sites therefore received N × the cap it
+ * bought — invisible on Free and Starter (`hostLimit: 1`) and growing with the
+ * plan, so the customers who paid most got the most cap they had not paid for.
+ *
+ * The per-host counter is UNCHANGED and still written, by `meterHostEmail`, on
+ * the delivered count. It is per-site history and it feeds the cost meter;
+ * nothing about it was wrong except being asked a question about an org.
+ *
+ * ## Why folding the existing per-site counters in was rejected
+ *
+ * Summing N site counters into one org total retroactively puts multi-site
+ * paying customers over a limit they have been under all along — a limit that
+ * then refuses a campaign they had every reason to expect to send, days after
+ * they bought the plan. This counter therefore STARTS EMPTY, and the campaign
+ * cap effectively restarts once for the month this ships.
+ *
+ * That is the same transition `campaignEmailSends` itself was given, and the
+ * same reasoning: it loosens for at most one month, which is the correct
+ * direction to be wrong in, and it needs no production measurement of who is
+ * currently over — a measurement that could only be taken against live
+ * customer data and would have blocked the fix indefinitely.
+ */
+export const ORG_CAMPAIGN_EMAIL_SENDS_COUNTER = CAMPAIGN_EMAIL_SENDS_COUNTER
+
+/** A granted claim on the org's monthly campaign allowance. */
+export interface CampaignSendReservation {
+  orgId: string
+  month: string
+  /** Messages claimed up front. */
+  reserved: number
+}
+
+export type ReserveCampaignSendsResult =
+  | { ok: true; reservation: CampaignSendReservation; used: number; limit: number }
+  | { ok: false; used: number; limit: number }
+
+/** Reads an org-scoped monthly counter field, clamped like every other. */
+function readMonthField(snapshot: any, month: string): number {
+  const used = Number((snapshot?.exists ? snapshot.get(month) : 0) ?? 0)
+  return Number.isFinite(used) && used > 0 ? Math.floor(used) : 0
+}
+
+/**
+ * The enforceable figure for an ORG this month: campaign sends alone.
+ *
+ * Read-only. Used by the campaign composer's recipient preview, which must
+ * not reserve anything (AGL-2178 — "nothing has been written above this
+ * line"), and by anything that reports headroom.
+ */
+export async function orgCampaignEmailSendsForMonth(
+  orgId: string,
+  month: string,
+  firestore?: any,
+): Promise<number> {
+  if (!orgId) return 0
+  const db = firestore ?? firebaseAdmin.app().firestore()
+  const snapshot = await db
+    .collection('orgs')
+    .doc(orgId)
+    .collection('counters')
+    .doc(ORG_CAMPAIGN_EMAIL_SENDS_COUNTER)
+    .get()
+  return readMonthField(snapshot, month)
+}
+
+/**
+ * Claims `count` campaign sends against the org's monthly allowance, ATOMICALLY.
+ *
+ * ## Why a reservation and not a check
+ *
+ * The cap used to be read before the send and incremented after delivery, so
+ * two concurrent campaigns both passed the same reading and both sent — the
+ * cap was advisory in exactly the conditions it existed for. **A read-then-write
+ * cap is not a cap.**
+ *
+ * The transaction reads the counter and writes an ABSOLUTE value derived from
+ * that read, deliberately not `FieldValue.increment`. Firestore aborts and
+ * re-runs the callback when a document the transaction read has moved, so a
+ * second sender that starts inside the first one's window re-reads the raised
+ * figure and is refused. An increment would be atomic on the number and
+ * useless for the decision, because the decision is made from a value the
+ * write never proves it still held.
+ *
+ * A refused reservation writes NOTHING.
+ *
+ * ## Why reserve-then-reconcile rather than reserve-and-keep
+ *
+ * A campaign reserves against a PARTIAL delivery: `sendEmail` reports per
+ * message, and only some of a 500-address batch may go out. Keeping the whole
+ * reservation would charge a customer's allowance for mail that never left.
+ * So the claim is taken in full up front — that is what makes it a cap — and
+ * {@link reconcileCampaignSendReservation} gives back the difference once the
+ * delivered count is known.
+ *
+ * **The failure mode is stated rather than hidden**: if the process dies
+ * between reserving and reconciling, the org is charged for the undelivered
+ * remainder for the rest of that calendar month. That is conservative in the
+ * direction this issue cares about — it can only ever refuse more mail, never
+ * let more out — and it self-heals at the month boundary, because each month
+ * is an independent field on the document.
+ *
+ * `limit` may be `Infinity` (`UNLIMITED`), which admits everything.
+ */
+export async function reserveCampaignEmailSends(options: {
+  orgId: string
+  month: string
+  count: number
+  limit: number
+  firestore?: any
+}): Promise<ReserveCampaignSendsResult> {
+  const count = Math.max(0, Math.floor(Number(options.count) || 0))
+  const limit = Number(options.limit)
+  // A plan-less or unresolvable org must not be a bypass. The caller resolves
+  // free-tier entitlements for it (AGL-247) and the cap is 0, so an empty
+  // orgId that reached here means the counter has nowhere to live — refuse
+  // rather than send unbounded.
+  if (!options.orgId) {
+    return { ok: false, used: 0, limit: Number.isFinite(limit) ? limit : 0 }
+  }
+  const db = options.firestore ?? firebaseAdmin.app().firestore()
+  const ref = db
+    .collection('orgs')
+    .doc(options.orgId)
+    .collection('counters')
+    .doc(ORG_CAMPAIGN_EMAIL_SENDS_COUNTER)
+
+  return db.runTransaction(async (tx: any) => {
+    const snapshot = await tx.get(ref)
+    const used = readMonthField(snapshot, options.month)
+    if (used + count > limit) return { ok: false, used, limit }
+    tx.set(ref, { [options.month]: used + count }, { merge: true })
+    return {
+      ok: true,
+      reservation: { orgId: options.orgId, month: options.month, reserved: count },
+      used,
+      limit,
+    }
+  })
+}
+
+/**
+ * Returns the undelivered part of a reservation.
+ *
+ * Also a transaction, and also an absolute write from its own read: a refund
+ * computed from a stale figure would undo a reservation another campaign took
+ * in the meantime, which is the same defect one direction over.
+ *
+ * **Never throws** and never drives the counter below zero. This runs after
+ * mail has already gone out; a bookkeeping failure must not turn a delivered
+ * campaign into a 500, exactly like `recordEmailSends` above. The cost of
+ * swallowing it is that the org keeps a claim it did not use for the rest of
+ * the month, which is the safe direction.
+ */
+export async function reconcileCampaignSendReservation(
+  reservation: CampaignSendReservation | null | undefined,
+  delivered: number,
+  firestore?: any,
+): Promise<void> {
+  if (!reservation?.orgId) return
+  const sent = Math.max(0, Math.floor(Number(delivered) || 0))
+  const refund = Math.max(0, reservation.reserved - sent)
+  if (refund <= 0) return
+  try {
+    const db = firestore ?? firebaseAdmin.app().firestore()
+    const ref = db
+      .collection('orgs')
+      .doc(reservation.orgId)
+      .collection('counters')
+      .doc(ORG_CAMPAIGN_EMAIL_SENDS_COUNTER)
+    await db.runTransaction(async (tx: any) => {
+      const snapshot = await tx.get(ref)
+      const used = readMonthField(snapshot, reservation.month)
+      tx.set(
+        ref,
+        { [reservation.month]: Math.max(0, used - refund) },
+        { merge: true },
+      )
+    })
+  } catch (error) {
+    console.error('campaign reservation reconcile failed', error)
+  }
+}
+
+/**
  * Volume above the plan's included band, in emails.
  *
  * Transactional mail is never refused, so an org CAN and will finish a month
