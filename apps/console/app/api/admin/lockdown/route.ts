@@ -133,6 +133,35 @@ function auditLockShape(lock: {
   }
 }
 
+/**
+ * The AGL-1526 raw-URL revocation, flattened onto the audit row.
+ *
+ * Absent entirely when rotation was not attempted (any non-`security` lock,
+ * any read-only lock, any unlock), so the row never implies a revocation
+ * that policy declined to perform. When it DID run, `truncated` rides along
+ * — a capped scan leaves live raw URLs behind, and an incident reviewer
+ * reading "rotated: 5000" must be able to see that it was not all of them.
+ */
+function auditRotationShape(
+  results: Array<{
+    scanned: number
+    rotated: number
+    failed: number
+    truncated: boolean
+    ok: boolean
+  }> = [],
+): Record<string, unknown> {
+  if (!results.length) return {}
+  const sum = (pick: (r: (typeof results)[number]) => number) =>
+    results.reduce((total, entry) => total + (pick(entry) || 0), 0)
+  return {
+    downloadTokensRotated: sum((r) => r.rotated),
+    downloadTokensScanned: sum((r) => r.scanned),
+    downloadTokenFailures: sum((r) => r.failed),
+    downloadTokenRotationTruncated: results.some((r) => r.truncated || !r.ok),
+  }
+}
+
 async function audit(options: {
   actorUid: string
   actorEmail?: string | null
@@ -849,6 +878,12 @@ async function handler(request: Request): Promise<Response> {
           locked: action === 'lock',
           ...(action === 'lock' ? auditLockShape(lock) : {}),
           tokensRevoked: result.tokensRevoked,
+          // AGL-1526 completion, on the row: how many raw
+          // `firebasestorage.googleapis.com?...&token=` URLs this lock
+          // actually killed. Recorded even when it is zero, because
+          // "rotation ran and found nothing" and "rotation never ran" are
+          // different facts to an incident reviewer.
+          ...auditRotationShape(result.downloadTokensRotated),
         },
       })
       return actionResponse({ firestore, scope, targetId, action, extra: result })
@@ -884,6 +919,7 @@ async function handler(request: Request): Promise<Response> {
       after: {
         locked: action === 'lock',
         ...(action === 'lock' ? auditLockShape(lock) : {}),
+        ...auditRotationShape(result.downloadTokensRotated),
       },
     })
     return actionResponse({ firestore, scope, targetId, action, extra: result })

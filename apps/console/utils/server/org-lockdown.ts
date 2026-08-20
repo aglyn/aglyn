@@ -20,8 +20,8 @@
  * panic button (/api/admin/lockdown) and the env-gated billing auto-lock
  * sweep — one implementation, so the two callers cannot drift.
  *
- * An org lockdown is FOUR effects, not a flag write, and this module is the
- * only writer so all four always happen together:
+ * An org lockdown is FIVE effects, not a flag write, and this module is the
+ * only writer so all five always happen together:
  *
  *  1. the org doc's `suspendedAt` family — what every shipped AGL-202
  *     reader (tenant loader, console APIs, rules) already enforces on;
@@ -33,7 +33,13 @@
  *     "logged out" must mean logged out, pool-aware for SSO orgs;
  *  4. tenant ISR revalidation for every host — a taken-down site must stop
  *     serving cached pages now, not when `revalidate = 60` gets around
- *     to it.
+ *     to it;
+ *  5. raw Firebase Storage download-token rotation on a `security` lock
+ *     (AGL-1526) — effects 1-4 all run on origins we control, and the
+ *     `firebasestorage.googleapis.com/...?alt=media&token=` URL is not one
+ *     of them. See `media-download-tokens.ts` for why this is `security`-
+ *     only, why it is awaited rather than fired async, and what it cannot
+ *     do (AGL-1615: it kills the URL, never the bytes already fetched).
  */
 
 import { screenRoutePathToUrl } from '@aglyn/aglyn/server'
@@ -41,6 +47,9 @@ import {
   authForPool,
   findUserByUidAcrossPools,
   listOrgMembers,
+  lockRotatesDownloadTokens,
+  rotateScopeDownloadTokens,
+  type DownloadTokenRotationResult,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue, type Firestore } from 'firebase-admin/firestore'
 
@@ -125,6 +134,13 @@ export interface OrgLockdownResult {
   tokensRevoked: number
   revokeTruncated: boolean
   revalidated: Array<{ hostId: string; ok: boolean; reason: string }>
+  /**
+   * Raw download-URL revocation, one entry per Storage prefix. EMPTY for
+   * every lock that does not qualify (see `lockRotatesDownloadTokens`) and
+   * for every unlock — an empty array means "not attempted", which is not
+   * the same as an entry reporting zero rotations.
+   */
+  downloadTokensRotated: DownloadTokenRotationResult[]
 }
 
 /**
@@ -233,11 +249,36 @@ export async function applyOrgLockdown(options: {
     revalidated.push(await revalidateHostAfterLockdown(firestore, hostId))
   }
 
+  // 5. Kill the raw `firebasestorage.googleapis.com?...&token=` URLs
+  // (AGL-1526). Effects 1-4 are all enforced by code of ours; that URL is
+  // served by Google's edge, so the ONLY way a lock reaches it is to
+  // rewrite the token in the object's metadata.
+  //
+  // BOTH prefix families, deliberately: an org's media lives under
+  // `orgs/{orgId}/` but each SITE's library is its own Storage tree under
+  // `hosts/{hostId}/` (`MediaScope.base`), and those are most of the assets
+  // a taken-down org is actually serving. Cleaning only the org tree would
+  // be the recognisable half-wired control.
+  //
+  // Last, after the lock is already durable: rotation is the slowest effect
+  // and the one most likely to be truncated, and no part of enforcement
+  // depends on it having finished.
+  let downloadTokensRotated: DownloadTokenRotationResult[] = []
+  if (action === 'lock' && lockRotatesDownloadTokens(options.lock ?? {})) {
+    downloadTokensRotated = await rotateScopeDownloadTokens({
+      prefixes: [
+        `orgs/${orgId}/`,
+        ...hostIds.map((hostId) => `hosts/${hostId}/`),
+      ],
+    })
+  }
+
   return {
     orgId,
     action,
     membersUpdated: members.length,
     tokensRevoked,
+    downloadTokensRotated,
     revokeTruncated:
       action === 'lock' &&
       Boolean(options.revokeMemberTokens) &&
@@ -256,7 +297,12 @@ export async function applyHostLockdown(options: {
   hostId: string
   action: 'lock' | 'unlock'
   lock?: LockdownWriteOptions
-}): Promise<{ hostId: string; action: string; revalidated: { ok: boolean; reason: string } }> {
+}): Promise<{
+  hostId: string
+  action: string
+  revalidated: { ok: boolean; reason: string }
+  downloadTokensRotated: DownloadTokenRotationResult[]
+}> {
   const { firestore, hostId, action } = options
   const hostRef = firestore.collection('hosts').doc(hostId)
   if (action === 'lock') {
@@ -291,5 +337,12 @@ export async function applyHostLockdown(options: {
     )
   }
   const revalidated = await revalidateHostAfterLockdown(firestore, hostId)
-  return { hostId, action, revalidated }
+  // The same AGL-1526 revocation at host scope: one site's Storage tree.
+  // A host takedown is the scope a DMCA/abuse report usually lands on, so
+  // it needs the raw-URL kill at least as much as the org scope does.
+  const downloadTokensRotated =
+    action === 'lock' && lockRotatesDownloadTokens(options.lock ?? {})
+      ? await rotateScopeDownloadTokens({ prefixes: [`hosts/${hostId}/`] })
+      : []
+  return { hostId, action, revalidated, downloadTokensRotated }
 }
