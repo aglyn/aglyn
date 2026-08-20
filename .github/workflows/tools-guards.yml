@@ -490,6 +490,21 @@ jobs:
       # reports "no drift", which is indistinguishable from convergence.
       - run: npm run test:legal-drift
 
+      # AGL-1986. The comparator behind `check:legal-index-dates`, which
+      # re-derives every /legal index card's date from the document that card
+      # links to. The nine cards are hand-typed besigner nodes restating a
+      # date the document below them also states, and ToS §5.3 / Privacy §12
+      # make that date the mechanism by which amended terms take effect — so a
+      # forgotten card is a second, contradictory claim about when the current
+      # terms began to bind, on the page a user lands on first.
+      #
+      # Only the SELF-TEST runs here; the check needs the live pages and runs
+      # in legal-drift.yml. It pins the four traps, and the reason it has to:
+      # a comparator that stops comparing reports "no drift", and two
+      # SPELLINGS of one day ("August 5, 2026" vs "5 August 2026") must not
+      # read as drift while two different days must.
+      - run: npm run test:legal-index-dates
+
       # AGL-2036. The reconciler behind `check:shipped-not-closed`, which lists
       # open Linear issues whose implementing commits are already live.
       #

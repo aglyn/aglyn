@@ -110,6 +110,21 @@ jobs:
       # it is here so a broken comparator fails the job before its verdict is
       # printed.
       - run: npm run test:legal-drift
+      - run: npm run test:legal-index-dates
+
+      # AGL-1986. The index-vs-document date check, BEFORE the credential gate
+      # below on purpose: it reads two public pages and needs no Drive service
+      # account, so it must still run on a day when the Drive credential is
+      # missing and the step below exits 2. Gating it behind a secret it does
+      # not use would recreate the AGL-2379 failure — a guard that never runs.
+      #
+      # This is the derivation AGL-1986 asked for, in the only place the repo
+      # can own it: the cards stay typed (legal copy is publication-first and
+      # is authored in besigner, never hand-written here), but what they should
+      # say is recomputed from the documents on every run, so a card that
+      # drifts fails a check instead of waiting to be noticed.
+      - name: Re-derive the /legal index card dates from the documents
+        run: npm run check:legal-index-dates -- --summary
 
       # Refuse to no-op. A missing credential must FAIL the job, never skip
       # the step — a skipped check that renders green is the failure mode this
