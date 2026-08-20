@@ -32,9 +32,28 @@ export interface ComponentPromotionContextValue {
    * "Edit component" on a selected instance (AGL-1303 phase 1): the
    * console opens the component's own besigner in a new tab. Kills the
    * dead end where the panel offered only Save-as/Detach and an author
-   * could not find where the component's truth lives. Phase 2's live
-   * propagation rides AGL-1301's co-editing on component documents — no
-   * extra plumbing here.
+   * could not find where the component's truth lives.
+   *
+   * This comment used to say phase 2's live propagation "rides AGL-1301's
+   * co-editing on component documents — no extra plumbing here". That is
+   * wrong in two ways, and it was load-bearing enough to mislead whoever
+   * picked phase 2 up (AGL-1898). AGL-1301's co-editing DID land for
+   * component documents, but its RTDB room is keyed
+   * `coedit/{org}/{host}/{docType}/{docId}/…`: a screen besigner subscribes
+   * to its own screen's room and never to a component's. Even if it did,
+   * the payload is component-internal node ids, not the
+   * `cmp__{instance}__{def}` ids a screen renders.
+   *
+   * The propagation that actually works is unrelated to co-editing:
+   * {@link definitions} arrives from a live `onSnapshot` over the host's
+   * `components` collection, so an open canvas re-renders its instances
+   * when a component's PARENT doc changes. In the component editor, Save
+   * writes only the version doc; Publish writes the parent. So today the
+   * loop is edit → Save → **Publish** → other tabs update, and a Save alone
+   * does nothing anywhere else. Whether Save should propagate is a product
+   * question (it would show screen authors component content the live site
+   * does not have) and is open on AGL-1898 — not something to infer from
+   * this comment.
    */
   onEditComponent?: (node: Aglyn.NodeSchema<any>) => void
   /**

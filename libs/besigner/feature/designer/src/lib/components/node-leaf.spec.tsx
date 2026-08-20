@@ -529,6 +529,68 @@ describe('component instance preview (AGL-1251)', () => {
     expect(shadowText(baseElement)).toContain('This placement only')
     expect(shadowText(baseElement)).not.toContain('Component copy')
   })
+
+  /**
+   * Live propagation into an already-open canvas (AGL-1898 phase 2).
+   *
+   * This is the mechanism, and it is easy to delete by accident. The
+   * console feeds `definitions` from a live `onSnapshot` over the host's
+   * `components` collection, so publishing a component in one tab hands
+   * every open canvas a NEW definitions object; the preview memo keys on
+   * it and re-grafts. Nothing announces this — swapping that listener for
+   * a one-shot read would not fail any test, it would just leave canvases
+   * drawing a stale component until reloaded.
+   *
+   * Asserted at the seam the designer actually owns: given new
+   * definitions, the preview re-renders. Which write produces them is the
+   * console's business (and today it is Publish, not Save).
+   */
+  it('re-renders an instance when the definition changes underneath it', () => {
+    // ONE node object, reused across the rerender on purpose. Building a
+    // second one would change the memo's `node` dependency and recompute
+    // the graft for that reason instead, so the test would pass with the
+    // `definitions` dependency removed — proving nothing about the thing
+    // it is named for.
+    const stable = instanceNode({ headline: 'Ship faster' })
+    const { baseElement, rerender } = renderInstance(stable)
+    expect(shadowText(baseElement)).toContain('Ship faster')
+    expect(shadowText(baseElement)).not.toContain('Now with a kicker')
+
+    // The same component, republished with an extra node — a NEW object,
+    // exactly as a fresh snapshot delivers it.
+    const republished = {
+      rootId: 'root',
+      nodes: {
+        root: { $id: 'root', componentId: 'div', nodes: ['h', 'kicker'] },
+        h: {
+          $id: 'h',
+          componentId: 'div',
+          parentId: 'root',
+          props: { children: '{{prop.headline}}' },
+        },
+        kicker: {
+          $id: 'kicker',
+          componentId: 'div',
+          parentId: 'root',
+          props: { children: 'Now with a kicker' },
+        },
+      },
+      props: [{ name: 'headline', type: 'text', defaultValue: 'Default copy' }],
+    } as any
+
+    rerender(
+      <ComponentPromotionContext.Provider
+        value={{ definitions: { hero: republished } }}
+      >
+        <ElementLeafComponent node={stable} />
+      </ComponentPromotionContext.Provider>,
+    )
+
+    // The component's new content appears without the instance changing,
+    // and this placement's own prop value survives the update.
+    expect(shadowText(baseElement)).toContain('Now with a kicker')
+    expect(shadowText(baseElement)).toContain('Ship faster')
+  })
 })
 
 describe('denormalizeTree', () => {

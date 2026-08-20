@@ -36,8 +36,21 @@ export interface UseHostComponentDefinitionsResult {
 
 /**
  * Client-side twin of `libs/tenant/runtime/src/lib/get-components.ts`: the
- * host's reusable-component definitions, read once and shared by everything
- * in the editor that needs them (AGL-1217).
+ * host's reusable-component definitions, read through ONE query and shared
+ * by everything in the editor that needs them (AGL-1217).
+ *
+ * "One query", not "read once": `useFirestoreCollection` is a live
+ * `onSnapshot` listener, and that is load-bearing rather than incidental.
+ * It is the entire transport for propagating a component edit into already
+ * open besigners (AGL-1898) — publish a component in one tab and every
+ * canvas rendering an instance of it re-renders, because this map is a new
+ * object and the consumers memo on it. Swapping this for a one-shot read to
+ * "save reads" would silently take that away, and nothing would fail: the
+ * canvas would simply keep drawing a stale component until reloaded.
+ *
+ * Note the boundary. This watches the component's PARENT doc, which only
+ * Publish writes; the component editor's Save writes the version doc and is
+ * invisible here.
  *
  * One hook rather than a read per consumer so the console asks the same
  * question the same way — identical `Query`, so the SDK serves every caller
