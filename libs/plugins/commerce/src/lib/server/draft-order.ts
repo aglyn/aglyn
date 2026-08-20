@@ -189,19 +189,10 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
         unitAmountCents,
       },
     ]
-    // `?? 'physical'` (AGL-2251), matching `checkout.ts` and the cart. Without
-    // it a product doc carrying no `type` fell to `resolveTransactionFeePct`'s
-    // digital branch, so a merchant's payment link took a different cut of the
-    // same product than their storefront did.
-    const feePct = Aglyn.resolveTransactionFeePct(
-      ownerOrg?.org as any,
-      product.type ?? 'physical',
-    )
     const itemsCents = unitAmountCents * quantity
-    const feeCents =
-      feePct > 0 ? Math.max(1, Math.round((itemsCents * feePct) / 100)) : 0
-    // `totals` is built once the tax is known, a few lines down — the store
-    // settings this handler already reads for shipping carry it (AGL-1953).
+    // The fee and `totals` are both built BELOW the shipping plan (AGL-2152):
+    // Stripe's card cost rides the whole payment-link total, so neither can be
+    // known until the tax (AGL-1953) and the shipping options are.
 
     // Shipping (AGL-1792), from the same settings document the two storefront
     // paths read. This handler contained no `shipping` string at all: a
@@ -288,10 +279,6 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
     // Stripe Tax mode leaves this 0 at composition time and the webhook folds
     // the computed figure in — the same additive shape AGL-1792 used for
     // shipping, and for the same reason: only Stripe knows it.
-    const totals = CommerceModel.computeOrderTotals(lineItems, {
-      feeCents,
-      taxCents,
-    })
     const shippingPlan =
       (product.type ?? 'physical') === 'physical'
         ? CommerceModel.planCheckoutShipping(
@@ -332,6 +319,41 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
         .status(409)
         .json({ error: CommerceModel.CART_UNPRICEABLE_SHIPPING_MESSAGE })
     }
+
+    // THE PLATFORM FEE (AGL-2152) — the advertised take PLUS Stripe's card
+    // cost, passed through at cost. A payment link is a destination charge, so
+    // Stripe debits 2.9% + 30¢ from the PLATFORM's balance; the old take-only
+    // figure meant every tier carrying a 0% rate invoiced a buyer at a loss to
+    // Aglyn, and Starter's 2% is below 2.9% so it lost money at every size too.
+    //
+    // `?? 'physical'` (AGL-2251), matching `checkout.ts` and the cart. Without
+    // it a product doc carrying no `type` fell to `resolveTransactionFeePct`'s
+    // digital branch, so a merchant's payment link took a different cut of the
+    // same product than their storefront did.
+    //
+    // The base is the whole card total: the goods, the manual tax line, and the DEAREST shipping
+    // option the link offers (the buyer picks after the link is minted and
+    // `application_fee_amount` is fixed at creation, so reaching for the
+    // cheapest would put the difference back on Aglyn). A store on Stripe Tax
+    // is the one residual — that tax is computed inside Stripe afterwards.
+    const shippingCeilingCents = shippingPlan.options.reduce(
+      (most, option) =>
+        Math.max(most, Math.max(0, Number(option.amountCents ?? 0))),
+      0,
+    )
+    const feeCents = Aglyn.resolveTransactionFeeCents(
+      ownerOrg?.org as any,
+      product.type ?? 'physical',
+      itemsCents,
+      itemsCents + taxCents + shippingCeilingCents,
+    )
+    // Stripe Tax mode leaves the tax 0 at composition time and the webhook
+    // folds the computed figure in — the same additive shape AGL-1792 used for
+    // shipping, and for the same reason: only Stripe knows it.
+    const totals = CommerceModel.computeOrderTotals(lineItems, {
+      feeCents,
+      taxCents,
+    })
 
     // Point of no return (AGL-1697): everything past here writes an order and
     // mints a live payment link. Every deterministic refusal — unknown

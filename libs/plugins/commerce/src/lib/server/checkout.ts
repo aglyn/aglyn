@@ -319,8 +319,10 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       ownerOrg.org as any,
       lifted.type ?? 'physical',
     )
-    const feeCents =
-      feePct > 0 ? Math.max(1, Math.round((amountCents * feePct) / 100)) : 0
+    // `feeCents` is NOT computed here any more (AGL-2152): Stripe's processing
+    // cost is charged on the whole card total, so the fee cannot be known until
+    // the manual tax and the shipping options are resolved below. See the
+    // `resolveTransactionFeeCents` call after the shipping plan.
     const referer = String(req.headers.referer ?? '')
     const origin = `https://${req.headers.host}`
     const backUrl = referer.startsWith('http') ? referer : origin
@@ -584,6 +586,44 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         .json({ error: CommerceModel.CART_UNPRICEABLE_SHIPPING_MESSAGE })
     }
 
+    // THE PLATFORM FEE (AGL-2152). Formerly `feePct` of the goods and nothing
+    // else, which on a DESTINATION charge meant Aglyn paid Stripe 2.9% + 30¢
+    // out of its own balance and — on every tier carrying
+    // `transactionFeePhysicalPct: 0` — collected nothing back. The advertised
+    // platform take is unchanged; the card cost is now passed through at cost
+    // so the net per order is the take rather than the take minus Stripe's fee.
+    //
+    // The charge base is everything Stripe will run the card for: the goods
+    // after the coupon, the manual tax line, and the DEAREST shipping option on
+    // the session. The dearest, not the cheapest, because the shopper picks
+    // after the session is created and `application_fee_amount` is a fixed
+    // number Stripe will not let us revise — under-reaching would put the
+    // difference back on Aglyn. A store on Stripe Tax is the one residual: its
+    // tax is computed by Stripe after this point and cannot be seen from here.
+    const shippingCeilingCents = shippingPlan.options.reduce(
+      (most, option) => Math.max(most, Math.max(0, Number(option.amountCents ?? 0))),
+      0,
+    )
+    // A SUBSCRIPTION keeps the old items-only figure. Stripe offers a
+    // Subscription no `application_fee_amount`, only
+    // `application_fee_percent`, which cannot carry a fixed 30¢ — so the
+    // recurring path cannot recover the card cost this way and is left exactly
+    // as it was rather than half-changed. It is still an uncovered cost; see
+    // the AGL-2152 note. This branch never reaches
+    // `payment_intent_data[application_fee_amount]` (the emission below is
+    // gated on `!isSubscription`); it feeds `metadata[feeCents]`, the figure
+    // the webhook records as what Aglyn keeps.
+    const feeCents = isSubscription
+      ? feePct > 0
+        ? Math.max(1, Math.round((amountCents * feePct) / 100))
+        : 0
+      : Aglyn.resolveTransactionFeeCents(
+          ownerOrg.org as any,
+          lifted.type ?? 'physical',
+          amountCents,
+          amountCents + taxCents + shippingCeilingCents,
+        )
+
     // The unit price Stripe actually charges — the coupon is priced INTO it
     // rather than sent as a Stripe discount, which is why `amount_discount` is
     // 0 on every buy-now session and the discount has to ride the metadata
@@ -693,7 +733,9 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         ? { 'line_items[0][tax_rates][0]': recurringTaxRateId }
         : {}),
       ...(useStripeTax ? { 'automatic_tax[enabled]': 'true' } : {}),
-      // Stripe rejects a zero application fee — omit it on 0% plans.
+      // Stripe rejects a zero application fee. Since AGL-2152 a one-time
+      // charge always carries at least the card cost, so this guard only
+      // still fires for a charge base that resolved to nothing at all.
       ...(!isSubscription && feeCents > 0
         ? { 'payment_intent_data[application_fee_amount]': String(feeCents) }
         : {}),

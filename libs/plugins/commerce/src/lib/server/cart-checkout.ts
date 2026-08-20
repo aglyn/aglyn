@@ -629,6 +629,46 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     // basket a gift card covered entirely still takes nothing: the fee is a cut
     // of the goods, and there are no goods left to cut.
     if (feeApplies && chargedItemsCents > 0 && feeCents < 1) feeCents = 1
+    // STRIPE'S CARD COST, PASSED THROUGH AT COST (AGL-2152). The loop above
+    // accumulates the platform's advertised TAKE per line and nothing else; on
+    // a destination charge Stripe debits 2.9% + 30¢ of the whole card total
+    // from the PLATFORM's balance, so a cart on any tier carrying a 0% rate
+    // cost Aglyn money on every single order — and Starter's 2% is below 2.9%,
+    // so it lost money too. Added ONCE per charge, not per line: the 30¢ is a
+    // per-charge cost.
+    //
+    // The base is everything the card will be run for that can be seen from
+    // here: the goods the shopper actually pays for, the DEAREST shipping
+    // option on the session (the shopper picks after this and
+    // `application_fee_amount` is fixed at creation), and the manual origin tax
+    // rate the lines carry. A store on Stripe Tax is the one residual — its tax
+    // is computed inside Stripe after the session is made.
+    if (chargedItemsCents > 0) {
+      const shippingCeilingCents = shippingPlan.options.reduce(
+        (most, option) =>
+          Math.max(most, Math.max(0, Number(option.amountCents ?? 0))),
+        0,
+      )
+      const cartTaxSettings = (storeSettings.get('tax') ??
+        {}) as CommerceModel.TaxSettings
+      const manualRate =
+        cartTaxSettings.mode === 'manual' && !cartTaxSettings.pricesIncludeTax
+          ? CommerceModel.resolveTaxRate(
+              cartTaxSettings,
+              cartTaxSettings.origin ?? {},
+            )
+          : null
+      const manualTaxPct =
+        manualRate && manualRate.pct > 0 ? manualRate.pct : 0
+      const chargeCents =
+        chargedItemsCents +
+        Math.round((chargedItemsCents * manualTaxPct) / 100) +
+        shippingCeilingCents
+      feeCents = Math.min(
+        chargeCents,
+        feeCents + Aglyn.storefrontProcessingCostCents(chargeCents),
+      )
+    }
     if (feeCents > 0) {
       params.set(
         'payment_intent_data[application_fee_amount]',

@@ -58,6 +58,15 @@ jest.mock('@aglyn/aglyn/server', () => ({
   resolveTransactionFeePct: jest.requireActual(
     '../../../../aglyn/src/lib/app-utils/plan-entitlements',
   ).resolveTransactionFeePct,
+  // The cents form the handler actually calls (AGL-2152) — the ladder's take
+  // PLUS Stripe's processing cost, which on a destination charge is debited
+  // from the PLATFORM's balance. Real for the same reason the rate above is.
+  resolveTransactionFeeCents: jest.requireActual(
+    '../../../../aglyn/src/lib/app-utils/plan-entitlements',
+  ).resolveTransactionFeeCents,
+  storefrontProcessingCostCents: jest.requireActual(
+    '../../../../aglyn/src/lib/app-utils/plan-entitlements',
+  ).storefrontProcessingCostCents,
 }))
 
 jest.mock('@aglyn/tenant-runtime', () => ({

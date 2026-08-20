@@ -189,13 +189,19 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
       return res.status(400).json({ error: quote.problem })
     }
 
-    const feePct = Aglyn.resolveTransactionFeePct(
+    const chargeCents = quote.depositCents || quote.totalCents
+    // Platform take PLUS Stripe's card cost at cost (AGL-2152). This is a
+    // destination charge, so Stripe debits 2.9% + 30¢ from the PLATFORM's
+    // balance; with the old take-only figure every tier carrying a 0% service
+    // rate paid Aglyn nothing and cost it that fee on each reservation. The
+    // charge base and the fee base are the same number here — a reservation
+    // charges exactly `chargeCents`, with no separate tax or shipping line.
+    const feeCents = Aglyn.resolveTransactionFeeCents(
       ownerOrg?.org as any,
       'service',
+      chargeCents,
+      chargeCents,
     )
-    const chargeCents = quote.depositCents || quote.totalCents
-    const feeCents =
-      feePct > 0 ? Math.max(1, Math.round((chargeCents * feePct) / 100)) : 0
 
     // THE HOLD IS TAKEN IN A TRANSACTION (AGL-2450).
     //

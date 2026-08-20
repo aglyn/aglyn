@@ -238,6 +238,29 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
                 </Typography>
               ) : null}
             </Typography>
+            {/* CARD PROCESSING, PASSED THROUGH AT COST (AGL-2152).
+
+                Unconditional, including on the 0% plans, because it is
+                exactly those plans where the merchant would otherwise read
+                "0%" and be surprised by a deduction. Their PLATFORM fee
+                really is zero — the figure below is Stripe's own charge for
+                taking the payment, which every storefront sale incurs and
+                which used to be absorbed silently out of the platform's
+                balance rather than passed through.
+
+                Named as a range rather than one number because the buyer
+                chooses the payment method after the session is created:
+                cards settle at the low end, buy-now-pay-later at the high
+                end, and the deduction is sized for the dearest so a sale can
+                never cost more to process than it collects. */}
+            <Typography variant="body2" color="text.secondary">
+              {'Card processing is passed through at cost on top of that: ' +
+                `${Aglyn.MARKETPLACE_PROCESSING_PERCENT_CARD}–` +
+                `${Aglyn.MARKETPLACE_PROCESSING_PERCENT_BNPL}% + ` +
+                `${Aglyn.MARKETPLACE_PROCESSING_FIXED_CENTS}¢ per online ` +
+                'sale, what Stripe charges to take the payment. It is not a ' +
+                `${Aglyn.PLATFORM_BRAND_LEGAL_NAME} margin.`}
+            </Typography>
             {/* EVERY TENDER, AND HOW EACH IS COLLECTED (AGL-2111).
 
                 Until now this card said "per sale" and meant it for online and

@@ -19,6 +19,7 @@ import type {
   PluginApiRequest,
   PluginApiResponse,
 } from '@aglyn/aglyn/server'
+import { storefrontProcessingCostCents } from '@aglyn/aglyn/server'
 import { posOrderHandler } from './pos-order'
 
 /**
@@ -671,15 +672,19 @@ describe('POS card sales carry the platform fee (AGL-2110)', () => {
     docs.set('hosts/host-1/products/product-1', DIGITAL_PRODUCT)
   })
 
-  it('sends 2% of a $4.00 digital sale as the application fee', async () => {
+  it('sends 2% of a $4.00 digital sale PLUS the card cost (AGL-2152)', async () => {
     const result = await post({ payment: 'link' })
     expect(result.status).toBe(200)
+    // 8¢ is the take. The rest is Stripe's own fee on this charge, which on a
+    // DESTINATION charge is debited from the PLATFORM's balance — sending the
+    // take alone left Aglyn 54¢ down on a 400¢ sale (AGL-2152).
+    const expected = 8 + storefrontProcessingCostCents(400)
     expect(
       stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
-    ).toBe('8')
+    ).toBe(String(expected))
     // The witness the completing webhook reads, and the merchant ledger.
-    expect(stripeCalls[0].body.get('metadata[feeCents]')).toBe('8')
-    expect(orderDocs()[0]?.totals?.feeCents).toBe(8)
+    expect(stripeCalls[0].body.get('metadata[feeCents]')).toBe(String(expected))
+    expect(orderDocs()[0]?.totals?.feeCents).toBe(expected)
     // The shopper's charge is untouched — a fee is a split, not a surcharge.
     expect(
       stripeCalls[0].body.get('line_items[0][price_data][unit_amount]'),
@@ -687,12 +692,16 @@ describe('POS card sales carry the platform fee (AGL-2110)', () => {
   })
 
   /** A cashier discount reduces what was paid, so it reduces the cut too. */
-  it('scales the fee by the cashier discount', async () => {
+  it('scales the TAKE by the cashier discount', async () => {
     await post({ payment: 'link', discountPct: 50 })
+    // The take halves with the goods; the card cost is recomputed on the
+    // discounted charge rather than scaled, because Stripe bills it on what
+    // the card actually runs for.
+    const expected = 4 + storefrontProcessingCostCents(200)
     expect(
       stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
-    ).toBe('4')
-    expect(orderDocs()[0]?.totals?.feeCents).toBe(4)
+    ).toBe(String(expected))
+    expect(orderDocs()[0]?.totals?.feeCents).toBe(expected)
   })
 
   /**
@@ -715,20 +724,25 @@ describe('POS card sales carry the platform fee (AGL-2110)', () => {
         { productId: 'product-2', quantity: 1 },
       ],
     })
-    // 2% of 400 = 8, plus 0% of 1000 = 0 → 8. A basket-wide DIGITAL rate
-    // would send 28; a basket-wide PHYSICAL rate would send 0.
+    // The TAKE is 2% of 400 = 8, plus 0% of 1000 = 0 → 8. A basket-wide
+    // DIGITAL rate would take 28; a basket-wide PHYSICAL rate would take 0.
+    // The card cost rides the whole 1400¢ basket once (AGL-2152).
     expect(
       stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
-    ).toBe('8')
+    ).toBe(String(8 + storefrontProcessingCostCents(1400)))
   })
 
   /**
-   * NEGATIVE CONTROL. Stripe rejects `application_fee_amount=0`, and a plan
-   * whose rate is a deliberate 0% must OMIT the parameter rather than send a
-   * zero — otherwise every Business physical sale 400s at Stripe and the
-   * register stops taking cards at all.
+   * A 0% TAKE IS NOT A 0% FEE ANY MORE (AGL-2152). This test used to assert
+   * that a Business physical sale sent NO `application_fee_amount` at all,
+   * which is precisely the defect: the register took a destination charge,
+   * Stripe debited 2.9%–6% + 30¢ from the PLATFORM's balance, and Aglyn
+   * collected nothing back on every in-person physical sale.
+   *
+   * The advertised 0% platform take is intact — the fee below is Stripe's cost
+   * and nothing else, so Aglyn's margin on this sale is still exactly zero.
    */
-  it('omits the parameter entirely when the rate is 0%', async () => {
+  it('sends the card cost alone when the take rate is 0%', async () => {
     docs.set('hosts/host-1/products/product-1', {
       name: 'Flat white',
       type: 'physical',
@@ -737,10 +751,13 @@ describe('POS card sales carry the platform fee (AGL-2110)', () => {
     })
     const result = await post({ payment: 'link' })
     expect(result.status).toBe(200)
+    const expected = storefrontProcessingCostCents(400)
     expect(
-      stripeCalls[0].body.has('payment_intent_data[application_fee_amount]'),
-    ).toBe(false)
-    expect(stripeCalls[0].body.get('metadata[feeCents]')).toBe('0')
+      stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
+    ).toBe(String(expected))
+    expect(stripeCalls[0].body.get('metadata[feeCents]')).toBe(String(expected))
+    // The take really is zero: the whole fee is the cost recovery.
+    expect(expected - storefrontProcessingCostCents(400)).toBe(0)
   })
 
   /**
@@ -2080,13 +2097,17 @@ describe('a POS platform fee that rounds to zero (AGL-2256)', () => {
     })
   })
 
-  it('still takes a cent rather than dropping the fee entirely', async () => {
+  it('still takes a cent of TAKE rather than dropping it entirely', async () => {
     const result = await post({ payment: 'link' })
     expect(result.status).toBe(200)
+    // The 1¢ floor is what this issue is about; the rest is Stripe's cost on
+    // the same charge, added since AGL-2152 and subtracted here so the floor
+    // is still the thing being asserted.
+    const expected = 1 + storefrontProcessingCostCents(30)
     expect(
       stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
-    ).toBe('1')
-    expect(stripeCalls[0].body.get('metadata[feeCents]')).toBe('1')
+    ).toBe(String(expected))
+    expect(stripeCalls[0].body.get('metadata[feeCents]')).toBe(String(expected))
   })
 
   it('survives the SECOND rounding, the cashier discount', async () => {
@@ -2103,22 +2124,25 @@ describe('a POS platform fee that rounds to zero (AGL-2256)', () => {
     expect(result.status).toBe(200)
     expect(
       stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
-    ).toBe('1')
+    ).toBe(String(1 + storefrontProcessingCostCents(15)))
   })
 
   /**
-   * THE OTHER BRANCH. A plan whose rate is a real zero must still send
-   * nothing — Stripe rejects a zero application fee, and inventing a cent on
-   * an advertised 0% tier would be a pricing lie.
+   * THE OTHER BRANCH. A plan whose rate is a real zero must invent no TAKE —
+   * a cent of margin on an advertised 0% tier would be a pricing lie. Since
+   * AGL-2152 the parameter is still emitted, because Stripe's own cost on the
+   * charge is real money leaving the platform's balance whatever the take is;
+   * what must be zero is the margin, and that is what this asserts.
    */
-  it('sends NOTHING on a plan whose rate is a real zero', async () => {
+  it('takes no margin on a plan whose rate is a real zero', async () => {
     mockOrg.org.plan = 'advanced'
     const result = await post({ payment: 'link' })
     expect(result.status).toBe(200)
-    expect(
+    const sent = Number(
       stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
-    ).toBeNull()
-    expect(stripeCalls[0].body.get('metadata[feeCents]')).toBe('0')
+    )
+    expect(sent - storefrontProcessingCostCents(30)).toBe(0)
+    expect(stripeCalls[0].body.get('metadata[feeCents]')).toBe(String(sent))
   })
 
   it('sends NOTHING when the cashier discounts the basket to zero', async () => {

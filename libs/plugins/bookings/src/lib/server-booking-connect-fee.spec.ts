@@ -72,6 +72,15 @@ jest.mock('@aglyn/aglyn/server', () => ({
   resolveTransactionFeePct: jest.requireActual(
     '../../../../aglyn/src/lib/app-utils/plan-entitlements',
   ).resolveTransactionFeePct,
+  // The cents form the handler actually calls (AGL-2152) — the ladder's take
+  // PLUS Stripe's processing cost, which on a destination charge is debited
+  // from the PLATFORM's balance. Real for the same reason the rate above is.
+  resolveTransactionFeeCents: jest.requireActual(
+    '../../../../aglyn/src/lib/app-utils/plan-entitlements',
+  ).resolveTransactionFeeCents,
+  storefrontProcessingCostCents: jest.requireActual(
+    '../../../../aglyn/src/lib/app-utils/plan-entitlements',
+  ).storefrontProcessingCostCents,
 }))
 
 jest.mock('@aglyn/tenant-runtime', () => ({
@@ -215,7 +224,10 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 
 import { bookHandler } from './server'
 import { computeOpenSlots } from './model'
-import { resolveTransactionFeePct } from '@aglyn/aglyn/server'
+import {
+  resolveTransactionFeePct,
+  storefrontProcessingCostCents,
+} from '@aglyn/aglyn/server'
 
 const mockAdmin = jest.requireMock('@aglyn/tenant-data-admin') as {
   __state: {
@@ -442,22 +454,24 @@ describe('the take rate is the storefront ladder’s (AGL-2315)', () => {
         params.get('payment_intent_data[transfer_data][destination]'),
       ).toBe('acct_merchant_1')
 
-      if (expectedFeeCents === null) {
-        // The NOT-CHARGED branch, asserted explicitly. `application_fee_amount`
-        // must be absent, not `'0'`: Stripe rejects a zero fee on some API
-        // versions, and an advertised 0% rate is a deliberate price, not a
-        // rounding artefact.
-        expect(params.has('payment_intent_data[application_fee_amount]')).toBe(
-          false,
-        )
-        expect(params.get('metadata[feeCents]')).toBe('0')
-      } else {
-        expect(params.get('payment_intent_data[application_fee_amount]')).toBe(
-          String(expectedFeeCents),
-        )
-        // Recorded on the session too — the figure a refund reverses.
-        expect(params.get('metadata[feeCents]')).toBe(String(expectedFeeCents))
-      }
+      // THE TAKE, isolated from the card cost. Since AGL-2152 the fee is the
+      // ladder's take PLUS Stripe's processing on the same charge, because a
+      // destination charge debits that processing from the PLATFORM's balance
+      // and a take-only fee made every paid booking on a 0% tier a loss. The
+      // table below is still about the TAKE, so the cost is subtracted back
+      // out rather than folded into the expected figures.
+      const sent = Number(
+        params.get('payment_intent_data[application_fee_amount]'),
+      )
+      const takeSent = sent - storefrontProcessingCostCents(7500)
+      // Always emitted now: even a 0% tier owes Stripe for the charge, so
+      // there is always a real amount to send.
+      expect(params.has('payment_intent_data[application_fee_amount]')).toBe(
+        true,
+      )
+      expect(takeSent).toBe(expectedFeeCents ?? 0)
+      // Recorded on the session too — the figure a refund reverses.
+      expect(params.get('metadata[feeCents]')).toBe(String(sent))
 
       // Tied to the resolver itself, so the table above cannot silently drift
       // away from the ladder the storefront charges.
@@ -481,24 +495,47 @@ describe('the take rate is the storefront ladder’s (AGL-2315)', () => {
       const params = await book()
       const storefrontPct = resolveTransactionFeePct({ plan } as never, 'service')
       expect(params.get('payment_intent_data[application_fee_amount]')).toBe(
-        String(Math.max(1, Math.round((7500 * storefrontPct) / 100))),
+        String(
+          Math.max(1, Math.round((7500 * storefrontPct) / 100)) +
+            storefrontProcessingCostCents(7500),
+        ),
       )
       stripePosts.length = 0
     }
   })
 
   it('floors a sub-cent fee at one cent instead of dropping it', async () => {
-    // 1% of a 10¢ service is 0.1¢. `Math.round` alone yields 0, which the
-    // `feeCents > 0` guard would then read as "this tier takes nothing" — the
-    // fee silently skipped on a tier that advertises one. Two payment paths in
-    // this repo have dropped a fee exactly this way.
-    mockAdmin.__state.service['priceUsd'] = 0.1
+    // 1% of a 60¢ service is 0.6¢. `Math.round` alone on the old per-line
+    // arithmetic yielded 0 at these sizes, which the `feeCents > 0` guard then
+    // read as "this tier takes nothing" — the fee silently skipped on a tier
+    // that advertises one. Two payment paths in this repo have dropped a fee
+    // exactly this way. 60¢ rather than 10¢ because Stripe will not process a
+    // charge under 50¢, and the clamp asserted below owns that case.
+    mockAdmin.__state.service['priceUsd'] = 0.6
     mockAdmin.__state.org = { id: 'org-1', ownerUid: 'owner-1', plan: 'scale' }
     const params = await book()
-    expect(params.get('payment_intent_data[application_fee_amount]')).toBe('1')
+    expect(params.get('payment_intent_data[application_fee_amount]')).toBe(
+      String(1 + storefrontProcessingCostCents(60)),
+    )
     expect(
       params.get('payment_intent_data[transfer_data][destination]'),
     ).toBe('acct_merchant_1')
+  })
+
+  /**
+   * THE CLAMP (AGL-2152). Stripe rejects an application fee larger than the
+   * charge, and on a charge small enough the recovered card cost alone exceeds
+   * it — so the fee is capped at the charge. That can only happen below
+   * Stripe's own 50¢ charge minimum, i.e. on a charge Stripe would refuse
+   * anyway; asserted so the cap is a known boundary rather than a 400 in
+   * production.
+   */
+  it('never asks Stripe for a fee larger than the charge', async () => {
+    mockAdmin.__state.service['priceUsd'] = 0.1
+    mockAdmin.__state.org = { id: 'org-1', ownerUid: 'owner-1', plan: 'scale' }
+    const params = await book()
+    expect(params.get('payment_intent_data[application_fee_amount]')).toBe('10')
+    expect(params.get('line_items[0][price_data][unit_amount]')).toBe('10')
   })
 
   it('prices a MALFORMED fee override from the plan, never at zero', async () => {
@@ -514,7 +551,7 @@ describe('the take rate is the storefront ladder’s (AGL-2315)', () => {
     }
     const params = await book()
     expect(params.get('payment_intent_data[application_fee_amount]')).toBe(
-      '375',
+      String(375 + storefrontProcessingCostCents(7500)),
     )
   })
 
@@ -526,7 +563,9 @@ describe('the take rate is the storefront ladder’s (AGL-2315)', () => {
       entitlements: { transactionFeeDigitalPct: 1 },
     }
     const params = await book()
-    expect(params.get('payment_intent_data[application_fee_amount]')).toBe('75')
+    expect(params.get('payment_intent_data[application_fee_amount]')).toBe(
+      String(75 + storefrontProcessingCostCents(7500)),
+    )
   })
 })
 
@@ -549,7 +588,7 @@ describe('the fee BASIS is items-only (AGL-2317)', () => {
     expect(params.has('subscription_data[application_fee_percent]')).toBe(false)
     expect(params.has('application_fee_percent')).toBe(false)
     expect(params.get('payment_intent_data[application_fee_amount]')).toBe(
-      '375',
+      String(375 + storefrontProcessingCostCents(7500)),
     )
   })
 
@@ -560,10 +599,13 @@ describe('the fee BASIS is items-only (AGL-2317)', () => {
     )
     const fee = Number(params.get('payment_intent_data[application_fee_amount]'))
     expect(unitAmount).toBe(7500)
-    // 5% of the item base and nothing else in the base. Written as a
-    // relationship rather than a literal so that a change to the fixture price
-    // cannot make this pass vacuously.
-    expect(fee).toBe(Math.round(unitAmount * 0.05))
+    // 5% of the item base and nothing else in the base, plus Stripe's cost on
+    // the same charge (AGL-2152). Written as a relationship rather than a
+    // literal so that a change to the fixture price cannot make this pass
+    // vacuously — and the TAKE half is isolated, which is the basis claim.
+    expect(fee - storefrontProcessingCostCents(unitAmount)).toBe(
+      Math.round(unitAmount * 0.05),
+    )
   })
 
   it('still carries no tax line, so the basis question stays honest', async () => {

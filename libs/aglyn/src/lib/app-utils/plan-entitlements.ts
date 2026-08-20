@@ -2132,17 +2132,21 @@ export function resolveTransactionFeePct(
  *
  * THE ONE-LINE LEVER. On a card-family order this over-recovers by the spread
  * between the two rates. Pinning `payment_method_types` on the storefront
- * sessions to the card family would make 2.9% the true binding rate, and this
- * function would follow by pointing at `MARKETPLACE_PROCESSING_PERCENT_CARD`.
- * That is a product decision about which payment methods a storefront offers,
- * not this one; it is recorded on AGL-2152 and in the Pricing Decision Log so
- * it can be taken deliberately.
+ * sessions to the card family would make 2.9% the true binding rate, and
+ * `STOREFRONT_PROCESSING_PERCENT` below is then the single identifier to
+ * repoint. That is a product decision about which payment methods a storefront
+ * offers, not this one; it is recorded on AGL-2152 and in the Pricing Decision
+ * Log so it can be taken deliberately.
  */
+// `STOREFRONT_PROCESSING_PERCENT` and `STOREFRONT_PROCESSING_FIXED_CENTS` are
+// declared beside the marketplace processing constants they are defined from,
+// further down this file — a `const` cannot be read before its declaration is
+// evaluated, and this function is only ever CALLED, never evaluated at import.
 export function storefrontProcessingCostCents(chargeCents: number): number {
   if (!Number.isFinite(chargeCents) || chargeCents <= 0) return 0
   return (
-    Math.ceil((chargeCents * MARKETPLACE_PROCESSING_PERCENT_BNPL) / 100) +
-    MARKETPLACE_PROCESSING_FIXED_CENTS
+    Math.ceil((chargeCents * STOREFRONT_PROCESSING_PERCENT) / 100) +
+    STOREFRONT_PROCESSING_FIXED_CENTS
   )
 }
 
@@ -2274,6 +2278,25 @@ export const MARKETPLACE_PROCESSING_FIXED_CENTS = 30
  * platform's own Texas rate as a representative figure.
  */
 export const MARKETPLACE_ASSUMED_TAX_PERCENT = 8.25
+
+/**
+ * The processing rate a STOREFRONT destination charge is priced against
+ * (AGL-2152), and the one identifier to repoint if the storefront's payment
+ * method set changes.
+ *
+ * Deliberately its OWN name rather than a direct use of the marketplace
+ * constants, while being defined as one of them: the two surfaces share
+ * Stripe's published rates and today share the platform's payment method
+ * configuration, but they are separate product decisions. A future choice to
+ * pin `payment_method_types` on storefront sessions to the card family — and
+ * so to recover at `MARKETPLACE_PROCESSING_PERCENT_CARD` — must not silently
+ * lower the marketplace listing floor, which is derived from the same figure
+ * for a different flow.
+ */
+export const STOREFRONT_PROCESSING_PERCENT = MARKETPLACE_PROCESSING_PERCENT_BNPL
+/** Stripe's per-transaction fixed component, in cents. Not rate-dependent. */
+export const STOREFRONT_PROCESSING_FIXED_CENTS =
+  MARKETPLACE_PROCESSING_FIXED_CENTS
 
 /** Where the money goes on one sale of a paid listing (AGL-2343). */
 export interface MarketplaceSaleEconomics {

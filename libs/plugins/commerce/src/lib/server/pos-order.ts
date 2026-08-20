@@ -329,7 +329,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     // Gated on what the shopper actually pays for goods, so a 100% cashier
     // discount still takes nothing — the fee is a cut of the goods, and there
     // are none left to cut.
-    const feeCents =
+    const takeFeeCents =
       feeApplies && chargedItemsCents > 0
         ? Math.max(1, scaledFeeCents)
         : scaledFeeCents
@@ -390,7 +390,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
      * ## the SAME rate, not a lower one
      *
      * On a card sale the fee becomes `application_fee_amount` on a DESTINATION
-     * charge, and Stripe's own processing (2.9% + 30c) is debited from the
+     * charge, and Stripe's own processing (2.9% + 30¢) is debited from the
      * PLATFORM's balance beside it (AGL-2071). At the Starter physical rate of
      * 2% the fee does not even cover that processing — Aglyn nets negative on
      * the card leg. So the take rate demonstrably is NOT a processing
@@ -410,17 +410,35 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
      * ## What changes is COLLECTION, not the rate
      *
      * There is still no charge to net it from, so the fee is ACCRUED against
-     * the org's month (`offlineFees`, below) and swept onto the org's own
-     * monthly Aglyn invoice by `report-usage` — option 2 on AGL-2111, the
-     * `aglyn_metered_usage` meter that already carries every other overage.
-     * `feeCollection` on the order says which of the two routes this sale's
-     * fee took, so a merchant reconciling a payout can tell "short by the fee"
-     * from "billed for it next month".
+     * the org's month (`offlineFees` below) and swept onto the
+     * org's own monthly Aglyn invoice by `report-usage` — option 2 on
+     * AGL-2111, the `aglyn_metered_usage` meter that already carries every
+     * other overage. `feeCollection` on the order says which of the two routes
+     * this sale's fee took, so a merchant reconciling a payout can tell "short
+     * by the fee" from "billed for it next month".
      *
      * `feeCents` does not enter `totalCents` (see `computeOrderTotals`), so
      * the shopper pays exactly what they paid before — this moves no price at
      * the till, on either tender.
      *=========================================*/
+    // STRIPE'S CARD COST, ON THE CARD TENDER ONLY (AGL-2152). `takeFeeCents`
+    // above is the platform's advertised take and every tender carries it
+    // (AGL-2111). This term is different in kind: it is not a rate, it is the
+    // 2.9% + 30¢ Stripe debits from the PLATFORM's balance when a destination
+    // charge settles — which the AGL-2111 note beside it already observes the
+    // take does not cover. Cash and folio never reach Stripe, so there is no
+    // such cost to pass through and adding one would invoice a merchant for a
+    // fee nobody paid.
+    //
+    // The base is exactly what the card runs for: the goods after the
+    // cashier's discount, plus the origin tax. A till knows both — there is no
+    // shopper-chosen shipping and no Stripe Tax to wait on — so unlike the
+    // online doors this one recovers the cost exactly.
+    const feeCents =
+      payment === 'link'
+        ? takeFeeCents +
+          Aglyn.storefrontProcessingCostCents(chargedItemsCents + taxCents)
+        : takeFeeCents
     const totals = CommerceModel.computeOrderTotals(lineItems, {
       discountCents,
       taxCents,
@@ -968,7 +986,8 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
  * sweeps `previousMonth()` in UTC and reads the accrual document by that key,
  * so a local-time month would strand every sale rung in the offset window on a
  * document no sweep ever looks at — which is uncollected revenue that leaves
- * no trace.
+ * no trace. `offline-pos-fee-month-key.spec.ts` pins the two against each
+ * other rather than trusting the comment.
  *
  * Local rather than imported because `apps/console` is an app: a plugin
  * library cannot import from it, and the repo's other eleven copies of this
