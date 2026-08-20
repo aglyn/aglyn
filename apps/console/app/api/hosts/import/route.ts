@@ -17,9 +17,11 @@
 
 import { PLATFORM_BRAND_NAME, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  ACTIONS_MAX_PER_HOST,
   checkDatasetQuota,
   checkEntitlement,
   checkQuota,
+  COLLECTIONS_MAX_PER_HOST,
   decodeStoredNodes,
   effectiveDatasetModel,
   hostScopeToken,
@@ -123,6 +125,44 @@ function cleanDoc(
  * So the only place the decision can be made atomically is before the first
  * write, and getting it there costs two projected reads.
  *
+ * ## Atomic against a CONCURRENT import, too (AGL-2370)
+ *
+ * "Before the first write" is not the same sentence as "serialized against
+ * another request", and this route had only the first. The gate counted with a
+ * plain `.get()`, awaited a second gate's reads, and only then committed — so
+ * two imports of `k` screens each into a host holding `prior` both computed
+ * `next = prior + k <= limit`, both passed, and both landed at `prior + 2k`.
+ * AGL-2231 and AGL-2369 are the same defect at the two single-screen doors.
+ *
+ * AGL-2370 filed this as unfixable by transaction, and that premise does not
+ * survive arithmetic. It rests on the note above — "the route commits in
+ * chunks of 400, so it is NOT atomic once it starts" — which is true of the
+ * WHOLE bundle and irrelevant to the cap. `screensPerHost` is a statement
+ * about ONE collection, and the leg that writes it is bounded by the bundle
+ * format: `EXPORT_COLLECTION_LIMITS.screens` is 200, each screen carries at
+ * most one version, and the host patch is one document — 401 writes against
+ * Firestore's 500-write transaction ceiling, asserted in
+ * `import-screen-cap-is-atomic.spec.ts` so raising the export limit fails the
+ * build rather than the commit.
+ *
+ * So the SCREENS leg (host patch, screen documents, their versions) moves into
+ * one transaction that re-runs this check through `tx.get`, and the rest of the
+ * bundle keeps its chunked batches. `tx.get` on the projected query takes a
+ * pessimistic lock on every screen the count read, so the loser of a race
+ * retries, re-reads the higher count and is refused. Nothing about the other
+ * collections needed to become atomic, because none of them is what the cap
+ * counts.
+ *
+ * Two properties of the existing order made that a rearrangement rather than a
+ * rewrite: screens are already written FIRST, and the host patch — which
+ * carries the routing map the count is evaluated against — is already batched
+ * beside them. The partial-failure surface is therefore unchanged; what changes
+ * is that the first commit is now conditional on the read it was authorized by.
+ *
+ * The refusal is returned as DATA and rendered by the caller. A transaction
+ * body can run several times, and allocating a `Response` per attempt reads as
+ * if the transaction were a place effects happen.
+ *
  * ## The post state, not the verb (AGL-1390)
  *
  * What is refused is the RAISE, never the state of being over. An org can be
@@ -192,7 +232,19 @@ async function screenCapRefusal(options: {
   bundleRoutingMap: unknown
   org: unknown
   bundleScreens: Array<Record<string, any>>
-}): Promise<Response | null> {
+  /**
+   * How to execute the projected screens scan (AGL-2370).
+   *
+   * `readScreenSources` takes the identical parameter for the identical
+   * reason: the call site passes `(query) => tx.get(query)` so the count is
+   * the TRANSACTION's read and the pessimistic lock it takes covers every
+   * screen the cap is counted from. Defaulting to a plain `.get()` is what
+   * the un-transacted callers (there are none left in this file) would use.
+   */
+  read?: (query: {
+    get(): Promise<{ docs: Array<{ id: string; get(field: string): unknown }> }>
+  }) => Promise<{ docs: Array<{ id: string; get(field: string): unknown }> }>
+}): Promise<{ status: 403; error: string } | null> {
   const { hostRef, routingMap, bundleRoutingMap, org } = options
   const limit = resolveOrgEntitlements(org as any).screensPerHost
 
@@ -230,10 +282,10 @@ async function screenCapRefusal(options: {
   // no longer decide anything here either — an entry template arrives already
   // marked `kind: 'template'`, which is what the exporter wrote and what the
   // live site reads.
-  const screensSnapshot = await hostRef
-    .collection('screens')
-    .select('kind', 'deletedAt')
-    .get()
+  const read = options.read ?? ((query) => query.get())
+  const screensSnapshot = await read(
+    hostRef.collection('screens').select('kind', 'deletedAt') as any,
+  )
 
   const priorScreens = new Map<string, BillableScreenSource>(
     screensSnapshot.docs.map((screen) => [
@@ -263,13 +315,14 @@ async function screenCapRefusal(options: {
     const prior = billableScreenIds([...priorScreens.values()], routingMap as any)
     const next = billableScreenIds([...nextScreens.values()], nextRoutingMap)
     if (next.size > prior.size && next.size > limit) {
-      return Response.json({
+      return {
+        status: 403,
         error:
           `This backup holds ${bundleScreens.length} screens and this site has ` +
           `${prior.size}, which would put it at ${next.size} of ${limit} ` +
           'screens. Nothing was imported — upgrade in Billing, or restore into ' +
           'a site with room.',
-      }, { status: 403 })
+      }
     }
   }
 
@@ -284,13 +337,14 @@ async function screenCapRefusal(options: {
     const prior = nonPageScreenIds([...priorScreens.values()], routingMap as any)
     const next = nonPageScreenIds([...nextScreens.values()], nextRoutingMap)
     if (next.size > prior.size && next.size > NON_PAGE_SCREEN_MAX_PER_HOST) {
-      return Response.json({
+      return {
+        status: 403,
         error:
           `This backup holds ${bundleScreens.length} screens and this site ` +
           `has ${prior.size} email and template screens, which would put it ` +
           `at ${next.size} of ${NON_PAGE_SCREEN_MAX_PER_HOST}. Nothing was ` +
           'imported — delete some, or restore into a site with room.',
-      }, { status: 403 })
+      }
     }
   }
 
@@ -340,6 +394,39 @@ const CAPPED_HOST_COLLECTIONS = [
     label: 'shared layouts',
   },
   { collection: 'services', quotaKey: 'servicesPerHost', label: 'services' },
+] as const
+
+/**
+ * The bundle collections bounded by a FLAT PLATFORM cap rather than a plan
+ * dimension (AGL-2266).
+ *
+ * A separate table from `CAPPED_HOST_COLLECTIONS` because the number comes
+ * from a constant rather than from `OrgEntitlements`, and mixing them would
+ * make the quota table look like it prices things it does not. The
+ * arithmetic is otherwise identical, so the loop below is shared.
+ *
+ * ## Why this route needs them at all
+ *
+ * AGL-2266 moved `actions` and `entries` creation server-side and gave
+ * `collections` a ceiling, which closes the CLIENT door. This route is the
+ * other one: it writes with the Admin SDK, so the rules do not govern it, and
+ * `EXPORT_COLLECTION_LIMITS` lets one bundle carry 100 actions and 20
+ * collections. Bounded per bundle, unbounded per BUTTON PRESS — import the
+ * same bundle six times under six fresh id sets and the flat cap the console
+ * now enforces has been walked around entirely. That is the create-time
+ * laundering shape this arc keeps producing, and a cap enforced at one of two
+ * writers is a cap.
+ *
+ * `entries` is deliberately NOT here, and the reason is a read bill rather
+ * than a judgement — see the note at the end of this table's use below.
+ */
+const FLAT_CAPPED_HOST_COLLECTIONS = [
+  { collection: 'actions', max: ACTIONS_MAX_PER_HOST, label: 'interactions' },
+  {
+    collection: 'collections',
+    max: COLLECTIONS_MAX_PER_HOST,
+    label: 'collections',
+  },
 ] as const
 
 /** The ids a collection already holds. A field mask with no fields projects to
@@ -514,6 +601,67 @@ async function hostCapRefusal(options: {
         'restore into a site with room.',
     }, { status: 403 })
   }
+
+  /**
+   * Then the flat platform caps (AGL-2266), same arithmetic, different source
+   * for the number — and reported AFTER the priced ones for the reason the
+   * dataset leg runs first: when two caps are crossed at once, the one worth
+   * naming is the one the customer can pay to raise.
+   *
+   * The id UNION rather than a sum, exactly as above: a bundle is keyed by id,
+   * so restoring a site into itself replaces rather than adds and leaves the
+   * count where it was. A `existing + bundle.length > max` test would refuse
+   * every restore of a site near its ceiling, which is every restore that
+   * matters.
+   *
+   * ## The read is paid only when it could refuse
+   *
+   * `count()` is one read; `existingDocIds` is one per document. So the cheap
+   * question is asked first — could this bundle possibly cross the cap, taking
+   * every id as new? — and the id scan happens only when the answer is yes.
+   * For every real restore that is one read per collection instead of five
+   * hundred.
+   */
+  for (const capped of FLAT_CAPPED_HOST_COLLECTIONS) {
+    const bundleIds = bundleDocIds(bundleItems(capped.collection))
+    if (!bundleIds.size) continue
+    const ref = hostRef.collection(capped.collection)
+    const held = (await ref.count().get()).data().count
+    if (held + bundleIds.size <= capped.max) continue
+
+    const existing = await existingDocIds(ref)
+    const next = new Set([...existing, ...bundleIds]).size
+    if (next <= existing.size || next <= capped.max) continue
+
+    return Response.json({
+      error:
+        `This backup holds ${bundleIds.size} ${capped.label} and this site ` +
+        `has ${existing.size}, which would put it at ${next} of ` +
+        `${capped.max}. Nothing was imported — delete some, or restore into ` +
+        'a site with room.',
+    }, { status: 403 })
+  }
+
+  /**
+   * `entries` is the one collection this leg does NOT bound, and the blocker
+   * is a read bill rather than a decision.
+   *
+   * `ENTRIES_MAX_PER_COLLECTION` is 10,000 and the id-union rule needs the
+   * ids, so the honest check costs up to 10,000 reads per bundle collection
+   * and 200,000 for a full 20-collection bundle — on every import, to defend a
+   * ceiling a bundle capped at 200 entries per collection needs fifty presses
+   * to reach. The cheap `count()` pre-test above does not rescue it either: a
+   * site AT the ceiling restoring its own backup would fail the pre-test every
+   * time and pay the full scan anyway, which is precisely the customer who
+   * must never be locked out of their own file.
+   *
+   * What bounds it instead is the pair the client path enforces:
+   * `COLLECTIONS_MAX_PER_HOST` is checked above, so a bundle cannot multiply
+   * the number of entry stores, and a site is left able to over-fill the
+   * collections it already has by repeated import — a Pro-and-above,
+   * admin-only, manual action against a store that is already bounded by the
+   * collection count. Recorded on AGL-2266 rather than left implicit.
+   */
   return null
 }
 
@@ -628,8 +776,25 @@ async function handler(request: Request): Promise<Response> {
       return items.slice(0, EXPORT_COLLECTION_LIMITS[name] ?? 100)
     }
 
-    // Before the first write, because a half-restored site is worse than a
-    // refused one (AGL-1398).
+    /**
+     * Before the first write, because a half-restored site is worse than a
+     * refused one (AGL-1398).
+     *
+     * This is the FAST FAIL and the message, not the authority (AGL-2370). The
+     * same check runs again inside the screens transaction below, where the
+     * count is `tx.get`'s and a concurrent import cannot slip between the read
+     * and the commit. Keeping this one costs a projected scan on a rare,
+     * admin-only, Pro-gated operation and buys two things a
+     * transaction-only shape loses: a bundle that busts the SCREEN cap is
+     * refused naming the screen cap rather than whichever of the five resource
+     * caps `resourceCapRefusal` happens to reach first, and neither gate's
+     * reads are paid for a bundle the other has already doomed.
+     *
+     * A stale answer here can only be over-strict, never over-permissive: the
+     * transaction re-derives the verdict from its own locked read, so the
+     * failure mode of this check being wrong is a refusal the customer can
+     * retry, not a screen nobody paid for.
+     */
     const overCap = await screenCapRefusal({
       hostRef,
       routingMap: hostSnapshot.get('screens'),
@@ -637,7 +802,9 @@ async function handler(request: Request): Promise<Response> {
       org: owningOrg?.org,
       bundleScreens: bundleItems('screens'),
     })
-    if (overCap) return overCap
+    if (overCap) {
+      return Response.json({ error: overCap.error }, { status: overCap.status })
+    }
 
     // And every OTHER numeric cap this route creates against (AGL-1403) —
     // datasets first, because they are the one sold as an addon.
@@ -652,6 +819,9 @@ async function handler(request: Request): Promise<Response> {
     if (overResourceCap) return overResourceCap
 
     let written = 0
+    /** Documents the screens transaction committed, folded into `written`
+     * after it succeeds rather than during an attempt (AGL-2370). */
+    let screenWrites = 0
     // Firestore batches cap at 500 writes; chunk conservatively.
     let batch = firestore.batch()
     let batched = 0
@@ -669,16 +839,16 @@ async function handler(request: Request): Promise<Response> {
       if ((batched += 1) >= 400) await commit()
     }
 
-    // Host settings — exportable fields only.
+    // Host settings — exportable fields only. Written by the SCREENS
+    // transaction below rather than queued here (AGL-2370): the patch carries
+    // the routing map the cap is counted against, so the two have to land
+    // together or the count the commit was authorized by is not the count the
+    // site ends up with. It stays the first document written either way.
     const hostPatch: Record<string, unknown> = {}
     for (const field of EXPORTABLE_HOST_FIELDS) {
       if (bundle.host?.[field] !== undefined) {
         hostPatch[field] = bundle.host[field]
       }
-    }
-    if (Object.keys(hostPatch).length) {
-      batch.set(hostRef, hostPatch, { merge: true })
-      batched += 1
     }
 
     const importPlain = async (name: string) => {
@@ -708,8 +878,23 @@ async function handler(request: Request): Promise<Response> {
     const bundleVariables = tokenLookup('variables')
     const bundleFunctions = tokenLookup('functions')
 
-    // Screens/layouts restore the doc plus its published version.
-    const importVersioned = async (name: 'screens' | 'layouts') => {
+    /**
+     * Screens/layouts restore the doc plus its published version.
+     *
+     * `writeDoc` is a parameter because the two collections no longer commit
+     * the same way (AGL-2370): layouts ride the chunked batch, screens are
+     * written by the transaction that owns `screensPerHost`. One function
+     * either way — a second copy of the version decode, the legacy `elements`
+     * alias and the AGL-835 name key is exactly the drift `cleanDoc` exists to
+     * prevent, one level up.
+     */
+    const importVersioned = async (
+      name: 'screens' | 'layouts',
+      writeDoc: (
+        ref: FirebaseFirestore.DocumentReference,
+        data: Record<string, unknown>,
+      ) => Promise<void> | void = write,
+    ) => {
       for (const item of bundleItems(name)) {
         if (!item?.$id) continue
         const docRef = hostRef.collection(name).doc(String(item.$id))
@@ -719,7 +904,7 @@ async function handler(request: Request): Promise<Response> {
         if (name === 'screens' && typeof cleaned['displayName'] === 'string') {
           cleaned['nameLower'] = nameSearchKey(cleaned['displayName'] as string)
         }
-        await write(docRef, cleaned)
+        await writeDoc(docRef, cleaned)
         if (item.version?.$id) {
           const version = cleanDoc('versions', item.version)
           /**
@@ -757,7 +942,7 @@ async function handler(request: Request): Promise<Response> {
               bundleFunctions,
             ).value
           }
-          await write(
+          await writeDoc(
             docRef.collection('versions').doc(String(item.version.$id)),
             version,
           )
@@ -1007,7 +1192,51 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
-    await importVersioned('screens')
+    /**
+     * The screens leg, in ONE transaction (AGL-2370).
+     *
+     * The host patch goes in with it because the routing map it carries is an
+     * INPUT to the count, and the screen versions because a screen without the
+     * version it points at is a broken page. `written` is accumulated inside
+     * the attempt and folded in only on success: a transaction body can run
+     * several times, and a counter incremented per attempt would report a
+     * retried import as having written the screens twice.
+     */
+    const screenRefusal = await firestore.runTransaction(async (tx) => {
+      // ALL READS BEFORE ANY WRITE, which Firestore requires. The HOST is
+      // re-read here rather than taken from the caller's earlier snapshot, for
+      // the reason AGL-2369 gives at the other door: the routing map is an
+      // INPUT to the count, a concurrent import's host patch changes it, and a
+      // gate reading a pre-race value is only accidentally serialized.
+      const currentHost = await tx.get(hostRef)
+      const refusal = await screenCapRefusal({
+        hostRef,
+        routingMap: currentHost.get('screens'),
+        bundleRoutingMap: bundle.host?.screens,
+        org: owningOrg?.org,
+        bundleScreens: bundleItems('screens'),
+        read: (query) => tx.get(query as any) as any,
+      })
+      if (refusal) return refusal
+      if (Object.keys(hostPatch).length) {
+        tx.set(hostRef, hostPatch, { merge: true })
+      }
+      let attemptWrites = 0
+      await importVersioned('screens', (ref, data) => {
+        tx.set(ref, data, { merge: false })
+        attemptWrites += 1
+      })
+      screenWrites = attemptWrites
+      return null
+    })
+    if (screenRefusal) {
+      return Response.json(
+        { error: screenRefusal.error },
+        { status: screenRefusal.status },
+      )
+    }
+    written += screenWrites
+
     await importVersioned('layouts')
     await importPlain('components')
     await importPlain('variables')

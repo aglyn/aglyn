@@ -103,6 +103,15 @@ function collectionRef(path: string): any {
     limit: () => ref,
     where: () => ref,
     select: () => ref,
+    // The flat platform caps ask `count()` first and only pay for the id scan
+    // when the answer says a refusal is possible (AGL-2266). A double without
+    // it makes the route throw, and every assertion here would read the crash
+    // as the cap misfiring.
+    count: () => ({
+      get: async () => ({
+        data: () => ({ count: (store.get(path) ?? new Map()).size }),
+      }),
+    }),
     get: async () => ({
       docs: [...(store.get(path) ?? new Map()).entries()].map(([id, data]) =>
         snapshotOf(path, id, data),
@@ -136,6 +145,31 @@ const mockFirestore = {
     },
     commit: async () => undefined,
   }),
+  /**
+   * The screens leg commits in a transaction since AGL-2370. This suite is
+   * about the OTHER caps, so the model is the simplest faithful one — reads
+   * see the store, writes buffer and apply on commit, a read after a write
+   * throws as the server does. The concurrency property lives in
+   * `import-screen-cap-is-atomic.spec.ts`, whose double serializes.
+   */
+  runTransaction: async (body: (tx: any) => Promise<any>) => {
+    const buffered: Array<() => void> = []
+    const result = await body({
+      get: async (ref: any) => {
+        if (buffered.length) {
+          throw new Error('Firestore transactions cannot read after a write')
+        }
+        return ref.get()
+      },
+      set: (ref: any, data: Doc, options?: { merge?: boolean }) => {
+        buffered.push(() => {
+          writes.push({ path: ref.path, data, merge: Boolean(options?.merge) })
+        })
+      },
+    })
+    for (const write of buffered) write()
+    return result
+  },
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
@@ -176,6 +210,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/name-search'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/binding-tokens'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
+  // The REAL flat platform caps (AGL-2266) — the import route reads both.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/actions'),
+  ...jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/collection-entries',
+  ),
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
     query: {},
@@ -192,7 +231,12 @@ import {
   SITE_EXPORT_FORMAT,
   SITE_EXPORT_VERSION,
 } from '../app/api/_lib/site-export'
-import { PLAN_ENTITLEMENTS, PLAN_PRICING } from '@aglyn/aglyn/server'
+import {
+  ACTIONS_MAX_PER_HOST,
+  COLLECTIONS_MAX_PER_HOST,
+  PLAN_ENTITLEMENTS,
+  PLAN_PRICING,
+} from '@aglyn/aglyn/server'
 
 const PRO = PLAN_ENTITLEMENTS.pro
 
@@ -630,12 +674,94 @@ describe('the whole bundle or none of it, and one refusal', () => {
   })
 })
 
+/**
+ * The FLAT platform caps this route also has to hold (AGL-2266).
+ *
+ * `actions` and `collections` became bounded when the client door closed —
+ * `ACTIONS_MAX_PER_HOST` on /api/hosts/resources, `COLLECTIONS_MAX_PER_HOST`
+ * on /api/hosts/collections — and this route writes both with the Admin SDK,
+ * where the rules do not reach. One bundle carries at most 100 actions and 20
+ * collections, so the bundle format alone cannot cross either; repeated
+ * imports under fresh ids can, which is the create-time laundering shape the
+ * whole arc keeps producing.
+ *
+ * Still NOT a plan dimension. Nothing is priced, no `OrgEntitlements` key is
+ * read, and AGL-1387's refusal of `collectionsPerHost` stands untouched.
+ */
+describe('the flat platform caps (AGL-2266)', () => {
+  const seedMany = (collection: string, count: number, prefix: string) => {
+    for (const id of ids(count, prefix)) {
+      seed(`hosts/host-1/${collection}`, id, { name: id })
+    }
+  }
+
+  /**
+   * FORCED RED: drop the `FLAT_CAPPED_HOST_COLLECTIONS` loop and this returns
+   * 200 — the console's ceiling walked around by a button press.
+   */
+  it('refuses a bundle that would put the host over the action cap', async () => {
+    seedMany('actions', ACTIONS_MAX_PER_HOST, 'held')
+    const response = await runImport('host-1', bundleOf({
+      actions: ids(10, 'new-act').map((id) => named(id, { steps: [] })),
+    }))
+    expect(response.status).toBe(403)
+    expect(response.body.error).toContain(String(ACTIONS_MAX_PER_HOST))
+    expect(writes).toEqual([])
+  })
+
+  /**
+   * A site restoring its OWN backup at the ceiling is allowed, because the
+   * bundle's ids collide and the union does not grow. That is the property the
+   * id-union rule exists for, and the one a `held + bundle.length > max` test
+   * would destroy — for exactly the customer who needs the file most.
+   */
+  it('allows a restore of the same actions into the same site', async () => {
+    const heldIds = ids(ACTIONS_MAX_PER_HOST, 'held')
+    seedMany('actions', ACTIONS_MAX_PER_HOST, 'held')
+    const response = await runImport('host-1', bundleOf({
+      actions: heldIds.slice(0, 100).map((id) => named(id, { steps: [] })),
+    }))
+    expect(response.status).toBe(200)
+  })
+
+  it('refuses a bundle that would put the host over the collection cap', async () => {
+    seedMany('collections', COLLECTIONS_MAX_PER_HOST, 'held-col')
+    const response = await runImport('host-1', bundleOf({
+      collections: ids(5, 'new-col').map((id) => ({
+        $id: id,
+        slug: id,
+        kind: 'content',
+        displayName: id,
+      })),
+    }))
+    expect(response.status).toBe(403)
+    expect(response.body.error).toContain(String(COLLECTIONS_MAX_PER_HOST))
+    expect(writes).toEqual([])
+  })
+
+  /**
+   * The PRICED cap still leads. A bundle busting a plan quota and a platform
+   * cap at once reports the one the customer can pay to raise.
+   */
+  it('names the priced cap first when both are crossed', async () => {
+    seedMany('actions', ACTIONS_MAX_PER_HOST, 'held')
+    const response = await runImport('host-1', bundleOf({
+      datasets: ids(50, 'ds').map((id) => datasetItem(id)),
+      actions: ids(10, 'new-act').map((id) => named(id, { steps: [] })),
+    }))
+    expect(response.status).toBe(403)
+    expect(response.body.error).toContain('datasets')
+  })
+})
+
 describe('what this deliberately does NOT cap', () => {
   it('restores a bundle full of actions, collections and entries', async () => {
-    // `actions` has no `RESOURCES` entry and therefore no quota key anywhere,
-    // and AGL-1387 declined `collectionsPerHost` on purpose. Nothing here gets
-    // to invent a cap — AGL-1383, AGL-1387 and AGL-1390 each refused to change
-    // what counts, and this issue does not get to either.
+    // A full bundle is well UNDER both flat caps (AGL-2266): 100 actions
+    // against 500 and 20 collections against 100, into an empty site. What
+    // this asserts is that the caps added there refuse nothing a real restore
+    // does — and `entries` is bounded by neither, deliberately, because the
+    // id-union read costs up to 10,000 documents per collection. See the note
+    // at the end of `hostCapRefusal`.
     const actionIds = ids(EXPORT_COLLECTION_LIMITS.actions, 'act')
     const response = await runImport('host-1', bundleOf({
       actions: actionIds.map((id) => named(id, { steps: [], enabled: true })),
