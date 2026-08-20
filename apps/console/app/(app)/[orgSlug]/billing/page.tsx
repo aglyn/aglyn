@@ -80,6 +80,7 @@ import BillingCollaboratorAllocationsCardComponent from '../../../../components/
 import BillingStorageOverageCardComponent from '../../../../components/billing/billing-storage-overage-card.component'
 import BillingUsageBudgetCardComponent from '../../../../components/billing/billing-usage-budget-card.component'
 import BillingMeteredEstimateComponent from '../../../../components/billing/billing-metered-estimate.component'
+import BillingUsageHistoryComponent from '../../../../components/billing/billing-usage-history.component'
 import { RetentionFunnelDialog } from '../../../../components/billing/retention-funnel.dialog'
 import BillingUsageComponent from '../../../../components/billing/billing-usage.component'
 import EmbeddedCheckoutDialogComponent from '../../../../components/embedded-checkout-dialog.component'
@@ -1034,6 +1035,30 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                     org={org}
                     hosts={hosts ?? []}
                   />
+                </CardDisplay>
+              ),
+            },
+            {
+              size: { xs: 12 },
+              children: (
+                // The trend beside the at-a-glance number (AGL-1530). The
+                // card above answers "what is this period costing"; this one
+                // answers "is that unusual", off the same monthly rollups
+                // `report-usage` already writes — one bounded read, no new
+                // aggregation and no second estimator to disagree with the
+                // invoice.
+                <CardDisplay
+                  header={'Usage history'}
+                  help={docsHelp('billing', {
+                    anchor: '#usage-meters',
+                    excerpt:
+                      'How your metered usage has moved over the last ' +
+                      'twelve months, from your monthly billing rollups.',
+                  })}
+                  contentGutterX
+                  contentGutterY
+                >
+                  <BillingUsageHistoryComponent org={org} />
                 </CardDisplay>
               ),
             },
