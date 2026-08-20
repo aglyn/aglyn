@@ -207,6 +207,51 @@ Soft delete is `retentionDurationSeconds: 604800` (7 days), also read back the
 same day. The retention schedule these two settings implement is
 [`docs/DATA_RETENTION.md`](DATA_RETENTION.md).
 
+Object **versioning is OFF** on this bucket and on
+`gs://$PLUGIN_ARTIFACTS_BUCKET` — no `versioning` key is returned by
+`GET /storage/v1/b/<bucket>?fields=versioning`, re-measured 2026-08-20 — and
+that is currently the correct setting. See the warning below before changing
+it.
+
+### ⚠️ Do NOT enable object versioning on the media bucket as a backup (AGL-2422)
+
+It looks like the cheap fix for "customer media has no backup" and it is a
+**DPA violation**. `libs/tenant/data/admin/src/lib/server/erase.ts` erases
+customer media with three `bucket.deleteFiles({ prefix })` calls —
+`hosts/{hostId}/`, `orgs/{orgId}/` and `users/{uid}/` — and none of them
+passes `versions: true`. The Node Storage client lists live versions only, so
+with versioning ON each of those deletes leaves the erased object behind as a
+noncurrent version, retained **forever**, because this bucket has no
+noncurrent-expiry rule. The erasure would report success and the object would
+be invisible in every ordinary listing while still existing.
+
+Enabling versioning here is therefore a code change to `erase.ts` plus a new
+lifecycle rule, not a config flip — and it still buys nothing against loss of
+the project. The backup that AGL-2422 actually calls for puts versioning on
+the off-project **mirror** instead (`cloud/storage-mirror-lifecycle.json`,
+runbook in `docs/DISASTER_RECOVERY.md` gap 6), where a bounded window is the
+right answer for a copy and the source stays a faithful record of what exists.
+
+### The off-project object mirror (AGL-2422 — not created yet)
+
+`gs://aglyn-dr-storage-mirror` will hold both buckets under a prefix each
+(`media/`, `plugin-artifacts/`), filled nightly by Storage Transfer Service.
+It does not exist today; `docs/DISASTER_RECOVERY.md` gap 6 has the ordered
+commands, and `npm run check:backup-copies` reports its absence on every run
+and will compare its object counts against both sources once
+`STORAGE_MIRROR_BUCKET` is set. Read the mirror's settings back with:
+
+```bash
+gcloud storage buckets describe gs://aglyn-dr-storage-mirror --project=aglyn-dr \
+  --format='json(versioning,lifecycle_config,uniform_bucket_level_access,public_access_prevention,location)'
+```
+
+Expect `versioning.enabled: true` and exactly one lifecycle rule, with
+`isLive: false` and `daysSinceNoncurrentTime: 30`. A rule on that bucket
+WITHOUT `isLive: false` deletes mirrors of objects that still exist in
+production, on a schedule — `tools/scripts/lib/backup-copies.test.mjs` fails
+the build if the committed document ever grows one.
+
 `gs://aglyn-main.appspot.com` — location `US`, CORS as in
 `cloud/storage-cors.json` (confirmed byte-identical to the live config, and
 confirmed by driving the real preflight, which returned
@@ -230,5 +275,6 @@ bootstrap.
 ## Runbooks
 
 - Firestore's equivalent: [`docs/FIRESTORE_MANUAL_CONFIG.md`](FIRESTORE_MANUAL_CONFIG.md)
+- Where every copy of this data lives (and does not): [`docs/DISASTER_RECOVERY.md`](DISASTER_RECOVERY.md) gaps 1 and 6
 - Plugin artifact bucket: [`docs/PLUGIN_LOADING.md`](PLUGIN_LOADING.md)
 - Provisioning overview: [`docs/PLATFORM_PROVISIONING.md`](PLATFORM_PROVISIONING.md)
