@@ -2351,6 +2351,29 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 paidCents,
                 checkoutSessionId: String(object.id),
                 paymentIntentId: String(object?.payment_intent ?? '') || null,
+                // The regime this stay carried, on the record the merchant
+                // reads (AGL-1969).
+                //
+                // This does NOT decide the lodging-tax question. `reserve.ts`
+                // computes no tax by an explicit, reasoned decision — a stay
+                // is not goods, the AGL-285 editor configures a SALES rate,
+                // and this charge is usually a DEPOSIT — and that decision is
+                // untouched. What the reservation lacked was any statement of
+                // it: the fact lived only in the `storefrontTaxCollected` row
+                // filed above, and nowhere a merchant looking at their own
+                // booking could see it. Every other storefront money door
+                // stamps this on the document the merchant reads (AGL-2451);
+                // the reservation settled money and recorded no regime at all.
+                //
+                // DERIVED, never the constant `'none'` the current decision
+                // happens to produce. A constant would keep answering `none`
+                // on the day this path does compute lodging tax, which is the
+                // failure this field exists to prevent — and would make the
+                // eventual AGL-1969 answer a second change here rather than
+                // none. `absent` remains a fourth state meaning "recorded
+                // before this shipped", which a back-book question needs to
+                // separate from a deliberate zero.
+                taxMode: storefrontTaxModeOf(object),
               },
               { merge: true },
             )

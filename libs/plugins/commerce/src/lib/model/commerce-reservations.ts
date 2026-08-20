@@ -24,6 +24,8 @@
  * reservation APIs and console own I/O.
  */
 
+import type { StorefrontTaxMode } from './commerce-tax-decision'
+
 export const DAY_MS = 24 * 60 * 60 * 1000
 
 /** Seasonal pricing window by month-day (year-agnostic, inclusive). */
@@ -90,6 +92,21 @@ export interface HostReservation {
   }>
   checkoutSessionId?: string
   createdAtMs?: number
+  /**
+   * WHICH tax regime the paid deposit carried (AGL-1969), stamped at
+   * confirmation from the same `storefrontTaxModeOf` derivation every order
+   * door uses (AGL-2451).
+   *
+   * `none` today, by the stated decision in `reserve.ts`: a stay is not goods,
+   * the AGL-285 zone editor configures a SALES rate, and this charge is
+   * usually a DEPOSIT rather than the stay. It is DERIVED rather than fixed at
+   * that value, so the day lodging tax is computed here the record follows it
+   * with no second change.
+   *
+   * ABSENT is a fourth state and is not `none` — it means the reservation was
+   * confirmed before this field existed. See `StorefrontTaxMode`.
+   */
+  taxMode?: StorefrontTaxMode
 }
 
 /** UTC midnight for an instant. */

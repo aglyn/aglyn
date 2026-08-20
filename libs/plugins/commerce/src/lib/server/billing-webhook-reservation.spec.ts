@@ -373,3 +373,86 @@ describe('paid reservation (AGL-1755)', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * A confirmed reservation says, on its own record, that it carried no lodging
+ * tax (AGL-1969).
+ *
+ * ## What this does and does not settle
+ *
+ * It does NOT decide the lodging-tax question. `reserve.ts` charges no tax by
+ * an explicit, reasoned decision — a stay is not goods, the AGL-285 editor
+ * configures a SALES rate, and the charge is usually a DEPOSIT — and that
+ * decision is unchanged here. Whether Aglyn should compute occupancy tax, at
+ * what rate, and on the deposit or the stay, is a tax position, and inventing
+ * one in code would be the "confidently wrong" failure the decision exists to
+ * avoid.
+ *
+ * What it settles is the RECORD. Before this the fact lived in exactly one
+ * place — the `storefrontTaxCollected` row `recordStorefrontTax` files ahead of
+ * the branch chain — and nowhere a merchant looking at their own reservation
+ * could see it. Every other storefront money door stamps `taxMode` on the
+ * document the merchant reads (AGL-2451, seven doors); the reservation was the
+ * one that settled money and recorded no regime at all.
+ *
+ * ABSENT IS NOT `none`. That distinction is the whole point of the field
+ * (`StorefrontTaxMode`): a reservation confirmed before this shipped genuinely
+ * answers "not recorded", and one confirmed after answers "no tax was charged,
+ * and here is the door that decided so". A back-book question about lodging
+ * tax can separate the two; it could not separate a missing field from a
+ * deliberate zero.
+ *
+ * It is also what makes the day AGL-1969 IS answered cheap: when a lodging
+ * rate exists, this same stamp carries `manual` with no further wiring, in the
+ * same words as every other door.
+ */
+describe('a confirmed reservation records its tax regime (AGL-1969)', () => {
+  /**
+   * THE DEFECT. The reservation document carried status, paidCents, the
+   * session id and the payment intent — and said nothing about tax, in either
+   * direction.
+   */
+  it('stamps the regime on the reservation the merchant reads', async () => {
+    await deliver(RESERVATION_SESSION)
+    const reservation = storedReservation()
+    expect(reservation.status).toBe('confirmed')
+    expect(reservation.taxMode).toBe('none')
+  })
+
+  /**
+   * Derived, not asserted. `reserve.ts` sends no tax parameter today, so the
+   * honest value is `none` — but a constant would keep saying `none` on the
+   * day this path starts computing lodging tax, which is precisely the
+   * "records a constant instead of the measured value" shape. Feed the branch
+   * a session that DID carry tax and the record must follow it.
+   */
+  it('follows the session rather than restating a constant', async () => {
+    await deliver({
+      ...RESERVATION_SESSION,
+      total_details: { amount_tax: 1732 },
+    })
+    expect(storedReservation().taxMode).toBe('manual')
+  })
+
+  /**
+   * And the Stripe Tax reading, which is a different regime with a different
+   * owner: on a storefront session `automatic_tax.liability` is AGLYN's
+   * platform account (measured — `storefront-tax.ts`), so a stay taxed that
+   * way is not the merchant's own rate on their own origin. AGL-1904.
+   */
+  it('separates a Stripe-computed stay from a merchant-rated one', async () => {
+    await deliver({
+      ...RESERVATION_SESSION,
+      automatic_tax: { enabled: true },
+      total_details: { amount_tax: 1732 },
+    })
+    expect(storedReservation().taxMode).toBe('stripe-automatic')
+  })
+
+  /** A redelivery must not disturb it, like every other field on this branch. */
+  it('survives a redelivered event', async () => {
+    await deliver(RESERVATION_SESSION)
+    await deliver(RESERVATION_SESSION)
+    expect(storedReservation().taxMode).toBe('none')
+  })
+})

@@ -359,6 +359,47 @@ describe('storefront tax recording (AGL-1904)', () => {
     expect(expandCalls).toHaveLength(0)
   })
 
+  /**
+   * The reservation half of the same guarantee, which nothing pinned
+   * (AGL-1969). `commerce-reservation` sits beside `booking-payment` in
+   * PLATFORM_UNTAXED_TYPES — the set whose zero tax is a decision taken in
+   * THIS codebase rather than by the merchant — and only the booking side had
+   * a test. Dropping either from that set silently deletes an untaxed
+   * storefront sale from the one ledger that would let anyone notice it was
+   * untaxed, and the suite stayed green while it happened.
+   */
+  it('records a paid reservation deposit, and reads it as an untaxed stay', async () => {
+    await deliver({
+      ...BOOKING_SESSION,
+      id: 'cs_res_1',
+      amount_total: 21000,
+      metadata: {
+        type: 'commerce-reservation',
+        hostId: 'host-1',
+        reservationId: 'res-1',
+      },
+    })
+    const row = docs.get('storefrontTaxCollected/cs_res_1')
+    expect(row).toBeDefined()
+    expect(row).toMatchObject({
+      kind: 'session',
+      hostId: 'host-1',
+      metadataType: 'commerce-reservation',
+      // `reserve.ts` computes no lodging tax by a stated decision, and this
+      // row is where that decision is reconcilable. AGL-1969 is the open
+      // question of what the right rate would be — not whether the sale is
+      // recorded, which it must be either way.
+      taxMode: 'none',
+      taxLiability: null,
+      // The DEPOSIT, not the stay total — which is half of why a lodging rate
+      // cannot simply be applied at this door.
+      grossCents: 21000,
+      taxCents: 0,
+      netCents: 21000,
+    })
+    expect(expandCalls).toHaveLength(0)
+  })
+
   // Positive control: the set must stay selective. Recording every session
   // type would file platform subscription revenue and marketplace sales as
   // storefront tax rows.
