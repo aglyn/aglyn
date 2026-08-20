@@ -86,6 +86,19 @@ updates:
       - dependency-name: '@base-ui/react'
         versions:
           - '>=1.7.0'
+      # Babel 8 cannot land while nx is on Babel 7. @nx/js depends on
+      # `@babel/core: ^7.23.2`, and @nx/next/babel — the preset
+      # apps/console/jest.config.ts runs every spec through — resolves through
+      # it. 116 packages in the tree require a ^7 core, and
+      # @babel/preset-react@8 peers on `@babel/core: ^8.0.0`, so the family
+      # cannot be split either: taking core to 8 leaves the whole jest
+      # transform pipeline on a peer-violating tree. Majors of the @babel/*
+      # family therefore arrive unmergeable, one PR per package, every week.
+      # Patch and minor bumps of the 7 line still arrive. Remove this once nx
+      # ships a Babel 8 toolchain. (AGL-2478)
+      - dependency-name: '@babel/*'
+        update-types:
+          - version-update:semver-major
     groups:
       # A dependency lands in the FIRST group whose patterns match, so the
       # order of these blocks is load-bearing: `eslint-config-next` belongs
