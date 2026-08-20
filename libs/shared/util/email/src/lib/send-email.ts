@@ -296,7 +296,7 @@ export async function sendEmail(
   const priority = resolveSendPriority(options.context, options.priority)
   const governor = getEmailSendGovernor()
   if (governor) {
-    let verdict: Awaited<ReturnType<typeof governor>> | null = null
+    let verdict: Awaited<ReturnType<typeof governor>> | null
     try {
       verdict = await governor({ priority, count: to.length, context: options.context })
     } catch (error) {

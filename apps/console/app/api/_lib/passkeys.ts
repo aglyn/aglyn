@@ -322,7 +322,7 @@ export async function verifyAndStoreRegistration(
     nowMs,
   )
   if (!challenge) throw new PasskeyError('challenge-invalid')
-  let verified = false
+  let verified: boolean
   let registrationInfo: Awaited<
     ReturnType<typeof verifyRegistrationResponse>
   >['registrationInfo']
@@ -447,8 +447,8 @@ export async function verifyAssertion(
   ).get()
   if (!credentialSnapshot.exists) throw new PasskeyError('credential-unknown')
   const stored = credentialSnapshot.data() as StoredPasskey
-  let verified = false
-  let newCounter = 0
+  let verified: boolean
+  let newCounter: number
   try {
     const result = await verifyAuthenticationResponse({
       response: params.response,

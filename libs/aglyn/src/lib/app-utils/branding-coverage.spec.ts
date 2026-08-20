@@ -459,7 +459,7 @@ describe('white-label branding coverage (Phase 2/3)', () => {
    * at once — cannot count, and so an untracked scratch file cannot either.
    */
   function consumers(field: string): string[] {
-    let output = ''
+    let output: string
     try {
       output = execFileSync('git', ['grep', '-l', '--', field, '--', 'apps', 'libs'], {
         cwd: REPO_ROOT,

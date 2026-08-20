@@ -97,7 +97,7 @@ function ExperimentsRunner(props: {
       consentHost,
       Aglyn.readStoredVisitorConsent(hostId),
     )
-    let visitorId = ''
+    let visitorId: string
     try {
       const storage =
         persistence === 'local' ? localStorage : sessionStorage

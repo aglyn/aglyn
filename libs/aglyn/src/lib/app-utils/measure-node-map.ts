@@ -64,7 +64,7 @@ export function measureNodeMap(
   if (!nodes) {
     return { bytes: 0, tooLarge: false, nearLimit: false, largest: [] }
   }
-  let bytes = 0
+  let bytes: number
   try {
     bytes = encode(nodes).length
   } catch {

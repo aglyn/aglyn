@@ -396,7 +396,7 @@ async function mediaCdnScopeLocked(scope: MediaCdnScope): Promise<boolean> {
   let pending = lockPending.get(key)
   if (!pending) {
     pending = (async () => {
-      let blocked = false
+      let blocked: boolean
       try {
         const nowMs = Date.now()
         // Platform first: cached, and a platform security lock is the panic

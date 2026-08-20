@@ -294,7 +294,7 @@ export async function performCampaignSend(
     substitutes an empty string into mail that has already been sent. Whenever
     an audience is added here, check what its collection actually writes.
   */
-  let recipients: string[] = []
+  let recipients: string[]
   const names = new Map<string, string>()
   const collectName = (email: string, name: unknown) => {
     const cleaned = email.trim().toLowerCase()

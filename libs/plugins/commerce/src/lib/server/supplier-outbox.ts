@@ -336,7 +336,7 @@ async function attemptSupplierDelivery(
   const secret = String(supplierSnapshot.get('webhookSecret') ?? '')
   const body = String(data.body ?? '')
 
-  let status = 0
+  let status: number
   try {
     const response = await fetch(url, {
       method: 'POST',

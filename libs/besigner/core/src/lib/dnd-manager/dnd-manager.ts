@@ -274,7 +274,7 @@ export class DndManager {
     const before = region === DropRegion.TOP || region === DropRegion.LEFT
     const after = region === DropRegion.RIGHT || region === DropRegion.BOTTOM
     let position = NaN
-    let parent = null
+    let parent
 
     if (before || after) {
       parent = Aglyn.canvas.getNode(dropNode.parentId)
