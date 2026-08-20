@@ -47,6 +47,7 @@ import MemberAvatar from '../../../../../components/member-avatar.component'
 import OrgActivityCard from '../../../../../components/org-activity-card.component'
 import PasswordAdminControls from '../../../../../components/password-admin-controls.component'
 import { useOrgHosts } from '../../../../../hooks/use-org-hosts'
+import { readOutcome } from '../../../../../utils/read-outcome'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
@@ -75,7 +76,17 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
   // `undefined`, never `null`, while the workspace resolves (AGL-2350) — see
   // the note on the plugins page. This one feeds the per-site access picker,
   // so a cross-org row here is a site a member could be granted by mistake.
-  const { hosts } = useOrgHosts(firestore, user?.uid, currentOrg?.$id)
+  const {
+    hosts,
+    ready: hostsReady,
+    error: hostsError,
+  } = useOrgHosts(firestore, user?.uid, currentOrg?.$id)
+  // AGL-1066, and this surface is the sharp case: the list IS the per-site
+  // access picker, so "No sites yet." over a refused read tells an admin the
+  // workspace has no sites AND silently withholds the rows they came here to
+  // change. (Existing grants survive — `hostAccess` is seeded from the member
+  // document, not from this list — so the cost is invisibility, not loss.)
+  const hostsRead = readOutcome({ ready: hostsReady, error: hostsError })
   const [member, setMember] = useState<any | null>(null)
   const [loadingMember, setLoadingMember] = useState(true)
   const [role, setRole] = useState('viewer')
@@ -416,13 +427,22 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 </Stack>
                               )
                             })}
-                            {(hosts ?? []).length === 0 ? (
+                            {(hosts ?? []).length === 0 &&
+                            hostsRead === 'loaded' ? (
                               <Typography
                                 variant="caption"
                                 color="text.secondary"
                               >
                                 {'No sites yet.'}
                               </Typography>
+                            ) : null}
+                            {hostsRead === 'unavailable' ? (
+                              <Alert severity="warning">
+                                {'Your sites could not be loaded, so this ' +
+                                  'list is incomplete — existing access is ' +
+                                  'unchanged. Reload once the session banner ' +
+                                  'above is resolved.'}
+                              </Alert>
                             ) : null}
                           </Stack>
                         ) : null}

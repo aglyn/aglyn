@@ -82,6 +82,7 @@ export function HostSwitcherNavComponent() {
     items: hits,
     loading,
     hasQuery,
+    error: hitsError,
   } = useSwitcherCollection<any>({
     firestore,
     path: ['users', uid ?? '', 'hostMemberships'],
@@ -139,7 +140,12 @@ export function HostSwitcherNavComponent() {
   const label =
     currentDoc?.displayName ?? currentDoc?.$id ?? hostSubdomain ?? 'All sites'
   const empty = sites.length === 0
-  const showEmpty = empty && !loading
+  // Three states, not two (AGL-1066). `!loading` used to stand in for "the
+  // read finished", and a refused read finishes too — so a dead session put
+  // "No sites yet." in the switcher of someone holding sites. Only a fetch
+  // that actually came back licenses that sentence.
+  const showEmpty = empty && !loading && !hitsError
+  const showUnreadable = empty && !loading && hitsError
 
   return (
     <>
@@ -187,7 +193,16 @@ export function HostSwitcherNavComponent() {
         />
         <Divider />
         <Box sx={{ maxHeight: 280, overflowY: 'auto', py: 0.5 }}>
-          {showEmpty ? (
+          {showUnreadable ? (
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ px: 2, py: 1.5 }}
+            >
+              {'Your sites could not be loaded. Nothing has been deleted — ' +
+                'try again in a moment.'}
+            </Typography>
+          ) : showEmpty ? (
             <Typography
               variant="body2"
               color="text.secondary"

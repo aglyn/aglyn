@@ -49,6 +49,7 @@ import OrgInvitesBanner from '../../../components/org-invites-banner.component'
 import { buildRoute, Route } from '../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
 import { useOrgScope } from '../../../hooks/use-org-scope'
+import { readOutcome } from '../../../utils/read-outcome'
 import { usePendingInvites } from '../../../hooks/use-pending-invites'
 import {
   consumeSignUpOrgFailure,
@@ -65,8 +66,24 @@ import { consumeOnboardingPlanIntent } from '../../../utils/onboarding-plan-inte
  * first site (which auto-provisions the workspace).
  */
 function OrgJump() {
-  const { orgs, loading, confirmed, hasMoreOrgs, loadMoreOrgs } =
-    useOrgScope()
+  const {
+    orgs,
+    loading,
+    confirmed,
+    hasMoreOrgs,
+    loadMoreOrgs,
+    error: orgsError,
+    retry: retryOrgs,
+  } = useOrgScope()
+  /**
+   * `useOrgScope` has said all along that an errored membership listen "says
+   * nothing about what orgs exist" (AGL-1260), and this page read `orgs`
+   * alone — so a session denied that read landed on **Create your first
+   * site** in front of someone who has several (AGL-1066). It is the Sites
+   * page's bug one level up, and worse: the workspace list is what the whole
+   * console routes off.
+   */
+  const orgsRead = readOutcome({ ready: !loading, error: orgsError })
   // A first-time invitee has zero orgs and lands here; this is the only jump
   // surface, so it must offer the invite (AGL-851). Without it the invite was
   // reachable only from a hosts page, which needs an org you don't have yet.
@@ -241,6 +258,9 @@ function OrgJump() {
             ) : (
               <>
                 <EmptyState
+                  read={orgsRead}
+                  subject="your workspaces"
+                  onRetry={retryOrgs}
                   iconPath={ICON_VARIANT_HOST_GROUP.path}
                   title={'Create your first site'}
                   description={

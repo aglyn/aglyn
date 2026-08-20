@@ -26,7 +26,8 @@ import {
   type DocumentData,
   type Firestore,
 } from 'firebase/firestore'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { reportDeniedRead } from '../utils/session-health'
 
 /**
  * Every host role, as a value (AGL-1145).
@@ -61,6 +62,13 @@ const RETRY_DELAY_MS = 400
 // enough that a valid host rarely falls through to the error path below
 // (AGL-813).
 const MAX_RETRIES = 8
+
+/**
+ * The evidence key this hook reports under (AGL-1066). It must be STABLE and
+ * distinct: `session-health` counts DISTINCT collections, so two reports of
+ * one key are one collection and can never reach the threshold alone.
+ */
+const MEMBERSHIP_COLLECTION_KEY = 'users/hostMemberships'
 
 export interface OrgHost extends DocumentData {
   $id: string
@@ -124,7 +132,7 @@ export function useOrgHosts(
    * `null` for accounts with no org yet, which lists every site they hold.
    */
   orgId?: string | null,
-): { hosts: OrgHost[]; ready: boolean; error: boolean } {
+): { hosts: OrgHost[]; ready: boolean; error: boolean; retry: () => void } {
   const [hosts, setHosts] = useState<OrgHost[]>([])
   const [ready, setReady] = useState(false)
   // `true` only when resolution SETTLED by exhausting retries (never from a
@@ -132,6 +140,11 @@ export function useOrgHosts(
   // apart from "this site isn't one you can open" — the former must offer a
   // retry, not a false 404 for a host that actually exists (AGL-813).
   const [error, setError] = useState(false)
+  // Bumping this re-runs the effect below from scratch, which is what a
+  // "Try again" button needs — the listens are torn down by the cleanup and
+  // opened afresh, rather than resuming a target the server already refused.
+  const [attemptId, setAttemptId] = useState(0)
+  const retry = useCallback(() => setAttemptId((value) => value + 1), [])
 
   useEffect(() => {
     setReady(false)
@@ -149,6 +162,15 @@ export function useOrgHosts(
 
     /** Live host documents, keyed by id. `null` = resolved as unreadable. */
     const hostDocs = new Map<string, OrgHost | null>()
+    /**
+     * Ids whose per-host read was REFUSED, as opposed to answered with "no
+     * such document" (AGL-1066).
+     *
+     * Both used to collapse into `hostDocs.set(id, null)`, and that is the
+     * whole bug: a refusal and an absence are the same value but not the same
+     * fact. Absence is an answer; refusal is the absence of one.
+     */
+    const deniedIds = new Set<string>()
     const hostUnsubs = new Map<string, () => void>()
     let wantedIds: string[] = []
 
@@ -182,7 +204,27 @@ export function useOrgHosts(
           .map((id) => hostDocs.get(id))
           .filter((host): host is OrgHost => host != null),
       )
-      setError(false)
+      /**
+       * A list the server refused ENTIRELY is not an empty list (AGL-1066).
+       *
+       * This used to be a flat `setError(false)`, which meant a session
+       * denied every `hosts/{id}` read published `{ hosts: [], ready: true,
+       * error: false }` — indistinguishable from a brand-new workspace, and
+       * the reason the Sites page printed "No sites yet" at someone holding
+       * sites. `persistentLocalCache` answers each listen from IndexedDB
+       * first and the server refuses it after, so the list even painted
+       * before it emptied.
+       *
+       * The threshold is EVERY candidate, not any candidate, and that is
+       * deliberate. One refusal among several is the by-design case AGL-1190
+       * documents: the mirror is a hint, the per-host read is the gate, and a
+       * stale row must cost that one site and not the whole list. But the
+       * mirror named these ids a moment ago — if not one of them can be read,
+       * the thing that changed is our ability to read, not their existence.
+       */
+      const allDenied =
+        wantedIds.length > 0 && wantedIds.every((id) => deniedIds.has(id))
+      setError(allDenied)
       setReady(true)
     }
 
@@ -194,6 +236,9 @@ export function useOrgHosts(
           doc(firestore, 'hosts', id),
           (snap) => {
             if (cancelled) return
+            // An answer of any kind clears the refusal: a listen that
+            // recovers must not leave the list latched as degraded.
+            deniedIds.delete(id)
             hostDocs.set(
               id,
               snap.exists() ? { $id: snap.id, ...snap.data() } : null,
@@ -204,7 +249,10 @@ export function useOrgHosts(
             if (cancelled) return
             // Denied or unavailable: the mirror row is stale, or access was
             // removed. Drop this host rather than failing the whole list —
-            // the mirror is a hint and this read is the gate.
+            // the mirror is a hint and this read is the gate. But REMEMBER
+            // that we were refused (AGL-1066): dropping it silently is what
+            // let a wholly-refused list read as an empty one.
+            deniedIds.add(id)
             hostDocs.set(id, null)
             publish()
           },
@@ -221,6 +269,7 @@ export function useOrgHosts(
           unsubscribe()
           hostUnsubs.delete(id)
           hostDocs.delete(id)
+          deniedIds.delete(id)
         }
       }
       ids.forEach(watchHost)
@@ -248,10 +297,13 @@ export function useOrgHosts(
                 if (cancelled) return
                 applyIds(idsFrom(fresh.docs))
               })
-              .catch(() => {
+              .catch((confirmError: { code?: string }) => {
                 if (cancelled) return
                 // Couldn't confirm (offline/transient): surface a retry, never
                 // a false 404. The live listener stays the source of truth.
+                if (confirmError?.code === 'permission-denied') {
+                  reportDeniedRead(MEMBERSHIP_COLLECTION_KEY)
+                }
                 setError(true)
                 setReady(true)
               })
@@ -261,7 +313,7 @@ export function useOrgHosts(
           if (ids.length > 0) emptyConfirmed = false
           applyIds(ids)
         },
-        () => {
+        (listenError: { code?: string }) => {
           if (cancelled) return
           membershipUnsub?.()
           membershipUnsub = null
@@ -269,10 +321,26 @@ export function useOrgHosts(
             attempt += 1
             timer = setTimeout(subscribe, RETRY_DELAY_MS)
           } else {
-            // Give up gracefully rather than crash the app, but FLAG it: an
-            // empty list here means "the read never succeeded", not "no hosts".
-            // Consumers that gate a 404 on emptiness must not fire on this
-            // (AGL-813).
+            /**
+             * Give up gracefully rather than crash the app, but FLAG it: an
+             * empty list here means "the read never succeeded", not "no
+             * hosts". Consumers that gate a 404 on emptiness must not fire on
+             * this (AGL-813).
+             *
+             * And REPORT it (AGL-1066). Surviving eight retries is already
+             * "not the post-sign-in race", and this collection is the least
+             * ambiguous denial in the console: the rule on
+             * `users/{userId}/hostMemberships` is `request.auth.uid ==
+             * userId` with no `resource.data` term, so no scoped
+             * collaborator can be refused it by design (the AGL-1041 case
+             * `session-health` guards against). It was nonetheless the one
+             * collection contributing NO evidence to the AGL-1063 banner,
+             * because only `firestoreOneShotRetry` ever reported and this is
+             * a listener.
+             */
+            if (listenError?.code === 'permission-denied') {
+              reportDeniedRead(MEMBERSHIP_COLLECTION_KEY)
+            }
             setError(true)
             setReady(true)
           }
@@ -288,9 +356,9 @@ export function useOrgHosts(
       hostUnsubs.forEach((unsubscribe) => unsubscribe())
       hostUnsubs.clear()
     }
-  }, [firestore, uid, orgId])
+  }, [firestore, uid, orgId, attemptId])
 
-  return { hosts, ready, error }
+  return { hosts, ready, error, retry }
 }
 
 export default useOrgHosts

@@ -48,6 +48,10 @@ export function ArtifactNotFound(props: ArtifactNotFoundProps) {
   const { noun, listUrl, listLabel, id } = props
   return (
     <EmptyState
+      // The caller reaches this only after distinguishing "still loading"
+      // from "does not exist" (AGL-706, and AGL-1066 for the third state a
+      // refused read adds), so the question is already answered here.
+      read="loaded"
       iconPath={ICON_VARIANT_SEARCH.path}
       title={`This ${noun} isn’t here`}
       description={
