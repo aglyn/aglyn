@@ -60,6 +60,29 @@ if (EMULATED && !getApps().length) {
   initializeApp({ projectId: 'aglyn-main' })
 }
 
+/**
+ * Deferred through a variable specifier rather than `import('@aglyn/…')`.
+ *
+ * `@aglyn/tenant-data-admin` initialises the firebase-admin default app WITH A
+ * PRODUCTION CERT CREDENTIAL on module load, so it cannot be imported
+ * statically at the top of this file — the hoisted import would run before the
+ * `initializeApp({ projectId: 'aglyn-main' })` guard above and the spec would
+ * reach for the root `.env`'s service-account key instead of the emulator.
+ *
+ * But a LITERAL specifier inside a callback is read by
+ * `@nx/enforce-module-boundaries` as a dynamic graph edge, and dynamic edges
+ * are transitive: one here marks the whole library lazy-loaded and forbids
+ * every STATIC import of it across the console — the AGL-949 shape, hundreds
+ * of errors in files that did not change. The indirection is load-bearing for
+ * the BUILD, not for this test.
+ *
+ * Nothing is concealed by it. The console's dependency on this library is
+ * already declared many times over — the route under test imports
+ * `firebaseAdmin` from it statically — so only the KIND of an existing edge
+ * was being mis-read, never its existence.
+ */
+const reRequire = (specifier: string) => require(specifier)
+
 const describeEmulated = EMULATED ? describe : describe.skip
 
 describeEmulated('sso-lookup honours a deactivated routing doc (AGL-1912)', () => {
@@ -84,7 +107,7 @@ describeEmulated('sso-lookup honours a deactivated routing doc (AGL-1912)', () =
 
   beforeAll(async () => {
     db = getFirestore()
-    sso = await import('@aglyn/tenant-data-admin')
+    sso = reRequire('@aglyn/tenant-data-admin')
     handler = (await import('./route')).GET as typeof handler
     await purge()
 
