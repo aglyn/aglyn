@@ -494,6 +494,41 @@ describe('component instance preview (AGL-1251)', () => {
     expect(css).toContain('padding-top:64px')
     expect(css).not.toContain('background-color:#101828')
   })
+
+  it("renders an inner node with this instance's attribute overrides (AGL-1899)", () => {
+    // Canvas parity for the attribute override layer. The snapshot this
+    // memo builds is hand-assembled field by field, so a field left out is
+    // invisible rather than broken: Preview and tenant SSR compose from the
+    // STORED node and would apply the override, while the canvas alone drew
+    // the component's own attributes.
+    const definition = {
+      rootId: 'root',
+      nodes: {
+        root: { $id: 'root', componentId: 'div', nodes: ['label'] },
+        label: {
+          $id: 'label',
+          componentId: 'div',
+          parentId: 'root',
+          props: { children: 'Component copy' },
+          nodes: [],
+        },
+      },
+    } as any
+    const node = {
+      $id: 'inst1',
+      type: 'node',
+      componentId: Aglyn.REUSABLE_INSTANCE_COMPONENT_ID,
+      props: { refId: 'hero' },
+      attrOverrides: { label: { children: 'This placement only' } },
+      sx: {},
+      nodes: [],
+    } as any
+    const { baseElement } = renderInstance(node, { hero: definition })
+    // Text lives in an `aglyn-text` shadow root, so `textContent` is empty
+    // by design — read it the way every other case here does.
+    expect(shadowText(baseElement)).toContain('This placement only')
+    expect(shadowText(baseElement)).not.toContain('Component copy')
+  })
 })
 
 describe('denormalizeTree', () => {
