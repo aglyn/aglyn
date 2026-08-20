@@ -812,7 +812,12 @@ const CollectionRelated = forwardRef<HTMLDivElement, CollectionRelatedProps>(
         <Box
           component="img"
           src={src}
-          alt={entry.title ?? ''}
+          // The author's own description wins, and the title stays the
+          // fallback (AGL-2418). Unlike the entry hero and the event
+          // thumbnail — which render empty when nothing is authored — this
+          // cover is the LINK's own content, so it must carry an accessible
+          // name rather than go silent.
+          alt={Aglyn.renderedMediaAlt(entry.coverImageAlt, entry.title)}
           loading="lazy"
           sx={{
             display: 'block',

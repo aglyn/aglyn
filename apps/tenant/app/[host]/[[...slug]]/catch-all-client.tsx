@@ -446,7 +446,14 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={entryCover}
-                alt=""
+                // The author's own description when they wrote one, and
+                // `alt=""` otherwise (AGL-2418). `coverImageAlt` has been
+                // stored since AGL-2417 but only ever reached `og:image:alt`
+                // — the sentence went to everyone who saw the link shared
+                // and to nobody who opened the post. No fallback to the
+                // title: this sits directly beneath `<h1>{entry.title}</h1>`,
+                // so borrowing it would announce the same words twice.
+                alt={Aglyn.renderedMediaAlt((entry as any)?.coverImageAlt)}
                 style={{ maxWidth: '100%', borderRadius: 8 }}
               />
             ) : null}

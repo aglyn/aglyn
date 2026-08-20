@@ -46,6 +46,12 @@ export interface EventItem {
   organizer?: string | null
   description?: string | null
   coverImage?: string | null
+  /**
+   * The author's description of the cover (AGL-2418). Absent or blank
+   * renders `alt=""` — correct for this layout, where the thumbnail sits
+   * immediately beside the title that already names it.
+   */
+  coverImageAlt?: string | null
 }
 
 /**
@@ -184,7 +190,11 @@ const EventList = forwardRef<HTMLDivElement, EventListProps>((props, ref) => {
             <Box
               component="img"
               src={event.coverImage}
-              alt=""
+              // The author's own description when they wrote one (AGL-2418),
+              // and `alt=""` otherwise. No fallback to the title: this is a
+              // 96×96 thumbnail sitting immediately beside that title, so
+              // borrowing it would announce the same words twice.
+              alt={Aglyn.renderedMediaAlt(event.coverImageAlt)}
               sx={{
                 width: 96,
                 height: 96,

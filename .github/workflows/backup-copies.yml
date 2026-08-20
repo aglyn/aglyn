@@ -16,21 +16,11 @@ name: Backup copies
 #   at least one FRESH copy of production data sits in a project that is not
 #   the production project — proven by `projectNumber`, never by bucket name.
 #
-# And since AGL-2422, a second invariant that the first one does not imply:
-# the Firestore export is a copy of the DATABASE. `exportDocuments` touches no
-# bucket contents, so a project with a perfect off-project export still has
-# zero copies of the ~47 MiB of customer media, the `adminAudit-archive/` the
-# DPA §11 erasure replay reads, and the publisher-signed plugin bundles that
-# cannot be rebuilt from our source. For those the invariant is COMPLETENESS,
-# not existence — a mirror bucket that is present, off-project and missing half
-# its objects restores half a workspace and looks healthy from any distance.
-#
 # ## What it does today, and why that is not a muted alarm
 #
-# Neither invariant holds right now. `tools/scripts/lib/backup-copies.mjs`
-# carries ACKNOWLEDGED entries for `no-off-project-copy` (AGL-1882) and
-# `no-storage-mirror` (AGL-2422) — both expiring **2026-09-01** — so this job
-# prints both gaps in full every run and
+# The invariant does NOT hold right now. `tools/scripts/lib/backup-copies.mjs`
+# carries an ACKNOWLEDGED entry for `no-off-project-copy` — owned by AGL-1882,
+# expiring **2026-09-01** — so this job prints the gap in full every run and
 # still exits 0, because a job that is red every day until one person does one
 # thing gets muted, and then it is worth nothing on the day something ELSE
 # breaks. On 2026-09-01 the acknowledgement expires and this job goes red with
@@ -79,7 +69,6 @@ on:
       - tools/scripts/check-backup-copies.mjs
       - tools/scripts/lib/backup-copies.mjs
       - tools/scripts/lib/backup-copies.test.mjs
-      - cloud/storage-mirror-lifecycle.json
       - .github/workflows/backup-copies.yml
   schedule:
     # Daily, 08:07 UTC — off the top of the hour, where GitHub's scheduler
@@ -153,12 +142,4 @@ jobs:
           # read, so pointing the export off-project moves all three at once.
           FIRESTORE_EXPORT_BUCKET: ${{ vars.FIRESTORE_EXPORT_BUCKET }}
           OFFSITE_BACKUP_BUCKET: ${{ vars.OFFSITE_BACKUP_BUCKET }}
-          # The OBJECT mirror (AGL-2422) — a different question from the two
-          # above, which are both about the Firestore export. Unset today, and
-          # unset is a FINDING rather than a skip: nothing copies the ~47 MiB
-          # of customer media, the audit archive or the plugin bundles. Set it
-          # to the mirror bucket and this job starts proving the mirror is
-          # COMPLETE (every source object present) instead of reporting that it
-          # does not exist.
-          STORAGE_MIRROR_BUCKET: ${{ vars.STORAGE_MIRROR_BUCKET }}
         run: npm run check:backup-copies

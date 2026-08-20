@@ -38,15 +38,6 @@
 //                                           the same marker the health probe
 //                                           counts, so the two cannot disagree
 //                                           about what "an export" means
-//   GET /storage/v1/b/<bucket>/o?prefix=…&fields=items(updated)
-//                                           object COUNT and newest copy time
-//                                           for each mirrored store. Object
-//                                           NAMES are not requested: the
-//                                           comparison does not need them, and
-//                                           a checker that prints every
-//                                           customer's media paths into a CI
-//                                           log is a disclosure nobody asked
-//                                           for.
 //
 // WHICH BUCKETS COUNT AS COPIES:
 //   FIRESTORE_EXPORT_BUCKET  (default `<projectId>-firestore-exports`) — the
@@ -57,14 +48,6 @@
 //   OFFSITE_BACKUP_BUCKET    an ADDITIONAL copy target, for the shape where
 //                            the in-project export stays and a mirror is added
 //                            beside it rather than replacing it.
-//   STORAGE_MIRROR_BUCKET    the OBJECT mirror (AGL-2422) — a different
-//                            question from the two above. Those ask about the
-//                            Firestore export; this one asks whether the
-//                            ~47 MiB of customer media, the audit archive and
-//                            the plugin bundles are copied at all. Unset is a
-//                            FINDING, not a skip, because that is the state
-//                            today. Once set, the invariant is completeness:
-//                            every source object present in the mirror.
 //
 // Auth — the drift-checkers' exact pattern, no new credential:
 //   service account from the root .env (FIREBASE_PROJECT_ID,
@@ -92,10 +75,8 @@ import { resolveReadToken } from './lib/firestore-indexes-api.mjs'
 import {
   ACKNOWLEDGED,
   MAX_EXPORT_AGE_DAYS,
-  PRODUCTION_DATA_STORES,
   ageInDays,
   assessBackupCopies,
-  resolveStoreName,
 } from './lib/backup-copies.mjs'
 
 loadLocalEnv()
@@ -273,114 +254,12 @@ for (const target of copyTargets) {
   })
 }
 
-// ── The object mirror (AGL-2422) ──────────────────────────────────────────
-//
-// The export bucket above answers a question about FIRESTORE. Cloud Storage is
-// a separate hole: `exportDocuments` touches no bucket contents, so customer
-// media, the audit archive and the plugin bundles are copied by nothing at all
-// unless a mirror exists. `STORAGE_MIRROR_BUCKET` names one bucket holding all
-// of them under a prefix each (`mirrorPrefix` in PRODUCTION_DATA_STORES);
-// unset means "no mirror", which is a finding, not a skip.
-//
-// Objects are listed with `fields=items(updated),nextPageToken` — names are
-// deliberately NOT requested. The count and the newest copy time are all the
-// comparison needs, and a checker that pulls a list of every customer's media
-// paths into CI logs is a data-exposure decision nobody asked for.
-
-/** Pages of 1000. 20 is ~20k objects — two orders of magnitude over today's 451. */
-const MAX_LIST_PAGES = 20
-
-/**
- * @returns {Promise<{ objects: number, newest: string | null, truncated: boolean }>}
- */
-async function listObjects(bucket, prefix, what) {
-  let objects = 0
-  let newest = null
-  let pageToken = null
-  for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
-    const url =
-      `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucket)}/o` +
-      `?prefix=${encodeURIComponent(prefix)}&fields=items(updated),nextPageToken&maxResults=1000` +
-      (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '')
-    const body = await getJson(url, what)
-    for (const item of body.items ?? []) {
-      objects += 1
-      if (item.updated && (newest === null || item.updated > newest)) {
-        newest = item.updated
-      }
-    }
-    pageToken = body.nextPageToken ?? null
-    if (!pageToken) return { objects, newest, truncated: false }
-  }
-  // Ran out of pages with a token still in hand: the count is a floor.
-  return { objects, newest, truncated: true }
-}
-
-const mirrorBucket = envBucket('STORAGE_MIRROR_BUCKET')
-let storageMirror = null
-if (mirrorBucket) {
-  try {
-    const meta = await getJson(
-      `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(mirrorBucket)}` +
-        '?fields=name,projectNumber,location,versioning',
-      `reading gs://${mirrorBucket} (from STORAGE_MIRROR_BUCKET)`,
-    )
-    const stores = []
-    for (const store of PRODUCTION_DATA_STORES.filter((s) => s.mirrorPrefix)) {
-      const name = resolveStoreName(store.bucket, {
-        projectId,
-        projectNumber: productionProjectNumber,
-      })
-      const source = await listObjects(name, '', `listing gs://${name}`)
-      const mirrored = await listObjects(
-        mirrorBucket,
-        store.mirrorPrefix,
-        `listing gs://${mirrorBucket}/${store.mirrorPrefix}`,
-      )
-      stores.push({
-        name,
-        prefix: store.mirrorPrefix,
-        sourceObjects: source.objects,
-        sourceNewest: source.newest,
-        sourceTruncated: source.truncated,
-        mirrorObjects: mirrored.objects,
-        mirrorNewest: mirrored.newest,
-        mirrorTruncated: mirrored.truncated,
-      })
-    }
-    storageMirror = {
-      bucket: mirrorBucket,
-      projectNumber: meta.projectNumber ?? null,
-      location: meta.location ?? null,
-      // An ABSENT `versioning` object means disabled, and so does
-      // `{enabled: false}`. Both must read as false; `!!meta.versioning` alone
-      // would call a disabled-but-once-configured bucket versioned.
-      versioningEnabled: meta.versioning?.enabled === true,
-      stores,
-    }
-  } catch (error) {
-    cannotCheck([
-      `Cannot check: ${error.message}`,
-      '',
-      'STORAGE_MIRROR_BUCKET names an object mirror that could not be read. A',
-      'mirror that cannot be read is not a mirror that is absent, and it is',
-      'certainly not a mirror that is complete.',
-      'A 403 means the credential lacks storage access on that bucket — grant it',
-      'roles/storage.objectViewer + roles/storage.legacyBucketReader there, or',
-      're-run with BACKUP_COPIES_ACCESS_TOKEN=$(gcloud auth print-access-token).',
-      'A 404 means the bucket named does not exist: fix the variable or create',
-      'the bucket, but do not let the check pass.',
-    ])
-  }
-}
-
 const now = Date.now()
 const verdict = assessBackupCopies({
   projectId,
   productionProjectNumber,
   copies,
   liveBuckets,
-  storageMirror,
   now,
   strict,
 })
@@ -421,41 +300,7 @@ for (const copy of verdict.inventory.offProject.concat(
 console.log('\nProduction data stores:')
 for (const store of verdict.inventory.declared) {
   console.log(`  gs://${store.name} — ${store.holds}`)
-  console.log(
-    `      copied by: ${store.copiedBy}` +
-      (store.mirrorPrefix ? ` (mirror prefix ${store.mirrorPrefix})` : ''),
-  )
-}
-
-console.log('\nObject mirror (AGL-2422):')
-if (!storageMirror) {
-  console.log(
-    '  STORAGE_MIRROR_BUCKET is not set — no copy of Cloud Storage exists.\n' +
-      `  ${verdict.inventory.mirroredStores.length} store(s) of primary data are copied by nothing:\n` +
-      verdict.inventory.mirroredStores
-        .map((store) => `    gs://${store.name} → would mirror to ${store.mirrorPrefix}`)
-        .join('\n'),
-  )
-} else {
-  const where =
-    storageMirror.projectNumber === productionProjectNumber
-      ? 'IN the production project'
-      : `OFF-PROJECT (project ${storageMirror.projectNumber})`
-  console.log(
-    `  gs://${storageMirror.bucket} — ${where}, ${storageMirror.location ?? 'unknown location'}, ` +
-      `versioning ${storageMirror.versioningEnabled ? 'ON' : 'OFF'}`,
-  )
-  for (const store of storageMirror.stores) {
-    const flag =
-      store.sourceTruncated || store.mirrorTruncated
-        ? ' [TRUNCATED — counts are floors]'
-        : ''
-    console.log(
-      `    gs://${store.name} → ${store.prefix}: ` +
-        `${store.mirrorObjects}/${store.sourceObjects} objects, ` +
-        `source newest ${store.sourceNewest ?? 'n/a'}, mirror newest ${store.mirrorNewest ?? 'n/a'}${flag}`,
-    )
-  }
+  console.log(`      copied by: ${store.copiedBy}`)
 }
 
 if (verdict.acknowledged.length > 0) {
@@ -490,6 +335,5 @@ if (verdict.failing.length > 0) {
 console.log(
   verdict.acknowledged.length > 0
     ? '\nNo unacknowledged findings.'
-    : '\nAt least one fresh copy of production data lives outside the production\n' +
-        'project, and every store that needs an object mirror has a complete one.',
+    : '\nAt least one fresh copy of production data lives outside the production project.',
 )

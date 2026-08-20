@@ -170,3 +170,79 @@ describe('the Event List cover refuses the http: scheme (AGL-1725)', () => {
     unmount()
   })
 })
+
+/**
+ * The event cover's authored alt reaches the rendered `<img>` (AGL-2418).
+ *
+ * Unlike the collection entry next door, this one had no field ANYWHERE —
+ * not on the document, not in the console editor, not on the payload
+ * `/api/events/list` returns. AGL-1896 taught the DAM's stored alt to
+ * default into every placement that has an alt to default into; this
+ * placement had none, so the picker wrote a bare URL and the renderer
+ * supplied a literal `alt=""` that nothing could ever change.
+ *
+ * The empty case stays empty on purpose. This is a 96×96 thumbnail sitting
+ * immediately beside the event title, so with nothing authored the adjacent
+ * text already names it — but the attribute must still be PRESENT, or a
+ * screen reader falls back to the file name.
+ */
+describe('the Event List cover’s authored alt (AGL-2418)', () => {
+  const originalFetch = global.fetch
+
+  afterEach(() => {
+    global.fetch = originalFetch
+  })
+
+  const coverFor = async (overrides: Partial<EventItem>) => {
+    global.fetch = jest.fn(async () => ({
+      json: async () => ({ events: [anEvent(overrides)] }),
+    })) as any
+    const { container, unmount } = render(
+      <Aglyn.SiteContext.Provider value={{ hostId: 'host-1' }}>
+        <EventList />
+      </Aglyn.SiteContext.Provider>,
+    )
+    await waitFor(() => expect(screen.getByText('Launch party')).toBeTruthy())
+    const img = container.querySelector('img')
+    unmount()
+    return img
+  }
+
+  it('renders the sentence the author typed', async () => {
+    const img = await coverFor({
+      coverImage: 'https://acme.example/party.jpg',
+      coverImageAlt: 'A crowd raising glasses under string lights',
+    })
+
+    expect(img?.getAttribute('alt')).toBe(
+      'A crowd raising glasses under string lights',
+    )
+  })
+
+  it('emits an EMPTY alt, not a missing one, for an event authored before the field existed', async () => {
+    // Every event that already exists takes this branch.
+    const img = await coverFor({ coverImage: 'https://acme.example/party.jpg' })
+
+    expect(img?.hasAttribute('alt')).toBe(true)
+    expect(img?.getAttribute('alt')).toBe('')
+  })
+
+  it('treats a whitespace-only alt as decorative', async () => {
+    const img = await coverFor({
+      coverImage: 'https://acme.example/party.jpg',
+      coverImageAlt: '  ',
+    })
+
+    expect(img?.hasAttribute('alt')).toBe(true)
+    expect(img?.getAttribute('alt')).toBe('')
+  })
+
+  it('survives a null alt with strictNullChecks off', async () => {
+    const img = await coverFor({
+      coverImage: 'https://acme.example/party.jpg',
+      coverImageAlt: null,
+    })
+
+    expect(img?.getAttribute('alt')).toBe('')
+  })
+})

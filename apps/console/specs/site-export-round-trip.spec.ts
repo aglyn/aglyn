@@ -642,6 +642,8 @@ const SEEDS: Array<{
       excerpt: 'A short summary',
       body: '# Heading\n\nBody copy.',
       coverImage: 'https://cdn/cover.png',
+      // AGL-2418: the cover's description survives the round trip with it.
+      coverImageAlt: 'A pallet of boxes on a loading dock',
       seoTitle: 'Shipping the export',
       seoDescription: 'How the bundle works',
       authorName: 'Zach',

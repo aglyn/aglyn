@@ -1108,6 +1108,12 @@ export interface CollectionRelatedItem {
    * one reference keeps working across sites and CDN route changes.
    */
   coverImage?: string
+  /**
+   * The author's description of that cover (AGL-2418). Travels WITH
+   * `coverImage`, and absent means "fall back to the title" rather than
+   * "silent" — on this block the cover is the link's own content.
+   */
+  coverImageAlt?: string
 }
 
 /**
@@ -1215,6 +1221,11 @@ export function expandCollectionRelated<
         // stamped field. Absent covers omit the key rather than stamping an
         // empty string, so the render asks one question, not two.
         ...(entry.coverImage ? { coverImage: entry.coverImage } : {}),
+        // Only alongside a cover, and only when authored (AGL-2418) — a
+        // description with no picture is dead weight on every stamped node.
+        ...(entry.coverImage && (entry as any).coverImageAlt
+          ? { coverImageAlt: (entry as any).coverImageAlt }
+          : {}),
         ...(categoryName ? { category: categoryName } : {}),
       }
     })
