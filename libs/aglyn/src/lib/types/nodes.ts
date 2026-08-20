@@ -331,6 +331,32 @@ export interface NodeSchema<P = JSX.AnyProps> extends NodeI<P> {
    */
   styleOverrides?: Record<string, JSX.SxProps>
   /**
+   * Per-instance ATTRIBUTE overrides on a reusable-component instance node
+   * (AGL-1899) — the same addressing as {@link styleOverrides}, applied to
+   * a node's props instead of its sx, so one placement can carry a
+   * different button `variant`, `size` or `href` without the component
+   * declaring a prop for it and without detaching.
+   *
+   * Merged **per named prop**: a slice replaces only the props it names and
+   * leaves the definition's others alone, so a component that later adds a
+   * prop still gives every existing instance the new default. That is
+   * deliberately shallower than the sx merge next door — an sx slice
+   * cascades because `@scheme dark` and breakpoint objects are themselves
+   * selectors, whereas a prop value is one value, and half-merging two
+   * objects that merely look alike (say a `slotProps`) would produce a
+   * third thing neither side asked for.
+   *
+   * `sx` is refused here. Styling an instance already has a mechanism one
+   * field up, and honouring both would leave two writers racing for one
+   * rendered value with no rule to say which wins.
+   *
+   * Applied BEFORE `{{prop.*}}` substitution, so an override may itself be
+   * written in tokens and still resolves, and an override on a prop the
+   * definition binds to a declared prop wins — the more specific placement
+   * beats the component's own default.
+   */
+  attrOverrides?: Record<string, Record<string, unknown>>
+  /**
    * The computed node parent (only for type completion)
    */
   readonly parent?: NodeSchema<any> | null

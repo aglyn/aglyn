@@ -73,6 +73,13 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
    * every canvas round-trip.
    */
   public styleOverrides?: Record<string, JSX.SxProps>
+  /**
+   * Per-instance attribute overrides (AGL-1899) — see `NodeSchema`. Same
+   * three-touch-point rule as `styleOverrides` above: declared here,
+   * assigned in the constructor, emitted in `toJSON`. Miss one and the
+   * field survives in memory but not across a save.
+   */
+  public attrOverrides?: Record<string, Record<string, unknown>>
 
   get parent(): NodeSchema<any> | undefined {
     if (!this.parentId) return
@@ -133,6 +140,9 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
     this.styleOverrides = schema.styleOverrides
       ? { ...schema.styleOverrides }
       : undefined
+    this.attrOverrides = schema.attrOverrides
+      ? { ...schema.attrOverrides }
+      : undefined
 
     makeAutoObservable(this, {
       store: false,
@@ -176,6 +186,11 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
     const styleOverrides = stripUndefinedDeep(toJS(this.styleOverrides))
     if (styleOverrides && Object.keys(styleOverrides).length > 0) {
       json['styleOverrides'] = styleOverrides
+    }
+    // Instance attribute overrides (AGL-1899): same treatment, same reason.
+    const attrOverrides = stripUndefinedDeep(toJS(this.attrOverrides))
+    if (attrOverrides && Object.keys(attrOverrides).length > 0) {
+      json['attrOverrides'] = attrOverrides
     }
     return json as NodeSchemaJSON<P>
   }

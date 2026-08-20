@@ -18,6 +18,7 @@
 import {
   composeReusableComponentNodes,
   detachInstanceSubtree,
+  getInstanceAttrOverrides,
   getInstanceEffectivePropText,
   getInstanceRootStyleOverride,
   getInstanceStyleOverrides,
@@ -2013,5 +2014,229 @@ describe('optional CTAs and media (AGL-1314)', () => {
         isNodeHiddenByDirective({ [NODE_HIDE_UNLESS_PROP]: '{{prop.ghost}}' }),
       ).toBe(false)
     })
+  })
+})
+
+/**
+ * AGL-1899 — per-instance ATTRIBUTE overrides on inner nodes.
+ *
+ * The style half of this shipped as AGL-1306 (root) and AGL-1332 (per leaf).
+ * This is the same addressing and the same single merge point applied to a
+ * node's props, so one placement can carry a different button `variant`
+ * without the component declaring a prop for it and without detaching.
+ *
+ * The rules that differ from styles are the ones worth pinning: the merge is
+ * one level deep (a slice replaces only the props it NAMES), `sx` is refused
+ * so the two override layers cannot race, and the patch lands before
+ * `{{prop.*}}` substitution so an override may be written in tokens.
+ */
+describe('instance attribute overrides (AGL-1899)', () => {
+  /** A button whose variant and size the component itself sets. */
+  const widget = {
+    rootId: 'root',
+    props: [{ name: 'label', type: 'string' }],
+    nodes: {
+      root: {
+        $id: 'root',
+        componentId: 'muiStack',
+        nodes: ['cta'],
+        props: { spacing: 2 },
+      },
+      cta: {
+        $id: 'cta',
+        componentId: 'muiButton',
+        parentId: 'root',
+        nodes: [],
+        props: {
+          variant: 'contained',
+          size: 'medium',
+          children: '{{prop.label}}',
+        },
+      },
+    },
+  } as any
+
+  const instanceWithAttrs = (
+    id: string,
+    attrOverrides: Record<string, unknown>,
+    propValues?: Record<string, unknown>,
+  ) => ({
+    $id: id,
+    componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+    props: { refId: 'widget', ...(propValues ? { propValues } : {}) },
+    attrOverrides,
+    nodes: [] as string[],
+  })
+
+  it('overrides only the props it names on an inner node', () => {
+    const composed = composeReusableComponentNodes(
+      { a: instanceWithAttrs('a', { cta: { variant: 'outlined' } }) } as any,
+      { widget },
+    )
+    const cta = composed['cmp__a__cta'] as any
+    expect(cta.props.variant).toBe('outlined')
+    // Untouched props keep the component's values — this is what lets a
+    // component add a prop later and have every instance take the default.
+    expect(cta.props.size).toBe('medium')
+    expect(cta.props.spacing).toBeUndefined()
+  })
+
+  it('addresses the definition root by the shared root key', () => {
+    const composed = composeReusableComponentNodes(
+      {
+        a: instanceWithAttrs('a', {
+          [STYLE_OVERRIDES_ROOT_KEY]: { spacing: 8 },
+        }),
+      } as any,
+      { widget },
+    )
+    expect((composed['cmp__a__root'] as any).props.spacing).toBe(8)
+    // The root slice must not leak onto the leaves.
+    expect((composed['cmp__a__cta'] as any).props.spacing).toBeUndefined()
+  })
+
+  it('refuses an sx override, which has its own layer', () => {
+    const composed = composeReusableComponentNodes(
+      {
+        a: instanceWithAttrs('a', {
+          cta: { sx: { color: 'red' }, variant: 'text' },
+        }),
+      } as any,
+      { widget },
+    )
+    const cta = composed['cmp__a__cta'] as any
+    expect(cta.props.sx).toBeUndefined()
+    // The rest of the slice still applies — one refused prop is not a
+    // reason to drop an author's other overrides.
+    expect(cta.props.variant).toBe('text')
+  })
+
+  it('resolves a declared-prop token written INTO an override', () => {
+    const composed = composeReusableComponentNodes(
+      {
+        a: instanceWithAttrs(
+          'a',
+          { cta: { 'aria-label': 'Go to {{prop.label}}' } },
+          { label: 'Pricing' },
+        ),
+      } as any,
+      { widget },
+    )
+    // The patch lands before substitution, so tokens still resolve.
+    expect((composed['cmp__a__cta'] as any).props['aria-label']).toBe(
+      'Go to Pricing',
+    )
+  })
+
+  it('beats the definition binding for the same prop', () => {
+    const composed = composeReusableComponentNodes(
+      {
+        a: instanceWithAttrs(
+          'a',
+          { cta: { children: 'Book a demo' } },
+          { label: 'Pricing' },
+        ),
+      } as any,
+      { widget },
+    )
+    // The component binds `children` to `{{prop.label}}`; the placement is
+    // more specific and wins.
+    expect((composed['cmp__a__cta'] as any).props.children).toBe('Book a demo')
+  })
+
+  it('renders component-latest plus the override, never pinning a version', () => {
+    const republished = {
+      ...widget,
+      nodes: {
+        ...widget.nodes,
+        cta: {
+          ...widget.nodes.cta,
+          props: { ...widget.nodes.cta.props, size: 'large', color: 'success' },
+        },
+      },
+    }
+    const composed = composeReusableComponentNodes(
+      { a: instanceWithAttrs('a', { cta: { variant: 'outlined' } }) } as any,
+      { widget: republished },
+    )
+    const cta = composed['cmp__a__cta'] as any
+    expect(cta.props.variant).toBe('outlined')
+    // The component's NEW values flow through untouched.
+    expect(cta.props.size).toBe('large')
+    expect(cta.props.color).toBe('success')
+  })
+
+  it('ignores a key naming a node the definition no longer has', () => {
+    const composed = composeReusableComponentNodes(
+      { a: instanceWithAttrs('a', { removedLeaf: { variant: 'text' } }) } as any,
+      { widget },
+    )
+    // Degrades to the component's own attributes rather than throwing on a
+    // page nobody has opened since the component changed.
+    expect((composed['cmp__a__cta'] as any).props.variant).toBe('contained')
+  })
+
+  it('does not materialize a props key on a node that had none', () => {
+    const bare = composeReusableComponentNodes(
+      {
+        b: {
+          $id: 'b',
+          componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+          props: { refId: 'plain' },
+          attrOverrides: { nope: { variant: 'text' } },
+          nodes: [] as string[],
+        },
+      } as any,
+      {
+        plain: {
+          rootId: 'root',
+          nodes: { root: { $id: 'root', componentId: 'muiStack', nodes: [] } },
+        } as any,
+      },
+    )
+    expect('props' in (bare['cmp__b__root'] as any)).toBe(false)
+  })
+
+  it('getInstanceAttrOverrides answers only for instances, dropping junk', () => {
+    expect(
+      getInstanceAttrOverrides(
+        instanceWithAttrs('a', {
+          [STYLE_OVERRIDES_ROOT_KEY]: { spacing: 2 },
+          cta: { variant: 'text' },
+          cleared: {},
+          bogus: 'nope',
+          nulled: null,
+          listy: [1, 2],
+          sxOnly: { sx: { color: 'red' } },
+        }) as any,
+      ),
+    ).toEqual({
+      [STYLE_OVERRIDES_ROOT_KEY]: { spacing: 2 },
+      cta: { variant: 'text' },
+    })
+    // A slice that held nothing BUT a refused prop reads as no override at
+    // all, so it cannot show up in the panel as a phantom entry.
+    expect(
+      getInstanceAttrOverrides({
+        componentId: 'muiStack',
+        attrOverrides: { cta: { variant: 'text' } },
+      } as any),
+    ).toEqual({})
+  })
+
+  it('detach bakes the overrides into the fork', () => {
+    let n = 0
+    const detached = detachInstanceSubtree(
+      { a: instanceWithAttrs('a', { cta: { variant: 'outlined' } }) } as any,
+      'a',
+      widget,
+      () => `new${++n}`,
+    )
+    const cta = Object.values(detached).find(
+      (node: any) => node?.componentId === 'muiButton',
+    ) as any
+    // The fork has to look identical to what the page was showing.
+    expect(cta.props.variant).toBe('outlined')
+    expect(cta.props.size).toBe('medium')
   })
 })
