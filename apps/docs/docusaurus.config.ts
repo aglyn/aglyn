@@ -132,6 +132,26 @@ const config: Config = {
       innerHTML:
         'window.dataLayer=window.dataLayer||[];' +
         'function gtag(){dataLayer.push(arguments);}' +
+        // The region-conditional consent default (AGL-1597). FIRST in the
+        // queue, before any `set` or the preset's `config`: a consent
+        // `default` read after `config` is not a default at all.
+        //
+        // Analytics GRANTED by default (Zach, 2026-08-20: implied consent
+        // where it is lawful), DENIED for the prior-consent regions —
+        // EEA/UK/CH — through the second declaration's `region` array. Ads
+        // denied in both. This site previously declared nothing, so its tag
+        // ran unrestricted everywhere, ad storage included.
+        //
+        // ⚠️ VERBATIM COPY of `PLATFORM_CONSENT_DEFAULT_SNIPPET` in
+        // `libs/aglyn/src/lib/app-utils/platform-consent-default.ts`, because
+        // this app cannot import from `libs/` (AGL-1595) — the same
+        // constraint that puts the measurement id and the internal-traffic
+        // snippet in source here. `apps/console/specs/docs-platform-consent-
+        // snippet.spec.ts` fails if the two ever drift; a stale copy would
+        // still run without error and still read like a working declaration,
+        // and no GA report would show it. A template literal because the
+        // snippet contains both quote styles.
+        `gtag('consent','default',{"analytics_storage":"granted","ad_storage":"denied","ad_user_data":"denied","ad_personalization":"denied"});gtag('consent','default',{"analytics_storage":"denied","ad_storage":"denied","ad_user_data":"denied","ad_personalization":"denied","region":["AT","AX","BE","BG","CH","CY","CZ","DE","DK","EE","ES","FI","FR","GB","GF","GI","GP","GR","HR","HU","IE","IS","IT","LI","LT","LU","LV","MQ","MT","NL","NO","PL","PT","RE","RO","SE","SI","SK","YT"]});` +
         "gtag('set',{'content_group':'docs'});" +
         "try{var aq=new URLSearchParams(location.search).get('aglyn_internal');if(aq!==null){if(['0','false','off','no'].indexOf(aq.toLowerCase())>=0)localStorage.removeItem('aglyn_traffic_type');else localStorage.setItem('aglyn_traffic_type','internal');}if(localStorage.getItem('aglyn_traffic_type')==='internal')gtag('set',{'traffic_type':'internal'});}catch(e){}",
     },
