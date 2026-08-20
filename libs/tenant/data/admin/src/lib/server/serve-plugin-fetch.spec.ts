@@ -130,21 +130,23 @@ describe('createPinnedDispatcher — the AGL-515 socket pin (AGL-2480)', () => {
       )
     })
 
+  const handler = (body: string) => (req: IncomingMessage, res: any) => {
+    seenHost = req.headers.host
+    res.writeHead(200, { 'Content-Type': 'text/plain' })
+    res.end(body)
+  }
+
   beforeAll(async () => {
-    const handler = (body: string) => (req: IncomingMessage, res: any) => {
-      seenHost = req.headers.host
-      res.writeHead(200, { 'Content-Type': 'text/plain' })
-      res.end(body)
-    }
+    // Only the v4 server is shared. The IPv6 one is bound inside the single
+    // test that needs it: binding ::1 in `beforeAll` would take the two
+    // undici-canary tests down with it on a host without IPv6 loopback, and
+    // those two are the reason this file exists.
     v4 = createServer(handler('from-v4'))
-    v6 = createServer(handler('from-v6'))
     port = await listen(v4, '127.0.0.1')
-    await listen(v6, '::1', port)
   })
 
   afterAll(async () => {
     await new Promise<void>((resolve) => v4.close(() => resolve()))
-    await new Promise<void>((resolve) => v6.close(() => resolve()))
   })
 
   beforeEach(() => {
@@ -186,8 +188,17 @@ describe('createPinnedDispatcher — the AGL-515 socket pin (AGL-2480)', () => {
   })
 
   it('selects the address FAMILY from the pin, reaching the v6 socket for a v6 pin', async () => {
-    // Same hostname, same port, opposite family. If the pin's family were
-    // ignored or hard-coded to 4 this would answer `from-v4`.
+    // Same hostname, same port, opposite family: the ONLY difference between
+    // the two servers is the address family, so `from-v6` can only be the
+    // answer if the pin's family was honoured. Hard-coding it to 4 makes the
+    // connect fail instead — which is the mutation this catches.
+    //
+    // A weaker "the request was refused" fallback for hosts without IPv6 was
+    // tried and rejected: with the family hard-coded to 4 the connect to ::1
+    // fails anyway, so the fallback passed on the broken code. A check that
+    // cannot fail is worse than one that needs a real IPv6 loopback.
+    v6 = createServer(handler('from-v6'))
+    await listen(v6, '::1', port)
     const dispatcher = createPinnedDispatcher('::1')
     try {
       const response = await fetch(`http://v6.invalid:${port}/`, {
@@ -196,6 +207,7 @@ describe('createPinnedDispatcher — the AGL-515 socket pin (AGL-2480)', () => {
       expect(await response.text()).toBe('from-v6')
     } finally {
       await dispatcher.close()
+      await new Promise<void>((resolve) => v6.close(() => resolve()))
     }
   })
 })
@@ -289,16 +301,21 @@ describe('servePluginFetch — the private-address refusal (AGL-515)', () => {
     ['v4-mapped loopback', '::ffff:127.0.0.1'],
   ]
 
-  it.each(cases)('refuses an allowlisted origin resolving to %s', async (_label, address) => {
-    resolved = [{ address, family: address.includes(':') ? 6 : 4 }]
-    const { res, captured } = makeRes()
-    await servePluginFetch(
-      makeReq({ hostId: 'h', listingId: 'l', url: `${ALLOWED_ORIGIN}/x` }),
-      res,
-    )
-    expect(captured.status).toBe(403)
-    expect(captured.body['error']).toBe('URL resolves to a non-public address')
-  })
+  it.each(cases)(
+    'refuses an allowlisted origin resolving to %s',
+    async (_label, address) => {
+      resolved = [{ address, family: address.includes(':') ? 6 : 4 }]
+      const { res, captured } = makeRes()
+      await servePluginFetch(
+        makeReq({ hostId: 'h', listingId: 'l', url: `${ALLOWED_ORIGIN}/x` }),
+        res,
+      )
+      expect(captured.status).toBe(403)
+      expect(captured.body['error']).toBe(
+        'URL resolves to a non-public address',
+      )
+    },
+  )
 
   it('refuses when ANY resolved address is private, not just the first', async () => {
     resolved = [
@@ -362,7 +379,11 @@ describe('servePluginFetch — what reaches the network', () => {
     // The guard is worth nothing if the dispatcher is built and then dropped.
     expect(seen?.init.dispatcher).toBeInstanceOf(Agent)
     expect(seen?.url).toBe(`${ALLOWED_ORIGIN}/data`)
-    expect(captured.body).toEqual({ ok: true, status: 200, body: 'upstream-body' })
+    expect(captured.body).toEqual({
+      ok: true,
+      status: 200,
+      body: 'upstream-body',
+    })
   })
 
   it('forwards no host credentials and caps the method to GET/POST', async () => {
@@ -380,7 +401,9 @@ describe('servePluginFetch — what reaches the network', () => {
     expect(seen?.init.method).toBe('GET')
     // A downgraded method must not smuggle its body through.
     expect(seen?.init.body).toBeUndefined()
-    const headerNames = Object.keys(seen?.init.headers ?? {}).map((h) => h.toLowerCase())
+    const headerNames = Object.keys(seen?.init.headers ?? {}).map((h) =>
+      h.toLowerCase(),
+    )
     expect(headerNames).toEqual(['accept'])
     expect(headerNames).not.toContain('cookie')
     expect(headerNames).not.toContain('authorization')
@@ -443,7 +466,11 @@ describe('servePluginFetch — what reaches the network', () => {
       res,
     )
     expect(captured.status).toBe(502)
-    expect(captured.body).toEqual({ ok: false, status: 0, error: 'Fetch failed' })
+    expect(captured.body).toEqual({
+      ok: false,
+      status: 0,
+      error: 'Fetch failed',
+    })
     expect(JSON.stringify(captured.body)).not.toContain('ECONNREFUSED')
     spy.mockRestore()
   })
