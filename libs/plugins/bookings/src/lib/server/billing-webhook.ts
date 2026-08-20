@@ -15,6 +15,12 @@
  * limitations under the License.
  */
 
+// `after()`, never a bare `void promise` (AGL-2327). This handler runs inside
+// the console's `/api/billing/webhook` invocation, which AGL-1133 measured on
+// production is frozen the moment the response is sent — so fire-and-forget
+// work scheduled any other way simply does not run.
+import { after } from 'next/server'
+
 import type { BillingWebhookHandler } from '@aglyn/aglyn/server'
 import { resolveBrandingProfile } from '@aglyn/aglyn/server'
 import {
@@ -22,8 +28,13 @@ import {
   getOrgForHost,
   meterHostEmail,
   renderHostEmailWithTokens,
+  sendGa4Purchase,
   upsertHostContact,
 } from '@aglyn/tenant-data-admin'
+import {
+  bookingPlatformNetCents,
+  shouldSendBookingPlatformPurchase,
+} from '../model/booking-purchase-analytics'
 import { sendEmail } from '@aglyn/shared-util-email'
 import { storefrontTaxModeOf } from '@aglyn/plugins-commerce/server/storefront-tax'
 
@@ -171,6 +182,18 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
                 // `confirmed` while the means to refund it are missing.
                 ...(paymentIntentId ? { paymentIntentId } : {}),
                 feeCents: chargedFeeCents,
+                // WHICH CHECKOUT PAID FOR THIS (AGL-2481). The guest's browser
+                // comes back from Stripe holding a session id and nothing
+                // else — a booking id was never in the return URL — so this is
+                // what lets `booking-analytics.ts` answer "what did I just
+                // buy?" for the merchant-side `purchase`, and it is written
+                // here because the session id first exists on this event.
+                //
+                // Inside the transaction with the status on purpose: the
+                // lookup refuses anything that is not `confirmed`, so a
+                // booking can never be findable by session id while reading as
+                // unpaid.
+                ...(object?.id ? { checkoutSessionId: String(object.id) } : {}),
                 // NOTE the absent `refundedCents: 0`. Seeding it here would be
                 // the AGL-1758 shape: a defaulted field written through
                 // `merge` destroying the real one. This handler can re-enter
@@ -188,6 +211,93 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
           },
         )
         if (!confirmedNow) return
+        // AGLYN'S REVENUE ON THIS BOOKING (AGL-2481) — into OUR GA4 property.
+        //
+        // ## Why it is inside the idempotency gate rather than beside it
+        //
+        // This sits AFTER `if (!confirmedNow) return` and that placement is the
+        // whole guard. Stripe redelivers `checkout.session.completed` for up to
+        // three days after any 500, and this endpoint 500s on purpose; a
+        // redelivery re-enters this handler, the transaction above sees a
+        // `confirmed` status (or a refund counter, or a recorded PaymentIntent)
+        // and answers false, and everything below — the contact, the email, and
+        // now this — is skipped. A `purchase` fired before that gate, or beside
+        // it, would inflate our own reported revenue by the redelivery rate.
+        //
+        // `transaction_id` is the checkout session id, which is the same key
+        // the guard turns on, so GA4's own de-duplication is a second
+        // independent line of defence: even if the Firestore guard were ever
+        // bypassed, GA would collapse the repeats.
+        //
+        // ## Platform NET, and the fee is the measured one
+        //
+        // `value` is our fee and not the $95 the guest paid — the AGL-1639
+        // settlement. This is our property, the subscription and marketplace
+        // `purchase` events in it already mean "what Aglyn was paid", and a
+        // gross booking figure sitting beside them would make every combined
+        // total, ARPA and revenue audience wrong. The merchant's own gross goes
+        // to the MERCHANT's property, client-side, and the two never meet.
+        //
+        // The figure comes off the session's `metadata.feeCents` — the fee
+        // Stripe actually charged as `application_fee_amount` — never from the
+        // plan's rate re-applied here. See `bookingPlatformNetCents`.
+        //
+        // ## Scheduling and failure posture
+        //
+        // `after()`, never a bare `void` (AGL-2327/AGL-2346): this runs inside
+        // the console's `/api/billing/webhook` invocation, which is frozen the
+        // moment the response is sent, so fire-and-forget work scheduled any
+        // other way simply does not run — the exact way marketplace revenue
+        // reported to nothing. And `.catch()`, because a throw here would
+        // un-claim the Stripe event and turn a missed analytics hit into a
+        // repeated billing side effect.
+        if (shouldSendBookingPlatformPurchase(object)) {
+          const netCents = bookingPlatformNetCents(object)
+          after(() =>
+            sendGa4Purchase({
+              transactionId: String(object?.id ?? ''),
+              value: netCents / 100,
+              currency: String(object?.currency ?? 'usd'),
+              items: [
+                {
+                  // Ids only, no merchant free text. A service name is
+                  // merchant-authored and one edit away from carrying a
+                  // person's name into a dimension in OUR property; the id
+                  // already identifies it. The merchant's own property gets
+                  // the name, because there it is their own content.
+                  item_id: String(booking['serviceId'] ?? bookingId),
+                  item_name: String(booking['serviceId'] ?? bookingId),
+                  item_category: 'booking',
+                  // GA expects the items to sum to `value`; one item, one
+                  // price, and that price is our fee — not the service's.
+                  price: netCents / 100,
+                  quantity: 1,
+                },
+              ],
+              // Booking sessions carry no `ga_client_id` today — nothing
+              // captures one on a tenant site — so this is read for the day
+              // one is stamped and the seed below is what actually resolves.
+              clientId: object?.metadata?.ga_client_id,
+              // ONE PAYING GUEST, ONE SYNTHETIC USER. Seeded from Stripe's
+              // customer where there is one, and otherwise from the guest's
+              // email, which `server.ts` passes as `customer_email` and Stripe
+              // echoes on `customer_details`. The seed is hashed inside
+              // `synthesizeClientId` and never transmitted.
+              //
+              // The booking id is the LAST resort deliberately: it is unique
+              // per appointment, so seeding from it would turn a regular
+              // client into a crowd of one-purchase strangers and make ARPA
+              // nonsense — precisely what that helper's determinism exists to
+              // prevent. Without any seed at all `sendGa4Purchase` returns
+              // `no-client-id` and the event is silently never sent, which is
+              // the void this whole change exists to close.
+              stripeCustomerId:
+                String(object?.customer ?? '') ||
+                String(object?.customer_details?.email ?? '') ||
+                String(bookingId),
+            }).catch(() => undefined),
+          )
+        }
         // Contacts ingestion (AGL-1755). `server.ts` captures the contact at
         // REQUEST time, which is the right place — the booking is written
         // `pendingPayment` and at that moment no money has moved, so passing an

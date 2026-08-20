@@ -121,11 +121,29 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   upsertHostContact: async (options: any) => {
     contactUpserts.push(options)
   },
+  // The GA4 `purchase` this handler now sends (AGL-2481). Stubbed rather than
+  // omitted: an absent export is a TypeError at the call site, which would
+  // redden these refund tests for a reason that has nothing to do with them.
+  // What the event CONTAINS is asserted in `billing-webhook-ga-purchase.spec.ts`.
+  sendGa4Purchase: async () => ({ sent: true, synthesizedClientId: true }),
 }))
 
 jest.mock('@aglyn/shared-util-email', () => ({
   sendEmail: async (message: any) => {
     sentEmails.push(message)
+  },
+}))
+
+/**
+ * The handler schedules its GA4 `purchase` through `after()` (AGL-2481), and
+ * importing `next/server` in a node test environment throws before any test
+ * runs. Mocked to run the callback inline, matching every marketplace webhook
+ * spec. The purchase itself is asserted in `billing-webhook-ga-purchase.spec.ts`;
+ * here this only keeps the module loadable.
+ */
+jest.mock('next/server', () => ({
+  after: (work: () => unknown) => {
+    void work()
   },
 }))
 

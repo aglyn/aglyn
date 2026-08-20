@@ -106,7 +106,7 @@ built-in reports and funnel explorations work. `Custom` = no GA4 equivalent.
 | **`site_published`**           | Custom          | Console + **Server** (tenant)                          | `first_publish?`                                                                          | **Activation — "% who publish a site"**                                                              |
 | `stripe_connected`             | Custom          | Console                                                | —                                                                                         | **Activation — "% who connect Stripe"**                                                              |
 | `begin_checkout`               | Reserved        | Console + Tenant                                       | `currency`, `value`, `items`, `billing_interval?`                                         | Revenue — checkout funnel                                                                            |
-| `purchase`                     | Reserved        | **Server** (ours) + Tenant storefront (the merchant's) | `transaction_id`, `currency`, `value`, `items`, `billing_interval?`                       | Revenue — paid conversions, ARPA, annual mix; and the merchant's own ecommerce revenue               |
+| `purchase`                     | Reserved        | **Server** (ours) + Tenant storefront **and bookings** (the merchant's) | `transaction_id`, `currency`, `value`, `items`, `billing_interval?`, `shipping?`          | Revenue — paid conversions, ARPA, annual mix; and the merchant's own ecommerce **and service** revenue |
 | `view_item`                    | Reserved        | Tenant (storefront)                                    | `items`                                                                                   | Merchant's own product funnel                                                                        |
 | `add_to_cart`                  | Reserved        | Tenant (storefront)                                    | `items`                                                                                   | Merchant's own product funnel                                                                        |
 | `aglyn_overlay`                | Custom          | Tenant (marketing)                                     | `overlay_action`, `overlay_id?`                                                           | Engagement — announcement bars and popups                                                            |
@@ -129,10 +129,13 @@ built-in reports and funnel explorations work. `Custom` = no GA4 equivalent.
 (the AGL-1497 door where "Sign in with Google" created the account and bounced
 the person to `/signup`), plus `passkey` and `sso` for `login`.
 
-`item_category` separates the two revenue lines: `subscription` and
-`marketplace`. Storefront items carry none — in a MERCHANT's property a
-constant category is a column with one value in it, and their real product
-categories are not on the payloads the storefront builds.
+`item_category` separates the THREE revenue lines in OUR property:
+`subscription`, `marketplace` and `booking` (AGL-2481). Storefront and booking
+items in a MERCHANT's property carry none — there a constant category is a
+column with one value in it, and their real product/service categories are not
+on the payloads the tenant builds. A merchant running both plugins would
+otherwise get a half-populated dimension: products with no category, bookings
+with one, which GA cannot distinguish from missing data.
 
 `experiment_action` is `exposure` | `conversion`; `overlay_action` is the
 overlay kind the beacon already reports.
@@ -191,7 +194,7 @@ a tenant site pointed at our own property.
 | `add_to_cart`      | the same file, on a successful add                                                                                                                                                                                                                                                                                                                                                  |
 | `aglyn_overlay`    | `libs/plugins/marketing/src/lib/components/site-runtime.tsx` (`sendOverlayBeacon`)                                                                                                                                                                                                                                                                                                  |
 | `aglyn_experiment` | the same file, from the experiments runner's exposure/conversion beacon                                                                                                                                                                                                                                                                                                             |
-| `purchase`         | **Ours:** `libs/tenant/data/admin/src/lib/server/ga4-measurement-protocol.ts`, called from the platform webhook's `invoice.paid` branch and from the marketplace webhook handler. **The merchant's:** `libs/plugins/commerce/src/lib/utils/use-storefront-purchase-event.ts`, mounted by `cart.tsx` and `product-detail.tsx` — the two pages Stripe returns a shopper to (AGL-1641) |
+| `purchase`         | **Ours:** `libs/tenant/data/admin/src/lib/server/ga4-measurement-protocol.ts`, called from the platform webhook's `invoice.paid` branch, from the marketplace webhook handler, and from the bookings webhook handler (AGL-2481). **The merchant's:** `libs/plugins/commerce/src/lib/utils/use-storefront-purchase-event.ts`, mounted by `cart.tsx` and `product-detail.tsx`; and `libs/plugins/bookings/src/lib/utils/use-booking-purchase-event.ts`, mounted by `booking.tsx` — the pages Stripe returns a buyer to (AGL-1641/AGL-2481) |
 
 ### `first_publish`, and what all four senders mean by it (AGL-1588)
 
@@ -590,6 +593,72 @@ session had already counted it.
 id and not the session id, a renewal invoice is never what answers, the two
 webhook races stay retryable, and the projection still withholds the
 subscriber's email, name and our fee.
+
+#### A paid BOOKING reports twice, to two properties, at two different figures (AGL-2481)
+
+The bookings plugin sent **zero** analytics events of any kind while its
+billing webhook computed real money and spent it on a contact record and a
+confirmation email. So booking revenue was invisible in both properties at
+once, and the two absences failed differently: ours simply had no service
+revenue line, while a merchant selling appointments saw traffic on the page and
+then nothing — which does not read as "bookings are not measured", it reads as
+a **100% abandonment rate** on every service they sell, because GA4's ecommerce
+reports and shopping funnel are all terminated by `purchase`.
+
+It is closed by mirroring what commerce and marketplace already settled, and
+the two hits carry deliberately different numbers:
+
+| | Aglyn's property | the merchant's property |
+| --- | --- | --- |
+| sender | `ga4-measurement-protocol.ts`, from the webhook | the merchant's `gtag`, in the guest's browser |
+| `value` | platform **net** — the fee we charged | **gross ex-tax** — what they sold |
+| Aglyn's fee | IS the value | **not** subtracted; their cost of sale |
+| tax | excluded, no `tax` param | excluded, no `tax` param |
+| `item_category` | `booking` | none — see the event map |
+| `transaction_id` | the Checkout Session id | the same id |
+
+Reporting one figure into both is the expensive mistake in either direction: a
+gross booking figure in **our** property would put a $95 massage beside a $95
+subscription as though Aglyn earned both and make every combined total, ARPA
+and revenue audience wrong (the AGL-1639 rule); platform net in the
+**merchant's** would show them a few percent of their real revenue (AGL-1641).
+Nothing is double-counted across them — they are two properties measuring two
+businesses, and within each GA4 de-duplicates on `transaction_id`.
+
+**The fee is the measured one.** `value` on our side comes off the session's
+`metadata.feeCents`, the `application_fee_amount` Stripe was actually told to
+charge — never the plan's rate re-applied at report time. The rate follows the
+plan and the plan moves, so a later re-derivation reports a share that was
+never taken; this is the "records a constant instead of the measured value"
+trap in its exact local form, and it would look right in any test written
+against a single-tier fixture. `billing-webhook-ga-purchase.spec.ts` pins it
+with a fee that is not a round percentage of the charge.
+
+**Idempotency is placement, not a new mechanism.** The send sits *after*
+`if (!confirmedNow) return`, inside the existing AGL-1755/AGL-2315 redelivery
+guard, so a Stripe replay — which this endpoint invites, since it 500s on
+purpose — is dropped before it can inflate our own reported revenue. The
+transaction id is the same key the guard turns on, so GA's de-duplication is a
+second, independent line of defence.
+
+**Scheduling.** `after()`, never a bare `void promise` — this handler runs
+inside the console's `/api/billing/webhook` invocation, which is frozen the
+moment the response is sent (AGL-2327/AGL-2346, the bug that had marketplace
+revenue reporting to nothing).
+
+**A booking sends no `shipping` param at all**, where a storefront order always
+sends one even as 0. That is not an inconsistency: on a storefront 0 is a true
+statement about an order that carried no shipping, whereas an appointment has
+no shipping concept to be zero, and sending one would put every service
+business into a shipping report they are not in.
+
+**The guest's return URL now carries the session id.** `success_url` was
+`/?booking=paid` — the word "paid" and nothing else — so the merchant-side hit
+had nothing to look itself up by. It is now
+`/?booking=paid&session_id={CHECKOUT_SESSION_ID}`, resolved by
+`bookings/booking-analytics`, which is authorised by that unguessable id, is
+scoped to the host, refuses anything not `confirmed`, and answers with a
+projection carrying no guest email, name, appointment time or our fee.
 
 ### 2. Consent-blocked means the event is gone, not queued
 
@@ -1387,6 +1456,22 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
   data retention **14 months** (event and user), email redaction **on**.
   Leave all of it that way — the live privacy policy's flat "we do not sell or
   share" denial rests on it.
+
+**Bookings (AGL-2481) needs NO new custom dimension.** Stated positively so
+nobody goes looking: the booking `purchase` carries only `transaction_id`,
+`currency`, `value` and `items` — all GA4 built-ins — and the one field that
+separates it from the other revenue lines, `item_category: 'booking'`, is a
+built-in **item-scoped** dimension, not an event-scoped custom one. Booking
+revenue is therefore readable the day the first payment lands, by filtering
+Item category in the standard ecommerce reports, with nothing to click first.
+
+The one thing worth doing by hand is optional and is reporting, not
+collection: if booking revenue should stand on its own in a dashboard rather
+than inside the combined `purchase` total, build a comparison or an exploration
+segmented on Item category = `booking` / `marketplace` / `subscription`.
+Registering `item_category` as a custom dimension would be the wrong fix — it
+is already there, and a duplicate registration reads as a second, half-empty
+dimension.
 
 ### 12. Where an account came from is captured at signup (AGL-1731)
 

@@ -618,3 +618,43 @@ describe('the fee BASIS is items-only (AGL-2317)', () => {
     expect(params.has('line_items[1][price_data][unit_amount]')).toBe(false)
   })
 })
+
+/**
+ * The guest's return URL has to name the transaction (AGL-2481).
+ *
+ * `success_url` was `/?booking=paid` — the word "paid" and nothing else — so
+ * the merchant-side GA4 `purchase` had no id to look the booking up by and
+ * could not have stated what was actually charged. That is the same reason
+ * Aglyn's own revenue is reported server-side rather than from a return page
+ * (docs/ANALYTICS.md decision 1), and the fix here is to make the URL carry
+ * the id rather than to give up on the client event.
+ *
+ * Asserted in this file because the checkout POST is already captured here and
+ * nothing else in the suite looked at `success_url` at all.
+ */
+describe('the return URL names the checkout session (AGL-2481)', () => {
+  it('carries Stripe’s session-id template token', async () => {
+    const params = await book()
+
+    // Stripe substitutes `{CHECKOUT_SESSION_ID}` on the redirect. A literal
+    // session id cannot be used: it does not exist until this POST returns.
+    expect(params.get('success_url')).toContain(
+      'session_id={CHECKOUT_SESSION_ID}',
+    )
+  })
+
+  it('keeps the `booking=paid` flag the widget already switches on', async () => {
+    const params = await book()
+
+    // The success panel and `useBookingPurchaseEvent` both gate on this, so
+    // replacing it rather than extending it would silently blank the
+    // confirmation the guest sees.
+    expect(params.get('success_url')).toContain('booking=paid')
+  })
+
+  it('leaves the cancel URL alone — nothing was bought to report', async () => {
+    const params = await book()
+
+    expect(params.get('cancel_url')).not.toContain('session_id')
+  })
+})

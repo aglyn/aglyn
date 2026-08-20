@@ -34,6 +34,7 @@ import {
 import { BUNDLE_ID } from './constants/bundle-common'
 import { BOOKINGS_CONFIG_SCHEMA } from './plugin-config'
 import { bookingsBillingWebhookHandler } from './server/billing-webhook'
+import { bookingAnalyticsHandler } from './server/booking-analytics'
 import { bookingRefundHandler } from './server/refund'
 
 // Settings schema (AGL-428): registered here too so server-only loads
@@ -511,7 +512,15 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         ...(feeCents > 0
           ? { 'payment_intent_data[application_fee_amount]': String(feeCents) }
           : {}),
-        success_url: `${origin}/?booking=paid`,
+        // `{CHECKOUT_SESSION_ID}` is Stripe's own template token, substituted
+        // on the redirect (AGL-2481). Without it the guest came back holding
+        // the word `paid` and nothing else — no id, no amount — so the
+        // merchant-side `purchase` had nothing to look itself up by and could
+        // not have stated what was actually charged. The id is safe in the
+        // URL: Stripe hands it only to the payer, and
+        // `booking-analytics.ts` scopes it to the host and answers with a
+        // projection rather than the booking document.
+        success_url: `${origin}/?booking=paid&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${origin}/?booking=canceled`,
         customer_email: email,
         'metadata[type]': 'booking-payment',
@@ -869,6 +878,10 @@ export function registerBookingsConsoleApi(): void {
   // Refunding a paid booking (AGL-2315). Console-side, because it is
   // site-admin-gated and moves money — never a site-facing route.
   registerPluginApiRoute('bookings/refund', bookingRefundHandler)
+  // The merchant-side `purchase` lookup (AGL-2481). A public, unauthenticated
+  // read like `bookings/slots`, authorised by the unguessable Stripe session
+  // id and answering with a projection that carries no guest identity.
+  registerPluginApiRoute('bookings/booking-analytics', bookingAnalyticsHandler)
   // Paid-booking confirmation rides the platform Stripe webhook (AGL-418).
   registerBillingWebhookHandler(bookingsBillingWebhookHandler)
 }
