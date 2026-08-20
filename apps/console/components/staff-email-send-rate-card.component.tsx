@@ -17,6 +17,7 @@
 
 'use client'
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -173,8 +174,8 @@ export default function StaffEmailSendRateCard() {
           'refuses transactional mail.',
       })}
       subheader={
-        'Everything Aglyn sends leaves on one key and one verified domain. ' +
-        'This is the ramp — change the value, no deploy.'
+        `Everything ${PLATFORM_BRAND_NAME} sends leaves on one key and one ` +
+        'verified domain. This is the ramp — change the value, no deploy.'
       }
       contentGutterX
       contentGutterY
