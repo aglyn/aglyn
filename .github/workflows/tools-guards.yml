@@ -526,6 +526,34 @@ jobs:
       # part-promoted issue shipped, and reading ancestry as deployment.
       - run: npm run test:shipped-not-closed
 
+      # AGL-2344. The detector behind `check:swept-commits`, which finds a
+      # commit that quietly DELETED a file another issue had just added.
+      #
+      # Several agents share one checkout. A commit made from a stale or
+      # contended working tree carries files it never meant to touch at their
+      # OLD content — and when that old content is "absent", it deletes
+      # another agent's just-landed work while reporting a subject about
+      # something else. Nothing fails: the deleted thing is often the guard
+      # that would have complained. What breaks is attribution — `git log
+      # --follow`, the changelog and the PR manifest all then file the work
+      # under an issue that does not own it.
+      #
+      # Three real incidents inside 1200 commits, all pinned as fixtures: the
+      # AGL-2422 storage-backup guard swept three times in four minutes,
+      # AGL-1890 reverting AGL-1993 (confirmed by 9ee2252bd's own subject),
+      # and AGL-2444 deleting AGL-2377's docs test project — the last of which
+      # this check FOUND rather than confirmed.
+      #
+      # Only the SELF-TEST runs here; the scan itself wants a range and is run
+      # before a promotion PR. The suite's negative cases carry the weight: a
+      # commit deleting a file its OWN issue added, one whose message names
+      # the file, and one deleting a file added long ago are all NORMAL, and a
+      # commit-shaped heuristic that flags them would be ignored within a
+      # week. See the module header for the two BROADER rules that were
+      # measured against real history and rejected at 8%, 16% and 47% false
+      # positives — including the file-overlap form the issue proposed.
+      - run: npm run test:swept-commits
+
       # AGL-1877. The Texas data-processing tax code (`txcd_10103001`) on
       # Aglyn's own Stripe products — the single input that decides how much
       # sales tax is collected and remitted from Sep 1. It was set by hand in
