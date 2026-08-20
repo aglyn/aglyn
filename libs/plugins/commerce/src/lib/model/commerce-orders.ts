@@ -176,6 +176,20 @@ export interface OrderRestockLine {
   /** Purchase-time snapshots, so a reader renders the prompt with no product read. */
   name?: string
   variantLabel?: string
+  /**
+   * Which `lineItems` entry this came from, matching `refundedLineItemIds`
+   * (AGL-2325).
+   *
+   * The index rather than the product, because a cart can hold one product on
+   * two lines and a line-scoped refund may name only one of them. It is what
+   * lets a SECOND partial refund be told apart from a repeat of the first: a
+   * reversal naming a line the open question already covers adds nothing, and
+   * one naming a line it misses is a new question rather than noise.
+   *
+   * Absent on a check written before this shipped, and that absence is read as
+   * "covers the whole order" — the assumption those checks were written under.
+   */
+  lineIndex?: number
 }
 
 /**
@@ -198,10 +212,17 @@ export interface OrderRestockLine {
  *  - a **chargeback** is the clearest do-not-restock case of all, since the
  *    shopper kept the item and took the money back.
  *
- * And the quantities are not even knowable on a partial reversal: a refund is
- * requested as an AMOUNT (`refund.ts` takes `amountCents`) and records no line
- * selection anywhere, so "$17 of a $62 order" names no line. `quantity` is
- * therefore an upper bound and `fullyReversed` says whether it is a tight one.
+ * And the quantities are not always knowable on a partial reversal: a refund
+ * requested as an AMOUNT names no line at all, so "$17 of a $62 order" selects
+ * nothing. `quantity` is an upper bound there and `fullyReversed` says whether
+ * it is a tight one.
+ *
+ * A refund that DID name its lines is scoped to them (AGL-2325). `refund.ts`
+ * records `refundedLineItemIds` with the money (AGL-2454), so the flag asks
+ * about the lines that reversal withdrew rather than about the whole order —
+ * and `lineIndex` on each line is what lets a second partial withdrawing a
+ * DIFFERENT line re-ask, instead of being swallowed by the still-open question
+ * about the first.
  *
  * So this records the question instead of guessing the answer, and the merchant
  * answers it from the stock adjustment they already have. The release action is

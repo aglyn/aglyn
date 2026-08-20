@@ -631,6 +631,21 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
     order.restockCheck && !order.restockCheck.resolution
       ? order.restockCheck
       : null
+  // Whether the reversal NAMED the lines this question is about (AGL-2325).
+  // AGL-2454 gave a refund a line selection, and `flagOrderRestock` now scopes
+  // the question to it — so the "we cannot tell which goods came back" caveat
+  // below is true of an amount-only reversal and false of this one. Asked of
+  // the order's own withdrawal record rather than of a flag on the check, so a
+  // prompt written before line indexes existed reads as the amount-only case
+  // it was.
+  const restockLinesNamed = Boolean(
+    restock?.lines?.length &&
+      restock.lines.every(
+        (line) =>
+          line.lineIndex != null &&
+          CommerceModel.orderLineRefunded(order, line.lineIndex),
+      ),
+  )
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
@@ -773,11 +788,15 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
                   (restock.kind === 'chargeback'
                     ? ' The shopper kept the goods unless they actually came back.'
                     : '') +
-                  // On a partial, no reversal records which lines it covered
-                  // (AGL-1797), so the flagged units are the MOST it could be.
+                  // On a partial the flagged units are the MOST it could be —
+                  // UNLESS the refund named its lines (AGL-2325), in which
+                  // case the question is scoped to exactly those and the
+                  // merchant is only being asked whether the goods came back.
                   (restock.fullyReversed
                     ? ''
-                    : ' Only part of the money came back, so these units are an upper bound — only you know which goods returned.')}
+                    : restockLinesNamed
+                      ? ' Only part of the money came back: these are the lines withdrawn by this refund, so the units are theirs — only you know whether the goods came back.'
+                      : ' Only part of the money came back, so these units are an upper bound — only you know which goods returned.')}
               </Typography>
               {restock.lines.map((line, index) => (
                 <Typography key={index} variant="caption" color="text.secondary">
