@@ -113,6 +113,18 @@ function collectionRef(path: string, filters: Array<[string, string, unknown]> =
     where: (field: string, op: string, value: unknown) =>
       collectionRef(path, [...filters, [field, op, value]]),
     select: () => ref,
+    // The flat platform caps ask `count()` before paying for an id scan
+    // (AGL-2266). Without it the route throws and every round-trip assertion
+    // below reads a 500 as if a FIELD had been lost.
+    count: () => ({
+      get: async () => ({
+        data: () => ({
+          count: [...(store.get(path) ?? new Map()).entries()].filter(([, data]) =>
+            filters.every((filter) => matchesFilter(data ?? {}, filter)),
+          ).length,
+        }),
+      }),
+    }),
     get: async () => ({
       docs: [...(store.get(path) ?? new Map()).entries()]
         .filter(([, data]) =>
@@ -152,6 +164,35 @@ const mockFirestore = {
     },
     commit: async () => undefined,
   }),
+  /**
+   * The screens leg of /api/hosts/import commits in a transaction since
+   * AGL-2370, so the double needs one — and it has to record its writes into
+   * the same `writes` array the batch uses, or every screen assertion in this
+   * suite would look like a field the restore dropped.
+   *
+   * Reads see the store, writes buffer and apply on commit, and a read after a
+   * write throws as the server does. What this suite asserts is LOSSLESSNESS,
+   * not concurrency; the serializing double lives in
+   * `import-screen-cap-is-atomic.spec.ts`.
+   */
+  runTransaction: async (body: (tx: any) => Promise<any>) => {
+    const buffered: Array<() => void> = []
+    const result = await body({
+      get: async (ref: any) => {
+        if (buffered.length) {
+          throw new Error('Firestore transactions cannot read after a write')
+        }
+        return ref.get()
+      },
+      set: (ref: any, data: Doc, options?: { merge?: boolean }) => {
+        buffered.push(() => {
+          writes.push({ path: ref.path, data, merge: Boolean(options?.merge) })
+        })
+      },
+    })
+    for (const write of buffered) write()
+    return result
+  },
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
@@ -195,6 +236,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // opaque Buffer envelope and this suite would still be green — which is
   // exactly how the feature shipped broken.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
+  // The REAL flat platform caps (AGL-2266) — the import route reads both.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/actions'),
+  ...jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/collection-entries',
+  ),
   // `compress` too — the seed below must be packed by the same encoder the
   // besigner writes with, and re-exporting it here keeps the spec off a
   // relative deep import into another project (@nx/enforce-module-boundaries).
