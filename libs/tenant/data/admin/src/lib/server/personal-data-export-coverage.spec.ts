@@ -86,10 +86,24 @@ const PLUMBING = new Set(['users', 'orgs', 'hosts', 'adminAudit'])
  *
  * This entry earned its place: the guard's very first run flagged both,
  * because neither was in the export's source list and neither had a decision.
+ *
+ * `hostMemberships` is the AGL-1448 addition, and it belongs here rather than
+ * in `PERSONAL_DATA_SOURCES` because it is genuinely a subcollection of the
+ * subject's own document: `users/{uid}/hostMemberships/{hostId}`.
+ * `exportUserData` walks `users/{uid}` with `readSubtree`, which enumerates
+ * children via `listCollections()` rather than a hard-coded list, so the rows
+ * come out for the PERSON without anything naming them — the `users` note has
+ * said so since AGL-1974. The erasure reaches the same rows from the other
+ * end, by `collectionGroup` on an ORG erasure, to collect the projection a
+ * FORMER member still carries; that is the org destroying its own name inside
+ * somebody else's user document, not a source the org may read back, and the
+ * authoritative roster it would duplicate is already exported as
+ * `orgs/{orgId}/members`.
  */
 const REACHED_UNDER: Record<string, string> = {
   members: 'orgs',
   messages: 'supportTickets',
+  hostMemberships: 'users',
 }
 
 /**
@@ -97,7 +111,21 @@ const REACHED_UNDER: Record<string, string> = {
  *   - `deleteDocsByOrgId('x', …)` — the field-keyed sweep helper;
  *   - `.collection('x')` — a direct read or delete;
  *   - `collectionGroup('x')` — the cross-workspace redaction sweep.
- * Plus the one name that arrives as an imported constant.
+ * Plus the names that arrive as a constant rather than a literal.
+ *
+ * ## Why the constant pass exists
+ *
+ * The three regexes above want a QUOTED literal, and a sweep written
+ * `.collection(SUPPLIER_DELIVERY_COLLECTION)` matches none of them. AGL-1448
+ * added exactly that: `supplierDeliveries` is declared as a local `const` in
+ * `erase.ts` — deliberately, because the collection belongs to a library this
+ * one may not import across the nx boundary — and the erasure grew a sweep for
+ * a collection holding a shopper's name, email and shipping address while this
+ * guard reported nothing to decide. A discovery guard that cannot see a sweep
+ * certifies its absence, which is the failure this whole file exists to
+ * prevent, so the pass below resolves local `const NAME = 'value'` bindings and
+ * the reference shapes that use them. The canary test names the resolved
+ * collections, so the resolution silently ceasing to work is itself a failure.
  */
 function collectionsNamedIn(source: string): Set<string> {
   const found = new Set<string>()
@@ -107,6 +135,26 @@ function collectionsNamedIn(source: string): Set<string> {
     /collectionGroup\(\s*'([^']+)'\s*\)/g,
   ]) {
     for (const match of source.matchAll(pattern)) found.add(match[1])
+  }
+  // Constant references: `const X = 'y'` in this file, then `.collection(X)`,
+  // `deleteDocsByOrgId(X, …)` or `collectionGroup(X)`. Only bindings declared
+  // in `erase.ts` itself are resolved; an imported one still has to be handled
+  // explicitly, as `CONSOLE_DOMAINS_COLLECTION` is below.
+  const bindings = new Map<string, string>()
+  for (const match of source.matchAll(
+    /\bconst\s+([A-Z][A-Z0-9_]*)\s*=\s*'([^']+)'/g,
+  )) {
+    bindings.set(match[1], match[2])
+  }
+  for (const pattern of [
+    /deleteDocsByOrgId\(\s*([A-Z][A-Z0-9_]*)\s*[,)]/g,
+    /\.collection\(\s*([A-Z][A-Z0-9_]*)\s*\)/g,
+    /collectionGroup\(\s*([A-Z][A-Z0-9_]*)\s*\)/g,
+  ]) {
+    for (const match of source.matchAll(pattern)) {
+      const resolved = bindings.get(match[1])
+      if (resolved) found.add(resolved)
+    }
   }
   // `CONSOLE_DOMAINS_COLLECTION` is imported rather than written as a literal,
   // so the regexes above cannot see it. Resolved from its own module so a
@@ -131,8 +179,13 @@ describe('the export and the erasure see the same collections', () => {
   it('finds the sweeps at all — the guard can fail', () => {
     // A parse that silently matched nothing would make every assertion below
     // vacuously true, which is the shape of green check this repo has been
-    // bitten by. These are the four AGL-1448 sweeps; if the regexes stop
-    // finding them, the guard is broken and says so here rather than passing.
+    // bitten by. These are the AGL-1448 sweeps; if the regexes stop finding
+    // them, the guard is broken and says so here rather than passing.
+    //
+    // `supplierDeliveries` is named through a `const` and `hostMemberships`
+    // through a `collectionGroup`, so between them they exercise BOTH parse
+    // paths: drop the constant-resolution pass and this canary goes red before
+    // any coverage assertion gets the chance to pass vacuously.
     expect(ERASED.size).toBeGreaterThan(8)
     for (const known of [
       'apiKeys',
@@ -140,6 +193,9 @@ describe('the export and the erasure see the same collections', () => {
       'stripeCustomers',
       'apiIdempotency',
       'orgSlugs',
+      'supplierDeliveries',
+      'hostIndex',
+      'hostMemberships',
     ]) {
       expect(ERASED.has(known)).toBe(true)
     }

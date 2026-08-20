@@ -271,6 +271,18 @@ describe('exportOrgData', () => {
       orgs: { o1: { name: 'Acme', slug: 'acme' } },
       hosts: { h1: { orgId: 'o1', name: 'Site' }, h9: { orgId: 'other', name: 'Theirs' } },
       hostIndex: { h1: { subdomain: 'acme' } },
+      supplierDeliveries: {
+        d1: {
+          hostId: 'h1',
+          status: 'failed',
+          body: {
+            buyerName: 'Dana Shopper',
+            buyerEmail: 'dana@example.com',
+            shipTo: '1 Main St',
+          },
+        },
+        d9: { hostId: 'h9', body: { buyerName: 'Theirs' } },
+      },
       apiKeys: {
         'sha256-of-the-token': {
           orgId: 'o1',
@@ -323,6 +335,28 @@ describe('exportOrgData', () => {
     }
     // Every historical name, tombstones included.
     expect(result.data['orgSlugs']).toHaveLength(2)
+  })
+
+  it('DISCLOSES the dropship outbox, and reads it rather than claiming it', async () => {
+    // The AGL-1448 sweep destroys these rows, so the export has to produce
+    // them — and a coverage entry is a promise, not a read. This asserts the
+    // read: a `PERSONAL_DATA_SOURCES` row for a collection `exportOrgData`
+    // never touches is an under-disclosure with documentation on top.
+    //
+    // It is also the one source whose personal data is a THIRD PARTY's, which
+    // is why the shopper's own fields are named here: the merchant is the
+    // controller of them and an org access request is entitled to them, so
+    // silently thinning the body would be a second, quieter omission.
+    const result = await exportOrgData('o1', { firestore: fakeDb(seed) })
+    expect(result.data['supplierDeliveries']).toHaveLength(1)
+    expect(result.data['supplierDeliveries'][0].data).toMatchObject({
+      body: { buyerEmail: 'dana@example.com', shipTo: '1 Main St' },
+    })
+    // Bounded by `hostId`, the same field `eraseHostSupplierDeliveries` sweeps
+    // by — this collection holds every other merchant's orders.
+    expect(JSON.stringify(result.data['supplierDeliveries'])).not.toContain(
+      'Theirs',
+    )
   })
 
   it('is BOUNDED — never another customer’s rows', async () => {

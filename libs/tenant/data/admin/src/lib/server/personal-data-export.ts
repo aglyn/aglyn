@@ -156,6 +156,13 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     exported: true,
     note: 'Subdomain/CNAME routing for each of the org’s sites. Configuration the customer set, so it is theirs to take.',
   },
+  {
+    collection: 'supplierDeliveries',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'The dropship outbox for each of the org’s sites, keyed by hostId (AGL-1448). Disclosed to the ORG and to no one else, and the reason is the unusual one: the personal data in the row is a SHOPPER’s — name, email and shipping address in the body we sign and POST to the supplier. That is the merchant’s own order record, which they already read in their console and for which they are the controller and we the processor, so an org access request is entitled to it. It is NOT a `user`-subject source: a console member asking what we hold about THEM is not the shopper, and returning these rows would answer their request with a third party’s address. Withholding it was not an option worth taking — `eraseHost` destroys these rows, so an export that omitted them would delete what it never disclosed.',
+  },
   // ── Top-level, field-keyed: what a path cascade cannot see ────────────
   {
     collection: 'apiKeys',
@@ -512,12 +519,18 @@ export async function exportOrgData(
   const hosts = await db.collection('hosts').where('orgId', '==', orgId).get()
   const hostDocs: ExportedDocument[] = []
   const routing: ExportedDocument[] = []
+  const outbox: ExportedDocument[] = []
   for (const host of hosts.docs) {
     hostDocs.push(...(await readSubtree(db, host.ref, 0, options.maxDepth ?? 4)))
     routing.push(...(await readDoc(db, 'hostIndex', host.id)))
+    // Keyed by `hostId`, not `orgId`, so it is read here rather than in the
+    // field-keyed loop below — the same bound `eraseHostSupplierDeliveries`
+    // sweeps by, so the export and the erasure see the same rows.
+    outbox.push(...(await readByField(db, 'supplierDeliveries', 'hostId', host.id)))
   }
   data['hosts'] = hostDocs
   data['hostIndex'] = routing
+  data['supplierDeliveries'] = outbox
 
   // The field-keyed collections a path cascade is blind to — the ones the
   // erasure had to grow a sweep for, one issue at a time.
