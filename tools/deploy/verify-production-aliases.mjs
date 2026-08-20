@@ -143,11 +143,33 @@ const PROJECTS = [
     name: 'aglyn-docs',
     legacyNames: ['docs-aglyn-io'],
     label: 'docs',
-    // Docusaurus docs site (apps/docs). Builds on every production push;
-    // three consecutive Error builds went unnoticed until AGL-580 because
-    // this project wasn't verified — a lagging commit now flags loudly.
+    // Docusaurus docs site (apps/docs). Three consecutive Error builds went
+    // unnoticed until AGL-580 because this project wasn't verified — a lagging
+    // commit still flags loudly, but only when a build was actually owed.
     domains: ['https://docs.aglyn.com'],
-    alwaysBuilds: true,
+    // Path-scoped, NOT always-built. This entry said `alwaysBuilds: true` until
+    // 2026-08-20 and produced a permanent false `BUILD MISSING` on every
+    // promotion that did not touch the docs.
+    //
+    // Unlike console/tenant/plugins, the scoping is NOT in
+    // `tools/scripts/vercel-ignore-build.sh` — that script rejects any app but
+    // `console|tenant|plugins`, and `apps/docs/vercel.json` declares no
+    // `ignoreCommand`. It comes from Vercel itself: the project's **Root
+    // Directory is `apps/docs`**, and Vercel skips a deployment when a push
+    // changes nothing inside a project's root directory.
+    //
+    // That is dashboard state rather than repo state, so it was confirmed
+    // behaviourally from two promotions on the same day:
+    //   v1.0.0-beta.5 — range TOUCHED apps/docs (fontsource + docusaurus
+    //                   bumps) -> docs BUILT, reported `=HEAD`.
+    //   v1.0.0-beta.6 — range touched ZERO files under apps/docs -> build
+    //                   CANCELED after 6s, alias legitimately trailing.
+    //
+    // ⚠️ If anyone turns on "Include source files outside of the Root
+    // Directory in the Build Step", docs starts building on every push and
+    // this entry must go back to `alwaysBuilds: true` — otherwise a genuinely
+    // dropped build reads as "path-current" and this check stops working.
+    buildsOnPaths: ['apps/docs'],
   },
   {
     name: 'aglyn-plugins',
