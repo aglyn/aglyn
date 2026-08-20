@@ -21,6 +21,7 @@ import {
   checkRateLimit,
   firebaseAdmin,
   getOrgForHost,
+  getSiteLockdown,
   notifyHostManagers,
   notifyStaff,
 } from '@aglyn/tenant-data-admin'
@@ -107,6 +108,101 @@ async function hostExists(hostId: string): Promise<boolean> {
     .get()
   hostExistence.set(hostId, { exists: snapshot.exists, at: now })
   return snapshot.exists
+}
+
+// ---------------------------------------------------------------------------
+// Lockdown gate (AGL-1627)
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether a READ-ONLY lock should also freeze telemetry — the open half of
+ * AGL-1627, and a product call rather than an engineering one.
+ *
+ * ## What is settled, and is refused below whatever this constant says
+ *
+ * A **full** lockdown freezes the beacon. That half is not a judgement call.
+ * `/api` sits outside the tenant middleware matcher, so a page already cached
+ * in a visitor's browser keeps beaconing after the site itself has gone dark
+ * and started answering 503 from `/api/locked`. Counting those as page views
+ * records traffic for a site we deliberately took offline — and because
+ * `/api/billing/report-usage` meters the SAME `hosts/{id}/analytics/{day}`
+ * documents this route increments (the invariant the bandwidth ceiling above
+ * is built on: one set of counters, so the ceiling and the invoice can never
+ * disagree), that false count does not stop at the dashboard. It reaches an
+ * invoice. Billing a customer for views of a site we switched off is a defect
+ * on any reading of the product, so `full` refuses.
+ *
+ * ## What is genuinely open, and why it is a constant rather than a guess
+ *
+ * A **read-only** lock is the opposite shape: the site is still serving and
+ * still earning, so the visitor is real and the page view is real. AGL-1511
+ * built the mode precisely so a migration or a data repair could run without
+ * taking customers offline. Two honest positions, and nothing in the code
+ * decides between them:
+ *
+ *  - **Freeze.** These counters are exactly the shape a counter
+ *    reconciliation repairs, and they are billing inputs; letting them move
+ *    underneath a repair of themselves is close to self-defeating.
+ *  - **Leave.** Dropping them silently loses analytics the customer is paying
+ *    for, during a window when we chose to keep their site up. A visitor who
+ *    cannot be counted is worse than a counter a few hits stale.
+ *
+ * Left at `false` — today's behaviour — so this change closes the defect
+ * without also making the product decision as a side effect. Flip this one
+ * constant to freeze read-only too; nothing else has to move.
+ */
+const FREEZE_TELEMETRY_DURING_READ_ONLY = false
+
+/**
+ * Per-instance memo of the freeze verdict, because this is the platform's
+ * highest-volume endpoint and `getSiteLockdown` is three reads.
+ *
+ * Sixty seconds, deliberately NOT the hour `hostExistence` uses: existence is
+ * a fact that effectively never flips back, whereas a lockdown is an incident
+ * control whose entire value is engaging promptly. A minute bounds the cost
+ * at one verdict per host per instance per minute — negligible beside the
+ * per-view read the bandwidth ceiling above spends 0.155 of and agonises
+ * over — while bounding the lag at a minute, comfortably inside the 30 s the
+ * middleware's own verdict memo already accepts on the page path.
+ *
+ * Size-capped and cleared wholesale like every other attacker-keyed map in
+ * this file; `hostExists` has already refused unknown hosts by the time
+ * anything reaches here, so the keys are real host ids.
+ */
+const lockdownFreeze = new Map<string, { frozen: boolean; at: number }>()
+const LOCKDOWN_FREEZE_TTL_MS = 60_000
+
+/**
+ * True when this beacon must not write.
+ *
+ * Fails OPEN, like every other lockdown reader: `getSiteLockdown` swallows
+ * its own errors and answers null, and an unreachable Firestore is an outage,
+ * not a lockdown. Losing a page view to a freeze that never happened is the
+ * cheap direction; refusing every beacon on the platform because one read
+ * timed out is not.
+ */
+async function telemetryFrozen(hostId: string): Promise<boolean> {
+  const now = Date.now()
+  const hit = lockdownFreeze.get(hostId)
+  if (hit && now - hit.at < LOCKDOWN_FREEZE_TTL_MS) return hit.frozen
+  if (lockdownFreeze.size > MAX_TRACKED_HOSTS) lockdownFreeze.clear()
+  let frozen: boolean
+  try {
+    const state = await getSiteLockdown(hostId, now)
+    frozen = state
+      ? Aglyn.lockdownMode(state) === 'full' || FREEZE_TELEMETRY_DURING_READ_ONLY
+      : false
+  } catch (error) {
+    // Belt and braces. `getSiteLockdown` already answers null rather than
+    // throwing, but this gate sits in front of EVERY write on the platform's
+    // busiest endpoint, and the cost of being wrong about that contract is
+    // dropping every beacon on the fleet. Caught here rather than left to the
+    // route's outer try/catch, which would abandon the pageview as well.
+    console.error('[analytics] lockdown verdict failed', hostId, error)
+    frozen = false
+  }
+  lockdownFreeze.set(hostId, { frozen, at: now })
+  return frozen
 }
 
 // ---------------------------------------------------------------------------
@@ -530,6 +626,14 @@ export async function POST(request: Request): Promise<Response> {
     // before emitHostEvent — an invented hostId must not mint counter docs
     // or fire host automations (AGL-510's open half).
     if (!(await hostExists(hostId))) return noContent()
+
+    // The lockdown gate (AGL-1627), beside the spoof gate because it answers
+    // the same question — may this beacon mint counters at all — and has to
+    // hold for BOTH branches below and for emitHostEvent, not just the
+    // pageview one. Refuses SILENTLY, with the same 204 every other path
+    // returns: nothing renders this response, so a 423 would buy a visitor's
+    // browser a retry and tell nobody anything.
+    if (await telemetryFrozen(hostId)) return noContent()
 
     // Overlay events (AGL-200): impressions/dismissals/clicks for the
     // announcement bar and popup count into the same day doc under an
