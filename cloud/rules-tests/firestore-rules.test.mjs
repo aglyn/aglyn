@@ -4238,10 +4238,15 @@ describe('a host-scope suspension freezes the client SDK too (AGL-1965)', () => 
         name: 'Uploads',
       }),
     )
+    // The twin of the `col-1/entries/e1` deny on LOCKED_HOST above, and it has
+    // to be an UPDATE for the pair to isolate the freeze: entry CREATE stopped
+    // being a client operation at all in AGL-2266 (/api/hosts/resources owns it
+    // and holds `ENTRIES_MAX_PER_COLLECTION`), so a create here would fail on a
+    // healthy site too and would say nothing about `hostWritesFrozen`.
     await mustAllow(
-      'an editor creating a collection entry on a healthy site',
-      setDoc(
-        doc(editor(), 'hosts', HOST, 'collections', 'col-h', 'entries', 'e1'),
+      'an editor updating a collection entry on a healthy site',
+      updateDoc(
+        doc(editor(), 'hosts', HOST, 'collections', 'col-1', 'entries', 'entry-draft'),
         { title: 'Post' },
       ),
     )
@@ -5859,15 +5864,27 @@ describe('the author host role edits content and cannot publish (AGL-2334)', () 
       'the author editing a LIVE entry body (editing is not publishing)',
       updateDoc(doc(authed(AUTHOR), ...ENTRY_LIVE), { body: 'a correction' }),
     )
+    // "The author adds a post" used to be a client-direct create, and this
+    // pair asserted the create-time draft condition the rule carried. AGL-2266
+    // took entry CREATE away from every client role — /api/hosts/resources owns
+    // it because it is the only place `ENTRIES_MAX_PER_COLLECTION` can be
+    // counted — and the draft condition moved with it: `status` is off that
+    // route's field allow-list and `'draft'` is stamped server-side.
+    //
+    // So the author's "add a post" is now a server shell followed by the
+    // ordinary merge-set save, and it is THAT save — the one the console
+    // actually makes on a brand-new entry — which this half has to prove.
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'hosts', HOST, 'collections', 'col-1',
+          'entries', 'entry-new'),
+        { title: 'New', status: 'draft' },
+      )
+    })
     await mustAllow(
-      'the author creating a draft entry',
+      'the author filling in an entry the route just created',
       setDoc(doc(authed(AUTHOR), 'hosts', HOST, 'collections', 'col-1',
-        'entries', 'entry-new'), { title: 'New', status: 'draft' }),
-    )
-    await mustAllow(
-      'the author creating an entry with no status at all',
-      setDoc(doc(authed(AUTHOR), 'hosts', HOST, 'collections', 'col-1',
-        'entries', 'entry-statusless'), { title: 'No status' }),
+        'entries', 'entry-new'), { body: 'first words' }, { merge: true }),
     )
     await mustAllow(
       'the author deleting a draft entry',
@@ -6023,7 +6040,11 @@ describe('the author host role edits content and cannot publish (AGL-2334)', () 
       }),
     )
     // A create is the update freeze's escape hatch if it is not covered:
-    // delete the draft, re-create it published.
+    // delete the draft, re-create it published. AGL-2334 closed it inside this
+    // rule; AGL-2266 then welded it shut a level up, because entry CREATE is
+    // API-only for every client role now. These two still hold, but they no
+    // longer isolate the AUTHOR — which is a guard that cannot fail unless the
+    // editor twin below runs beside it and says so.
     await mustDeny(
       'the author CREATING an entry that is already published',
       setDoc(doc(authed(AUTHOR), 'hosts', HOST, 'collections', 'col-1',
@@ -6036,6 +6057,15 @@ describe('the author host role edits content and cannot publish (AGL-2334)', () 
         'entries', 'entry-born-scheduled'),
         { title: 'Born scheduled', status: 'scheduled',
           publishAt: new Date(Date.now() + AN_HOUR) }),
+    )
+    // The reason the two above are denied is NOT the publish freeze any more,
+    // and this is what records that honestly. The editor may publish an entry
+    // (HALF THREE) and still cannot create one from the browser.
+    await mustDeny(
+      'the EDITOR creating an entry client-direct — create is API-only, not author-specific (AGL-2266)',
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'collections', 'col-1',
+        'entries', 'entry-editor-live'),
+        { title: 'Born live', status: 'published' }),
     )
   })
 
@@ -6145,12 +6175,10 @@ describe('the author host role edits content and cannot publish (AGL-2334)', () 
         status: 'published', publishedAt: new Date(),
       }),
     )
-    await mustAllow(
-      'the editor creating an already-published entry',
-      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'collections', 'col-1',
-        'entries', 'entry-editor-live'),
-        { title: 'Born live', status: 'published' }),
-    )
+    // The editor's create twin is NOT here, and its absence is deliberate:
+    // entry create left the client entirely in AGL-2266, so it is asserted as
+    // a DENY in HALF TWO instead. What the editor must still be able to do is
+    // publish one the route created — the assertion directly above.
     await mustAllow(
       'the editor renaming a component (the catch-all exclusion did not break it)',
       updateDoc(doc(authed(EDITOR), ...COMPONENT), { name: 'Hero v3' }),

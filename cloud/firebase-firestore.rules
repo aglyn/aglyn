@@ -4,7 +4,25 @@ service cloud.firestore {
     function isSignedIn() { return request.auth != null; }
     // Staff access is a Firebase custom claim set via
     // tools/scripts/set-staff-claim.mjs (Aglyn Admin Console, AGL-42).
-    function isStaff() { return isSignedIn() && request.auth.token.staff == true; }
+    //
+    // Read with `.get()` — the `staffRole()` idiom below — and NOT as
+    // `request.auth.token.staff`, which is an ERROR for the 99.99% of sessions
+    // that carry no such claim rather than a `false` (AGL-2479). The outcome
+    // never differed: `isStaff()` is only ever the first disjunct of an `||` or
+    // the left of an `&&`, and CEL absorbs an error against a `true` and
+    // propagates it as a deny against a `false` — exactly what a `false` does.
+    // There is no `!isStaff()` anywhere in this file, which is the one shape
+    // that WOULD have differed.
+    //
+    // The MESSAGE differed, and that is the whole reason this changed. Every
+    // ordinary denial in the emulator read `Property staff is undefined on
+    // object for 'create' @ L<the allow line>`, so the reported cause of a
+    // refusal was a red herring pointing at this function, on every rule, for
+    // every non-staff user. Three stale tests were misfiled as a rules bug on
+    // exactly that evidence. Denials now name the line that actually refused.
+    function isStaff() {
+      return isSignedIn() && request.auth.token.get('staff', false) == true;
+    }
     // Staff RBAC (AGL-206): roles ride a second claim. A missing role means
     // 'support', the LEAST privileged (AGL-2131) — it meant 'super' here
     // long after AGL-495 inverted that default in every API route, so a
