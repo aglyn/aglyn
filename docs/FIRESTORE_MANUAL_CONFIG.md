@@ -93,6 +93,7 @@ running the deploy, which is the one action that can destroy them.
 | `assistExchanges` | `expiresAt` | The **verbatim** half of an Aglyn Assist exchange (AGL-1972) — the question, the answer and the asking `uid`. **180 days** (`ASSIST_EXCHANGE_RETENTION_DAYS` in `apps/console/app/api/_lib/assist-usage.ts`). The number is only affordable because the analytic half was split into `assistSignals`, which carries `docsPaths`, the thumbs rating, tokens and cost, has NO expiry and no `uid` — so the docs-gap data loop keeps its corpus while the prose expires. Both are org subcollections, so `recursiveDelete(orgRef)` still takes them on erasure. TTL `ACTIVE`, enabled and verified 2026-08-19. |
 | `churnSurveyDetails` | `expiresAt` | The churn survey's free text (AGL-1978), split out of `orgs/{orgId}/retention` into its own document so it can expire without taking the closed-set `reason` with it — the reason breakdown is the whole point of the funnel (AGL-1859/AGL-1863) and must not be reaped. **365 days** (`CHURN_SURVEY_DETAIL_RETENTION_DAYS` in `apps/console/app/api/_lib/retention.ts`), because churn analysis is annual. TTL `ACTIVE`, enabled and verified 2026-08-19. |
 | `apiIdempotency` | `expiresAt` | REST/POS/marketplace replay keys (AGL-618, AGL-1978). **30 days** (`API_IDEMPOTENCY_RETENTION_DAYS` in `libs/aglyn/src/lib/app-utils/api-idempotency.ts`). Not merely a key: a settled claim stores the **original response body**, which for the REST API is the created record's `values` — so this collection was a permanent second copy of every record created through the API, surviving the record's own deletion. Top-level and `orgId`-keyed, so `eraseOrgIdempotencyKeys` sweeps it on erasure; the TTL is what bounds it for a **live** org. The published contract in `apps/docs/api/conventions.md` moved from "never expire" to the 30-day window in the same change. TTL `ACTIVE`, enabled and verified 2026-08-19. |
+| `authHandoffs` | `expiresAt` | Cross-domain console session handoffs (AGL-1902). Each doc holds the SHA-256 of two secrets that together buy a full session, plus the `uid` that session would be minted for. Written with a **15-minute** expiry at initiation and rewritten to **120 seconds** at authorize. ⚠️ **The TTL is hygiene ONLY.** Deletion here is best-effort within ~72h, which is three orders of magnitude wider than the window this credential may live for, so **expiry is enforced in code** in `auth-handoff.ts` and the TTL exists so spent and abandoned records do not accumulate forever. Never the other way round. TTL **not yet enabled** — the command is below and is owed before the first custom console domain is activated. |
 
 Not TTL targets (deliberately): `apiKeys.expiresAt` (validity field — keep expired
 keys as records), `orgSlugs.movedTo` tombstones (intentional persistent
@@ -114,6 +115,11 @@ gcloud firestore fields ttls update expiresAt \
   --project=aglyn-main --database='(default)'
 gcloud firestore fields ttls update expiresAt \
   --collection-group=screenAnalytics --enable-ttl \
+  --project=aglyn-main --database='(default)'
+# AGL-1902 — OWED, not yet run. Do this before the first custom console
+# domain is activated:
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=authHandoffs --enable-ttl \
   --project=aglyn-main --database='(default)'
 # AGL-1972 / AGL-1978 — run 2026-08-19, now ACTIVE:
 gcloud firestore fields ttls update expiresAt \

@@ -24,6 +24,7 @@ import {
   type RegistrationResponseJSON,
 } from '@simplewebauthn/server'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
+import { consumeOnce } from '@aglyn/tenant-data-admin'
 import { WORKSPACE_DOMAIN } from '../../../constants/workspace-domain'
 
 /**
@@ -201,6 +202,19 @@ async function storeChallenge(params: StoreChallengeParams): Promise<string> {
  * Reads AND DELETES the challenge in one transaction — single use is not a
  * policy here, it is a property: a second consume of the same id finds
  * nothing, whatever the outcome of the first.
+ *
+ * The transaction itself is now `consumeOnce` (AGL-1902, the D8 extraction).
+ * It was private and lived in an app while the cross-domain handoff needed the
+ * identical shape, and two hand-written copies of a single-use guarantee is
+ * one more than is safe to have.
+ *
+ * Behaviour here is IDENTICAL, deliberately. `consumeOnce` does not write on a
+ * refusal by default — a refused consume that deletes can destroy a record a
+ * concurrent legitimate consume is about to accept — but this call site
+ * deleted on every outcome before the move, so it opts back in with
+ * `remove: true` on each refusal. Whether it should keep doing that is a real
+ * question and a separate one; an extraction is not the change that gets to
+ * decide it.
  */
 async function consumeChallenge(
   firestore: Firestore,
@@ -209,23 +223,28 @@ async function consumeChallenge(
   nowMs: number,
 ): Promise<string | null> {
   if (!challengeId) return null
-  const ref = challengeRef(firestore, challengeId)
-  return firestore.runTransaction(async (tx) => {
-    const snapshot = await tx.get(ref)
-    if (!snapshot.exists) return null
-    tx.delete(ref)
-    const data = snapshot.data() as {
-      type?: string
-      challenge?: string
-      uid?: string | null
-      createdAt?: number
-    }
-    if (data.type !== expected.type) return null
-    if (expected.type === 'register' && data.uid !== expected.uid) return null
-    const createdAt = Number(data.createdAt ?? 0)
-    if (nowMs - createdAt > CHALLENGE_TTL_MS) return null
-    return data.challenge ?? null
-  })
+  const result = await consumeOnce<string | null>(
+    firestore,
+    challengeRef(firestore, challengeId),
+    (data) => {
+      if (data['type'] !== expected.type) {
+        return { accept: false, reason: 'type-mismatch', remove: true }
+      }
+      if (expected.type === 'register' && data['uid'] !== expected.uid) {
+        return { accept: false, reason: 'uid-mismatch', remove: true }
+      }
+      const createdAt = Number(data['createdAt'] ?? 0)
+      if (nowMs - createdAt > CHALLENGE_TTL_MS) {
+        return { accept: false, reason: 'expired', remove: true }
+      }
+      return {
+        accept: true,
+        value: (data['challenge'] as string | undefined) ?? null,
+        remove: true,
+      }
+    },
+  )
+  return result.ok ? (result.value ?? null) : null
 }
 
 /** Uniform error result so routes map outcomes to responses in one place. */

@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { createHmac, timingSafeEqual } from 'crypto'
+import { createHmac } from 'crypto'
+import { safeEqual } from './safe-equal'
 import { tokenSigningSecret } from './media-signing'
 
 /**
@@ -119,17 +120,10 @@ export function verifyEditAccessToken(
     // Secret missing — refuse rather than trusting anything.
     return null
   }
-  // Length-checked before timingSafeEqual, which THROWS on mismatched
-  // lengths an attacker controls — a 500 where a 401 belongs.
-  if (sig.length !== expected.length) return null
-  if (
-    !timingSafeEqual(
-      new Uint8Array(Buffer.from(sig)),
-      new Uint8Array(Buffer.from(expected)),
-    )
-  ) {
-    return null
-  }
+  // `safeEqual` length-checks before `timingSafeEqual`, which THROWS on
+  // mismatched lengths an attacker controls — a 500 where a 401 belongs. One
+  // implementation since AGL-1902; this was one of six hand-written copies.
+  if (!safeEqual(sig, expected)) return null
   let claims: EditAccessClaims
   try {
     claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'))

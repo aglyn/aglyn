@@ -49,6 +49,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // AGL-1993. Matches the real function under this env: the SSO domain
   // policy is unconfigured in tests, so it governs nothing and returns null.
   ssoDomainRefusal: () => null,
+  // AGL-1902. These scenarios all run on the workspace domain, where the
+  // console-domain epoch is never consulted — but a closed-world mock that
+  // omits it throws rather than skipping, which is a suite failure wearing a
+  // behaviour-change costume. `false` is what the real function answers for a
+  // host with no claim.
+  consoleSessionEpochRefuses: async () => false,
   __esModule: true,
   firebaseAdmin: {
     app: () => ({

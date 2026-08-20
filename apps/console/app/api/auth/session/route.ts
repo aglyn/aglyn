@@ -23,6 +23,7 @@ import {
   toEpochMs,
 } from '@aglyn/aglyn/server'
 import {
+  consoleSessionEpochRefuses,
   emailUnverifiedResponse,
   firebaseAdmin,
   getFeatureLockdown,
@@ -650,6 +651,37 @@ async function handler(request: Request): Promise<Response> {
             `${SESSION_TENANT_COOKIE}=; ${cookieAttributes(request, 0)}`,
           )
           return locked
+        }
+        // Console-domain session epoch (AGL-1353 D6, wired by AGL-1902).
+        //
+        // `consoleDomains/{host}.sessionEpoch` is bumped by
+        // `suspendOnDowngrade` and by `releaseConsoleDomain`, and it was
+        // written correctly since AGL-1099c with nothing to check: no cookie
+        // could reach a custom domain before the handoff existed. Now one can.
+        //
+        // This is the only lever that reaches an already-minted cookie, and it
+        // works because our boundary is the ONLY place a Firebase session
+        // cookie has any value — it is opaque and can be cashed only by
+        // `verifySessionCookie` under our Admin credentials. It also closes
+        // the re-registration case: a domain claimed by a new owner bumps the
+        // epoch, so no cookie minted under the previous one can be exchanged.
+        //
+        // Skipped on the workspace domain, where there is no claim to read.
+        if (
+          !isWorkspaceDomainHost(request.headers.get('host')) &&
+          (await consoleSessionEpochRefuses({
+            host: hostnameOf(request.headers.get('host')),
+            cookieIssuedAtMs: claimSecondsToMs(decoded.iat),
+          }))
+        ) {
+          return jsonWithCookie(
+            { error: 'Signed out', reason: 'domain-revoked' },
+            401,
+            [
+              `${SESSION_COOKIE}=; ${cookieAttributes(request, 0)}`,
+              `${SESSION_TENANT_COOKIE}=; ${cookieAttributes(request, 0)}`,
+            ],
+          )
         }
         // Device revocation, the exchange half (AGL-1959). The session cookie
         // is what a revoked browser still holds, and this route is what turns

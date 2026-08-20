@@ -68,6 +68,11 @@ import {
 const APEX_PATH_SEGMENTS = new Set([
   'manage',
   'admin',
+  // The cross-domain handoff legs (AGL-1902). `/auth/handoff`,
+  // `/auth/handoff/start` and `/auth/handoff/continue` are platform routes, not
+  // anything inside an org, and rewriting them to `/{slug}/auth/handoff` would
+  // 404 the one flow that exists to get a session onto a custom domain.
+  'auth',
   'signin',
   'signout',
   'signup',
@@ -491,10 +496,27 @@ async function serveConsoleDomain(
     return NextResponse.redirect(fallback, 307)
   }
 
-  // Sign-in never happens on the custom domain. Until the AGL-1099e handoff
-  // exists this is where the user is sent; afterwards this is where the handoff
-  // starts. Either way the credential prompt stays on an origin we control.
+  // Sign-in never happens on the custom domain — the credential prompt stays
+  // on an origin we control. What changes with AGL-1902 is where the visitor
+  // goes instead.
+  //
+  // `signin` now STARTS THE HANDOFF, here on the custom domain, because that
+  // is the only place the verifier cookie can be set: it is host-only, and a
+  // cookie set on `app.aglyn.com` cannot reach `console.acme-agency.com`. The
+  // start route bounces on to the auth host itself.
+  //
+  // The rest of the family still goes to the auth host unchanged. `signup`
+  // must not create accounts from a white-label address, and `verify-email` /
+  // `account-recovery` redeem one-shot codes from emailed links whose origin
+  // is ours — none of the three is a session handoff.
   const first = request.nextUrl.pathname.split('/').filter(Boolean)[0] ?? ''
+  if (first === 'signin') {
+    const start = request.nextUrl.clone()
+    start.pathname = '/auth/handoff/start'
+    const wanted = request.nextUrl.searchParams.get('continue')
+    start.search = wanted ? `?continue=${encodeURIComponent(wanted)}` : ''
+    return NextResponse.redirect(start, 307)
+  }
   if (AUTH_PATH_SEGMENTS.has(first)) {
     const authHost = request.nextUrl.clone()
     authHost.hostname = `app.${WORKSPACE_DOMAIN}`

@@ -714,6 +714,20 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Cross-domain console session handoff (AGL-1902). Admin SDK only, and
+    // this one is not a judgement call: a document here holds the SHA-256 of
+    // two secrets that together buy a full session on somebody's account, plus
+    // the uid the session would be minted for.
+    //
+    // A client that could READ one could compare a candidate against the
+    // stored digest offline. A client that could WRITE one could set
+    // `uid` to any account and `status` back to `authorized`, which is
+    // account takeover with no password involved. Nothing client-side consults
+    // this collection: the three legs of the flow are all server routes.
+    match /authHandoffs/{requestId} {
+      allow read, write: if false;
+    }
+
     // Host → org resolver mirror, server-written beside host create.
     match /hostIndex/{hostId} {
       allow read: if isSignedIn();

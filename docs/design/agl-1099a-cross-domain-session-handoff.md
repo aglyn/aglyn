@@ -1155,7 +1155,7 @@ Recorded because disagreeing with evidence is more useful than elaborating.
   reCAPTCHA allowlist, which **cannot be automated today** and is blocked on an
   account action. See §5.*
 - **1099e** — the handoff itself, per this document, plus the two extractions in
-  D8.
+  D8. **Built — see below.**
 
 Before 1099b starts, run the proof-of-concept in §5: a page on an unauthorized
 hostname doing `signInWithCustomToken` with `inMemoryPersistence` and no
@@ -1320,3 +1320,67 @@ redirect becomes the handoff start rather than a new mechanism.
   yet: `__console_session` is 1099e's, and no cookie can reach a custom domain
   before the handoff exists. The epoch is written on suspension so it is correct
   the day that check is added.
+
+### 1099e, as built (AGL-1902)
+
+The mechanism, its legs, and both D8 extractions. Lands **dark for the same
+structural reason 1099b and 1099c did**: every leg refuses unless
+`resolveConsoleDomain` says `servable`, and the only thing that sets `active`
+is `activateConsoleDomain`, which still has no caller while AGL-1378 is open.
+
+- `libs/tenant/data/admin/src/lib/server/auth-handoff.ts` —
+  `startConsoleHandoff`, `authorizeConsoleHandoff`, `redeemConsoleHandoff` and
+  `consoleSessionEpochRefuses`. Opaque random secrets with a stored SHA-256,
+  both windows (15 min / 120 s) enforced in code, both hashes destroyed on
+  consume.
+- The D8 extractions, both taken: `consumeOnce` (lifted out of `passkeys.ts`,
+  which now uses it, with its delete-on-refusal behaviour preserved by an
+  explicit opt-in rather than changed on the way out) and `safeEqual`.
+  `safeEqual` replaced the hand-written length-check-then-`timingSafeEqual`
+  dance in `media-signing.ts` and `edit-access-token.ts`; the four copies
+  outside `@aglyn/tenant-data-admin` are unchanged and still hold their own.
+- `GET /auth/handoff/start`, `POST /api/auth/handoff/authorize`,
+  `GET /auth/handoff`, `POST /api/auth/handoff/redeem`, plus
+  `/auth/handoff/continue` on the auth host — which exists so the sign-in page
+  itself needs no change, and so D5's "await the mint BEFORE the cross-origin
+  navigation" is the natural shape rather than a discipline.
+- `apps/console/middleware.ts` — `signin` on a custom domain now STARTS the
+  handoff on that host rather than sending the visitor to the auth host and
+  leaving them there. The verifier cookie is host-only, so that origin is the
+  only one that can set it. `auth` joins `APEX_PATH_SEGMENTS` so the legs are
+  never rewritten under an org slug.
+- The D6 **session epoch** is now checked on the `GET /api/auth/session`
+  exchange for a non-workspace host. 1099c wrote `sessionEpoch` correctly and
+  recorded that it had nothing to check; it does now.
+- `authHandoffs` is `allow read, write: if false` in the rules, and its TTL
+  policy is filed in `docs/FIRESTORE_MANUAL_CONFIG.md` as **owed** — a gcloud
+  action, not a deploy.
+
+**Departure worth naming: the cookie is still `__session`, not
+`__console_session`.** D6 item 1 asked for a distinct name because "sharing the
+name across the boundary invites exactly the AGL-1259 duplicate-cookie
+confusion". That reasoning is about a SHARED PARENT: a host-only cookie on
+`console.acme-agency.com` and a `Domain=.aglyn.com` cookie cannot appear in one
+`Cookie` header, because they are different registrable domains. So the rename
+buys nothing the host-only scope does not already give, and costs a fork of
+every read path in the session route and the client. Recorded as a decision
+rather than an omission — reopen it if a case is found where both names really
+can arrive together.
+
+**Precondition still owed, and it is not optional.** D6's
+`authPersistence: 'ephemeral'` is not yet passed on a custom console domain:
+`FirebaseServicesProvider` still defaults to `durable` everywhere. The
+`setPersistence` seal (AGL-1379) and the memory cache (AGL-1456) are both built
+and both wired to that one prop; nobody passes it. Until somebody does, a
+custom console domain would leave a Firebase refresh token and cached document
+bodies in IndexedDB on an origin whose DNS the customer can re-point at
+themselves — the durable account-takeover primitive §9.3 is about. That
+declaration is 1099c's per this same split, and it is a second reason no domain
+may be activated yet, alongside AGL-1378.
+
+**Test evidence.** §7 items 2–7 and 10 are unit tests. Item 1's concurrent half
+runs against the Firestore emulator, and the negative control is the useful
+part: with a read-then-write consume outside a transaction, **8 of 8**
+simultaneous redemptions succeed; with the transaction, exactly one does. Items
+11 and 12 were already built and tested by AGL-1379/AGL-1456. Item 13 still
+needs a real browser and a real domain, and is still owed.

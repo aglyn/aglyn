@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { createHmac, timingSafeEqual } from 'crypto'
+import { createHmac } from 'crypto'
+import { safeEqual } from './safe-equal'
 
 /**
  * Signed access to a PRIVATE media asset (AGL-1051).
@@ -80,10 +81,11 @@ export interface MediaSignature {
 /**
  * Whether a presented signature authorizes this asset right now.
  *
- * Compared with `timingSafeEqual` on equal-length buffers. The candidate is
- * length-checked first because `timingSafeEqual` THROWS on a length
- * mismatch, and an attacker controls that length — an exception here would
- * be a 500 where a 403 belongs.
+ * Compared with `safeEqual`, which is constant-time on equal-length inputs and
+ * length-checks first because `timingSafeEqual` THROWS on a length mismatch —
+ * and an attacker controls that length, so an exception here would be a 500
+ * where a 403 belongs. That dance was hand-written in six files before
+ * AGL-1902 lifted it into one.
  */
 export function verifyMediaAccess(
   scope: string,
@@ -101,11 +103,7 @@ export function verifyMediaAccess(
     // Secret missing — fail closed rather than serving the bytes.
     return false
   }
-  if (sig.length !== expected.length) return false
-  return timingSafeEqual(
-    new Uint8Array(Buffer.from(sig)),
-    new Uint8Array(Buffer.from(expected)),
-  )
+  return safeEqual(sig, expected)
 }
 
 /** The query string that carries a signature on a CDN URL. */
