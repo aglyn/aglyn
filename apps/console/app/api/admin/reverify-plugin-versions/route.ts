@@ -25,13 +25,32 @@ import {
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin, notifyStaff } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
-import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
+import { isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
+import {
+  authorizeMaintenanceActor,
+  recordStaffMaintenanceRun,
+} from '../../../../utils/server/maintenance-actor'
+import {
+  findMaintenanceJob,
+  refuseStaffRun,
+  type StaffRunRequest,
+} from '../../../../utils/maintenance-jobs'
 import {
   reverifyOutcome,
   summariseReverify,
   type ReverifyEntry,
 } from '../../../../utils/server/reverify-plugin-versions'
+
+/**
+ * This job's console descriptor (AGL-1949) — the audit action, shared with the
+ * Staff → Maintenance page. No confirmation phrase: this route delists nothing
+ * and revokes nothing, and a wrong verdict is recomputed on the next run.
+ */
+const JOB = findMaintenanceJob('reverify-plugin-versions') as ReturnType<
+  typeof findMaintenanceJob
+> &
+  object
 
 /** Artifacts downloaded per run — a ceiling on time and egress, not on truth. */
 const MAX_VERSIONS = 250
@@ -68,14 +87,22 @@ async function handler(request: Request): Promise<Response> {
       { status: 501 },
     )
   }
-  if (!isCronAuthorized(headers)) {
+  // Staff, or the scheduler (AGL-1949). This route was cron-secret-only, so
+  // re-checking a verdict after a verifier bump needed a shell and the
+  // production secret — for a job whose entire purpose is finding what nobody
+  // had a reason to look for.
+  const actor = await authorizeMaintenanceActor(headers)
+  if (!actor) {
     return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   }
   // AGL-1955 — the mark `/api/health/crons` reads to notice this job going
   // AWAY. Stamped on the invocation, not on the work, so a run that finds
-  // nothing to do still proves the schedule is alive; POST only, because a
-  // human's GET is not the scheduler and must not stand in for it.
-  if (method === 'POST') await recordCronBeat('reverify-plugin-versions')
+  // nothing to do still proves the schedule is alive; the SCHEDULER's POST
+  // only, because a human pressing the button in the console is not the cron
+  // and must not make a job that stopped being scheduled read as alive.
+  if (method === 'POST' && actor.kind === 'cron') {
+    await recordCronBeat('reverify-plugin-versions')
+  }
   const bucketName = process.env.PLUGIN_ARTIFACTS_BUCKET
   if (!bucketName) {
     return Response.json(
@@ -86,16 +113,43 @@ async function handler(request: Request): Promise<Response> {
 
   const asFlag = (value: unknown): boolean =>
     value !== undefined && value !== '0' && value !== 'false' && value !== false
-  const payload = body as { force?: unknown } | undefined
+  const payload = body as
+    | { force?: unknown; reason?: unknown }
+    | undefined
   // A GET is somebody's curl or a browser: report, never write. The cron
   // POSTs, and writing back a verdict is what makes the next reviewer's page
   // load free, so a dry run is not the default there.
   const dryRun = isCronDryRun({ method, query, body })
   const force = asFlag(payload?.force ?? query['force'])
 
+  /*==========================================
+   * AUDITED AND REASONED, BUT NOT TYPE-TO-CONFIRM (AGL-1949).
+   *
+   * This route writes verdicts back and notifies staff about regressions on
+   * live versions. It delists nothing and revokes nothing — the verifier is a
+   * lint, and a wrong verdict is recomputed on the next run — so the typed
+   * phrase the two destructive jobs carry would be ceremony here. The reason
+   * stays: the audit row still has to answer why someone did not wait for the
+   * Monday run.
+   *=========================================*/
+  if (actor.kind === 'staff' && !dryRun) {
+    const refusal = refuseStaffRun(JOB, (body ?? {}) as StaffRunRequest)
+    if (refusal) return Response.json({ error: refusal }, { status: 400 })
+  }
+
   try {
     const app = firebaseAdmin.app()
     const firestore = app.firestore()
+    // Recorded BEFORE the sweep: a run that dies partway through 250
+    // downloads still leaves a row saying who started it and why.
+    if (actor.kind === 'staff' && !dryRun) {
+      await recordStaffMaintenanceRun(
+        firestore,
+        JOB,
+        actor,
+        String(payload?.reason ?? ''),
+      )
+    }
     const bucket = app.storage().bucket(bucketName)
 
     const versions = await firestore.collectionGroup('pluginVersions').get()

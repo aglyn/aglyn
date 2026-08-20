@@ -100,6 +100,14 @@ export function adminNavTabItems() {
       label: 'Health',
       href: buildRoute(Route.ADMIN_HEALTH),
     },
+    // Directly after Health, because it is the other half of the same job:
+    // Health says a scheduled job stopped running, and this is where the
+    // operator does something about it (AGL-1949).
+    {
+      id: 'nav-tab-admin-maintenance',
+      label: 'Maintenance',
+      href: buildRoute(Route.ADMIN_MAINTENANCE),
+    },
     {
       id: 'nav-tab-admin-assist-signals',
       label: 'Assist signal',

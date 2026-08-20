@@ -17,13 +17,32 @@
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
+import { isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
+import {
+  authorizeMaintenanceActor,
+  recordStaffMaintenanceRun,
+} from '../../../../utils/server/maintenance-actor'
+import {
+  findMaintenanceJob,
+  refuseStaffRun,
+  type StaffRunRequest,
+} from '../../../../utils/maintenance-jobs'
 import {
   ArtifactObject,
   artifactClaimKey,
   planArtifactReap,
 } from '../../../../utils/server/reap-plugin-artifacts'
+
+/**
+ * This job's console descriptor (AGL-1949) — the confirmation phrase and the
+ * audit action, shared with the Staff → Maintenance page rather than
+ * transcribed into it.
+ */
+const JOB = findMaintenanceJob('reap-plugin-artifacts') as ReturnType<
+  typeof findMaintenanceJob
+> &
+  object
 
 /** Objects younger than this are never reaped (mid-publish guard). */
 const MIN_AGE_DAYS = 7
@@ -58,14 +77,21 @@ async function handler(request: Request): Promise<Response> {
       { status: 501 },
     )
   }
-  if (!isCronAuthorized(headers)) {
+  // Staff, or the scheduler (AGL-1949). This route was cron-secret-only, so
+  // the artifacts bucket — already invisible to the Firebase console — could
+  // only be inspected from a shell holding the production secret.
+  const actor = await authorizeMaintenanceActor(headers)
+  if (!actor) {
     return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   }
   // AGL-1955 — the mark `/api/health/crons` reads to notice this job going
   // AWAY. Stamped on the invocation, not on the work, so a run that finds
-  // nothing to do still proves the schedule is alive; POST only, because a
-  // human's GET is not the scheduler and must not stand in for it.
-  if (method === 'POST') await recordCronBeat('reap-plugin-artifacts')
+  // nothing to do still proves the schedule is alive; the SCHEDULER's POST
+  // only, because a human pressing the button in the console is not the cron
+  // and must not make a job that stopped being scheduled read as alive.
+  if (method === 'POST' && actor.kind === 'cron') {
+    await recordCronBeat('reap-plugin-artifacts')
+  }
   const bucketName = process.env.PLUGIN_ARTIFACTS_BUCKET
   if (!bucketName) {
     return Response.json(
@@ -81,9 +107,35 @@ async function handler(request: Request): Promise<Response> {
   // Firestore rows, was the copy nobody ever wrote.
   const dryRun = isCronDryRun({ method, query, body })
 
+  /*==========================================
+   * A CONSOLE BUTTON IS WORSE THAN CURL UNLESS IT IS HARDER TO FIRE (AGL-1949).
+   *
+   * Deletions here are permanent — the bucket has no object versioning, so
+   * there is nothing to restore from. A staff-triggered real run therefore
+   * needs a reason AND the exact typed phrase, enforced HERE and not only in
+   * the page: a control that lives only in the UI is not a control.
+   *
+   * The scheduler is untouched — it has no user, no reason and no phrase.
+   *=========================================*/
+  if (actor.kind === 'staff' && !dryRun) {
+    const refusal = refuseStaffRun(JOB, (body ?? {}) as StaffRunRequest)
+    if (refusal) return Response.json({ error: refusal }, { status: 400 })
+  }
+
   try {
     const app = firebaseAdmin.app()
     const firestore = app.firestore()
+    // Recorded BEFORE any object is deleted. The run audits the object list
+    // it removed, but only on success — a sweep that dies halfway is exactly
+    // when "who asked for this, and why now" is the open question.
+    if (actor.kind === 'staff' && !dryRun) {
+      await recordStaffMaintenanceRun(
+        firestore,
+        JOB,
+        actor,
+        String((body as { reason?: unknown } | undefined)?.reason ?? ''),
+      )
+    }
     const bucket = app.storage().bucket(bucketName)
 
     const [files] = await bucket.getFiles({ prefix: 'artifacts/' })

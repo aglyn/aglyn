@@ -353,6 +353,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Long documents in markdown',
     excerpt: 'Put a whole policy, terms or handbook page on the canvas as one Markdown element, and let a Table of contents element build the "On this page" list from its headings.',
   },
+  maintenance: {
+    path: '/staff-console/maintenance',
+    title: 'Maintenance',
+    excerpt: 'The staff maintenance jobs — whether each scheduled job is still running, what a run would do, and how to run one by hand without firing an irreversible sweep by accident.',
+  },
   maintenanceMode: {
     path: '/building-sites/site-protection/maintenance-mode',
     title: 'Maintenance mode',
@@ -697,6 +702,7 @@ export const DOCS_HELP_ANCHORS = {
   liveCoEditing: ['#whos-here', '#editing-together', '#when-saves-collide', '#local-draft-recovery', '#the-save-button-always-answers', '#related'],
   lockdown: ['#what-a-lockdown-does', '#reasons-and-the-notice', '#read-only-mode', '#what-reads-keep-working-does-and-does-not-cover', '#read-only-timing', '#read-only-evidence', '#read-only-revocation-evidence', '#a-gentler-lock-never-softens-a-stricter-one', '#maintenance-windows-and-expiry', '#who-keeps-access-the-un-panic-invariant', '#feature-scope', '#signups-also-refuses-account-creation--if-the-valve-is-armed', '#asset-quarantine--one-file-not-the-site-that-serves-it', '#which-digest', '#quarantine-keys', '#quarantine-audiences', '#disabled-files-page', '#deny-list', '#quarantine-curl', '#quarantine-history', '#operating-it', '#never-take-a-lock-or-a-lift-on-trust', '#what-a-caller-is-told', '#verifying-a-lockdown-on-the-wire', '#what-the-audit-row-records'],
   longFormMarkdown: ['#the-markdown-element', '#what-the-markdown-supports', '#the-table-of-contents-element', '#how-it-finds-the-markdown', '#heading-links', '#related'],
+  maintenance: ['#is-the-job-still-running', '#running-a-job-by-hand', '#the-jobs', '#audit-archive', '#plugin-artifact-reaper', '#plugin-verdict-re-verification', '#jobs-that-live-elsewhere', '#related'],
   maintenanceMode: ['#turn-it-on', '#tips', '#related'],
   manageAccount: ['#account', '#sign-in-methods', '#profile-image', '#basic-info', '#contact-details', '#security', '#related'],
   manifestAndEnvs: ['#plugin-manifest-published-with-every-version', '#listing--version-documents', '#review--trust-lifecycle', '#environment-variables', '#pluginsconfigjson-first-party-contributors'],
