@@ -95,7 +95,8 @@ const NONE = 0
 
 function quotaColumn(key: string): number[] {
   return PUBLISHED_COLUMNS.map(
-    (plan) => (PLAN_ENTITLEMENTS[plan] as Record<string, number>)[key],
+    (plan) =>
+      (PLAN_ENTITLEMENTS[plan] as unknown as Record<string, number>)[key],
   )
 }
 
