@@ -16,7 +16,9 @@
  */
 
 import {
+  domainLockdownDocId,
   featureLockdownDocId,
+  isLockableDomain,
   isLockdownActive,
   isLockdownFeatureKey,
   LOCKDOWN_FEATURE_KEYS,
@@ -910,5 +912,168 @@ describe('AGL-1531 · the signups lock refuses account CREATION', () => {
     // Reader + clock, and nothing else before the optional timeout. There is
     // no uid, no email, no provider and no tenant to branch on.
     expect(signupsCreationVerdict.length).toBe(2)
+  })
+})
+
+describe('DOMAIN scope (AGL-1513) — lock one NAME, not the site', () => {
+  const domainLock = (over: Record<string, unknown> = {}) => ({
+    scope: 'domain' as const,
+    reason: 'manual' as const,
+    ...over,
+  })
+
+  describe('domainLockdownDocId — keyed on the name, not the host id', () => {
+    it('prefixes and lowercases', () => {
+      expect(domainLockdownDocId('Acme.COM')).toBe('domain--acme.com')
+      expect(domainLockdownDocId('  shop.acme.com  ')).toBe(
+        'domain--shop.acme.com',
+      )
+    })
+
+    it('stays disjoint from the other prefixes in the shared collection', () => {
+      // One collection holds platform, user--, feature-- and domain-- docs.
+      // A name that could collide with another scope's key space would be a
+      // lock that lifts or forges a different one.
+      expect(domainLockdownDocId('acme.com')).not.toBe(
+        featureLockdownDocId('uploads'),
+      )
+      expect(domainLockdownDocId('acme.com').startsWith('domain--')).toBe(true)
+    })
+  })
+
+  describe('isLockableDomain', () => {
+    it('accepts real custom hostnames', () => {
+      expect(isLockableDomain('acme.com')).toBe(true)
+      expect(isLockableDomain('shop.acme.co.uk')).toBe(true)
+      expect(isLockableDomain('  ACME.com ')).toBe(true)
+    })
+
+    it('refuses anything not hostname-shaped', () => {
+      for (const bad of [
+        '',
+        'nodots',
+        'has space.com',
+        'acme.com/path',
+        'https://acme.com',
+        '-lead.com',
+        null,
+        undefined,
+        42,
+      ]) {
+        expect(isLockableDomain(bad as never)).toBe(false)
+      }
+    })
+
+    it('refuses the platform apex, because a lock there would do NOTHING', () => {
+      // The tenant resolves `*.aglyn.app` by subdomain and never consults the
+      // domain scope for it, so such a document would be written and never
+      // read. Refusing is the difference between "you cannot" and a control
+      // that silently no-ops.
+      expect(isLockableDomain('aglyn.app')).toBe(false)
+      expect(isLockableDomain('shop.aglyn.app')).toBe(false)
+    })
+
+    it('refuses a name past the DNS length limit', () => {
+      const label = 'a'.repeat(60)
+      const tooLong = `${[label, label, label, label, label].join('.')}.com`
+      // Guard the fixture itself: a "too long" name that is not actually too
+      // long would make this assertion pass for the wrong reason.
+      expect(tooLong.length).toBeGreaterThan(253)
+      expect(isLockableDomain(tooLong)).toBe(false)
+      // …and the control: the same shape under the limit is accepted, so the
+      // refusal above is the LENGTH rule and not the pattern.
+      const justFits = `${[label, label, label].join('.')}.com`
+      expect(justFits.length).toBeLessThanOrEqual(253)
+      expect(isLockableDomain(justFits)).toBe(true)
+    })
+  })
+
+  describe('resolveLockdown precedence — platform > org > host > domain > user', () => {
+    const now = Date.now()
+
+    it('a domain lock alone is the verdict', () => {
+      const state = resolveLockdown({ domain: domainLock() }, now)
+      expect(state?.scope).toBe('domain')
+    })
+
+    it('NEVER outranks a host takedown — a name lock must not soften a site lock', () => {
+      const state = resolveLockdown(
+        {
+          host: { scope: 'host', reason: 'security' },
+          domain: domainLock(),
+        },
+        now,
+      )
+      expect(state?.scope).toBe('host')
+    })
+
+    it('outranks a user lock', () => {
+      const state = resolveLockdown(
+        { domain: domainLock(), user: { scope: 'user', reason: 'manual' } },
+        now,
+      )
+      expect(state?.scope).toBe('domain')
+    })
+
+    it('a FULL domain lock still beats a wider READ-ONLY one (strictness > width)', () => {
+      // The AGL-1511 invariant, extended to the new scope: a platform-wide
+      // read-only maintenance window must not readmit visitors to a domain
+      // staff just took down.
+      const state = resolveLockdown(
+        {
+          platform: { scope: 'platform', reason: 'maintenance', mode: 'read-only' },
+          domain: domainLock({ reason: 'security' }),
+        },
+        now,
+      )
+      expect(state?.scope).toBe('domain')
+      expect(lockdownMode(state)).toBe('full')
+    })
+
+    it('an EXPIRED domain lock is not the verdict', () => {
+      const state = resolveLockdown(
+        { domain: domainLock({ untilMs: now - 1000 }) },
+        now,
+      )
+      expect(state).toBeNull()
+    })
+  })
+
+  describe('the notice never hands the reader the address that still works', () => {
+    /**
+     * The load-bearing property of this scope's copy. The reader may be the
+     * party the site is being withheld from — that is what a hijack IS — so
+     * naming the `*.aglyn.app` fallback would lift the lock in one sentence.
+     */
+    it('names no fallback address, for any reason', () => {
+      for (const reason of ['security', 'billing', 'maintenance', 'manual']) {
+        const notice = lockdownNotice(domainLock({ reason }) as never)
+        const text = `${notice.title} ${notice.body}`
+        expect(text).not.toMatch(/aglyn\.app/i)
+        expect(text).not.toMatch(/instead/i)
+        expect(text).not.toMatch(/https?:\/\//)
+      }
+    })
+
+    it('does not assert whose the name is — a dispute is exactly the unknown', () => {
+      const notice = lockdownNotice(domainLock({ reason: 'security' }) as never)
+      const text = `${notice.title} ${notice.body}`.toLowerCase()
+      expect(text).not.toMatch(/stolen|hijack|fraud|belongs to|owner/)
+    })
+
+    it('is about the ADDRESS, not the account — the site is fine', () => {
+      const notice = lockdownNotice(domainLock() as never)
+      expect(notice.title).toMatch(/address/i)
+      // The host/org copy says "account"; saying it here would describe the
+      // wrong blast radius to the visitor.
+      expect(notice.body.toLowerCase()).not.toMatch(/this account/)
+    })
+
+    it('a staff message still replaces the body, like every other scope', () => {
+      const notice = lockdownNotice(
+        domainLock({ message: 'Pending registrar review.' }) as never,
+      )
+      expect(notice.body).toBe('Pending registrar review.')
+    })
   })
 })

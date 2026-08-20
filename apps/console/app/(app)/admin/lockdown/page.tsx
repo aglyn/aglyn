@@ -813,6 +813,11 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                   >
                     <MenuItem value="org">{'Workspace (org)'}</MenuItem>
                     <MenuItem value="host">{'Site (host)'}</MenuItem>
+                    {/* AGL-1513. Deliberately listed AFTER the site scope so
+                        the wider lever reads first: a domain lock leaves the
+                        site serving on its platform subdomain, and an
+                        operator reaching for a takedown wants `host`. */}
+                    <MenuItem value="domain">{'Custom domain'}</MenuItem>
                     <MenuItem value="user">{'Account (user)'}</MenuItem>
                   </TextField>
                   <TextField
@@ -822,7 +827,9 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                         ? 'Org id'
                         : scope === 'host'
                           ? 'Host id'
-                          : 'User uid'
+                          : scope === 'domain'
+                            ? 'Domain (e.g. acme.com)'
+                            : 'User uid'
                     }
                     value={targetId}
                     onChange={(event) => {

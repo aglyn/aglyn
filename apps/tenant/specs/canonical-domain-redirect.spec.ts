@@ -45,6 +45,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // Lockdown (AGL-1501): nothing is locked in these scenarios; the verdict
   // logic is unit-tested in libs/tenant/data/admin lockdown.spec.ts.
   getPlatformLockdown: jest.fn(async () => null),
+  // AGL-1513. A wholesale mock is a CLOSED WORLD: without this export the
+  // loader's domain read is `undefined(...)`, which throws on exactly the
+  // `cname--` hosts this file exists to test — and the redirect assertions
+  // would fail for a reason that has nothing to do with redirects.
+  getDomainLockdown: jest.fn(async () => null),
   filterEnabledPluginsByReleaseFlags: jest.fn(async () => []),
   getRealmPluginInstalls: jest.fn(async () => []),
 }))

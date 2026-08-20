@@ -48,6 +48,7 @@ import {
   lockdownNotice,
   lockdownRetryAfterSeconds,
   type LockdownState,
+  domainLockdownDocId,
   normalizeHostLockdown,
   normalizeLockdownDoc,
   normalizeOrgLockdown,
@@ -304,6 +305,94 @@ export async function getUserLockdown(
       userPending.delete(uid)
     })
     userPending.set(uid, pending)
+  }
+  return pending
+}
+
+/**
+ * DOMAIN-lock cache (AGL-1513), same shape and same TTL as the user cache.
+ *
+ * Bounded for the same reason and one more: the key is a HOSTNAME taken from
+ * the request, so an unbounded map here would be attacker-keyed by anyone who
+ * can point a DNS record at us — which, for the hijack incident this scope
+ * exists for, is the adversary by definition.
+ */
+export const DOMAIN_LOCKDOWN_CACHE_MAX = 5000
+
+const domainCache = new Map<
+  string,
+  { at: number; state: LockdownState | null }
+>()
+const domainPending = new Map<string, Promise<LockdownState | null>>()
+
+/**
+ * Drop one hostname's cached verdict (after a domain lock/unlock write), or
+ * the whole cache when called bare.
+ */
+export function invalidateDomainLockdownCache(hostname?: string): void {
+  if (hostname === undefined) {
+    domainCache.clear()
+    domainPending.clear()
+    return
+  }
+  const key = hostname.trim().toLowerCase()
+  domainCache.delete(key)
+  domainPending.delete(key)
+}
+
+/**
+ * `lockdowns/domain--{hostname}`, normalized; null = not locked (incl. on
+ * error), matching every other reader here — an unreachable Firestore is an
+ * outage, not a lockdown.
+ */
+export async function getDomainLockdown(
+  hostname: string,
+): Promise<LockdownState | null> {
+  const key = String(hostname ?? '')
+    .trim()
+    .toLowerCase()
+  if (!key) return null
+  const cached = domainCache.get(key)
+  if (cached && Date.now() - cached.at < PLATFORM_TTL_MS) {
+    // Re-insert to refresh recency, like the user cache: eviction is
+    // least-recently-USED, and a domain under active dispute is exactly the
+    // one a scan must not push out.
+    domainCache.delete(key)
+    domainCache.set(key, cached)
+    return cached.state
+  }
+  let pending = domainPending.get(key)
+  if (!pending) {
+    pending = (async () => {
+      let state: LockdownState | null = null
+      try {
+        const snapshot = await firebaseAdmin
+          .app()
+          .firestore()
+          .collection(LOCKDOWNS_COLLECTION)
+          .doc(domainLockdownDocId(key))
+          .get()
+        state = snapshot.exists
+          ? normalizeLockdownDoc(
+              snapshot.data() as Partial<LockdownDoc>,
+              'domain',
+            )
+          : null
+      } catch {
+        // Fail open, as above.
+      }
+      domainCache.delete(key)
+      domainCache.set(key, { at: Date.now(), state })
+      while (domainCache.size > DOMAIN_LOCKDOWN_CACHE_MAX) {
+        const oldest = domainCache.keys().next().value
+        if (oldest === undefined) break
+        domainCache.delete(oldest)
+      }
+      return state
+    })().finally(() => {
+      domainPending.delete(key)
+    })
+    domainPending.set(key, pending)
   }
   return pending
 }

@@ -58,6 +58,8 @@
 
 import {
   bandwidthCapEngaged,
+  isLockdownActive,
+  type LockdownState,
   lockdownMode,
   lockdownNotice,
   lockdownRetryAfterSeconds,
@@ -66,11 +68,51 @@ import {
   resolveLockdown,
   showsPlatformAttribution,
 } from '@aglyn/aglyn/server'
-import { getPlatformLockdown } from '@aglyn/tenant-data-admin'
-import { getHost } from '../../../utils/get-host'
+import { getDomainLockdown, getPlatformLockdown } from '@aglyn/tenant-data-admin'
+import { CNAME_HOST_PREFIX, getHost } from '../../../utils/get-host'
 import { getOrgBilling } from '../../../utils/get-org-billing'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * The locked answer, shared by the attached-host path and the domain-locked
+ * unknown-host path (AGL-1513).
+ *
+ * READ-ONLY (AGL-1511): the site keeps serving. The verdict still says
+ * `locked: true` — it is describing the LOCK, not the middleware's action —
+ * and reports the mode so the caller decides. Answering `locked: false`
+ * instead would have been the shorter change and the wrong one: this route is
+ * also how a staff probe and any future reader learns a site is in read-only,
+ * and a lock that reports itself as absent is a lock nobody can verify is
+ * engaged.
+ */
+function lockedVerdict(
+  state: LockdownState,
+  facts: { attribution: boolean; overQuota: boolean },
+): Response {
+  const notice = lockdownNotice(state)
+  const retryAfter = lockdownRetryAfterSeconds(state, Date.now())
+  return Response.json(
+    {
+      locked: true,
+      attribution: facts.attribution,
+      overQuota: facts.overQuota,
+      mode: lockdownMode(state),
+      reason: state.reason,
+      title: notice.title,
+      message: notice.body,
+      ...(notice.contact ? { contact: notice.contact } : {}),
+      ...(typeof state.untilMs === 'number' ? { untilMs: state.untilMs } : {}),
+    },
+    {
+      status: 200,
+      headers: {
+        'Cache-Control': 'no-store',
+        ...(retryAfter ? { 'Retry-After': String(retryAfter) } : {}),
+      },
+    },
+  )
+}
 
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url)
@@ -79,14 +121,37 @@ export async function GET(request: Request): Promise<Response> {
     return Response.json({ error: 'Missing host' }, { status: 400 })
   }
   try {
+    // DOMAIN scope (AGL-1513): lock ONE attached name while the same site
+    // keeps serving on its `*.aglyn.app` subdomain. `host` arrives here as
+    // `cname--{hostname}` for an attached custom domain and as a bare label
+    // for a platform subdomain — the discriminator the middleware already
+    // computed, and the only signal the edge can carry since the edge runtime
+    // cannot reach Firestore. A platform subdomain is never domain-locked:
+    // that address is ours, and taking it down is what the HOST scope is for.
+    //
+    // Read BEFORE the unknown-host return on purpose. The incidents this
+    // scope exists for are the ones where the name is not (or is no longer)
+    // attached to anything: a disputed domain is usually parked mid-dispute,
+    // and a hijacked one gets detached and re-attached elsewhere. A lock that
+    // only answered for currently-attached names would go quiet at exactly
+    // the moment the dispute is live.
+    const domain = host.startsWith(CNAME_HOST_PREFIX)
+      ? await getDomainLockdown(host.slice(CNAME_HOST_PREFIX.length))
+      : null
+
     const hostRes = await getHost({ host })
     if (!hostRes.host) {
-      // Unknown host: not locked — the normal 404 flow owns this case. No org,
-      // so no attribution either; there is nothing here to fingerprint.
-      return Response.json(
-        { locked: false, attribution: false, overQuota: false },
-        { status: 200 },
-      )
+      // Unknown host: the normal 404 flow owns this case — UNLESS the name
+      // itself is locked, which is a thing we can assert without any host.
+      // No org either way, so no attribution; there is nothing here to
+      // fingerprint.
+      if (!domain || !isLockdownActive(domain, Date.now())) {
+        return Response.json(
+          { locked: false, attribution: false, overQuota: false },
+          { status: 200 },
+        )
+      }
+      return lockedVerdict(domain, { attribution: false, overQuota: false })
     }
     const orgRes = await getOrgBilling({ hostId: hostRes.host.$id })
     const attribution = showsPlatformAttribution(orgRes.org)
@@ -107,6 +172,7 @@ export async function GET(request: Request): Promise<Response> {
         platform: await getPlatformLockdown(),
         org: normalizeOrgLockdown(orgRes.org as never),
         host: normalizeHostLockdown(hostRes.host as never),
+        domain,
       },
       Date.now(),
     )
@@ -116,35 +182,7 @@ export async function GET(request: Request): Promise<Response> {
         { status: 200 },
       )
     }
-    // READ-ONLY (AGL-1511): the site keeps serving. The verdict still says
-    // `locked: true` — it is describing the LOCK, not the middleware's
-    // action — and reports the mode so the caller decides. Answering
-    // `locked: false` instead would have been the shorter change and the
-    // wrong one: this route is also how a staff probe and any future reader
-    // learns a site is in read-only, and a lock that reports itself as
-    // absent is a lock nobody can verify is engaged.
-    const notice = lockdownNotice(state)
-    const retryAfter = lockdownRetryAfterSeconds(state, Date.now())
-    return Response.json(
-      {
-        locked: true,
-        attribution,
-        overQuota,
-        mode: lockdownMode(state),
-        reason: state.reason,
-        title: notice.title,
-        message: notice.body,
-        ...(notice.contact ? { contact: notice.contact } : {}),
-        ...(typeof state.untilMs === 'number' ? { untilMs: state.untilMs } : {}),
-      },
-      {
-        status: 200,
-        headers: {
-          'Cache-Control': 'no-store',
-          ...(retryAfter ? { 'Retry-After': String(retryAfter) } : {}),
-        },
-      },
-    )
+    return lockedVerdict(state, { attribution, overQuota })
   } catch (error) {
     console.error('[lockdown-verdict] failed', error)
     // Fail open on the LOCK: the middleware treats any non-locked answer as

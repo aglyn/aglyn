@@ -31,6 +31,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: { app: jest.fn() },
   getPlatformLockdown: (...args: unknown[]) =>
     mockGetPlatformLockdown(...(args as [])),
+  // AGL-1513. Present even though every case here uses a bare subdomain (so
+  // the loader's `cname--` ternary short-circuits and never calls it): a
+  // wholesale mock is a closed world, and the first `cname--` case added
+  // below would otherwise fail as an inscrutable TypeError rather than as
+  // whatever it was actually asserting.
+  getDomainLockdown: jest.fn(async () => null),
   filterEnabledPluginsByReleaseFlags: jest.fn(async () => []),
   getRealmPluginInstalls: jest.fn(async () => []),
 }))

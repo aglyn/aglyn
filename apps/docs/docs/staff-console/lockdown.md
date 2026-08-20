@@ -14,17 +14,18 @@ action — lock and unlock — writes an audit row.
 
 Lockdown is the control you reach for when something has gone wrong: a compromised
 site, an account being abused, a billing suspension that has run its course, or a
-maintenance window that needs the doors closed. One mechanism, four scopes:
+maintenance window that needs the doors closed. One mechanism, five scopes:
 
 | Scope | What it covers | Where the state lives |
 |---|---|---|
 | **Platform** | Everyone except staff | `lockdowns/platform` |
 | **Workspace (org)** | The org's console access (writes), all of its sites | `orgs/{id}.suspendedAt` family |
 | **Site (host)** | One published site | `hosts/{id}.suspendedAt` family |
+| **Custom domain** | One attached domain name; the site keeps serving elsewhere | `lockdowns/domain--{hostname}` |
 | **Account (user)** | One person | `lockdowns/user--{uid}` + Firebase Auth `disabled` |
 
-Precedence is **platform → org → host → user**: the widest active scope decides the
-notice a person sees.
+Precedence is **platform → org → host → domain → user**: the widest active scope
+decides the notice a person sees.
 
 ## What a lockdown does
 
@@ -372,6 +373,49 @@ that notice**, so write it for the customer, not for the incident channel. An
 end time is restated in the reader's own local time; without one, no return
 time is promised. Genuine failures are untouched — a real error still shows a
 real error.
+
+## Custom-domain scope — one name, not the site {#domain-scope}
+
+When the problem is **the domain rather than the content** — an ownership
+dispute, a hijacked or lapsed registration now pointing at us, or a trademark
+complaint about the name itself — a host takedown is disproportionate. The
+customer's site is fine; the *name* is the problem. This scope locks one
+attached domain while the same site keeps serving on its `*.aglyn.app`
+subdomain.
+
+```bash
+curl -X POST https://console.aglyn.com/api/admin/lockdown \
+  -H "Authorization: Bearer $ID_TOKEN" \
+  -d '{"action":"lock","scope":"domain","targetId":"acme.com",
+       "reason":"security","message":"Pending registrar review."}'
+```
+
+Three things about it are worth knowing before you use it:
+
+**It is keyed on the NAME, not on the site.** Every other narrow scope keys on
+the thing it locks. This one cannot, because the incidents it exists for are
+exactly the ones where the domain moves — a disputed name gets detached and
+re-attached, sometimes to a different workspace. Keying on the hostname means
+the lock follows the name, survives a detach and re-attach, and **can be placed
+on a domain that is currently attached to nothing at all**, which is the state
+a dispute is usually resolved in.
+
+**The notice never names the address that still works.** The site is still up
+on its platform subdomain, and every other scope's copy would happily be
+helpful about that. Here it must not be: the person reading the notice may be
+precisely the party the site is being withheld from, and *"try acme.aglyn.app
+instead"* would lift the lock in one sentence. The copy also does not say whose
+the name is — a dispute is exactly the case where we do not know, and a notice
+is a publication.
+
+**A platform subdomain cannot be domain-locked.** `{sub}.aglyn.app` is our own
+name, and the tenant resolves that space by subdomain without ever consulting
+this scope — so a lock placed there would write a document no reader looks at.
+The route refuses it rather than accepting a control that silently does
+nothing. To take a platform subdomain down, use the **Site (host)** scope.
+
+**Expiry and modes** work as everywhere else. Read-only is accepted but rarely
+what you want here: a name dispute is a full refusal or nothing.
 
 ## Asset quarantine — one file, not the site that serves it
 

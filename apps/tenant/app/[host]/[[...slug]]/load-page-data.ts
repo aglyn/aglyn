@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import {
   filterEnabledPluginsByReleaseFlags,
   firebaseAdmin,
+  getDomainLockdown,
   getPlatformLockdown,
   getRealmPluginInstalls,
 } from '@aglyn/tenant-data-admin'
@@ -263,6 +264,13 @@ const loadPageDataCached = cache(
         platform: await getPlatformLockdown(),
         org: Aglyn.normalizeOrgLockdown(orgRes.org as any),
         host: Aglyn.normalizeHostLockdown(hostRes.host as any),
+        // DOMAIN scope (AGL-1513). Mirrored here for the same reason every
+        // other scope is: this branch is what keeps a freshly REGENERATED
+        // page honest, and a lock the loader cannot see is one an ISR
+        // revalidation quietly serves straight past.
+        domain: host.startsWith(CNAME_HOST_PREFIX)
+          ? await getDomainLockdown(host.slice(CNAME_HOST_PREFIX.length))
+          : null,
       },
       Date.now(),
     )

@@ -29,6 +29,12 @@
  *  - `org`      → `orgs/{id}.suspendedAt` family (the shipped AGL-202
  *                 carrier, extended) via `applyOrgLockdown`
  *  - `host`     → `hosts/{id}.suspendedAt` family via `applyHostLockdown`
+ *  - `domain`   → `lockdowns/domain--{hostname}` (AGL-1513) — locks ONE
+ *                 attached custom domain while the same site keeps serving
+ *                 on its platform subdomain. Keyed on the NAME, not the host
+ *                 id, so the lock survives a detach/re-attach and can be
+ *                 placed on a name that is currently attached to nothing —
+ *                 which is the state a dispute is usually resolved in.
  *  - `user`     → `lockdowns/user--{uid}` + Firebase Auth `disabled` +
  *                 pool-aware refresh-token revocation
  *
@@ -47,7 +53,9 @@
  */
 
 import {
+  domainLockdownDocId,
   featureLockdownDocId,
+  isLockableDomain,
   isLockdownFeatureKey,
   isLockdownMode,
   isLockdownReasonCode,
@@ -67,6 +75,7 @@ import {
   findUserByUidAcrossPools,
   firebaseAdmin,
   getLockdownVerdict,
+  invalidateDomainLockdownCache,
   invalidateFeatureLockdownCache,
   invalidatePlatformLockdownCache,
   invalidateUserLockdownCache,
@@ -82,7 +91,14 @@ import {
 
 export const dynamic = 'force-dynamic'
 
-const SCOPES = new Set(['platform', 'org', 'host', 'user', 'feature'])
+const SCOPES = new Set([
+  'platform',
+  'org',
+  'host',
+  'domain',
+  'user',
+  'feature',
+])
 
 /**
  * The platform scope's server-side type-to-confirm. The UI asks the
@@ -266,7 +282,11 @@ async function readLockState(
         ? featureLockdownDocId(
             targetId as Parameters<typeof featureLockdownDocId>[0],
           )
-        : userLockdownDocId(targetId)
+        : // AGL-1513: `domain--{hostname}`, the same existence-is-the-lever
+          // shape as platform/feature/user, so it needs only its own id.
+          scope === 'domain'
+          ? domainLockdownDocId(targetId)
+          : userLockdownDocId(targetId)
   const snapshot = await firestore
     .collection(LOCKDOWNS_COLLECTION)
     .doc(docId)
@@ -779,6 +799,64 @@ async function handler(request: Request): Promise<Response> {
         targetId,
         action,
         extra: { feature: targetId },
+      })
+    }
+
+    /*==========================================
+     * DOMAIN (AGL-1513)
+     *=========================================*/
+    if (scope === 'domain') {
+      // Lock ONE attached name while the same site keeps serving on its
+      // platform subdomain. No type-to-confirm, same reasoning as `feature`:
+      // this is the NARROW lever, and it is narrower than a host takedown —
+      // the customer's content is fine, the name is the problem.
+      if (!isLockableDomain(targetId)) {
+        return Response.json(
+          {
+            error:
+              'Not a lockable domain — expected a custom hostname outside the platform apex',
+          },
+          { status: 400 },
+        )
+      }
+      const hostname = targetId.trim().toLowerCase()
+      const ref = firestore
+        .collection(LOCKDOWNS_COLLECTION)
+        .doc(domainLockdownDocId(hostname))
+      const before = (await ref.get()).data() ?? null
+      if (action === 'lock') {
+        await ref.set({
+          scope: 'domain',
+          reason: lock.reason,
+          ...(message ? { message } : {}),
+          ...(untilMs !== undefined ? { untilMs } : {}),
+          atMs: Date.now(),
+          actorUid: decoded.uid,
+        })
+      } else {
+        await ref.delete()
+      }
+      // The process that flipped the switch enforces it NOW; other processes
+      // converge within the reader's 15s TTL.
+      invalidateDomainLockdownCache(hostname)
+      await audit({
+        ...actor,
+        action: `lockdown.${action}`,
+        scope: 'domain',
+        target: `lockdowns/${domainLockdownDocId(hostname)}`,
+        before: { locked: before != null, ...auditLockShape(before ?? {}) },
+        after: {
+          locked: action === 'lock',
+          domain: hostname,
+          ...(action === 'lock' ? auditLockShape(lock) : {}),
+        },
+      })
+      return actionResponse({
+        firestore,
+        scope,
+        targetId: hostname,
+        action,
+        extra: { domain: hostname },
       })
     }
 
