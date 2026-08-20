@@ -156,6 +156,35 @@ updates:
       types:
         patterns:
           - '@types/*'
+      # mobx and its React bindings must move as a PAIR: mobx-react-lite@5
+      # declares `peerDependencies: { mobx: ^7.0.0 }` and mobx-react-lite@4
+      # peers on ^6, so a bump to either one alone leaves the tree
+      # peer-violating. Ungrouped they are two separate majors, which is
+      # exactly how #888 (mobx 7) and #890 (mobx-react-lite 5) arrived — a
+      # pair of PRs where merging either one on its own is wrong and merging
+      # both means merging two conflicting lockfiles. `mobx-react` is listed
+      # although nothing imports it today: it is the class-component half of
+      # the same release train (MobX 7 shipped with mobx-react 10), so if it
+      # is ever added it must already be in this group. (AGL-2480)
+      mobx:
+        patterns:
+          - mobx
+          - mobx-react
+          - mobx-react-lite
+      # @stripe/react-stripe-js pins @stripe/stripe-js by an EXACT major
+      # window, so the two are locked together harder than a usual peer range:
+      #   react-stripe-js v3/v4 -> stripe-js >=1.44.1 <8.0.0   (we are here)
+      #   react-stripe-js v5    -> stripe-js >=8.0.0  <9.0.0
+      #   react-stripe-js v6    -> stripe-js >=9.5.0  <10.0.0
+      # There is no version of the bindings that spans two stripe-js majors,
+      # so every stripe-js major REQUIRES a bindings major in the same commit.
+      # #889 proposed stripe-js 9.13.0 against react-stripe-js 3.10.0, which
+      # its own peer range forbids outright. Grouping them means the checkout
+      # path is offered one coherent migration to gate, never a broken half.
+      # (AGL-2480)
+      stripe:
+        patterns:
+          - '@stripe/*'
       # Everything not named above, split by dependency type so a dev-tool
       # bump can be merged on sight while a production bump gets read. Both
       # are minor+patch only — a major of an ungrouped package arrives as its
