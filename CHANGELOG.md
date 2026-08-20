@@ -9,6 +9,26 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.6 — 2026-08-20
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/f2bac3cd1...v1.0.0-beta.6)
+
+### Fixed
+
+- **commerce:** the tax card's brand import stops disabling its own use client ([AGL-2153](https://linear.app/aglyn/issue/AGL-2153))
+- **commerce:** put 'use client' back above the import that displaced it ([AGL-2476](https://linear.app/aglyn/issue/AGL-2476), [AGL-2153](https://linear.app/aglyn/issue/AGL-2153))
+
+<details>
+<summary>Also in this release: 3 chore, 2 ci</summary>
+
+- **deps-dev:** bump the linters group, eslint 9 -> 10 ([AGL-2478](https://linear.app/aglyn/issue/AGL-2478))
+- **deps:** group typescript-eslint with its own scoped siblings ([AGL-2478](https://linear.app/aglyn/issue/AGL-2478))
+- **deps-dev:** bump eight dev tools from the dev-minor-patch group ([AGL-2478](https://linear.app/aglyn/issue/AGL-2478))
+- **deps-dev:** bump eslint to 10.8.1 in /cloud/functions ([AGL-2459](https://linear.app/aglyn/issue/AGL-2459))
+- **deps:** guard the docs TypeScript major and keep react/react-dom paired ([AGL-2477](https://linear.app/aglyn/issue/AGL-2477), [AGL-2363](https://linear.app/aglyn/issue/AGL-2363))
+
+</details>
+
 ## v1.0.0-beta.5 — 2026-08-20
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.4...v1.0.0-beta.5)
