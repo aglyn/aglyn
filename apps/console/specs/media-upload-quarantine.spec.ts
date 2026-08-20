@@ -258,7 +258,7 @@ import { POST as replacePost } from '../app/api/media/replace/route'
 import { PATCH as finalize } from '../app/api/media/upload-url/route'
 
 /** The file staff took down. Any bytes will do — the digest is the key. */
-const INFECTED = 'MZ  pretend this is the malicious PDF'
+const INFECTED = 'MZ\u0090\x00 pretend this is the malicious PDF'
 const CLEAN = 'PNG an ordinary logo'
 
 const sha256 = (text: string) =>

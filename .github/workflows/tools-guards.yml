@@ -505,3 +505,31 @@ jobs:
       # in rules-drift.test.mjs actually asserts, so deleting this step turns
       # three other active workflows red.
       - run: npm run check:provider-key-exposure
+
+      # AGL-1890. No tracked source file may contain a raw NUL byte.
+      #
+      # A NUL in a blob's first 8000 bytes makes the file BINARY to git: no
+      # diff, no `git log -p`, no blame, and `grep` skips it. That is not a
+      # cosmetic problem — it means NO change to that file has ever been
+      # reviewed, including whatever is in it right now.
+      # `apps/console/utils/analytics-day-cache.ts` landed that way and stayed
+      # unreviewable for six days over 6.7 KB of caching logic; read as text
+      # for the first time, it held two real defects.
+      #
+      # AGL-1323 removed the repo's one known instance and recorded that it
+      # was the only one. Two more arrived within fifteen days, because
+      # nothing stopped them — that issue left a fact, and a fact cannot fail.
+      # This is that fact as an exit code.
+      #
+      # Stricter than git on purpose: it flags a NUL at ANY offset, not only
+      # inside git's window. The second offender sat at byte 9188, where git
+      # still called the file text — a landmine that flips the whole file to
+      # binary on the next edit that grows anything above it, on a commit with
+      # no visible relationship to the cause.
+      #
+      # Two steps, self-test first, as everywhere else here: the self-test
+      # rebuilds both real offenders and asserts they are caught, so the
+      # repo-wide green that follows is worth something.
+      - run: npm run test:nul-bytes
+
+      - run: npm run check:nul-bytes

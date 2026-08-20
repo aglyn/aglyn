@@ -17,6 +17,7 @@
 'use client'
 
 import { useContinueUrlDecoded } from '@aglyn/shared-util-next'
+import { signInWithCustomToken } from 'firebase/auth'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth, useSigninCheck } from '@aglyn/tenant-feature-instance'
 import {
@@ -26,7 +27,6 @@ import {
   shouldDelegateSignIn,
 } from '../utils/auth-delegation'
 import isMobileBrowser from '../utils/is-mobile-browser'
-import { signInWithPooledCustomToken } from '../utils/pooled-custom-token'
 
 /**
  * Workspace-subdomain sign-in delegation (AGL-465). On an org subdomain,
@@ -82,14 +82,7 @@ export function useDelegateWorkspaceSignIn(
             const payload = await response.json().catch(() => null)
             if (payload?.token && active && !auth.currentUser) {
               try {
-                // In the token's OWN pool (AGL-1993): a delegated return for
-                // an SSO user carries a tenant-minted token, and the shared
-                // instance still points at the project pool.
-                await signInWithPooledCustomToken(
-                  auth,
-                  payload.token,
-                  payload.tenantId,
-                )
+                await signInWithCustomToken(auth, payload.token)
               } catch (error) {
                 console.error(
                   '[auth] workspace custom-token sign-in failed',

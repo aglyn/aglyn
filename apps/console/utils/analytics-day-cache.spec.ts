@@ -123,10 +123,12 @@ describe('analytics day-doc reads', () => {
     expect(attempts).toBe(30)
   })
 
-  it('drops days that have fallen out of the window', async () => {
+  it('drops days that have fallen out of the retention window', async () => {
     const source = reader()
     await readAnalyticsDays(media(source))
-    const laterNow = Date.parse('2026-10-01T09:00:00Z')
+    // Well past RETENTION_DAYS, so August's entries are genuinely evicted
+    // rather than merely unasked-for.
+    const laterNow = Date.parse('2027-03-01T09:00:00Z')
     const later = recentDayIds(laterNow, 30)
     source.calls.length = 0
     await readAnalyticsDays({
@@ -135,9 +137,49 @@ describe('analytics day-doc reads', () => {
       liveDay: later[0],
       now: laterNow,
     })
-    // A month on, none of August's entries are still held.
     expect(source.calls.filter((day) => DAYS.includes(day))).toEqual([])
     expect(source.calls).toHaveLength(30)
+    // Ask for August again: every one of its days is a miss, which is the
+    // only way to observe that the map is not still holding them.
+    source.calls.length = 0
+    await readAnalyticsDays({ ...media(source), now: laterNow })
+    expect(source.calls).toHaveLength(30)
+  })
+
+  /**
+   * AGL-1890. `prune` swept the WHOLE map against the current call's oldest
+   * day, so a narrower window evicted the wider one that had already been
+   * paid for — the opposite of what this module is for. These two are the
+   * reds that shape proved.
+   */
+  it('does not evict a wider window when a narrower one is read', async () => {
+    const source = reader()
+    await readAnalyticsDays(media(source))
+    // The traffic panel's range switch, 30 → 7 → 30.
+    await readAnalyticsDays({ ...media(source), dayIds: recentDayIds(NOW, 7) })
+    source.calls.length = 0
+    await readAnalyticsDays(media(source))
+    expect(source.calls).toEqual([])
+  })
+
+  it('never evicts another panel or scope when it prunes', async () => {
+    const source = reader()
+    await readAnalyticsDays(media(source))
+    // The traffic card's 14 days, in its own field, and another scope's.
+    const narrow = recentDayIds(NOW, 14)
+    await readAnalyticsDays({
+      ...media(source),
+      field: 'traffic',
+      dayIds: narrow,
+    })
+    await readAnalyticsDays({
+      ...media(source),
+      scopeKey: 'orgs/o1',
+      dayIds: narrow,
+    })
+    source.calls.length = 0
+    await readAnalyticsDays(media(source))
+    expect(source.calls).toEqual([])
   })
 
   it('sums one asset out of the shared day maps', () => {
@@ -153,5 +195,37 @@ describe('analytics day-doc reads', () => {
   it('puts the live UTC day first', () => {
     expect(recentDayIds(NOW, 30)[0]).toBe('2026-08-12')
     expect(recentDayIds(NOW, 14)).toHaveLength(14)
+  })
+
+  /**
+   * AGL-1890. The ids must be whole UTC days back from `now`, because that is
+   * what the day-docs are keyed by. Local-calendar arithmetic keeps the local
+   * wall clock across a DST transition, so one step back is 23 or 25 hours,
+   * and the UTC day it prints skips or repeats.
+   *
+   * `America/Chicago` is chosen because it observes DST; the instant is 18:30
+   * on 1 Nov LOCAL, the evening after the 2026 fall-back, and the UTC day has
+   * already rolled to the 2nd. The old implementation answered
+   * `2026-11-02, 2026-10-31, 2026-10-30, 2026-10-29` — `2026-11-01` was never
+   * read, and every older day was mislabelled by one.
+   */
+  it('counts back in UTC days, not local ones', () => {
+    const previous = process.env.TZ
+    process.env.TZ = 'America/Chicago'
+    try {
+      const at = Date.parse('2026-11-02T00:30:00Z')
+      // Guard the premise: if changing TZ did not take, this test cannot see
+      // the bug it exists for and its green would mean nothing.
+      expect(new Date(at).getDate()).toBe(1)
+      expect(recentDayIds(at, 4)).toEqual([
+        '2026-11-02',
+        '2026-11-01',
+        '2026-10-31',
+        '2026-10-30',
+      ])
+    } finally {
+      if (previous === undefined) delete process.env.TZ
+      else process.env.TZ = previous
+    }
   })
 })

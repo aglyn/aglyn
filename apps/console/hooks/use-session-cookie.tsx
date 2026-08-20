@@ -18,7 +18,7 @@
 
 import { FIREBASE_AUTH_EMULATOR_ENABLED } from '@aglyn/shared-data-enums'
 import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
-import { signOut } from 'firebase/auth'
+import { signInWithCustomToken, signOut } from 'firebase/auth'
 import { useEffect, useRef } from 'react'
 import { tombstoneEndsSession } from '../app/api/auth/session/session-tombstone'
 import {
@@ -27,7 +27,6 @@ import {
   consumeInteractiveSignOut,
 } from '../utils/interactive-signin'
 import clearServiceWorkerCaches from '../utils/clear-service-worker-caches'
-import { signInWithPooledCustomToken } from '../utils/pooled-custom-token'
 import {
   captureReauthIdentity,
   requestSessionReauth,
@@ -264,11 +263,7 @@ export function useSessionCookie(): void {
             // Silent restore — the follow-up auth emission must NOT re-mint
             // the shared cookie (AGL-804).
             restoredSilently.current = true
-            // …and it must land in the pool the token was minted in
-            // (AGL-1993). An SSO session's cookie is re-minted through the
-            // GCIP tenant, so exchanging it on a project-pool instance is a
-            // cross-pool exchange — the failure that hid a staff claim.
-            await signInWithPooledCustomToken(auth, payload.token, payload.tenantId)
+            await signInWithCustomToken(auth, payload.token)
           }
         } catch {
           // Network trouble never signs anyone out; the next load's
@@ -284,11 +279,9 @@ export function useSessionCookie(): void {
         const payload = await response.json()
         if (payload?.token && active) {
           // Silent restore — the follow-up auth emission must NOT re-mint
-          // the shared cookie (AGL-804) — and must stay in the token's own
-          // pool (AGL-1993). This is the branch a staff member signing in
-          // through SSO actually takes on a cold load of app.aglyn.com.
+          // the shared cookie (AGL-804).
           restoredSilently.current = true
-          await signInWithPooledCustomToken(auth, payload.token, payload.tenantId)
+          await signInWithCustomToken(auth, payload.token)
         }
       } catch {
         // no valid shared session — the sign-in page takes it from here
