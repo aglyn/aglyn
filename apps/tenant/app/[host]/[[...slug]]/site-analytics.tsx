@@ -288,7 +288,12 @@ export default function SiteAnalytics({
   // `trackEvent` reaches `window.gtag`, and without a granting consent state
   // the scripts above never render, so gtag does not exist and every
   // classified click is dropped. `surface` labels this as a tenant published
-  // site; the docs app (AGL-1579) installs the same listener with its own.
+  // site — and `site` is the ONLY value this param has ever carried. The docs
+  // app does NOT install this listener and is not going to until the
+  // `aglyn-docs` Vercel project can see `libs/` at all
+  // (`sourceFilesOutsideRootDirectory: false` — docs/ANALYTICS.md decision 7),
+  // so do not read a missing `docs` row as docs having no clicks: GA4 enhanced
+  // measurement reports docs outbound clicks unclassified and unsurfaced.
   installLinkClickTracking({ surface: 'site' })
   // Real-user Core Web Vitals (AGL-1642), same shape as the click listener:
   // installed during render, once per page load, delivery through

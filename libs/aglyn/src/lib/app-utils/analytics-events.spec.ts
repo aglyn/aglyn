@@ -563,6 +563,30 @@ describe('analytics-events (AGL-1561)', () => {
       expect(ANALYTICS_EVENT_NAMES).toContain('sign_up')
     })
 
+    it('refuses the SERVER-ONLY names too, which the taxonomy union cannot hold', () => {
+      const calls = installGtag()
+
+      // `refund` and `subscription_cancelled` are sent by
+      // `ga4-measurement-protocol.ts` and by nothing client-side, so they have
+      // no entry in `AnalyticsEventParams` and are therefore absent from
+      // `ANALYTICS_EVENT_NAMES` — which is exactly why the loop above cannot
+      // see them. They land in the SAME property as authored hits: aglyn.com
+      // is itself a tenant site pointed at the platform measurement id, so an
+      // authored `refund` step would subtract from real reported revenue.
+      trackAuthoredEvent('refund', { value: 999 })
+      trackAuthoredEvent('subscription_cancelled', { plan: 'pro' })
+
+      expect(calls).toHaveLength(0)
+      expect(resolveAuthoredEventName('refund').reason).toBe('reserved')
+      expect(resolveAuthoredEventName('subscription_cancelled').reason).toBe(
+        'reserved',
+      )
+      // The guard has to be a real one: these are precisely the names the
+      // union-driven loop above proves nothing about.
+      expect(ANALYTICS_EVENT_NAMES).not.toContain('refund')
+      expect(ANALYTICS_EVENT_NAMES).not.toContain('subscription_cancelled')
+    })
+
     it('refuses GA4 reserved names and reserved prefixes', () => {
       const calls = installGtag()
 

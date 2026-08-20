@@ -119,6 +119,10 @@ built-in reports and funnel explorations work. `Custom` = no GA4 equivalent.
 | `cancellation_completed`       | Custom          | Console (AGL-1865)                                     | `surface`, `funnel_completed`, `plan?`                                                    | Retention — the funnel's denominator                                                                 |
 | `plan_downgrade_scheduled`     | Custom          | Console (AGL-2235)                                     | `from_plan`, `to_plan`, `interval`, `effective_at?`                                       | Retention — downgrades taken from the plan grid, and the gap between decision and effect             |
 | `plan_upgraded`                | Custom          | Console (AGL-2235)                                     | `from_plan`, `to_plan`, `interval`                                                        | Revenue — expansion from EXISTING subscribers, which `purchase` never saw                            |
+| `assistant_message_sent`       | Custom          | Console (AGL-1860)                                     | `tier`, `grounded`                                                                        | Assist usage, and the docs-gap signal ungrounded questions carry                                     |
+| `assistant_feedback`           | Custom          | Console (AGL-1860)                                     | `feedback`                                                                                | Assist answer quality, explicitly rated                                                              |
+| `assistant_proposal_shown`     | Custom          | Console (AGL-1988)                                     | `action`                                                                                  | Is the confirm gate a real choice, or a speed bump? — the denominator                                |
+| `assistant_proposal_confirmed` | Custom          | Console (AGL-1988)                                     | `action`                                                                                  | ...and the numerator; a ratio near 1 means the card is not being read                                |
 | `LCP` / `CLS` / `INP` / `TTFB` | web.dev pattern | Console + Tenant (AGL-1642)                            | `value` (=delta), `metric_id`, `metric_value`, `metric_delta`, `metric_rating`, `surface` | Real-user performance; the hydration-stall attribution question                                      |
 
 `method` values: `password`, `google_popup`, `google_redirect`, `google_signin`
@@ -1478,11 +1482,39 @@ order above matters more than usual.
    | Link id        | `link_id`       | Which outbound link, by label                                                                        |
    | Surface        | `surface`       | `site` vs `docs` (AGL-1579); Hostname covers the domains, this covers surfaces sharing one           |
 
-0d. **Register `plan` and `tenure_days`** (AGL-2327). Both are sent by
-   `sendGa4SubscriptionCancelled` and appear on **neither** the registered list
-   above **nor** either outstanding list — so the churn event arrives as one
-   undifferentiated count and plan-tier churn mix and tenure-at-cancellation,
-   the two numbers it exists for, are unreachable. Event-scoped.
+0d. **Register `plan` as a dimension and `tenure_days` as a METRIC**
+   (AGL-2327). Both are sent by `sendGa4SubscriptionCancelled` and appear on
+   **neither** the registered list above **nor** either outstanding list — so
+   the churn event arrives as one undifferentiated count and plan-tier churn
+   mix and tenure-at-cancellation, the two numbers it exists for, are
+   unreachable. `plan` is event-scoped custom **dimension**.
+
+   ⚠️ `tenure_days` is NOT a dimension, and registering it as one is the
+   plausible mistake that would leave the number still unreachable after the
+   work looked done. It is a NUMBER, and GA4 splits the two registries: a
+   custom **dimension** buckets by string, so a day count becomes one report
+   ROW per distinct tenure — hundreds of one-org rows, against the 50-dimension
+   quota — and cannot be averaged. "Tenure at cancellation" is an AVERAGE, and
+   only a custom **metric** (Admin → Custom definitions → **Custom metrics**,
+   event-scoped, unit **Standard**) can produce one. Same registry, different
+   tab; the parameter name is unchanged.
+
+0e. **Register the Core Web Vitals custom METRICS** (AGL-1642). `metric_value`
+   and `metric_delta` are numeric and are on no list anywhere — the repo has
+   never had a custom-metric registry at all, which is why they were never
+   noticed missing: every audit read the DIMENSIONS list, and a metric is
+   invisible from there. Without them the CWV events arrive as a count of
+   measurements with no measurement in it, and "what is real-user LCP" stays
+   the unanswerable question AGL-1642 existed to answer.
+
+   | Metric name  | Event parameter | Unit     | Why                                                               |
+   | ------------ | --------------- | -------- | ----------------------------------------------------------------- |
+   | Metric value | `metric_value`  | Standard | The metric's current value — the number the report is OF          |
+   | Metric delta | `metric_delta`  | Standard | Its change since the last report, for the multi-report metrics    |
+
+   `value` needs nothing — it is GA4's built-in event value. `metric_id`,
+   `metric_rating` and `surface` are strings and belong on the DIMENSION list
+   above.
 
 0c. **Register the three campaign dimensions** (AGL-1731), all
    **event-scoped**, and do it BEFORE the first ad runs — an unregistered
@@ -1527,6 +1559,60 @@ without registration, which is a large part of why these use GA's reserved
 names and its exact `items` spelling. They also land in the merchant's
 property rather than ours (see the event map), so the registration decision
 there is the merchant's to make, not one we can make for them.
+
+0f. **Three money paths send nothing at all**, found in the 2026-08-20 audit.
+   Ranked, because they are not the same kind of gap:
+
+   - **A paid BOOKING is invisible in both properties.** `libs/plugins/bookings`
+     contains **zero** analytics calls of any kind — no `trackEvent`, no
+     `sendGa4*`, no `readGaClientId`. Its webhook computes the real money
+     (`amount_total` → `paidAmountCents`, `server/billing-webhook.ts`) and
+     spends it on a contact record and a confirmation email. This is the one
+     that is a genuine hole rather than a limit: bookings is a September
+     revenue line, and the storefront pattern next door
+     (`use-storefront-purchase-event.ts` + `/api/commerce/order-analytics`)
+     already shows how a merchant-property `purchase` gets sent from the
+     confirmation screen. **Needs a decision before it can be built**: whose
+     property, and whether the platform fee is reported the marketplace way
+     (net, to ours) or the storefront way (gross, to the merchant's).
+   - **A storefront REFUND is not sent.** `commerce/src/lib/server/refund.ts`
+     has no GA call, so a merchant's GA revenue only ever goes up — the
+     one-directional problem AGL-1850 fixed for subscriptions and marketplace.
+     **This one is blocked, not forgotten**: the storefront `purchase` is
+     client-side because the hit belongs in the MERCHANT's property, and a
+     refund has no browser to send from. It needs a per-host Measurement
+     Protocol secret, the same missing thing that keeps storefront RENEWALS
+     dark. Do not "fix" it by sending the refund to our property; that would
+     subtract a merchant's refund from Aglyn's revenue.
+   - **The console's `begin_checkout` `value` is a source-code constant.** It
+     is derived from `PLAN_PRICING` in `plan-entitlements.ts`, not from a
+     Stripe Price lookup, so if the two ever diverge the event lies with no
+     symptom. Acceptable while pricing is frozen for Sept 1 and the table IS
+     the source of truth; revisit the moment a price is changed in Stripe
+     first. `purchase` is unaffected — it reads `amount_paid` off the invoice.
+
+0g. **Two whole event families carry params on no registration list**, so
+   they currently arrive as undifferentiated counts — the same failure mode
+   item 0 describes, one level larger. Found 2026-08-20 by diffing the fired
+   params against every list above:
+
+   | Event family                          | Params fired but unregistered                                      |
+   | ------------------------------------- | ------------------------------------------------------------------ |
+   | Retention funnel (AGL-1865)           | `reason`, `surface`, `from_plan`, `to_plan`, `funnel_completed`     |
+   | Plan changes from the grid (AGL-2235) | `from_plan`, `to_plan`, `interval`, `effective_at`                  |
+   | Aglyn Assist (AGL-1860/AGL-1988)      | `tier`, `grounded`, `feedback`, `action`                            |
+   | Core Web Vitals (AGL-1642)            | `metric_id`, `metric_rating` (dimensions; the numbers are in 0e)    |
+
+   `percent_off` and `duration_months` on `winback_discount_accepted` are
+   NUMBERS — custom **metrics**, like `tenure_days`, not dimensions; a save
+   recorded without an averageable price reads as free, which is the exact
+   thing AGL-1620 reported them to prevent.
+
+   The dimension quota is **50 event-scoped**, and the lists above now total
+   well under it, so this is a clicking job rather than a prioritization one.
+   Register nothing speculatively: an unregistered param is still COLLECTED,
+   so registration can wait for the question, but the answer is unavailable for
+   the period before it — GA does not backfill a dimension.
 
 1. **Mark the remaining key events.** Admin → Events → _Mark as key event_.
    `sign_up` is marked; `purchase` is a key event by GA default. GA will not let
