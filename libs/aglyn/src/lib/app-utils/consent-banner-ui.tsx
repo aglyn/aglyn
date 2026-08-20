@@ -28,6 +28,7 @@ import {
   type CSSProperties,
   type ReactElement,
   useEffect,
+  useRef,
   useState,
 } from 'react'
 import {
@@ -147,6 +148,125 @@ const PILL_STYLE: CSSProperties = {
   cursor: 'pointer',
 }
 
+/** Breathing room kept between the pill and the last row it must not cover. */
+const PILL_CLEARANCE = 8
+
+/**
+ * Selector for "the end of the page" — the footer landmark, however the
+ * template spells it. A besigner-authored footer renders as `<footer>`;
+ * `[role=contentinfo]` catches a hand-rolled one. `body` is the fallback so
+ * a site with no footer at all still reserves the room.
+ */
+const FOOTER_SELECTOR = 'footer, [role="contentinfo"]'
+
+/**
+ * Bottom padding the end of the page needs so the fixed pill cannot land on
+ * top of it (AGL-2205).
+ *
+ * Derived from the pill's MEASURED box rather than from `PILL_STYLE`: the
+ * label wraps to two lines in a narrow viewport and in a translated locale,
+ * and a clearance computed from the constants would be exactly one line
+ * short in precisely the case where the copyright row is already tightest.
+ *
+ * Pure, and exported, because the geometry is the whole fix: a spec can pin
+ * "51px of room for a 30.8px pill sitting 12px off the bottom" without a
+ * layout engine, which is the half a jsdom render cannot check.
+ */
+export function consentPillClearance(
+  viewportHeight: number,
+  pillTop: number,
+): number {
+  if (!Number.isFinite(viewportHeight) || !Number.isFinite(pillTop)) return 0
+  return Math.max(0, Math.ceil(viewportHeight - pillTop) + PILL_CLEARANCE)
+}
+
+/**
+ * Reserves that room at the foot of the document while the pill is up.
+ *
+ * The pill is `position: fixed`, so scrolling to the end of the page parks
+ * it directly on the footer's bottom row — which on every Aglyn marketing
+ * page is the "© 2026 Aglyn LLC" line, the one piece of footer content that
+ * is there for legal reasons. Measured on aglyn.com/pricing before this: the
+ * pill occupied 12–126 × 680–711 and the copyright row 24–258 × 669–689, a
+ * 102 × 9 px overlap at 1440 and the same again at 375.
+ *
+ * AGL-2205 proposed docking the pill above the footer instead. Measuring the
+ * real footer ruled that out: it is 490px tall at 1440 and 1375px at 375,
+ * against an 812px viewport — docking above it puts the pill in the middle
+ * of the screen on desktop and clean off it on mobile, and the pill is the
+ * ONLY opt-out surface a visitor in the implied posture ever sees, so it may
+ * not scroll away. Reserving the pill's own footprint keeps it where people
+ * expect it, costs nothing to anyone who never scrolls that far, and the
+ * room appears INSIDE the footer's own background band rather than as a
+ * strip of body colour underneath it.
+ *
+ * Only the DEFICIT is added: a template that already leaves enough room is
+ * left exactly as it was, which is why the site's own padding is re-read
+ * (with ours removed) on every pass instead of being captured once — it is
+ * responsive, and a value cached at mount is wrong after the first resize.
+ */
+function useConsentPillClearance(
+  pillRef: { current: HTMLElement | null },
+  active: boolean,
+): void {
+  useEffect(() => {
+    const pill = pillRef.current
+    if (!active || !pill) return
+    const doc = pill.ownerDocument
+    const view = doc?.defaultView
+    // `ownerDocument`, never the global `document`: the console preview
+    // mounts this same component, and reserving room in the CONSOLE's
+    // chrome because the preview happens to share its document would be a
+    // fix applied to the wrong page.
+    if (!doc || !view) return
+    const target: HTMLElement | null =
+      doc.querySelector<HTMLElement>(FOOTER_SELECTOR) ?? doc.body
+    if (!target) return
+
+    const previous = target.style.getPropertyValue('padding-bottom')
+    const previousPriority = target.style.getPropertyPriority('padding-bottom')
+    const restore = () => {
+      if (previous) {
+        target.style.setProperty('padding-bottom', previous, previousPriority)
+      } else {
+        target.style.removeProperty('padding-bottom')
+      }
+    }
+
+    const apply = () => {
+      // Ours off first: `getComputedStyle` would otherwise read back the
+      // value this effect wrote on the previous pass and ratchet it upward.
+      // Safe to do mid-measurement — the pill is fixed, so the reflow this
+      // causes cannot move it.
+      restore()
+      const natural =
+        Number.parseFloat(view.getComputedStyle(target).paddingBottom) || 0
+      const needed = consentPillClearance(
+        view.innerHeight,
+        pill.getBoundingClientRect().top,
+      )
+      if (needed > natural) {
+        target.style.setProperty('padding-bottom', `${needed}px`)
+      }
+    }
+
+    apply()
+    view.addEventListener('resize', apply)
+    // The pill's own box changes without the viewport changing — a font
+    // finishing loading re-wraps the label.
+    const observer =
+      typeof view.ResizeObserver === 'function'
+        ? new view.ResizeObserver(apply)
+        : undefined
+    observer?.observe(pill)
+    return () => {
+      view.removeEventListener('resize', apply)
+      observer?.disconnect()
+      restore()
+    }
+  }, [pillRef, active])
+}
+
 export interface ConsentBannerUiProps {
   hostId: string
   /** The visitor's recorded state; null means undecided. */
@@ -234,6 +354,12 @@ export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | nul
       : 'declined'
 
   const askBanner = !stored && posture === 'opt-in' && !preferencesOpen
+
+  // Before the early returns below, so the hook order never depends on which
+  // of the three surfaces is up. The banner and the panel are centred cards
+  // that reserve nothing — only the pill parks itself on the footer.
+  const pillRef = useRef<HTMLButtonElement | null>(null)
+  useConsentPillClearance(pillRef, !preferencesOpen && !askBanner)
 
   if (preferencesOpen) {
     return (
@@ -385,6 +511,7 @@ export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | nul
   // implied posture, where it is the only opt-out surface there is.
   return (
     <button
+      ref={pillRef}
       type="button"
       data-aglyn-consent-pill=""
       aria-label="Privacy choices"
