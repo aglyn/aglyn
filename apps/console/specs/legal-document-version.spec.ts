@@ -143,6 +143,45 @@ describe('the clickwrap points at the operator (AGL-2017)', () => {
     )
   })
 
+  it('the origin has ONE reader — shared.ts does not read the variable again (AGL-2014)', () => {
+    // `constants/shared.ts` used to carry its own copy of
+    // `process.env.NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN || 'https://aglyn.com'`,
+    // byte-for-byte the same expression as `published-legal-pages.ts`. Two
+    // readers of one value is the shape AGL-2195 removed for the tenant apex.
+    // The risk was never that they disagreed on the day — it is that a later
+    // fix to one (a second accepted name, an empty-string guard, a different
+    // trimming rule) would reach the clickwrap LINKS while
+    // `isPublishedLegalUrl`, the gate deciding whether a publisher agreement
+    // URL counts as published, went on answering from the other.
+    //
+    // Asserted on the SOURCE rather than by importing the lib module here.
+    // A `require('@aglyn/aglyn/...')` in this file marks the whole `aglyn`
+    // library lazy-loaded in the nx graph, and
+    // `@nx/enforce-module-boundaries` then rejects every STATIC import of it
+    // elsewhere — measured: adding one turned `constants/tenant-links.ts`,
+    // a file this change never touched, from clean to erroring. The
+    // behavioural half is already covered by the three cases above, and the
+    // Aglyn literal itself is independently ratcheted by
+    // `selfhost-hardcoded-hosts.spec.ts`.
+    const source = readFileSync(
+      join(__dirname, '..', 'constants', 'shared.ts'),
+      'utf8',
+    )
+    expect(source).toMatch(
+      /import \{ LEGAL_ORIGIN as OPERATOR_LEGAL_ORIGIN \} from '@aglyn\/aglyn\/app-utils\/published-legal-pages'/,
+    )
+    expect(source).toMatch(/const LEGAL_ORIGIN = OPERATOR_LEGAL_ORIGIN/)
+    // Comments are stripped first — this file, and the comment directly
+    // above, both NAME the variable while explaining why it is no longer
+    // read here. Asserting on raw source would fail on its own documentation
+    // (it did), which is the same reason `selfhost-hardcoded-hosts.spec.ts`
+    // strips comments before counting.
+    const code = source
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^[ \t]*\/\/.*$/gm, '')
+    expect(code).not.toMatch(/process\.env\.NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN/)
+  })
+
   it('the RECORDED document identity is still ours — the open half', () => {
     // Deliberately asserting the LIMITATION, so it is visible rather than
     // assumed closed. An operator's user clicks through to the operator's

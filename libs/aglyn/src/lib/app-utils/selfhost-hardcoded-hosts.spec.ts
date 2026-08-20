@@ -107,12 +107,6 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'Reader of NEXT_PUBLIC_WORKSPACE_DOMAIN with the same default.',
   },
   {
-    file: 'apps/console/app/api/_lib/assist-retrieval.ts',
-    count: 1,
-    reason:
-      'Reader of NEXT_PUBLIC_DOCS_ORIGIN; the literal is its default.',
-  },
-  {
     file: 'apps/console/app/api/_lib/auth-action-url.ts',
     count: 1,
     reason:
@@ -206,13 +200,9 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
     file: 'apps/console/constants/docs-links.ts',
     count: 1,
     reason:
-      'Reader of NEXT_PUBLIC_DOCS_ORIGIN; the literal is its default.',
-  },
-  {
-    file: 'apps/console/constants/shared.ts',
-    count: 1,
-    reason:
-      'LEGAL_ORIGIN — reader of NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN; ENTERPRISE_CONTACT_URL now builds on it.',
+      'DOCS_BASE_URL — the ONE reader of NEXT_PUBLIC_DOCS_ORIGIN (and the ' +
+      'legacy NEXT_PUBLIC_AGLYN_DOCS_URL); the literal is its default. ' +
+      'Assist citations re-export it rather than reading again (AGL-2014).',
   },
   {
     file: 'apps/console/constants/workspace-domain.ts',
@@ -302,7 +292,9 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
     file: 'libs/aglyn/src/lib/app-utils/published-legal-pages.ts',
     count: 1,
     reason:
-      'LEGAL_ORIGIN — the one reader of NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN.',
+      'LEGAL_ORIGIN — the one reader of NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN. ' +
+      "The console's constants/shared.ts imports this rather than reading " +
+      'the variable a second time (AGL-2014).',
   },
   {
     file: 'libs/aglyn/src/lib/foundation/constants/_internal.ts',

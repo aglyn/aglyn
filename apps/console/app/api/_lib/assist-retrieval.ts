@@ -19,6 +19,7 @@ import {
   ASSIST_DOCS_INDEX,
   type AssistDocsSection,
 } from '../../../constants/assist-docs-index.generated'
+import { DOCS_BASE_URL } from '../../../constants/docs-links'
 
 /**
  * Lexical docs retrieval for Aglyn Assist (AGL-1860, phase 1) — deliberately
@@ -140,12 +141,21 @@ export function retrieveDocsSections(
  * the difference is deliberate: an unset citation origin degrades to a page
  * that genuinely exists and is genuinely about this software, so it is wrong
  * in the way a stale bookmark is wrong. An unset contact address would
- * misroute a legal notice, which is why that one refuses to guess. Dot
- * notation — this constant is re-exported to client code (AGL-2037).
+ * misroute a legal notice, which is why that one refuses to guess.
+ *
+ * ⚠️ RE-EXPORTED FROM `DOCS_BASE_URL` RATHER THAN READ AGAIN HERE (AGL-2014).
+ * This module had its own `process.env.NEXT_PUBLIC_DOCS_ORIGIN || 'https://
+ * docs.aglyn.com'`, which accepted ONLY the canonical name — while
+ * `constants/docs-links.ts` also honours the older `NEXT_PUBLIC_AGLYN_DOCS_URL`.
+ * So AGL-2186's own defect survived, inverted, in the one file it did not
+ * touch: a deployment configured under the older name retargeted every console
+ * and besigner help link and left every ASSIST CITATION pointing at
+ * `docs.aglyn.com` — our documentation, cited inside their product as theirs.
+ * That is the same "one value, two env names" split AGL-733 is the record of.
+ * One reader means an operator's docs site cannot be honoured on some surfaces
+ * and ignored on others.
  */
-export const DOCS_SITE_ORIGIN = (
-  process.env.NEXT_PUBLIC_DOCS_ORIGIN || 'https://docs.aglyn.com'
-).replace(/\/+$/, '')
+export const DOCS_SITE_ORIGIN = DOCS_BASE_URL
 
 /**
  * The grounding block injected into the system prompt: the retrieved
