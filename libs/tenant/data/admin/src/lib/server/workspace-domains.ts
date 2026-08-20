@@ -53,6 +53,11 @@
  *    very redirect the tombstone exists to serve.
  */
 
+import {
+  reconcileUploadCors,
+  type UploadCorsVerdict,
+} from './upload-cors-reconcile'
+
 export type WorkspaceDomainOutcome =
   | 'attached'
   | 'detached'
@@ -65,6 +70,16 @@ export interface WorkspaceDomainResult {
   outcome: WorkspaceDomainOutcome
   domain: string
   detail?: string
+  /**
+   * Whether a browser at this name can complete a signed direct-to-GCS upload
+   * (AGL-1452).
+   *
+   * Present only when the attach made the name a SERVING origin — a redirect
+   * never becomes one. `permitted: false` carries the exact command a human
+   * must run, so the gap is legible here rather than days later as a large
+   * upload that fails behind a generic snackbar.
+   */
+  uploadCors?: UploadCorsVerdict | null
 }
 
 const WORKSPACE_DOMAIN =
@@ -209,14 +224,20 @@ export async function attachProjectDomain(
         signal: deadline(),
       },
     )
-    if (response.ok) return { outcome: 'attached', domain }
+    if (response.ok) {
+      return { outcome: 'attached', domain, ...(await uploadCorsFor(domain, redirect)) }
+    }
     const payload = await response.json().catch(() => null)
     const code = String(payload?.error?.code ?? '')
     if (code === 'domain_already_in_use' || response.status === 409) {
       // An entry that already exists still has to CARRY the redirect, or the
       // twin quietly serves the console instead of forwarding to the primary.
       if (redirect) return patchRedirect(settings, domain, redirect)
-      return { outcome: 'already-exists', domain }
+      // Reconciled on the idempotent path too, deliberately: that is what lets
+      // a reconcile pass heal names attached before this existed, without a
+      // migration. Five workspace subdomains were serving the console and
+      // refusing large uploads when this was written.
+      return { outcome: 'already-exists', domain, ...(await uploadCorsFor(domain, redirect)) }
     }
     // Logged, never thrown — see property 1 above.
     console.error('[workspace-domains] attach failed', domain, code)
@@ -229,6 +250,52 @@ export async function attachProjectDomain(
     console.error('[workspace-domains] attach threw', domain, error)
     return { outcome: 'failed', domain, detail: aborted ? 'timeout' : 'network' }
   }
+}
+
+/**
+ * The upload-CORS verdict for a name this call just put on the project.
+ *
+ * Nothing for a REDIRECT: the browser is already at the redirect target before
+ * it uploads, so that name is never an origin, and an entry for it would be
+ * permission granted for nothing. Every unnecessary origin is one more site
+ * that could spend a leaked signed URL.
+ *
+ * Swallows its own failures for the same reason everything else in this file
+ * does: a domain must not fail to attach because a storage API was slow.
+ */
+async function uploadCorsFor(
+  domain: string,
+  redirect: string | null,
+): Promise<{ uploadCors?: UploadCorsVerdict | null }> {
+  if (redirect) return {}
+  try {
+    const verdict = await reconcileUploadCors(domain)
+    // The key appears only when there is something to say. A deployment with
+    // no media bucket configured — a fresh self-host install — has nothing,
+    // and reporting `uploadCors: null` on every attach would be noise about a
+    // feature the operator is not using.
+    return verdict ? { uploadCors: verdict } : {}
+  } catch (error) {
+    console.error('[workspace-domains] upload CORS reconcile threw', domain, error)
+    return {}
+  }
+}
+
+/**
+ * The command still owed after a set of attaches, or null when nothing is
+ * (AGL-1452).
+ *
+ * One remedy rather than a list: every verdict names the same bucket and the
+ * same command, and a caller that has to render five copies of it renders
+ * none.
+ */
+export function pendingUploadCorsRemedy(
+  results: WorkspaceDomainResult[],
+): string | null {
+  return (
+    results.find((result) => result.uploadCors && !result.uploadCors.permitted)
+      ?.uploadCors?.remedy ?? null
+  )
 }
 
 /** Point an already-attached name at `redirect`. Same never-throws contract. */

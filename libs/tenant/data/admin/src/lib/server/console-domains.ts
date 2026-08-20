@@ -79,6 +79,7 @@ import {
 import {
   attachProjectDomain,
   detachProjectDomain,
+  pendingUploadCorsRemedy,
   type WorkspaceDomainResult,
 } from './workspace-domains'
 
@@ -513,6 +514,23 @@ export interface ConsoleDomainAttachment {
   domain: string
   results: WorkspaceDomainResult[]
   attached: boolean
+  /**
+   * Non-null when a name this claim SERVES on cannot complete a large upload
+   * (AGL-1452), carrying the exact ordered command that fixes it.
+   *
+   * The attach itself still succeeds — the console does serve on the name, and
+   * refusing the domain over the upload path would be the worse outcome. But
+   * the customer's video, PDF and ZIP uploads will fail behind a generic "try
+   * again" snackbar until this is cleared, and the whole point of surfacing it
+   * here is that it stops being something a person has to remember: GCS
+   * matches CORS origins EXACTLY, so a new console origin needs its own entry
+   * and nothing about the eventual symptom points at bucket configuration.
+   *
+   * `attachProjectDomain` tries to add the entry itself; this is what is left
+   * when it could not — in practice, a runtime service account without
+   * `storage.buckets.update`.
+   */
+  uploadCorsRemedy: string | null
 }
 
 /**
@@ -579,6 +597,7 @@ export async function activateConsoleDomain(options: {
   const attached = results.every(
     (result) => result.outcome === 'attached' || result.outcome === 'already-exists',
   )
+  const uploadCorsRemedy = pendingUploadCorsRemedy(results)
   await claimRef(domain).set(
     {
       status: attached ? 'active' : 'verified',
@@ -602,7 +621,7 @@ export async function activateConsoleDomain(options: {
     claim: view,
     error: attached ? null : 'Vercel did not accept every name',
     status: attached ? 200 : 502,
-    attachment: { domain: primary, results, attached },
+    attachment: { domain: primary, results, attached, uploadCorsRemedy },
   }
 }
 

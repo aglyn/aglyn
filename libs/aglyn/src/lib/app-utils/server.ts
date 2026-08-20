@@ -53,6 +53,10 @@ export * from './onboarding-deep-link'
 // remembered on `users/{uid}` across the verification wall.
 export * from './campaign-attribution'
 export * from './deployment-shape'
+// Which browser origins may complete a signed direct-to-GCS upload (AGL-1452).
+// GCS matches the origin list EXACTLY, so every serving console name needs its
+// own entry — the rule nobody could be expected to remember at attach time.
+export * from './upload-cors'
 // The docs-help subset the first-party plugin consoles read (AGL-2213) — the
 // console's own registry lives in apps/console/constants and a lib cannot
 // import an app.

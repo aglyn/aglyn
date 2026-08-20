@@ -63,6 +63,67 @@ preflight is unanswered and the upload dies as `TypeError: Failed to fetch`
 behind a generic "try again" snackbar. Ordinary images never take this path,
 which is why the break was invisible in everyday use.
 
+### 1a. Adding an origin — the console does it, and what to do when it cannot (AGL-1452)
+
+**GCS matches the `origin` list as an exact string.** There is no subtree form.
+This is the OPPOSITE of the App Check reCAPTCHA allowlist, which matches a
+listed name and everything beneath it — and reasoning across from that list is
+the natural move, since both are "allowed domains for the platform".
+
+Re-measured against the live bucket on 2026-08-20 by driving real preflights
+(`OPTIONS` with `Origin` + `Access-Control-Request-Method: PUT`):
+
+| Origin | Preflight answer |
+| -- | -- |
+| `https://app.aglyn.com` | `access-control-allow-origin: https://app.aglyn.com` |
+| `https://console.aglyn.com` | no CORS headers — and it does not need them: `308 → app.aglyn.com` |
+| `https://app.aglyn.io` | no CORS headers — `307 → app.aglyn.com` |
+| `https://zgover.aglyn.com` | **no CORS headers, and it SERVES the console at 200** |
+| `http://app.aglyn.com` | no CORS headers (scheme is part of the match) |
+| `https://app.aglyn.com.evil.example` | no CORS headers (no suffix matching) |
+
+The rule that falls out, and the one the code now encodes: **a name attached to
+the console project as a REDIRECT never becomes a browser origin and needs no
+entry; a name that SERVES the console does.**
+
+`attachProjectDomain()` — the single seam every console name goes through, org
+workspace subdomains and white-label console domains alike — now reconciles the
+bucket itself: it reads the live CORS, merges the new origin in, and writes it
+back conditional on the metageneration it read. Nobody has to remember this at
+attach time any more.
+
+**When it cannot**, which in practice means the runtime service account has no
+`storage.buckets.update`, the attach still succeeds and the result carries
+`uploadCors.permitted: false` plus the exact command. Do it by hand:
+
+```bash
+# 1. READ the live document. Do not skip this step.
+gcloud storage buckets describe gs://aglyn-main.appspot.com \
+  --format=json\(cors_config\) --project=aglyn-main > /tmp/cors.json
+
+# 2. ADD the origin to the rule whose method is PUT. Keep every existing entry.
+
+# 3. Write it back.
+gcloud storage buckets update gs://aglyn-main.appspot.com \
+  --cors-file=/tmp/cors.json --project=aglyn-main
+
+# 4. Prove it with the request a browser actually makes — not a config read-back.
+curl -sS -D - -o /dev/null -X OPTIONS \
+  -H 'Origin: https://acme.example.com' \
+  -H 'Access-Control-Request-Method: PUT' \
+  -H 'Access-Control-Request-Headers: content-type,x-goog-resumable' \
+  https://storage.googleapis.com/aglyn-main.appspot.com/probe | grep -i access-control
+```
+
+⚠️ **`--cors-file` replaces rather than merges.** Building a fresh document from
+the origins you happen to know about drops every other customer's, and that
+failure lands on them, days later, as a large upload that fails behind a generic
+snackbar. Step 1 is the whole procedure.
+
+`libs/aglyn/src/lib/app-utils/upload-cors.ts` holds the matching rules and the
+merge, with `upload-cors.spec.ts` pinning each against the measurements above.
+It refuses to emit `*` at all.
+
 #### The origin list, and why it is exactly one entry
 
 The signed URL already carries the authorization. CORS here is not deciding
@@ -77,7 +138,7 @@ the build if it ever appears.
 | `https://app.aglyn.com` | **Yes** | The canonical console. Routing is path-based (`app.aglyn.com/{slug}`), so every org's DAM is served from this one origin. |
 | `https://console.aglyn.com` | No | Measured 2026-08-12: `308 → https://app.aglyn.com/`. It never renders the app, so no page there can issue the `PUT`. |
 | `https://aglyn.com`, `https://www.aglyn.com` | No | The marketing site. It is served by the **tenant** runtime (host `aglyn-marketing`, `cname: aglyn.com` — AGL-1607), not by a separate marketing app, but the verdict is unchanged: the tenant runtime only *serves* published pages and never issues a signed `PUT`. DAM uploads happen in the console. |
-| `https://<slug>.aglyn.com` (org workspace subdomains) | No | The middleware **rewrites** rather than redirects, so the origin would be preserved and would need its own entry. Measured 2026-08-12: `demo.aglyn.com` and `northwind.aglyn.com` both `404` — no workspace subdomain is attached to the console Vercel project today. See the ceiling note below before the first one is. |
+| `https://<slug>.aglyn.com` (org workspace subdomains) | **Not yet — and that is a live gap** | The middleware **rewrites** rather than redirects, so the origin is preserved and each one needs its own entry. The 2026-08-12 reading (`demo.aglyn.com`, `northwind.aglyn.com` → `404`, none attached) is **stale**. Re-measured 2026-08-20: `zgover`, `test-org`, `aglyn-org`, `sale-test` and `zachary1748` all serve the console at `200`, and a real preflight from each returns **no CORS headers**. Large uploads from those origins fail today. See §1a. |
 | Custom console domains (AGL-1099c white-label) | No | Same rewrite, same consequence: a customer console on their own domain is a distinct origin. Same ceiling note. |
 | `*.vercel.app` preview/branch hosts | No, deliberately | `aglyn-console-aglyn.vercel.app` serves a fully working console today, and AGL-1344 exists to **remove** that exposure. Adding it to a bucket allowlist would entrench a host we are deleting. |
 | `http://localhost:*` | No | Consequence, stated plainly: **signed uploads over 3 MB cannot be exercised on localhost.** Small files use the base64 route and are unaffected. Add a `http://localhost:4200` entry temporarily if you need to drive the large path locally, and take it back out — a permanent localhost entry means any page on a developer's machine can spend a leaked signed URL. |
