@@ -16,6 +16,15 @@
  */
 
 import { sanitizeEventParams } from '@aglyn/aglyn/app-utils/analytics-events'
+// One definition for a pair of strings that has to agree with a setting in the
+// GA UI nothing here can typecheck against (AGL-1582/AGL-2064). Four surfaces
+// stamp them now — the console, the tenant runtime, the docs site, and this
+// one — and a second spelling would read as a different dimension in GA, so
+// the filter would catch three of them and look like it was working.
+import {
+  INTERNAL_TRAFFIC_PARAM,
+  INTERNAL_TRAFFIC_VALUE,
+} from '@aglyn/aglyn/app-utils/internal-traffic'
 
 /**
  * Server-to-server GA4 delivery via the Measurement Protocol (AGL-1561) —
@@ -123,6 +132,16 @@ export interface Ga4PurchaseInput {
   userId?: string | null
   /** Stripe customer id — used ONLY to synthesize a fallback client id. */
   stripeCustomerId?: string | null
+
+  /**
+   * Whether this transaction is OURS — a staff or rehearsal purchase — rather
+   * than a customer's (AGL-1582). Carried from the browser that started
+   * checkout on Stripe metadata, the same way `clientId` is.
+   *
+   * Opt-in only, never inferred: wrongly flagging a real customer erases their
+   * revenue from every report, and a GA4 data filter is not retroactive.
+   */
+  internal?: boolean
 }
 
 export interface Ga4SendResult {
@@ -204,8 +223,24 @@ async function postGa4Event(options: {
   userId?: string | null
   /** Structured-log fields for the two failure lines (tag + subject). */
   log: Record<string, unknown>
+  /**
+   * Whether this hit is OURS rather than a customer's (AGL-1582).
+   *
+   * Applied here, centrally, rather than by each sender: a fifth sender added
+   * later would otherwise be unstamped by default, and "unstamped by default"
+   * is how our own rehearsal revenue ends up in the real reports.
+   */
+  internal?: boolean
 }): Promise<{ sent: boolean; reason?: string }> {
   const { credentials, eventName, params, clientId, userId, log } = options
+  // Only ever ADDED, never set to `false`. GA4's internal-traffic filter
+  // matches on the parameter being present with this value; a `traffic_type:
+  // 'external'` on every real hit would be a second dimension nobody filters
+  // on, and one bad `internal` computation away from erasing paying customers
+  // from every report — which a data filter cannot undo.
+  const stamped = options.internal
+    ? { ...params, [INTERNAL_TRAFFIC_PARAM]: INTERNAL_TRAFFIC_VALUE }
+    : params
   try {
     const response = await fetch(
       `${GA4_ENDPOINT}?measurement_id=${encodeURIComponent(
@@ -224,7 +259,7 @@ async function postGa4Event(options: {
           // same thing per hit so a future dashboard change cannot quietly
           // opt our server-side events into ads personalization.
           non_personalized_ads: true,
-          events: [{ name: eventName, params }],
+          events: [{ name: eventName, params: stamped }],
         }),
         signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
       },
@@ -291,6 +326,7 @@ export async function sendGa4Purchase(
       tag: 'AGL-1561:ga4-purchase',
       transactionId: input.transactionId,
     },
+    internal: input.internal,
   })
   return { ...result, synthesizedClientId }
 }
@@ -355,6 +391,7 @@ export async function sendGa4Refund(
       tag: 'AGL-1850:ga4-refund',
       transactionId: input.transactionId,
     },
+    internal: input.internal,
   })
   return { ...result, synthesizedClientId }
 }
@@ -390,6 +427,8 @@ export async function sendGa4SubscriptionCancelled(input: {
   clientId?: string | null
   userId?: string | null
   stripeCustomerId?: string | null
+  /** Ours rather than a customer's (AGL-1582) — see `Ga4PurchaseInput`. */
+  internal?: boolean
 }): Promise<Ga4SendResult> {
   const credentials = ga4Credentials()
   if (!credentials) {
@@ -418,6 +457,7 @@ export async function sendGa4SubscriptionCancelled(input: {
     clientId,
     userId: input.userId,
     log: { tag: 'AGL-1851:ga4-subscription-cancelled' },
+    internal: input.internal,
   })
   return { ...result, synthesizedClientId }
 }
@@ -463,6 +503,12 @@ export async function sendGa4SitePublished(input: {
    * breakdown value beats an invented one.
    */
   firstPublish?: boolean
+  /**
+   * Ours rather than a customer's (AGL-1582). A scheduled publish of our own
+   * marketing site or a demo host is an activation event for nobody, and
+   * `site_published` is the headline activation metric.
+   */
+  internal?: boolean
 }): Promise<Ga4SendResult> {
   const credentials = ga4Credentials()
   if (!credentials) {
@@ -482,6 +528,7 @@ export async function sendGa4SitePublished(input: {
     params: sanitizeEventParams({ first_publish: input.firstPublish }),
     clientId: synthesizeClientId(input.hostId),
     log: { tag: 'AGL-1589:ga4-site-published' },
+    internal: input.internal,
   })
   // Always synthetic here: there is no browser client id to have missed.
   return { ...result, synthesizedClientId: true }

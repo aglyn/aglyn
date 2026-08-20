@@ -368,6 +368,69 @@ describe('invoice.paid reaches sendGa4Purchase with the right object (AGL-1684)'
     expect(sent.stripeCustomerId).toBe('cus_own_1')
   })
 
+  it('a purchase from a browser WE declared ours is stamped internal (AGL-1582)', async () => {
+    // The AGL-1582 stamp rides browser mechanisms — `setDefaultEventParameters`
+    // and a `gtag('set')` snippet — so the server-side `purchase` was the one
+    // hit GA4's internal-traffic filter could never reach. The last week
+    // before launch is a scheduled run of REAL paid transactions, and a data
+    // filter is not retroactive: an unstamped rehearsal purchase is real
+    // revenue in the real reports, forever.
+    //
+    // Checkout writes it onto the SUBSCRIPTION's metadata, so the renewal
+    // months later is stamped too.
+    const post = loadWebhook()
+    const response = await post(
+      signed(
+        invoiceEvent({
+          ...ANNUAL_INVOICE,
+          subscription_details: {
+            metadata: {
+              ...ANNUAL_INVOICE.subscription_details.metadata,
+              traffic_type: 'internal',
+            },
+          },
+        }),
+      ),
+    )
+    expect(response.status).toBe(200)
+
+    expect(mockGa4Calls).toHaveLength(1)
+    expect(mockGa4Calls[0].internal).toBe(true)
+  })
+
+  it('leaves a real customer purchase unstamped — absence, never `false` (AGL-1582)', async () => {
+    // The expensive direction, and the one a bad predicate gets wrong.
+    // Stamping a paying customer erases their revenue from every report the
+    // moment the filter goes Active, and that cannot be undone.
+    const post = loadWebhook()
+    await post(signed(invoiceEvent(ANNUAL_INVOICE)))
+
+    expect(mockGa4Calls).toHaveLength(1)
+    expect(mockGa4Calls[0].internal).toBeFalsy()
+  })
+
+  it('an arbitrary metadata value is NOT internal (AGL-1582)', async () => {
+    // Compared against the shared constant, not tested for truthiness: this
+    // is client-supplied through the checkout body, and "any value present
+    // means ours" is how a stray metadata edit deletes a customer.
+    const post = loadWebhook()
+    await post(
+      signed(
+        invoiceEvent({
+          ...ANNUAL_INVOICE,
+          subscription_details: {
+            metadata: {
+              ...ANNUAL_INVOICE.subscription_details.metadata,
+              traffic_type: 'yes',
+            },
+          },
+        }),
+      ),
+    )
+
+    expect(mockGa4Calls[0].internal).toBe(false)
+  })
+
   it('the beacon is SCHEDULED through `after()`, not fired and forgotten (AGL-2346)', async () => {
     // AGL-1133 measured on production that a bare `void promise` in a route
     // handler never runs — the serverless function is frozen when the response

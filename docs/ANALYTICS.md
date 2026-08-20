@@ -1016,6 +1016,54 @@ resolved id is `G-YW5PG16YTM`. A customer's property gets no opinion of ours:
 wrongly flagging a real visitor erases them from every report, and that is the
 expensive direction.
 
+### 8d-pre. The SERVER hits were the surface no browser stamp could reach (AGL-1582)
+
+Everything above is a browser mechanism — `setDefaultEventParameters` on the
+console, a `gtag('set', …)` snippet on the tenant runtime and on docs. The four
+Measurement Protocol events never touch a browser, so `purchase`, `refund`,
+`subscription_cancelled` and `site_published` were the one surface the
+internal-traffic filter could not reach.
+
+That is not academic in the launch window: the final week before September 1
+is a scheduled rehearsal of **real paid transactions**, and a data filter is
+not retroactive. An unstamped rehearsal purchase is real revenue in the real
+property, permanently.
+
+**The carrier is the opt-in that already exists**, not a new notion of "an
+internal org" — there is no such concept in this repo and inventing one would
+flag by identity, which is the expensive direction. The browser that starts
+checkout reports `readInternalTrafficOverride()` in the checkout body; the
+route writes `subscription_data[metadata][traffic_type] = internal`; the
+webhook compares it against the shared constant and hands `internal: true` to
+the sender, which adds the parameter centrally in `postGa4Event` — centrally,
+so a fifth sender added later is not unstamped by default.
+
+**On the SUBSCRIPTION's metadata, not the session's**, so a renewal months
+later is stamped too, exactly as `ga_client_id` is.
+
+**The refund had to be solved with it, or the fix would have been worse than
+nothing.** A refund arrives on a charge, which carries no subscription
+metadata. An internal `purchase` discarded by the filter with its `refund`
+kept would net the reports **negative** by the rehearsal's value. So the flag
+is also written onto the `platformRevenue` ledger row the purchase records,
+which both refund branches already read. (The pre-AGL-1811 branch, which has
+no row, can only fire for invoices that predate this feature — so no internal
+purchase can exist there.)
+
+**Only ever added, never `false`.** GA4's filter matches on the parameter
+being present with this value. A `traffic_type: 'external'` on every real hit
+would be a second dimension nobody filters on, and one bad predicate away from
+erasing paying customers from reports that cannot be recovered. The metadata
+is client-supplied, so it is compared against `INTERNAL_TRAFFIC_VALUE` rather
+than tested for truthiness — "any value present means ours" is how a stray
+metadata edit deletes a customer.
+
+**Still uncovered, deliberately:** the marketplace `purchase`/`refund` pair
+(a plugin checkout does not carry the flag yet) and `site_published` from a
+scheduled publish of one of our own hosts — the sender accepts `internal` but
+no caller sets it, because a publish has no browser to ask. Both are smaller
+than the rehearsal hole and neither is on the revenue path.
+
 ### 8c. Non-production builds do not report at all (AGL-2067)
 
 The stamp only helps once the filter is Active, and a filter is not

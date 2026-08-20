@@ -21,6 +21,7 @@ import {
   readGaClientId,
   trackEvent,
 } from '@aglyn/aglyn/app-utils/analytics-events'
+import { readInternalTrafficOverride } from '@aglyn/aglyn/app-utils/internal-traffic'
 import {
   ENTERPRISE_PLAN_LABEL,
   isEnterpriseOrg,
@@ -598,6 +599,18 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             gaClientId: await readGaClientId(
               process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
             ),
+            // And whether this browser is one of OURS (AGL-1582). The stamp
+            // that keeps our own sessions out of the reports rides
+            // `setDefaultEventParameters` and a `gtag('set')` snippet — both
+            // browser mechanisms — so the server-side `purchase` the webhook
+            // sends from a Stripe event, hours later and in another process,
+            // was the one hit the internal-traffic filter could never reach.
+            // The last week before launch is a scheduled run of REAL paid
+            // transactions, and a data filter is not retroactive.
+            //
+            // Read synchronously from localStorage, so unlike `gaClientId` it
+            // cannot be lost to a slow tag.
+            internalTraffic: readInternalTrafficOverride(),
           }),
         })
         const payload = await response.json()

@@ -32,6 +32,10 @@
  */
 
 import {
+  INTERNAL_TRAFFIC_PARAM,
+  INTERNAL_TRAFFIC_VALUE,
+} from '@aglyn/aglyn/app-utils/internal-traffic'
+import {
   sendGa4Purchase,
   sendGa4Refund,
   sendGa4SitePublished,
@@ -276,6 +280,90 @@ describe('purchase carries billing_interval only when it is known (AGL-1640)', (
     expect(Object.hasOwn(body.events[0].params, 'billing_interval')).toBe(false)
     expect(body.client_id).toBe(synthesizeClientId('cus_1'))
     expect(result.synthesizedClientId).toBe(true)
+  })
+
+  describe('our own traffic is stamped on the SERVER hits too (AGL-1582)', () => {
+    // The AGL-1582 stamp rides `setDefaultEventParameters` and a `gtag('set')`
+    // snippet — both of which are BROWSER mechanisms. The Measurement Protocol
+    // never touches a browser, so the four server events were the one surface
+    // GA4's internal-traffic filter could not reach: a staff rehearsal
+    // purchase landed as real revenue, in the real property, permanently,
+    // because a data filter is not retroactive. The last week before launch is
+    // a scheduled run of real paid transactions, so this is not hypothetical.
+    beforeEach(() => {
+      process.env.GA4_MEASUREMENT_ID = 'G-TEST'
+      process.env.GA4_API_SECRET = 'secret'
+    })
+
+    /** The params of the single event in the nth fetch body. */
+    const paramsOf = (index: number) =>
+      JSON.parse(
+        (fetchMock.mock.calls[index] as unknown as [string, { body: string }])[1]
+          .body,
+      ).events[0].params
+
+    it('stamps traffic_type on a purchase the buyer declared internal', async () => {
+      await sendGa4Purchase({
+        transactionId: 'in_1',
+        value: 10,
+        currency: 'usd',
+        stripeCustomerId: 'cus_1',
+        internal: true,
+      })
+
+      // Asserted off the WIRE, not off the input: the whole point of the
+      // event is what leaves the process, and an input the sender drops on
+      // the floor is exactly the failure this file exists to catch.
+      expect(paramsOf(0).traffic_type).toBe('internal')
+    })
+
+    it('stamps a refund and a cancellation the same way', async () => {
+      await sendGa4Refund({
+        transactionId: 'in_1',
+        value: 10,
+        currency: 'usd',
+        stripeCustomerId: 'cus_1',
+        internal: true,
+      })
+      await sendGa4SubscriptionCancelled({
+        plan: 'pro',
+        stripeCustomerId: 'cus_1',
+        internal: true,
+      })
+
+      // A refund or a cancellation left unstamped while its purchase is
+      // stamped is worse than neither: the filter would net a rehearsal's
+      // revenue in and never take it back out.
+      expect(paramsOf(0).traffic_type).toBe('internal')
+      expect(paramsOf(1).traffic_type).toBe('internal')
+    })
+
+    it('leaves a REAL customer hit completely alone', async () => {
+      await sendGa4Purchase({
+        transactionId: 'in_2',
+        value: 10,
+        currency: 'usd',
+        stripeCustomerId: 'cus_2',
+      })
+
+      // The expensive direction. Wrongly stamping a paying customer erases
+      // their revenue from every report the moment the filter goes Active,
+      // and a data filter cannot be un-applied — so absence, not `false`, and
+      // never inferred from anything.
+      expect(Object.hasOwn(paramsOf(0), 'traffic_type')).toBe(false)
+    })
+
+    it('spells the param and the value through the shared constants', async () => {
+      // Three surfaces already stamp this pair and a fourth is joining them.
+      // A second spelling reads as a different dimension in GA and the filter
+      // catches one of them — which is indistinguishable, from the report end,
+      // from the filter working.
+      await sendGa4SitePublished({ hostId: 'host-1', internal: true })
+
+      expect(paramsOf(0)[INTERNAL_TRAFFIC_PARAM]).toBe(INTERNAL_TRAFFIC_VALUE)
+      expect(INTERNAL_TRAFFIC_PARAM).toBe('traffic_type')
+      expect(INTERNAL_TRAFFIC_VALUE).toBe('internal')
+    })
   })
 
   it('joins the browser session when a real client id was captured', async () => {
