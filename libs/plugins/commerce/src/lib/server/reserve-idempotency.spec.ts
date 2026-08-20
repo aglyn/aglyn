@@ -19,6 +19,10 @@ import type {
   PluginApiRequest,
   PluginApiResponse,
 } from '@aglyn/aglyn/server'
+import {
+  resolveTransactionFeeCents,
+  storefrontProcessingCostCents,
+} from '@aglyn/aglyn'
 import { reserveHandler } from './reserve'
 
 /**
@@ -671,21 +675,30 @@ describe('the commerce entitlement gates the reservation door (AGL-1873)', () =>
 })
 
 /**
- * The reservation's no-tax decision, PINNED (AGL-2000, part 3).
+ * LODGING TAX IS THE MERCHANT'S OWN SETTING, AND IT IS OFF UNTIL THEY SET IT
+ * (AGL-1969, replacing AGL-2000 part 3's flat no-tax pin).
  *
- * `reserve.ts` carries two stated reasons for charging no tax — a stay is not
- * goods, and the AGL-285 editor configures a goods SALES rate while lodging is
- * an occupancy-tax regime with its own rates, registration and return; and the
- * charge is usually a DEPOSIT, so taxing it would apply a whole stay's tax to a
- * fraction of it. That reasoning was written down and nothing asserted it, so a
- * future change adding `automatic_tax` here would have broken nothing. It does
- * now.
+ * AGL-2000 pinned "this path charges no tax" as a stated decision. That
+ * decision was always a holding position for one reason: the merchant had no
+ * way to answer the question at all. The AGL-285 editor configures a goods
+ * SALES rate, and reading it for a room would apply the wrong regime's number
+ * — so the honest interim answer was zero.
  *
- * This pins the DECISION, not the outcome: proper lodging-tax support (AGL-1969)
- * is expected to change it, and whoever does that should have to come here and
- * say so.
+ * The merchant now has a field of their own (`tax.lodging`), and the shape of
+ * the guarantee changes accordingly:
+ *
+ *  - **Unset — the default, and every existing store — still charges nothing.**
+ *    The first describe below is the AGL-2000 guard, kept and WIDENED to a
+ *    property over the whole emitted body rather than four named keys.
+ *  - **Set, and the guest pays it**, as an ordinary line item the way every
+ *    other manual rate rides (AGL-1711), so the derived `taxMode` reads
+ *    `manual` and the figure is never computed against Aglyn's registrations.
+ *
+ * Aglyn still takes no position on what is owed. These tests assert the
+ * MECHANISM — that the merchant's number is the one charged and recorded —
+ * and nothing about who must remit it.
  */
-describe('a reservation charges no tax, deliberately (AGL-2000)', () => {
+describe('a reservation with no lodging rate set charges no tax (AGL-1969)', () => {
   it('sends no tax parameter of any kind', async () => {
     const result = await post()
     expect(result.status).toBe(200)
@@ -701,6 +714,44 @@ describe('a reservation charges no tax, deliberately (AGL-2000)', () => {
     expect(session?.params.get('line_items[1][price_data][unit_amount]')).toBeNull()
     // And no metadata witness claiming a tax that was never charged.
     expect(session?.params.get('metadata[taxCents]')).toBeNull()
+
+    // THE GUARD ITSELF, widened — the AGL-2028 shape applied here.
+    //
+    // The four assertions above are an allowlist of four exact keys, and a
+    // change that adds tax by any other spelling walks straight past them:
+    // `automatic_tax[liability][type]`, `tax_id_collection[enabled]` and
+    // `line_items[0][price_data][tax_behavior]` are all real Stripe
+    // parameters this body would have carried silently. Stated as a property
+    // over the whole emitted body, because the next spelling is by definition
+    // the one nobody listed.
+    expect([...(session?.params.keys() ?? [])].filter((key) => /tax/i.test(key)))
+      .toEqual([])
+  })
+
+  it('is unmoved by the GOODS sales rate the merchant configured', async () => {
+    // The reason a lodging field had to exist. A store with a full manual
+    // sales-tax setup — mode, origin, a matching 8.25% zone rate — still
+    // charges nothing on a stay, because none of that describes lodging.
+    // Without this, "charges no tax" could hold merely because the fixture
+    // store had no tax settings at all.
+    docs.set('hosts/host-1/settings/store', {
+      tax: {
+        mode: 'manual',
+        origin: { country: 'US', state: 'TX' },
+        rates: [{ country: 'US', state: 'TX', pct: 8.25, label: 'TX sales tax' }],
+      },
+    })
+    const result = await post()
+    expect(result.status).toBe(200)
+    const session = stripeCalls.find((call) =>
+      call.url.includes('/checkout/sessions'),
+    )
+    expect([...(session?.params.keys() ?? [])].filter((key) => /tax/i.test(key)))
+      .toEqual([])
+    // 2 nights x $150, no deposit configured, and nothing on top.
+    expect(session?.params.get('line_items[0][price_data][unit_amount]')).toBe(
+      '30000',
+    )
   })
 
   // Positive control: the charge itself must still be made, or the assertions
@@ -714,6 +765,196 @@ describe('a reservation charges no tax, deliberately (AGL-2000)', () => {
       Number(session?.params.get('line_items[0][price_data][unit_amount]')),
     ).toBeGreaterThan(0)
     expect(session?.params.get('metadata[type]')).toBe('commerce-reservation')
+  })
+})
+
+describe('a merchant-set lodging rate is charged and recorded (AGL-1969)', () => {
+  /** 6% occupancy tax, the merchant's own number, in their own words. */
+  const withLodging = (rate: Record<string, unknown>) => {
+    docs.set('hosts/host-1/settings/store', { tax: { lodging: rate } })
+  }
+
+  it('adds the merchant’s rate as its own line on the session', async () => {
+    withLodging({ pct: 6, label: 'City occupancy tax' })
+    const result = await post()
+    expect(result.status).toBe(200)
+    const session = stripeCalls.find((call) =>
+      call.url.includes('/checkout/sessions'),
+    )
+    // 2 nights x $150 = $300 charged, 6% = $18 on top.
+    expect(session?.params.get('line_items[0][price_data][unit_amount]')).toBe(
+      '30000',
+    )
+    expect(session?.params.get('line_items[1][price_data][unit_amount]')).toBe(
+      '1800',
+    )
+    // The merchant's OWN label reaches the guest's receipt — not a generic
+    // one this code chose for them.
+    expect(
+      session?.params.get('line_items[1][price_data][product_data][name]'),
+    ).toBe('City occupancy tax')
+  })
+
+  it('never asks Stripe Tax to compute it', async () => {
+    // The line item construction is the whole point (AGL-1711/AGL-1904): a
+    // manual line means the tax is the MERCHANT's, derived as `taxMode:
+    // 'manual'`. `automatic_tax` would compute against AGLYN's registrations,
+    // at a goods rate, on a room.
+    withLodging({ pct: 6 })
+    await post()
+    const session = stripeCalls.find((call) =>
+      call.url.includes('/checkout/sessions'),
+    )
+    expect(session?.params.get('automatic_tax[enabled]')).toBeNull()
+    expect(session?.params.get('line_items[0][tax_rates][0]')).toBeNull()
+  })
+
+  it('stamps the figure the webhook needs to record it', async () => {
+    // Stripe is never told the second line is tax, so the session's own
+    // metadata is the only witness — the same reason `checkout.ts` stamps it.
+    withLodging({ pct: 6, label: 'City occupancy tax' })
+    await post()
+    const session = stripeCalls.find((call) =>
+      call.url.includes('/checkout/sessions'),
+    )
+    expect(session?.params.get('metadata[taxCents]')).toBe('1800')
+    expect(session?.params.get('metadata[taxPct]')).toBe('6')
+  })
+
+  it('falls back to a plain label, never to a blank receipt line', async () => {
+    withLodging({ pct: 6 })
+    await post()
+    const session = stripeCalls.find((call) =>
+      call.url.includes('/checkout/sessions'),
+    )
+    expect(
+      session?.params.get('line_items[1][price_data][product_data][name]'),
+    ).toBe('Lodging tax')
+  })
+
+  it('taxes the DEPOSIT when one is charged — the stated limitation', async () => {
+    // THE RESIDUAL AGL-1969 DOES NOT DECIDE, asserted so it cannot be
+    // mistaken for an oversight.
+    //
+    // `reserve.ts` charges `depositCents || totalCents`. The rate is applied
+    // to WHAT IS CHARGED — the only amount the platform actually moves — so
+    // on a deposit-taking resource the tax collected here is the rate on the
+    // deposit, not on the stay. Whether a jurisdiction wants occupancy tax on
+    // the full stay at booking, on the deposit only, or on redemption at
+    // check-out is a tax question this code deliberately does NOT answer; the
+    // merchant is told so in the settings card and collects any balance the
+    // way they already collect the balance of the stay.
+    //
+    // Pinned as an equality rather than left implicit: a later change that
+    // quietly switched the basis to `totalCents` would be TAKING that
+    // decision, and it should have to come here and say so.
+    docs.set('hosts/host-1/resources/room-1', {
+      name: 'Garden cabin',
+      nightlyRateUsd: 150,
+      depositPct: 25,
+    })
+    withLodging({ pct: 6 })
+    const result = await post()
+    expect(result.status).toBe(200)
+    const session = stripeCalls.find((call) =>
+      call.url.includes('/checkout/sessions'),
+    )
+    const charged = Number(
+      session?.params.get('line_items[0][price_data][unit_amount]'),
+    )
+    // A deposit really was taken — without this the assertion below would
+    // hold for a resource whose deposit configuration did nothing.
+    expect(charged).toBe(7500)
+    expect(charged).toBeLessThan(30000)
+    // 6% of the DEPOSIT ($75), not of the stay ($300, which would be 1800).
+    expect(session?.params.get('line_items[1][price_data][unit_amount]')).toBe(
+      '450',
+    )
+  })
+
+  it('OFF stays off for a rate that is not a rate', async () => {
+    // Zero, negative, non-numeric and a decimal-point typo (`825` for `8.25`)
+    // all resolve to no tax rather than to some number the merchant did not
+    // choose. Driven through the handler, not through the resolver, so this
+    // proves the HANDLER never emits a line for them.
+    for (const pct of [0, -6, Number.NaN, 825] as unknown[]) {
+      stripeCalls.length = 0
+      docs.delete('hosts/host-1/reservations/auto-1')
+      docs.clear()
+      collectionVersions.clear()
+      docs.set('hosts/host-1/resources/room-1', {
+        name: 'Garden cabin',
+        nightlyRateUsd: 150,
+      })
+      docs.set('profiles/owner-1', {
+        stripeAccountId: 'acct_live_merchant',
+        stripeChargesEnabled: true,
+      })
+      withLodging({ pct } as Record<string, unknown>)
+      const result = await post()
+      expect(result.status).toBe(200)
+      const session = stripeCalls.find((call) =>
+        call.url.includes('/checkout/sessions'),
+      )
+      expect(
+        [...(session?.params.keys() ?? [])].filter((key) => /tax/i.test(key)),
+      ).toEqual([])
+    }
+  })
+
+  it('keeps the platform take off the tax, and passes the card cost on all of it', async () => {
+    // AGL-2317's rule, restated for a path that now carries tax: the take is
+    // computed on the ITEMS, never on the state's money, while Stripe's card
+    // cost is debited from the platform balance on the WHOLE charge and so
+    // must be passed through on the whole charge (AGL-2152).
+    withLodging({ pct: 6 })
+    await post()
+    const withTax = stripeCalls.find((call) =>
+      call.url.includes('/checkout/sessions'),
+    )
+    const feeWithTax = Number(
+      withTax?.params.get('payment_intent_data[application_fee_amount]'),
+    )
+
+    docs.clear()
+    collectionVersions.clear()
+    stripeCalls.length = 0
+    docs.set('hosts/host-1/resources/room-1', {
+      name: 'Garden cabin',
+      nightlyRateUsd: 150,
+    })
+    docs.set('profiles/owner-1', {
+      stripeAccountId: 'acct_live_merchant',
+      stripeChargesEnabled: true,
+    })
+    await post()
+    const withoutTax = stripeCalls.find((call) =>
+      call.url.includes('/checkout/sessions'),
+    )
+    const feeWithoutTax = Number(
+      withoutTax?.params.get('payment_intent_data[application_fee_amount]'),
+    )
+
+    // The difference is EXACTLY Stripe's own cost on the extra $18 and
+    // nothing more — no platform take on the state's money. Derived from the
+    // real pricing function rather than a copied constant, so a rate change
+    // moves the expectation with it.
+    expect(feeWithTax - feeWithoutTax).toBe(
+      storefrontProcessingCostCents(31800) - storefrontProcessingCostCents(30000),
+    )
+    // NEGATIVE CONTROL. The business plan takes 2% on a service, so a fee
+    // computed on the TAX-INCLUSIVE base is a different, larger number. If
+    // these two were equal the assertion above would be proving nothing.
+    const takeOnTaxToo = resolveTransactionFeeCents(
+      mockOrg.org,
+      'service',
+      31800,
+      31800,
+    )
+    expect(feeWithTax).toBe(
+      resolveTransactionFeeCents(mockOrg.org, 'service', 30000, 31800),
+    )
+    expect(feeWithTax).toBeLessThan(takeOnTaxToo)
   })
 })
 

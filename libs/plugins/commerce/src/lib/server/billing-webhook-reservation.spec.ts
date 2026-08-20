@@ -456,3 +456,89 @@ describe('a confirmed reservation records its tax regime (AGL-1969)', () => {
     expect(storedReservation().taxMode).toBe('none')
   })
 })
+
+/**
+ * A MERCHANT-SET LODGING RATE, ON THE RECORD (AGL-1969, the answer).
+ *
+ * `reserve.ts` now charges the merchant's own lodging rate when they have set
+ * one, as an ordinary line item Stripe is never told is tax (AGL-1711). That
+ * construction is what keeps the tax the MERCHANT's rather than something
+ * computed against Aglyn's registrations — and it is also what makes the
+ * session report `total_details.amount_tax: 0`, so the session's own
+ * `metadata.taxCents` is the ONLY witness to the figure.
+ *
+ * Two things have to follow from that here, and both were wrong before:
+ *
+ *  1. **The regime must read `manual`, not `none`.** The stamp derived from a
+ *     one-argument `storefrontTaxModeOf(object)` reads only Stripe's own tax
+ *     fields, which are zero by our construction — so a stay that charged the
+ *     guest $18 of occupancy tax would have been recorded as untaxed. The
+ *     two-argument form the cart, draft and buy-now doors already use is the
+ *     fix, not a second derivation.
+ *  2. **`paidCents` must not swallow the tax.** It is the money applied to the
+ *     STAY: the console shows `paidCents / totalCents` and computes the
+ *     balance due at check-out from the difference. Storing `amount_total`
+ *     with the tax inside it would report a guest as having paid more of their
+ *     stay than they have and under-state the balance the merchant collects at
+ *     the register — money quietly lost, on the merchant's own screen.
+ */
+describe('a stay that carried the merchant’s lodging tax (AGL-1969)', () => {
+  /** $210 deposit + $12.60 lodging tax at 6% = $222.60 charged. */
+  const TAXED_SESSION = {
+    ...RESERVATION_SESSION,
+    amount_total: 22260,
+    metadata: {
+      ...RESERVATION_SESSION.metadata,
+      taxCents: '1260',
+      taxPct: '6',
+    },
+  }
+
+  it('records the regime as the merchant’s own rate', async () => {
+    await deliver(TAXED_SESSION)
+    const reservation = storedReservation()
+    expect(reservation.status).toBe('confirmed')
+    // NOT `none`. Stripe reports no tax on this session by our own
+    // construction, so anything reading only Stripe's fields says `none` here
+    // — for a stay that really did charge the guest tax.
+    expect(reservation.taxMode).toBe('manual')
+  })
+
+  it('records the tax as its own figure', async () => {
+    await deliver(TAXED_SESSION)
+    expect(storedReservation().taxCents).toBe(1260)
+  })
+
+  it('keeps `paidCents` the money applied to the STAY', async () => {
+    await deliver(TAXED_SESSION)
+    const reservation = storedReservation()
+    // The deposit, not the deposit plus the tax. The console divides this by
+    // `totalCents` and collects the remainder at check-out.
+    expect(reservation.paidCents).toBe(21000)
+    expect(reservation.paidCents).not.toBe(22260)
+    // And the two still account for every cent that moved.
+    expect(reservation.paidCents + reservation.taxCents).toBe(22260)
+  })
+
+  it('counts only the stay toward the guest’s lifetime value', async () => {
+    // Tax is not the merchant's revenue and must not inflate a contact's LTV
+    // — the AGL-1755 figure, kept honest.
+    await deliver(TAXED_SESSION)
+    expect(contactUpserts).toHaveLength(1)
+    expect(contactUpserts[0].purchaseCents).toBe(21000)
+    expect(contactUpserts[0].interaction.summary).toBe(
+      'Reserved a stay ($210.00)',
+    )
+  })
+
+  it('writes no `taxCents` at all on an untaxed stay', async () => {
+    // ABSENT is not zero (the AGL-1758 shape): a defaulted zero written
+    // through `merge` is how a real figure gets destroyed, and a back-book
+    // question needs "no tax was charged" to be distinguishable from "this
+    // predates the field".
+    await deliver(RESERVATION_SESSION)
+    const reservation = storedReservation()
+    expect(reservation.taxCents).toBeUndefined()
+    expect(reservation.paidCents).toBe(21000)
+  })
+})
