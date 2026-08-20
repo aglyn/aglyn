@@ -218,7 +218,9 @@ async function readAccountState(
   let inFlight = pending.get(key)
   if (!inFlight) {
     inFlight = (async () => {
-      let state: AccountState | null = null
+      // No initializer: every path below either assigns `state` or returns,
+      // so seeding it with `null` would be a value nothing ever reads.
+      let state: AccountState
       try {
         const record = await pool.getUser(uid)
         const validAfterRaw = record?.tokensValidAfterTime
