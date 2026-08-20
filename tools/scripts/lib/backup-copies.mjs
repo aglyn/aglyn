@@ -68,6 +68,25 @@
 export const MAX_EXPORT_AGE_DAYS = 8
 
 /**
+ * How far the object mirror may lag its source before that is a finding
+ * (AGL-2422).
+ *
+ * Deliberately NOT a wall-clock freshness budget, because object timestamps
+ * cannot express one. A sync that runs nightly over a bucket nobody wrote to
+ * copies nothing, so the mirror's newest object stays exactly as old as the
+ * source's and a "newest object younger than N days" rule would go red on a
+ * perfectly healthy mirror of a quiet bucket. What object times CAN prove is
+ * **completeness**: the destination object's `updated` is its copy time, so
+ * once a sync has caught up the mirror's newest is at or after the source's.
+ * A sync that stopped running is therefore invisible until something is
+ * written — and visible the moment it is, which is also the only moment it
+ * costs anything. Two days is one nightly run plus a day of slack, and it
+ * doubles as the tolerance for a write that landed while the sync was in
+ * flight.
+ */
+export const MAX_MIRROR_LAG_DAYS = 2
+
+/**
  * Every bucket that exists in the production project, and what copies it.
  *
  * A statement of fact, not permission to add more. `copiedBy` is the honest
@@ -79,26 +98,37 @@ export const MAX_EXPORT_AGE_DAYS = 8
  * the generated Cloud Functions buckets can be declared without pinning this
  * file to one project id.
  *
+ * `mirrorPrefix` marks a store as **primary data that a copy must exist for**
+ * — the AGL-2422 set. It names the prefix that store occupies inside the
+ * single off-project mirror bucket (`STORAGE_MIRROR_BUCKET`); one bucket with
+ * a prefix per source, rather than a bucket each, because the lifecycle, the
+ * IAM and the versioning setting that make the mirror safe are then written
+ * once instead of drifting apart. A store WITHOUT `mirrorPrefix` is one
+ * nobody has to copy, and the `why` says why.
+ *
  * @type {ReadonlyArray<{
  *   bucket: string,
  *   holds: string,
- *   copiedBy: 'firestore-export' | 'is-the-copy' | 'none' | 'nothing-to-copy',
+ *   copiedBy: 'firestore-export' | 'is-the-copy' | 'none' | 'nothing-to-copy' | 'storage-mirror',
  *   why: string,
+ *   mirrorPrefix?: string,
  * }>}
  */
 export const PRODUCTION_DATA_STORES = [
   {
     bucket: '{projectId}.appspot.com',
     holds:
-      'Live customer media (orgs/{orgId}/media/), adminAudit-archive/, erasures/',
+      'Live customer media under orgs/{orgId}/ (35.7 MiB), the legacy pre-AGL-237 hosts/{hostId}/media/ path (11.2 MiB, still served), users/{uid}/ avatars, plus the adminAudit-archive/ and erasures/ retention prefixes (both empty on 2026-08-20)',
     copiedBy: 'none',
-    why: 'AGL-2422. ~47 MiB of primary data with no copy anywhere — no object versioning, no mirror; the only safety net is the bucket default 7-day soft delete, which a lifecycle-rule mistake outlives. The weekly Firestore export does not touch Storage.',
+    why: 'AGL-2422. 451 objects / ~47 MiB of primary data with no copy anywhere — no object versioning, no mirror; the only safety net is the bucket default 7-day soft delete, which a lifecycle-rule mistake outlives. The weekly Firestore export does not touch Storage. NOTE the holds line names hosts/ and users/ deliberately: it read as orgs/ only until 2026-08-20, and hosts/ is a QUARTER of the bucket — a mirror scoped from that description would have silently omitted it.',
+    mirrorPrefix: 'media/',
   },
   {
     bucket: '{projectId}-plugin-artifacts',
-    holds: 'Published plugin bundles the marketplace serves',
+    holds: 'Published plugin bundles the marketplace serves (7 objects)',
     copiedBy: 'none',
     why: 'AGL-2422. Invisible to the Firebase console (it is a plain GCS bucket, not the Firebase default), so it is absent from every Firebase-shaped review. Small (~28 KiB) but not reconstructible — a publisher-signed artifact cannot be rebuilt from source on our side.',
+    mirrorPrefix: 'plugin-artifacts/',
   },
   {
     bucket: '{projectId}-firestore-exports',
@@ -150,6 +180,12 @@ export const ACKNOWLEDGED = [
     expires: '2026-09-01',
     why: 'Closing this means creating a bucket in a second GCP project — a cloud-resource change only Zach can make (docs/DISASTER_RECOVERY.md, gap 1, has the exact commands). Expires on the public-beta date because launching with paying customers and zero off-project copies is a different decision from carrying the gap pre-revenue.',
   },
+  {
+    code: 'no-storage-mirror',
+    issue: 'AGL-2422',
+    expires: '2026-09-01',
+    why: 'Same shape and the same sitting as AGL-1882: the mirror bucket is a cloud resource, and docs/DISASTER_RECOVERY.md gap 6 carries the ordered commands. Everything on this side of the line is done — set STORAGE_MIRROR_BUCKET and this check starts proving the mirror is complete instead of reporting its absence. Expires on the public-beta date for the same reason the other one does: media we cannot restore is a promise we cannot make to somebody paying us.',
+  },
 ]
 
 /**
@@ -165,6 +201,36 @@ export const ACKNOWLEDGED = [
 
 /**
  * @typedef {{ code: string, title: string, detail: string }} Finding
+ */
+
+/**
+ * One source store measured against its prefix inside the mirror bucket.
+ *
+ * `truncated` is not a detail. Both listings are paginated and capped, and a
+ * count comparison that silently stopped early would report "mirror complete"
+ * for the one bucket big enough to matter. When either side is truncated the
+ * comparison is reported as unproven and never as clean.
+ *
+ * @typedef {{
+ *   name: string,
+ *   prefix: string,
+ *   sourceObjects: number,
+ *   sourceNewest: string | null,
+ *   sourceTruncated: boolean,
+ *   mirrorObjects: number,
+ *   mirrorNewest: string | null,
+ *   mirrorTruncated: boolean,
+ * }} MirroredStore
+ */
+
+/**
+ * @typedef {{
+ *   bucket: string,
+ *   projectNumber: string | null,
+ *   location: string | null,
+ *   versioningEnabled: boolean,
+ *   stores: MirroredStore[],
+ * }} StorageMirror
  */
 
 const DAY_MS = 86_400_000
@@ -196,6 +262,7 @@ export function ageInDays(iso, now) {
  *   productionProjectNumber: string,
  *   copies: CopyBucket[],
  *   liveBuckets: { name: string, projectNumber?: string, location?: string }[],
+ *   storageMirror?: StorageMirror | null,
  *   now?: number,
  *   strict?: boolean,
  * }} input
@@ -205,6 +272,7 @@ export function assessBackupCopies({
   productionProjectNumber,
   copies,
   liveBuckets,
+  storageMirror = null,
   now = Date.now(),
   strict = false,
 }) {
@@ -306,6 +374,152 @@ export function assessBackupCopies({
     })
   }
 
+  // ── The Cloud Storage half (AGL-2422) ────────────────────────────────────
+  //
+  // Everything above is about the FIRESTORE export: where it lives and how old
+  // it is. `exportDocuments` copies documents and touches no bucket contents,
+  // so none of it says anything at all about the ~47 MiB of customer media,
+  // the audit archive, or the plugin bundles. The stores that need a copy are
+  // exactly the ones declaring `mirrorPrefix`, and the invariant asked of the
+  // mirror is COMPLETENESS rather than existence: a mirror bucket that is
+  // present, off-project and missing half the objects restores half a
+  // workspace, and reads identically to a healthy one from any distance.
+  const mirroredStores = declared.filter((store) => store.mirrorPrefix)
+
+  if (mirroredStores.length > 0 && !storageMirror) {
+    findings.push({
+      code: 'no-storage-mirror',
+      title: `${mirroredStores.length} store(s) of primary data are copied by nothing`,
+      detail: [
+        mirroredStores.map((store) => `gs://${store.name}`).join(', '),
+        '— no STORAGE_MIRROR_BUCKET is configured, so these have no copy at all:',
+        'not off-project, not in-project. The only safety net is the bucket-default',
+        '7-day soft delete, which is the default on every bucket and which a',
+        'mis-scoped lifecycle rule outlives comfortably. A Firestore restore into',
+        'a bucket that lost its objects reports SUCCESS and yields a consistent',
+        'database of broken media references.',
+      ].join(' '),
+    })
+  }
+
+  if (storageMirror) {
+    if (storageMirror.projectNumber === productionProjectNumber) {
+      findings.push({
+        code: 'storage-mirror-in-production-project',
+        title: `The object mirror gs://${storageMirror.bucket} is inside the production project`,
+        detail: [
+          `It resolves to project number ${storageMirror.projectNumber}, the same`,
+          'project that serves production. A copy there survives a bad script and a',
+          'stray delete; it does not survive the loss of the project, which is the',
+          'failure AGL-1882 is about and the one a mirror is usually bought for.',
+          'The name is not the test — this is projectNumber, so no rename can fake it.',
+        ].join(' '),
+      })
+    }
+
+    if (!storageMirror.versioningEnabled) {
+      findings.push({
+        code: 'storage-mirror-unversioned',
+        title: `The object mirror gs://${storageMirror.bucket} has no object versioning`,
+        detail: [
+          'A mirror that propagates deletes has no undo without versioning: the run',
+          'that copies a mistaken deletion into the mirror is the run that destroys',
+          'the last copy, and it looks exactly like a successful sync. A mirror that',
+          'does NOT propagate deletes has the opposite problem — an erased',
+          "customer's media stays in it forever, which is a DPA §11 answer nobody",
+          'wants to give. Versioning plus a noncurrent-version expiry',
+          '(cloud/storage-mirror-lifecycle.json) is what makes the delete-propagating',
+          'shape safe, and it must be ON BEFORE the first sync, never after.',
+        ].join(' '),
+      })
+    }
+
+    // A store declared as needing a copy that the mirror measurement does not
+    // MENTION is the quietest failure available here: every store it did
+    // measure is complete, so the run is green, and the omitted one is the
+    // whole loss. The declaration is the authority; the measurement is checked
+    // against it, never the other way round.
+    const measured = new Set(storageMirror.stores.map((store) => store.name))
+    const unmeasured = mirroredStores.filter(
+      (store) => !measured.has(store.name),
+    )
+    if (unmeasured.length > 0) {
+      findings.push({
+        code: 'storage-mirror-store-unmeasured',
+        title: `${unmeasured.length} store(s) needing a copy were never compared with the mirror`,
+        detail: [
+          unmeasured.map((store) => `gs://${store.name}`).join(', '),
+          '— PRODUCTION_DATA_STORES says these need a mirror and nothing measured',
+          'whether they have one. Every store that WAS measured could be complete,',
+          'making this run green while the omitted store is copied by nothing.',
+          'Extend the sync AND the comparison together, or drop the mirrorPrefix',
+          'and say in `why` what covers the store instead.',
+        ].join(' '),
+      })
+    }
+
+    for (const store of storageMirror.stores) {
+      if (store.sourceTruncated || store.mirrorTruncated) {
+        findings.push({
+          code: 'storage-mirror-comparison-truncated',
+          title: `Could not finish comparing gs://${store.name} with its mirror`,
+          detail: [
+            `Object listing hit the page cap on the ${store.sourceTruncated ? 'source' : ''}`,
+            `${store.sourceTruncated && store.mirrorTruncated ? ' and ' : ''}${store.mirrorTruncated ? 'mirror' : ''} side,`,
+            'so the object counts below are floors and the completeness comparison',
+            'proves nothing. This is reported as a finding rather than folded into',
+            'the counts on purpose: a truncated listing that renders as "mirror',
+            'complete" is the exact false green this whole check exists to avoid.',
+            'Raise the cap or compare with `gcloud storage rsync --dry-run`.',
+          ].join(' '),
+        })
+        continue
+      }
+
+      if (store.mirrorObjects < store.sourceObjects) {
+        findings.push({
+          code: 'storage-mirror-incomplete',
+          title: `The mirror of gs://${store.name} is missing objects`,
+          detail: [
+            `Source holds ${store.sourceObjects} object(s); the mirror prefix`,
+            `${store.prefix} in gs://${storageMirror.bucket} holds ${store.mirrorObjects}.`,
+            'A partial mirror restores a partial workspace. The mirror may legitimately',
+            'hold MORE than the source — an object the source lifecycle expired is still',
+            'in the copy, which is the point — so only the deficit is a finding.',
+          ].join(' '),
+        })
+        continue
+      }
+
+      // Freshness, expressed the only way object metadata can express it: the
+      // destination object's `updated` is its COPY time, so a caught-up mirror
+      // is at or after its source. See MAX_MIRROR_LAG_DAYS for why there is no
+      // wall-clock budget here.
+      if (store.sourceObjects === 0) continue
+      const sourceTime = Date.parse(store.sourceNewest ?? '')
+      const mirrorTime = Date.parse(store.mirrorNewest ?? '')
+      if (!Number.isFinite(sourceTime)) continue
+      const lagDays = Number.isFinite(mirrorTime)
+        ? Math.round(((sourceTime - mirrorTime) / DAY_MS) * 10) / 10
+        : null
+      if (lagDays === null || lagDays > MAX_MIRROR_LAG_DAYS) {
+        findings.push({
+          code: 'storage-mirror-stale',
+          title: `The mirror of gs://${store.name} has stopped keeping up`,
+          detail: [
+            lagDays === null
+              ? 'The mirror prefix holds no object with a readable timestamp, while the source does.'
+              : `The mirror's newest object predates the source's by ${lagDays} days, past the ${MAX_MIRROR_LAG_DAYS}-day budget.`,
+            'Object counts match or exceed, so this is not a missing object — it is a',
+            'sync that ran and then stopped, with the objects it had already copied',
+            'left behind to look like a healthy mirror. Check the transfer job ran,',
+            'and check it still has write access to the mirror bucket.',
+          ].join(' '),
+        })
+      }
+    }
+  }
+
   const acknowledged = strict
     ? []
     : findings.filter((finding) =>
@@ -324,6 +538,14 @@ export function assessBackupCopies({
     findings,
     failing,
     acknowledged,
-    inventory: { offProject, inProject, declared, undeclared, missing },
+    inventory: {
+      offProject,
+      inProject,
+      declared,
+      undeclared,
+      missing,
+      mirroredStores,
+      storageMirror,
+    },
   }
 }
