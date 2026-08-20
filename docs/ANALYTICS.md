@@ -640,22 +640,46 @@ the tag never loads without an explicit accept, because loading an analytics
 tag before consent is the specific act prior-consent law prohibits.
 Load-then-restrict is additive to the gate, never a replacement for it.
 
-**The signal set.** `analytics_storage` follows the visitor's grant;
-`ad_storage`, `ad_user_data` and `ad_personalization` are **denied
-unconditionally, in both directions, from the first hit** — the tool asks a
-visitor about analytics and nothing else, so there is no advertising basis on
-file to grant, and the type declares those three as the literal `'denied'` so
-widening them is a change the type has to be edited to allow. This is a change
-from the pre-AGL-1622 state, where a freshly loaded tag ran with `ad_storage`
+**The signal set.** `analytics_storage` follows the visitor's grant.
+`ad_storage`, `ad_user_data` and `ad_personalization` are **denied from the
+first hit**, and on the great majority of sites they are denied
+unconditionally and in both directions: a site that has not turned the
+advertising question on asks its visitors about analytics and nothing else,
+so there is no advertising basis on file to grant. This is a change from the
+pre-AGL-1622 state, where a freshly loaded tag ran with `ad_storage`
 unrestricted: anyone reading GA4 Ads-linked reporting for a tenant site needs
-to know why the numbers moved on 2026-08-14. Whether a host should be able to
-grant the advertising signals themselves is AGL-1649, open.
+to know why the numbers moved on 2026-08-14.
 
-`analyticsConsentSignals()` in
-`libs/aglyn/src/lib/app-utils/visitor-consent.ts` is the **single source** for
-both declarations — the load-time `default` (`GA_CONSENT_DEFAULT_SNIPPET` is
-built from it) and the withdrawal `update` — so the two cannot drift. Read the
-payload there rather than trusting any restatement here.
+**A host CAN now ask for an advertising basis** — AGL-1649 shipped in
+`7901f7332`, and the "open question" this section used to end on is settled.
+The category is off for every site that exists and is gated on the host
+turning it on **and** an analytics id being configured
+(`hostAsksAboutAdvertising()`); turning it on grants nothing by itself, it
+adds a second, separate question to the banner and to the preferences panel
+so a visitor has somewhere to say yes. Default-deny survives it: `implied`
+never grants advertising, a record written before the category existed reads
+as never-asked rather than as a yes, the grant is re-derived on every read and
+write (so a hand-edited `localStorage` entry, or one left behind after a host
+switched the category back off, decays to denied), and advertising is clamped
+to analytics — `ad_storage: 'granted'` alongside `analytics_storage: 'denied'`
+is not a state this tool can reach.
+
+**Two payload builders, and the split is deliberate.** Both live in
+`libs/aglyn/src/lib/app-utils/visitor-consent.ts`, and between them they are
+the **single source** for every declaration — the load-time `default` and the
+withdrawal `update` alike — so the two directions cannot drift:
+
+- `analyticsConsentSignals(granted)` — the analytics-only path, feeding
+  `GA_CONSENT_DEFAULT_SNIPPET`. Its return type still declares the three ad
+  signals as the literal `'denied'`, so a caller that only knows about
+  analytics **cannot** express an advertising grant it has no answer for.
+- `consentModeSignals({ analytics, advertising })` — the advertising path,
+  feeding `GA_CONSENT_DEFAULT_WITH_ADS_SNIPPET`. A separate function rather
+  than a widening of the first, precisely so that reaching an advertising
+  grant is a different call with a different argument: a thing a reviewer can
+  see in a diff.
+
+Read the payloads there rather than trusting any restatement here.
 
 The three mechanisms, in the order a visitor meets them:
 
