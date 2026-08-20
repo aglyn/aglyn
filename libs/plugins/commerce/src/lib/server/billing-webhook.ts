@@ -45,6 +45,7 @@ import {
 } from './promotion-hold'
 import { flagOrderRestock } from './restock-flag'
 import { recordStorefrontTax } from './storefront-tax-record'
+import { enqueueSupplierDelivery } from './supplier-outbox'
 
 /**
  * Assigns unassigned license keys for a digital product (AGL-308):
@@ -1663,7 +1664,14 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             : {}),
           link: `/${hostId}/products`,
         })
-        void upsertHostContact({
+        // AWAITED SINCE AGL-2473, here and at the five sibling call sites in
+        // this file. `upsertHostContact` carries `purchaseCents`, so it is what
+        // feeds `ltvCents` and the RFM ranking — a `void`ed one is a paying
+        // customer quietly missing from the segment the merchant emails. It
+        // touches only our own Firestore, which is the whole line AGL-2473
+        // drew: Aglyn's own storage is awaited, a stranger's server is queued.
+        // `refund.ts` already awaited its sibling for exactly this reason.
+        await upsertHostContact({
           hostId: String(hostId),
           email: object?.customer_details?.email,
           name: object?.customer_details?.name ?? undefined,
@@ -2226,7 +2234,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           // counting only the first charge ranks them as a one-purchase
           // customer forever. Keyed to the invoice so the guard above is what
           // stops a redelivery inflating it.
-          void upsertHostContact({
+          await upsertHostContact({
             hostId: invoiceHostId,
             email: renewalEmail,
             ...(soldSnapshot.get('customerName')
@@ -2341,7 +2349,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           const guestContactEmail =
             object?.customer_details?.email ?? reservation['guestEmail'] ?? null
           if (guestContactEmail) {
-            void upsertHostContact({
+            await upsertHostContact({
               hostId: String(hostId),
               email: guestContactEmail,
               name:
@@ -2761,7 +2769,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             : {}),
           link: `/${hostId}/products`,
         })
-        void upsertHostContact({
+        await upsertHostContact({
           hostId: String(hostId),
           email: object?.customer_details?.email,
           name: object?.customer_details?.name ?? undefined,
@@ -3217,7 +3225,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             const chargedCents =
               Number(object?.amount_total ?? 0) ||
               Number(order.totals?.totalCents ?? 0)
-            void upsertHostContact({
+            await upsertHostContact({
               hostId: String(hostId),
               email: draftEmail,
               name: object?.customer_details?.name ?? undefined,
@@ -3465,7 +3473,21 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // it (signed webhook and/or email) and stash a callback token so
         // the supplier can post tracking back. Plan-gated; failures never
         // fail the webhook.
-        void (async () => {
+        //
+        // AWAITED SINCE AGL-2473, and the reason it can be is that the
+        // supplier POST is no longer in it. This was `void (async () => …)()`
+        // whose last act was `fetch(supplier.webhookUrl)` — a merchant-typed
+        // endpoint on a host we do not run — and Vercel freezes the container
+        // when the response is written, so a slow supplier was a supplier
+        // never told, with nothing written down to say a notification was
+        // owed. AGL-2161 declined to await it because a supplier timing out
+        // would push this handler past Stripe's window and buy a DUPLICATED
+        // order in exchange; that objection is now moot, because what is left
+        // here touches only Aglyn's own Firestore and Aglyn's own mail
+        // provider — the same things `refund.ts` awaits, for the same reason.
+        // The one call to a stranger's server is a queued row that
+        // `supplier-outbox.ts` retries out of band.
+        await (async () => {
           try {
             const routedOrg = await getOrgForHost(String(hostId))
             if (
@@ -3520,31 +3542,24 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 `?hostId=${hostId}&orderId=${object.id}&token=${supplierToken}`,
             }
             if (supplier.webhookUrl) {
-              const body = JSON.stringify(payload)
-              // NO SECRET, NO SIGNATURE HEADER (AGL-2455). This was
-              // `createHmac('sha256', supplier.webhookSecret ?? '')` — an
-              // empty-key HMAC over a body whose every field is public, which
-              // any party can compute. A supplier who also left their secret
-              // unset would verify it successfully and believe the delivery was
-              // authenticated, which is worse than no header at all: an absent
-              // header fails their check closed, a forgeable one passes it.
-              // A supplier WITH a secret rejects either way, so nothing that
-              // worked stops working.
-              const webhookSecret = String(supplier.webhookSecret ?? '')
-              await fetch(supplier.webhookUrl, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  ...(webhookSecret
-                    ? {
-                        'x-aglyn-signature': createHmac('sha256', webhookSecret)
-                          .update(body)
-                          .digest('hex'),
-                      }
-                    : {}),
-                },
-                body,
-              }).catch(() => undefined)
+              // QUEUED, NOT POSTED (AGL-2473). One Firestore write, then the
+              // job beat owns the delivery: retries with backoff, and a dead
+              // letter that stamps this order's timeline and rings the bell
+              // when a supplier stays unreachable. The BODY is frozen here
+              // because `updateUrl` is built from `requestHost`, which is a
+              // property of this request that no later pass can recover; the
+              // endpoint and the signing secret are deliberately NOT frozen,
+              // so a merchant correcting a typo'd URL fixes what is already
+              // queued and no shared secret is copied into a second document.
+              await enqueueSupplierDelivery({
+                firestore,
+                hostId: String(hostId),
+                orderId: String(object.id),
+                supplierId: String(supplierId),
+                supplierName: String(supplier.name ?? ''),
+                url: String(supplier.webhookUrl),
+                body: JSON.stringify(payload),
+              })
             }
             if (supplier.email) {
               await sendEmail({
@@ -3566,7 +3581,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           }
         })()
         // Contacts ingestion (AGL-197): buyers become contacts.
-        void upsertHostContact({
+        await upsertHostContact({
           hostId: String(hostId),
           email: object?.customer_details?.email,
           name: object?.customer_details?.name ?? undefined,

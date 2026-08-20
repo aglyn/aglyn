@@ -82,6 +82,7 @@ import {
 import { processRestockHandler, scanRestockAlerts } from './server/process-restock'
 import { scanStockDecrements } from './server/reconcile-stock'
 import { refundHandler } from './server/refund'
+import { scanSupplierDeliveries } from './server/supplier-outbox'
 import { supplierUpdateHandler } from './server/supplier-update'
 
 /**
@@ -169,6 +170,44 @@ registerPluginJob({
         `commerce: ${scan.missingLines} order lines across ${scan.hosts} ` +
           `sites have no sale ledger row (${scan.reportedOrders} newly ` +
           `reported, ${scan.truncatedHosts} sites' ledger window truncated)`,
+      )
+    }
+  },
+})
+
+/**
+ * The dropship supplier outbox drain (AGL-2473).
+ *
+ * EVERY MINUTE, unlike the three above, and the interval is the point rather
+ * than an oversight. This is the only one of the four that a BUYER is waiting
+ * on: the row it drains is a paid order that has not been routed to whoever
+ * ships it, and every minute it sits is a minute the parcel is not moving. The
+ * first backoff step is also 60s, so a supplier that blipped is retried on the
+ * next tick.
+ *
+ * The cost that set fifteen minutes for the recovery pair does not apply. Those
+ * are collection-GROUP scans across every site on the platform; this is one
+ * ordinary equality query against a top-level collection that is EMPTY in the
+ * ordinary case — an empty result bills a single read, so the whole beat is
+ * ~1,440 reads a day whether or not anyone is dropshipping.
+ *
+ * Not gated on `isEmailConfigured()`. The supplier notification is an HTTP POST
+ * to the merchant's own supplier, and a self-host with no mail provider still
+ * has dropship orders to route.
+ */
+registerPluginJob({
+  pluginId: BUNDLE_ID,
+  name: 'supplier-webhook-delivery',
+  intervalMinutes: 1,
+  description:
+    'Deliver queued dropship supplier notifications, with backoff and a ' +
+    'dead letter that tells the merchant (AGL-2473).',
+  handler: async () => {
+    const scan = await scanSupplierDeliveries()
+    if (scan.deadLettered) {
+      console.warn(
+        `commerce: ${scan.deadLettered} dropship orders could not be routed ` +
+          `to their supplier and have been reported on the order`,
       )
     }
   },
