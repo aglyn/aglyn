@@ -17,6 +17,10 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
+import {
+  isPaymentsNotConfigured,
+  storefrontPaymentsNotConfiguredText,
+} from '@aglyn/aglyn/app-utils/payments-configured'
 import * as CommerceModel from '../model'
 import { mdiTagOutline } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
@@ -141,9 +145,15 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     const [selections, setSelections] = useState<Record<string, string>>({})
     const [quantity, setQuantity] = useState(1)
     const [activeImage, setActiveImage] = useState(0)
-    const [status, setStatus] = useState<'idle' | 'sending' | 'error' | 'ask'>(
-      'idle',
-    )
+    // `unconfigured` is not an `error` with softer words (AGL-2019). A store
+    // with no Stripe key answers 501, and rendering that at `severity="error"`
+    // tells a shopper their payment failed when nothing was ever attempted —
+    // the same distinction `ask` already makes, and the same one the cart's
+    // 423 lockdown branch makes. It is the terminal one: it latches Buy off,
+    // because every further click gets the identical refusal.
+    const [status, setStatus] = useState<
+      'idle' | 'sending' | 'error' | 'ask' | 'unconfigured'
+    >('idle')
     const [message, setMessage] = useState('')
     // Buy-now's half of AGL-1721: asked only when the server refuses to price
     // shipping without a destination, so a digital product, a subscription, or
@@ -319,6 +329,13 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
         }
         if (response.ok && payload?.url) {
           window.location.assign(payload.url)
+          return
+        }
+        // Buy-now's half of AGL-2019. The server's own 501 wording is not
+        // rendered to a visitor; this surface is public.
+        if (isPaymentsNotConfigured(response.status)) {
+          setMessage(storefrontPaymentsNotConfiguredText())
+          setStatus('unconfigured')
           return
         }
         if (payload?.needsShippingCountry) {
@@ -584,6 +601,10 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                 !hostId ||
                 status === 'sending' ||
                 variant?.soldOut ||
+                // No payments on this deployment: the same 501 every time, so
+                // the control latches off rather than inviting a retry that
+                // cannot succeed (AGL-2019).
+                status === 'unconfigured' ||
                 // Asked but unanswered: the server would only refuse again.
                 (shipCountries !== null && !shipTo)
               }
@@ -635,7 +656,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               ))}
             </TextField>
           ) : null}
-          {status === 'ask' ? (
+          {status === 'ask' || status === 'unconfigured' ? (
             <Alert severity="info" sx={{ mb: 2 }}>
               {message}
             </Alert>
