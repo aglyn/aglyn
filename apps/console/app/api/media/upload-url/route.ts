@@ -27,7 +27,11 @@ import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band
 import {
   checkEntitlement,
   createResourceUid,
+  inspectUploadBytes,
   readImageDimensions,
+  UPLOAD_INSPECTION_HEAD_BYTES,
+  UPLOAD_INSPECTION_TAIL_BYTES,
+  uploadInspectionNeedsTail,
 } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
@@ -253,6 +257,81 @@ async function handler(request: Request): Promise<Response> {
     if (!maxBytes || declaredBytes > maxBytes) {
       await file.delete().catch(() => undefined)
       return Response.json({ error: 'Uploaded object rejected' }, { status: 415 })
+    }
+
+    /**
+     * STRUCTURAL inspection (AGL-1475) on the route that never sees a byte.
+     *
+     * This is the chokepoint that made the whole question awkward, and the
+     * reason a scanner "wired to the other three" would have been theatre:
+     * the browser PUTs straight to GCS with a signed URL, so by the time
+     * anything of ours can look, the object is already in the bucket — and
+     * downloading it back to look properly is the exact cost this route
+     * exists to avoid. A 200 MB video pulled into the function to be sniffed
+     * would cost more than the feature.
+     *
+     * It does not have to be. Every signature `inspectUploadBytes` knows sits
+     * either in the first few bytes or, for a document archive's central
+     * directory, in the last few. So this takes two RANGED GETs of a few KB
+     * instead of the file: {@link UPLOAD_INSPECTION_HEAD_BYTES} from the
+     * front always, and {@link UPLOAD_INSPECTION_TAIL_BYTES} from the back
+     * only for the document types whose macro entries live there — which is
+     * never a video. The signed route therefore reaches the same verdict as
+     * the three in-process routes for a rounding error in egress, and the
+     * asymmetry AGL-1475 called "the design question" turns out not to need
+     * an asymmetric answer.
+     *
+     * A refusal DELETES the object, for the same reason the quarantine branch
+     * below does: it is already in the bucket, an object with no media
+     * document is billed to nobody and readable by nobody, and leaving it
+     * would grow the bucket forever. Ordered before the deny-list read, the
+     * counter, the document and variant generation.
+     *
+     * Structure only — NOT an antivirus scan. See `upload-inspection.ts`.
+     */
+    {
+      const headEnd = Math.min(declaredBytes, UPLOAD_INSPECTION_HEAD_BYTES) - 1
+      let head: Buffer | null = null
+      let tail: Buffer | null = null
+      try {
+        if (headEnd >= 0) {
+          const [chunk] = await file.download({ start: 0, end: headEnd })
+          head = chunk
+        }
+        if (
+          head &&
+          uploadInspectionNeedsTail(contentType) &&
+          declaredBytes > UPLOAD_INSPECTION_HEAD_BYTES
+        ) {
+          const start = Math.max(0, declaredBytes - UPLOAD_INSPECTION_TAIL_BYTES)
+          const [chunk] = await file.download({ start, end: declaredBytes - 1 })
+          tail = chunk
+        }
+      } catch {
+        /**
+         * Fail OPEN on a ranged-read error, matching the deny list below and
+         * the lockdown core. An unreachable Storage object is an outage, not
+         * a detection, and a GCS blip must not start refusing every large
+         * upload on the platform. The residual risk is stated rather than
+         * traded away: during such a blip an object finalizes uninspected.
+         */
+        head = null
+      }
+      if (head) {
+        const refusal = inspectUploadBytes({
+          bytes: head,
+          tail,
+          contentType,
+          fileName,
+        })
+        if (refusal) {
+          await file.delete().catch(() => undefined)
+          return Response.json(
+            { error: refusal.message, code: refusal.code },
+            { status: 415, headers: { 'cache-control': 'no-store' } },
+          )
+        }
+      }
     }
 
     /**

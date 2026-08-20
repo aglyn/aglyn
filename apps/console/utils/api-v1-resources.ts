@@ -33,6 +33,7 @@ import {
   createResourceUid,
   defaultScopeForNewResource,
   effectiveDatasetModel,
+  inspectUploadBytes,
   newResourceScopeFields,
   normalizeContactEmail,
   ORG_SCOPE_TOKEN,
@@ -1712,6 +1713,35 @@ async function createMedia(
       code: 'file_too_large',
       headers: ctx.headers,
     })
+  }
+
+  /**
+   * STRUCTURAL inspection (AGL-1475). AGL-2463 shipped this route with the
+   * gap written down — "no magic-byte sniffing anywhere in media ingress, the
+   * declared type is trusted" — and this is that sentence being retired.
+   *
+   * It matters more here than on the console routes, not less. This is the
+   * key-authenticated path: the caller is a migration tool or an agency's
+   * automation, not a person watching a progress bar, and `media:write` was
+   * added precisely so a key could fill a library unattended. A key that
+   * leaks fills it unattended too.
+   *
+   * Structure only — not an antivirus scan. See `upload-inspection.ts` for
+   * the exact boundary, and do not let it drift back into a scanning claim.
+   */
+  {
+    const refusal = inspectUploadBytes({
+      bytes: decoded,
+      contentType,
+      fileName,
+    })
+    if (refusal) {
+      return ApiErrors.unsupportedMediaType({
+        message: refusal.message,
+        code: refusal.code,
+        headers: ctx.headers,
+      })
+    }
   }
 
   // Sanitize BEFORE hashing and before measuring what we store, so the digest

@@ -16,7 +16,7 @@
  */
 
 import { isFirstPartyMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
-import { type PluginApiHandler } from '@aglyn/aglyn/server'
+import { inspectUploadBytes, type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, isImpersonationSession } from '@aglyn/tenant-data-admin'
 import { randomUUID } from 'crypto'
 import { canActAsPublisher } from './publisher-profile'
@@ -144,6 +144,31 @@ export const previewImageHandler: PluginApiHandler = async (req, res) => {
       return res
         .status(413)
         .json({ error: 'File is empty or too large (2MB)' })
+    }
+
+    /**
+     * STRUCTURAL inspection (AGL-1475). The FIFTH byte ingress, and the one
+     * least like the other four.
+     *
+     * `contentType.startsWith('image/')` above is the entire type gate, and
+     * it is taken verbatim from the request body — so `image/png` over a
+     * Windows executable satisfied it. Worse than on the DAM routes: the URL
+     * this mints points straight at `firebasestorage.googleapis.com` rather
+     * than through `serveMediaCdn`, so the stored object never gets that
+     * route's `nosniff` and per-type CSP either. And it is the picture on the
+     * cross-org BROWSE grid and the `og:image` an unauthenticated unfurler
+     * fetches — the same reasoning that hardened the URL branch in AGL-1701,
+     * applied at last to the bytes branch.
+     *
+     * Structure only — not an antivirus scan. See `upload-inspection.ts`.
+     */
+    const refusal = inspectUploadBytes({
+      bytes: buffer,
+      contentType,
+      fileName: String(req.body?.fileName ?? '') || null,
+    })
+    if (refusal) {
+      return res.status(415).json({ error: refusal.message, code: refusal.code })
     }
 
     const token = randomUUID()

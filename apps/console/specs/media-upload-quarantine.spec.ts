@@ -146,7 +146,19 @@ const storageFile = () => ({
   name: 'object',
   exists: async () => [true],
   getMetadata: async () => [state.objectMetadata],
-  download: async () => [mockFileDownload()],
+  /**
+   * GCS ranged reads, modelled (AGL-1475). The signed-upload route inspects a
+   * large object through small `download({ start, end })` windows rather than
+   * pulling it back into the function, so a double that ignored the range and
+   * always returned the whole buffer would test a code path that does not
+   * exist — and would hide a range this route got wrong.
+   */
+  download: async (options?: { start?: number; end?: number }) => {
+    const whole = mockFileDownload() as Buffer
+    if (!options || typeof options.start !== 'number') return [whole]
+    const end = typeof options.end === 'number' ? options.end : whole.length - 1
+    return [whole.subarray(options.start, end + 1)]
+  },
   setMetadata: async () => undefined,
   save: (...args: unknown[]) => {
     mockFileSave(...args)
@@ -214,6 +226,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // The real structural inspector (AGL-1475), not a stub. This mock replaces
+  // the WHOLE barrel, so an export the route calls but the fake omits is
+  // `undefined` at the call site and 500s the request. Requiring the actual
+  // module also keeps these specs honest: the upload paths below are checked
+  // against the control that really runs, not against a permissive stand-in.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/upload-inspection'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
   createResourceUid: () => 'media-1',
   readImageDimensions: () => undefined,
@@ -257,12 +275,39 @@ import { POST as uploadPost } from '../app/api/media/upload/route'
 import { POST as replacePost } from '../app/api/media/replace/route'
 import { PATCH as finalize } from '../app/api/media/upload-url/route'
 
-/** The file staff took down. Any bytes will do — the digest is the key. */
-const INFECTED = 'MZ\u0090\x00 pretend this is the malicious PDF'
-const CLEAN = 'PNG an ordinary logo'
+/**
+ * The file staff took down.
+ *
+ * It has to be a real PDF now (AGL-1475): structural inspection runs AHEAD of
+ * the deny list, so a fixture that was secretly a Windows executable — which
+ * this one was, it opened `MZ` — is refused for THAT instead, and every
+ * assertion below about quarantine would then be passing for the wrong
+ * reason. Same for the clean one, whose four-byte `\x89PNG` was not a PNG
+ * header either.
+ */
+const INFECTED = '%PDF-1.7 pretend this is the malicious PDF'
+const CLEAN = '%PDF-1.7 an ordinary document'
+
+/**
+ * A real PNG, for the replace route — which is images-only, so it cannot use
+ * the PDF fixtures above.
+ *
+ * Built as BYTES rather than from a string. The previous fixture was
+ * `'\x89PNG …'`, and `Buffer.from(that, 'utf8')` encodes U+0089 as the two
+ * bytes `c2 89` — so it never carried a PNG signature at all, and could not
+ * have, whatever the escape looked like in the source.
+ */
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+const pngBytes = (tag: string) =>
+  Buffer.concat([PNG_MAGIC, Buffer.from(tag, 'utf8')])
+const INFECTED_PNG = pngBytes(' pretend this is the malicious logo')
+const CLEAN_PNG = pngBytes(' an ordinary logo')
 
 const sha256 = (text: string) =>
   createHash('sha256').update(Buffer.from(text, 'utf8')).digest('hex')
+
+const sha256Bytes = (buffer: Buffer) =>
+  createHash('sha256').update(new Uint8Array(buffer)).digest('hex')
 
 /** GCS reports md5 base64; `storageContentHash` truncates its hex to 16. */
 const md5Truncated = (text: string) =>
@@ -328,7 +373,7 @@ describe('/api/media/upload · the same bytes cannot come back (AGL-1613)', () =
     )
 
   it('accepts an ordinary upload — the gate is not a wall', async () => {
-    expect((await upload(CLEAN, 'image/png')).status).toBe(200)
+    expect((await upload(CLEAN)).status).toBe(200)
     expect(mockFileSave).toHaveBeenCalled()
     expect(mockCounterSet).toHaveBeenCalled()
   })
@@ -383,7 +428,7 @@ describe('/api/media/upload · the same bytes cannot come back (AGL-1613)', () =
 })
 
 describe('/api/media/replace · the second door is closed too (AGL-1613)', () => {
-  const replace = (text: string) =>
+  const replace = (buffer: Buffer) =>
     replacePost(
       new Request('https://app.aglyn.com/api/media/replace', {
         method: 'POST',
@@ -392,13 +437,13 @@ describe('/api/media/replace · the second door is closed too (AGL-1613)', () =>
           orgId: 'org-1',
           mediaId: 'media-1',
           contentType: 'image/png',
-          data: Buffer.from(text, 'utf8').toString('base64'),
+          data: buffer.toString('base64'),
         }),
       }),
     )
 
   it('replaces ordinary bytes — the gate is not a wall', async () => {
-    expect((await replace(CLEAN)).status).toBe(200)
+    expect((await replace(CLEAN_PNG)).status).toBe(200)
     expect(mockFileSave).toHaveBeenCalled()
   })
 
@@ -406,8 +451,8 @@ describe('/api/media/replace · the second door is closed too (AGL-1613)', () =>
     // Replace deliberately keeps the stable `cdnPath`, so without this an
     // upload of anything followed by a replace would launder a takedown
     // straight back onto a URL already embedded in published pages.
-    state.denyList = { [`hash--${sha256(INFECTED)}`]: takenDown() }
-    expect((await replace(INFECTED)).status).toBe(403)
+    state.denyList = { [`hash--${sha256Bytes(INFECTED_PNG)}`]: takenDown() }
+    expect((await replace(INFECTED_PNG)).status).toBe(403)
     expectNoWrites()
   })
 
@@ -416,7 +461,7 @@ describe('/api/media/replace · the second door is closed too (AGL-1613)', () =>
     // the swap would produce a "successful" replace whose result still 410s —
     // the exact confusing outcome this issue exists to end.
     state.denyList = { 'asset--org:org-1--media-1': takenDown({ reason: 'abuse' }) }
-    expect((await replace(CLEAN)).status).toBe(403)
+    expect((await replace(CLEAN_PNG)).status).toBe(403)
     expectNoWrites()
   })
 
@@ -424,10 +469,10 @@ describe('/api/media/replace · the second door is closed too (AGL-1613)', () =>
     state.existing = {
       contentType: 'image/png',
       visibleTo: ['org'],
-      contentSha256: sha256(INFECTED),
+      contentSha256: sha256Bytes(INFECTED_PNG),
     }
-    state.denyList = { [`hash--${sha256(INFECTED)}`]: takenDown() }
-    expect((await replace(CLEAN)).status).toBe(403)
+    state.denyList = { [`hash--${sha256Bytes(INFECTED_PNG)}`]: takenDown() }
+    expect((await replace(CLEAN_PNG)).status).toBe(403)
     expectNoWrites()
   })
 })
@@ -494,6 +539,18 @@ describe('/api/media/upload-url · finalize refuses and leaves no orphan (AGL-16
       size: 200 * 1024 * 1024,
       md5Hash: md5Base64(INFECTED),
     }
+    // The object has to BE an mp4, not the PDF the shared `beforeEach` puts
+    // behind the download mock (AGL-1475). Structural inspection reads a head
+    // window before the deny list is consulted, so an object declaring
+    // `video/mp4` over PDF bytes is refused as a type mismatch and this test
+    // would assert about a lookup that never happened.
+    mockFileDownload.mockReturnValue(
+      Buffer.concat([
+        Buffer.from([0x00, 0x00, 0x00, 0x18]),
+        Buffer.from('ftypmp42', 'ascii'),
+        Buffer.alloc(64, 0x00),
+      ]),
+    )
     await patch()
     expect(state.consulted[0]?.['contentSha256']).toBeUndefined()
     expect(state.consulted[0]?.['contentHash']).toBe(md5Truncated(INFECTED))

@@ -20,6 +20,8 @@
  * limitations under the License.
  */
 
+import { uploadFixtureBase64 } from './upload-fixture-bytes'
+
 /**
  * AGL-2463 — media writes over `/v1`.
  *
@@ -233,6 +235,12 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // The real structural inspector (AGL-1475), not a stub. This mock replaces
+  // the WHOLE barrel, so an export the route calls but the fake omits is
+  // `undefined` at the call site and 500s the request. Requiring the actual
+  // module also keeps these specs honest: the upload paths below are checked
+  // against the control that really runs, not against a permissive stand-in.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/upload-inspection'),
   // The REAL idempotency claim, the REAL plan table and the REAL scope token:
   // the storage band is exactly what is under test, so a stubbed plan table
   // would make every assertion below a statement about the stub.
@@ -303,7 +311,13 @@ function bandBytes(): number {
   return Math.max(1, entitlements.hostLimit) * entitlements.storagePerHostMb * MB
 }
 
-const bytes = (n: number) => Buffer.alloc(n, 7).toString('base64')
+/**
+ * `n` bytes that are genuinely `contentType` (AGL-1475). Filler alone is
+ * refused by structural inspection for every type that has a container
+ * header, so a fixture has to carry one to reach the code these specs test.
+ */
+const bytes = (n: number, contentType = 'image/png') =>
+  uploadFixtureBase64(contentType, n)
 
 /**
  * Stored ORIGINALS. Generated variants (`…__w320.webp`) are real objects too,

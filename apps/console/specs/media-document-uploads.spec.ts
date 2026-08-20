@@ -20,6 +20,8 @@
  * limitations under the License.
  */
 
+import { uploadFixtureBase64 } from './upload-fixture-bytes'
+
 /**
  * Documents upload, and their bytes are METERED (AGL-1465).
  *
@@ -153,6 +155,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // The real structural inspector (AGL-1475), not a stub. This mock replaces
+  // the WHOLE barrel, so an export the route calls but the fake omits is
+  // `undefined` at the call site and 500s the request. Requiring the actual
+  // module also keeps these specs honest: the upload paths below are checked
+  // against the control that really runs, not against a permissive stand-in.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/upload-inspection'),
   // The REAL plan rules. A stubbed `checkQuota`/`checkEntitlement` would make
   // "the counter is visible to the quota check" unfalsifiable.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
@@ -224,7 +232,11 @@ const upload = (
         orgId: 'org-1',
         fileName,
         contentType,
-        data: Buffer.alloc(bytes, 1).toString('base64'),
+        // A file that IS the type it claims (AGL-1475). `Buffer.alloc(n, 1)`
+        // is not a Word document, and structural inspection now says so —
+        // which would have made every metering assertion below run on a
+        // payload no real client could send.
+        data: uploadFixtureBase64(contentType, bytes),
       }),
     }),
   )

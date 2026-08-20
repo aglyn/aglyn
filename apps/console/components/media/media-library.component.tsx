@@ -323,6 +323,38 @@ function fileToBase64(file: File): Promise<string> {
  * server-side; the quota check here is just a friendlier early error.
  * Doubles as the browse grid inside MediaPickerDialog via `onSelect`.
  */
+/**
+ * A structural refusal has to STAY on screen (AGL-1475).
+ *
+ * The upload snackbars are transient by design — a dropped batch of thirty
+ * files should not leave thirty notices behind. But a structural refusal is
+ * not progress noise: it is the platform declining to store a file because its
+ * bytes are not what it says they are, it names an action the author has to
+ * take ("re-save it in the format it claims to be"), and in a batch drop it is
+ * exactly the one message that must not scroll past. So a refusal carrying an
+ * inspection code persists until it is dismissed, and every other upload
+ * failure keeps the behaviour it had.
+ *
+ * The codes are the server's `UploadInspectionCode` values. An unrecognised
+ * one degrades to the ordinary transient error rather than persisting
+ * everything, which is the safe direction for a UI notice.
+ */
+const STRUCTURAL_REFUSAL_CODES = new Set([
+  'executable_bytes',
+  'type_mismatch',
+  'macro_payload',
+  'signature_match',
+])
+
+function uploadRefusalOptions(payload: { code?: unknown } | null | undefined) {
+  const structural = STRUCTURAL_REFUSAL_CODES.has(String(payload?.code ?? ''))
+  return {
+    variant: 'error' as const,
+    allowDuplicate: true,
+    ...(structural ? { persist: true } : {}),
+  }
+}
+
 export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   const { hostId, orgId, onSelect, forHostId } = props
   // Scope plumbing: one library serves both a site's media and the org
@@ -1754,7 +1786,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         return void enqueueSnackbar(payload?.error ?? 'Replace failed', {
-          variant: 'error',
+          ...uploadRefusalOptions(payload),
           allowDuplicate: true,
         })
       }
@@ -2587,10 +2619,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           })
           const minted = await mint.json().catch(() => ({}))
           if (!mint.ok || !minted?.uploadUrl) {
-            enqueueSnackbar(minted?.error ?? `Upload failed for "${file.name}"`, {
-              variant: 'error',
-              allowDuplicate: true,
-            })
+            enqueueSnackbar(
+              minted?.error ?? `Upload failed for "${file.name}"`,
+              uploadRefusalOptions(minted),
+            )
             return 0
           }
           const put = await fetch(minted.uploadUrl, {
@@ -2621,10 +2653,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           })
           const finalized = await finalize.json().catch(() => ({}))
           if (!finalize.ok) {
-            enqueueSnackbar(finalized?.error ?? `Upload failed for "${file.name}"`, {
-              variant: 'error',
-              allowDuplicate: true,
-            })
+            enqueueSnackbar(
+              finalized?.error ?? `Upload failed for "${file.name}"`,
+              uploadRefusalOptions(finalized),
+            )
             return 0
           }
           enqueueSnackbar(`Uploaded "${file.name}"`, {
@@ -2650,10 +2682,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         })
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
-          enqueueSnackbar(payload?.error ?? `Upload failed for "${file.name}"`, {
-            variant: 'error',
-            allowDuplicate: true,
-          })
+          enqueueSnackbar(
+            payload?.error ?? `Upload failed for "${file.name}"`,
+            uploadRefusalOptions(payload),
+          )
           return 0
         }
         enqueueSnackbar(`Uploaded "${file.name}"`, {

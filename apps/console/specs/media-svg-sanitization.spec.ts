@@ -20,6 +20,8 @@
  * limitations under the License.
  */
 
+import { UPLOAD_INSPECTION_HEAD_BYTES } from '@aglyn/aglyn/server'
+
 /**
  * The sanitizer is WIRED, at every path that can put bytes in the bucket
  * (AGL-1474).
@@ -53,6 +55,9 @@ const mockVerifyIdToken = jest.fn()
 const mockFileSave = jest.fn()
 const mockMediaSet = jest.fn()
 const mockFileDownload = jest.fn()
+
+/** Every RANGE finalize asked for, so a test can assert it stayed bounded. */
+const mockDownloadRanges: { start: number; end: number }[] = []
 const mockSetMetadata = jest.fn()
 
 const state: {
@@ -136,7 +141,19 @@ const storageFile = () => ({
         : state.objectMetadata,
     ]
   },
-  download: async () => [mockFileDownload()],
+  /**
+   * GCS ranged reads, modelled (AGL-1475). Finalize inspects a large object
+   * through a small `download({ start, end })` window instead of pulling it
+   * back into the function; a double that ignored the range would hide a
+   * window this route got wrong.
+   */
+  download: async (options?: { start?: number; end?: number }) => {
+    const whole = mockFileDownload() as Buffer
+    if (!options || typeof options.start !== 'number') return [whole]
+    const end = typeof options.end === 'number' ? options.end : whole.length - 1
+    mockDownloadRanges.push({ start: options.start, end })
+    return [whole.subarray(options.start, end + 1)]
+  },
   setMetadata: (...args: unknown[]) => {
     mockSetMetadata(...args)
     return Promise.resolve()
@@ -189,6 +206,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // The real structural inspector (AGL-1475), not a stub. This mock replaces
+  // the WHOLE barrel, so an export the route calls but the fake omits is
+  // `undefined` at the call site and 500s the request. Requiring the actual
+  // module also keeps these specs honest: the upload paths below are checked
+  // against the control that really runs, not against a permissive stand-in.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/upload-inspection'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
   createResourceUid: () => 'media-1',
   readImageDimensions: () => undefined,
@@ -262,11 +285,26 @@ beforeEach(() => {
   }
   state.rewrittenMetadata = null
   state.metadataCalls = 0
+  mockDownloadRanges.length = 0
   mockFileDownload.mockReturnValue(Buffer.from(HOSTILE_SVG, 'utf8'))
   mockVerifyIdToken.mockResolvedValue({ uid: 'user-1', email_verified: true })
 })
 
 describe('/api/media/upload strips the payload before it is stored (AGL-1474)', () => {
+  const uploadBytes = (buffer: Buffer, contentType: string) =>
+    uploadPost(
+      new Request('https://app.aglyn.com/api/media/upload', {
+        method: 'POST',
+        headers: { authorization: 'Bearer tok' },
+        body: json({
+          orgId: 'org-1',
+          fileName: 'mark.png',
+          contentType,
+          data: buffer.toString('base64'),
+        }),
+      }),
+    )
+
   const upload = (svg: string, contentType = 'image/svg+xml') =>
     uploadPost(
       new Request('https://app.aglyn.com/api/media/upload', {
@@ -312,9 +350,16 @@ describe('/api/media/upload strips the payload before it is stored (AGL-1474)', 
   })
 
   it('does not touch a PNG — the sanitizer is type-scoped', async () => {
-    const png = '\x89PNG not-really <script>alert(1)</script>'
-    await upload(png, 'image/png')
-    expect(savedBytes()).toBe(png)
+    // A REAL PNG signature (AGL-1475). This fixture used to be the string
+    // '\x89PNG …', which `Buffer.from(x, 'utf8')` encodes as `c2 89 50 4e 47`
+    // — not a PNG header at all, and four bytes short of one even before the
+    // encoding. Structural inspection refuses that now, correctly.
+    const png = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.from(' not-really <script>alert(1)</script>', 'utf8'),
+    ])
+    await uploadBytes(png, 'image/png')
+    expect(savedBytes()).toBe(png.toString('utf8'))
   })
 })
 
@@ -382,15 +427,40 @@ describe('/api/media/upload-url finalizes on bytes it has LOOKED at (AGL-1474)',
     expect(savedDoc()['contentHash']).not.toBe('0123456789abcdef')
   })
 
-  it('never downloads a non-SVG — the 200 MB videos stay in the bucket', async () => {
+  it('reads only a HEAD WINDOW of a non-SVG — the 200 MB videos stay in the bucket', async () => {
+    /**
+     * The contract this test defends changed shape in AGL-1475 and is worth
+     * restating rather than deleting.
+     *
+     * Finalize used to download nothing at all for a non-SVG, which is what
+     * kept a 200 MB video in the bucket instead of in the function. Structural
+     * inspection needs to see the object's first bytes — so it now issues one
+     * RANGED read of at most `UPLOAD_INSPECTION_HEAD_BYTES` and never a full
+     * `download()`. The property being protected is the same one (the whole
+     * object is never pulled back); only the way to assert it moved.
+     */
     state.objectMetadata = {
       contentType: 'video/mp4',
       size: 200 * 1024 * 1024,
       md5Hash: Buffer.from('0123456789abcdef', 'hex').toString('base64'),
     }
+    mockFileDownload.mockReturnValue(
+      Buffer.concat([
+        Buffer.from([0x00, 0x00, 0x00, 0x18]),
+        Buffer.from('ftypmp42', 'ascii'),
+        Buffer.alloc(8192, 0x00),
+      ]),
+    )
     expect((await patch()).status).toBe(200)
-    expect(mockFileDownload).not.toHaveBeenCalled()
     expect(mockFileSave).not.toHaveBeenCalled()
+    // Exactly one read, and a bounded one.
+    expect(mockDownloadRanges).toHaveLength(1)
+    const [range] = mockDownloadRanges
+    expect(range.start).toBe(0)
+    expect(range.end).toBeLessThanOrEqual(UPLOAD_INSPECTION_HEAD_BYTES - 1)
+    // The negative control the old assertion gave for free: a full-object
+    // download has no range at all, and would fail the check above.
+    expect(range.end).toBeLessThan(200 * 1024 * 1024 - 1)
   })
 })
 
