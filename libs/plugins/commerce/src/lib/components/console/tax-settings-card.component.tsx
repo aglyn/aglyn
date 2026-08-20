@@ -105,10 +105,10 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
    * as a "rate".
    */
   const updateFlat = (
-    key: 'lodging',
+    key: 'lodging' | 'service',
     patch: Partial<CommerceModel.FlatTaxRate>,
   ) => update({ [key]: { ...current[key], ...patch } })
-  const flatPctText = (key: 'lodging') => {
+  const flatPctText = (key: 'lodging' | 'service') => {
     const pct = current[key]?.pct
     return pct === undefined || pct === null ? '' : String(pct)
   }
@@ -117,7 +117,7 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
    * failure: `resolveFlatTaxCents` treats an out-of-range percentage as off,
    * so a decimal-point typo would otherwise save cleanly and collect nothing.
    */
-  const flatPctProblem = (key: 'lodging'): string | null => {
+  const flatPctProblem = (key: 'lodging' | 'service'): string | null => {
     const raw = current[key]?.pct
     if (raw === undefined || raw === null || String(raw) === '') return null
     if (Number(raw) === 0) return null
@@ -398,6 +398,69 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
               'whole stay. If tax is due on the full stay, collect the ' +
               'difference the same way you collect the rest of the balance.'}
           </Typography>
+        </Stack>
+        {/*
+          SERVICE TAX (AGL-2028) — the bookings sibling of the block above,
+          and here for the same reason it is not in the bookings plugin's own
+          settings: this is the one card a merchant comes to with a tax
+          question, and a second tax surface elsewhere is how one of them ends
+          up unanswered.
+
+          Its EXISTENCE is also the opt-in AGL-2000 wanted. That issue
+          declined to apply the goods rate to an appointment partly because
+          nothing said the merchant meant these settings to cover bookings; a
+          field labelled for services, blank until they fill it in, is them
+          saying so.
+        */}
+        <Divider sx={{ my: 0.5 }} />
+        <Stack spacing={1}>
+          <Typography variant="subtitle2">{'Service tax'}</Typography>
+          <Typography variant="body2" color="text.secondary">
+            {'Charged on paid bookings, on top of the price, using the rate ' +
+              'you enter here. It is separate from the sales tax above ' +
+              'because whether a service is taxable is often a different ' +
+              'question from whether goods are. Leave it blank to charge ' +
+              'none — that is the default.'}
+          </Typography>
+          <Stack direction="row" spacing={1}>
+            <TextField
+              label="Rate %"
+              value={flatPctText('service')}
+              onChange={(event) =>
+                updateFlat('service', {
+                  pct:
+                    event.target.value === ''
+                      ? undefined
+                      : Number(event.target.value),
+                })
+              }
+              size="small"
+              sx={{ width: 110 }}
+              placeholder="0"
+              error={Boolean(flatPctProblem('service'))}
+              helperText={flatPctProblem('service') ?? ' '}
+              slotProps={{ htmlInput: { inputMode: 'decimal' } }}
+            />
+            <TextField
+              label="Label"
+              value={current.service?.label ?? ''}
+              onChange={(event) =>
+                updateFlat('service', { label: event.target.value })
+              }
+              size="small"
+              sx={{ flex: 1 }}
+              placeholder="Service tax"
+              helperText="Shown to the client on the receipt"
+            />
+          </Stack>
+          {/* MECHANISM ONLY, AND NO REMITTANCE DETERMINATION — see the
+              lodging block above. */}
+          <Alert severity="info">
+            {`${PLATFORM_BRAND_NAME} applies the rate you enter and records ` +
+              'what was charged. It does not determine whether this tax ' +
+              'applies to you, at what rate, or where it should be paid — ' +
+              'that is yours to decide.'}
+          </Alert>
         </Stack>
         <Button
           variant="contained"

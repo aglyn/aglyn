@@ -149,10 +149,10 @@ export type PluginDocsKey = keyof typeof PLUGIN_DOCS
 export const PLUGIN_DOCS_ANCHORS = {
   actionsBuilder: ['#create-an-action', '#triggers', '#only-run-when-a-field-matches', '#chain-multiple-conditions-andor', '#steps', '#run-history', '#what-is-and-isnt-recorded', '#interactions-from-the-besigner', '#when-to-use-which', '#related'],
   bindings: ['#binding-tokens', '#rename-safe-id-tokens', '#insert-a-variable', '#token-pills', '#in-the-canvas-text-editor', '#typed-variables', '#no-code-functions', '#where-used--safety', '#workflows', '#related'],
-  bookings: ['#set-up-bookings', '#taking-bookings', '#reminders', '#payments-and-fees', '#manage', '#cancelling-and-refunding', '#related'],
+  bookings: ['#set-up-bookings', '#taking-bookings', '#reminders', '#payments-and-fees', '#service-tax', '#manage', '#cancelling-and-refunding', '#related'],
   buildAWorkflow: ['#1-open-the-workflows-page', '#2-choose-a-trigger', '#3-add-steps', '#4-save-and-test', '#tips', '#related'],
   catalog: ['#products-options-and-variants', '#billing-modes-and-subscriptions', '#categories-and-tags', '#collections', '#slugs', '#merchant-center-feed', '#related'],
-  commerce: ['#products-hub', '#inventory', '#stock-movements', '#gift-cards', '#recovery-and-alerts', '#orders', '#orders-screen', '#order-statuses', '#order-money-tiles', '#a-lost-dispute', '#shipping--taxes', '#storefront-sales-tax', '#destination-coverage', '#dropshipping', '#related'],
+  commerce: ['#products-hub', '#inventory', '#stock-movements', '#gift-cards', '#recovery-and-alerts', '#orders', '#orders-screen', '#order-statuses', '#order-money-tiles', '#a-lost-dispute', '#shipping--taxes', '#lodging-tax-on-reservations', '#storefront-sales-tax', '#destination-coverage', '#dropshipping', '#related'],
   commerceEndToEnd: ['#1-connect-payments', '#2-create-products', '#3-design-the-storefront', '#catalog-search-filters-and-sort', '#category-pages', '#the-product-page-template', '#4-what-checkout-does', '#paying-without-leaving-your-site', '#5-run-orders-from-the-console', '#6-subscriptions--the-stripe-portal', '#related'],
   consoleTour: ['#the-app-bar', '#in-context-help', '#primary-navigation', '#editing-vs-managing', '#the-sites-list', '#the-status-pill', '#how-the-pill-is-decided', '#your-site-allowance', '#a-sites-dashboard', '#next', '#workspace-settings--notifications', '#alerts-on-this-device'],
   contacts: ['#unified-ingestion', '#the-contacts-page', '#segments', '#related'],

@@ -154,6 +154,18 @@ export interface TaxSettings {
    * the merchant sets it — see `FlatTaxRate`. Read by `reserve.ts` only.
    */
   lodging?: FlatTaxRate
+  /**
+   * SERVICE tax on a paid booking (AGL-2028). Off unless the merchant sets
+   * it — see `FlatTaxRate`. Read by the bookings plugin only.
+   *
+   * ITS EXISTENCE IS THE OPT-IN. AGL-2000 declined to apply the goods
+   * `rates[]` to an appointment partly because nothing said the merchant
+   * meant those settings to cover bookings — they are another plugin's
+   * surface. A field of its own, labelled for services and blank until
+   * somebody fills it in, is the merchant saying so explicitly. Reading
+   * `rates[]` for a booking is still wrong and still nothing does it.
+   */
+  service?: FlatTaxRate
 }
 
 export interface TaxAddress {

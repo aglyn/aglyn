@@ -27,6 +27,10 @@ import {
   registerPluginApiRoute,
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
+import {
+  resolveFlatTaxCents,
+  type TaxSettings,
+} from '@aglyn/plugins-commerce/model'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { BOOKINGS_CONFIG_SCHEMA } from './plugin-config'
 import { bookingsBillingWebhookHandler } from './server/billing-webhook'
@@ -291,11 +295,17 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
     // on a booking that could never be paid.
     let chargeAccountId = ''
     let feeCents = 0
+    let serviceTax = resolveFlatTaxCents(undefined, 0, 'Service tax')
     if (paid) {
       const ownerUid = (ownerOrg as { ownerUid?: unknown } | null)?.ownerUid
-      const ownerProfile = ownerUid
-        ? await firestore.collection('profiles').doc(String(ownerUid)).get()
-        : null
+      const [ownerProfile, storeSnapshot] = await Promise.all([
+        ownerUid
+          ? firestore.collection('profiles').doc(String(ownerUid)).get()
+          : Promise.resolve(null),
+        // The merchant's own service rate (AGL-2028), in the SAME round trip
+        // as the connected-account read this path already makes.
+        hostRef.collection('settings').doc('store').get(),
+      ])
       chargeAccountId = String(ownerProfile?.get('stripeAccountId') ?? '')
       if (
         !connectLinkageIsReady(
@@ -353,12 +363,51 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
       // The fee base and the charge base are the same number here: by
       // AGL-2000's stated decision this session carries one line item, no tax
       // line and no shipping option, so the card runs for exactly `priceUsd`.
+      // SERVICE TAX: the MERCHANT'S OWN RATE, off unless they set one
+      // (AGL-2028, answering the decision AGL-2000 recorded here).
+      //
+      // AGL-2000's reasoning is unchanged and is why this is a field of its
+      // own rather than a reuse of the goods table. A service is not goods:
+      // whether one is taxable is jurisdiction-specific and frequently the
+      // opposite answer, so the AGL-285 `rates[]` are still never read here
+      // — a test in `server-booking-tax.spec.ts` pins that with a fully
+      // configured sales-tax store. Stripe Tax is still never asked either:
+      // it has no service tax code from this handler and would compute a
+      // goods rate against AGLYN's registrations (AGL-1904).
+      //
+      // What changed is that the merchant now has somewhere to answer. A
+      // service business is one of the three named ICPs and in many states
+      // their services ARE taxable, so "Aglyn does not compute it" could only
+      // ever be a holding position. They type the rate, we compute it, charge
+      // it, record it and stamp the regime; the settings card states plainly
+      // that determining what is owed and to whom is theirs. Aglyn takes no
+      // tax position, and the existence of a separate, blank-by-default field
+      // is also AGL-2000's second reason answered — it is the merchant
+      // saying, explicitly, that they mean this to cover bookings.
+      //
+      // DEFAULT OFF, and load-bearing: an absent, zero, negative or
+      // out-of-range rate resolves to zero, so no existing merchant's charge
+      // moves because this shipped.
+      const taxSettings = ((storeSnapshot?.data() as any)?.tax ??
+        {}) as TaxSettings
       const chargeCents = Math.round(priceUsd * 100)
+      serviceTax = resolveFlatTaxCents(
+        taxSettings.service,
+        chargeCents,
+        'Service tax',
+      )
+      // THE TWO FEE BASES ARE NOW DIFFERENT NUMBERS (AGL-2028). The take is
+      // computed on the SERVICE, never on the state's money — AGL-2317's rule
+      // — while Stripe's card cost is debited from the platform balance on
+      // the WHOLE charge and so is passed through on the whole charge
+      // (AGL-2152). The comment above already promised this: "a fee derived
+      // from `priceUsd` stays off the tax the moment tax is added". This is
+      // the moment.
       feeCents = resolveTransactionFeeCents(
         ownerOrg as never,
         'service',
         chargeCents,
-        chargeCents,
+        chargeCents + serviceTax.taxCents,
       )
     }
 
@@ -417,38 +466,23 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
 
     if (paid) {
       const origin = req.headers.origin ?? `https://${req.headers.host}`
-      // TAX ON A PAID BOOKING: none, and that is a DECISION (AGL-2000).
+      // TAX ON A PAID BOOKING: the merchant's own service rate, resolved
+      // above and default OFF (AGL-2028, answering AGL-2000).
       //
-      // AGL-1953 made every commerce path state its tax decision explicitly.
-      // Bookings sat outside that sweep and stated nothing at all — no
-      // `automatic_tax`, no `tax_rates`, no manual line, and no comment — so a
-      // paid service booking charged list price untaxed in both merchant tax
-      // modes, and nobody had ever considered whether it should. The distinction
-      // matters: reservations decided not to tax (`reserve.ts`); this had not
-      // decided anything.
+      // The rate rides as an ORDINARY product line Stripe is never told is
+      // tax — the AGL-1711 construction every other manual rate in this
+      // repo uses. That is what makes the derived `taxMode` read `manual`:
+      // the figure is the merchant's own, from their own rate, and is never
+      // computed against Aglyn's registrations the way `automatic_tax` would
+      // be (AGL-1904). Absent entirely when no rate is set, so a default
+      // store's session carries no tax parameter of any kind — the property
+      // `server-booking-tax.spec.ts` asserts over the whole emitted body.
       //
-      // Two reasons for the decision, and either alone would be enough:
-      //
-      //  1. **A service is not goods.** The rate the merchant configures lives
-      //     in the COMMERCE plugin's Taxes card and is a goods sales rate for a
-      //     declared store origin (AGL-285). Whether a given service is taxable
-      //     at all is jurisdiction-specific and frequently the opposite answer
-      //     from goods, so applying that rate here would be confidently wrong
-      //     rather than merely absent. Stripe Tax has the same problem from the
-      //     other side: it needs a service tax code this handler does not send,
-      //     so `automatic_tax` would compute a goods rate on an appointment.
-      //  2. **Nothing says the merchant meant it to cover bookings.** The
-      //     commerce tax settings are a different plugin's document; reading
-      //     them here would silently extend a decision to a surface the
-      //     merchant was never asked about.
-      //
-      // So the merchant collects any service tax they owe outside the platform,
-      // and the sale is RECORDED either way: `booking-payment` is in
-      // `storefront-tax-record.ts`'s SESSION_TYPES since AGL-2000, so the row
-      // exists and reads `taxMode: 'none'` — which is what makes the absence
-      // reconcilable instead of invisible. Proper service-tax support is filed
-      // rather than guessed at here. The day this path does compute tax, it is
-      // recorded with no further wiring.
+      // The sale is recorded either way: `booking-payment` has been in
+      // `storefront-tax-record.ts`'s SESSION_TYPES since AGL-2000, so an
+      // untaxed booking still files a row reading `taxMode: 'none'` and a
+      // taxed one files `manual` with the figure, both with no further
+      // wiring.
       const params = new URLSearchParams({
         mode: 'payment',
         'line_items[0][quantity]': '1',
@@ -459,6 +493,16 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         'line_items[0][price_data][product_data][name]': String(
           service.name ?? 'Booking',
         ).slice(0, 120),
+        ...(serviceTax.taxCents > 0
+          ? {
+              'line_items[1][quantity]': '1',
+              'line_items[1][price_data][currency]': 'usd',
+              'line_items[1][price_data][unit_amount]': String(
+                serviceTax.taxCents,
+              ),
+              'line_items[1][price_data][product_data][name]': serviceTax.label,
+            }
+          : {}),
         // Destination charge to the MERCHANT's connected account (AGL-2315).
         // Unconditional: `transfer_data[destination]` is what makes this the
         // merchant's money, and it is required on every paid booking whatever
@@ -478,6 +522,19 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         // figure a reconciliation reads. `'0'` on a 0%-fee tier is a real
         // answer, not a missing one.
         'metadata[feeCents]': String(feeCents),
+        // The only witness to the tax (AGL-2028). By the construction above
+        // Stripe does not know the second line is tax and reports
+        // `total_details.amount_tax: 0`, so the session's own metadata is
+        // what `storefront-tax-record.ts` and the confirmation webhook read
+        // to record the figure and derive the regime — exactly as
+        // `checkout.ts` stamps it for a buy-now sale. Absent when there is no
+        // tax, never a reassuring `'0'`: absent and zero are different facts.
+        ...(serviceTax.taxCents > 0
+          ? {
+              'metadata[taxCents]': String(serviceTax.taxCents),
+              'metadata[taxPct]': String(serviceTax.pct),
+            }
+          : {}),
         expires_at: String(Math.floor(Date.now() / 1000) + 30 * 60),
       })
       const stripeResponse = await fetch(

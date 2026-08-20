@@ -25,6 +25,7 @@ import {
   upsertHostContact,
 } from '@aglyn/tenant-data-admin'
 import { sendEmail } from '@aglyn/shared-util-email'
+import { storefrontTaxModeOf } from '@aglyn/plugins-commerce/server/storefront-tax'
 
 /**
  * Paid-booking section of the platform Stripe webhook (AGL-170/418):
@@ -49,10 +50,31 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
           .doc(String(hostId))
           .collection('bookings')
           .doc(String(bookingId))
+        // WHAT THE CLIENT HANDED OVER, ALL OF IT. Tax included: this is the
+        // ceiling `refund.ts` reverses against, and the client paid the tax
+        // too — a net figure here would strand part of a refund.
         const paidAmountCents = Math.max(
           0,
           Math.round(Number(object?.amount_total ?? 0)),
         )
+        // THE MERCHANT'S SERVICE TAX, SEPARATED OUT (AGL-2028).
+        //
+        // `server.ts` charges the merchant's own service rate as an ordinary
+        // `line_items[1]` Stripe is never told is tax (the AGL-1711
+        // construction, which is what keeps the figure the MERCHANT's rather
+        // than something computed against Aglyn's registrations). So
+        // `amount_total` is service-plus-tax while Stripe's own tax fields
+        // read zero, and the session's metadata is the only witness — exactly
+        // as it is for a buy-now sale.
+        const taxCents = Math.max(
+          0,
+          Math.round(Number(object?.metadata?.taxCents ?? 0)),
+        )
+        // The merchant's REVENUE, which is the charge less the tax. Used for
+        // the contact's lifetime value below: tax is collected on behalf of
+        // an authority and is not money the business earned, so counting it
+        // would over-state every service client's worth.
+        const serviceCents = Math.max(0, paidAmountCents - taxCents)
         // WHAT A REFUND WILL NEED (AGL-2315). A paid booking is now a
         // destination charge to the merchant's connected account, and
         // reversing one requires the PaymentIntent — which lives only on this
@@ -124,6 +146,26 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
               {
                 status: 'confirmed',
                 paidAmountCents,
+                // WHICH TAX REGIME THIS BOOKING CARRIED (AGL-2028), on the
+                // document the merchant reads — the stamp every other
+                // storefront money door already carries (AGL-2451).
+                //
+                // DERIVED from the one shared derivation, never a constant.
+                // A hand-written "manual when the metadata says so" would be
+                // a second rule that can drift from the `storefrontTaxCollected`
+                // row filed for the same Stripe id, which is the exact
+                // disagreement AGL-2451 exists to prevent.
+                //
+                // TWO-ARGUMENT, because the manual line makes Stripe report
+                // `total_details.amount_tax: 0` on a booking that really did
+                // charge the client tax; the one-argument form would stamp
+                // `none` on precisely those. `absent` remains a fourth state
+                // meaning "recorded before this shipped".
+                taxMode: storefrontTaxModeOf(object, taxCents),
+                // The figure itself. Absent rather than a defaulted `0` — a
+                // zero written through `merge` is the AGL-1758 shape, and
+                // this handler can re-enter (see the widened guard above).
+                ...(taxCents > 0 ? { taxCents } : {}),
                 // The refund handles (AGL-2315). Written inside the same
                 // transaction as the status, so a booking can never read
                 // `confirmed` while the means to refund it are missing.
@@ -171,12 +213,18 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
             email: booking['email'],
             ...(booking['name'] ? { name: String(booking['name']) } : {}),
             source: 'booking',
-            ...(paidAmountCents > 0 ? { purchaseCents: paidAmountCents } : {}),
+            // The SERVICE, not the charge (AGL-2028). `amount_total` now
+            // includes the merchant's service tax where they set one, and
+            // tax is collected for an authority rather than earned — booking
+            // it as lifetime value would over-state what every service
+            // client is worth. Identical to `paidAmountCents` on the default
+            // store, which sets no rate.
+            ...(serviceCents > 0 ? { purchaseCents: serviceCents } : {}),
             interaction: {
               refId: String(bookingId),
               summary: `Paid for "${String(
                 booking['serviceName'] ?? 'a service',
-              ).slice(0, 60)}" ($${(paidAmountCents / 100).toFixed(2)})`,
+              ).slice(0, 60)}" ($${(serviceCents / 100).toFixed(2)})`,
             },
           })
         }
