@@ -105,7 +105,15 @@ describe('ScreenLinkValuePicker (AGL-1335)', () => {
     // An unpublished or deleted screen must not silently become "unset" the
     // moment someone opens the dialog.
     render(<Harness initial="screen:gone" />)
-    expect(screen.getByRole('combobox').textContent).toMatch(/Unknown screen/)
+    // And it says which of the two it is (AGL-1893): "unknown" read as "we
+    // could not look it up", so the author had no reason to act. This is
+    // the same wording the plain Screen picker uses for the same condition.
+    expect(screen.getByRole('combobox').textContent).toMatch(
+      /Unavailable screen \(gone\)/,
+    )
+    expect(screen.getByRole('combobox').textContent).toMatch(
+      /unpublished or deleted/,
+    )
     expect(stored()).toBe('screen:gone')
   })
 

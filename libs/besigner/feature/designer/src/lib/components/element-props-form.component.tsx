@@ -529,20 +529,32 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
 
       return (rawAttributes ?? []).map(withAttributeHelp).map((field) => {
         if (field.component === Aglyn.FieldComponentType.SCREEN_SELECT) {
+          const options = [
+            { value: '', label: 'None (use external URL)' },
+            ...Object.entries(screens ?? {})
+              .sort(([, a], [, b]) => a.localeCompare(b))
+              .map(([screenId, path]) => ({
+                value: screenId,
+                label: `${labels?.[screenId] ?? screenId} (${
+                  path === '/' ? '/' : `/${path}`
+                })`,
+              })),
+          ]
+          // A stored target the host no longer has renders as a BLANK
+          // picker, which reads as "no link set" while the element still
+          // behaves as linked (AGL-1893). Naming it is the only way the
+          // author finds out before publishing rather than after.
+          const stranded = Aglyn.unresolvedScreenOption(
+            nodeProps?.[field.name],
+            screens,
+          )
+          if (stranded && !options.some((o) => o.value === stranded.value)) {
+            options.push(stranded)
+          }
           return {
             ...field,
             component: Aglyn.FieldComponentType.SELECT,
-            options: [
-              { value: '', label: 'None (use external URL)' },
-              ...Object.entries(screens ?? {})
-                .sort(([, a], [, b]) => a.localeCompare(b))
-                .map(([screenId, path]) => ({
-                  value: screenId,
-                  label: `${labels?.[screenId] ?? screenId} (${
-                    path === '/' ? '/' : `/${path}`
-                  })`,
-                })),
-            ],
+            options,
           }
         }
         if (field.component === Aglyn.FieldComponentType.PLUGIN_SETTINGS) {
@@ -667,6 +679,11 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       rawAttributes,
       screens,
       labels,
+      // Read by the Screen pickers to name a target the map has lost
+      // (AGL-1893). Safe as a dependency: the form owns the values the
+      // author is typing, so this object's identity moves when a different
+      // node is selected or a save commits — not on every keystroke.
+      nodeProps,
       entityOptions,
       nodeOptions,
       // The installed-plugin set arrives from a live subscription and can land

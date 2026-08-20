@@ -578,8 +578,12 @@ describe('link mode (AGL-1312)', () => {
     expect(container.innerHTML).not.toContain('screen-changelog')
   })
 
-  it('renders a plain tab when the target screen no longer resolves', () => {
+  it('renders no anchor when the target screen no longer resolves', () => {
     // Unpublished or deleted: a dead anchor is worse than a plain tab.
+    //
+    // This case used to stop here, and that was the bug (AGL-1893): "no
+    // link role, label still present" is equally true of a control that
+    // does nothing, which is what shipped. What it must ALSO do is below.
     renderSite(
       <TabsElement labels={'One\nTwo'} tabLink2="screen-deleted">
         <TabPanelElement label="One">{'One body'}</TabPanelElement>
@@ -744,5 +748,147 @@ describe('Tabs option values (AGL-1451)', () => {
     expect(byName['variant'].options[0].value).toBe('standard')
     expect(byName['textColor'].options[0].value).toBe('primary')
     expect(byName['indicatorColor'].options[0].value).toBe('primary')
+  })
+})
+
+/**
+ * A tab whose screen is gone (AGL-1893).
+ *
+ * Live on `aglyn.com/changelog` and `/newsroom` for two days: `tabLink1`
+ * pointed at the `/blog` screen AGL-1313 had unpublished, and the tab
+ * rendered as a bare `<button>` sitting between two working ones. No href
+ * (the map could not resolve it), no `aria-controls` and an early return in
+ * `onChange` (both read the authored id, which was still there) — so it was
+ * indistinguishable from its neighbours and did nothing at all.
+ *
+ * Red conditions, each verified by mutation:
+ *  - drop the `disabled` prop            -> the live cases go red;
+ *  - compute deadness from `href` rather than from the map -> the preview
+ *    case goes red, because preview withholds every href on purpose;
+ *  - treat an absent/empty map as broken -> the no-map case goes red.
+ */
+describe('a tab whose screen is unpublished or deleted (AGL-1893)', () => {
+  const SCREENS = {
+    'screen-changelog': 'changelog',
+    'screen-newsroom': 'newsroom',
+  }
+
+  /** The real /changelog shape: tab 1 dead, tab 2 the page we are on. */
+  const deadRow = (
+    <TabsElement
+      labels={'Blog\nChangelog\nNewsroom'}
+      tabLink1="screen-deleted"
+      tabLink3="screen-newsroom"
+      ssrPanels
+    >
+      <TabPanelElement label="Changelog">{'Changelog body'}</TabPanelElement>
+    </TabsElement>
+  )
+
+  const withContext = (value: any, ui: React.ReactElement) =>
+    render(
+      <Aglyn.ScreenLinkContext.Provider value={value}>
+        {ui}
+      </Aglyn.ScreenLinkContext.Provider>,
+    )
+
+  const tab = (slug: string) =>
+    document.getElementById(`tab-${slug}`) as HTMLButtonElement
+
+  describe('on the live site', () => {
+    beforeEach(() => {
+      withContext({ screens: SCREENS }, deadRow)
+    })
+
+    it('is not a control any more', () => {
+      // The whole defect: it USED to be an enabled button that swallowed
+      // every click in silence.
+      expect(tab('blog').disabled).toBe(true)
+      expect(tab('blog').tagName).toBe('BUTTON')
+    })
+
+    it('LOOKS unavailable, not merely behaves that way', () => {
+      // The half that matters to a reader: MUI's disabled class is what
+      // dims the label, so a visitor can see the difference between this
+      // tab and the two beside it before clicking. Asserting only the
+      // `disabled` property would pass on a tab styled to look live.
+      expect(tab('blog').className).toContain('Mui-disabled')
+      expect(tab('changelog').className).not.toContain('Mui-disabled')
+    })
+
+    it('marks itself so a smoke pass can find it', () => {
+      expect(tab('blog').hasAttribute(Aglyn.BROKEN_SCREEN_LINK_ATTR)).toBe(true)
+    })
+
+    it('says nothing to the visitor about the authoring problem', () => {
+      // The tooltip is an instruction to the person who can fix this, and
+      // "unpublished or deleted" is not a visitor's business.
+      expect(tab('blog').getAttribute('title')).toBeNull()
+    })
+
+    it('leaves the tabs that still work completely alone', () => {
+      const newsroom = screen.getByRole('link', { name: 'Newsroom' })
+      expect(newsroom.getAttribute('href')).toBe('/newsroom')
+      expect(newsroom.hasAttribute('disabled')).toBe(false)
+      expect(
+        newsroom.hasAttribute(Aglyn.BROKEN_SCREEN_LINK_ATTR),
+      ).toBe(false)
+      // And the landing tab and its panel are exactly where they were —
+      // the rule AGL-1893 proved must not move.
+      expect(screen.getByText('Changelog body')).toBeTruthy()
+      expect(tab('changelog').getAttribute('aria-current')).toBe('page')
+      expect(tab('changelog').disabled).toBe(false)
+    })
+  })
+
+  describe('on the besigner canvas', () => {
+    beforeEach(() => {
+      withContext(
+        { screens: SCREENS, suppressNavigation: true, editorInert: true },
+        deadRow,
+      )
+    })
+
+    it('tells the author what is wrong and where to fix it', () => {
+      expect(tab('blog').getAttribute('title')).toBe(
+        Aglyn.BROKEN_SCREEN_LINK_MESSAGE,
+      )
+    })
+
+    it('stays selectable, because the author has to open it to repair it', () => {
+      // Disabling it here would put the fix behind the symptom.
+      expect(tab('blog').disabled).toBe(false)
+    })
+
+    it('does not flag the tabs whose screens are fine', () => {
+      expect(tab('newsroom').getAttribute('title')).toBeNull()
+      expect(tab('newsroom').hasAttribute(Aglyn.BROKEN_SCREEN_LINK_ATTR)).toBe(
+        false,
+      )
+    })
+  })
+
+  describe('on surfaces that cannot tell', () => {
+    it('does not read a suppressed href as a dead screen', () => {
+      // Preview withholds EVERY href on purpose. Deriving deadness from the
+      // href would grey out the whole row there — including the two tabs
+      // whose screens are perfectly healthy.
+      withContext({ screens: SCREENS, suppressNavigation: true }, deadRow)
+      expect(tab('newsroom').disabled).toBe(false)
+      expect(tab('blog').disabled).toBe(true)
+    })
+
+    it('disables nothing when no routing map was provided', () => {
+      withContext({}, deadRow)
+      expect(tab('blog').disabled).toBe(false)
+      expect(tab('newsroom').disabled).toBe(false)
+    })
+
+    it('disables nothing while the map is still empty', () => {
+      // The console's live host subscription starts at `{}`. A row that
+      // greys out and then ungreys is worse than one beat of nothing.
+      withContext({ screens: {} }, deadRow)
+      expect(tab('blog').disabled).toBe(false)
+    })
   })
 })

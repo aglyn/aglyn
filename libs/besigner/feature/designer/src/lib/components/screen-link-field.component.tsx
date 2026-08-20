@@ -192,7 +192,15 @@ export function ScreenLinkValuePicker(props: ScreenLinkValuePickerProps) {
         <MenuItem value="">{resolvedEmptyLabel}</MenuItem>
         {unknownScreen ? (
           <MenuItem value={unknownScreen}>
-            {`Unknown screen (${unknownScreen})`}
+            {/* Wording shared with the plain Screen picker (AGL-1893): the
+                same condition told two different stories in two panels, and
+                "Unknown screen" reads as "we cannot look it up" rather than
+                "this link is dead". The value stays the bare id — this
+                select re-wraps it through `formatScreenLinkValue`. */}
+            {Aglyn.unavailableScreenLabel(
+              unknownScreen,
+              !!screens && Object.keys(screens).length > 0,
+            )}
           </MenuItem>
         ) : null}
         {options.map((option) => (

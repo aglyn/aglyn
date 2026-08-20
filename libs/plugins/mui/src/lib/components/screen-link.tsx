@@ -103,10 +103,22 @@ const ScreenLink = forwardRef<any, ScreenLinkProps>((props, ref) => {
   // Id-vs-URL precedence and the `javascript:`/`data:` guard live in
   // `useLinkTarget` (AGL-1335) — one copy for every linking element, and
   // the only place that knows a `screen:`-prefixed value is a reference.
-  const { href, suppressNavigation } = Aglyn.useLinkTarget(
-    screenId,
-    externalHref,
-  )
+  const { href, suppressNavigation, editorInert, broken } =
+    Aglyn.useLinkTarget(screenId, externalHref)
+  /**
+   * The same dead-target problem Tabs had, on the element there are 326 of
+   * (AGL-1893). Here it is less violent — an unresolved Screen Link already
+   * degrades to inert content rather than to a fake control — but it is just
+   * as silent: unpublish a screen and every link to it quietly stops
+   * navigating, with nothing in the editor to say which ones.
+   *
+   * So the LIVE rendering is deliberately unchanged, and only the authoring
+   * surface gains anything: on the besigner canvas the link wears a warning
+   * ring and explains itself on hover. A live restyle would be the riskier
+   * half of this by far — it would repaint any published CTA whose screen is
+   * temporarily unpublished, on sites whose owners never asked.
+   */
+  const flagged = Aglyn.brokenScreenLinkProps(broken, editorInert)
   const asLink = renderAs === 'link'
   // Semantics and appearance are independent choices now (AGL-1347): a
   // styled link takes the button's styling props and none of its role.
@@ -115,8 +127,29 @@ const ScreenLink = forwardRef<any, ScreenLinkProps>((props, ref) => {
   if (!href || suppressNavigation) {
     // The canvas must not lie about which element the page will ship, so
     // the unresolved/suppressed case mirrors the same three shapes.
+    //
+    // `sx` is lifted out of the spread so the editor ring can be merged
+    // rather than replace the author's styles — the AGL-1284 mistake, in a
+    // place where the symptom would be "my link lost all its styling the
+    // day its screen was unpublished". The ring goes LAST, and is the one
+    // thing here allowed to outrank an authored value: it is a diagnostic
+    // on a surface only the author sees, not a style.
+    const { sx: authoredSx, ...restNoSx } = rest as Record<string, any>
+    const inertSx = [
+      ...(Array.isArray(authoredSx) ? authoredSx : authoredSx ? [authoredSx] : []),
+      ...(broken && editorInert ? [Aglyn.BROKEN_SCREEN_LINK_SX] : []),
+    ]
     if (asLink) {
-      return <Link ref={ref} component="span" underline="hover" {...rest} />
+      return (
+        <Link
+          ref={ref}
+          component="span"
+          underline="hover"
+          {...flagged}
+          {...restNoSx}
+          sx={inertSx}
+        />
+      )
     }
     return (
       <Button
@@ -125,7 +158,9 @@ const ScreenLink = forwardRef<any, ScreenLinkProps>((props, ref) => {
         variant={variant}
         size={size}
         fullWidth={fullWidth}
-        {...rest}
+        {...flagged}
+        {...restNoSx}
+        sx={inertSx}
       />
     )
   }
