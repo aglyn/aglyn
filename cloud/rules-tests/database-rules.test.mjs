@@ -100,6 +100,31 @@ describe('presence access', () => {
   })
 
   /**
+   * AGL-1870 R2. `.read` used to sit on `presence/$orgId`, three levels above
+   * anything the client subscribes to — `use-presence.ts` listens at
+   * `presence/{orgId}/{docType}/{docId}` and never higher. RTDB rules
+   * CASCADE and a deeper rule cannot revoke a shallower grant, so that one
+   * line handed every token holder the whole org: every doc id in it, plus
+   * the display name, photo URL and cursor of everyone editing anything —
+   * including documents the reader cannot open.
+   *
+   * Moving the grant down to `$docId` makes the narrow listener the only
+   * read the rules permit. The room read above still succeeds; these are the
+   * negative controls that say the move actually bit, because a rule that
+   * only ever gets tested from below cannot be told apart from the old one.
+   */
+  it('cannot read above the room — the org and docType levels are refused', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await set(
+        ref(context.database(), `${DOC}/${MEMBER}/${SESSION}`),
+        validEntry(),
+      )
+    })
+    await assertFails(get(ref(scoped(MEMBER, ORG), `presence/${ORG}`)))
+    await assertFails(get(ref(scoped(MEMBER, ORG), `presence/${ORG}/screen`)))
+  })
+
+  /**
    * The whole reason this rule set exists. An ordinary console token has no
    * `presenceOrg` claim, so simply being signed in is not enough — otherwise
    * anyone who knew a host id could watch who was editing what.
@@ -257,6 +282,27 @@ describe('co-editing channel (AGL-677)', () => {
     await assertSucceeds(set(ref(editor(MEMBER, ORG, HOST), `${ROOM}/n1`), node()))
     // A viewer still SEES the live document — they just cannot change it.
     await assertSucceeds(get(ref(scoped(OTHER_MEMBER, ORG), ROOM)))
+  })
+
+  /**
+   * AGL-1870 R2, the co-editing half. `.read` used to sit on
+   * `coedit/$orgId/$hostId` — four levels above the room `use-coediting.ts`
+   * actually subscribes to. Because `versionId` is a path segment, that
+   * grant covered every document on the host AND every superseded version
+   * of each: the unsaved node JSON of work nobody has published yet.
+   *
+   * The grant moves down to `nodes`, which is exactly where the listener
+   * sits. Deliberately NOT gated on `coeditHost`: the broker gives a viewer
+   * `presenceOrg` and nothing else (see `editor` vs `scoped` above), so
+   * requiring the edit claim to READ would stop viewers watching a live
+   * document — the viewer gate is on WRITE, and it stays there.
+   */
+  it('cannot read above the room — host and document levels are refused', async () => {
+    await assertSucceeds(set(ref(editor(MEMBER, ORG, HOST), `${ROOM}/n1`), node()))
+    await assertFails(get(ref(scoped(MEMBER, ORG), `coedit/${ORG}/${HOST}`)))
+    await assertFails(
+      get(ref(scoped(MEMBER, ORG), `coedit/${ORG}/${HOST}/screen/screen-1`)),
+    )
   })
 
   /**
