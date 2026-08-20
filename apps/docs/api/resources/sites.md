@@ -6,10 +6,11 @@ description: List your organization's sites and read their details.
 
 # Sites
 
-List the sites in your organization and read their details. A site's *content* is
-read-only over the API — creating, renaming and deleting one is a console action — but
-you can [publish](#publish) a site, which is what makes writes you made elsewhere in
-the API appear on the live pages.
+List the sites in your organization, read their details, and
+[create](#create) new ones. A site's *content* is read-only over the API, and so are
+renaming and deleting — those stay console actions — but you can
+[publish](#publish) a site, which is what makes writes you made elsewhere in the API
+appear on the live pages.
 
 Their [form submissions](form-submissions.md) are a resource of their own, and that
 one is **not** read-only.
@@ -67,6 +68,50 @@ ordered by site id.
 curl "https://app.aglyn.com/api/v1/sites" \
   -H "Authorization: Bearer aglyn_sk_…"
 ```
+
+### Create a site {#create}
+
+`POST /v1/sites` — scope `sites:write`. Accepts an
+[`Idempotency-Key`](../conventions.md#idempotency).
+
+```bash
+curl -X POST "https://app.aglyn.com/api/v1/sites" \
+  -H "Authorization: Bearer aglyn_sk_…" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d '{ "displayName": "Demo Bakery", "subdomain": "demo-bakery" }'
+```
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `displayName` | yes | Name shown in the console. Trimmed, truncated at 80 characters. |
+| `subdomain` | yes | 3–30 characters: lowercase letters, numbers and hyphens, starting with a letter or number. Becomes `{subdomain}.aglyn.app`. |
+
+Returns `201` with the [site object](#the-site-object). A replayed request returns the
+**same site** with `200` — so if you retry after a dropped connection, compare the
+status to tell a fresh create from a replay.
+
+**Send an `Idempotency-Key`.** Subdomains are globally unique, so a retry that reuses
+the same one happens to 409 — but that is an accident of the namespace, not a
+guarantee. If your client generates a subdomain per attempt, a retry without a key
+creates a **second site**, which consumes a slot of your site allowance.
+
+Refusals:
+
+| Status | `code` | Means |
+| --- | --- | --- |
+| `400` | `validation_failed` | Missing `displayName`, or a `subdomain` that is malformed or reserved. Never consumes the idempotency key — fix the body and retry with the same one. |
+| `403` | `site_quota` | Your plan's site limit is reached. Upgrade or add extra sites, then retry with the same key. |
+| `409` | `subdomain_taken` | Something already uses that subdomain. The message lists free alternatives. |
+| `429` | — | More than 10 creates in an hour for this organization. Honour `Retry-After`. |
+
+Each of those releases the key, so the retry that should finally succeed is not
+answered with a replay of the refusal.
+
+Renaming and deleting a site are deliberately **not** available over the API. A delete
+would erase every screen, version, product and uploaded file immediately, with no hold
+and no undo, from one field in a request body — that is not something to expose to an
+automated caller before a soft-delete exists.
 
 ### Retrieve a site
 

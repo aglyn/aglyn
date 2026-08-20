@@ -51,16 +51,34 @@ const PICKER_SOURCE = join(
   'apps/console/components/org-api-keys-card.component.tsx',
 )
 
-/** The `resource:action` strings inside a named array literal. */
+/**
+ * The `resource:action` strings inside a named array literal.
+ *
+ * The array ends at the first `]` in COLUMN ZERO, not the first `]` anywhere
+ * (AGL-2465). Both of these lists are heavily commented, and a comment that
+ * mentions something like `memberRoles[uid]` used to truncate the capture at
+ * that bracket — silently shortening the list to whatever preceded it.
+ *
+ * That mattered in both directions. It was noticed because a scope added
+ * BELOW such a comment read as a picker phantom, which fails loudly. The
+ * dangerous direction is the mirror: the same truncation drops entries from
+ * `enforced`, and a scope the picker genuinely omits then reads as "not
+ * enforced either" — the exact AGL-899 defect this file exists to catch,
+ * passing green. The anti-vacuity test below only catches a list that is
+ * entirely empty, not one quietly cut in half.
+ */
 function scopesInArray(source: string, declaration: RegExp): string[] {
   const start = source.search(declaration)
   if (start < 0) return []
   const open = source.indexOf('[', start)
-  const close = source.indexOf(']', open)
-  if (open < 0 || close < 0) return []
-  return [...source.slice(open, close).matchAll(/'([a-z]+:[a-z]+)'/g)].map(
-    (match) => match[1],
-  )
+  if (open < 0) return []
+  const closeMatch = /^\]/m.exec(source.slice(open))
+  if (!closeMatch) return []
+  return [
+    ...source
+      .slice(open, open + closeMatch.index)
+      .matchAll(/'([a-z]+:[a-z]+)'/g),
+  ].map((match) => match[1])
 }
 
 const enforced = scopesInArray(

@@ -68,6 +68,30 @@ export const API_SCOPES = [
   // budget on top of the per-key request limit, because one call and 250
   // dropped pages are not the same unit of cost.
   'sites:publish',
+  // AGL-2465. Everything downstream of a site was automatable and creating
+  // the site was not: `handleSites` 405'd every non-GET, so an agency
+  // onboarding a client could push its datasets, contacts and media and still
+  // had to open a browser to make the site those things go in.
+  //
+  // CREATE ONLY — no rename, no delete, and the omissions are deliberate
+  // rather than unfinished. `hosts/rename` authorizes off the host projection
+  // alone — the member's own entry in `memberRoles`, which must equal
+  // `admin` — and an API key is an ORG credential with no uid, so that gate
+  // has no translation at all; giving it one is a permission decision, not a
+  // port. `hosts/delete` runs
+  // `recursiveDelete` over the whole site plus a storage prefix wipe with no
+  // hold and no soft-delete, and the type-the-name confirmation that guards it
+  // is console UI only — a one-field irreversible delete is the last thing to
+  // put behind a bearer token, and whether it should exist at all is a product
+  // decision that has not been made.
+  //
+  // Replay-safe, which is what actually blocked this: site creation is the
+  // most expensive object here to duplicate — it takes a `hostLimit` slot,
+  // writes `hostIndex` and runs `syncOrgAuthProjections` across every member —
+  // and `/v1` publishes idempotency as a contract. A POST that succeeded
+  // server-side but lost its response now replays the original site rather
+  // than minting a second one.
+  'sites:write',
   'forms:read',
   // AGL-2127. A lead sync could READ a submission and never record that it
   // had — so it re-pushed the same lead on every poll, or kept its own
