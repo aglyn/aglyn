@@ -173,12 +173,6 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'Reader of STRIPE_WEBHOOK_URL; the literal is its default.',
   },
   {
-    file: 'apps/console/app/api/screens/revalidate/route.ts',
-    count: 1,
-    reason:
-      'Server-side reader of NEXT_PUBLIC_TENANT_DOMAIN, same default.',
-  },
-  {
     file: 'apps/console/app/layout.tsx',
     count: 1,
     reason:

@@ -37,7 +37,18 @@
  * host check.
  */
 
-const TENANT_DOMAIN = process.env['NEXT_PUBLIC_TENANT_DOMAIN'] ?? 'aglyn.app'
+/**
+ * The apex comes from `TENANT_APEX`, never re-derived here (AGL-2195).
+ *
+ * `TENANT_APEX` is the one reader of `NEXT_PUBLIC_TENANT_DOMAIN`. Reading that
+ * variable again here, with our own apex as the literal default, is how the
+ * four hand-rolled copies the ratchet exists to prevent got in — and the
+ * extraction this module IS carried one across from the console route it
+ * replaced. A self-hoster who sets the variable must not end up with a console
+ * that posts its revalidation at OUR apex: that is a cache-drop which never
+ * lands on their pages, and an unsolicited request to a host they do not own.
+ */
+import { TENANT_APEX } from '@aglyn/aglyn/server'
 
 /** A publish should feel instant; a slow tenant must not hold the caller. */
 const TIMEOUT_MS = 5000
@@ -78,7 +89,7 @@ export async function postTenantRevalidate(options: {
   if (!secret) return { revalidated: [], reason: 'not-configured', pathsDropped: 0 }
 
   try {
-    const response = await fetch(`https://${subdomain}.${TENANT_DOMAIN}/api/revalidate`, {
+    const response = await fetch(`https://${subdomain}.${TENANT_APEX}/api/revalidate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-revalidate-secret': secret },
       body: JSON.stringify({ host: subdomain, hostId, paths }),
