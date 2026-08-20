@@ -36,11 +36,13 @@ import {
   newResourceScopeFields,
   normalizeContactEmail,
   ORG_SCOPE_TOKEN,
+  screenRoutePathToUrl,
   validateDocument,
 } from '@aglyn/aglyn/server'
 import {
   apiJson,
   ApiErrors,
+  consumeRateLimit,
   dataStorageRefusal,
   decodeCursor,
   encodeCursor,
@@ -49,6 +51,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { FieldPath, Timestamp } from 'firebase-admin/firestore'
 import { type ApiV1Context, apiUsageMonth, requireScope } from './api-v1'
+import { postTenantRevalidate } from './server/tenant-revalidate'
 
 // ── Serialization ───────────────────────────────────────────────────────────
 
@@ -891,9 +894,166 @@ async function handleSites(
   if (sub === 'orders') return handleOrders(request, ctx, segments, url)
   if (sub === 'products') return handleProducts(request, ctx, segments, url)
   if (sub === 'media') return handleScopedMedia(request, ctx, url, hostRef(ctx, hostId))
+  if (sub === 'publish') return handlePublish(request, ctx, hostId)
   // Kept below the sub-resources so an unknown one still 404s here.
 
   return ApiErrors.notFound({ message: 'Unknown endpoint', headers: ctx.headers })
+}
+
+// ── Publish ─────────────────────────────────────────────────────────────────
+
+/**
+ * How many publishes one SITE may spend an hour (AGL-2462).
+ *
+ * The budget is per host and not per key because it bounds WORK, not requests.
+ * One call sends up to `MAX_PATHS` = 250 paths to the tenant, each dropping a
+ * cache entry whose next render costs roughly 40 Firestore reads — so the
+ * cheapest call in the API is also the most expensive one, and the two limits
+ * are not the same unit. Keyed on the API key instead, an organization mints
+ * ten keys and multiplies the fan-out by ten; keyed on the host, the ceiling
+ * is a property of the site being republished and no number of keys moves it.
+ *
+ * ## The number
+ *
+ * 10 an hour. A publish is a human-scale event even when a machine triggers
+ * it: an integration that finishes a nightly catalogue sync publishes once,
+ * and one that publishes after every record write does not want this endpoint
+ * at all — it wants the 60-second window it already has, which is still
+ * underneath as the backstop and is why a `429` here costs correctness
+ * nothing. Ten leaves room for a bad afternoon of manual retries and still
+ * caps the worst case at 2,500 dropped pages per site per hour, against the
+ * ~1.2M reads a minute the documented 120/min per-key limit would have
+ * allowed on its own.
+ *
+ * DURABLE (`consumeRateLimit`), not the per-instance counter: this is a limit
+ * with a consequence on another service, and a ceiling that moves with how
+ * many instances happen to be warm would not be one.
+ */
+export const PUBLISH_LIMIT_PER_HOUR = 10
+
+/** Window for {@link PUBLISH_LIMIT_PER_HOUR}. */
+export const PUBLISH_WINDOW_MS = 60 * 60 * 1000
+
+/**
+ * `POST /v1/sites/{siteId}/publish` (AGL-2462) — the call that makes a write
+ * visible.
+ *
+ * ## What was missing
+ *
+ * `POST /v1/datasets/{id}/records` wrote and called nothing else. What made a
+ * live site show the new data was time, and only time: `getDatasets` is cached
+ * for `DATASETS_TTL_SECONDS` (60) behind `tenantDataTag(hostId)`, and the
+ * tenant catch-all page is `revalidate = 60`. Time-based ISR is
+ * stale-while-revalidate, so the visitor AFTER the window can still be served
+ * the old copy and the change appears on the visit after that. An integration
+ * could therefore own a site's data and never publish it — the cache expiring
+ * is a side effect, not an operation the caller performed.
+ *
+ * ## The authorization, stated plainly
+ *
+ * The console path (`/api/screens/revalidate`) admits a user whose HOST role
+ * `hostRoleCanPublish` accepts — `admin` or `editor`, never `author` — and
+ * 404s everyone else so a caller cannot learn a site exists. An API key is an
+ * ORG credential with no uid, so there is no host role to read. The same two
+ * questions are answered with the two facts a key does carry:
+ *
+ * 1. **May this credential publish at all?** `sites:publish`, which the
+ *    organization's admin ticks when minting the key. That is the deliberate
+ *    grant `hostRoleCanPublish` represents, made once at mint time instead of
+ *    per request — and, like `author`, a key without it cannot publish however
+ *    much else it can read.
+ * 2. **May it publish THIS site?** `orgOwnsHost`, the same predicate every
+ *    other site sub-resource uses, and the analogue of passing `hostId` to
+ *    `resolveOrgPermissions` so a scope over two sites cannot reach a third.
+ *
+ * The 404 posture is kept for the same reason the console route gives.
+ *
+ * ## Ordering
+ *
+ * Scope, then ownership, then the budget, then the work. The budget is spent
+ * only by a caller who could actually have published, so a key without the
+ * scope cannot burn a site's hourly allowance — a refusal that consumed the
+ * budget would be a denial-of-service against the site's own operator, from
+ * outside their organization's authorization.
+ *
+ * No `Idempotency-Key`: publishing twice lands the same state and returns the
+ * same answer, exactly as `updateRecord` argues. The budget, not the key, is
+ * what makes a retry loop safe.
+ */
+async function handlePublish(
+  request: Request,
+  ctx: ApiV1Context,
+  hostId: string,
+): Promise<Response> {
+  if (request.method !== 'POST') {
+    return ApiErrors.methodNotAllowed({
+      headers: { ...ctx.headers, Allow: 'POST' },
+    })
+  }
+  const denied = requireScope(ctx, 'sites:publish')
+  if (denied) return denied
+
+  const snap = await ctx.firestore.collection('hosts').doc(hostId).get()
+  const subdomain = String(snap.get('subdomain') ?? '').trim()
+  if (!snap.exists || !subdomain) {
+    return ApiErrors.notFound({ message: 'No such site', headers: ctx.headers })
+  }
+
+  // Per-host hourly budget, ABOVE the fan-out and below the authorization.
+  const rate = await consumeRateLimit(`apiv1-publish:${hostId}`, {
+    limit: PUBLISH_LIMIT_PER_HOUR,
+    windowMs: PUBLISH_WINDOW_MS,
+  })
+  if (!rate.allowed) {
+    // The per-key `X-RateLimit-*` headers still ride along in `ctx.headers`;
+    // they describe a different budget from the one that refused, so the
+    // `Retry-After` is computed from THIS window and is the number to obey.
+    return ApiErrors.rateLimited(
+      Math.max(1, Math.ceil((rate.resetMs - Date.now()) / 1000)),
+      ctx.headers,
+    )
+  }
+
+  // `screens` is the routing map the console route reads for the same purpose:
+  // screen id → route path. A site with none is not an error — an unrouted or
+  // empty site has no live page to drop — but it must not report a publish it
+  // did not perform, which is the "reported fast, still slow" confusion the
+  // original bug was made of.
+  const screens = (snap.get('screens') ?? {}) as Record<string, unknown>
+  const paths = Object.values(screens)
+    .filter((path) => typeof path === 'string')
+    .map((path) => screenRoutePathToUrl(path as string))
+  if (!paths.length) {
+    return apiJson(
+      {
+        object: 'publish',
+        site: hostId,
+        published: false,
+        reason: 'not_routed',
+        pages: 0,
+      },
+      { headers: ctx.headers },
+    )
+  }
+
+  const result = await postTenantRevalidate({ subdomain, hostId, paths })
+  return apiJson(
+    {
+      object: 'publish',
+      site: hostId,
+      published: result.reason === 'ok',
+      // Named rather than swallowed: `not-configured` and a tenant refusal are
+      // the two cases where a caller would otherwise read a success and keep
+      // polling a page that never changed.
+      reason: result.reason === 'ok' ? null : result.reason,
+      pages: result.revalidated.length,
+      // The tenant's own 250-path cap (AGL-1161). A site above it is refreshed
+      // in part, and the remainder catches up on the 60-second window — worth
+      // saying, because the caller is the one deciding whether to poll.
+      pagesDropped: result.pathsDropped,
+    },
+    { headers: ctx.headers },
+  )
 }
 
 // ── Form submissions ────────────────────────────────────────────────────────

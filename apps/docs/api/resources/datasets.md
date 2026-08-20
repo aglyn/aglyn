@@ -232,6 +232,26 @@ payload produces either an empty record or a confusing "required field" error. S
 valid JSON with `Content-Type: application/json`.
 :::
 
+#### The record is written; the live page still isn't showing it {#records-and-publish}
+
+Writing a record and refreshing the site is the first thing everyone tries, and it
+usually shows the old data. That is the cache, not a failed write: live pages rebuild
+at most every 60 seconds and serve the previous copy while the new one is built, so a
+brand-new record can take a couple of minutes to appear on its own.
+
+To make it appear now, [publish the site](sites.md#publish) once you've finished
+writing:
+
+```bash
+curl -X POST "https://app.aglyn.com/api/v1/sites/host_demo/publish" \
+  -H "Authorization: Bearer aglyn_sk_…"
+```
+
+Publish **after the batch, not after each record** — it is limited to
+[10 per site per hour](sites.md#publish-limit), and one publish covers every record you
+just wrote. Skipping it entirely is a valid choice too: the data still appears within
+the minute.
+
 ### Update a record
 
 `PATCH /v1/datasets/{datasetId}/records/{recordId}` — scope `datasets:write`. Merges

@@ -68,6 +68,24 @@ When you exceed the limit, the request returns `429` with a `Retry-After` header
 - Prefer a larger `?limit=` over more requests when reading collections: one call for
   100 records costs one request, a hundred calls cost a hundred.
 
+### Publishing has its own, separate budget {#publish-budget}
+
+[`POST /v1/sites/{siteId}/publish`](resources/sites.md#publish) is limited to **10 per
+site per hour**, on top of — not instead of — the per-key limit above.
+
+It is counted differently on purpose. Every other call does work proportional to
+itself; one publish drops up to 250 cached pages, each of which then costs real work to
+rebuild. So the budget is sized to the work and attached to the **site**, which means
+minting extra keys does not raise it.
+
+Two practical consequences:
+
+- **`X-RateLimit-*` does not describe it.** Those headers report your key's 120/min
+  budget. A publish `429` carries `Retry-After`, and that is the number to obey.
+- **Publish once per batch.** A sync that writes 500 records and publishes once stays
+  well inside the budget; publishing per record is refused after ten and gains nothing,
+  because the pages would have refreshed on their own anyway.
+
 ## Monthly quota & overage
 
 Separate from the rate limit, each **organization** has a monthly request quota tied

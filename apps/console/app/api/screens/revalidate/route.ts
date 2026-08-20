@@ -54,6 +54,7 @@ import {
   screenIdsUsingLayoutDeep,
 } from '../../../../utils/server/scan-artifact-usage'
 import { readUsageCandidates } from '../../../../utils/server/read-usage-candidates'
+import { postTenantRevalidate } from '../../../../utils/server/tenant-revalidate'
 
 export const dynamic = 'force-dynamic'
 
@@ -241,11 +242,9 @@ async function screenIdsUsingComponent(
  */
 const SCAN_LIMIT = 2000
 
-const TENANT_DOMAIN =
-  process.env['NEXT_PUBLIC_TENANT_DOMAIN'] ?? 'aglyn.app'
-
-/** A publish should feel instant; a slow tenant must not hold the editor. */
-const TIMEOUT_MS = 5000
+// The tenant domain and the request timeout moved into `postTenantRevalidate`
+// (AGL-2462) when `/v1` gained a publish endpoint — one copy of the call, so
+// the two callers cannot disagree about it.
 
 export async function POST(request: Request): Promise<Response> {
   const { body: payload, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -369,53 +368,33 @@ export async function POST(request: Request): Promise<Response> {
       )
     }
 
-    const secret = process.env['REVALIDATE_SECRET']
-    if (!secret) {
-      // Say so rather than pretending. Without this the editor would report a
-      // fast publish and the page would still take a minute, which is the
-      // confusing half of the original bug.
-      return Response.json(
-        { revalidated: [], reason: 'not-configured' },
-        { status: 200 },
-      )
-    }
-
-    const url = `https://${subdomain}.${TENANT_DOMAIN}/api/revalidate`
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-revalidate-secret': secret,
-      },
-      body: JSON.stringify({
-        host: subdomain,
-        // The tenant busts its `tenant-data:{hostId}` document cache with
-        // this (AGL-1302) — without it a dropped page would regenerate from
-        // the same cached routing map and version pointers the publish just
-        // replaced. Older tenant deploys ignore unknown fields.
-        hostId,
-        paths: routePaths.map((path) => screenRoutePathToUrl(path)),
-      }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+    // The tenant call itself lives in `postTenantRevalidate` (AGL-2462), so
+    // this route and `POST /v1/sites/{siteId}/publish` cannot come to disagree
+    // about the request they send — above all about `hostId`, which is what
+    // busts `tenant-data:{hostId}` (AGL-1302). Without it a dropped page
+    // regenerates from the same cached routing map and version pointers the
+    // publish just replaced. It never throws: the publish already succeeded.
+    const result = await postTenantRevalidate({
+      subdomain,
+      hostId,
+      paths: routePaths.map((path) => screenRoutePathToUrl(path)),
     })
-    const result = await response.json().catch(() => null)
-    if (!response.ok) {
-      console.error('[screens/revalidate] tenant refused', response.status, result)
+    if (result.reason !== 'ok') {
       return Response.json(
-        { revalidated: [], reason: `tenant-${response.status}` },
+        { revalidated: [], reason: result.reason },
         { status: 200 },
       )
     }
     return Response.json(
       {
-        revalidated: result?.revalidated ?? [],
+        revalidated: result.revalidated,
         reason: 'ok',
         // Carried through so a caller can tell a complete drop from one that
         // only covered part of the site.
         truncated: scanTruncated,
         // The tenant route caps paths too, and says when it drops some
         // (AGL-1161). Pass that on rather than absorbing it here.
-        ...(result?.truncated ? { pathsDropped: result.truncated } : {}),
+        ...(result.pathsDropped ? { pathsDropped: result.pathsDropped } : {}),
       },
       { status: 200 },
     )

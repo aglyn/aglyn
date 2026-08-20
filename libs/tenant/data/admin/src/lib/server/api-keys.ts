@@ -52,6 +52,22 @@ export const API_SCOPES = [
   // key, and never `sources`/`interactions`, which are provenance.
   'contacts:write',
   'sites:read',
+  // AGL-2462. An integration could write a dataset record over /v1 and had no
+  // way to make a live page show it: `getDatasets` caches for 60s behind
+  // `tenant-data:{hostId}` and the catch-all page is `revalidate = 60`, and
+  // time-based ISR is stale-while-revalidate — so the visitor AFTER the window
+  // can still get the old copy. A cache expiring is not a publish.
+  //
+  // Its OWN scope rather than a `sites:write` covering two very different
+  // powers. Publishing is not a site edit: it changes no stored field, and it
+  // is the one /v1 call whose cost lands on a different service — up to 250
+  // dropped pages, each re-rendering at roughly 40 Firestore reads. A key that
+  // syncs a catalogue should not thereby be able to spend that, and an
+  // integration that only needs to flush its own writes should not have to
+  // hold a scope that could rename the site. Bounded by a per-HOST hourly
+  // budget on top of the per-key request limit, because one call and 250
+  // dropped pages are not the same unit of cost.
+  'sites:publish',
   'forms:read',
   // AGL-2127. A lead sync could READ a submission and never record that it
   // had — so it re-pushed the same lead on every poll, or kept its own
