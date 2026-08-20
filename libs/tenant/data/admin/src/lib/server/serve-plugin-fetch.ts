@@ -69,6 +69,35 @@ async function resolvePublicIp(hostname: string): Promise<string | null> {
 }
 
 /**
+ * Build the dispatcher that pins the socket to `pinnedIp` (AGL-515). A custom
+ * `connect.lookup` forces the connection to the address `resolvePublicIp`
+ * already validated, so the name can't be rebound to an internal target
+ * between the check and the connect. TLS SNI / certificate validation still
+ * use the original hostname, because only the address resolution is replaced.
+ *
+ * Exported so the transport itself is covered by a spec (AGL-2480). `undici`
+ * is a **declared direct dependency** for exactly this reason: it used to
+ * arrive only as a transitive of the dev-only `jsdom`, which meant a
+ * `--omit=dev` install had no `undici` at all and a jsdom bump silently
+ * re-versioned the HTTP client behind a production security control. undici 8
+ * rejects this `lookup` shape with `UND_ERR_INVALID_ARG` on every request —
+ * fail-closed, but the plugin-fetch route stops working outright. The spec
+ * drives a real request through this dispatcher so that break is a red test,
+ * not a production discovery.
+ */
+export function createPinnedDispatcher(pinnedIp: string): Agent {
+  const family = isIPv6(pinnedIp) ? 6 : 4
+  return new Agent({
+    connect: {
+      lookup: (_host, options, cb) =>
+        options && options.all
+          ? cb(null, [{ address: pinnedIp, family }])
+          : cb(null, pinnedIp, family),
+    },
+  })
+}
+
+/**
  * Host-mediated plugin fetch (AGL-191). The sandboxed plugin can't reach
  * the network directly under a strict plugin-origin CSP, so `PluginFrame`
  * forwards a `fetch-request` here and the host proxies it. Mounted in BOTH
@@ -143,19 +172,8 @@ export async function servePluginFetch(
       return
     }
 
-    // Pin the socket to the address we just validated (AGL-515): a custom
-    // undici lookup forces the connection to `pinnedIp`, so the name can't be
-    // rebound to an internal target between the check above and the connect.
-    // TLS SNI / certificate validation still use the original hostname.
-    const family = isIPv6(pinnedIp) ? 6 : 4
-    const dispatcher = new Agent({
-      connect: {
-        lookup: (_host, options, cb) =>
-          options && options.all
-            ? cb(null, [{ address: pinnedIp, family }])
-            : cb(null, pinnedIp, family),
-      },
-    })
+    // Pin the socket to the address we just validated (AGL-515).
+    const dispatcher = createPinnedDispatcher(pinnedIp)
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
     // `dispatcher` is an undici extension not in the DOM RequestInit type;

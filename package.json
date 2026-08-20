@@ -233,6 +233,7 @@
     "rxjs": "^7.8.2",
     "sharp": "^0.35.3",
     "tslib": "^2.8.1",
+    "undici": "^7.29.0",
     "use-debounce": "^10.1.1",
     "warning": "^4.0.3",
     "web-vitals": "^6.1.1"
