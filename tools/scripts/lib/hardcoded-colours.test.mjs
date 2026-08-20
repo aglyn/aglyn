@@ -105,6 +105,30 @@ test('catches the other property spellings, quotings and shorthands', () => {
   }
 })
 
+test('catches a colour written as a LITERAL rgb()/hsl() call', () => {
+  // Hex was not the only way to pin a colour, and for a while it was the only
+  // one this detector could see: 28 literal rgba() values across 10 files sat
+  // in colour slots invisible to it — `catch-all-client.tsx` 7,
+  // `admin-bar.tsx` 6, `consent-banner-ui.tsx` 4. Same defect shape as the
+  // census knowing only two hexes, one syntax layer down.
+  const cases = [
+    [`boxShadow: '0px 8px 24px rgba(0,0,0,0.18)'`, 'rgba(0,0,0,0.18)'],
+    [`background: 'rgba(127, 127, 127, 0.12)'`, 'rgba(127, 127, 127, 0.12)'],
+    [`backgroundColor: 'rgb(255, 255, 255)'`, 'rgb(255, 255, 255)'],
+    // The modern space/slash form pins exactly as hard as the comma form.
+    [`color: 'rgb(255 255 255 / 0.5)'`, 'rgb(255 255 255 / 0.5)'],
+    [`backgroundColor: 'hsl(210, 40%, 96%)'`, 'hsl(210, 40%, 96%)'],
+    [`borderColor: 'hsla(210, 40%, 96%, 0.5)'`, 'hsla(210, 40%, 96%, 0.5)'],
+    // A fallback default, the email-blocks shape, in the function form.
+    [`backgroundColor: brand ?? 'rgba(0, 0, 0, 0.72)'`, 'rgba(0, 0, 0, 0.72)'],
+  ]
+  for (const [source, value] of cases) {
+    const found = findHardcodedColours(source)
+    assert.equal(found.length, 1, `missed the literal call in: ${source}`)
+    assert.equal(found[0].hex, value)
+  }
+})
+
 test('reports the LINE, so a 161-instance file can actually be worked', () => {
   const found = findHardcodedColours(
     ['const a = 1', '', `sx: { color: '#2196f3' },`, '', `fill: '#2e7d32'`].join(
@@ -143,6 +167,40 @@ test('a legitimate theme-token reference PASSES', () => {
       [],
       `false positive on a token reference: ${source}`,
     )
+})
+
+test('a MUI CHANNEL TOKEN written as rgba() PASSES — the false positive that would sink this', () => {
+  // The whole subtlety of the function form. MUI's channel tokens ARE spelled
+  // `rgba(...)`, and they are the pattern AGL-2025 asks authors to move TO.
+  // Measured on the tree: 72 rgb/hsl calls sit in colour slots and 44 of them
+  // are this idiom. A detector matching `rgba(` would fire on all 72 and
+  // punish correctly-themed code — so every argument must be a bare number.
+  const clean = [
+    'backgroundColor: `rgba(${tv.palette.surface.mainChannel} / 0.96)`',
+    'borderRightColor: `rgba(${tv.palette.warning.darkChannel} / 0.36)`',
+    'background: `rgba(${tv.palette.primary.lightChannel} / ${theme.palette.action.hoverOpacity})`',
+    'border: `1px solid rgba(${tv.palette.secondary.lightChannel} / 0.72)`',
+    // A CSS custom property is derived too.
+    `backgroundColor: 'rgba(var(--surface-channel) / 0.9)'`,
+    // And the MUI helper, which is the non-string way to say the same thing.
+    'backgroundColor: alpha(theme.palette.primary.main, 0.5)',
+  ]
+  for (const source of clean)
+    assert.deepEqual(
+      findHardcodedColours(source),
+      [],
+      `false positive on a derived colour: ${source}`,
+    )
+})
+
+test('a literal rgb() inside a REGEX is a matcher, not a style — it PASSES', () => {
+  assert.deepEqual(
+    findHardcodedColours(
+      String.raw`const RE = /background:\s*rgba\(0,0,0,0.5\)/g`,
+      'case.ts',
+    ),
+    [],
+  )
 })
 
 test('a hex that is not in a style slot PASSES', () => {
@@ -329,6 +387,14 @@ test('the baseline records the AGL-2025 census and still matches the tree', () =
   // and the assertion is updated in the same commit — never up. The ceiling
   // is what stops `--write` being used to launder a regression: re-baselining
   // past 332 fails here even though the ratchet itself would be satisfied.
+  //
+  // 332 is now reached by a different route than when it was written, and the
+  // arithmetic is worth spelling out because the coincidence is pure: the hex
+  // census had fallen to 304 in 78 files as cleanups landed, and extending the
+  // detector to fully-literal `rgb()`/`hsl()` calls added the 28 in 10 files
+  // it had never been able to see. 304 + 28 = 332 again. Nothing was
+  // baselined in — every one of the 28 is a colour that was already sitting in
+  // a style slot, invisible.
   assert.ok(
     total >= 150 && total <= 332,
     `baseline total is ${total}; AGL-2025 measured 332. A jump up means a ` +
