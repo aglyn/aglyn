@@ -285,26 +285,10 @@ const CollectionEntries = forwardRef<HTMLDivElement, CollectionEntriesProps>(
     const fuzzy = useMemo(
       () =>
         items?.length
-          ? new Fuse(items, {
-              // The icon picker's weighted-keys shape (use-mdi-icons-fuzzy):
-              // the title names the post, the excerpt merely describes it.
-              keys: [
-                { name: 'title', weight: 0.7 },
-                { name: 'excerpt', weight: 0.3 },
-              ],
-              includeScore: true,
-              shouldSort: true,
-              // Tuned for prose, MEASURED before shipping: the icon picker
-              // fuzzes 2-word icon names, where Fuse's defaults are fine. On
-              // sentence-long excerpts the default location scoring buries a
-              // legitimate mid-sentence hit ("…and workflows into one…"),
-              // and the default 0.6 threshold matches "media" against every
-              // post on letter soup. Ignoring location and tightening to 0.3
-              // keeps typo tolerance ("platfrom" still finds the post) while
-              // a filtered-out card actually means something.
-              ignoreLocation: true,
-              threshold: 0.3,
-            })
+          ? // The ONE matcher config (AGL-1525), shared with the site-wide
+            // results page this block's panel links to — a query the panel
+            // forgave must not come back empty from "View all results".
+            new Fuse(items, { ...Aglyn.COLLECTION_SEARCH_FUSE_OPTIONS })
           : null,
       [items],
     )

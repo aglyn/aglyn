@@ -1140,6 +1140,38 @@ function reformattableEntryDate(
 }
 
 /**
+ * The ONE matcher configuration behind every entry search in the product
+ * (AGL-1516/AGL-1525) — the block's toolbar box, its suggestion panel, and
+ * the site-wide results page the panel links to.
+ *
+ * Shared rather than copied because the two halves are joined by a link the
+ * reader clicks: the panel's "View all results" hands its query to /search,
+ * and if the results page matched more strictly it would answer a visible
+ * suggestion with "no results". A typo the panel forgave — "platfrom" — is
+ * exactly the query most likely to make that trip.
+ *
+ * The shape is the icon picker's (use-mdi-icons-fuzzy), tuned once for prose
+ * and MEASURED before shipping: the title names the post and the excerpt
+ * merely describes it, so they are weighted 0.7/0.3; the default location
+ * scoring buries a legitimate mid-sentence hit in a sentence-long excerpt,
+ * and the default 0.6 threshold matches "media" against every post on letter
+ * soup, so location is ignored and the threshold tightened to 0.3.
+ *
+ * A plain object, not a Fuse instance: `libs/aglyn` is dependency-light by
+ * design, and each consumer already imports Fuse from the vendor bundle.
+ */
+export const COLLECTION_SEARCH_FUSE_OPTIONS = {
+  keys: [
+    { name: 'title', weight: 0.7 },
+    { name: 'excerpt', weight: 0.3 },
+  ],
+  includeScore: true,
+  shouldSort: true,
+  ignoreLocation: true,
+  threshold: 0.3,
+}
+
+/**
  * One entry of a Collection Entries search index (AGL-1516): the fields the
  * block's client-side search box matches against, index-aligned with the
  * entry clones the block rendered. Stamped by {@link expandCollectionEntries}
