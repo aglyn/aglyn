@@ -36,8 +36,8 @@ name: Legal drift
 # publication, and several disagree with the live pages about something
 # substantive rather than cosmetic. Confirmed on 2026-08-19: LIVE is ahead on
 # all nine, and no Doc is ahead on anything. The Docs would, if pasted back,
-# reinstate a home mailing address as the DMCA designated agent, "community
-# marketplace" (the AGL-975 rename, AGL-1840), "you are the seller of record"
+# reinstate a home mailing address as the DMCA designated agent, the marketplace
+# name AGL-975 retired (AGL-1840), "you are the seller of record"
 # against the destination-charge model the platform actually runs, and a DPA
 # whose SCCs are `[ANNEX - SCCs TO BE ATTACHED]` with no Annex A or B.
 # AGL-1647 tracks writing live back into the Docs.
