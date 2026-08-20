@@ -118,6 +118,42 @@ const WORKSPACE_DOMAIN = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.com'
 const TENANT_DOMAIN = process.env.NEXT_PUBLIC_TENANT_DOMAIN ?? 'aglyn.app'
 
 export const COOKIE_WRITERS: Record<string, CookieWriter> = {
+  'apps/console/app/auth/handoff/start/route.ts': {
+    note:
+      'Sets the cross-domain handoff VERIFIER before bouncing to the auth ' +
+      'host (AGL-1902). Host-only and deliberately NOT `Domain`-scoped: a ' +
+      "customer controls their own domain's DNS, so a wider cookie could be " +
+      'shadowed by one they set.',
+    cookies: [
+      {
+        name: '__aglyn_handoff',
+        token: 'HANDOFF_VERIFIER_COOKIE',
+        surface: 'A custom console domain, host-only',
+        purpose:
+          'Proves the browser that finishes a cross-domain sign-in is the ' +
+          'one that started it',
+        duration: '15 minutes, and cleared the moment it is redeemed',
+        httpOnly: true,
+      },
+    ],
+  },
+  'apps/console/app/api/auth/handoff/redeem/route.ts': {
+    note:
+      'Clears the handoff verifier on redemption — success or refusal ' +
+      '(AGL-1902). It writes only an expiry, never a value.',
+    cookies: [
+      {
+        name: '__aglyn_handoff',
+        token: 'HANDOFF_VERIFIER_COOKIE',
+        surface: 'A custom console domain, host-only',
+        purpose:
+          'Proves the browser that finishes a cross-domain sign-in is the ' +
+          'one that started it',
+        duration: 'Cleared here; single-use',
+        httpOnly: true,
+      },
+    ],
+  },
   'apps/console/app/api/auth/session/route.ts': {
     note: 'Mints and clears the console session on sign-in and sign-out.',
     cookies: [
