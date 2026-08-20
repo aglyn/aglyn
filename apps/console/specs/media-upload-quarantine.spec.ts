@@ -176,6 +176,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ...jest.requireActual(
     '../../../libs/tenant/data/admin/src/lib/server/media-variants',
   ),
+  // The REAL bounded digest (AGL-1629). Finalize calls it on every non-SVG
+  // object, so a fake barrel that omitted it would leave the export
+  // `undefined` at the call site and 500 every case in this file.
+  ...jest.requireActual(
+    '../../../libs/tenant/data/admin/src/lib/server/media-strong-digest',
+  ),
   firebaseAdmin: {
     firestore: {
       FieldValue: {
@@ -528,12 +534,16 @@ describe('/api/media/upload-url · finalize refuses and leaves no orphan (AGL-16
   })
 
   it('carries NO strong digest for a plain video — the stated limit', async () => {
-    // Honest coverage rather than an implied guarantee: the server never
-    // holds these bytes, GCS computes md5 and crc32c, and a client-supplied
-    // sha256 is a value a re-uploader can choose to miss with. So this route
-    // matches on the md5-derived `contentHash` alone, and a file that
-    // arrived through the direct route carries a sha256-derived one — the
-    // takedown bites within an ingestion path, not across them (AGL-1614).
+    // Honest coverage rather than an implied guarantee — and since AGL-1629
+    // this is the ONE remaining class it applies to. Every other type on
+    // this route now carries a streamed full sha256, because the ceiling
+    // (`MEDIA_STRONG_DIGEST_MAX_BYTES`, 50 MiB) is the largest non-video
+    // cap. A 200 MB video is over it, so it still matches on the
+    // md5-derived `contentHash` alone while a copy that arrived through the
+    // direct route carries a sha256-derived one — for video, and only for
+    // video, the takedown still bites within an ingestion path rather than
+    // across them. See `media-signed-upload-digest.spec.ts` for the case
+    // that proves the cross-route match now holds under the ceiling.
     state.objectMetadata = {
       contentType: 'video/mp4',
       size: 200 * 1024 * 1024,

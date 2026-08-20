@@ -175,6 +175,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ...jest.requireActual(
     '../../../libs/tenant/data/admin/src/lib/server/media-variants',
   ),
+  // The REAL bounded digest (AGL-1629). Finalize calls it on every non-SVG
+  // object, so a fake barrel that omitted it would leave the export
+  // `undefined` at the call site and 500 every case in this file.
+  ...jest.requireActual(
+    '../../../libs/tenant/data/admin/src/lib/server/media-strong-digest',
+  ),
   firebaseAdmin: {
     firestore: {
       FieldValue: {

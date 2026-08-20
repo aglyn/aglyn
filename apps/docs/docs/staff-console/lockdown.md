@@ -408,8 +408,18 @@ interchangeable. Send the strong one.
 | `contentHash` | A **16-hex (64-bit) truncation** of *one of two* algorithms — sha256 on the direct upload/replace routes, GCS's md5 on the signed-upload route | Only as a fallback, when there is no `contentSha256` |
 
 Documents with no `contentSha256` are every asset uploaded before the field
-existed, plus everything except SVG that came in through the signed-upload
-route (that route never holds the bytes, so it cannot hash them).
+existed, plus **video larger than 50 MB** that came in through the
+signed-upload route.
+
+That second class used to be *everything except SVG* on the signed route,
+because the browser PUTs straight to storage and the server never held the
+bytes. Since AGL-1629 that route streams the object back through sha256 at
+finalize, up to a 50 MiB ceiling — which is exactly the largest non-video cap
+it accepts, so an image, a PDF, an archive or a deck can never be too big for a
+strong digest. Only video can exceed it, and only past 50 MB. The bound is
+deliberate: a 200 MB video is the one shape where a full read costs more than
+the strengthening is worth, and it is also the shape least likely to be a
+chosen-prefix collision target.
 
 The **request** field is called `contentHash` for both — the route accepts any
 8–64 character hex digest and does not care which document field you copied it
@@ -437,7 +447,7 @@ entry written under either field keeps biting.
 | Key | Set it with | Reach |
 |---|---|---|
 | `hash--{sha256}` | `contentHash: "<the contentSha256 value>"` | Every document sharing those bytes, in every workspace — at delivery **and** at ingestion wherever the server hashed the bytes itself |
-| `hash--{legacy}` | `contentHash: "<the contentHash value>"` | The same reach with the weaker key. For a non-SVG signed upload it is the only digest that exists |
+| `hash--{legacy}` | `contentHash: "<the contentHash value>"` | The same reach with the weaker key. For signed-upload video over 50 MB, and for anything uploaded before the strong digest existed, it is the only one there is |
 | `asset--{scopeSegment}--{mediaId}` | `by: "asset"` plus `scopeSegment` and `mediaId` | Exactly one document in one workspace, matched on identity, so it needs no digest at all |
 
 Three limits, each a real hole rather than a caveat:
@@ -447,11 +457,14 @@ Three limits, each a real hole rather than a caveat:
   look up. The refusal lands at the finalize step instead, which deletes the
   orphaned object — nothing is registered, counted or billed — but the bytes do
   briefly reach the bucket.
-- **A takedown bites *within* an ingestion path, not across them.** The
-  signed-upload route's digest is a truncation of GCS's md5; the direct upload
-  and replace routes' is a truncation of sha256. The same file pushed through
-  the other route presents a different digest and therefore a different key.
-  Where a file must be un-re-uploadable through *every* path, lock the scope.
+- **For video over 50 MB, a takedown bites *within* an ingestion path, not
+  across them.** That video is the one class the signed route still keys on a
+  truncation of GCS's md5, while the direct upload and replace routes key on
+  sha256 — so the same clip pushed through the other route presents a different
+  digest and therefore a different key. Everything under the 50 MiB digest
+  ceiling now shares one sha256 across every route, so the cross-path promise
+  holds for it. Where a large video must be un-re-uploadable through *every*
+  path, lock the scope.
 - **A composite object carries no digest at all.** GCS reports no `md5Hash` for
   one, so a very large signed upload can reach the DAM with neither field set.
   Quarantine it `by: "asset"`, and know that it is then covered **at delivery

@@ -45,6 +45,8 @@
  * and callability is what broke.
  */
 
+import { Readable } from 'stream'
+
 const mockVerifyIdToken = jest.fn()
 const mockCounterSet = jest.fn()
 const mockMediaSet = jest.fn()
@@ -53,6 +55,13 @@ const mockMediaSet = jest.fn()
 const mockSaved = new Map<string, Buffer>()
 /** Full-object downloads, by path. A video must never appear here. */
 const mockFullDownloads: string[] = []
+/**
+ * Objects pulled through `createReadStream` — the AGL-1629 digest, which is
+ * deliberately NOT a `download()`. Tracked separately because the whole
+ * argument for allowing a full read here is that it never materializes the
+ * object in memory, and collapsing the two would erase that distinction.
+ */
+const mockStreamedObjects: string[] = []
 
 const mockState: {
   org: Record<string, unknown>
@@ -143,6 +152,10 @@ const mockBucketFile = (path: string) => ({
     mockFullDownloads.push(path)
     return [mockState.source]
   },
+  createReadStream: () => {
+    mockStreamedObjects.push(path)
+    return Readable.from([mockState.source])
+  },
   save: async (buffer: Buffer) => {
     if (mockState.saveVariantFails && path !== mockOriginalPath) {
       throw new Error('storage said no')
@@ -159,6 +172,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // every byte assertion below a statement about the mock.
   ...jest.requireActual(
     '../../../libs/tenant/data/admin/src/lib/server/media-variants',
+  ),
+  // The REAL bounded digest (AGL-1629), for the same reason: finalize calls
+  // it on every non-SVG object, and a barrel that omitted it would leave the
+  // export `undefined` at the call site and 500 every case in this file.
+  ...jest.requireActual(
+    '../../../libs/tenant/data/admin/src/lib/server/media-strong-digest',
   ),
   firebaseAdmin: {
     firestore: {
@@ -277,6 +296,7 @@ describe('the signed finalize lands the same document as the base64 route (AGL-1
     jest.clearAllMocks()
     mockSaved.clear()
     mockFullDownloads.length = 0
+    mockStreamedObjects.length = 0
     mockState.org = { plan: 'pro' }
     mockState.usedBytes = 0
     mockState.contentType = 'image/png'
@@ -334,6 +354,7 @@ describe('the finalize still only pays for what it can use (AGL-1476)', () => {
     jest.clearAllMocks()
     mockSaved.clear()
     mockFullDownloads.length = 0
+    mockStreamedObjects.length = 0
     mockState.org = { plan: 'pro' }
     mockState.usedBytes = 0
     mockState.saveVariantFails = false
@@ -348,6 +369,14 @@ describe('the finalize still only pays for what it can use (AGL-1476)', () => {
     const response = await finalize()
     expect(response.status).toBe(200)
     expect(mockFullDownloads).toEqual([])
+    // AGL-1629 qualified this, and the qualification is asserted rather than
+    // left implicit: a video UNDER the 50 MiB digest ceiling — which this
+    // 4 KB fixture is — does get streamed through sha256. That is not a
+    // download: it is bounded, constant-memory, and it is what buys the
+    // cross-route quarantine match. A real 200 MB clip is over the ceiling
+    // and is not read at all, which `media-signed-upload-digest.spec.ts`
+    // proves against a genuinely 200 MB object.
+    expect(mockStreamedObjects).toEqual([mockOriginalPath])
     // `[]` by design, exactly as on the base64 route — the three-way split in
     // AGL-1476: same route + image → variants, different route + image → the
     // bug, either route + document → `[]`.
@@ -386,6 +415,7 @@ describe('a signed-path variant failure is still WRITTEN DOWN (AGL-1468 survives
     jest.clearAllMocks()
     mockSaved.clear()
     mockFullDownloads.length = 0
+    mockStreamedObjects.length = 0
     mockState.org = { plan: 'pro' }
     mockState.usedBytes = 0
     mockState.contentType = 'image/png'

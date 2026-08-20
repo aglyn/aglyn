@@ -602,7 +602,7 @@ function AdminMediaQuarantine() {
                   {!lookup.asset.hasStrongDigest ? (
                     <Alert severity="warning">
                       {lookup.asset.hasLegacyDigest
-                        ? 'This file carries only the legacy 64-bit digest — it predates the strong one, or it came in through the signed-upload route. A takedown on it still bites, but it is the weaker key and it does not match the same bytes re-uploaded through a different route.'
+                        ? 'This file carries only the legacy 64-bit digest — it predates the strong one, or it is video over 50 MB, which is the one class the signed-upload route still cannot afford to hash. A takedown on it still bites, but it is the weaker key and it does not match the same bytes re-uploaded through a different route.'
                         : 'This file carries NO digest at all (a composite object, or a pre-digest upload). Only the per-asset key can cover it, and only at delivery: with nothing to compare, the upload gate cannot refuse a fresh copy of these bytes.'}
                     </Alert>
                   ) : null}

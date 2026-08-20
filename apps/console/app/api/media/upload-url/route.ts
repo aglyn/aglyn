@@ -38,7 +38,9 @@ import {
   firebaseAdmin,
   generateStoredMediaVariants,
   isImpersonationSession,
+  MEDIA_STRONG_DIGEST_MAX_BYTES,
   quarantinedUploadRefusal,
+  storedObjectSha256,
 } from '@aglyn/tenant-data-admin'
 import {
   folderStoragePath,
@@ -351,20 +353,36 @@ async function handler(request: Request): Promise<Response> {
     let actualBytes = declaredBytes
     let contentHash = storageContentHash(metadata.md5Hash)
     /**
-     * The strong quarantine digest (AGL-1614), written only when the server
-     * actually held the bytes — which on THIS route is the SVG branch below
-     * and nowhere else.
+     * The strong quarantine digest (AGL-1614, decided by AGL-1629).
      *
-     * It stays absent for everything else deliberately rather than being
-     * faked from `md5Hash`: GCS computes md5 and crc32c, not sha256, and
-     * hashing a 200 MB video properly would mean downloading it back into
-     * the function — which is the exact cost this route exists to avoid. A
-     * client-computed sha256 is not an option either: the quarantine key is
-     * a security control, and a value the uploader chooses is one a
-     * re-uploader can choose to miss with. So the cross-route gap in the
-     * strong hash is a stated limit, not an oversight, and quarantine
-     * degrades to `contentHash` and then to the per-asset key exactly as it
-     * did before.
+     * AGL-1614 could only fill this in on the SVG branch below, and argued
+     * that the rest of the route could not have one: the bytes go
+     * browser→GCS, GCS computes md5 and crc32c but never sha256, and
+     * `file.download()` on a 200 MB video is the exact cost this route
+     * exists to avoid. A client-computed value was never an option — the
+     * quarantine key is a security control, and a value the uploader
+     * chooses is one a re-uploader can choose to miss with.
+     *
+     * AGL-1629 took the decision the issue deferred, on two facts that were
+     * not available when it was filed. First, AGL-1475 already made this
+     * handler read bytes (a 4 KB head, a 64 KB tail), so the question is no
+     * longer whether to read but how much. Second, the production media
+     * bucket measured 182 source objects / 42.70 MiB, largest 7.38 MiB, no
+     * video at all — the 200 MB video is a ceiling, not a population, and
+     * must not be allowed to price the other 99%.
+     *
+     * So: digest every object up to {@link MEDIA_STRONG_DIGEST_MAX_BYTES}
+     * by STREAMING it (constant memory, ~$0.0057 of egress at the ceiling
+     * and ~$0.00003 at the measured mean), and above it write nothing and
+     * degrade exactly as before. 50 MiB is not a round number for comfort —
+     * it is the largest NON-VIDEO cap on this route, so no PDF, image,
+     * archive or deck can ever be too big for a strong digest. Only video
+     * can, and only past 50 MB.
+     *
+     * What that buys is the property the takedown lever always claimed and
+     * never had: the same bytes present the same key whichever route
+     * carried them. See `media-strong-digest.ts` for the full argument and
+     * the numbers.
      */
     let contentSha256: string | undefined
     let svgRemoved: string[] = []
@@ -385,25 +403,49 @@ async function handler(request: Request): Promise<Response> {
         svgRemoved = sanitized.removed
       }
     }
+    if (!contentSha256) {
+      /**
+       * Everything that is not an SVG (AGL-1629).
+       *
+       * Streamed, never `download()`ed: at the ceiling that would be 50 MiB
+       * of function heap on a handler that goes on to hold a `sharp`
+       * pipeline. `actualBytes` rather than `declaredBytes` because a
+       * sanitizing re-save above changes the object, and a digest of bytes
+       * that are no longer in the bucket is worse than none.
+       *
+       * Ordered BEFORE the deny-list consult below, which is the only
+       * ordering that makes the strong key usable at ingestion rather than
+       * only at delivery. Fail-soft by construction: an over-ceiling object
+       * or an unreadable one leaves `contentSha256` absent, and every
+       * quarantine consumer already falls back to the legacy hash and then
+       * to the per-asset key.
+       */
+      const digest = await storedObjectSha256({
+        file: file as never,
+        sizeBytes: actualBytes,
+        maxBytes: MEDIA_STRONG_DIGEST_MAX_BYTES,
+      })
+      contentSha256 = digest.sha256
+    }
     /**
      * Asset quarantine at INGESTION (AGL-1613) — and the chokepoint where
      * the coverage has to be stated rather than implied.
      *
      * **What this catches.** Every object whose `contentHash` GCS gave us,
-     * plus the full `contentSha256` on the SVG branch above, where the
-     * server genuinely held the bytes. That is the whole population of
-     * signed uploads that carry any digest at all.
+     * plus — since AGL-1629 — the full `contentSha256` for every object up
+     * to {@link MEDIA_STRONG_DIGEST_MAX_BYTES}, which is every type on this
+     * route except video past 50 MB.
      *
      * **What it does not, and cannot.** The mint (`POST`) leg is not gated:
      * it hands out a signed URL before any byte exists, so there is nothing
-     * to look up. And `contentHash` here is a truncation of GCS's md5 while
-     * the direct route's is a truncation of sha256, so the same file
-     * re-uploaded through the OTHER route does not present the same key —
-     * quarantine bites within an ingestion path, not across them (AGL-1614
-     * argues why that is unfixable without downloading 200 MB videos back
-     * into the function). A composite object, which GCS gives no md5 for,
-     * carries no digest at all and cannot be matched here; the CDN's
-     * per-asset fallback key is what still covers it at delivery.
+     * to look up. Video above the digest ceiling still presents only the
+     * md5-derived `contentHash`, which the direct route never produces, so
+     * for THAT class quarantine still bites within an ingestion path rather
+     * than across them — the bounded residual AGL-1629 accepted rather than
+     * pay a full 200 MB read on every finalize. A composite object, which
+     * GCS gives no md5 for and reports no size for, carries no digest at
+     * all and cannot be matched here; the CDN's per-asset fallback key is
+     * what still covers it at delivery.
      *
      * The object is already in the bucket by the time we can ask, so a
      * refusal DELETES it — exactly as the quota branch below does, and for
@@ -584,9 +626,11 @@ async function handler(request: Request): Promise<Response> {
       // Re-read after a sanitizing re-save (AGL-1474), or the ETag and the
       // immutable URL would both pin bytes that are no longer in the bucket.
       ...(contentHash ? { contentHash } : {}),
-      // AGL-1614, and spread for the same reason: absent means "the server
-      // never held these bytes", which every quarantine consumer already
-      // handles by falling back. A null here would read as a hash.
+      // AGL-1614/AGL-1629, and spread for the same reason: absent means
+      // "no strong digest was taken" — on this route, an object over the
+      // 50 MiB ceiling or one whose read failed — which every quarantine
+      // consumer already handles by falling back to `contentHash` and then
+      // to the per-asset key. A null here would read as a hash.
       ...(contentSha256 ? { contentSha256 } : {}),
       // AGL-1474 — absent on every clean asset. See `/api/media/upload`.
       ...(svgRemoved.length ? { svgSanitized: svgRemoved } : {}),
