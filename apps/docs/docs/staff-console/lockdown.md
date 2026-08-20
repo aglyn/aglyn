@@ -820,9 +820,9 @@ Billing locks for lapsed subscriptions are **manual by default**. The automated
 deliberate operator decision, never a default.
 
 **What the sweep counts as delinquent, and why it is not just `past_due`
-(AGL-1877).** A Stripe test-clock drill of a failed renewal measured the real
-timeline: the subscription retries five times, stays `past_due` throughout, and
-Stripe **cancels it at 21.08 days** with
+(AGL-1877).** A Stripe **test-mode** test-clock drill of a failed renewal
+measured the timeline: the subscription retries five times, stays `past_due`
+throughout, and Stripe **cancels it at 21.08 days** with
 `cancellation_details.reason: 'payment_failed'`. It never becomes `unpaid`. So the
 30-day grace clock outlives the `past_due`/`unpaid` statuses by nine days, and the
 predicate had no reachable true branch at all until it also accepted a
@@ -830,3 +830,64 @@ predicate had no reachable true branch at all until it also accepted a
 `orgs/{id}/billing/stripe` as `subscription.canceledReason`, and the sweep locks
 only on the literal `'payment_failed'` — a workspace that cancelled on purpose, and
 every cancellation recorded before this shipped, fail closed and are never locked.
+
+### The LIVE dunning schedule has not been read (AGL-2430)
+
+Every number in the paragraph above is a **test-mode** measurement. Stripe's
+retry schedule, the Smart Retries flag, the after-the-final-retry behaviour and
+the subscription-email toggles are **Dashboard settings held independently per
+mode** (Settings → Subscriptions and emails). Test and live do not share them,
+and this account has already been shown to diverge between modes on a
+neighbouring setting — product tax codes were live-only until AGL-1877
+reconciled them.
+
+**What was measured in LIVE, read-only, on 2026-08-20** (account
+`acct_1IzHQTDYHP4psn7h`, `GET` requests only — no Dashboard setting was
+changed):
+
+| Question | Live answer |
+| -- | -- |
+| Retry count / interval / terminal behaviour | **Not readable.** No API surface exposes it |
+| `GET /v1/account` | No field matching `dunning｜retry｜smart_retr` anywhere in the payload |
+| `/v1/billing/settings`, `/v1/subscription_settings`, `/v1/billing/dunning`, `/v1/billing/retry_settings`, `/v1/account/settings` | All `404 Unrecognized request URL` |
+| `/v1/billing_portal/configurations` | `200` — but it is the customer portal, not dunning |
+| Live invoices | 3, all `paid` |
+| Live `subscription_cycle` invoices | 1 — `in_1U5qemDYHP4psn7hLzqzXuYc`, **amount 0, `attempt_count: 0`** |
+| Live charges / failed | 1 / **0** |
+| Live subscriptions | 2, both `canceled`, both `cancellation_details.reason: 'cancellation_requested'` |
+
+So it is unreadable **twice over**: no endpoint returns the setting, and no live
+renewal has ever attempted a real charge from which it could be inferred. The
+one `subscription_cycle` invoice on the account is a zero-amount renewal that
+never touched a card, and no live subscription has ever ended for non-payment.
+AGL-1877's audit note said the account had produced *zero* `subscription_cycle`
+invoices; that is now stale in letter — there is one — but correct in
+substance, because a zero-amount renewal produces no dunning evidence.
+
+**Reading it requires a human** opening the **live** Dashboard at Settings →
+Subscriptions and emails and recording: the number of retries, the interval
+schedule, what happens after the final retry, and whether the failed-payment,
+card-expiring and receipt emails are ON. Until then:
+
+- **Nothing in the product may state a live retry count, window length or
+  terminal state as fact.** The console banner and the customer-facing billing
+  docs have both been changed to describe only the shape — access continues
+  while Stripe retries, and the plan stops if the retries run out. A spec in
+  `apps/console/specs/billing-dunning-banner.spec.tsx` fails if a count, a
+  duration or the phrase "retry window" returns to that copy.
+- **`BILLING_LOCK_GRACE_DAYS = 30` stands** and is not blocked on the read. It
+  is reachable under all three possible terminal settings — *cancel* (fires on
+  the `canceled` + `payment_failed` branch at ~21 days, with nine days' slack),
+  *mark unpaid* and *leave past_due* (both fire at day 30 on their own
+  branches). No live value can make it unsafe, only more or less generous.
+- **Whether Stripe emails the customer on a failed payment is also unread.**
+  `system-email-catalog.ts` catalogues `stripe-payment-failed` as
+  `deliveredBy: 'stripe'` precisely because the code cannot see the toggle.
+  Aglyn composes no failed-payment email of its own, and the in-app
+  notification it does send is suppressed entirely by a muted `billing`
+  category — so if that toggle is off in live, a failed renewal has **no
+  customer-reachable signal beyond the console banner**. That is the item on
+  this list with a real customer consequence, and it is worth reading first.
+
+The mode-tagged constants, and the probe evidence above, live in one place:
+`apps/console/utils/stripe-dunning-schedule.ts`.
