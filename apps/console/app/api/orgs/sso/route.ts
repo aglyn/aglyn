@@ -22,6 +22,7 @@ import {
   enforceSsoSignInMethods,
   firebaseAdmin,
   isImpersonationSession,
+  isStaffAttestedClaim,
   issueDomainClaim,
   lockdownRefusal,
   logOrgActivity,
@@ -133,7 +134,14 @@ async function handler(request: Request): Promise<Response> {
         return {
           domain: doc.id,
           verified: data['verified'] === true,
-          attested: false,
+          // The REAL marker now (AGL-1887), not a hard-coded false. Before
+          // part 2 an attestation had no representation, so "has a claim
+          // document" and "was never attested" were the same thing and this
+          // could only ever be false here. `attestSsoDomain` writes
+          // `attestedBy` onto the claim, so an attested domain HAS a claim
+          // document — and would otherwise have read back as neither verified
+          // nor attested, which is the one combination that is not true of it.
+          attested: isStaffAttestedClaim(data['attestedBy']),
           recordHost: `_aglyn-challenge.${doc.id}`,
           recordValue: `aglyn-domain-verification=${data['token']}`,
           lastRecords: data['lastRecords'] ?? null,
@@ -150,6 +158,11 @@ async function handler(request: Request): Promise<Response> {
       // working deployment — and NOT counted as verified, because a human
       // saying so is precisely the assurance this feature replaces. The org
       // can add the claim and prove them properly.
+      //
+      // Still needed after AGL-1887: an attestation is not retroactive. Until
+      // somebody runs `tools/scripts/attest-sso-domain.mjs` against an org
+      // onboarded by hand, it has no claim document at all and this is the
+      // only branch that sees its domains.
       const claimed = new Set(claims.map((claim) => claim.domain))
       const governed = Array.isArray(sso['domains'])
         ? (sso['domains'] as string[])
