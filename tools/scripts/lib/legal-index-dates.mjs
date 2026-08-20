@@ -120,7 +120,7 @@ function stripScriptsAndStyles(html) {
  */
 export function parseLegalDate(text) {
   const raw = String(text ?? '')
-    .replace(/ /g, ' ')
+    .replace(/\u00a0/g, ' ')
     .trim()
   if (!raw) return null
 

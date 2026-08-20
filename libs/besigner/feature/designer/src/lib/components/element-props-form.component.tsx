@@ -183,8 +183,19 @@ export const ElementPropsFormTemplate = forwardRef<
 ElementPropsFormTemplate.displayName = 'ElementPropsFormTemplate'
 ElementPropsFormTemplate.aglyn = true
 
-export interface ElementPropsFormProps extends FormRendererProps {
+export interface ElementPropsFormProps
+  extends Omit<FormRendererProps, 'schema' | 'componentMapper'> {
   node?: Aglyn.NodeSchema<any>
+  /**
+   * Supplied by the component, not the caller: `ElementPropsFormRaw` reads
+   * `node.componentSchema` and ignores anything passed in, and the production
+   * mount (`withLastSelectedNode(withTabPanelInner(...))`) passes neither. They
+   * stayed required only because the interface extended `FormRendererProps`
+   * wholesale, so any direct render was a type error for props the component
+   * discards.
+   */
+  schema?: FormRendererProps['schema']
+  componentMapper?: FormRendererProps['componentMapper']
 }
 
 // Attribute editors available to canvas component schemas: the simple set
