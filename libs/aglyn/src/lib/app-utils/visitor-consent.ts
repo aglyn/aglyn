@@ -483,12 +483,40 @@ export function analyticsCookieDomains(
 export function clearAnalyticsCookies(
   hostname?: string | null,
 ): string[] {
+  return clearCookiesWithPrefixes(ANALYTICS_COOKIE_PREFIXES, hostname)
+}
+
+/**
+ * The same sweep for an ARBITRARY prefix set — the generalisation
+ * {@link clearAnalyticsCookies} now delegates to.
+ *
+ * Extracted rather than copied because the hard part is not the prefix match,
+ * it is {@link analyticsCookieDomains}: the ladder from the exact hostname up
+ * to the registrable domain, which exists because a tag written with an `auto`
+ * cookie domain leaves its identifier one or more rungs ABOVE the host. A
+ * second vendor's sweep re-derived by hand would get that wrong the first time
+ * and pass its own test, because a deletion aimed at the wrong domain silently
+ * no-ops — it writes an already-expired host-scoped cookie and reports success.
+ * One implementation, one ladder, one place to fix.
+ *
+ * Meta's `_fbp`/`_fbc` are written exactly like `_ga`: path `/`, registrable
+ * domain, first-party. Nothing here is Google-specific and nothing here is
+ * Meta-specific.
+ */
+export function clearCookiesWithPrefixes(
+  prefixes: readonly string[],
+  hostname?: string | null,
+): string[] {
   if (typeof document === 'undefined') return []
+  // An empty prefix set would match EVERY cookie via `''.startsWith`, which
+  // would delete the cart, the member session and the consent record itself.
+  // A caller with nothing to sweep gets nothing swept.
+  if (!prefixes || prefixes.length === 0) return []
   try {
     const names = new Set<string>()
     for (const pair of String(document.cookie ?? '').split(';')) {
       const name = pair.split('=')[0].trim()
-      if (name && ANALYTICS_COOKIE_PREFIXES.some((p) => name.startsWith(p))) {
+      if (name && prefixes.some((p) => !!p && name.startsWith(p))) {
         names.add(name)
       }
     }

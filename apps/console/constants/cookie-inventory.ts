@@ -291,7 +291,7 @@ export const COOKIE_WRITERS: Record<string, CookieWriter> = {
     ],
   },
   'libs/aglyn/src/lib/app-utils/visitor-consent.ts': {
-    note: 'Consent engine. It only ever CLEARS analytics cookies (expires them); it sets none of its own — the consent record itself lives in web storage.',
+    note: 'Consent engine. It only ever CLEARS cookies (expires them) — the analytics prefixes, and any prefix set an advertising vendor is registered with; it sets none of its own, the consent record itself lives in web storage.',
     cookies: [],
   },
   'libs/shared/util/http/src/lib/cookie-set-user-id-token.ts': {

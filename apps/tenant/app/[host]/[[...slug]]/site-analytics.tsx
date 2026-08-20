@@ -38,6 +38,16 @@ import {
   resolveGaMeasurementId,
   type VisitorConsentHost,
 } from '@aglyn/aglyn/app-utils/visitor-consent'
+import AdvertisingTags from './advertising-tags'
+// The platform's own GA4 property (AGL-1857). `aglyn.com` is a tenant site
+// pointed at this id, and it is the ONE host whose pageviews should carry
+// `content_group: 'marketing'` — the GA4 axis that separates marketing from
+// `console` and `docs` without reaching for the Hostname dimension. A
+// customer's site configures their own id, which is why the discriminator is
+// the id itself: same-property IS the definition of "this is our surface".
+// Hoisted to `platform-marketing-host.ts` so the advertising gate
+// shares this definition rather than retyping the literal beside it.
+import { PLATFORM_GA_MEASUREMENT_ID } from '@aglyn/aglyn/app-utils/platform-marketing-host'
 import Script from 'next/script'
 import type { ReactElement } from 'react'
 import { primeVisitorConsent, useVisitorConsent } from './use-visitor-consent'
@@ -51,18 +61,6 @@ import { claimDailyVisit } from './visit-claim'
  */
 const beaconed = new Set<string>()
 
-/**
- * The platform's own GA4 property (AGL-1857). `aglyn.com` is a tenant site
- * pointed at this id, and it is the ONE host whose pageviews should carry
- * `content_group: 'marketing'` — the first-class GA4 axis that separates
- * marketing from `console` and `docs` in standard reports without reaching
- * for the Hostname dimension. A customer's site configures their own
- * measurement id, and their property gets no opinion of ours stamped on it,
- * which is why the discriminator is the id itself: same-property IS the
- * definition of "this is our surface". The id is public in every page the
- * platform serves, so holding it in source discloses nothing.
- */
-const PLATFORM_GA_MEASUREMENT_ID = 'G-YW5PG16YTM'
 
 /**
  * Send the pageview beacon (AGL-82), NOT from an effect (AGL-1550).
@@ -436,6 +434,39 @@ export default function SiteAnalytics({
           />
         </>
       ) : null}
+      {/* Consent-gated ADVERTISING tags — Aglyn's own marketing
+          site only, and nowhere else.
+
+          The same structural enforcement as the GA pair above, extended to a
+          channel that is not Google's. Until this existed the `advertising`
+          category could only ever be expressed as four strings handed to
+          `gtag`, so a non-Google tag could not be consent-gated at all.
+
+          Mounted UNCONDITIONALLY and gated inside, which is not the shape of
+          the block above it and is deliberate: the component also owns the
+          withdrawal path, and a visitor who turns advertising off from "Your
+          Privacy Choices" has to stop being tracked in THAT pageview. By then
+          the vendor library has executed, and React dropping a `<Script>` does
+          not unload it (the AGL-1608 lesson) — so the teardown runs from the
+          consent-changed event, which needs a listener that is still mounted
+          when the answer is no.
+
+          On a customer's site this renders nothing AND installs nothing: the
+          host is not ours, so there is no listener and no script. That
+          boundary is the DPA §3.2 promise — Aglyn does not "sell"/"share"
+          Customer Personal Data — expressed in code rather than in a review
+          checklist. The console needs no clause of its own: it does not render
+          this route at all.
+
+          NOTHING IS CONFIGURED TO LOAD TODAY. No host document carries an
+          `analytics.adTags` entry, so every visitor on every site takes the
+          empty branch. Deploying the Meta Pixel means writing a pixel id onto
+          the `aglyn-marketing` host — a data change, reviewed on its own. */}
+      <AdvertisingTags
+        host={host}
+        stored={consent.stored}
+        ready={consent.ready}
+      />
       {/* Visitor consent surfaces (AGL-1498): only when the machinery is
           live — the tool is active AND the site uses a gated feature. A
           site with no analytics has nothing to ask, so its visitors see
