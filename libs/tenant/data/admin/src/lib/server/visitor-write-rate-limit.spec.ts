@@ -47,7 +47,33 @@ function fakeFirestore() {
       failing = true
     },
     collection: (name: string) => ({
-      doc: (id: string) => ({ path: `${name}/${id}` }),
+      doc: (id: string) => ({
+        path: `${name}/${id}`,
+        // AGL-2416: the counter is now an atomic increment plus a read-back,
+        // not a read-modify-write transaction. `increment` is applied from the
+        // sentinel's real `operand`, so mutating the production call to
+        // `increment(0)` changes what this store holds instead of being absorbed.
+        set: async (value: Record<string, unknown>) => {
+          if (failing) throw new Error('firestore unavailable')
+          const prior = docs.get(`${name}/${id}`) ?? {}
+          const next: Record<string, unknown> = { ...prior }
+          for (const [field, raw] of Object.entries(value)) {
+            const operand = (raw as { operand?: unknown })?.operand
+            next[field] =
+                typeof operand === 'number'
+                  ? (Number(prior[field]) || 0) + operand
+                  : raw
+          }
+          docs.set(`${name}/${id}`, next as never)
+        },
+        get: async () => {
+          if (failing) throw new Error('firestore unavailable')
+          return {
+            exists: docs.has(`${name}/${id}`),
+            get: (field: string) => (docs.get(`${name}/${id}`) as never)?.[field],
+          }
+        },
+      }),
     }),
     runTransaction: async (fn: (tx: unknown) => Promise<number>) => {
       if (failing) throw new Error('firestore unavailable')

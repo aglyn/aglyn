@@ -61,6 +61,32 @@ jest.mock(
         doc: (id: string) => ({
           path: `${name}/${id}`,
           collection: () => ({ doc: () => ({ set: async () => undefined }) }),
+          // AGL-2416: the counter is an atomic increment plus a read-back, not
+          // a read-modify-write transaction. The sentinel's real `operand` is
+          // applied rather than assuming +1, so a mutation to `increment(0)`
+          // changes what this store holds instead of being absorbed.
+          set: async (value: Record<string, unknown>) => {
+            if (mockStoreFails) throw new Error('firestore unavailable')
+            const path = `${name}/${id}`
+            const prior = mockRateLimitDocs.get(path) ?? {}
+            const next: Record<string, unknown> = { ...prior }
+            for (const [field, raw] of Object.entries(value)) {
+              const operand = (raw as { operand?: unknown })?.operand
+              next[field] =
+                typeof operand === 'number'
+                  ? (Number(prior[field]) || 0) + operand
+                  : raw
+            }
+            mockRateLimitDocs.set(path, next)
+          },
+          get: async () => {
+            if (mockStoreFails) throw new Error('firestore unavailable')
+            const path = `${name}/${id}`
+            return {
+              exists: mockRateLimitDocs.has(path),
+              get: (field: string) => mockRateLimitDocs.get(path)?.[field],
+            }
+          },
         }),
       }),
       runTransaction: async (fn: (tx: unknown) => Promise<unknown>) => {
@@ -80,7 +106,15 @@ jest.mock(
         return fn(tx)
       },
     }
-    const firebaseAdmin = { app: () => ({ firestore: () => firestore }) }
+    const firebaseAdmin = {
+      app: () => ({ firestore: () => firestore }),
+      // Without this namespace the counter's `FieldValue.increment` lookup
+      // throws, the limiter degrades to its per-instance fallback, and every
+      // durability assertion in this file passes for the wrong reason.
+      firestore: Object.assign(() => firestore, {
+        FieldValue: { increment: (n: number) => ({ operand: n }) },
+      }),
+    }
     return { __esModule: true, default: firebaseAdmin, firebaseAdmin }
   },
 )
