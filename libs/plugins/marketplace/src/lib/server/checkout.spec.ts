@@ -28,6 +28,18 @@
  * the session request IS the contract this file pins.
  */
 
+// The acting org (AGL-2331). Checkout resolves the workspace a licence is
+// being bought for through the caller's own membership — never a request-body
+// field — so the handler cannot open a session without one. These suites are
+// about the take rate, the tax code and the kill switch, so the membership is
+// simply present and permitted.
+jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
+  resolveOrgPermissions: async () => ({
+    orgId: 'buyer-org',
+    permissions: { installPlugins: true },
+  }),
+}))
+
 jest.mock('./publisher-profile', () => ({
   canActAsPublisher: async () => false,
   resolvePublisherProfile: async () =>

@@ -43,7 +43,11 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { hasLivePurchaseOf, isLivePurchase } from './marketplace'
+import {
+  hasLivePurchaseOf,
+  isLivePurchase,
+  licensedOrgIdsFor,
+} from './marketplace'
 
 describe('isLivePurchase (AGL-2158)', () => {
   it('is true for an ordinary purchase', () => {
@@ -123,22 +127,100 @@ describe('hasLivePurchaseOf (AGL-2158)', () => {
   })
 })
 
+describe('licensedOrgIdsFor — WHICH workspace holds it (AGL-2331)', () => {
+  // What the console licences panel and the listing page's "you own this in
+  // another workspace" notice are built on. The question has no answer at all
+  // while entitlement is person-scoped, and it is the question an agency has
+  // to answer before deciding whether to buy again.
+  const listingId = 'listing-1'
+
+  it('names each licensed org once, in document order', () => {
+    expect(
+      licensedOrgIdsFor(
+        [
+          { listingId, buyerOrgId: 'org-b' },
+          { listingId, buyerOrgId: 'org-a' },
+          { listingId, buyerOrgId: 'org-b' },
+        ],
+        listingId,
+      ),
+    ).toEqual(['org-b', 'org-a'])
+  })
+
+  it('omits a refunded licence — it is not held any more', () => {
+    expect(
+      licensedOrgIdsFor(
+        [{ listingId, buyerOrgId: 'org-a', refundedAt: 'THEN' }],
+        listingId,
+      ),
+    ).toEqual([])
+  })
+
+  it('INVENTS NO ORG for a legacy purchase that names none', () => {
+    // The surface has to say "every workspace you belong to" rather than
+    // guess a workspace — guessing one is the silent reinterpretation this
+    // whole change refuses to make.
+    expect(licensedOrgIdsFor([{ listingId, buyerUid: 'buyer-1' }], listingId)).toEqual(
+      [],
+    )
+  })
+
+  it('ignores other listings', () => {
+    expect(
+      licensedOrgIdsFor([{ listingId: 'other', buyerOrgId: 'org-a' }], listingId),
+    ).toEqual([])
+  })
+})
+
 describe('both sides still CALL the shared predicate (AGL-2158)', () => {
   const read = (relative: string) =>
     readFileSync(join(__dirname, '..', relative), 'utf8')
 
   it('the install gate delegates to it', () => {
     const source = read('server/purchase-entitlement.ts')
-    expect(source).toContain('hasLivePurchaseOf(')
+    // `hasOrgLicenceOf` since AGL-2331 — the same shared predicate, now asked
+    // about the ORGANIZATION as well as the refund. The guard follows the
+    // rename rather than being dropped: what it protects is that the server
+    // module calls the model's answer instead of restating one.
+    expect(source).toContain('hasOrgLicenceOf(')
     // The restated form this file used to end with.
     expect(source).not.toMatch(/some\(\s*\(purchase\)\s*=>\s*!purchase\.get/)
   })
 
   it('the listing page delegates to it, and does not restate it', () => {
     const source = read('components/listing-content.component.tsx')
-    expect(source).toContain('hasLivePurchaseOf(purchaseDocs ?? [], listingId)')
+    // Org-scoped since AGL-2331, and the org is what the CTA now turns on:
+    // reading the person-scoped answer here would put the page back in the
+    // disagreement with the install routes that AGL-2158 closed.
+    expect(source).toContain(
+      'hasOrgLicenceOf(purchaseDocs ?? [], listingId, { orgId, uid: user?.uid })',
+    )
     // The exact predicate that diverged: a listing-id match with no refund
     // test. Pinned as a string because that is what came back.
     expect(source).not.toContain('purchase.listingId === listingId')
+  })
+
+  it('every paid-content door hands the gate an ORG (AGL-2331)', () => {
+    // The wiring proof, and the reason `buyerOrgId` is a REQUIRED property
+    // rather than an optional one: a model change the install path does not
+    // read fixes nothing, and the way that happens is one of nine doors
+    // quietly omitting the argument. TypeScript already refuses a missing
+    // required property; this says the same thing where a reviewer can see
+    // the whole set at once, and it fails when door number ten is added
+    // without it.
+    const doors = [
+      'server/install.ts',
+      'server/install-plugin.ts',
+      'server/install-theme.ts',
+      'server/install-template.ts',
+      'server/install-layout.ts',
+      'server/install-email-template.ts',
+      'server/install-dataset-schema.ts',
+      'server/update-artifact.ts',
+      'server/checkout.ts',
+    ]
+    for (const door of doors) {
+      expect([door, read(door).includes('buyerOrgId')]).toEqual([door, true])
+    }
   })
 })

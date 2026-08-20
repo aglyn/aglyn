@@ -6229,4 +6229,98 @@ describe('the author host role edits content and cannot publish (AGL-2334)', () 
   })
 })
 
+/**
+ * A marketplace purchase is an ORGANIZATION's licence, and the org can read it
+ * (AGL-2331).
+ *
+ * The rule change these pin: before AGL-2331 the buying side of
+ * `marketplacePurchases` was `buyerUid == request.auth.uid` and nothing else,
+ * so the only person who could see a licence was whoever clicked Buy. Once a
+ * purchase licenses the installing organization, that makes the org's own
+ * licence invisible to the org — to a colleague, and to the buyer's
+ * replacement after their account is gone.
+ *
+ * The legacy case is the other half and matters more: purchases written before
+ * AGL-2331 carry no `buyerOrgId` at all, and the new membership clause must
+ * not make them unreadable by the person who bought them.
+ */
+describe('an org can read the marketplace licences it holds (AGL-2331)', () => {
+  const ORG_PURCHASE = ['marketplacePurchases', 'cs_org']
+  const LEGACY_PURCHASE = ['marketplacePurchases', 'cs_legacy']
+  const OTHER_ORG_PURCHASE = ['marketplacePurchases', 'cs_other_org']
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      // Bought by the OWNER, licensed to ORG.
+      await setDoc(doc(db, ...ORG_PURCHASE), {
+        listingId: 'l1', buyerUid: OWNER, buyerOrgId: ORG,
+        sellerOrgId: 'org-seller',
+      })
+      // Pre-AGL-2331: no buyer org was ever recorded.
+      await setDoc(doc(db, ...LEGACY_PURCHASE), {
+        listingId: 'l1', buyerUid: OWNER, sellerOrgId: 'org-seller',
+      })
+      // A different workspace's licence entirely.
+      await setDoc(doc(db, ...OTHER_ORG_PURCHASE), {
+        listingId: 'l1', buyerUid: OUTSIDER, buyerOrgId: OTHER_ORG,
+        sellerOrgId: 'org-seller',
+      })
+    })
+  })
+
+  it('a colleague who did not buy it can still see the org holds it', async () => {
+    // THE POINT. `EDITOR` never clicked Buy and is not `buyerUid`; they are on
+    // the ORG roster, and the licence is the ORG's.
+    await mustAllow(
+      "an org member reading their org's licence",
+      getDoc(doc(authed(EDITOR), ...ORG_PURCHASE)),
+    )
+  })
+
+  it('the buyer still reads a LEGACY purchase that names no org', async () => {
+    // The regression that would silently strip every pre-AGL-2331 customer of
+    // their own receipt: the org clause cannot answer for a document with no
+    // `buyerOrgId`, so the `buyerUid` clause has to stay.
+    await mustAllow(
+      'the buyer reading their pre-AGL-2331 purchase',
+      getDoc(doc(authed(OWNER), ...LEGACY_PURCHASE)),
+    )
+  })
+
+  it("a member of ANOTHER org cannot read this org's licence", async () => {
+    // The negative control the membership clause must not have loosened.
+    await mustDeny(
+      'an outsider reading an org licence they have no membership in',
+      getDoc(doc(authed(EDITOR), ...OTHER_ORG_PURCHASE)),
+    )
+    await mustDeny(
+      'a stranger reading a legacy purchase they did not make',
+      getDoc(doc(authed(OUTSIDER), ...LEGACY_PURCHASE)),
+    )
+    await mustDeny(
+      'an anonymous reader',
+      getDoc(doc(anon(), ...ORG_PURCHASE)),
+    )
+  })
+
+  it('nobody writes a purchase from a client, org member or not', async () => {
+    // `allow write: if false` — the ledger is the Stripe webhook's alone, and
+    // widening READ must not have widened WRITE. A client-written purchase is
+    // a free licence.
+    await mustDeny(
+      'an org owner forging a licence for their own org',
+      setDoc(doc(authed(OWNER), 'marketplacePurchases', 'cs_forged'), {
+        listingId: 'l1', buyerUid: OWNER, buyerOrgId: ORG,
+      }),
+    )
+    await mustDeny(
+      'staff forging a licence',
+      setDoc(doc(authed(STAFF, { staff: true }), 'marketplacePurchases', 'cs_staff'), {
+        listingId: 'l1', buyerOrgId: ORG,
+      }),
+    )
+  })
+})
+
 assert.ok(true)

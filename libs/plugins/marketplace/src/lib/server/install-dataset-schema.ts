@@ -139,6 +139,12 @@ export const installDatasetSchemaHandler: PluginApiHandler = async (
     const unpaid = await requirePurchase({
       firestore,
       buyerUid: decoded.uid,
+      // THE ORG THE LICENCE HAS TO COVER (AGL-2331). `membership.orgId` is
+      // resolved server-side from the caller's own membership by the
+      // permission gate above — never a request-body field — so this is the
+      // workspace the install actually lands in, and the only one a purchase
+      // can entitle here.
+      buyerOrgId: membership.orgId ?? '',
       listingId,
       priceUsd,
       ownsListing,

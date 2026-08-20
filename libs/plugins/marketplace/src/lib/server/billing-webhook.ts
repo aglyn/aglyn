@@ -862,7 +862,7 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
     object?.payment_status === 'paid'
   ) {
     // Sellers are orgs (AGL-652) — the ledger records which ORG earned it.
-    const { listingId, buyerUid, sellerOrgId, feeCents, transferCents } =
+    const { listingId, buyerUid, buyerOrgId, sellerOrgId, feeCents, transferCents } =
       object.metadata ?? {}
     if (listingId && buyerUid && sellerOrgId) {
       // The remittance-correct split (AGL-1544), read ONCE and used by both
@@ -894,6 +894,26 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
         .set({
           listingId,
           buyerUid,
+          // THE ORG THE PURCHASE LICENSES (AGL-2331).
+          //
+          // The one field that makes this document an ORGANIZATIONAL licence
+          // rather than a personal one. `hasLivePurchase` keys the eight
+          // paid-content doors and the duplicate-purchase guard on it; a
+          // document written without it falls back to the legacy person-scoped
+          // grant, which is exactly right for the purchases that predate
+          // AGL-2331 and exactly wrong for anything written after it. Checkout
+          // therefore refuses to open a session that cannot name a validated
+          // buyer org, so `metadata.buyerOrgId` is present on every session
+          // this branch can see from now on.
+          //
+          // Written CONDITIONALLY, and the merge is why: a redelivery of an
+          // older session — Stripe retries for up to three days — carries no
+          // `buyerOrgId`, and `{ merge: true }` with an explicit `undefined`
+          // is a no-op in the Admin SDK but an explicit `''` is not. Spreading
+          // nothing keeps a redelivery from overwriting a real org id with an
+          // empty string, which would strip the licence off the org that
+          // bought it.
+          ...(buyerOrgId ? { buyerOrgId: String(buyerOrgId) } : {}),
           sellerOrgId,
           // Gross − tax − transfer = the platform fee, which feeCents also
           // records independently from the rate resolved at checkout.

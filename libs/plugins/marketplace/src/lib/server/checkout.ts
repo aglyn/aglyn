@@ -27,6 +27,7 @@ import {
   type PluginApiHandler,
   type PluginRevocation,
 } from '@aglyn/aglyn/server'
+import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { isListingBrowsable, isPrivateListing } from '../model/marketplace'
 import {
   canActAsPublisher,
@@ -104,6 +105,10 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
   }
   const listingId = String(req.body?.listingId ?? '')
   const hostId = String(req.body?.hostId ?? '')
+  // The org this licence is being bought FOR (AGL-2331). Requested, never
+  // trusted: it is resolved through the caller's own membership below, exactly
+  // as `connect.ts` resolves the org a payout account is being set up for.
+  const requestedOrgId = String(req.body?.orgId ?? '')
   // One purchase attempt, minted by the browser (AGL-1697). Node lowercases
   // incoming headers, but read both spellings — the plugin API request type
   // makes no promise about casing.
@@ -123,6 +128,51 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
   let claim: AttemptClaim | null = null
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+    // WHICH ORGANIZATION IS BUYING (AGL-2331).
+    //
+    // A marketplace purchase licenses an organization, not a person — see
+    // `purchaseEntitlesOrg` in the model for why, and for what the published
+    // Publisher Agreement §8.1 already says about it. So a Checkout session
+    // that cannot name the org it licenses must not open: the purchase
+    // document it produces would carry no `buyerOrgId`, and a half-populated
+    // org field is a worse premise for an entitlement than an absent one —
+    // the gate would have to guess whether a missing value means "legacy,
+    // grandfathered" or "modern, but nobody wrote it".
+    //
+    // Resolved through `resolveOrgPermissions`, not from the body and not from
+    // `hostIndex`. The old derivation was `hostId` → `hostIndex.orgId` with no
+    // membership test at all, which is a real hole once the field grants
+    // anything: post any host id and the purchase would be stamped with an org
+    // the buyer has no standing in, entitling strangers. This is the same
+    // resolution the seven install routes and `connect.ts` use, so the org
+    // that gets the licence is by construction an org the buyer could install
+    // into.
+    //
+    // `installPlugins` rather than a bare membership: buying is the act of
+    // acquiring something to install, and a viewer who cannot install must not
+    // be able to spend the workspace's money on one. It is also what keeps
+    // this door and the install door agreeing about who the licence is for.
+    const membership = await resolveOrgPermissions(decoded.uid, {
+      orgId: requestedOrgId || null,
+      hostId: requestedOrgId ? null : hostId || null,
+    })
+    const buyerOrgId = membership.orgId ?? ''
+    if (!buyerOrgId) {
+      return res.status(400).json({
+        error:
+          'A purchase is licensed to an organization — open the marketplace ' +
+          'from the workspace you are buying for.',
+      })
+    }
+    if (requestedOrgId && buyerOrgId !== requestedOrgId) {
+      return res.status(403).json({ error: 'Not a member of that organization' })
+    }
+    if (!membership.permissions.installPlugins) {
+      return res.status(403).json({
+        error:
+          'Your organization role does not allow installing from the marketplace',
+      })
+    }
     const firestore = firebaseAdmin.app().firestore()
     const listingSnapshot = await firestore
       .collection('marketplaceListings')
@@ -196,9 +246,30 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     //
     // 409 rather than 400: nothing about the request is malformed, the buyer
     // is just asking for a state that already holds.
-    if (await hasLivePurchase({ firestore, buyerUid: decoded.uid, listingId })) {
+    //
+    // KEYED ON THE ORGANIZATION SINCE AGL-2331, and that is what turns this
+    // guard from a blocked sale back into a real one. A licence belongs to a
+    // workspace, so an agency developer who bought a component for one client
+    // must be able to buy it again for the next — the person-keyed version of
+    // this check answered `409 already_purchased` to exactly the second sale
+    // we want. It still refuses the case it was written for: the same
+    // workspace buying the same listing twice.
+    //
+    // A pre-AGL-2331 purchase still refuses, through the legacy grant inside
+    // the shared predicate: that buyer can already install this listing
+    // anywhere, so selling them a second copy would take money for nothing.
+    if (
+      await hasLivePurchase({
+        firestore,
+        buyerUid: decoded.uid,
+        buyerOrgId,
+        listingId,
+      })
+    ) {
       return res.status(409).json({
-        error: 'You already own this listing — install it from your library.',
+        error:
+          'This organization already owns this listing — install it from ' +
+          'your library.',
         code: 'already_purchased',
       })
     }
@@ -260,15 +331,15 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // buyer's org slug is needed now (`sellerOrgId` is the wrong org), and
     // it's resolved from the host here since server code cannot call
     // useConsoleHostRoute. `/manage/marketplace` is the hostless fallback.
-    const buyerIndex = hostId
-      ? await firestore.collection('hostIndex').doc(hostId).get()
-      : null
-    const buyerOrgId = buyerIndex?.get('orgId') as string | undefined
-    const buyerOrgSlug = buyerOrgId
-      ? ((await firestore.collection('orgs').doc(buyerOrgId).get()).get(
-          'slug',
-        ) as string | undefined)
-      : undefined
+    //
+    // The slug comes off the VALIDATED buyer org resolved at the top of the
+    // handler now (AGL-2331) rather than a second, unvalidated `hostIndex`
+    // read: one org id decides where the buyer lands, which org the licence
+    // entitles, and which org's erasure sweeps the idempotency claim, so
+    // having two derivations of it was a way for those three to disagree.
+    const buyerOrgSlug = (
+      await firestore.collection('orgs').doc(buyerOrgId).get()
+    ).get('slug') as string | undefined
     const returnPath = buyerOrgSlug
       ? buildRoute(Route.ORG_MARKETPLACE, { orgSlug: buyerOrgSlug })
       : Route.ORG_MARKETPLACE
@@ -323,12 +394,20 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       'payment_intent_data[metadata][type]': 'marketplace-purchase',
       'payment_intent_data[metadata][listingId]': listingId,
       'payment_intent_data[metadata][buyerUid]': decoded.uid,
+      'payment_intent_data[metadata][buyerOrgId]': buyerOrgId,
       success_url: `${origin}${returnPath}?purchase=success`,
       cancel_url: `${origin}${returnPath}?purchase=canceled`,
       client_reference_id: decoded.uid,
       'metadata[type]': 'marketplace-purchase',
       'metadata[listingId]': listingId,
       'metadata[buyerUid]': decoded.uid,
+      // THE ORG THE LICENCE IS FOR (AGL-2331). The webhook writes the
+      // purchase document from this metadata and had no buyer org to write,
+      // which is why the entitlement could only ever be person-scoped: the
+      // one field the gate needs was never carried across the Stripe
+      // boundary. Validated above against the caller's own membership, so a
+      // session can never license an org the buyer has no standing in.
+      'metadata[buyerOrgId]': buyerOrgId,
       'metadata[sellerOrgId]': sellerOrgId,
       'metadata[feeCents]': String(feeCents),
       'metadata[transferCents]': String(transferCents),
@@ -368,10 +447,15 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // presses the same button again.
     const claimed = await claimAttempt(firestore, {
       kind: 'marketplace-checkout',
-      scopeId: `${listingId}:${decoded.uid}`,
+      // Scoped to the ORG as well as the buyer since AGL-2331. The scope is
+      // what decides which two attempts are allowed to contend, and a
+      // licence for one workspace and a licence for another are now two
+      // different goods — an agency owner buying for two clients from two
+      // tabs must not have one of them read as a double-click of the other.
+      scopeId: `${listingId}:${buyerOrgId}:${decoded.uid}`,
       // The BUYER's org, so `eraseOrgIdempotencyKeys` sweeps this with the
       // buyer's data (AGL-1448) — the seller keeps the sale.
-      orgId: buyerOrgId ?? '',
+      orgId: buyerOrgId,
       key: idempotencyKey,
       busyMessage: 'This purchase is already being processed',
     })

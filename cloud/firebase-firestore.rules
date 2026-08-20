@@ -2150,8 +2150,23 @@ service cloud.firestore {
       // The seller is an ORG (AGL-652), so the sales side is a membership
       // check, not a uid match — a uid never equals an org id, and leaving
       // the old comparison would hide every publisher's own revenue.
+      //
+      // THE BUYING SIDE IS AN ORG TOO SINCE AGL-2331. A purchase licenses the
+      // installing organization, so the workspace that holds a licence has to
+      // be able to SEE it: without this clause the only person who could read
+      // an org's own licence was whoever happened to click Buy, and a
+      // colleague — or their replacement after they leave — saw a listing the
+      // org already paid for as unbought. `buyerUid` stays for the buyer's own
+      // receipt and for pre-AGL-2331 purchases, which carry no `buyerOrgId` at
+      // all and would otherwise become unreadable by anyone.
+      //
+      // The `is string` test is what keeps a legacy document from building the
+      // path `orgs//members/{uid}` — the membership `exists()` must be asked
+      // about a real org or not asked at all.
       allow read: if isStaff() || (isSignedIn() &&
         (resource.data.buyerUid == request.auth.uid ||
+         (resource.data.buyerOrgId is string &&
+          exists(/databases/$(database)/documents/orgs/$(resource.data.buyerOrgId)/members/$(request.auth.uid))) ||
          exists(/databases/$(database)/documents/orgs/$(resource.data.sellerOrgId)/members/$(request.auth.uid))));
       allow write: if false;
     }
