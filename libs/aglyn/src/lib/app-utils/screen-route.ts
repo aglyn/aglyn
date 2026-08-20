@@ -16,6 +16,7 @@
  */
 
 import { HOST_ERROR_SCREEN_SLOTS, type ScreenUid } from '../foundation'
+import { PLATFORM_BRAND_NAME } from './platform-brand'
 
 /**
  * Route path of a host's root screen. The tenant matcher joins the catch-all
@@ -132,7 +133,7 @@ export function reservedScreenRouteSegment(
  * wording a platform constraint three ways is how AGL-2093's precheck drifted.
  */
 export function reservedScreenRouteMessage(segment: string): string {
-  return `"/${segment}" is a reserved address on every Aglyn site — pick another slug`
+  return `"/${segment}" is a reserved address on every ${PLATFORM_BRAND_NAME} site — pick another slug`
 }
 
 /** Minimal screen shape the hierarchy helpers need. */
