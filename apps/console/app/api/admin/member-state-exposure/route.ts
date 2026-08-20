@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
@@ -179,9 +180,9 @@ async function handler(request: Request): Promise<Response> {
       // Stated in the payload, not only in the docs: a reader who gets this
       // as JSON during an incident must not have to go and find the caveat.
       scope:
-        'Account holders only — Aglyn as CONTROLLER. Says nothing about a ' +
-        "customer's site visitors or site members, for whom Aglyn is " +
-        'processor and the customer notifies.',
+        `Account holders only — ${PLATFORM_BRAND_NAME} as CONTROLLER. Says ` +
+        'nothing about a customer\'s site visitors or site members, for whom ' +
+        `${PLATFORM_BRAND_NAME} is processor and the customer notifies.`,
       caveat:
         'Billing country is the payer address, not residence. A sign-in ' +
         'country is where somebody WAS, once. Buckets marked inferredOnly ' +

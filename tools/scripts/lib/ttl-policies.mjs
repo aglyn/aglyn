@@ -104,4 +104,13 @@ export const TTL_POLICIES = Object.freeze([
     // body, i.e. a second copy of every record created through the REST API.
     why: 'REST/POS/marketplace replay keys, 30 days',
   },
+  {
+    collection: 'authHandoffs',
+    field: 'expiresAt',
+    // AGL-1902 — a cross-domain session handoff record. It holds the SHA-256
+    // of two secrets that together buy a session plus the uid it would mint
+    // for, so an unexpired leftover is the one document worth stealing.
+    // Expiry is enforced in code as well; this bounds the row itself.
+    why: 'cross-domain session handoff records',
+  },
 ])
