@@ -166,7 +166,36 @@ updates:
       prefix: chore
       prefix-development: chore
       include: scope
+    ignore:
+      # apps/docs CANNOT go to TypeScript 7. It extends @docusaurus/tsconfig,
+      # which still sets `baseUrl` — an option TS 7 removed — so `tsc` fails
+      # parsing the CONFIG and never reads a source file:
+      #   error TS5102: Option 'baseUrl' has been removed.
+      # We set no compilerOptions of our own here, so there is nothing local to
+      # fix; it needs Docusaurus to ship a tsconfig without baseUrl. This is
+      # the AGL-2363 shape again — a config-level rejection that reads as a
+      # broken build rather than as lost type coverage. Note this guards
+      # something completely different from the root/functions `typescript`
+      # ignores, which exist because those pin an npm ALIAS: do not remove
+      # them together. 5.6.x patches still arrive. (AGL-2477)
+      - dependency-name: typescript
+        update-types:
+          - version-update:semver-major
     groups:
+      # react and react-dom must move as a PAIR: react-dom@19 declares
+      # `peerDependencies: { react: ^19.2.8 }`, and the two share internals, so
+      # a bump to one alone leaves the site on a mismatched major. A major sits
+      # outside docs-minor-patch and would otherwise arrive as a lone
+      # single-package PR — which is exactly how #878 turned up, bumping
+      # react-dom to 19 while leaving react on 18. Grouping them means the pair
+      # arrives as one reviewable React-19 migration or not at all. The root
+      # config already does this with its next-react group. (AGL-2477)
+      docs-react:
+        patterns:
+          - react
+          - react-dom
+          - '@types/react'
+          - '@types/react-dom'
       docusaurus:
         patterns:
           - '@docusaurus/*'
