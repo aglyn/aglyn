@@ -49,7 +49,36 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   orgDataCollectionForHost: jest.fn(),
   orgDataQueryForHost: jest.fn(),
   meterHostEmail: async () => undefined,
-  campaignEmailSendsForMonth: async () => 0,
+  /*
+   * AGL-2267/AGL-2409. The barrel factory is a CLOSED WORLD — anything the
+   * sender imports and this object omits arrives as `undefined` and throws at
+   * the call — so the org-scoped cap and the platform send-rate governor have
+   * to be listed here even where neither is what the file is testing.
+   *
+   * Permissive on purpose: this file is about something else, and a cap or a
+   * ceiling that refused here would make every assertion below a test of the
+   * cap. `campaign-send.spec.ts` owns the enforcement.
+   */
+  orgCampaignEmailSendsForMonth: async () => 0,
+  reserveCampaignEmailSends: async ({ count }: any) => ({
+    ok: true,
+    reservation: { orgId: 'org-1', month: '2026-08', reserved: count },
+    used: 0,
+    limit: 500,
+  }),
+  reconcileCampaignSendReservation: async () => undefined,
+  readEmailSendRateConfig: async () => ({
+    perHour: 100_000,
+    enabled: true,
+    updatedAtMs: null,
+    updatedByEmail: null,
+    note: '',
+  }),
+  readEmailSendRateWindow: async () => ({
+    windowStartMs: 0,
+    resetMs: 3_600_000,
+    used: 0,
+  }),
 }))
 
 jest.mock('@aglyn/shared-util-email', () => ({
@@ -216,15 +245,26 @@ describe('a campaign recipient preview', () => {
     // very object the factory above returned. A namespace import would NOT:
     // the interop wrapper copies the properties, and the copy is not what
     // `campaign-send` calls.
+    //
+    // Since AGL-2267 the figure is ORG-scoped and read through
+    // `orgCampaignEmailSendsForMonth`; the per-SITE reader this used to spy on
+    // is no longer what the cap asks. The property name is the whole point of
+    // the test — a preview must refuse on the same reading the send does.
     const withUsage = jest
       .spyOn(
         jest.requireMock('@aglyn/tenant-data-admin') as {
-          campaignEmailSendsForMonth: (...args: any[]) => Promise<number>
+          orgCampaignEmailSendsForMonth: (...args: any[]) => Promise<number>
         },
-        'campaignEmailSendsForMonth',
+        'orgCampaignEmailSendsForMonth',
       )
       .mockResolvedValue(1_000_000)
     await expect(preview()).rejects.toBeInstanceOf(CampaignSendError)
+    // AGL-2267: and it must ask about the ORG. The dry run is the ONLY
+    // consumer of this read — the real send is enforced by the atomic
+    // reservation — so a preview that asked about the site would quote a
+    // merchant a headroom figure the send then disagrees with, and nothing
+    // else in the tree would notice.
+    expect(withUsage).toHaveBeenCalledWith('org-1', expect.any(String))
     withUsage.mockRestore()
   })
 })

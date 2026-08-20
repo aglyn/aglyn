@@ -59,14 +59,68 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   meterHostEmail: async (hostId: string, count: number, sendClass: string) => {
     mockState.metered.push([hostId, count, sendClass])
   },
-  campaignEmailSendsForMonth: async (hostRef: any, month: string) => {
-    const snapshot = await hostRef
-      .collection('counters')
-      .doc('campaignEmailSends')
-      .get()
-    const used = Number(snapshot.get(month) ?? 0)
+  /*
+   * The ORG-scoped, atomic campaign cap (AGL-2267).
+   *
+   * The cap used to be read off `hosts/{hostId}/counters/campaignEmailSends`
+   * — per SITE, against an ORG entitlement, so an org with N sites got N × the
+   * cap it bought — and it was a plain read followed by a post-delivery
+   * increment, so two concurrent campaigns both passed the same figure.
+   *
+   * These stubs are backed by the SAME `mockState.store` the fake Firestore
+   * uses, and they read and write the ORG path, so the assertions below are
+   * about the counter the product now enforces on. The transaction semantics
+   * themselves — abort-and-retry under contention, the reconcile — are owned
+   * by `campaign-send-reservation.spec.ts`, which models them properly; a
+   * single-threaded stub here would only pretend to.
+   */
+  orgCampaignEmailSendsForMonth: async (orgId: string, month: string) => {
+    const used = Number(
+      mockState.store[`orgs/${orgId}/counters/campaignEmailSends`]?.[month] ?? 0,
+    )
     return Number.isFinite(used) && used > 0 ? used : 0
   },
+  reserveCampaignEmailSends: async ({ orgId, month, count, limit }: any) => {
+    const path = `orgs/${orgId}/counters/campaignEmailSends`
+    const used = Number(mockState.store[path]?.[month] ?? 0) || 0
+    if (used + count > limit) return { ok: false, used, limit }
+    mockState.store[path] = { ...(mockState.store[path] ?? {}), [month]: used + count }
+    return {
+      ok: true,
+      reservation: { orgId, month, reserved: count },
+      used,
+      limit,
+    }
+  },
+  reconcileCampaignSendReservation: async (
+    reservation: any,
+    delivered: number,
+  ) => {
+    if (!reservation) return
+    const refund = Math.max(0, reservation.reserved - delivered)
+    if (refund <= 0) return
+    const path = `orgs/${reservation.orgId}/counters/campaignEmailSends`
+    const used = Number(mockState.store[path]?.[reservation.month] ?? 0) || 0
+    mockState.store[path] = {
+      ...(mockState.store[path] ?? {}),
+      [reservation.month]: Math.max(0, used - refund),
+    }
+  },
+  // The platform hourly ceiling (AGL-2409). Wide open here — this file is
+  // about the monthly cap and the cost meter, and `send-rate.spec.ts` plus
+  // `email-send-rate.spec.ts` own the ceiling.
+  readEmailSendRateConfig: async () => ({
+    perHour: 100_000,
+    enabled: true,
+    updatedAtMs: null,
+    updatedByEmail: null,
+    note: '',
+  }),
+  readEmailSendRateWindow: async () => ({
+    windowStartMs: 0,
+    resetMs: 3_600_000,
+    used: 0,
+  }),
 }))
 
 // Only the two I/O functions are stubbed — `renderEmailHtml` and the merge
@@ -432,11 +486,76 @@ describe('the campaign cap and the cost meter (AGL-1438)', () => {
   it('still refuses a campaign once the campaign meter is at the cap', async () => {
     seed(NODES)
     const month = new Date().toISOString().slice(0, 7)
-    mockState.store['hosts/host-1/counters/campaignEmailSends'] = {
+    mockState.store['orgs/org-1/counters/campaignEmailSends'] = {
       [month]: 500,
     }
 
     await expect(recorded()).rejects.toThrow(/campaign email limit/i)
     expect(mockState.sent).toHaveLength(0)
+  })
+
+  /**
+   * AGL-2267. The cap is the ORG's, so a SITE counter at the cap is not the
+   * cap — it is one site's history. Before this, the cap was read per site,
+   * which handed an org with N sites N × the allowance it bought.
+   *
+   * This is the mutation that would restore the defect: point the read back at
+   * `hosts/{hostId}/counters/...` and this test refuses a campaign that should
+   * send.
+   */
+  it('does NOT read the per-SITE counter as the cap (AGL-2267)', async () => {
+    seed(NODES)
+    const month = new Date().toISOString().slice(0, 7)
+    mockState.store['hosts/host-1/counters/campaignEmailSends'] = {
+      [month]: 500,
+    }
+
+    await expect(recorded()).resolves.toMatchObject({ sent: 1 })
+    expect(mockState.sent).toHaveLength(1)
+  })
+
+  /**
+   * The AGL-2267 defect, stated as the property it broke: **two sites of one
+   * org share ONE allowance.** Per-site enforcement handed an org with N sites
+   * N × the cap it bought, and it grew with the plan — invisible on Free and
+   * Starter, where `hostLimit` is 1.
+   *
+   * `getOrgForHost` answers `org-1` for every host in this file, so a cap
+   * keyed on the ORG refuses this and a cap keyed on the SITE (or on any other
+   * subject) does not.
+   */
+  it('is ONE allowance across the org, not one per site (AGL-2267)', async () => {
+    seed(NODES)
+    const month = new Date().toISOString().slice(0, 7)
+    mockState.store['orgs/org-1/counters/campaignEmailSends'] = { [month]: 500 }
+    // A DIFFERENT site of the same org, with no counter of its own.
+    mockState.store['hosts/host-2'] = { subdomain: 'acme-two' }
+    mockState.store['hosts/host-2/leads/lead-1'] = {
+      email: 'lead@example.com',
+      visibleTo: ['host-2'],
+    }
+
+    await expect(
+      performCampaignSend({
+        hostId: 'host-2',
+        subject: 'Spring sale',
+        body: 'plain-text fallback',
+        audience: 'leads',
+        senderUid: 'uid-1',
+      }),
+    ).rejects.toThrow(/campaign email limit/i)
+    expect(mockState.sent).toHaveLength(0)
+  })
+
+  it('claims the batch against the ORG counter and reconciles to what went out', async () => {
+    seed(NODES)
+    const month = new Date().toISOString().slice(0, 7)
+
+    await expect(recorded()).resolves.toMatchObject({ sent: 1 })
+    // One recipient in this fixture: claimed 1, delivered 1, so the counter
+    // holds 1 — not the batch size, and not zero.
+    expect(
+      mockState.store['orgs/org-1/counters/campaignEmailSends']?.[month],
+    ).toBe(1)
   })
 })

@@ -33,6 +33,10 @@ export * from './lib/server/edit-access-authz'
 export * from './lib/server/edit-access-token'
 export * from './lib/server/edit-hint-token'
 export * from './lib/server/email-metering'
+// Side-effecting on purpose (AGL-2409): evaluating this module INSTALLS the
+// platform send-rate governor on `sendEmail`. Every server surface already
+// imports this barrel, so nothing has to remember to call an installer.
+export * from './lib/server/email-send-rate'
 export * from './lib/server/erase'
 export * from './lib/server/firebase-admin'
 export * from './lib/server/ga4-measurement-protocol'

@@ -176,6 +176,34 @@ system emails that exist — adding one is a code change. Password reset and ema
 verification are Aglyn's own and are fully editable. Billing emails — receipts, failed
 payments, refunds — are sent by Stripe from its Dashboard and are listed read-only.
 
+#### Platform send rate {#platform-send-rate}
+
+At the top of the same page. Everything Aglyn sends leaves on **one** Resend key
+from **one** verified sending domain, under a `p=reject` DMARC record — so a
+throttle or a reputation hit there is a rejection, not a spam folder, and it
+lands on every customer's password resets at the same time. This is the ceiling
+on outbound mail per hour across the whole platform, and it is a **value, not a
+deploy**: a sending-domain warm-up or a deliverability incident is handled by
+changing the number here.
+
+The card shows the current hour's volume beside the ceiling, because the
+question during an incident is never "what is the limit" but "are we near it".
+
+**What the ceiling can and cannot do.** It can defer a marketing **campaign**
+and a scheduled **bulk sweep** (the monthly usage summary). It can **never**
+refuse transactional mail — password resets, invites, order receipts, booking
+reminders — at any value. Those are counted, because the ceiling is about total
+volume on the domain, but they send regardless.
+
+Nothing is lost when the ceiling bites. A scheduled campaign over it goes back
+to `scheduled` and the 15-minute processor picks it up in the next window; a
+usage-summary run stops without stamping the orgs it did not reach, and the
+hourly firing on the 1st and 2nd of the month mails them.
+
+Reading the value needs any staff role; **changing it needs `super`**, the same
+bar as feature flags, and every change writes an audit row with the before, the
+after and the reason typed into the **Why** box.
+
 ### [Feature flags](feature-flags.md) {#feature-flags}
 
 Release-gate console features via Remote

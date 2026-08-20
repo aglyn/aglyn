@@ -221,6 +221,17 @@ const GATED_SURFACES: Record<string, { ui: string[]; via: RegExp }> = {
     ui: ['app/(app)/admin/marketplace-reports/page.tsx'],
     via: /access level/,
   },
+  // The platform hourly send ceiling (AGL-2409). Reading it is open to every
+  // staff role — during an incident the question "are we at the ceiling" must
+  // be answerable by whoever is on — and SETTING it is `super`, the same bar
+  // as `flags`, because the value decides whether every merchant's campaigns
+  // go out. Like `flags/page.tsx`, the card reads the role off its OWN
+  // endpoint's response rather than the claim hook; the route is the authority
+  // either way.
+  'email-send-rate/route.ts': {
+    ui: ['components/staff-email-send-rate-card.component.tsx'],
+    via: /isSuper/,
+  },
   'media-quarantine/route.ts': {
     ui: ['app/(app)/admin/media-quarantine/page.tsx'],
     via: /useStaffRole/,

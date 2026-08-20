@@ -165,7 +165,24 @@ describe('only campaigns may be refused by the quota (AGL-1438)', () => {
     expect(campaignSender).toBeDefined()
     // The counter the quota is measured against. Reading `emailSends` here
     // would refuse a campaign because the site sent order confirmations.
-    expect(campaignSender!.text).toMatch(/campaignEmailSendsForMonth\s*\(/)
+    //
+    // SINCE AGL-2267 the reader is `orgCampaignEmailSendsForMonth` and the
+    // ENFORCEMENT is `reserveCampaignEmailSends` — the figure moved from the
+    // per-SITE counter to the per-ORG one (the entitlement is an org's) and
+    // from a read-then-write to an atomic claim. Both are required here: the
+    // read alone is the shape that could be raced, and the claim alone would
+    // leave the dry-run preview with no figure to quote.
+    expect(campaignSender!.text).toMatch(/orgCampaignEmailSendsForMonth\s*\(/)
+    expect(campaignSender!.text).toMatch(/reserveCampaignEmailSends\s*\(/)
+    // …and the claim is reconciled to the DELIVERED count, or a campaign that
+    // half-delivered would spend the whole batch of the org's allowance.
+    expect(campaignSender!.text).toMatch(
+      /reconcileCampaignSendReservation\s*\(/,
+    )
+    // The per-SITE reader is GONE. Its presence is the AGL-2267 defect.
+    expect(campaignSender!.text).not.toMatch(
+      /[^g]campaignEmailSendsForMonth\s*\(/,
+    )
     // And the old inline increment is gone, so nothing counts twice.
     expect(campaignSender!.text).not.toMatch(/doc\(\s*'emailSends'\s*\)/)
   })

@@ -22,6 +22,14 @@
  * Auth email (verification, password reset) is Firebase's job and does NOT
  * come through this module.
  */
+import {
+  type EmailSendPriority,
+  emailSendRateWindowStartMs,
+  getEmailSendGovernor,
+  isRefusablePriority,
+  resolveSendPriority,
+} from './send-rate'
+
 export const RESEND_SEND_ENDPOINT = 'https://api.resend.com/emails'
 
 /** A Resend delivery tag, used for webhook attribution (AGL-268). */
@@ -65,6 +73,18 @@ export interface SendEmailOptions {
    * send — see `contextTag` below.
    */
   context?: string
+  /**
+   * What the platform send-rate governor is allowed to do to this message
+   * (AGL-2409). Omitted, it is derived from `context`: `'campaign'` is a
+   * campaign and everything else is transactional, so no existing caller
+   * changes and the default is the one that can never be refused.
+   *
+   * Set it to `'bulk'` ONLY from a resumable sweep — a cron that leaves its
+   * subject unstamped and picks it up on the next run. A refusal for a bulk
+   * send means "not this hour", and a caller that cannot come back would turn
+   * that into a message nobody ever gets.
+   */
+  priority?: EmailSendPriority
 }
 
 /**
@@ -101,14 +121,20 @@ export function contextTag(context: string | undefined): EmailTag[] {
 }
 
 /**
- * Why a send did not happen. `unconfigured` and `no-recipient` mean nothing
- * was attempted; `rejected` and `network` mean Resend was called and failed.
+ * Why a send did not happen. `unconfigured`, `no-recipient` and
+ * `rate-limited` mean nothing was attempted; `rejected` and `network` mean
+ * Resend was called and failed.
+ *
+ * `rate-limited` (AGL-2409) is the ONLY one of these that a caller may
+ * reasonably retry unchanged, and the only one that can ever be produced for
+ * a campaign or a bulk sweep and never for a transactional message.
  */
 export type SendEmailFailureReason =
   | 'unconfigured'
   | 'no-recipient'
   | 'rejected'
   | 'network'
+  | 'rate-limited'
 
 export type SendEmailResult =
   | { sent: true; id: string | null }
@@ -119,7 +145,33 @@ export type SendEmailResult =
       status?: number
       /** Resend's error body or the thrown message, trimmed for logs. */
       detail?: string
+      /**
+       * `rate-limited` only: when the platform hourly window rolls and the
+       * caller may try again. A resumable sweep does not need to wait on it —
+       * its next scheduled run is the retry.
+       */
+      retryAtMs?: number
     }
+
+/**
+ * The retry instant when the platform send-rate governor deferred this
+ * message, or `null` for every other outcome (AGL-2409).
+ *
+ * A FUNCTION rather than `result.reason === 'rate-limited'` at each call site,
+ * because `strictNullChecks` is OFF repo-wide and TypeScript will not narrow a
+ * boolean-literal discriminant without it: `if (result.sent) … else
+ * result.reason` does not compile, in every consumer, for a reason that has
+ * nothing to do with this union. One helper is also one place to change if the
+ * shape of a deferral ever moves.
+ */
+export function rateLimitedRetryAtMs(
+  result: SendEmailResult | null | undefined,
+): number | null {
+  const failure = result as { reason?: string; retryAtMs?: number } | null
+  if (!failure || failure.reason !== 'rate-limited') return null
+  const retryAtMs = Number(failure.retryAtMs)
+  return Number.isFinite(retryAtMs) ? retryAtMs : 0
+}
 
 export interface EmailConfig {
   apiKey: string | undefined
@@ -215,6 +267,58 @@ export async function sendEmail(
   if (!to.length) {
     console.warn(`${label} skipped — no valid recipient address`)
     return { sent: false, reason: 'no-recipient' }
+  }
+
+  /*
+   * THE PLATFORM SEND-RATE GOVERNOR (AGL-2409).
+   *
+   * Asked on EVERY send, including transactional ones, because the ceiling is
+   * about total volume on one sending domain — a governor that only saw
+   * campaigns would report a quiet hour while ten thousand receipts went out.
+   * The governor counts what it grants.
+   *
+   * Two properties this block must have, in order:
+   *
+   *  1. **A refusal is honoured only for a refusable priority.** This is the
+   *     second of the two enforcement points described in `send-rate.ts`.
+   *     `emailSendRateVerdict` already cannot refuse a transactional send;
+   *     the governor is INJECTABLE, so a wrong one is reachable, and the send
+   *     path must still be unable to drop a password reset. Anything that is
+   *     not explicitly a campaign or a bulk sweep sends regardless of the
+   *     answer.
+   *  2. **It fails open.** A governor that throws — Firestore unreachable, no
+   *     Admin app, a bug — must not stop mail. The counter being unavailable
+   *     is an outage on the control, and an outage on a control that turns
+   *     into an outage on the product is a worse bug than the burst it was
+   *     guarding. The same posture `sendEmail` takes everywhere else: it
+   *     never throws, and neither does this.
+   */
+  const priority = resolveSendPriority(options.context, options.priority)
+  const governor = getEmailSendGovernor()
+  if (governor) {
+    let verdict: Awaited<ReturnType<typeof governor>> | null = null
+    try {
+      verdict = await governor({ priority, count: to.length, context: options.context })
+    } catch (error) {
+      console.error(`${label} send-rate governor failed — allowing`, error)
+      verdict = null
+    }
+    if (verdict && !verdict.allowed && isRefusablePriority(priority)) {
+      const retryAtMs =
+        verdict.retryAtMs ?? emailSendRateWindowStartMs(Date.now())
+      console.warn(
+        `${label} deferred — platform send rate reached ` +
+          `(${verdict.used ?? '?'}/${verdict.ceiling ?? '?'} this hour)`,
+      )
+      return {
+        sent: false,
+        reason: 'rate-limited',
+        retryAtMs,
+        detail:
+          `Platform hourly send rate reached (${verdict.ceiling ?? '?'}/hour). ` +
+          'Transactional mail is unaffected.',
+      }
+    }
   }
 
   try {

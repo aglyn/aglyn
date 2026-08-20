@@ -17,7 +17,11 @@
 
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { CampaignSendError, performCampaignSend } from './campaign-send'
+import {
+  CampaignSendDeferredError,
+  CampaignSendError,
+  performCampaignSend,
+} from './campaign-send'
 
 /**
  * Scheduled-campaign processor (AGL-272): scheduler-invoked (Cloud
@@ -83,6 +87,39 @@ export const campaignProcessScheduledHandler: PluginApiHandler = async (
         })
         results.push(result)
       } catch (error) {
+        /*
+         * DEFERRED IS NOT FAILED (AGL-2409).
+         *
+         * The platform send-rate governor had no room for this campaign in
+         * the current hour and NOTHING WAS SENT — the admission check runs
+         * before the first message and before any counter moves, which is
+         * what makes this safe to retry. So the claim is released by putting
+         * the row back to `scheduled`, and the next 15-minute run picks it up.
+         *
+         * Marking it `failed` here — which is the right answer for every
+         * other `CampaignSendError`, an empty audience or a stopped
+         * experiment — would turn a ramp into a lost campaign that the
+         * merchant has to notice in the History list and re-create by hand.
+         * That is the failure mode the ceiling exists to avoid making worse.
+         */
+        if (error instanceof CampaignSendDeferredError) {
+          await campaignDoc.ref
+            .set(
+              {
+                status: 'scheduled',
+                deferredReason: error.message,
+                deferredUntilMs: error.retryAtMs,
+              },
+              { merge: true },
+            )
+            .catch(() => undefined)
+          results.push({
+            campaignId: campaignDoc.id,
+            deferred: true,
+            retryAtMs: error.retryAtMs,
+          })
+          continue
+        }
         const message =
           error instanceof CampaignSendError
             ? error.message

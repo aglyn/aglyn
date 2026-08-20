@@ -72,7 +72,25 @@ on:
     # invoked — see `monthIsClosed`.
     - cron: '0 7 * * *' # report-usage (current month, no metering) — daily 07:00 UTC
     - cron: '0 8 * * *' # usage-alerts   — daily 08:00 UTC
-    - cron: '0 6 1 * *' # usage-email    — monthly, 1st at 06:00 UTC
+    # HOURLY across the first two days, not one monthly firing (AGL-2409).
+    #
+    # This route used to read `orgs` with `.limit(1000)` and loop with `await
+    # sendEmail` inside: one invocation, up to a thousand messages, as fast as
+    # Resend accepts them, on the same key and the same From address that
+    # carries every customer's password resets — under `p=reject`, where a
+    # throttle is a rejection and not a spam folder.
+    #
+    # The route is now chunked and resumable, and every send asks the platform
+    # send-rate governor (staff-configurable at /admin/emails). A run that hits
+    # the hourly ceiling stops and reports `done: true` WITHOUT stamping the
+    # orgs it did not reach, so the next hourly firing mails exactly those.
+    # `emailedAt` is the idempotence key, so a run over already-mailed orgs
+    # costs reads and sends nothing.
+    #
+    # Two days rather than one, so a low ceiling during a domain warm-up still
+    # has 48 windows to drain a thousand orgs through before the month's
+    # summaries would be lost.
+    - cron: '0 * 1-2 * *' # usage-email    — hourly, 1st-2nd of the month
     # Weekly Firestore GCS export (AGL-1843) — the independent copy that
     # exists because the managed backups kept flipping READY → NOT_AVAILABLE
     # at ~day 7. Mondays 05:00 UTC: the day after the Sunday managed backup,
@@ -201,7 +219,7 @@ jobs:
             '0 4 * * *') path=/api/admin/run-erasures ;;
             '0 7 * * *') path='/api/billing/report-usage?month=current' ;;
             '0 8 * * *') path=/api/billing/usage-alerts ;;
-            '0 6 1 * *') path=/api/billing/usage-email ;;
+            '0 * 1-2 * *') path=/api/billing/usage-email ;;
             '0 5 * * 1') path=/api/admin/firestore-export ;;
             '30 5 * * 1') path=/api/admin/reap-plugin-artifacts ;;
             '0 6 * * 1') path=/api/admin/reverify-plugin-versions ;;
