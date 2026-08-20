@@ -7,9 +7,10 @@ description: List the files in your organization library and in each site's medi
 # Media
 
 List the files your organization has uploaded — images, video, documents — with their
-size, dimensions, folder and URLs. Media is **read-only** over the API; uploading goes
-through the console's media library, which does virus scanning, image variant
-generation and quota accounting that a bare `PUT` would skip.
+size, dimensions, folder and URLs, and [upload new ones](#upload).
+
+Uploading is a create only: there is no API call that replaces, renames or deletes an
+existing file. Those stay console actions.
 
 ## Two libraries, one resource
 
@@ -154,6 +155,87 @@ curl "https://app.aglyn.com/api/v1/sites/host_demo/media" \
   -H "Authorization: Bearer aglyn_sk_…"
 ```
 
+### Upload a file {#upload}
+
+`POST /v1/media` — scope `media:write`, uploads to the **organization library**.
+`POST /v1/sites/{siteId}/media` — same call, uploads to **one site's** library.
+
+Accepts an [`Idempotency-Key`](../conventions.md#idempotency).
+
+**Body** — JSON, with the file's bytes base64-encoded. There is no multipart form.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `data` | string | yes | The file's bytes, base64. Anything that isn't valid base64 is a `400` — we never store a partially-decoded file. |
+| `contentType` | string | yes | MIME type. Must be on the [allowed list](#upload-limits). |
+| `fileName` | string | no | Defaults to `upload`. Truncated at 200 characters. |
+| `folderId` | string | no | Put the file in a folder, by its id. |
+| `alt` | string | no | Alt text. Worth setting — it's the field an accessibility audit reads. |
+| `private` | boolean | no | `true` stores it restricted: no `cdnUrl`, no public link. |
+
+```bash
+curl -X POST "https://app.aglyn.com/api/v1/media" \
+  -H "Authorization: Bearer aglyn_sk_…" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: 2b9f1c4e-…" \
+  -d "{\"fileName\":\"hero.jpg\",\"contentType\":\"image/jpeg\",\"data\":\"$(base64 < hero.jpg)\"}"
+```
+
+Returns **`201`** with the [media object](#the-media-object) — or **`200`** with the
+original object when an `Idempotency-Key` replays. Image variants are generated exactly
+as they are for a console upload, so an uploaded image gets its `cdnUrl` and its `?w=`
+widths without a second call.
+
+#### Size and type limits {#upload-limits}
+
+Because the bytes travel inside a JSON body, base64 inflates them by about a third —
+budget for that when you size a batch.
+
+| Family | Limit |
+| --- | --- |
+| Images (`image/*`, including SVG) | 15 MB |
+| PDF, Word, Excel, CSV, text, Markdown, JSON, ZIP | 10 MB |
+| Video (`mp4`, `webm`, `quicktime`) | 25 MB |
+| PowerPoint | 10 MB |
+
+Anything outside the allowed types returns `415 unsupported_media_type`; anything past
+its ceiling returns `413 payload_too_large`. The size is measured on the **decoded**
+bytes, not on anything you declare.
+
+Video and document uploads need a plan that includes them; images do not.
+
+#### What we check, and what we don't {#upload-checks}
+
+Worth stating exactly, because "the platform accepted it" is not the same as "the
+platform vetted it":
+
+- **We check the declared content type against an allowlist** and refuse the rest.
+- **We measure the real decoded size** against the per-type ceiling.
+- **We sanitize SVGs**, stripping script and other active content before storing.
+- **We hash the file** (SHA-256) and refuse anything matching a taken-down asset.
+- **We do not scan for malware.** No upload path on the platform does — neither this
+  one nor the console's. An accepted file has not been checked for anything harmful
+  inside it.
+- **We do not verify that a file is what it claims to be.** The content type you send
+  is trusted (corrected only by file extension), so the allowlist bounds what a file
+  *says* it is, not what it contains.
+
+Treat files uploaded through your own integration as you would any other content you
+are responsible for.
+
+#### Quota
+
+Uploads count against your **storage allowance**, the same one console uploads count
+against — there is no separate API allowance and no per-upload charge. An upload that
+would cross the band returns `403 plan_required` with `code: "storage_quota"`, and
+nothing is stored: no file, no metering.
+
+A quota refusal **releases** the `Idempotency-Key`, so if you free up space or upgrade,
+retrying with the same key genuinely re-runs rather than replaying the refusal.
+
+Check [`GET /v1/usage`](../usage.md) before a large batch — `dataStorageMb` tells you
+what is left.
+
 ### Retrieve a file
 
 `GET /v1/media/{mediaId}` — scope `media:read`.
@@ -214,9 +296,14 @@ Prefix the filename with the id: `fileName` is not unique across folders, and a 
 
 | Status | `type` | When |
 | --- | --- | --- |
-| `403` | `insufficient_scope` | Key lacks `media:read`. |
+| `400` | `bad_request` | `data` is not valid base64. |
+| `403` | `insufficient_scope` | Key lacks `media:read`, or `media:write` to upload. |
+| `403` | `plan_required` | `code: "storage_quota"` — the upload would cross your storage band. Or the file type needs a higher plan. |
 | `404` | `not_found` | Unknown or unowned site; unknown or deleted file. |
-| `405` | `method_not_allowed` | Anything other than `GET`. |
+| `405` | `method_not_allowed` | A method the path doesn't take — `POST` is accepted on the collection, never on `/media/{id}`. |
+| `413` | `payload_too_large` | Past the [ceiling](#upload-limits) for that type. |
+| `415` | `unsupported_media_type` | Content type not on the allowed list. |
+| `451` | `unavailable_for_legal_reasons` | The file matches a taken-down asset. |
 
 Media needs no commerce entitlement — an organization with no store still reads its
 own files.
@@ -224,7 +311,7 @@ own files.
 ## Related
 
 - [Products](products.md) — `mediaUrls` point at these files.
-- [Media library](/content-and-data/media/overview) — uploading and organizing.
+- [Media library](/content-and-data/media/overview) — organizing what you upload.
 - [Variant widths](/content-and-data/media/overview#variant-widths) — what `?w=` can ask
   for, and what a file's own delivery line says it has.
 - [Conventions](../conventions.md) — pagination, ordering, errors.

@@ -38,7 +38,8 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { getApp, getApps, initializeApp, type FirebaseApp } from 'firebase/app'
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check'
-import { signInWithCustomToken, connectAuthEmulator } from 'firebase/auth'
+import { connectAuthEmulator } from 'firebase/auth'
+import { signInWithPooledCustomToken } from '../utils/pooled-custom-token'
 import {
   type Database,
   connectDatabaseEmulator,
@@ -376,9 +377,10 @@ export function usePresence(options: {
         // instance already placed in that tenant. Set it BEFORE the exchange.
         // Assigned unconditionally — null puts the instance back on the
         // project pool, so a presence app reused across a sign-out into a
-        // non-SSO account cannot carry a stale tenant over.
-        auth.tenantId = tenantId ?? null
-        await signInWithCustomToken(auth, token)
+        // non-SSO account cannot carry a stale tenant over. Shared with every
+        // other exchange since AGL-1993; this call site is where the rule was
+        // first got right.
+        await signInWithPooledCustomToken(auth, token, tenantId)
         // The database handle is built HERE, once, and carried on the
         // session: co-editing must talk to the same authenticated app
         // instance the presence write used, and re-deriving it in each

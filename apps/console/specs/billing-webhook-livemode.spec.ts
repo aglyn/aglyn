@@ -199,6 +199,19 @@ jest.mock('next/server', () => ({
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // The REAL classifier, ledger and write observer (AGL-1954), never stubs.
+  // The route's "did this delivery do anything" verdict is the thing under
+  // test in `billing-webhook-inert.spec.ts`, and a hand-written double here
+  // would let this suite keep passing while the real rule changed under it.
+  classifyWebhookDelivery: jest.requireActual(
+    '@aglyn/aglyn/app-utils/webhook-delivery',
+  ).classifyWebhookDelivery,
+  createWebhookEffectLedger: jest.requireActual(
+    '@aglyn/aglyn/app-utils/webhook-delivery',
+  ).createWebhookEffectLedger,
+  observeWrites: jest.requireActual(
+    '@aglyn/aglyn/app-utils/webhook-delivery',
+  ).observeWrites,
   buildRoute: () => '/acme/manage/billing',
   Route: { MANAGE_BILLING: 'MANAGE_BILLING' },
   // Captured, not stubbed: this IS the money-reversal dispatch — the

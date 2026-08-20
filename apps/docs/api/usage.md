@@ -94,6 +94,13 @@ before you alert on them.
   up-to-the-second figure. Records you wrote minutes ago may not be in it yet. That is
   the honest field to publish: a freshly-derived number would disagree with the
   invoice.
+- **Live is not the same as billed, for `contacts` and `dataStorageMb`.** Both are
+  levels rather than monthly totals, and a level has to be charged on one moment in the
+  month: the **last daily reading before the month closes**. So during a month these
+  fields track your current position against the band — which is what you want to alert
+  on, because that is what enforcement acts on — while the invoice for a *finished*
+  month is fixed at where you ended it. Deleting contacts in March cannot change the
+  February invoice, and the March figure you see here is not final until March is.
 
 ## Errors
 

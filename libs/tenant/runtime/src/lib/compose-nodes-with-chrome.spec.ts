@@ -87,6 +87,7 @@ jest.mock('./get-screen-version', () => ({
   default: jest.fn(),
 }))
 
+import { formatCollectionEntryDate } from '@aglyn/aglyn/server'
 import { composeNodesWithChrome } from './compose-screen-nodes'
 
 /**
@@ -464,7 +465,12 @@ describe('composeNodesWithChrome fills Entry Meta blocks (AGL-1385)', () => {
     entry,
     categories: [{ id: 'guides', name: 'Guides' }],
   }
-  const expectedDate = new Date(1_754_714_956 * 1000).toLocaleDateString()
+  // 2025-08-09T05:29:16Z, which is the PREVIOUS day in every American zone.
+  // Derived from the shared formatter rather than a bare
+  // `toLocaleDateString()` (AGL-1926): the stamped prop is whatever the ONE
+  // formatter produces, and asserting the ambient runtime instead made this
+  // a test of the developer's time zone.
+  const expectedDate = formatCollectionEntryDate({ seconds: 1_754_714_956 })
 
   it('stamps the routed entry’s date, category and tags into the tree', async () => {
     const composed = await composeNodesWithChrome({

@@ -34,6 +34,7 @@ import {
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import DocsHelpTip from './docs-help-tip.component'
+import { useHostId } from './host-id-provider'
 import useCurrentOrg from '../hooks/use-current-org'
 
 /** Mirrors `REPORT_KINDS` in `app/api/_lib/linear-issues.ts`. */
@@ -75,6 +76,7 @@ export function ReportIssueDialog(props: ReportIssueDialogProps) {
   const { open, onClose } = props
   const { data: user } = useUser()
   const { orgId } = useCurrentOrg()
+  const hostId = useHostId()
   const { enqueueSnackbar } = useSnackbar()
   const pathname = usePathname()
 
@@ -111,6 +113,11 @@ export function ReportIssueDialog(props: ReportIssueDialogProps) {
           summary: summary.trim(),
           description: description.trim(),
           orgId,
+          // Which site the person is working on, when they are on one. Like
+          // `orgId` this is a HINT: the server re-checks that this session may
+          // actually see the host and drops it otherwise, so naming someone
+          // else's site here achieves nothing.
+          hostId,
           // The one fact the server cannot observe for itself. It is treated
           // as untrusted there and sanitised before it reaches the issue.
           route: pathname,
@@ -167,8 +174,9 @@ export function ReportIssueDialog(props: ReportIssueDialogProps) {
       >
         <Typography variant="body2" color="text.secondary">
           {'Tell us what happened and we will track it. The page you are on, ' +
-            'your workspace, and your browser and app version are attached ' +
-            'automatically — you do not need to describe them.'}
+            'your workspace and site, your role and plan, and your browser ' +
+            'and app version are attached automatically — you do not need to ' +
+            'describe them.'}
         </Typography>
         <TextField
           select

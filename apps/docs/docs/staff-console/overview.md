@@ -75,6 +75,39 @@ and GDPR-erasure flags, per organization. The directory is listed server-side wi
 the Admin SDK (so it shows *every* org, not the subset client rules would return),
 ordered by organization id, 25 per page with Previous/Next.
 
+#### Free workspace limit {#free-workspace-limit}
+
+How many **free** workspaces one account may hold, on a card at the top of the
+organizations page. Every free quota in the product — sites, media, bandwidth,
+Assist messages, form submissions, contacts — is counted per workspace, so
+without this ceiling one account multiplies the whole free allowance by however
+many workspaces it opens. The default is **three**.
+
+What is counted is free workspaces the account **owns now or created**. Three
+consequences worth knowing before you answer a ticket about it:
+
+- **Paid workspaces do not count.** An agency or consultant whose workspaces
+  are paid is unaffected at any number. A workspace whose subscription lapses
+  becomes free again and counts again.
+- **Being invited to somebody else's workspace never counts.** A contractor on
+  ten client rosters owns none of them.
+- **Handing a workspace to another account does not free a slot**, because the
+  creator is recorded separately from the owner. That is deliberate: otherwise
+  "transfer it to an alt account, create another, take it back" would be a way
+  round the ceiling. Deleting a workspace *does* free a slot — the allowance it
+  was consuming went with it.
+
+Changing the number needs the **super** staff role and is audited with a
+before, an after and a typed reason. It takes effect within fifteen seconds
+across the platform and needs no deploy. **Lowering it never removes anybody's
+workspaces**: an account already over the new number keeps every one and simply
+cannot create another. Staff creating a workspace on a customer's behalf are
+exempt from the ceiling entirely.
+
+A person who hits it sees the number, and is told to upgrade one, delete one,
+or ask us — so "support raised it for this account" is a real answer. Today
+that is done by raising the platform number; there is no per-account override.
+
 ### Entitlement editor {#entitlement-editor}
 
 Full override editor for an organization's entitlements,
@@ -175,6 +208,34 @@ The list is generated from the emails the product actually sends, so staff edit 
 system emails that exist — adding one is a code change. Password reset and email
 verification are Aglyn's own and are fully editable. Billing emails — receipts, failed
 payments, refunds — are sent by Stripe from its Dashboard and are listed read-only.
+
+#### Platform send rate {#platform-send-rate}
+
+At the top of the same page. Everything Aglyn sends leaves on **one** Resend key
+from **one** verified sending domain, under a `p=reject` DMARC record — so a
+throttle or a reputation hit there is a rejection, not a spam folder, and it
+lands on every customer's password resets at the same time. This is the ceiling
+on outbound mail per hour across the whole platform, and it is a **value, not a
+deploy**: a sending-domain warm-up or a deliverability incident is handled by
+changing the number here.
+
+The card shows the current hour's volume beside the ceiling, because the
+question during an incident is never "what is the limit" but "are we near it".
+
+**What the ceiling can and cannot do.** It can defer a marketing **campaign**
+and a scheduled **bulk sweep** (the monthly usage summary). It can **never**
+refuse transactional mail — password resets, invites, order receipts, booking
+reminders — at any value. Those are counted, because the ceiling is about total
+volume on the domain, but they send regardless.
+
+Nothing is lost when the ceiling bites. A scheduled campaign over it goes back
+to `scheduled` and the 15-minute processor picks it up in the next window; a
+usage-summary run stops without stamping the orgs it did not reach, and the
+hourly firing on the 1st and 2nd of the month mails them.
+
+Reading the value needs any staff role; **changing it needs `super`**, the same
+bar as feature flags, and every change writes an audit row with the before, the
+after and the reason typed into the **Why** box.
 
 ### [Feature flags](feature-flags.md) {#feature-flags}
 

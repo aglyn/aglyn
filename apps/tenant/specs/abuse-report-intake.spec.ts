@@ -147,6 +147,15 @@ const OPERATOR_KEYS = [
   'NEXT_PUBLIC_OPERATOR_NAME',
   'NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL',
   'NEXT_PUBLIC_OPERATOR_LEGAL_EMAIL',
+  // AGL-2035: the designated-agent block renders from these, so `setOperator`
+  // must be able to clear them. Left out, the UNCONFIGURED cases below would
+  // inherit whatever a shell or a leaked root `.env` had set and could assert
+  // "names nobody" while an agent block sat on the page.
+  'NEXT_PUBLIC_OPERATOR_DMCA_AGENT_NAME',
+  'NEXT_PUBLIC_OPERATOR_DMCA_AGENT_ADDRESS',
+  'NEXT_PUBLIC_OPERATOR_DMCA_AGENT_EMAIL',
+  'NEXT_PUBLIC_OPERATOR_DMCA_AGENT_PHONE',
+  'NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED',
 ]
 const setOperator = (values: Record<string, string>): void => {
   for (const key of OPERATOR_KEYS) delete process.env[key]
@@ -622,6 +631,108 @@ describe('AGL-2016 · the intake addresses the operator of THIS deployment', () 
       }
       const accepted = await POST(jsonPost(PHISHING))
       expect(accepted.status).toBe(200)
+    })
+  })
+})
+
+describe('AGL-2035 · §512(c)(2) publishes the agent, phone included', () => {
+  // §512(c)(2) requires the designated agent's "name, address, phone number,
+  // and electronic mail address" to be available to the public THROUGH THE
+  // SERVICE — a duty separate from, and not discharged by, registering with
+  // the Copyright Office. AGL-2016 built `operatorDmcaAgent()` and the whole
+  // `NEXT_PUBLIC_OPERATOR_DMCA_AGENT_*` family, and then nothing read it, so
+  // the publication duty was unmet on every deployment however carefully an
+  // operator filled the values in.
+  //
+  // Forced red by making `designatedAgentHtml()` return `''` — the state main
+  // was in before the call site existed. The three cases that assert something
+  // IS published went red; the two that assert nothing is published stayed
+  // green. That asymmetry is the point: a suite built only from the negatives
+  // passes unchanged on a route that renders no block at all, which is exactly
+  // how configuration nothing reads survives a green run.
+  const form = async (): Promise<string> => {
+    const response = await GET(
+      new Request('https://site.example.com/api/report-abuse'),
+    )
+    expect(response.status).toBe(200)
+    return response.text()
+  }
+
+  const FILED = {
+    ...AGLYN_OPERATED,
+    NEXT_PUBLIC_OPERATOR_DMCA_AGENT_NAME: 'Copyright Compliance Department',
+    NEXT_PUBLIC_OPERATOR_DMCA_AGENT_ADDRESS:
+      'c/o Northwest Registered Agent, LLC., 5900 Balcones Drive STE 100, Austin, TX 78731',
+    NEXT_PUBLIC_OPERATOR_DMCA_AGENT_EMAIL: 'dmca@aglyn.com',
+    NEXT_PUBLIC_OPERATOR_DMCA_AGENT_PHONE: '512-222-8232',
+    NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED: 'true',
+  }
+
+  describe('PUBLISHED — a configured agent reaches the public page', () => {
+    beforeEach(() => setOperator(FILED))
+
+    it('prints all four §512(c)(2) details', async () => {
+      const body = await form()
+      expect(body).toContain('Copyright Compliance Department')
+      expect(body).toContain('5900 Balcones Drive STE 100')
+      expect(body).toContain('dmca@aglyn.com')
+      // The phone is the element AGL-2035 is about: the live policy page
+      // published name, email and address and no number at all.
+      expect(body).toContain('512-222-8232')
+    })
+
+    it('says the agent is registered, because this deployment says so', async () => {
+      const body = await form()
+      expect(body).toContain('registered with the U.S. Copyright Office')
+    })
+  })
+
+  describe('CONFIGURED BUT NOT REGISTERED — details, no federal claim', () => {
+    beforeEach(() => {
+      const { NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED: _drop, ...rest } =
+        FILED
+      setOperator(rest)
+    })
+
+    it('publishes the block without asserting a Copyright Office filing', async () => {
+      // An operator who fills in an agent so their form has a name on it has
+      // not thereby claimed a federal registration. The product must not
+      // upgrade their configuration into a legal assertion on their behalf —
+      // the claim renders from its own flag or not at all.
+      const body = await form()
+      expect(body).toContain('Copyright Compliance Department')
+      expect(body).not.toContain('registered with the U.S. Copyright Office')
+    })
+  })
+
+  describe('PARTIAL — a phone but no designation is not a designation', () => {
+    beforeEach(() =>
+      setOperator({
+        ...AGLYN_OPERATED,
+        NEXT_PUBLIC_OPERATOR_DMCA_AGENT_PHONE: '512-222-8232',
+        NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED: 'true',
+      }),
+    )
+
+    it('claims nothing when the agent has no name and no address', async () => {
+      // `operatorDmcaAgent()` requires both. A heading with a bare phone
+      // under it reads as a designation and is not one, and the `registered`
+      // flag must not survive the block it belongs to.
+      const body = await form()
+      expect(body).not.toContain('Designated agent for copyright notices')
+      expect(body).not.toContain('registered with the U.S. Copyright Office')
+      expect(body).not.toContain('512-222-8232')
+    })
+  })
+
+  describe('UNCONFIGURED — a self-hoster inherits no agent of ours', () => {
+    beforeEach(() => setOperator({}))
+
+    it('renders no agent block at all', async () => {
+      const body = await form()
+      expect(body).not.toContain('Designated agent for copyright notices')
+      expect(body).not.toContain('dmca@aglyn.com')
+      expect(body).not.toContain('512-222-8232')
     })
   })
 })

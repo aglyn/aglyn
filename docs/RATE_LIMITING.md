@@ -128,7 +128,7 @@ is.
 `POST /api/analytics/collect` and the two `POST /api/errors` client error-report
 endpoints still use in-memory limiters.
 
-Each durable call is a Firestore transaction — one read plus one write. That
+Each durable call costs one document write plus one document read. That
 is the right price for a password attempt and the wrong price for a beacon
 that can fire on every page view. The harm from analytics spam is polluted
 numbers, not access; paying a write per pageview to prevent it would cost more
@@ -160,9 +160,9 @@ caller's cheap 429 came back to the client as a bodyless **504 with no
 `Retry-After`**. Measured on production: two concurrent requests on one key
 were enough, dying at ~10.3 s.
 
-The transaction now has a wall-clock budget
-(`RATE_LIMIT_TRANSACTION_BUDGET_MS`, 2.5 s) and `maxAttempts: 3`, and the two
-failures are told apart:
+The counter now has a wall-clock budget
+(`RATE_LIMIT_TRANSACTION_BUDGET_MS`, 2.5 s), and the two failures are told
+apart:
 
 | Condition | Signal | Posture | Result flag |
 | --- | --- | --- | --- |
@@ -181,9 +181,56 @@ markers in that feed would answer it wrongly and mask a real outage.
 Callers need no change: `contended` surfaces as `allowed: false`, which every
 call site already turns into its usual 429 + `Retry-After`.
 
-This bounds the symptom, not the cause. The counter is still one document per
-(key, window), so the contention *threshold* is unchanged — raising it is
-AGL-2416, and it needs a load rehearsal on the emulator rather than a guess.
+That bounded the symptom. The cause — the counter's storage shape — is
+AGL-2416, below.
+
+### The counter is an atomic increment, not a read-modify-write (AGL-2416)
+
+`runTransaction(read count, write count + 1)` is optimistic concurrency on one
+document, so two writers in flight already race. Measured on production on
+2026-08-19 against `/api/protection/unlock` with a fresh key per sweep:
+
+```
+concurrency 2 -> 504 @10.26s, 404 @0.69s
+concurrency 4 -> 504 @10.30s, 504 @10.33s, 404 @0.97s, 404 @0.80s
+concurrency 5 -> 504 @10.80s, 504 @10.85s, 404 @2.77s, 404 @3.23s, 404 @0.68s
+```
+
+Sequential traffic on the same endpoint was clean: 10 × 404 at 0.62–0.74 s,
+then a 429 with `Retry-After`. **Two** concurrent requests on one key were
+enough — which is a double-submit, a mobile retry, or two visitors behind one
+NAT, not an attack. And `apps/docs/api/rate-limits.md` publishes 120/min per
+API key, a number no integration can reach *without* concurrency.
+
+The counter is now `set({count: increment(1)}, {merge: true})` followed by a
+read-back. The write carries no read set, so concurrent writers do not abort
+each other and there is no optimistic-retry storm to bound. Cost is unchanged:
+one write, one read.
+
+**The trade is exactness for headroom, deliberately biased.** The read-back
+can observe increments that landed after ours, so under `C` concurrent
+requests a caller may see a count up to `C - 1` above its own position:
+
+- It can only refuse **early**, never late. The count is monotonic within a
+  window and always includes this request's own increment, so the cap can
+  never be exceeded and going concurrent can never widen it.
+- "Exactly `limit` admitted" becomes "**at most** `limit` admitted" — at a
+  window's edge as few as `limit - C + 1`. Bounded by the concurrency,
+  confined to one window, and in the customer-favourable direction for a
+  security limiter, which is what every call site here is.
+- A fixed-window limiter already admits up to `2 × limit` across a window
+  boundary, so end-to-end exactness was never a property this shape had.
+
+The wall-clock budget and the soft/closed classification above are unchanged
+and still load-bearing: a store slow for any other reason must still produce a
+decision rather than a held function.
+
+Both properties are asserted in `rate-limit-store.spec.ts` against a Firestore
+double that models per-document versions and real transaction conflicts —
+including a **negative control** that drives the old read-modify-write through
+the same double and requires it to contend. Without that control a double
+which merely runs transactions inline would pass every one of those tests
+under the old code too.
 
 ### …but only if someone finds out it fired (AGL-1679)
 

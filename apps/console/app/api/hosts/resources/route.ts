@@ -17,10 +17,12 @@
 
 import { hostRoleCanWrite, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  ACTIONS_MAX_PER_HOST,
   checkEntitlement,
   checkHostRegisterQuota,
   checkQuota,
   createResourceUid,
+  ENTRIES_MAX_PER_COLLECTION,
   nameSearchKey,
   NON_PAGE_SCREEN_MAX_PER_HOST,
   type OrgEntitlements,
@@ -70,6 +72,17 @@ import {
  */
 const RESOURCES: Record<string, {
   collection: string
+  /**
+   * The host subcollection whose DOCUMENT owns `collection`, for a resource
+   * that does not sit directly under the host (AGL-2266).
+   *
+   * Only `entry` needs it — `hosts/{h}/collections/{cid}/entries/{eid}` — and
+   * the parent id arrives as `body.parentId`. Declared rather than special-
+   * cased at the one call site because the cap, the count and the create all
+   * have to address the same reference: a nested resource whose cap counted
+   * the wrong collection would be a cap that never says no.
+   */
+  parentCollection?: string
   /** Numeric per-plan cap; omit for entitlement-only (boolean) features. */
   quotaKey?: keyof OrgEntitlements & string
   /**
@@ -290,6 +303,85 @@ const RESOURCES: Record<string, {
     label: 'webhooks',
     fields: ['name', 'direction', 'url', 'workflowName', 'secret', 'enabled'],
   },
+  /**
+   * Actions (AGL-2266): the collection the import route's own table named as
+   * having "no `RESOURCES` entry and no quota key anywhere". The rules granted
+   * client `create` through the host catch-all, so a free org could mint
+   * unbounded documents from the browser — the AGL-1360 shape, and the answer
+   * is AGL-1360's: a flat platform cap counted from a server read.
+   *
+   * NO `entitlement`. `actions` is a Pro flag but `interactions` is free and
+   * both write this collection — the besigner's preset wiring and the
+   * interaction builder create the same document the Pro actions card does.
+   * Gating creation on the paid flag would remove element interactions from
+   * every free site, which is a pricing change and not a cap. The entitlement
+   * is checked where it decides what RUNS (`run-event-actions.ts`).
+   *
+   * `softDeletes` because the interactions provider retires an action by
+   * stamping `deletedAt`; counting tombstones would mean removing an
+   * interaction never frees its slot.
+   *
+   * `fields` is the full `HostAction` model rather than one form's subset:
+   * three creators send it — the actions card, the interaction builder dialog
+   * and `onCreatePresetInteractions` — and a list narrower than its callers
+   * loses authoring input silently (AGL-1377).
+   */
+  action: {
+    collection: 'actions',
+    maxPerHost: ACTIONS_MAX_PER_HOST,
+    softDeletes: true,
+    label: 'interactions and actions',
+    fields: [
+      'name',
+      'description',
+      'trigger',
+      'steps',
+      'enabled',
+      'frequency',
+      'cooldownMinutes',
+      'audience',
+      'nodeId',
+      'screenId',
+    ],
+  },
+  /**
+   * Content-collection entries (AGL-2266) — the ONE resource here that does
+   * not live directly under the host, hence `parentCollection`.
+   *
+   * Entries were the other client-direct writable class: a dedicated rules
+   * block re-grants create/update/delete to any editor, on purpose, because
+   * the catch-all's name-based exclusions must not reach them. That left the
+   * only quota-governed content shape with no quota. CREATE moves here; update
+   * and delete stay client-direct exactly as they are for every other resource
+   * in this table, because neither consumes a slot.
+   *
+   * `fields` is the entry editor's whole payload minus the three publish keys.
+   * `status`, `publishedAt` and `publishAt` are absent deliberately: the rules
+   * admit an author's create only when it is a draft, and a create that
+   * arrived already published would be a publish wearing a create's clothes —
+   * the same sentence the entries rule block makes. `status: 'draft'` is
+   * stamped below instead, so the server decides it rather than the client.
+   */
+  entry: {
+    collection: 'entries',
+    parentCollection: 'collections',
+    maxPerHost: ENTRIES_MAX_PER_COLLECTION,
+    label: 'entries',
+    fields: [
+      'title',
+      'slug',
+      'excerpt',
+      'body',
+      'coverImage',
+      'coverImageAlt',
+      'seoTitle',
+      'seoDescription',
+      'authorName',
+      'categoryId',
+      'category',
+      'tags',
+    ],
+  },
 }
 
 /** Payload cap: none of these docs legitimately approach this size. */
@@ -407,7 +499,35 @@ async function handler(request: Request): Promise<Response> {
       }, { status: 403 })
     }
 
-    const collectionRef = hostRef.collection(resource.collection)
+    /**
+     * The collection the create is addressed to (AGL-2266).
+     *
+     * For everything but `entry` that is a host subcollection. An entry hangs
+     * off a content-collection DOCUMENT, so the parent id is required and
+     * checked to exist: a create under a missing parent would land an orphan
+     * in a collection nothing lists, and — because the cap counts the parent's
+     * entries — every such orphan would be counted against a different, empty
+     * collection. An unbounded store reached through a bounded route is the
+     * failure this whole issue is about, so the parent is verified rather than
+     * assumed.
+     */
+    let collectionRef = hostRef.collection(resource.collection)
+    if (resource.parentCollection) {
+      const parentId = String(body?.parentId ?? '').slice(0, 64)
+      if (!parentId) {
+        return Response.json({ error: 'Missing parentId' }, { status: 400 })
+      }
+      const parentRef = hostRef
+        .collection(resource.parentCollection)
+        .doc(parentId)
+      if (!(await parentRef.get()).exists) {
+        return Response.json(
+          { error: `Unknown ${resource.parentCollection} document` },
+          { status: 404 },
+        )
+      }
+      collectionRef = parentRef.collection(resource.collection)
+    }
     // The routing map decides which screens count (AGL-1383), and the host
     // snapshot above already holds it — no second read.
     const routingMap = hostSnapshot.get('screens')
@@ -522,8 +642,10 @@ async function handler(request: Request): Promise<Response> {
           : (await tx.get(collectionRef.count())).data().count
         if (existing >= resource.maxPerHost) {
           return {
-            error:
-              `${resource.label} are capped at ${resource.maxPerHost} per site`,
+            error: resource.parentCollection
+              ? `A collection holds at most ${resource.maxPerHost} ` +
+                `${resource.label} — delete some to make room`
+              : `${resource.label} are capped at ${resource.maxPerHost} per site`,
           }
         }
       }
@@ -558,6 +680,13 @@ async function handler(request: Request): Promise<Response> {
         ...doc,
         ...nameLower,
         ...(resourceKey === 'template' ? { source: { type: 'authored' } } : {}),
+        // An entry is born a DRAFT, decided here rather than sent (AGL-2266).
+        // The rules admit an author's client create only when it is a draft;
+        // routing the create through this server does not get to be the way
+        // that condition stops applying, so `status` is off the allow-list
+        // above and stamped instead. Publishing stays the client `updateDoc`
+        // the entries rule block already gates on `canPublishHostContent`.
+        ...(resourceKey === 'entry' ? { status: 'draft' } : {}),
         // Unconditional now that no allow-list carries them: the client cannot
         // supply either, so there is no client value left to preserve. The
         // callers already relied on this — a Timestamp does not survive the

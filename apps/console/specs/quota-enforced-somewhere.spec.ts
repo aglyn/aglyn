@@ -98,7 +98,7 @@ function withoutComments(source: string): string {
  * comment-stripped text.
  */
 function readerFiles(key: string): string[] {
-  let output = ''
+  let output: string
   try {
     output = execFileSync(
       'git',

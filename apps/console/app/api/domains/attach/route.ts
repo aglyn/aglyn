@@ -17,6 +17,7 @@
 
 import { checkEntitlement, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  domainStateServes,
   emailUnverifiedResponse,
   firebaseAdmin,
   getOrgForHost,
@@ -189,11 +190,12 @@ async function handler(request: Request): Promise<Response> {
     // without a human (AGL-2010) — the two changes only make sense together,
     // because without the sweeper this would strand every new domain on the
     // manual Re-attach button.
-    const serves =
-      status.state !== 'not-attached' &&
-      status.state !== 'ownership-pending' &&
-      status.state !== 'dns-misconfigured' &&
-      status.state !== 'certificate-pending'
+    //
+    // The predicate itself now lives beside `projectDomainStatus` as
+    // `domainStateServes` (AGL-2011) rather than inline here — it had two
+    // hand-kept copies, and the staff re-attach at `/api/admin/host` would
+    // have been a third.
+    const serves = domainStateServes(status.state)
     if (status.state === 'not-attached') {
       await hostSnapshot.ref
         .set({ cnameAttachmentPending: true }, { merge: true })

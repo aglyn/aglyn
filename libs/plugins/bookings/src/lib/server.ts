@@ -19,7 +19,7 @@ import { checkEntitlement,
   registerPluginConfigSchema,
   registerPluginJob,
   resolveBrandingProfile,
-  resolveTransactionFeePct,
+  resolveTransactionFeeCents,
 } from '@aglyn/aglyn/server'
 import { type BookedInterval, BOOKING_MAX_DAYS_AHEAD, computeOpenSlots, type HostBookingService, isBookingReminderDue, isSlotOpen, REMINDER_WINDOW_END_HOURS, REMINDER_WINDOW_START_HOURS } from './model'
 import {
@@ -330,16 +330,26 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
       // derived from `priceUsd` stays off the tax the moment tax is added,
       // whereas a percent would silently start taxing the state's money.
       //
-      // The `Math.max(1, ...)` floor and the `feePct > 0` skip are both
-      // `reserve.ts`'s, and they are two different branches: a merchant on a
-      // 0%-fee tier takes a destination charge with NO application fee at all
-      // (the advertised rate, not a rounding artefact), while a chargeable fee
-      // that rounds below a cent is charged as one cent rather than silently
-      // dropped to zero.
-      const feePct = resolveTransactionFeePct(ownerOrg as never, 'service')
+      // PLUS STRIPE'S CARD COST, AT COST (AGL-2152). A 0%-fee tier used to
+      // take a destination charge with NO application fee at all, which is not
+      // "no take rate" — Stripe debits 2.9% + 30¢ from the PLATFORM's balance
+      // when that charge settles, so every paid booking on Pro and above cost
+      // Aglyn money. `resolveTransactionFeeCents` is the same resolver's cents
+      // form: the advertised take (still 0% where the ladder says 0%) plus the
+      // card cost passed through, so the net per booking is the take and never
+      // less. The `Math.max(1, …)` floor on a chargeable take is folded into
+      // it, unchanged.
+      //
+      // The fee base and the charge base are the same number here: by
+      // AGL-2000's stated decision this session carries one line item, no tax
+      // line and no shipping option, so the card runs for exactly `priceUsd`.
       const chargeCents = Math.round(priceUsd * 100)
-      feeCents =
-        feePct > 0 ? Math.max(1, Math.round((chargeCents * feePct) / 100)) : 0
+      feeCents = resolveTransactionFeeCents(
+        ownerOrg as never,
+        'service',
+        chargeCents,
+        chargeCents,
+      )
     }
 
     // Transaction: re-read overlapping bookings and validate the slot so

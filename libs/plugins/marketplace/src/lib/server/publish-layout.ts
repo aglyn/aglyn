@@ -24,7 +24,10 @@ import {
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
-import { sanitizeMarketplaceDefinition } from '../model/marketplace'
+import {
+  marketplacePriceRefusal,
+  sanitizeMarketplaceDefinition,
+} from '../model/marketplace'
 import { resolvePublisherProfile } from './publisher-profile'
 import { publishPreconditionRefusal } from './publish-preconditions'
 
@@ -59,6 +62,14 @@ export const publishLayoutHandler: PluginApiHandler = async (req, res) => {
     return res
       .status(400)
       .json({ error: 'Missing hostId, layoutId or displayName' })
+  }
+  // The price floor and ceiling, from ONE validator (AGL-2343). This door had
+  // NO price validation at all: it clamped to zero and stored whatever came in,
+  // so both a $1 listing that loses money on every sale and a $250,000 one were
+  // publishable here. Also enforced in `publishPreconditionRefusal` below.
+  const priceRefusal = marketplacePriceRefusal(priceUsd)
+  if (priceRefusal) {
+    return res.status(400).json({ error: priceRefusal })
   }
   const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ')

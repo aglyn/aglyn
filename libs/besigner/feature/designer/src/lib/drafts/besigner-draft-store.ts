@@ -151,7 +151,7 @@ export function readBesignerDraft(
   const key = besignerDraftKey(ids)
   const raw = storage.getItem(key)
   if (!raw) return null
-  let draft: BesignerDraft | null = null
+  let draft: BesignerDraft | null
   try {
     const parsed = JSON.parse(raw) as BesignerDraft
     draft = parsed?.nodes ? parsed : null

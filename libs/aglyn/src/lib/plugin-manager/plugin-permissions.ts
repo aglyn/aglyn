@@ -50,6 +50,19 @@ export function listPluginPermissions(): PluginPermission[] {
   return [...pluginPermissions.values()]
 }
 
+/**
+ * The registered keys alone (AGL-2474). `resolveRolePermissions` needs the
+ * grantable key SPACE, not the tier verdicts: it used to iterate
+ * `ORG_ROLE_PERMISSION_KEYS` — the legacy six — when applying overrides and
+ * custom roles, so a plugin-declared key materialised into the resolved map
+ * and could then only ever hold its tier default. Read live rather than
+ * snapshotted: registration happens at plugin module scope, which can run
+ * after any module-level constant here has already been evaluated.
+ */
+export function listPluginPermissionKeys(): string[] {
+  return [...pluginPermissions.keys()]
+}
+
 /** Tier defaults for every registered plugin permission. */
 export function pluginPermissionDefaults(
   tier: 'admin' | 'editor' | 'viewer',

@@ -17,6 +17,7 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
+import { recordCronBeat } from '../../../../utils/cron-beat'
 import { sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 import { firebaseAdmin, meterPlatformEmail } from '@aglyn/tenant-data-admin'
@@ -54,6 +55,11 @@ async function handler(request: Request): Promise<Response> {
   if (!isCronAuthorized(headers)) {
     return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   }
+  // AGL-1955 — the mark `/api/health/crons` reads to notice this job going
+  // AWAY. Stamped on the invocation, not on the work, so a run that finds
+  // nothing to do still proves the schedule is alive; POST only, because a
+  // human's GET is not the scheduler and must not stand in for it.
+  if (method === 'POST') await recordCronBeat('audit-archive')
 
   // A GET REPORTS; it never archives and never deletes (AGL-2084). This route
   // was one of the two irreversible scheduled routes that lacked the guard its

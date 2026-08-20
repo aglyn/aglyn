@@ -82,7 +82,7 @@ async function handler(request: Request): Promise<Response> {
   const context = String(body?.context ?? 'unknown').trim().slice(0, 60)
 
   let uid: string
-  let staff = false
+  let staff: boolean
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
     uid = decoded.uid

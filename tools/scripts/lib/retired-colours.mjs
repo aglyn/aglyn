@@ -276,7 +276,10 @@ export function splitSourceComments(text, path = '') {
       if (syntax === 'html') {
         if (source.startsWith('<!--', i)) {
           state = 'block'
-          ;(toComment(i), toComment(i + 1), toComment(i + 2), toComment(i + 3))
+          toComment(i)
+          toComment(i + 1)
+          toComment(i + 2)
+          toComment(i + 3)
           i += 4
           continue
         }
@@ -291,13 +294,15 @@ export function splitSourceComments(text, path = '') {
       }
       if (two === '//') {
         state = 'line'
-        ;(toComment(i), toComment(i + 1))
+        toComment(i)
+        toComment(i + 1)
         i += 2
         continue
       }
       if (two === '/*') {
         state = 'block'
-        ;(toComment(i), toComment(i + 1))
+        toComment(i)
+        toComment(i + 1)
         i += 2
         continue
       }

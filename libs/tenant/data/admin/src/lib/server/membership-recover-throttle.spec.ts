@@ -40,7 +40,33 @@ function fakeFirestore() {
   const docs = new Map<string, Record<string, unknown>>()
   return {
     docs,
-    collection: () => ({ doc: (id: string) => ({ id }) }),
+    collection: () => ({
+      doc: (id: string) => ({
+        id,
+        // AGL-2416: the counter is now an atomic increment plus a read-back,
+        // not a read-modify-write transaction. `increment` is applied from the
+        // sentinel's real `operand`, so mutating the production call to
+        // `increment(0)` changes what this store holds instead of being absorbed.
+        set: async (value: Record<string, unknown>) => {
+          const prior = docs.get(id) ?? {}
+          const next: Record<string, unknown> = { ...prior }
+          for (const [field, raw] of Object.entries(value)) {
+            const operand = (raw as { operand?: unknown })?.operand
+            next[field] =
+                typeof operand === 'number'
+                  ? (Number(prior[field]) || 0) + operand
+                  : raw
+          }
+          docs.set(id, next as never)
+        },
+        get: async () => {
+          return {
+            exists: docs.has(id),
+            get: (field: string) => (docs.get(id) as never)?.[field],
+          }
+        },
+      }),
+    }),
     runTransaction: async (fn: (tx: unknown) => Promise<number>) =>
       fn({
         get: async (ref: { id: string }) => ({
@@ -209,11 +235,13 @@ describe('consumeMembershipRecoverAttempt (AGL-1966)', () => {
     // members out of their own password reset. `consumeRateLimit` falls back
     // to the in-process cap and flags it, and this asserts the flag reaches
     // the caller rather than being swallowed.
+    const unavailable = async () => {
+      throw Object.assign(new Error('unavailable'), { code: 14 })
+    }
     const broken = {
-      collection: () => ({ doc: (id: string) => ({ id }) }),
-      runTransaction: async () => {
-        throw Object.assign(new Error('unavailable'), { code: 14 })
-      },
+      collection: () => ({
+        doc: (id: string) => ({ id, set: unavailable, get: unavailable }),
+      }),
     }
     const result = await consumeMembershipRecoverAttempt({
       email: 'degrade@example.com',
@@ -228,11 +256,11 @@ describe('consumeMembershipRecoverAttempt (AGL-1966)', () => {
   it('refuses CLOSED when the key is contended', async () => {
     // The other half of AGL-2404's split posture. Contention on a key that is
     // per recipient and per IP is not a legitimate visitor racing themselves.
+    const abort = async () => {
+      throw Object.assign(new Error('aborted'), { code: 10 })
+    }
     const contended = {
-      collection: () => ({ doc: (id: string) => ({ id }) }),
-      runTransaction: async () => {
-        throw Object.assign(new Error('aborted'), { code: 10 })
-      },
+      collection: () => ({ doc: (id: string) => ({ id, set: abort, get: abort }) }),
     }
     const result = await consumeMembershipRecoverAttempt({
       email: 'contend@example.com',

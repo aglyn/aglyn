@@ -177,7 +177,13 @@ const GATED_SURFACES: Record<string, { ui: string[]; via: RegExp }> = {
     via: /canEdit/,
   },
   'host/route.ts': {
-    ui: ['app/(app)/admin/orgs/[orgId]/host/[hostId]/page.tsx'],
+    ui: [
+      'app/(app)/admin/orgs/[orgId]/host/[hostId]/page.tsx',
+      // The route's SECOND super-only action (AGL-2011). Its control lives in
+      // the card, not the page, so listing only the page would have left the
+      // Re-attach button covered by a gate on a different button.
+      'components/staff-domain-card.component.tsx',
+    ],
     via: /SuperStaffOnly/,
   },
   'lockdown/route.ts': {
@@ -214,6 +220,28 @@ const GATED_SURFACES: Record<string, { ui: string[]; via: RegExp }> = {
   'marketplace-reports/route.ts': {
     ui: ['app/(app)/admin/marketplace-reports/page.tsx'],
     via: /access level/,
+  },
+  // The platform hourly send ceiling (AGL-2409). Reading it is open to every
+  // staff role — during an incident the question "are we at the ceiling" must
+  // be answerable by whoever is on — and SETTING it is `super`, the same bar
+  // as `flags`, because the value decides whether every merchant's campaigns
+  // go out. Like `flags/page.tsx`, the card reads the role off its OWN
+  // endpoint's response rather than the claim hook; the route is the authority
+  // either way.
+  'email-send-rate/route.ts': {
+    ui: ['components/staff-email-send-rate-card.component.tsx'],
+    via: /isSuper/,
+  },
+  // The free-workspace ceiling (AGL-2265). Reading it is open to every staff
+  // role — support fields "why can't I make another workspace" and must be
+  // able to answer it — and SETTING it is `super`, the same bar as `flags`,
+  // because a low enough number is indistinguishable from signups being
+  // switched off. Like `flags/page.tsx` and the send-rate card, the card
+  // reads the role off its OWN endpoint's response rather than the claim
+  // hook; the route is the authority either way.
+  'free-workspace-cap/route.ts': {
+    ui: ['components/staff-free-workspace-cap-card.component.tsx'],
+    via: /isSuper/,
   },
   'media-quarantine/route.ts': {
     ui: ['app/(app)/admin/media-quarantine/page.tsx'],
@@ -279,6 +307,39 @@ describe('every role-refusing admin route has a role-aware surface', () => {
         readFileSync(join(apiRoot, relative), 'utf8'),
       ),
     )
+    expect(offenders).toEqual([])
+  })
+
+  it('no console SOURCE file defaults a missing staffRole to super (AGL-2024)', () => {
+    // WIDER THAN THE ROUTE GUARD ABOVE, because the route guard is what let
+    // this through. AGL-2131 brought the last two fail-OPEN defaults down to
+    // `support` and pinned both — but it pinned them where the gates are, and
+    // `app/(app)/admin/users/[uid]/page.tsx` was still rendering
+    // `staffRole ?? 'super'` into the chip that TELLS a staff member what a
+    // claim-less account can do. Not a gate, so no guard looked at it; the one
+    // surface that reports the answer gave the opposite of the real one.
+    //
+    // Walks the console tree rather than /api/admin so any spelling in any
+    // file is caught. Specs are excluded because they must be free to quote
+    // the string they forbid — this very file does.
+    const offenders: string[] = []
+    const walk = (dir: string, prefix = '') => {
+      for (const entry of readdirSync(dir)) {
+        if (entry === 'node_modules' || entry === '.next') continue
+        const full = join(dir, entry)
+        if (statSync(full).isDirectory()) {
+          walk(full, `${prefix}${entry}/`)
+          continue
+        }
+        if (!/\.tsx?$/.test(entry) || /\.spec\.tsx?$/.test(entry)) continue
+        if (/staffRole['"\]]* \?\? 'super'/.test(readFileSync(full, 'utf8'))) {
+          offenders.push(`${prefix}${entry}`)
+        }
+      }
+    }
+    for (const top of ['app', 'components', 'hooks', 'utils']) {
+      walk(join(CONSOLE_ROOT, top), `${top}/`)
+    }
     expect(offenders).toEqual([])
   })
 

@@ -16,6 +16,7 @@
  */
 
 import { resolveRolePermissions } from './org-roles'
+import { registerPluginPermissions } from '../plugin-manager/plugin-permissions'
 
 describe('tenant roles', () => {
   it('resolves built-in role defaults', () => {
@@ -67,5 +68,84 @@ describe('tenant roles', () => {
     expect(
       resolveRolePermissions('ghost', null, customRoles).publishToMarketplace,
     ).toBe(false)
+  })
+})
+
+/**
+ * PLUGIN-DECLARED KEYS ARE GRANTABLE AND REVOCABLE (AGL-2474).
+ *
+ * `pluginPermissionDefaults` always spread a declared key into the resolved
+ * map, so `managePos` LOOKED wired: it was present, and it held the right tier
+ * verdict. But both override loops iterated `ORG_ROLE_PERMISSION_KEYS` — the
+ * hardcoded six — so the value that got spread in was the only value the key
+ * could ever hold. It could not be granted and it could not be taken away,
+ * which is the whole of what a permission is.
+ */
+describe('plugin-declared permissions resolve like any other key (AGL-2474)', () => {
+  beforeAll(() => {
+    registerPluginPermissions([
+      {
+        key: 'testPluginPerm',
+        pluginId: 'test-plugin',
+        label: 'Test plugin permission',
+        defaults: { admin: true, editor: true, viewer: false },
+      },
+    ])
+  })
+
+  it('carries the tier default (the part that already worked)', () => {
+    expect(resolveRolePermissions('admin').testPluginPerm).toBe(true)
+    expect(resolveRolePermissions('editor').testPluginPerm).toBe(true)
+    expect(resolveRolePermissions('viewer').testPluginPerm).toBe(false)
+  })
+
+  it('a per-member override can REVOKE it from an admin', () => {
+    expect(
+      resolveRolePermissions('admin', { testPluginPerm: false })
+        .testPluginPerm,
+    ).toBe(false)
+  })
+
+  it('a per-member override can GRANT it to a viewer', () => {
+    expect(
+      resolveRolePermissions('viewer', { testPluginPerm: true }).testPluginPerm,
+    ).toBe(true)
+  })
+
+  it('ignores junk override values, like every other key', () => {
+    expect(
+      resolveRolePermissions('viewer', { testPluginPerm: 'yes' as any })
+        .testPluginPerm,
+    ).toBe(false)
+  })
+
+  it('a custom role can set it, and an override still wins', () => {
+    const customRoles = {
+      cashier: { name: 'Cashier', permissions: { testPluginPerm: true } },
+    }
+    expect(
+      resolveRolePermissions('cashier', null, customRoles).testPluginPerm,
+    ).toBe(true)
+    expect(
+      resolveRolePermissions(
+        'cashier',
+        { testPluginPerm: false },
+        customRoles,
+      ).testPluginPerm,
+    ).toBe(false)
+  })
+
+  it('a custom role that says nothing about it keeps the DEFAULT, not undefined', () => {
+    // The custom-role branch used to rebuild its base from the viewer tier
+    // alone, dropping every plugin key off the map. `undefined` reads as
+    // denied at a call site and as "no opinion" everywhere else — and it made
+    // `'testPluginPerm' in permissions` false, so a UI enumerating the map
+    // could not even show the control.
+    const customRoles = {
+      marketer: { name: 'Marketer', permissions: { installPlugins: true } },
+    }
+    const resolved = resolveRolePermissions('marketer', null, customRoles)
+    expect(resolved.testPluginPerm).toBe(false)
+    expect('testPluginPerm' in resolved).toBe(true)
   })
 })

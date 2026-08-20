@@ -115,6 +115,10 @@ const eventsListHandler: PluginApiHandler = async (req, res) => {
             sources: [{ image: doc.get('coverImage') }],
             host,
           })?.url ?? null,
+        // The author's description of that cover (AGL-2418). Passed through
+        // as stored — unlike the URL beside it there is nothing to resolve,
+        // and the renderer owns the "blank means decorative" decision.
+        coverImageAlt: doc.get('coverImageAlt') ?? null,
       }))
     // Cacheable: published events change rarely; CDN may hold for a minute.
     res.setHeader('Cache-Control', 'public, s-maxage=60')

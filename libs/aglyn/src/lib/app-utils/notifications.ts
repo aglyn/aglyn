@@ -129,6 +129,19 @@ export type AglynNotificationType =
   // failure on that route no automatic retry can make safe, because the
   // handlers behind it are not all idempotent, and a human has to reconcile.
   | 'system.billingWebhookHalfApplied'
+  // A card dispute arrived that NOTHING in the platform claimed (AGL-2429):
+  // no `platformRevenue` row, no storefront order, no marketplace purchase.
+  // Staff audience, and the reason it needs a type of its own is that its
+  // absence was the bug — the routine case (a storefront or marketplace
+  // chargeback, which the plugins own) and the fault case were the same
+  // silence from the route's side, so a dispute nobody handled looked
+  // exactly like one somebody did.
+  //
+  // `system.`, not `billing.`, for the AGL-1088 reason and one specific to
+  // this alert: `billing` is the category a recipient is most likely to have
+  // muted as routine invoice traffic, and this is the one message on that
+  // route where muting it means money moves with nobody looking.
+  | 'system.disputeUnattributed'
 
 export interface AglynNotification {
   $id?: string
@@ -171,6 +184,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> =
     'system.bandwidthCeilingTripped': 'Bandwidth ceiling reached',
     'system.bandwidthCapEngaged': 'Monthly traffic limit reached',
     'system.billingWebhookHalfApplied': 'Billing webhook half applied',
+    'system.disputeUnattributed': 'Card dispute with no owner',
   }
 
 /** Preference buckets (AGL-267): the prefix before the dot. */

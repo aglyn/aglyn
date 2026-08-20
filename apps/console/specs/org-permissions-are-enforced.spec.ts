@@ -90,7 +90,7 @@ const ENFORCED_AS: Record<OrgPermission, readonly string[]> = {
 }
 
 function serverFilesContaining(needle: string): string[] {
-  let output = ''
+  let output: string
   try {
     output = execFileSync(
       'git',

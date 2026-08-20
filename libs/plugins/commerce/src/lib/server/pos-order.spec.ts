@@ -19,6 +19,7 @@ import type {
   PluginApiRequest,
   PluginApiResponse,
 } from '@aglyn/aglyn/server'
+import { storefrontProcessingCostCents } from '@aglyn/aglyn/server'
 import { posOrderHandler } from './pos-order'
 
 /**
@@ -72,16 +73,44 @@ function makeSnapshot(path: string) {
   }
 }
 
+/**
+ * `FieldValue.increment` as Firestore actually applies it (AGL-2111).
+ *
+ * The offline-fee accrual is written with `set(..., { merge: true })` carrying
+ * increment sentinels, and a double that stored the sentinel object verbatim
+ * would report green for a counter that never counted — and would make two
+ * sales look identical to one. So the sentinel is RESOLVED here, against the
+ * value already in the document, with a missing field treated as 0, which is
+ * Firestore's own rule.
+ *
+ * `arrayUnion` is deliberately left as an opaque sentinel: the AGL-1760 folio
+ * tests assert on that exact shape.
+ */
+function resolveIncrements(
+  existing: Record<string, any> | undefined,
+  value: Record<string, any>,
+): Record<string, any> {
+  const resolved: Record<string, any> = {}
+  for (const [key, raw] of Object.entries(value)) {
+    if (raw && typeof raw === 'object' && '__increment' in raw) {
+      const base = Number(existing?.[key] ?? 0)
+      resolved[key] = (Number.isFinite(base) ? base : 0) + raw.__increment
+    } else {
+      resolved[key] = raw
+    }
+  }
+  return resolved
+}
+
 function makeDocRef(path: string): any {
   return {
     id: path.split('/').pop() as string,
     path,
     get: async () => makeSnapshot(path),
     set: async (value: Record<string, any>, options?: { merge?: boolean }) => {
-      docs.set(
-        path,
-        options?.merge ? { ...(docs.get(path) ?? {}), ...value } : value,
-      )
+      const existing = docs.get(path)
+      const applied = resolveIncrements(existing, value)
+      docs.set(path, options?.merge ? { ...(existing ?? {}), ...applied } : applied)
     },
     /**
      * The atomic claim. Firestore's `create()` rejects when the document
@@ -164,6 +193,25 @@ const contactUpserts: any[] = []
 const notifications: any[] = []
 
 const mockVerifyIdToken = jest.fn(async () => ({ uid: 'cashier-1' }))
+
+/**
+ * The org-permission resolver (AGL-2474). MOCKED, and mocked here rather than
+ * left to the real one: the real module reads the org, the membership and the
+ * custom role through `@aglyn/tenant-data-admin`, which this file replaces
+ * with a closed-world double — so it would fail closed and 403 every test in
+ * the suite for a reason that has nothing to do with what they assert.
+ *
+ * Defaults to GRANTED so the existing cases keep measuring what they were
+ * written to measure; the `managePos` block below drives it to false.
+ */
+const mockResolveOrgPermissions = jest.fn(async () => ({
+  orgId: 'org-1',
+  role: 'admin',
+  isOwner: true,
+  permissions: { managePos: true } as Record<string, boolean>,
+  orgWide: true,
+  hostRole: 'admin',
+}))
 /**
  * The org's stored commerce plugin settings (AGL-2161). `undefined` is the
  * common case — no settings doc — and every test that sets it restores it in
@@ -181,6 +229,12 @@ const mockOrg: any = {
   },
 }
 
+jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
+  ...jest.requireActual('@aglyn/tenant-runtime/org-permissions'),
+  resolveOrgPermissions: (...args: any[]) =>
+    mockResolveOrgPermissions(...(args as [])),
+}))
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: {
     app: () => ({
@@ -191,6 +245,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       FieldValue: {
         serverTimestamp: () => '<server-timestamp>',
         arrayUnion: (value: any) => ({ __arrayUnion: value }),
+        // Resolved by `resolveIncrements` on write — see the note there.
+        increment: (value: number) => ({ __increment: value }),
       },
     },
   },
@@ -350,6 +406,15 @@ beforeEach(() => {
   mockPluginSettings = undefined
   fetchMock.mockClear()
   mockVerifyIdToken.mockClear()
+  mockResolveOrgPermissions.mockClear()
+  mockResolveOrgPermissions.mockResolvedValue({
+    orgId: 'org-1',
+    role: 'admin',
+    isOwner: true,
+    permissions: { managePos: true },
+    orgWide: true,
+    hostRole: 'admin',
+  } as any)
 
   // `editor`, not `manager` (AGL-2262): the projection has no such role,
   // and the register admitted it only because the gate was a denylist.
@@ -423,6 +488,54 @@ describe('the POS card sale tax witness (AGL-1953)', () => {
     const result = await post({ payment: 'link' })
     expect(result.status).toBe(200)
     expect(stripeCalls[0].body.get('metadata[taxCents]')).toBe('0')
+  })
+
+  /**
+   * WHICH REGIME THE REGISTER SOLD UNDER (AGL-2451), on the order itself.
+   *
+   * The cash and folio tenders never reach Stripe at all, so no Stripe object
+   * will ever state this and nothing downstream can supply it later: the
+   * decision resolved at ring-up is the only witness there will be. A register
+   * order that cannot say which tax it carried cannot be reconciled against
+   * the merchant's return afterwards, which is the whole point of the field.
+   */
+  it('stamps the tax regime on a CASH sale, which Stripe never sees', async () => {
+    docs.set('hosts/host-1/settings/store', TAXED_STORE)
+    const result = await post({ payment: 'cash', cashReceivedCents: 500 })
+    expect(result.status).toBe(200)
+    expect(orderDocs()[0]?.totals?.taxCents).toBe(33)
+    expect(orderDocs()[0]?.taxMode).toBe('manual')
+  })
+
+  /** The card tender's pending order carries it too, before the webhook lands. */
+  it('stamps the tax regime on a CARD sale at the moment it is rung', async () => {
+    docs.set('hosts/host-1/settings/store', TAXED_STORE)
+    await post({ payment: 'link' })
+    expect(orderDocs()[0]?.taxMode).toBe('manual')
+  })
+
+  /**
+   * A store that decided to collect nothing says `none` — a recorded decision,
+   * not an absent field. Absent means NOT RECORDED and belongs only to orders
+   * written before this shipped.
+   */
+  it('stamps none when the store collects no tax, on both tenders', async () => {
+    docs.set('hosts/host-1/settings/store', { tax: { mode: 'none' } })
+    await post({ payment: 'cash', cashReceivedCents: 500 })
+    expect(orderDocs()[0]?.taxMode).toBe('none')
+  })
+
+  /**
+   * NEGATIVE CONTROL for the derivation: `stripe-automatic` must never appear
+   * on a register order. AGL-2145 refuses that store in person — there is no
+   * shopper address at a till — so the mode is unreachable here by refusal,
+   * and this pins that the stamp did not invent it anyway.
+   */
+  it('never stamps stripe-automatic at the register', async () => {
+    docs.set('hosts/host-1/settings/store', { tax: { mode: 'stripe' } })
+    const result = await post({ payment: 'cash', cashReceivedCents: 500 })
+    expect(result.status).toBe(409)
+    expect(orderDocs()).toHaveLength(0)
   })
 })
 
@@ -607,15 +720,19 @@ describe('POS card sales carry the platform fee (AGL-2110)', () => {
     docs.set('hosts/host-1/products/product-1', DIGITAL_PRODUCT)
   })
 
-  it('sends 2% of a $4.00 digital sale as the application fee', async () => {
+  it('sends 2% of a $4.00 digital sale PLUS the card cost (AGL-2152)', async () => {
     const result = await post({ payment: 'link' })
     expect(result.status).toBe(200)
+    // 8¢ is the take. The rest is Stripe's own fee on this charge, which on a
+    // DESTINATION charge is debited from the PLATFORM's balance — sending the
+    // take alone left Aglyn 54¢ down on a 400¢ sale (AGL-2152).
+    const expected = 8 + storefrontProcessingCostCents(400)
     expect(
       stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
-    ).toBe('8')
+    ).toBe(String(expected))
     // The witness the completing webhook reads, and the merchant ledger.
-    expect(stripeCalls[0].body.get('metadata[feeCents]')).toBe('8')
-    expect(orderDocs()[0]?.totals?.feeCents).toBe(8)
+    expect(stripeCalls[0].body.get('metadata[feeCents]')).toBe(String(expected))
+    expect(orderDocs()[0]?.totals?.feeCents).toBe(expected)
     // The shopper's charge is untouched — a fee is a split, not a surcharge.
     expect(
       stripeCalls[0].body.get('line_items[0][price_data][unit_amount]'),
@@ -623,12 +740,16 @@ describe('POS card sales carry the platform fee (AGL-2110)', () => {
   })
 
   /** A cashier discount reduces what was paid, so it reduces the cut too. */
-  it('scales the fee by the cashier discount', async () => {
+  it('scales the TAKE by the cashier discount', async () => {
     await post({ payment: 'link', discountPct: 50 })
+    // The take halves with the goods; the card cost is recomputed on the
+    // discounted charge rather than scaled, because Stripe bills it on what
+    // the card actually runs for.
+    const expected = 4 + storefrontProcessingCostCents(200)
     expect(
       stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
-    ).toBe('4')
-    expect(orderDocs()[0]?.totals?.feeCents).toBe(4)
+    ).toBe(String(expected))
+    expect(orderDocs()[0]?.totals?.feeCents).toBe(expected)
   })
 
   /**
@@ -651,20 +772,25 @@ describe('POS card sales carry the platform fee (AGL-2110)', () => {
         { productId: 'product-2', quantity: 1 },
       ],
     })
-    // 2% of 400 = 8, plus 0% of 1000 = 0 → 8. A basket-wide DIGITAL rate
-    // would send 28; a basket-wide PHYSICAL rate would send 0.
+    // The TAKE is 2% of 400 = 8, plus 0% of 1000 = 0 → 8. A basket-wide
+    // DIGITAL rate would take 28; a basket-wide PHYSICAL rate would take 0.
+    // The card cost rides the whole 1400¢ basket once (AGL-2152).
     expect(
       stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
-    ).toBe('8')
+    ).toBe(String(8 + storefrontProcessingCostCents(1400)))
   })
 
   /**
-   * NEGATIVE CONTROL. Stripe rejects `application_fee_amount=0`, and a plan
-   * whose rate is a deliberate 0% must OMIT the parameter rather than send a
-   * zero — otherwise every Business physical sale 400s at Stripe and the
-   * register stops taking cards at all.
+   * A 0% TAKE IS NOT A 0% FEE ANY MORE (AGL-2152). This test used to assert
+   * that a Business physical sale sent NO `application_fee_amount` at all,
+   * which is precisely the defect: the register took a destination charge,
+   * Stripe debited 2.9%–6% + 30¢ from the PLATFORM's balance, and Aglyn
+   * collected nothing back on every in-person physical sale.
+   *
+   * The advertised 0% platform take is intact — the fee below is Stripe's cost
+   * and nothing else, so Aglyn's margin on this sale is still exactly zero.
    */
-  it('omits the parameter entirely when the rate is 0%', async () => {
+  it('sends the card cost alone when the take rate is 0%', async () => {
     docs.set('hosts/host-1/products/product-1', {
       name: 'Flat white',
       type: 'physical',
@@ -673,24 +799,186 @@ describe('POS card sales carry the platform fee (AGL-2110)', () => {
     })
     const result = await post({ payment: 'link' })
     expect(result.status).toBe(200)
+    const expected = storefrontProcessingCostCents(400)
     expect(
-      stripeCalls[0].body.has('payment_intent_data[application_fee_amount]'),
-    ).toBe(false)
-    expect(stripeCalls[0].body.get('metadata[feeCents]')).toBe('0')
+      stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
+    ).toBe(String(expected))
+    expect(stripeCalls[0].body.get('metadata[feeCents]')).toBe(String(expected))
+    // The take really is zero: the whole fee is the cost recovery.
+    expect(expected - storefrontProcessingCostCents(400)).toBe(0)
   })
 
   /**
-   * Cash never touches Stripe, so there is no charge to take a fee out of.
-   * Recording one would put a number in the merchant's ledger that nothing
-   * will ever collect — see AGL-2111 for the pricing question that is.
+   * A cash sale reaches no Stripe charge, and it still carries the fee —
+   * AGL-2111 answered the pricing question this test used to record as
+   * settled. It stays here as the CARD-side regression: the card path must be
+   * byte-for-byte what it was, and this is the sale beside it.
    */
-  it('records no fee on a cash sale, and still rings the sale', async () => {
+  it('records the fee on a cash sale too, and still rings the sale', async () => {
     await post({ payment: 'cash', cashReceivedCents: 400 })
     expect(stripeCalls).toHaveLength(0)
-    expect(orderDocs()[0]?.totals?.feeCents).toBe(0)
-    // Not passing on a refusal: the sale landed at its full amount.
+    expect(orderDocs()[0]?.totals?.feeCents).toBe(8)
+    // Not passing it on: the shopper's total is untouched, exactly as on card.
     expect(orderDocs()[0]?.totals?.totalCents).toBe(400)
     expect(orderDocs()[0]?.status).toBe('paid')
+  })
+})
+
+/**
+ * THE PLATFORM FEE FOLLOWS THE SALE, NOT THE TENDER (AGL-2111).
+ *
+ * Cash and folio tenders recorded `feeCents: 0`, deliberately, because there
+ * is no Stripe charge to take an `application_fee_amount` out of. The
+ * consequence was an avoidance route a merchant could simply choose: ring
+ * every in-person sale as cash and pay the platform nothing, while the
+ * identical basket on a card paid the plan's rate.
+ *
+ * Zach's decision, 2026-08-19: the same rate on every tender. Cash is cheaper
+ * for us, not dearer — no Stripe processing is debited against it — so a
+ * discount for cash would be unjustified as well as leaving the incentive
+ * intact. What differs is COLLECTION: there is no payout to net it from, so
+ * the fee accrues to `orgs/{id}/offlineFees/{YYYY-MM}` and `report-usage`
+ * sweeps it onto the org's own monthly invoice.
+ *
+ * `mockOrg` is on Business — 2% digital, a deliberate 0% physical — so the
+ * digital product below is the one that can tell a rate from a zero.
+ */
+describe('the platform fee follows the sale, not the tender (AGL-2111)', () => {
+  /** $4.00 digital at Business's 2% = 8¢. */
+  const DIGITAL_PRODUCT = {
+    name: 'Recipe PDF',
+    type: 'digital',
+    status: 'active',
+    variants: [{ id: 'default', priceUsd: 4, inventory: null }],
+  }
+
+  /** The org-month accrual document, by the same UTC key the handler mints. */
+  function accrual() {
+    const month = new Date().toISOString().slice(0, 7)
+    return docs.get(`orgs/org-1/offlineFees/${month}`)
+  }
+
+  beforeEach(() => {
+    docs.set('hosts/host-1/products/product-1', DIGITAL_PRODUCT)
+    docs.set('hosts/host-1/reservations/stay-1', {
+      status: 'checked-in',
+      guestEmail: 'Guest@example.com',
+      guestName: 'Ada',
+    })
+  })
+
+  it("charges a CASH sale the plan's rate — 2% of $4.00, the same 8c a card sale is charged", async () => {
+    await post({ payment: 'cash', cashReceivedCents: 400 })
+    // The FIGURE, not a comparison against whatever the card leg happens to
+    // total. AGL-2152 is adding Stripe's own processing cost to the CARD
+    // tender beside this one, and that cost is real on card and absent on
+    // cash — so an `expect(cash).toBe(card)` here would be asserting the two
+    // are identical in a way the platform's economics say they are not. What
+    // must be equal is the PLATFORM'S TAKE, and 8 is Business's 2% of $4.00.
+    expect(orderDocs()[0]?.totals?.feeCents).toBe(8)
+  })
+
+  it('charges a FOLIO (room-charge) sale the same fee', async () => {
+    const result = await post({ payment: 'folio', reservationId: 'stay-1' })
+    expect(result.status).toBe(200)
+    expect(orderDocs()[0]?.totals?.feeCents).toBe(8)
+    // The guest's folio line is the SALE, not the sale plus our cut — the fee
+    // is the merchant's cost, and billing it to the room would be a surcharge.
+    const folio = docs.get('hosts/host-1/reservations/stay-1')?.folio
+    expect(folio?.__arrayUnion?.amountCents).toBe(400)
+  })
+
+  it('does not raise what the shopper pays on any tender', async () => {
+    await post({ payment: 'cash', cashReceivedCents: 400 })
+    expect(orderDocs()[0]?.totals?.totalCents).toBe(400)
+  })
+
+  /*=====================================================================
+   * WIRED TO A COLLECTION ROUTE, not just written down. A fee recorded on an
+   * order that no invoice ever reads is the same zero it replaced.
+   *====================================================================*/
+
+  it('accrues the cash fee to the org-month `report-usage` sweeps', async () => {
+    await post({ payment: 'cash', cashReceivedCents: 400 })
+    expect(accrual()?.feeCents).toBe(8)
+    expect(accrual()?.orders).toBe(1)
+    expect(orderDocs()[0]?.feeCollection).toBe('invoice')
+  })
+
+  it('accrues a folio fee to the same org-month document', async () => {
+    await post({ payment: 'folio', reservationId: 'stay-1' })
+    expect(accrual()?.feeCents).toBe(8)
+    expect(orderDocs()[0]?.feeCollection).toBe('invoice')
+  })
+
+  it('ADDS across sales rather than overwriting the month', async () => {
+    await post({ payment: 'cash', cashReceivedCents: 400 })
+    await post({ payment: 'cash', cashReceivedCents: 400 })
+    await post({ payment: 'folio', reservationId: 'stay-1' })
+    expect(accrual()?.feeCents).toBe(24)
+    expect(accrual()?.orders).toBe(3)
+  })
+
+  it('keys the accrual by the UTC billing month the sweep reads', async () => {
+    await post({ payment: 'cash', cashReceivedCents: 400 })
+    // The same expression `apps/console/utils/billing-month.ts` uses. A
+    // local-time key would strand every sale rung in the offset window on a
+    // document no sweep ever opens.
+    const month = new Date().toISOString().slice(0, 7)
+    expect(/^\d{4}-\d{2}$/.test(month)).toBe(true)
+    expect(docs.has(`orgs/org-1/offlineFees/${month}`)).toBe(true)
+    expect(docs.get(`orgs/org-1/offlineFees/${month}`)?.month).toBe(month)
+  })
+
+  /*=====================================================================
+   * NEGATIVE CONTROLS.
+   *====================================================================*/
+
+  it('a CARD sale accrues NOTHING — Stripe already took it', async () => {
+    await post({ payment: 'link' })
+    expect(accrual()).toBeUndefined()
+    expect(orderDocs()[0]?.feeCollection).toBe('payout')
+    // And the card path still collects the way it always did — through
+    // Stripe, at charge time. The EXACT figure is asserted by the AGL-2110
+    // suite above (and moved by AGL-2152); what this negative control has to
+    // prove is that the card tender did not ALSO accrue an invoice line,
+    // which would bill the merchant twice for one sale.
+    expect(
+      Number(
+        stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
+      ),
+    ).toBeGreaterThan(0)
+  })
+
+  it('a 0%-rate line accrues nothing and records no collection route', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Flat white',
+      type: 'physical',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 4, inventory: null }],
+    })
+    const result = await post({ payment: 'cash', cashReceivedCents: 400 })
+    expect(result.status).toBe(200)
+    expect(orderDocs()[0]?.totals?.feeCents).toBe(0)
+    expect(orderDocs()[0]?.feeCollection).toBeUndefined()
+    expect(accrual()).toBeUndefined()
+  })
+
+  it('a 100% comp takes nothing, and accrues nothing', async () => {
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 0,
+      discountPct: 100,
+    })
+    expect(result.status).toBe(200)
+    expect(orderDocs()[0]?.totals?.feeCents).toBe(0)
+    expect(accrual()).toBeUndefined()
+  })
+
+  it('scales the cash fee by the cashier discount, as the card fee is', async () => {
+    await post({ payment: 'cash', cashReceivedCents: 200, discountPct: 50 })
+    expect(orderDocs()[0]?.totals?.feeCents).toBe(4)
+    expect(accrual()?.feeCents).toBe(4)
   })
 })
 
@@ -1857,13 +2145,17 @@ describe('a POS platform fee that rounds to zero (AGL-2256)', () => {
     })
   })
 
-  it('still takes a cent rather than dropping the fee entirely', async () => {
+  it('still takes a cent of TAKE rather than dropping it entirely', async () => {
     const result = await post({ payment: 'link' })
     expect(result.status).toBe(200)
+    // The 1¢ floor is what this issue is about; the rest is Stripe's cost on
+    // the same charge, added since AGL-2152 and subtracted here so the floor
+    // is still the thing being asserted.
+    const expected = 1 + storefrontProcessingCostCents(30)
     expect(
       stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
-    ).toBe('1')
-    expect(stripeCalls[0].body.get('metadata[feeCents]')).toBe('1')
+    ).toBe(String(expected))
+    expect(stripeCalls[0].body.get('metadata[feeCents]')).toBe(String(expected))
   })
 
   it('survives the SECOND rounding, the cashier discount', async () => {
@@ -1880,22 +2172,25 @@ describe('a POS platform fee that rounds to zero (AGL-2256)', () => {
     expect(result.status).toBe(200)
     expect(
       stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
-    ).toBe('1')
+    ).toBe(String(1 + storefrontProcessingCostCents(15)))
   })
 
   /**
-   * THE OTHER BRANCH. A plan whose rate is a real zero must still send
-   * nothing — Stripe rejects a zero application fee, and inventing a cent on
-   * an advertised 0% tier would be a pricing lie.
+   * THE OTHER BRANCH. A plan whose rate is a real zero must invent no TAKE —
+   * a cent of margin on an advertised 0% tier would be a pricing lie. Since
+   * AGL-2152 the parameter is still emitted, because Stripe's own cost on the
+   * charge is real money leaving the platform's balance whatever the take is;
+   * what must be zero is the margin, and that is what this asserts.
    */
-  it('sends NOTHING on a plan whose rate is a real zero', async () => {
+  it('takes no margin on a plan whose rate is a real zero', async () => {
     mockOrg.org.plan = 'advanced'
     const result = await post({ payment: 'link' })
     expect(result.status).toBe(200)
-    expect(
+    const sent = Number(
       stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
-    ).toBeNull()
-    expect(stripeCalls[0].body.get('metadata[feeCents]')).toBe('0')
+    )
+    expect(sent - storefrontProcessingCostCents(30)).toBe(0)
+    expect(stripeCalls[0].body.get('metadata[feeCents]')).toBe(String(sent))
   })
 
   it('sends NOTHING when the cashier discounts the basket to zero', async () => {
@@ -1919,6 +2214,54 @@ describe('a POS platform fee that rounds to zero (AGL-2256)', () => {
  * strictly WIDER than the rules it claimed to mirror: any role string that was
  * not literally `viewer` transacted.
  */
+/**
+ * `managePos` IS ENFORCED (AGL-2474).
+ *
+ * The key was declared by `COMMERCE_PERMISSIONS`, registered by both surfaces,
+ * resolved into every permission map — and read by nothing anywhere in the
+ * repo. A permission that cannot deny anything is not a permission; it is a
+ * label the customer is told is a control. These cases are what make it one.
+ */
+describe('the managePos permission gates the register (AGL-2474)', () => {
+  it('refuses a host admin whose managePos was revoked', async () => {
+    // The host allowlist still ADMITS this user — `memberRoles` says admin.
+    // Before this change that was the entire test, so a revoked `managePos`
+    // rang the sale anyway.
+    docs.set('hosts/host-1', { memberRoles: { 'cashier-1': 'admin' } })
+    mockResolveOrgPermissions.mockResolvedValue({
+      orgId: 'org-1',
+      role: 'admin',
+      isOwner: true,
+      permissions: { managePos: false },
+      orgWide: true,
+      hostRole: 'admin',
+    } as any)
+    const result = await post({ payment: 'cash', cashReceivedCents: 500 })
+    expect(result.status).toBe(403)
+    // The refusal must be a refusal, not a 403 with a sale behind it.
+    expect(orderDocs()).toHaveLength(0)
+  })
+
+  it('POSITIVE CONTROL: the same admin rings the sale when it is granted', async () => {
+    // Without this the test above passes for any reason at all — a broken
+    // fixture, a 403 from the allowlist, an exception in the handler.
+    docs.set('hosts/host-1', { memberRoles: { 'cashier-1': 'admin' } })
+    const result = await post({ payment: 'cash', cashReceivedCents: 500 })
+    expect(result.status).toBe(200)
+    expect(orderDocs()).toHaveLength(1)
+  })
+
+  it('resolves the permission against the HOST in context', async () => {
+    docs.set('hosts/host-1', { memberRoles: { 'cashier-1': 'admin' } })
+    await post({ payment: 'cash', cashReceivedCents: 500 })
+    // A resolver called with no host resolves an org-wide question and would
+    // hand a site collaborator someone else's standing.
+    expect(mockResolveOrgPermissions).toHaveBeenCalledWith('cashier-1', {
+      hostId: 'host-1',
+    })
+  })
+})
+
 describe('who may ring a sale (AGL-2262)', () => {
   async function postAs(role: unknown) {
     docs.set('hosts/host-1', { memberRoles: { 'cashier-1': role } })

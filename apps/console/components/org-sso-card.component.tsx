@@ -150,6 +150,12 @@ export function OrgSsoCard() {
   const [sso, setSso] = useState<SsoConfig>({})
   const [claims, setClaims] = useState<DomainClaim[]>([])
   const [metadata, setMetadata] = useState<ServiceMetadata | null>(null)
+  /**
+   * Why there is no ACS URL to show (AGL-2020). Null on every correctly
+   * configured deployment; set only when the server could not resolve an auth
+   * origin at all, which used to silently render OURS.
+   */
+  const [metadataError, setMetadataError] = useState<string | null>(null)
   const [newDomain, setNewDomain] = useState('')
   const [entityId, setEntityId] = useState('')
   const [ssoUrl, setSsoUrl] = useState('')
@@ -197,7 +203,7 @@ export function OrgSsoCard() {
   )
 
   const refresh = useCallback(async () => {
-    let payload: Awaited<ReturnType<typeof request>> = null
+    let payload: Awaited<ReturnType<typeof request>>
     try {
       payload = await request({ action: 'status' })
     } catch {
@@ -213,6 +219,7 @@ export function OrgSsoCard() {
     setSso(payload.sso ?? {})
     setClaims(payload.claims ?? [])
     setMetadata(payload.metadata ?? null)
+    setMetadataError(payload.metadataError ?? null)
     const idp = payload.sso?.idp
     if (idp) {
       setEntityId(idp.entityId ?? '')
@@ -524,6 +531,12 @@ export function OrgSsoCard() {
               <CopyField label="Reply / ACS URL" value={metadata.acsUrl} />
               <CopyField label="Entity ID / Audience" value={metadata.entityId} />
             </>
+          ) : metadataError ? (
+            // AGL-2020. Before this, an unconfigured deployment printed
+            // Aglyn's own auth origin here and the operator pasted it into
+            // their IdP. Showing the reason is the only honest option: there
+            // is no ACS URL this deployment can serve.
+            <Alert severity="error">{metadataError}</Alert>
           ) : null}
           <Typography variant="body2" color="text.secondary" sx={{ pt: 1 }}>
             {'Then paste your provider’s details back here.'}

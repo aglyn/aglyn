@@ -801,3 +801,240 @@ describe('AGL-1878: usage is withheld rather than forfeited when nothing can bil
     // mid-month figure was money owed.
   })
 })
+
+
+/*==========================================
+ * THE STOCK MEASURES ARE TAKEN INSIDE THE MONTH THEY BILL (AGL-2399).
+ *
+ * ## What was broken
+ *
+ * Four dimensions are metered; two of them are not month-scoped counters.
+ * API requests read `apiUsage/{month}.count` and form submissions read
+ * `counters/formSubmissions.{month}` — both are FLOWS, accumulated inside the
+ * period and unaffected by anything done afterwards. Contacts and dataset
+ * storage are STOCKS: `contacts.count()` and `orgDatasetBytes()` are live
+ * readings of the collection as it stands at the instant the sweep runs, and
+ * the closed-month sweep runs at 02:00 UTC on the 1st — i.e. AFTER the month
+ * it is billing has ended.
+ *
+ * So the amount charged for August depended on what the customer did in
+ * September, in both directions:
+ *
+ *   - bulk-delete on the 1st and August's audience-band overage vanishes,
+ *   - import on the 1st and the import lands on August's invoice.
+ *
+ * And a re-sweep on the 3rd measured a THIRD value, so the figure was not even
+ * stable across runs of the same month — only `reportedAt` froze it, and only
+ * for whichever run happened to report first.
+ *
+ * ## The convention, and why this one
+ *
+ * A stock has no single honest monthly figure; the candidates are period-end,
+ * peak and time-weighted mean, and each charges a different amount for the
+ * same behaviour. This picks **the last reading taken INSIDE the period** —
+ * the `?month=current` sweep's final daily write, recorded as
+ * `contactsCountAtPeriodEnd` / `dataStorageMbAtPeriodEnd`.
+ *
+ * It is the narrowest change that makes the meter honest, and deliberately so,
+ * because pricing is locked for Sept 1:
+ *
+ *   1. It keeps the same STATISTIC — a point-in-time level. Only the instant
+ *      it is read moves, from just after the period to the last moment inside
+ *      it. Peak and mean are different statistics and would be a pricing
+ *      decision; this is a measurement-window fix.
+ *   2. It is the number the customer was already shown. The console meter and
+ *      the budget card read `contactsCount`/`dataStorageMb` off this very
+ *      document, written by the in-progress sweep — so the invoice now equals
+ *      the last figure the console displayed, instead of one no surface ever
+ *      showed.
+ *   3. It is computable for every month. Mean needs a complete daily series;
+ *      months before the in-progress sweep existed have none.
+ *   4. The platform's other level meters (host media bytes, org-library bytes)
+ *      are already billed as point-in-time levels, so the four meters stay
+ *      mutually consistent.
+ *
+ * Peak is the only candidate that fully closes the bulk-delete-before-the-31st
+ * vector. That remains Zach's call; it would raise bills, which is the
+ * direction the locked-pricing rule reserves for him.
+ *=========================================*/
+describe('contacts and dataset storage bill the month, not the sweep (AGL-2399)', () => {
+  /** Starter: 1,000 contacts included at $1.00/1k, 1,024 MB at $0.25/GB. */
+  const CONTACTS_AT_PERIOD_END = 6_000
+  const DATA_MB_AT_PERIOD_END = 5_000
+  /** 5,000 contacts over the band at $1/1k. */
+  const EXPECTED_CONTACT_OVERAGE_USD = 5
+  /** (5000 - 1024) MB = 3.8828125 GB x $0.25, rounded to the cent. */
+  const EXPECTED_DATA_OVERAGE_USD = 0.97
+
+  /**
+   * What last month's daily in-progress sweeps left on the document — the
+   * fixture is the production state, not a contrivance: `?month=current` wrote
+   * `usage/{CLOSED}` every day while CLOSED was the month in progress, and the
+   * last of those writes is the period-end reading.
+   */
+  function seedPeriodEndReading(
+    fields: Record<string, unknown> = {
+      contactsCountAtPeriodEnd: CONTACTS_AT_PERIOD_END,
+      dataStorageMbAtPeriodEnd: DATA_MB_AT_PERIOD_END,
+    },
+  ) {
+    mockDocs.set(`orgs/org-1/usage/${CLOSED}`, {
+      month: CLOSED,
+      ...fields,
+    })
+  }
+
+  /** `count()` counts seeded documents, so this IS the live reading. */
+  function seedLiveContacts(howMany: number) {
+    for (let index = 0; index < howMany; index += 1) {
+      mockDocs.set(`orgs/org-1/contacts/contact-${index}`, { email: 'a@b.c' })
+    }
+  }
+
+  it('a bulk-delete on the 1st no longer erases the closed month (under-billing)', async () => {
+    // The gaming vector. August ended with 6,000 contacts and 5,000 MB of
+    // datasets; on 1 September the customer deleted almost all of it, hours
+    // before the 02:00 sweep. Under the old basis August billed the ten
+    // records that survived, which is $0 of a $5.97 overage.
+    //
+    // FORCED RED: on the pre-fix route this case failed on the first
+    // expectation with `contactsOverageUsd: 0` and `dataOverageUsd: 0` — the
+    // sweep read the live collection and found ten contacts and no datasets.
+    seedOrg()
+    seedPeriodEndReading()
+    seedLiveContacts(10)
+
+    const response = await runSweep(loadRoute())
+    expect(response.status).toBe(200)
+
+    const rollup = mockDocs.get(`orgs/org-1/usage/${CLOSED}`)!
+    expect(rollup['contactsOverageUsd']).toBe(EXPECTED_CONTACT_OVERAGE_USD)
+    expect(rollup['dataOverageUsd']).toBe(EXPECTED_DATA_OVERAGE_USD)
+    // The BASIS is on the document, so "why was I charged this" is answerable
+    // from the audit row alone.
+    expect(rollup['stockBasis']).toBe('period-end')
+    // The figures the console reads are the billed ones, not the post-period
+    // measurement — a meter that disagrees with the invoice is its own bug.
+    expect(rollup['contactsCount']).toBe(CONTACTS_AT_PERIOD_END)
+    expect(rollup['dataStorageMb']).toBe(DATA_MB_AT_PERIOD_END)
+    // What the sweep saw is still recorded, under a name that says when it
+    // was taken. Dropping it would make the two bases indistinguishable in
+    // the very months somebody will want to compare them.
+    expect(rollup['contactsCountAtSweep']).toBe(10)
+  })
+
+  it('an import on the 1st is not billed to the month before it (over-billing)', async () => {
+    // The other direction, and the one that is harder to defend in a support
+    // conversation. August ended inside every band; the customer imported
+    // 6,000 contacts on 1 September and the closed-month sweep put that
+    // import on AUGUST's invoice.
+    //
+    // FORCED RED: pre-fix, `contactsOverageUsd` came back as 5 — a $5 charge
+    // for records that did not exist during the month being billed.
+    seedOrg()
+    seedPeriodEndReading({
+      contactsCountAtPeriodEnd: 10,
+      dataStorageMbAtPeriodEnd: 0,
+    })
+    seedLiveContacts(CONTACTS_AT_PERIOD_END)
+
+    await runSweep(loadRoute())
+
+    const rollup = mockDocs.get(`orgs/org-1/usage/${CLOSED}`)!
+    expect(rollup['contactsCount']).toBe(10)
+    expect(rollup['contactsOverageUsd']).toBe(0)
+    expect(rollup['contactsCountAtSweep']).toBe(CONTACTS_AT_PERIOD_END)
+    expect(rollup['stockBasis']).toBe('period-end')
+  })
+
+  it('a re-sweep days later bills the same figure (idempotency, AGL-1878)', async () => {
+    // The daily cron re-sweeps any org-month lacking `reportedAt`, so a month
+    // blocked on the 1st is measured again on the 2nd and the 3rd. On a live
+    // reading that is a different number every time; the amount was stable
+    // only by accident, because `reportedAt` froze whichever run reported
+    // first. Here it is stable BY CONSTRUCTION: the closed sweep never writes
+    // the period-end fields, so every re-run reads the same frozen input.
+    //
+    // FORCED RED: pre-fix the second sweep billed 5000 more contacts than the
+    // first, and the two `billedCents` differed by 500.
+    seedOrg()
+    seedPeriodEndReading()
+    seedLiveContacts(10)
+    // No metered item, so nothing reports and `reportedAt` is never stamped —
+    // which is exactly the state that earns an org a re-sweep tomorrow.
+    subscriptionsResponse = { ok: true, body: { data: [] } }
+
+    const first = await runSweep(loadRoute())
+    const firstCents = (await first.json()).orgs['org-1'].billedCents
+
+    // A day passes and the customer re-imports. The closed month must not care.
+    seedLiveContacts(CONTACTS_AT_PERIOD_END)
+    subscriptionsResponse = { ok: true, body: { data: [] } }
+    const second = await runSweep(loadRoute())
+    const secondCents = (await second.json()).orgs['org-1'].billedCents
+
+    expect(secondCents).toBe(firstCents)
+    expect(mockDocs.get(`orgs/org-1/usage/${CLOSED}`)!['contactsCount']).toBe(
+      CONTACTS_AT_PERIOD_END,
+    )
+  })
+
+  it('the in-progress sweep is what records the period-end reading', async () => {
+    // The writer half. Nothing above can hold if the daily `?month=current`
+    // run does not put these fields on the document — and it must write them
+    // on EVERY in-progress run, so the last one before the month rolls over
+    // is the reading the closed sweep inherits.
+    //
+    // FORCED RED by writing the fields unconditionally instead of only when
+    // the month is open: the closed sweep then overwrote the period-end
+    // reading with its own post-period measurement on the first re-sweep, and
+    // the idempotency case above went red with it.
+    seedOrg()
+    seedLiveContacts(2_500)
+
+    await runSweep(loadRoute(), { query: '?month=current' })
+
+    const rollup = mockDocs.get(`orgs/org-1/usage/${OPEN}`)!
+    expect(rollup['contactsCountAtPeriodEnd']).toBe(2_500)
+    expect(rollup['dataStorageMbAtPeriodEnd']).toBe(rollup['dataStorageMb'])
+    // An open month is measured now BY DEFINITION — "now" is inside it.
+    expect(rollup['stockBasis']).toBe('in-progress')
+  })
+
+  it('a closed month with no in-period reading falls back, and says so', async () => {
+    // Months that ended before the in-progress sweep existed have no daily
+    // series at all, and an org created in the last seventeen hours of a
+    // month misses the final 07:00 run. Refusing to bill those would forfeit
+    // real revenue; billing them silently on the old basis would hide which
+    // months are comparable. So it falls back and NAMES the fallback.
+    //
+    // FORCED RED by making the fallback bill zero: the sweep charged nothing
+    // for 6,000 contacts and the case failed on `contactsOverageUsd`.
+    seedOrg()
+    seedLiveContacts(CONTACTS_AT_PERIOD_END)
+
+    await runSweep(loadRoute())
+
+    const rollup = mockDocs.get(`orgs/org-1/usage/${CLOSED}`)!
+    expect(rollup['stockBasis']).toBe('sweep-time')
+    expect(rollup['contactsCount']).toBe(CONTACTS_AT_PERIOD_END)
+    expect(rollup['contactsOverageUsd']).toBe(EXPECTED_CONTACT_OVERAGE_USD)
+  })
+
+  it('POSITIVE CONTROL: the FLOW meters are untouched by any of this', async () => {
+    // Page views, form submissions and API requests are month-scoped counters
+    // and were always honest. If this change moved them, it moved something
+    // it had no business near — and every figure in this suite would shift
+    // together, which is how a basis change disguises itself as a fix.
+    seedOrg()
+    seedPeriodEndReading()
+    seedLiveContacts(10)
+
+    await runSweep(loadRoute())
+
+    const rollup = mockDocs.get(`orgs/org-1/usage/${CLOSED}`)!
+    expect(rollup['apiRequests']).toBe(20_000)
+    expect(rollup['pageViews']).toBe(300_000)
+    expect(rollup['formSubmissions']).toBe(4_000)
+  })
+})

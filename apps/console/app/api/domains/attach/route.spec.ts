@@ -147,6 +147,19 @@ function mockMakeFirestore() {
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  // The REAL `domainStateServes` (AGL-2011). The predicate that decides
+  // whether a probed state counts as serving used to be four inline
+  // comparisons in this route and four more in the completer cron, kept
+  // identical by a comment; it is now one exported function, and stubbing it
+  // here would make every state case below a test of the stub.
+  //
+  // Reached through the defining FILE, not
+  // `jest.requireActual('@aglyn/tenant-data-admin')`: the package barrel pulls
+  // in `render-cache.ts` -> `next/cache`, which throws under this test
+  // environment. That file has no imports of its own.
+  ...jest.requireActual(
+    '../../../../../../libs/tenant/data/admin/src/lib/server/workspace-domains',
+  ),
   firebaseAdmin: {
     app: () => ({
       auth: () => ({ verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args) }),

@@ -390,3 +390,40 @@ describe('the other tax modes on a draft order', () => {
     expect(orderDoc()?.totals?.taxCents ?? 0).toBe(0)
   })
 })
+
+/**
+ * WHICH REGIME THE DRAFT WAS COMPOSED UNDER (AGL-2451).
+ *
+ * Stamped from the DECISION, never from the frozen `taxCents`: a Stripe Tax
+ * draft freezes 0 there — only the paid session knows the figure — so a mode
+ * read back off the amount would call it `none` and the console would tell the
+ * merchant their Stripe Tax order carried no tax at all.
+ *
+ * The `commerce-draft` webhook branch restates this from the session that
+ * actually charged the order, which is the authoritative reading. This one is
+ * what a draft that is never paid can still say for itself.
+ */
+describe('the draft order records which tax it was composed under (AGL-2451)', () => {
+  it('stamps stripe-automatic even though the frozen tax is still zero', async () => {
+    await runDraft({ settings: { tax: { mode: 'stripe' } } })
+    expect(orderDoc()?.totals?.taxCents ?? 0).toBe(0)
+    expect(orderDoc()?.taxMode).toBe('stripe-automatic')
+    expect(orderDoc()?.taxMode).not.toBe('none')
+  })
+
+  it('stamps manual for the merchant’s own rate', async () => {
+    await runDraft({ settings: MANUAL_TX })
+    expect(orderDoc()?.taxMode).toBe('manual')
+  })
+
+  it('stamps none for a store that decided to collect nothing', async () => {
+    await runDraft({ settings: { tax: { mode: 'none' } } })
+    expect(orderDoc()?.taxMode).toBe('none')
+  })
+
+  /** An exempt product charges nothing, whatever the store's mode is. */
+  it('stamps none for a tax-exempt product at a manual store', async () => {
+    await runDraft({ settings: MANUAL_TX, product: { taxExempt: true } })
+    expect(orderDoc()?.taxMode).toBe('none')
+  })
+})

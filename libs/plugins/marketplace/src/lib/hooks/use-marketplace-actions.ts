@@ -124,7 +124,7 @@ function baseMissingWarning(displayName: string): string {
  * version snapshot server-side (/api/marketplace/install); buy opens a
  * Stripe checkout (/api/marketplace/checkout) when configured.
  */
-export function useMarketplaceActions(hostId: string) {
+export function useMarketplaceActions(hostId: string, orgId?: string | null) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
@@ -435,6 +435,18 @@ export function useMarketplaceActions(hostId: string) {
           body: JSON.stringify({
             listingId: listing.$id,
             hostId,
+            // WHICH WORKSPACE IS BUYING (AGL-2331). A purchase licenses an
+            // organization, so the acting org is named rather than inferred:
+            // at org scope the surface acts through an arbitrary FIRST site,
+            // and letting the server derive the licence holder from that site
+            // would make which client workspace got the licence depend on the
+            // order sites happen to come back in.
+            //
+            // Advisory, not authority — the server resolves it through the
+            // caller's own membership and refuses an org they are not in. An
+            // older cached bundle that sends none still works: the server
+            // falls back to resolving the org from `hostId` the same way.
+            ...(orgId ? { orgId } : {}),
             gaClientId: await readGaClientId(
               process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
             ),
@@ -475,7 +487,7 @@ export function useMarketplaceActions(hostId: string) {
         dequeue()
       }
     },
-    [user, hostId, queueLoading, enqueueSnackbar],
+    [user, hostId, orgId, queueLoading, enqueueSnackbar],
   )
 
   /**

@@ -17,6 +17,7 @@
 'use client'
 
 import { checkQuota, pluginDocsHelp } from '@aglyn/aglyn'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { type HostBookingService, isBookingReminderDue } from '../model'
 import { CardDisplay, HelpTip, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -593,6 +594,28 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
             />
             <TextField
               label="Price (USD, 0 = free)"
+              // WHAT THIS PRICE DOES NOT INCLUDE (AGL-2028).
+              //
+              // A paid booking is charged exactly this figure: the handler
+              // sends no tax parameter at all, by a stated decision (AGL-2000)
+              // — whether a service is taxable is jurisdiction-specific and
+              // frequently the opposite answer from goods, so applying the
+              // commerce plugin's GOODS sales rate would be confidently wrong
+              // rather than merely absent.
+              //
+              // That decision was recorded in the source and in the
+              // `storefrontTaxCollected` ledger, and in neither place can the
+              // merchant see it. A service business is one of the three named
+              // ICPs, and one who configured a rate in Commerce → Settings →
+              // Taxes has every reason to assume it covers the appointments
+              // they sell on the same site. Saying so here is the half of
+              // AGL-2028 that holds however the rate question is answered.
+              //
+              // States the MECHANISM and makes no remittance determination —
+              // the same line `describeOrderTaxMode` holds. Who owes which
+              // authority what attaches by operation of law and is counsel's
+              // call (AGL-1904/AGL-1956).
+              helperText={`${PLATFORM_BRAND_NAME} charges this price as typed — no tax is added. Your Commerce tax settings are a goods sales rate and do not apply to bookings.`}
               value={draft?.priceUsd ?? ''}
               onChange={(event) =>
                 setDraft((prev) =>

@@ -299,6 +299,10 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
     'excerpt',
     'body',
     'coverImage',
+    // Travels WITH the cover (AGL-2418). Exporting the picture and dropping
+    // its description silently un-does the author's accessibility work on
+    // every round trip, and the loss is invisible — the image comes back.
+    'coverImageAlt',
     'seoTitle',
     'seoDescription',
     'authorName',

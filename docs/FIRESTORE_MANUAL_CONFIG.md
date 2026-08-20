@@ -90,9 +90,9 @@ running the deploy, which is the one action that can destroy them.
 | `cspViolationDaily` | `expiresAt` | Durable CSP-violation counters (AGL-1799) written by the console and tenant `/api/csp-report` collectors — one doc per (day × app × directive × disposition × blocked origin), never report bodies. 60-day retention (`CSP_AGGREGATE_RETENTION_DAYS` in `libs/tenant/data/admin/src/lib/server/csp-aggregate.ts`); the evidence AGL-1702/AGL-1726 gate their enforcing flips on. **TTL `ACTIVE`, re-verified 2026-08-18.** |
 | `analytics` | `expiresAt` | Per-day pageview/serve/redirect counters on hosts and orgs (AGL-1844). **400 days** (`ANALYTICS_DAY_RETENTION_DAYS` in `libs/tenant/data/admin/src/lib/server/analytics-retention.ts`) — wide enough for the console's 90-day range, a usage-metering dispute a year later, and a year-over-year comparison no surface renders yet. TTL `ACTIVE`. |
 | `screenAnalytics` | `expiresAt` | The same counters per screen, same 400 days, same policy. TTL `ACTIVE`. |
-| `assistExchanges` | `expiresAt` | The **verbatim** half of an Aglyn Assist exchange (AGL-1972) — the question, the answer and the asking `uid`. **180 days** (`ASSIST_EXCHANGE_RETENTION_DAYS` in `apps/console/app/api/_lib/assist-usage.ts`). The number is only affordable because the analytic half was split into `assistSignals`, which carries `docsPaths`, the thumbs rating, tokens and cost, has NO expiry and no `uid` — so the docs-gap data loop keeps its corpus while the prose expires. Both are org subcollections, so `recursiveDelete(orgRef)` still takes them on erasure. ⚠️ **Not yet enabled in gcloud** — run the command below. |
-| `churnSurveyDetails` | `expiresAt` | The churn survey's free text (AGL-1978), split out of `orgs/{orgId}/retention` into its own document so it can expire without taking the closed-set `reason` with it — the reason breakdown is the whole point of the funnel (AGL-1859/AGL-1863) and must not be reaped. **365 days** (`CHURN_SURVEY_DETAIL_RETENTION_DAYS` in `apps/console/app/api/_lib/retention.ts`), because churn analysis is annual. ⚠️ **Not yet enabled in gcloud** — run the command below. |
-| `apiIdempotency` | `expiresAt` | REST/POS/marketplace replay keys (AGL-618, AGL-1978). **30 days** (`API_IDEMPOTENCY_RETENTION_DAYS` in `libs/aglyn/src/lib/app-utils/api-idempotency.ts`). Not merely a key: a settled claim stores the **original response body**, which for the REST API is the created record's `values` — so this collection was a permanent second copy of every record created through the API, surviving the record's own deletion. Top-level and `orgId`-keyed, so `eraseOrgIdempotencyKeys` sweeps it on erasure; the TTL is what bounds it for a **live** org. The published contract in `apps/docs/api/conventions.md` moved from "never expire" to the 30-day window in the same change. ⚠️ **Not yet enabled in gcloud** — run the command below. |
+| `assistExchanges` | `expiresAt` | The **verbatim** half of an Aglyn Assist exchange (AGL-1972) — the question, the answer and the asking `uid`. **180 days** (`ASSIST_EXCHANGE_RETENTION_DAYS` in `apps/console/app/api/_lib/assist-usage.ts`). The number is only affordable because the analytic half was split into `assistSignals`, which carries `docsPaths`, the thumbs rating, tokens and cost, has NO expiry and no `uid` — so the docs-gap data loop keeps its corpus while the prose expires. Both are org subcollections, so `recursiveDelete(orgRef)` still takes them on erasure. TTL `ACTIVE`, enabled and verified 2026-08-19. |
+| `churnSurveyDetails` | `expiresAt` | The churn survey's free text (AGL-1978), split out of `orgs/{orgId}/retention` into its own document so it can expire without taking the closed-set `reason` with it — the reason breakdown is the whole point of the funnel (AGL-1859/AGL-1863) and must not be reaped. **365 days** (`CHURN_SURVEY_DETAIL_RETENTION_DAYS` in `apps/console/app/api/_lib/retention.ts`), because churn analysis is annual. TTL `ACTIVE`, enabled and verified 2026-08-19. |
+| `apiIdempotency` | `expiresAt` | REST/POS/marketplace replay keys (AGL-618, AGL-1978). **30 days** (`API_IDEMPOTENCY_RETENTION_DAYS` in `libs/aglyn/src/lib/app-utils/api-idempotency.ts`). Not merely a key: a settled claim stores the **original response body**, which for the REST API is the created record's `values` — so this collection was a permanent second copy of every record created through the API, surviving the record's own deletion. Top-level and `orgId`-keyed, so `eraseOrgIdempotencyKeys` sweeps it on erasure; the TTL is what bounds it for a **live** org. The published contract in `apps/docs/api/conventions.md` moved from "never expire" to the 30-day window in the same change. TTL `ACTIVE`, enabled and verified 2026-08-19. |
 
 Not TTL targets (deliberately): `apiKeys.expiresAt` (validity field — keep expired
 keys as records), `orgSlugs.movedTo` tombstones (intentional persistent
@@ -115,7 +115,7 @@ gcloud firestore fields ttls update expiresAt \
 gcloud firestore fields ttls update expiresAt \
   --collection-group=screenAnalytics --enable-ttl \
   --project=aglyn-main --database='(default)'
-# AGL-1972 / AGL-1978 — OWED, not yet run:
+# AGL-1972 / AGL-1978 — run 2026-08-19, now ACTIVE:
 gcloud firestore fields ttls update expiresAt \
   --collection-group=assistExchanges --enable-ttl \
   --project=aglyn-main --database='(default)'
@@ -129,8 +129,9 @@ gcloud firestore fields ttls update expiresAt \
 gcloud firestore fields ttls list --project=aglyn-main --database='(default)'
 ```
 
-⚠️ **The three AGL-1972/AGL-1978 policies are declared and written but NOT yet
-enabled in gcloud.** The `fieldOverrides` entries are in the index file and the
+✅ **The three AGL-1972/AGL-1978 policies were enabled on 2026-08-19** and
+`gcloud firestore fields ttls list` now reports eight `ACTIVE` policies.
+Historically they were declared and written but not enabled: The `fieldOverrides` entries are in the index file and the
 writers stamp `expiresAt`, so nothing is at risk from a deploy — but until the
 three commands above are run, the documents accrue an expiry timestamp that
 nothing acts on, and `docs/DATA_RETENTION.md` must not describe those periods
@@ -192,5 +193,5 @@ gcloud firestore databases describe --database='(default)' --project=aglyn-main 
 - Location `nam5` (US multi-region), Native mode, Pessimistic concurrency
 - Point-in-time recovery: **ENABLED** (7-day window)
 - Delete protection: **ENABLED** (AGL-872)
-- TTL policies: **five `ACTIVE`, three declared and OWED** — active: `rateLimits` (AGL-870), `mediaTombstones` (AGL-1467), `cspViolationDaily` (AGL-1799), `analytics` and `screenAnalytics` (AGL-1844), re-verified 2026-08-18 with `gcloud firestore fields ttls list --project=aglyn-main --database='(default)'`. Declared in the index file, writers stamping, gcloud command not yet run: `assistExchanges` (AGL-1972), `churnSurveyDetails` and `apiIdempotency` (AGL-1978). The retention schedule they implement is [`docs/DATA_RETENTION.md`](DATA_RETENTION.md); `apps/console/specs/retention-ttl-config.spec.ts` fails the build if a declaration, a doc row or a writer goes missing — it cannot see gcloud, which is why the owed state is written down here
+- TTL policies: **eight `ACTIVE`, none owed** — active: `rateLimits` (AGL-870), `mediaTombstones` (AGL-1467), `cspViolationDaily` (AGL-1799), `analytics` and `screenAnalytics` (AGL-1844), plus `assistExchanges` (AGL-1972), `churnSurveyDetails` and `apiIdempotency` (AGL-1978) enabled 2026-08-19, all eight re-verified 2026-08-19 with `gcloud firestore fields ttls list --project=aglyn-main --database='(default)'`. The retention schedule they implement is [`docs/DATA_RETENTION.md`](DATA_RETENTION.md); `apps/console/specs/retention-ttl-config.spec.ts` fails the build if a declaration, a doc row or a writer goes missing — it cannot see gcloud, which is why the owed state is written down here
 - Backup schedules: **weekly (Sunday), 14-week retention** (AGL-871)

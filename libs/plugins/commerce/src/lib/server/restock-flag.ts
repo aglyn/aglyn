@@ -43,13 +43,19 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
  *    kept the item and took the money, and `product_not_received` — the most
  *    common reason code — asserts the goods shipped.
  *
- * The quantities are not knowable either, on a partial. A refund is requested
- * as an AMOUNT (`refund.ts` takes `amountCents` and nothing else) and no
- * reversal anywhere records which lines it covered, so "$17 of a $62 order"
- * selects no line. That is a real blocker for any automatic behaviour and it
- * is recorded rather than papered over: `quantity` is at most the units the
- * line sold — capped to what the count actually gave up, see below — and
- * `fullyReversed` says whether that bound is a tight one.
+ * The quantities are not always knowable on a partial. A refund requested as an
+ * AMOUNT selects no line — "$17 of a $62 order" names nothing — and that is
+ * recorded rather than papered over: `quantity` is at most the units the line
+ * sold, capped to what the count actually gave up, and `fullyReversed` says
+ * whether that bound is a tight one.
+ *
+ * A refund that NAMES ITS LINES is scoped to them (AGL-2325). When this was
+ * written no reversal recorded which lines it covered; AGL-2454 changed that,
+ * and `refund.ts` commits `refundedLineItemIds` with the money, before this
+ * flag re-reads the order. A one-line refund on a three-line order that still
+ * asked about all three was the same over-statement this module already fixed
+ * on the units axis, arriving by a door that opened afterwards. See
+ * `reversalLineScope` for the three cases that stay whole-order.
  *
  * So the merchant is asked. They are the only party who knows whether the
  * goods came back, and by the time they read this they know it.
@@ -121,10 +127,21 @@ export async function flagOrderRestock(options: {
     const order = CommerceModel.liftLegacyOrder(
       (snapshot.data() ?? {}) as never,
     )
-    // Once per open question. A second partial on an order already flagged and
-    // still unanswered adds nothing the merchant does not have; one they
-    // already ANSWERED is a new question, because stock moved since.
-    if (order.restockCheck && !order.restockCheck.resolution) return
+    // Once per open question — but "the question" is now a set of LINES, not
+    // the order (AGL-2325). A second partial that withdraws a line the open
+    // prompt already names adds nothing the merchant does not have; one that
+    // withdraws a DIFFERENT line is a genuinely new question, and swallowing it
+    // left those units off the shelf with nothing recording that they had gone.
+    // A check they already ANSWERED is a new question either way, because
+    // stock moved since.
+    const open =
+      order.restockCheck && !order.restockCheck.resolution
+        ? order.restockCheck
+        : null
+    const covered = open ? openCheckCoverage(open) : null
+    // An open question that names no lines cannot be told apart from one that
+    // names these, so it stands. See `openCheckCoverage`.
+    if (open && covered === null) return
     // AN ORDER THAT WAS CANCELLED HAS NO RESTOCK QUESTION LEFT (AGL-2149).
     // Until `cancelled: ['refunded']` this was unreachable — a cancelled order
     // could not refund at all — and reaching it now would be the double-count
@@ -149,7 +166,14 @@ export async function flagOrderRestock(options: {
       return
     }
 
-    const { lines } = await resolveTrackedRestockLines(
+    // WHICH LINES THIS REVERSAL TOOK BACK, plus the ones an open question
+    // already names (AGL-2325). Extending rather than replacing is what keeps
+    // ONE prompt on the order: a second partial that withdraws a new line
+    // re-asks the whole standing question, so the merchant answers once and
+    // the units of the earlier line are not dropped on the way.
+    const scope = reversalLineScope(order, options.kind, options.closedTheOrder)
+    const extended = scope && covered ? new Set([...scope, ...covered]) : scope
+    const { lines: allLines } = await resolveTrackedRestockLines(
       hostRef,
       order,
       // A product this flag cannot read drops out rather than failing the
@@ -158,6 +182,10 @@ export async function flagOrderRestock(options: {
       // dropped would leave stock off the shelf it just promised to return.
       (ref) => ref.get().catch(() => null),
     )
+    const lines =
+      extended == null
+        ? allLines
+        : allLines.filter((line) => extended.has(line.lineIndex))
     // Nothing was ever decremented for this order, so nothing is missing from
     // the shelf. Writing a prompt here would be the noise that teaches a
     // merchant to ignore the ones that matter.
@@ -186,6 +214,12 @@ export async function flagOrderRestock(options: {
     // the shelf and there is no question to ask.
     if (capped.length === 0) return
 
+    // Asked of the CAPPED lines, so a line the floor absorbed is not counted
+    // as something the open prompt is missing — it would re-flag on every
+    // reversal forever.
+    const asking = new Set(capped.map((line) => line.lineIndex))
+    if (covered && alreadyCovered(asking, covered)) return
+
     const units = capped.reduce((sum, line) => sum + line.quantity, 0)
     const flaggedAtMs = Date.now()
     const record: CommerceModel.OrderRestockCheck = {
@@ -204,8 +238,23 @@ export async function flagOrderRestock(options: {
       // Re-asked inside the transaction that writes it, so two reversals
       // settling at once cannot both flag — the same mechanism AGL-1754 used to
       // make its status flip observable exactly once, and the reason this is
-      // not a bare `set(…, { merge: true })`.
-      if (current.restockCheck && !current.restockCheck.resolution) return
+      // not a bare `set(…, { merge: true })`. Re-asked in the same LINE terms
+      // as the check above (AGL-2325): a concurrent flag that already covers
+      // every line this one would ask about has asked the question, while one
+      // covering a different line leaves this one still worth writing.
+      const currentOpen =
+        current.restockCheck && !current.restockCheck.resolution
+          ? current.restockCheck
+          : null
+      if (currentOpen) {
+        const currentCoverage = openCheckCoverage(currentOpen)
+        if (
+          currentCoverage === null ||
+          alreadyCovered(asking, currentCoverage)
+        ) {
+          return
+        }
+      }
       // `update()`, and the whole `restockCheck` map at that. A merge recurses,
       // so a re-flag after a merchant answered would inherit the previous
       // `resolution`/`resolvedAtMs` and read as already handled while asking a
@@ -229,6 +278,75 @@ export async function flagOrderRestock(options: {
   } catch (error) {
     console.error('flagOrderRestock failed', error)
   }
+}
+
+/**
+ * The order lines THIS reversal took back, or `null` for "all of them"
+ * (AGL-2325).
+ *
+ * When AGL-2325 was filed a refund was an AMOUNT and nothing else — "$17 of a
+ * $62 order" selected no line — so naming every tracked line and labelling the
+ * total an upper bound was the only honest answer available. AGL-2454 ended
+ * that: `refund.ts` records `refundedLineItemIds` in the same transaction that
+ * moves the money, and it commits before this flag re-reads the order. A
+ * one-line refund on a three-line order that still asks about all three is the
+ * same over-statement this issue is about, arriving by a door that opened after
+ * it was written.
+ *
+ * `null` — the whole order — for the three cases where a line list is not the
+ * scope:
+ *
+ *  - a **chargeback** reverses the entire payment, so an earlier line-scoped
+ *    partial must not narrow it to the one line that admin picked;
+ *  - a refund that **closed the order** took everything back, however the
+ *    individual attempts were requested;
+ *  - a refund by **amount alone**, which names no line. That is the pre-AGL-2454
+ *    shape and still the shape of one requested without a line selection, and
+ *    it degrades to the upper bound this has always carried rather than to
+ *    silence.
+ */
+function reversalLineScope(
+  order: CommerceModel.HostOrder,
+  kind: 'refund' | 'chargeback',
+  closedTheOrder: boolean,
+): Set<number> | null {
+  if (kind === 'chargeback' || closedTheOrder) return null
+  const withdrawn = new Set<number>()
+  for (const value of order.refundedLineItemIds ?? []) {
+    const index = Math.round(Number(value))
+    if (Number.isFinite(index) && index >= 0) withdrawn.add(index)
+  }
+  return withdrawn.size > 0 ? withdrawn : null
+}
+
+/**
+ * Which order lines an OPEN restock question already covers (AGL-2325), or
+ * `null` when that cannot be told.
+ *
+ * `null` for a check written before `lineIndex` existed, and it is read as
+ * "covers the whole order" by the one caller — suppressing, which is the
+ * behaviour those checks were written under and the safe way to be wrong: a
+ * duplicate prompt for units already asked about would teach a merchant to
+ * ignore the ones that matter.
+ */
+function openCheckCoverage(
+  check: CommerceModel.OrderRestockCheck,
+): Set<number> | null {
+  const covered = new Set<number>()
+  for (const line of check.lines ?? []) {
+    if (line.lineIndex == null) return null
+    covered.add(line.lineIndex)
+  }
+  return covered
+}
+
+/** Does the open question already cover every line this reversal names? */
+function alreadyCovered(
+  scope: ReadonlySet<number>,
+  covered: ReadonlySet<number>,
+): boolean {
+  for (const index of scope) if (!covered.has(index)) return false
+  return true
 }
 
 /**
@@ -385,7 +503,9 @@ export async function resolveTrackedRestockLines(
 ): Promise<TrackedRestockLines> {
   const products = new Map<string, CommerceModel.HostProduct | null>()
   const lines: CommerceModel.OrderRestockLine[] = []
-  for (const line of order.lineItems ?? []) {
+  const orderLines = order.lineItems ?? []
+  for (let lineIndex = 0; lineIndex < orderLines.length; lineIndex += 1) {
+    const line = orderLines[lineIndex]
     const productId = String(line?.productId ?? '')
     const quantity = Math.round(Number(line?.quantity ?? 0))
     if (!productId || !(quantity > 0)) continue
@@ -413,6 +533,7 @@ export async function resolveTrackedRestockLines(
       productId,
       variantId,
       quantity,
+      lineIndex,
       ...(line.name ? { name: line.name } : {}),
       ...(line.variantLabel ? { variantLabel: line.variantLabel } : {}),
     })

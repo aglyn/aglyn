@@ -44,7 +44,9 @@ import {
   settlePromotionSlot,
 } from './promotion-hold'
 import { flagOrderRestock } from './restock-flag'
+import { storefrontTaxModeOf } from './storefront-tax'
 import { recordStorefrontTax } from './storefront-tax-record'
+import { enqueueSupplierDelivery } from './supplier-outbox'
 
 /**
  * Assigns unassigned license keys for a digital product (AGL-308):
@@ -1642,6 +1644,46 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 : {}),
               checkoutSessionId: String(object.id),
               createdAtMs: Date.now(),
+              // WHICH TAX this subscription will bill, for as long as it
+              // lives (AGL-2323).
+              //
+              // A subscription bills on its own, and the mechanism attached at
+              // the sale is the one every future invoice uses. The record kept
+              // none of it: what was bought and for how much, and nothing at
+              // all about the regime that produced the tax inside that figure.
+              //
+              // That absence is what made AGL-2323 unanswerable rather than
+              // merely unfixed. "Which subscriptions predate AGL-1751 and bill
+              // untaxed from cycle two?" and "which subscribers still carry a
+              // rate their merchant has since corrected?" are questions about
+              // the back book, and the only place the answer lived was a live
+              // Stripe enumeration — the mutation-adjacent operation nobody
+              // wants to run to find out whether they need to run it.
+              //
+              // ONE derivation, in the two-argument form the cart, draft and
+              // buy-now order doors already use (AGL-2451), so this record,
+              // the order minted for each cycle and the
+              // `storefrontTaxCollected` row filed for the same Stripe id
+              // cannot state three different regimes. The second argument
+              // carries the pre-AGL-1751 shape, where the manual tax rode
+              // `metadata[taxCents]` and `total_details.amount_tax` read 0.
+              taxMode: storefrontTaxModeOf(
+                object,
+                Number(object?.metadata?.taxCents ?? 0),
+              ),
+              // The rate's IDENTITY, from the metadata `checkout.ts` stamps —
+              // the session cannot answer it, because `line_items` is not
+              // expanded on a delivered event. `taxMode` separates manual from
+              // Stripe Tax; these two say WHICH manual rate, which is the only
+              // thing that makes rate drift detectable without a Stripe read.
+              // Absent where there is no merchant rate to name, never filled
+              // with a plausible zero (AGL-1904).
+              ...(object?.metadata?.taxRateId
+                ? { taxRateId: String(object.metadata.taxRateId) }
+                : {}),
+              ...(Number(object?.metadata?.taxPct) > 0
+                ? { taxRatePct: Number(object.metadata.taxPct) }
+                : {}),
             },
             { merge: true },
           )
@@ -1663,7 +1705,14 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             : {}),
           link: `/${hostId}/products`,
         })
-        void upsertHostContact({
+        // AWAITED SINCE AGL-2473, here and at the five sibling call sites in
+        // this file. `upsertHostContact` carries `purchaseCents`, so it is what
+        // feeds `ltvCents` and the RFM ranking — a `void`ed one is a paying
+        // customer quietly missing from the segment the merchant emails. It
+        // touches only our own Firestore, which is the whole line AGL-2473
+        // drew: Aglyn's own storage is awaited, a stranger's server is queued.
+        // `refund.ts` already awaited its sibling for exactly this reason.
+        await upsertHostContact({
           hostId: String(hostId),
           email: object?.customer_details?.email,
           name: object?.customer_details?.name ?? undefined,
@@ -2089,6 +2138,15 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               channel: 'subscription',
               lineItems: invoiceLineItems,
               totals: invoiceTotals,
+              // WHICH TAX THIS CYCLE CARRIED (AGL-2451), from the invoice's own
+              // `automatic_tax.enabled` and never from its tax lines. This is
+              // the door the distinction matters most at: a MANUAL-mode
+              // subscription carries a real Stripe Tax Rate so the recurring
+              // tax survives (AGL-1751), so every renewal invoice arrives with
+              // a populated `total_taxes[]` that looks exactly like a Stripe
+              // Tax one. Reading the lines would stamp the merchant's own tax
+              // as Aglyn-collected on every cycle they ever bill.
+              taxMode: storefrontTaxModeOf(object),
               timeline: [{ atMs: paidAtMs, event: 'paid' }],
               paymentIntentId: String(object?.payment_intent ?? '') || null,
               subscriptionId,
@@ -2226,7 +2284,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           // counting only the first charge ranks them as a one-purchase
           // customer forever. Keyed to the invoice so the guard above is what
           // stops a redelivery inflating it.
-          void upsertHostContact({
+          await upsertHostContact({
             hostId: invoiceHostId,
             email: renewalEmail,
             ...(soldSnapshot.get('customerName')
@@ -2293,6 +2351,29 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 paidCents,
                 checkoutSessionId: String(object.id),
                 paymentIntentId: String(object?.payment_intent ?? '') || null,
+                // The regime this stay carried, on the record the merchant
+                // reads (AGL-1969).
+                //
+                // This does NOT decide the lodging-tax question. `reserve.ts`
+                // computes no tax by an explicit, reasoned decision — a stay
+                // is not goods, the AGL-285 editor configures a SALES rate,
+                // and this charge is usually a DEPOSIT — and that decision is
+                // untouched. What the reservation lacked was any statement of
+                // it: the fact lived only in the `storefrontTaxCollected` row
+                // filed above, and nowhere a merchant looking at their own
+                // booking could see it. Every other storefront money door
+                // stamps this on the document the merchant reads (AGL-2451);
+                // the reservation settled money and recorded no regime at all.
+                //
+                // DERIVED, never the constant `'none'` the current decision
+                // happens to produce. A constant would keep answering `none`
+                // on the day this path does compute lodging tax, which is the
+                // failure this field exists to prevent — and would make the
+                // eventual AGL-1969 answer a second change here rather than
+                // none. `absent` remains a fourth state meaning "recorded
+                // before this shipped", which a back-book question needs to
+                // separate from a deliberate zero.
+                taxMode: storefrontTaxModeOf(object),
               },
               { merge: true },
             )
@@ -2341,7 +2422,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           const guestContactEmail =
             object?.customer_details?.email ?? reservation['guestEmail'] ?? null
           if (guestContactEmail) {
-            void upsertHostContact({
+            await upsertHostContact({
               hostId: String(hostId),
               email: guestContactEmail,
               name:
@@ -2504,6 +2585,17 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             channel: 'online',
             lineItems,
             totals,
+            // WHICH TAX THIS SALE CARRIED (AGL-2451). `totals.taxCents` above
+            // says how much; this says who computed it, which is the fact that
+            // decides whose registration the money is held under. The same
+            // resolver `recordStorefrontTax` used a few hundred lines up, so
+            // the order and the filed row cannot disagree. A manual cart's tax
+            // rides a real Stripe Tax Rate since AGL-1953 and therefore has a
+            // populated breakdown — the flag is what tells the two apart.
+            taxMode: storefrontTaxModeOf(
+              object,
+              Number(object?.metadata?.taxCents ?? 0),
+            ),
             timeline: [
               { atMs: Date.now(), event: 'paid' },
               ...(unresolvedLines.length
@@ -2761,7 +2853,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             : {}),
           link: `/${hostId}/products`,
         })
-        void upsertHostContact({
+        await upsertHostContact({
           hostId: String(hostId),
           email: object?.customer_details?.email,
           name: object?.customer_details?.name ?? undefined,
@@ -3133,6 +3225,25 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             orderRef,
             {
               status: 'paid',
+              // WHICH TAX THIS ORDER CARRIED (AGL-2451), resolved from the
+              // session that actually charged it rather than from the draft's
+              // frozen composition. `draft-order.ts` stamps its own reading at
+              // compose time and this is the authoritative restatement: a
+              // Stripe Tax draft freezes `taxCents: 0` and only the paid
+              // session knows the figure, so only the paid session can say the
+              // regime with the tax in hand.
+              //
+              // The metadata witness matters here more than anywhere: a POS
+              // CARD sale completes through this same branch with the whole
+              // basket sent as one opaque `In-store purchase` line, so Stripe
+              // states no tax at all and `metadata[taxCents]` is the only
+              // record that any of the charge was tax (AGL-1953). Without it
+              // every register card sale would stamp `none` beside an order
+              // plainly carrying tax.
+              taxMode: storefrontTaxModeOf(
+                object,
+                Number(object?.metadata?.taxCents ?? 0),
+              ),
               paymentIntentId: String(object?.payment_intent ?? '') || null,
               customerEmail:
                 object?.customer_details?.email ?? lifted.customerEmail ?? null,
@@ -3217,7 +3328,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             const chargedCents =
               Number(object?.amount_total ?? 0) ||
               Number(order.totals?.totalCents ?? 0)
-            void upsertHostContact({
+            await upsertHostContact({
               hostId: String(hostId),
               email: draftEmail,
               name: object?.customer_details?.name ?? undefined,
@@ -3433,6 +3544,15 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             channel: 'online',
             lineItems: buyNowLineItems,
             totals: buyNowTotals,
+            // WHICH TAX THIS SALE CARRIED (AGL-2451). Buy-now's manual tax
+            // goes over as an ordinary `line_items[1]` Stripe is never told is
+            // tax (AGL-1711), so the session reports `amount_tax: 0` and
+            // `metadata[taxCents]` — the key `checkout.ts` writes — is the only
+            // witness. Same resolver as the filed tax row, same witness.
+            taxMode: storefrontTaxModeOf(
+              object,
+              Number(object?.metadata?.taxCents ?? 0),
+            ),
             timeline: [{ atMs: Date.now(), event: 'paid' }],
             paymentIntentId: String(object?.payment_intent ?? '') || null,
             checkoutSessionId: String(object.id),
@@ -3465,7 +3585,21 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // it (signed webhook and/or email) and stash a callback token so
         // the supplier can post tracking back. Plan-gated; failures never
         // fail the webhook.
-        void (async () => {
+        //
+        // AWAITED SINCE AGL-2473, and the reason it can be is that the
+        // supplier POST is no longer in it. This was `void (async () => …)()`
+        // whose last act was `fetch(supplier.webhookUrl)` — a merchant-typed
+        // endpoint on a host we do not run — and Vercel freezes the container
+        // when the response is written, so a slow supplier was a supplier
+        // never told, with nothing written down to say a notification was
+        // owed. AGL-2161 declined to await it because a supplier timing out
+        // would push this handler past Stripe's window and buy a DUPLICATED
+        // order in exchange; that objection is now moot, because what is left
+        // here touches only Aglyn's own Firestore and Aglyn's own mail
+        // provider — the same things `refund.ts` awaits, for the same reason.
+        // The one call to a stranger's server is a queued row that
+        // `supplier-outbox.ts` retries out of band.
+        await (async () => {
           try {
             const routedOrg = await getOrgForHost(String(hostId))
             if (
@@ -3520,31 +3654,24 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 `?hostId=${hostId}&orderId=${object.id}&token=${supplierToken}`,
             }
             if (supplier.webhookUrl) {
-              const body = JSON.stringify(payload)
-              // NO SECRET, NO SIGNATURE HEADER (AGL-2455). This was
-              // `createHmac('sha256', supplier.webhookSecret ?? '')` — an
-              // empty-key HMAC over a body whose every field is public, which
-              // any party can compute. A supplier who also left their secret
-              // unset would verify it successfully and believe the delivery was
-              // authenticated, which is worse than no header at all: an absent
-              // header fails their check closed, a forgeable one passes it.
-              // A supplier WITH a secret rejects either way, so nothing that
-              // worked stops working.
-              const webhookSecret = String(supplier.webhookSecret ?? '')
-              await fetch(supplier.webhookUrl, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  ...(webhookSecret
-                    ? {
-                        'x-aglyn-signature': createHmac('sha256', webhookSecret)
-                          .update(body)
-                          .digest('hex'),
-                      }
-                    : {}),
-                },
-                body,
-              }).catch(() => undefined)
+              // QUEUED, NOT POSTED (AGL-2473). One Firestore write, then the
+              // job beat owns the delivery: retries with backoff, and a dead
+              // letter that stamps this order's timeline and rings the bell
+              // when a supplier stays unreachable. The BODY is frozen here
+              // because `updateUrl` is built from `requestHost`, which is a
+              // property of this request that no later pass can recover; the
+              // endpoint and the signing secret are deliberately NOT frozen,
+              // so a merchant correcting a typo'd URL fixes what is already
+              // queued and no shared secret is copied into a second document.
+              await enqueueSupplierDelivery({
+                firestore,
+                hostId: String(hostId),
+                orderId: String(object.id),
+                supplierId: String(supplierId),
+                supplierName: String(supplier.name ?? ''),
+                url: String(supplier.webhookUrl),
+                body: JSON.stringify(payload),
+              })
             }
             if (supplier.email) {
               await sendEmail({
@@ -3566,7 +3693,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           }
         })()
         // Contacts ingestion (AGL-197): buyers become contacts.
-        void upsertHostContact({
+        await upsertHostContact({
           hostId: String(hostId),
           email: object?.customer_details?.email,
           name: object?.customer_details?.name ?? undefined,
@@ -3763,6 +3890,16 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
     if (lookup.kind === 'unresolved') {
       await reportUnresolvedDispute(lookup.reason, paymentIntentId, dispute)
     }
+    // TELL THE ROUTE WE RECOGNISED IT (AGL-2429). A storefront chargeback is
+    // the ORDINARY answer to "no platform revenue row matched", and the route
+    // could not tell it apart from a dispute that nothing at all handled —
+    // so it stayed silent about both. Claiming here is what buys the route
+    // the right to alert on the ones nobody claimed.
+    //
+    // `unresolved` claims too: the lookup could not run, which
+    // `reportUnresolvedDispute` has just raised with staff by name. A second,
+    // vaguer alert from the route would describe the same incident twice.
+    const claimed = lookup.kind === 'order' || lookup.kind === 'unresolved'
     const snapshot = lookup.kind === 'order' ? lookup.snapshot : null
     if (snapshot) {
       const hostId = String(snapshot.ref.parent.parent?.id ?? '')
@@ -3868,5 +4005,6 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         }
       }
     }
+    return { claimed }
   }
 }

@@ -102,7 +102,7 @@ export async function GET(request: Request): Promise<Response> {
 
   // The redirect target is validated BEFORE anything else: refusing to
   // forward is the one behaviour that must survive every other branch.
-  let destination: URL | null = null
+  let destination: URL | null
   try {
     destination = returnUrl ? new URL(returnUrl) : null
   } catch {

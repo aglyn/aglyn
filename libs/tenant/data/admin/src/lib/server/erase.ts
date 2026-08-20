@@ -42,6 +42,75 @@ function storageBucket() {
 }
 
 /**
+ * `supplierDeliveries` — the dropship outbox, keyed by `hostId` as a FIELD.
+ *
+ * The literal rather than an import: the collection belongs to
+ * `libs/plugins/commerce/src/lib/server/supplier-outbox.ts`
+ * (`SUPPLIER_DELIVERY_COLLECTION`), which is tagged `aglyn:addons`, and this
+ * library is `scope:data` — the nx boundary forbids the edge, and reaching
+ * for a dynamic import to dodge it would poison the lint graph instead. The
+ * emulator spec asserts the two spellings still agree by reading that file,
+ * so a rename fails a test rather than silently un-wiring this sweep.
+ */
+const SUPPLIER_DELIVERY_COLLECTION = 'supplierDeliveries'
+
+/**
+ * Destroy the site's DEAD-LETTERED supplier deliveries (AGL-1448).
+ *
+ * `supplierDeliveries/{id}` is TOP-LEVEL and carries `hostId` as a field, so
+ * neither `recursiveDelete(hosts/{hostId})` here nor
+ * `recursiveDelete(orgs/{orgId})` in `eraseOrg` can see it. That placement is
+ * deliberate and correct — a subcollection would be editor-writable under the
+ * permissive host catch-all, and the row carries the exact JSON body we sign
+ * and POST to the supplier — so the fix is a sweep, not a move.
+ *
+ * **The gap is the dead letter, and the module that created it named it.**
+ * `supplier-outbox.ts` DELETES a row the moment delivery succeeds, and its
+ * docblock says why in terms: the body holds the buyer's email and name, and
+ * a top-level document is outside the recursive delete an erasure runs. The
+ * happy path was solved by that deletion. The failure path was not: after
+ * `SUPPLIER_DELIVERY_MAX_ATTEMPTS` the row is left standing as `failed`,
+ * because a human is supposed to act on it and the merchant has been told.
+ * Nothing ever collects it afterwards — no TTL policy keys on it, no cron
+ * reaps it, and the erasure could not reach it. So the one class of row that
+ * survives is the one holding a THIRD PARTY's name, email and shipping
+ * address, against a site whose owner has since asked to be erased and whom
+ * nobody can ask to act on the dead letter any more.
+ *
+ * Bounded by the `hostId` field, never a collection sweep: this collection
+ * holds every other merchant's orders. Chunked, because a batch caps at 500
+ * and nothing bounds a dead-letter backlog below that.
+ *
+ * In `eraseHost` rather than `eraseOrg` on purpose — it is host-scoped data,
+ * so the self-serve "delete this site" path gets the same cleanup as a full
+ * org erasure instead of leaving the residue behind for the smaller action.
+ *
+ * Best-effort, like every other trailing cleanup in `eraseHost`: a site
+ * delete must not fail because an outbox query did.
+ */
+async function eraseHostSupplierDeliveries(hostId: string): Promise<number> {
+  if (!hostId) return 0
+  try {
+    const firestore = firebaseAdmin.app().firestore()
+    const rows = await firestore
+      .collection(SUPPLIER_DELIVERY_COLLECTION)
+      .where('hostId', '==', hostId)
+      .get()
+    for (let index = 0; index < rows.docs.length; index += 400) {
+      const batch = firestore.batch()
+      for (const doc of rows.docs.slice(index, index + 400)) {
+        batch.delete(doc.ref)
+      }
+      await batch.commit()
+    }
+    return rows.size
+  } catch (error) {
+    console.error(`eraseHost: supplier outbox cleanup failed for ${hostId}`, error)
+    return 0
+  }
+}
+
+/**
  * Permanently erase a single site and everything it owns (AGL-488).
  * Unlike deleting the host doc alone (which orphans data), this cleans up
  * every trailing reference:
@@ -67,6 +136,11 @@ export async function eraseHost(hostId: string): Promise<void> {
   } catch (error) {
     console.error(`eraseHost: storage cleanup failed for ${hostId}`, error)
   }
+
+  // Dead-lettered supplier deliveries (AGL-1448). See the note on
+  // SUPPLIER_DELIVERY_COLLECTION below for why this is here and not implied
+  // by the recursiveDelete at the end of this function.
+  await eraseHostSupplierDeliveries(hostId)
 
   // Routing: the middleware resolves a request to a host via hostIndex and
   // the owning org's hosts map — drop both so the subdomain/cname 404s.
@@ -405,6 +479,107 @@ async function eraseOrgSlugs(
 }
 
 /**
+ * Sweep up ORPHANED `hostIndex` rows the per-host loop cannot enumerate
+ * (AGL-1448).
+ *
+ * `hostIndex/{hostId}` is `{ orgId, subdomain }` and `allow read: if
+ * isSignedIn()`. It is deleted today inside `eraseHost`, which `eraseOrg`
+ * calls once per document in `hosts where orgId == org` — so the row is
+ * reached DERIVATIVELY, through a second collection, and only for as long as
+ * the two agree.
+ *
+ * **The erasure is itself one of the ways they stop agreeing.** `eraseHost`'s
+ * `hostIndex` delete is `.catch(() => undefined)` — fail-soft on purpose, so
+ * a transient failure never blocks the Firestore delete — and the very next
+ * statement `recursiveDelete`s `hosts/{hostId}`. The instant that lands, the
+ * orphaned index row is unreachable from the org side forever: nothing points
+ * at it, so neither this run nor any retry can ever enumerate it again. A
+ * fail-soft that manufactures a PERMANENT orphan is not fail-soft, and the
+ * residue is a signed-in-readable row naming a dead org and the subdomain its
+ * customer chose.
+ *
+ * Bounded by the `orgId` field — this is the table the middleware resolves
+ * every request on, so an unbounded sweep here does not lose an index, it
+ * takes the estate offline.
+ *
+ * A BACKSTOP, not a replacement: the per-host loop still does the real work
+ * (Storage, the org routing map, the member projections, the host tree). This
+ * only collects what that loop structurally cannot see.
+ */
+async function eraseOrgHostIndex(
+  orgId: string,
+  dryRun = false,
+): Promise<number> {
+  return deleteDocsByOrgId('hostIndex', orgId, dryRun)
+}
+
+/**
+ * Sweep up `hostMemberships` projections belonging to FORMER members
+ * (AGL-1448).
+ *
+ * `users/{uid}/hostMemberships/{hostId}` carries `{ orgId, subdomain,
+ * displayName, nameLower, role }` — the site switcher's row. It lives under a
+ * USER, so `recursiveDelete(orgs/{orgId})` cannot reach it, and `eraseOrg`'s
+ * members loop only walks `orgs/{orgId}/members`.
+ *
+ * `deleteHostProjectionForAllMembers(orgId, hostId)` clears the row for
+ * everyone in that member list at the moment the erasure runs. **A former
+ * member is not in it.** Their row is written by the projection fan-out and
+ * removed by `removeOrgMember`, which is fail-soft in the same way as
+ * everything else on that path; one missed fan-out leaves a row no later
+ * erasure can find, because the enumeration starts from a membership that no
+ * longer exists. The erased workspace's site NAME and subdomain then live on
+ * in the user document of somebody who left the company.
+ *
+ * ## This is a COLLECTION-GROUP query, and that owes an index
+ *
+ * `hostMemberships` has two composite indexes, both `queryScope: COLLECTION`.
+ * A collection-group equality on `orgId` needs a `COLLECTION_GROUP`
+ * single-field index, which Firestore does NOT create automatically — the
+ * automatic single-field indexes are collection-scoped except for
+ * array-contains. `cloud/firebase-firestore.indexes.json` therefore gains a
+ * `fieldOverrides` entry alongside the existing `members.uid` and
+ * `messages.authorId` ones, and **it must be deployed by hand.**
+ *
+ * Until it is, the query throws `FAILED_PRECONDITION`. AGL-1793 is this
+ * codebase's record of exactly that failure mode — both commerce crons
+ * silently dead in production for want of a `COLLECTION_GROUP_ASC` override —
+ * so this refuses to be the thing that kills an erasure. It is caught and
+ * reported as `null`, which is deliberately NOT `0`: a zero would say "there
+ * was nothing to sweep" and a missing index would wear that as a clean bill
+ * of health. `null` in the audit row says "attempted, could not run", and the
+ * spec asserts a NUMBER so the wired-and-indexed path is what is pinned.
+ */
+async function eraseOrgHostMemberships(
+  orgId: string,
+  dryRun = false,
+): Promise<number | null> {
+  if (!orgId) return 0
+  try {
+    const firestore = firebaseAdmin.app().firestore()
+    const rows = await firestore
+      .collectionGroup('hostMemberships')
+      .where('orgId', '==', orgId)
+      .get()
+    if (dryRun) return rows.size
+    for (let index = 0; index < rows.docs.length; index += 400) {
+      const batch = firestore.batch()
+      for (const doc of rows.docs.slice(index, index + 400)) {
+        batch.delete(doc.ref)
+      }
+      await batch.commit()
+    }
+    return rows.size
+  } catch (error) {
+    console.error(
+      `eraseOrg: hostMemberships projection sweep failed for ${orgId} — a missing COLLECTION_GROUP index on hostMemberships.orgId is the likeliest cause`,
+      error,
+    )
+    return null
+  }
+}
+
+/**
  * What an erasure did with `publisherProfiles/{orgId}` (AGL-1970).
  *
  * Three outcomes rather than a boolean, because the third one is a decision
@@ -629,6 +804,21 @@ export interface EraseOrgResult {
   stripeIndex?: number
   /** Slugs released — the current one AND every tombstone (AGL-1448). */
   slugs?: number
+  /**
+   * ORPHANED `hostIndex` rows collected (AGL-1448) — ones with no surviving
+   * `hosts` document for the per-host loop to reach them through.
+   */
+  hostIndex?: number
+  /**
+   * `hostMemberships` projections collected (AGL-1448), including FORMER
+   * members' rows that no membership list names.
+   *
+   * `null` means the sweep could not RUN — almost always the missing
+   * `COLLECTION_GROUP` index on `hostMemberships.orgId`. Deliberately not
+   * `0`: an erasure that could not reach a collection must not report the
+   * same number as one that reached it and found nothing.
+   */
+  hostMemberships?: number | null
   /** Marketplace handle reservations released (AGL-1970) — id-keyed, public. */
   publisherHandles?: number
   /** What became of the org's public publisher profile (AGL-1970). */
@@ -896,6 +1086,13 @@ export async function eraseOrg(
       progress.hosts += 1
     }
 
+    // The backstop for what the loop above cannot enumerate (AGL-1448): a
+    // `hostIndex` row whose `hosts` document is already gone. AFTER the loop
+    // deliberately — the loop's own fail-soft delete is one of the things
+    // that creates them, so sweeping first would leave this run's orphans
+    // behind for a retry that can no longer see them.
+    progress.hostIndex = await eraseOrgHostIndex(orgId, dryRun)
+
     // Org-level Storage (media/dataset assets outside the host prefix).
     step = 'org-storage'
     if (!dryRun) {
@@ -926,6 +1123,13 @@ export async function eraseOrg(
           .catch(() => undefined)
       }
     }
+
+    // The backstop for the members loop (AGL-1448): a `hostMemberships`
+    // projection belonging to somebody who has LEFT the org, whom
+    // `deleteHostProjectionForAllMembers` cannot enumerate because the
+    // membership it would start from is already gone. Collection-group —
+    // see the note on the function, and the index it owes.
+    progress.hostMemberships = await eraseOrgHostMemberships(orgId, dryRun)
 
     // The org subtree, then every slug reservation it has ever held — the
     // current one and each rename tombstone (AGL-1448), with the matching

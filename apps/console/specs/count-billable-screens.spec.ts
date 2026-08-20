@@ -15,7 +15,15 @@
  * limitations under the License.
  */
 
-import { countBillableScreens } from '../app/api/hosts/resources/count-billable-screens'
+import {
+  billableScreenIds,
+  countBillableScreens,
+  nonPageScreenIds,
+} from '../app/api/hosts/resources/count-billable-screens'
+import {
+  ERROR_SCREEN_MAX_PER_HOST,
+  SCREEN_KIND_ERROR,
+} from '@aglyn/aglyn/app-utils/screen-route'
 
 /**
  * Minimal stand-in for the admin SDK's snapshot/ref surface.
@@ -255,5 +263,100 @@ describe('a template is a template because it says so (AGL-1400)', () => {
       home: '/',
     })
     expect(count).toBe(1)
+  })
+})
+
+/**
+ * The `kind: 'error'` exemption is bounded by the RULE, not by one endpoint
+ * (AGL-2093).
+ *
+ * AGL-2092 introduced the exemption and bounded it at four — one per
+ * `HostErrorScreens` slot — by checking the post-state at the moment
+ * /api/hosts/screens stamps the kind. That made the bound true of the assign
+ * route and false end to end: `SITE_EXPORT_FIELDS.screens` carries `kind`, so a
+ * crafted bundle could declare `kind: 'error'` on all 200 of its screens and
+ * /api/hosts/import excluded every one of them from `screensPerHost` without
+ * ever passing the bound and without ever binding a slot.
+ *
+ * These assert the fix where it lives — in the counting rule five enforcement
+ * points share — so the answer does not depend on which writer produced the
+ * document.
+ */
+describe('error screens are exempt only up to the slot bound (AGL-2093)', () => {
+  const errorScreens = (count: number) =>
+    Array.from({ length: count }, (_unused, index) => ({
+      id: `err-${index + 1}`,
+      kind: SCREEN_KIND_ERROR,
+    }))
+
+  /** The promise AGL-2092 made: four cost the plan nothing. */
+  it('exempts up to the slot count', () => {
+    expect(
+      billableScreenIds(errorScreens(ERROR_SCREEN_MAX_PER_HOST), {}).size,
+    ).toBe(0)
+  })
+
+  /**
+   * FORCED RED: drop the `exemptionSpent` clause from `billableScreenIds` and
+   * this reads 0 — every error screen unbilled, without limit, which is the
+   * issue.
+   */
+  it('bills every error screen past the bound', () => {
+    const screens = errorScreens(ERROR_SCREEN_MAX_PER_HOST + 6)
+    expect(billableScreenIds(screens, {}).size).toBe(6)
+  })
+
+  /**
+   * The exempt SET is deterministic, because five enforcement points re-run
+   * this over different row sets to model a post-state. Its SIZE never depends
+   * on order — it is `min(live, bound)` — so shuffling the rows can change
+   * which ids a refusal names but never whether one is refused.
+   */
+  it('answers the same for the same host whatever the row order', () => {
+    const screens = errorScreens(ERROR_SCREEN_MAX_PER_HOST + 3)
+    const forward = [...billableScreenIds(screens, {})].sort()
+    const backward = [...billableScreenIds([...screens].reverse(), {})].sort()
+    expect(backward).toEqual(forward)
+  })
+
+  /**
+   * A tombstone is in neither set, exactly as it is for `nonPageScreenIds`. A
+   * cap that counted soft-deleted rows would be AGL-1173's bug one cap over,
+   * where deleting an error screen never frees its slot — so a host with 400
+   * retired error screens can still hold four live exempt ones.
+   */
+  it('ignores soft-deleted error screens when spending the bound', () => {
+    const screens = [
+      ...Array.from({ length: 400 }, (_unused, index) => ({
+        id: `gone-${index}`,
+        kind: SCREEN_KIND_ERROR,
+        deletedAt: { seconds: 1 },
+      })),
+      ...errorScreens(ERROR_SCREEN_MAX_PER_HOST),
+    ]
+    expect(billableScreenIds(screens, {}).size).toBe(0)
+  })
+
+  /**
+   * The routing map still outranks the document (AGL-1383). An error screen
+   * published at an address of its own is a page somebody is using as a page,
+   * and it counts — the bound is about the EXEMPTION, not about the kind.
+   */
+  it('counts a routed error screen however few there are', () => {
+    const screens = errorScreens(2)
+    expect(billableScreenIds(screens, { 'err-1': '/oops' }).size).toBe(1)
+  })
+
+  /**
+   * And the two sets still PARTITION the live screens: a billable error screen
+   * leaves the flat infrastructure cap's set in the same act, so no document is
+   * counted twice.
+   */
+  it('keeps the billable and non-page sets disjoint', () => {
+    const screens = errorScreens(ERROR_SCREEN_MAX_PER_HOST + 6)
+    const billable = billableScreenIds(screens, {})
+    const nonPage = nonPageScreenIds(screens, {})
+    expect(billable.size + nonPage.size).toBe(screens.length)
+    for (const id of billable) expect(nonPage.has(id)).toBe(false)
   })
 })

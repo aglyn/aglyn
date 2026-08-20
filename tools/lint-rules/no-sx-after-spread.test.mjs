@@ -58,6 +58,13 @@ ruleTester.run('no-sx-after-spread', rule, {
     '<Box sx={{ p: 2 }} />',
     // Spreading a literal is not a props bag.
     '<Box {...{ id: "x" }} sx={{ p: 2 }} />',
+    // A CALL is not a props bag whether or not it is optionally chained —
+    // the chain unwrap (AGL-2030) must not quietly widen what counts as one.
+    '<Box {...getProps()} sx={{ p: 2 }} />',
+    '<Box {...getProps?.()} sx={{ p: 2 }} />',
+    // The optional-chained spread composed CORRECTLY still passes: proof the
+    // cases below fail on the composition order, not on the `?.`.
+    '<Box {...node?.icon} sx={[{ p: 2 }, ...nodeSx]} />',
   ],
   invalid: [
     // The Image shape (AGL-1240) — the one that discarded the hero mockups'
@@ -95,6 +102,26 @@ ruleTester.run('no-sx-after-spread', rule, {
     // Two spreads, one violation — the last spread before `sx` is named.
     {
       code: '<Box {...a} {...rest} sx={{ p: 2 }} />',
+      errors: err,
+    },
+    // An OPTIONALLY CHAINED spread (AGL-2030). `node?.icon` parses as a
+    // ChainExpression WRAPPING the member read, so the rule used to answer
+    // "not a props spread" and leave the element untouched — silently
+    // passing 24 real instances inside `libs/plugins`, its own scope. The
+    // besigner node card is the shape that exposed it:
+    // `<MdiIcon {...node?.icon} sx={{ fontSize: "2rem" }} />` discards every
+    // registry `icon.sx` (AGL-2025).
+    {
+      code: '<MdiIcon {...node?.icon} sx={{ fontSize: "2rem" }} />',
+      errors: err,
+    },
+    // A chain of any depth, and a chain inside a cast.
+    {
+      code: '<Box {...a?.b?.c} sx={{ p: 2 }} />',
+      errors: err,
+    },
+    {
+      code: '<Box {...(node?.icon as Record<string, unknown>)} sx={{ p: 2 }} />',
       errors: err,
     },
   ],

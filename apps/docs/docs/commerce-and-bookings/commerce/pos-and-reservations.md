@@ -53,6 +53,24 @@ POS sales create normal orders tagged `pos`, decrement the same inventory
 as your online store (per location if you use locations), and appear in
 the orders list under the channel filter.
 
+### Platform fees at the register
+
+Your plan's platform fee is charged on the **sale**, not on how it was
+paid — the rate is the same whether the customer hands you cash, scans the
+QR, or charges it to their room. What differs is only how it reaches us:
+
+| Tender | How the fee is collected |
+| --- | --- |
+| Card (QR) | Deducted from your Stripe payout for that sale |
+| Cash | No payout to deduct from — added to your next monthly invoice |
+| Charge to room | Same as cash: added to your next monthly invoice |
+
+The customer never pays the fee, and the amount **Due** on the register is
+the same on every tender. On plans with a 0% fee there is nothing to
+collect either way. See
+[Billing & plans](../../workspace-and-billing/billing-and-plans/overview.md#platform-fees)
+for your plan's rates.
+
 ### Selling past the count
 
 If a line is for more units than the count says are on the shelf, the

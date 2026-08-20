@@ -63,6 +63,23 @@ interface LockdownRecord {
 }
 
 /**
+ * Is the signups lock's creation-level valve armed? (AGL-1531)
+ *
+ * Mirrors `SignupsCreationTriggerStatus`. `unknown` is "we could not check"
+ * and is rendered as exactly that — never as armed. During an incident,
+ * "creation is refused" and "we could not confirm creation is refused" are
+ * different facts and the page must not merge them.
+ *
+ * A STRING discriminant because `strictNullChecks` is off here: a
+ * `boolean | null` union does not narrow, so the unknown arm would quietly
+ * stop being distinguishable from the other two.
+ */
+type SignupsCreationTrigger =
+  | { status: 'armed'; functionUri: string | null; updateTime: string | null }
+  | { status: 'absent' }
+  | { status: 'unknown'; reason: string }
+
+/**
  * One target's state as the SERVER read it, mirroring `LockState` in
  * /api/admin/lockdown. `readAtMs` is the load-bearing field: it is rendered
  * verbatim so the panel is always a claim about a moment, never an implicit
@@ -123,6 +140,46 @@ interface VerdictProbe {
 }
 
 /**
+ * What the signups lever actually reaches, in one line (AGL-1531).
+ *
+ * The lock refuses the session mint, the acceptance recorder and the signup
+ * pages from code that ships with every deploy. Refusing account CREATION
+ * needs a `beforeUserCreated` blocking function that lives in
+ * `cloud/functions` and is registered in Identity Platform — neither of which
+ * a merge performs. The switch on this page looks identical in both worlds,
+ * so without this line an operator in a bot wave would believe the wave had
+ * been stopped from creating accounts when it had only been stopped from
+ * using them.
+ *
+ * UNKNOWN never reads as armed. A probe that could not run is not evidence
+ * of a valve that is running.
+ */
+function creationValveLine(
+  trigger: SignupsCreationTrigger | null,
+): string {
+  if (!trigger) {
+    return 'Account creation: not reported by this server — treat as sessions-only.'
+  }
+  if (trigger.status === 'armed') {
+    return `Account creation is REFUSED too — Identity Platform has a beforeCreate blocking function registered${
+      trigger.functionUri ? ` (${trigger.functionUri})` : ''
+    }.`
+  }
+  if (trigger.status === 'absent') {
+    return (
+      'Account creation is NOT refused — no beforeCreate blocking function is ' +
+      'registered in Identity Platform. Locking signups turns away the session ' +
+      'and the signup pages; the Auth records are still created. Deploy ' +
+      'cloud/functions (firebase deploy --only functions) and confirm the ' +
+      'trigger in Identity Platform.'
+    )
+  }
+  return `Account creation: UNKNOWN — ${
+    trigger.status === 'unknown' ? trigger.reason : ''
+  } Treat as sessions-only until this reads as registered.`
+}
+
+/**
  * The one line an operator needs during an incident: is this caller refused
  * for everything, for writes only, or for nothing? Null when the probe did
  * not report intents, so nothing is asserted that was not measured.
@@ -170,6 +227,20 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
   const { blocked: notSuper } = useSuperStaffGate()
   /** Server clock at the last successful state load — shown, never assumed. */
   const [readAtMs, setReadAtMs] = useState<number | null>(null)
+  /**
+   * Has the state ever loaded? (AGL-1531)
+   *
+   * The feature checklist read `records.find(...)` directly, and `records`
+   * starts empty — so for the whole first paint, and forever after a failed
+   * load, every capability rendered a green "on". That is the loading-default
+   * trap on the panic page itself: an UNRESOLVED lock state must never read
+   * as unlocked, least of all to the operator deciding whether the lever they
+   * just pulled took.
+   */
+  const loaded = readAtMs !== null
+  /** Creation-level valve status, from Identity Platform (AGL-1531). */
+  const [signupsTrigger, setSignupsTrigger] =
+    useState<SignupsCreationTrigger | null>(null)
   /**
    * Every action that actually reached the server, newest first (AGL-1571).
    *
@@ -237,6 +308,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
       if (!response.ok) throw new Error(`Load failed (${response.status})`)
       const payload = await response.json()
       setRecords(payload.records ?? [])
+      setSignupsTrigger(payload.signupsCreationTrigger ?? null)
       setReadAtMs(Date.now())
     } catch (error) {
       console.error(error)
@@ -572,7 +644,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
               <Stack spacing={2}>
                 <Typography variant="body2" color="text.secondary">
                   {
-                    'Kill one capability platform-wide while everything else keeps serving — signups off during a bot wave, uploads off on a malware report, checkout off over a billing bug. A platform lock implies every feature; a feature lock touches nothing else. No type-to-confirm: one named capability is the narrow lever, and it confirms like an org or site lock. Staff bypass: uploads, installs and AI assist stay usable to staff for verification; checkout does not (a staff checkout is still a real charge); signups is decided by account age, not claims.'
+                    'Kill one capability platform-wide while everything else keeps serving — signups off during a bot wave, uploads off on a malware report, checkout off over a billing bug. A platform lock implies every feature; a feature lock touches nothing else. No type-to-confirm: one named capability is the narrow lever, and it confirms like an org or site lock. Staff bypass: uploads, installs and AI assist stay usable to staff for verification; checkout does not (a staff checkout is still a real charge); signups is decided by account age, not claims. Signups also refuses account CREATION itself, through a Firebase Auth blocking function — which lives outside this repo, so the line under the row says whether it is actually registered.'
                   }
                 </Typography>
                 <Stack
@@ -610,8 +682,12 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                         sx={{ alignItems: 'center', flexWrap: 'wrap' }}
                       >
                         <Chip
-                          label={record ? 'LOCKED' : 'on'}
-                          color={record ? 'error' : 'success'}
+                          label={
+                            !loaded ? 'checking…' : record ? 'LOCKED' : 'on'
+                          }
+                          color={
+                            !loaded ? 'default' : record ? 'error' : 'success'
+                          }
                           size="small"
                         />
                         <Typography variant="body2" sx={{ minWidth: 220 }}>
@@ -626,11 +702,17 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                         </Typography>
                         {record ? (
                           <Typography variant="body2" color="text.secondary">
+                            {/* Who pulled it (AGL-1531). The uid was already
+                                on the wire and in this type, and was the one
+                                thing the page never showed — so "who turned
+                                signups off?" was a question only the audit
+                                log could answer, at the moment nobody has
+                                time to go and read it. */}
                             {`${record.reason ?? 'manual'}${
                               record.untilMs
                                 ? ` — until ${new Date(record.untilMs).toLocaleString()}`
                                 : ''
-                            }`}
+                            }${record.actorUid ? ` — set by ${record.actorUid}` : ''}`}
                           </Typography>
                         ) : null}
                         {record ? (
@@ -638,7 +720,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                             size="small"
                             variant="outlined"
                             color="success"
-                            disabled={busy || notSuper}
+                            disabled={busy || notSuper || !loaded}
                             onClick={() =>
                               void act(
                                 {
@@ -657,7 +739,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                             size="small"
                             variant="contained"
                             color="error"
-                            disabled={busy || notSuper}
+                            disabled={busy || notSuper || !loaded}
                             onClick={() =>
                               void act(
                                 {
@@ -675,6 +757,21 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                             {'Disable'}
                           </Button>
                         )}
+                        {feature === 'signups' ? (
+                          <Typography
+                            variant="caption"
+                            sx={{ width: '100%' }}
+                            color={
+                              signupsTrigger?.status === 'armed'
+                                ? 'success.main'
+                                : signupsTrigger?.status === 'absent'
+                                  ? 'warning.main'
+                                  : 'text.secondary'
+                            }
+                          >
+                            {creationValveLine(signupsTrigger)}
+                          </Typography>
+                        ) : null}
                       </Stack>
                     )
                   })}
@@ -1165,7 +1262,9 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                           record.untilMs
                             ? ` — until ${new Date(record.untilMs).toLocaleString()}`
                             : ''
-                        }${record.atMs ? ` — since ${new Date(record.atMs).toLocaleString()}` : ''}`}
+                        }${record.atMs ? ` — since ${new Date(record.atMs).toLocaleString()}` : ''}${
+                          record.actorUid ? ` — set by ${record.actorUid}` : ''
+                        }`}
                       </Typography>
                     </Stack>
                   ))}

@@ -39,6 +39,7 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
+import StaffEmailSendRateCard from '../../../../components/staff-email-send-rate-card.component'
 import SystemEmailTestDrawer from '../../../../components/system-email-test-drawer.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
@@ -182,6 +183,11 @@ function AdminEmails() {
               gap was invisible: the page merely looked empty. */}
           <StaffOnly>
           <Stack spacing={2}>
+            {/* The platform hourly send ceiling (AGL-2409). First, above the
+                catalog, because it is the control that decides whether any of
+                the mail below actually leaves — and the one an operator opens
+                this page for during a warm-up or a deliverability incident. */}
+            <StaffEmailSendRateCard />
             <CardDisplay
               header={'System emails'}
               help={docsHelp('staffConsole')}

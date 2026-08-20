@@ -22,8 +22,14 @@ import {
   resolveBrandingProfile,
 } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
+import { recordCronBeat } from '../../../../utils/cron-beat'
+import { selectCronChunk } from '../../../../utils/cron-chunk'
 import { previousMonth } from '../../../../utils/billing-month'
-import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
+import {
+  isEmailConfigured,
+  rateLimitedRetryAtMs,
+  sendEmail,
+} from '@aglyn/shared-util-email'
 import { brandSupportLine } from '../../_lib/brand-support-line'
 import {
   loadSystemEmail,
@@ -51,6 +57,26 @@ function formatUsd(costUsd: number) {
 }
 
 /**
+ * Orgs one invocation will mail, at most (AGL-2409).
+ *
+ * This route read `orgs` with `.limit(1000)` and then looped with `await
+ * sendEmail` inside — one invocation, up to a thousand messages, as fast as
+ * Resend accepts them, from a domain whose steady-state volume is a few
+ * hundred a day. That burst is half of what AGL-2409 is about.
+ *
+ * The chunk is the *shape* fix and the platform send-rate governor is the
+ * *rate* fix; they do different jobs and both are needed. The chunk makes the
+ * sweep resumable, so a run that stops for any reason can be continued rather
+ * than restarted; the governor decides how many messages an hour may carry,
+ * and it is the thing an operator ramps.
+ *
+ * 100 rather than `CRON_CHUNK_SIZE` (10): each subject here is one rollup
+ * read, one auth lookup and one send, where a `report-usage` subject is a
+ * whole org rollup. Ten would make the sweep 100 HTTP round trips.
+ */
+export const USAGE_EMAIL_CHUNK_SIZE = 100
+
+/**
  * Monthly usage email summary (AGL-98, item 3). Invoke from the same
  * scheduler as `report-usage` (after it, so rollups exist) with
  * `x-cron-secret`. Env-gated on the email provider: without
@@ -73,6 +99,11 @@ async function handler(request: Request): Promise<Response> {
   if (!isCronAuthorized(headers)) {
     return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   }
+  // AGL-1955 — the mark `/api/health/crons` reads to notice this job going
+  // AWAY. Stamped on the invocation, not on the work, so a run that finds
+  // nothing to do still proves the schedule is alive; POST only, because a
+  // human's GET is not the scheduler and must not stand in for it.
+  if (method === 'POST') await recordCronBeat('usage-email')
   if (!isEmailConfigured()) {
     return Response.json({
       error:
@@ -90,13 +121,39 @@ async function handler(request: Request): Promise<Response> {
     // the org owner's account address.
     const orgsSnapshot = await firestore.collection('orgs').limit(1000).get()
 
+    // Resumable chunk (AGL-2409/AGL-1141). Ordered by id, so "everything
+    // after the cursor" means the same thing across invocations.
+    const byId = new Map(orgsSnapshot.docs.map((doc) => [doc.id, doc]))
+    const chunk = selectCronChunk(
+      orgsSnapshot.docs.map((doc) => doc.id),
+      typeof body?.cursor === 'string' ? body.cursor : null,
+      USAGE_EMAIL_CHUNK_SIZE,
+    )
+
     // Resolve the staff-designed template ONCE for the whole batch (AGL-768),
     // not once per recipient; null keeps every org's built-in summary copy.
     const template = await loadSystemEmail('usage-summary')
 
     const results: Record<string, any> = {}
-    for (const orgDoc of orgsSnapshot.docs) {
-      const orgId = orgDoc.id
+    /**
+     * Set when the platform send-rate governor refuses (AGL-2409).
+     *
+     * The run then STOPS and reports `done: true`, deliberately not
+     * `done: false` — the workflow's cursor loop would otherwise re-POST
+     * immediately into a window that is still full, up to its 50-chunk limit,
+     * and go red on a governor working exactly as intended. The retry is the
+     * next hourly run instead, which is why the schedule for this route is
+     * hourly across the first two days of the month rather than a single
+     * monthly firing.
+     *
+     * Nothing is lost by stopping: `emailedAt` is the idempotence key, so the
+     * next run re-walks from the start and mails only the orgs still missing
+     * a stamp.
+     */
+    let rateLimited = 0
+    for (const orgId of chunk.items) {
+      const orgDoc = byId.get(orgId)
+      if (!orgDoc) continue
       const rollup = await orgDoc.ref.collection('usage').doc(month).get()
       if (!rollup.exists) continue
       if (rollup.get('emailedAt')) {
@@ -219,11 +276,33 @@ async function handler(request: Request): Promise<Response> {
         // (keeps the verified address; White-Label Phase 1).
         fromName: branding.fromName,
         context: `usage summary (${orgId})`,
+        /*
+         * BULK, not transactional (AGL-2409).
+         *
+         * This is the purest bulk send in the product: a cron that mails a
+         * thousand addresses on the same morning every month and answers
+         * nothing anybody just did. It is refusable BECAUSE this sweep is
+         * resumable — `emailedAt` is only stamped after a successful send, so
+         * a refused org is simply not stamped and the next run picks it up.
+         *
+         * Nothing else here may be `bulk`. A caller that cannot come back
+         * would turn a refusal into a summary nobody ever receives.
+         */
+        priority: 'bulk',
       })
       // Cost meter (AGL-1438). Org-scoped and transactional: the org's own
       // billing summary, sent to no site.
       if (result.sent) await meterOrgEmail(orgId)
       if (!result.sent) {
+        // The hourly ceiling refused this one, so it will refuse every one
+        // after it in this window — the counter only goes up. Stop the run;
+        // the rollup is unstamped, so the next hourly run mails it.
+        const retryAtMs = rateLimitedRetryAtMs(result)
+        if (retryAtMs !== null) {
+          rateLimited += 1
+          results[orgId] = { deferred: true, retryAtMs }
+          break
+        }
         results[orgId] = { sent: false }
         continue
       }
@@ -233,7 +312,19 @@ async function handler(request: Request): Promise<Response> {
       )
       results[orgId] = { sent: true }
     }
-    return Response.json({ month, orgs: results }, { status: 200 })
+    return Response.json(
+      {
+        month,
+        orgs: results,
+        // The sweep contract the workflow's loop reads (AGL-1141). A
+        // rate-limited run reports `done: true` — see `rateLimited` above.
+        done: rateLimited > 0 ? true : chunk.done,
+        nextCursor: rateLimited > 0 ? null : chunk.nextCursor,
+        total: chunk.total,
+        ...(rateLimited > 0 ? { deferred: rateLimited } : {}),
+      },
+      { status: 200 },
+    )
   } catch (error) {
     console.error(error)
     return Response.json({ error: 'Usage email failed' }, { status: 500 })

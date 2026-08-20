@@ -104,7 +104,7 @@ const human = (kb) =>
  * process serving".
  */
 function runningNextProcesses() {
-  let lines = []
+  let lines
   try {
     lines = execFileSync('pgrep', ['-laf', 'next'], {
       encoding: 'utf8',
@@ -121,7 +121,7 @@ function runningNextProcesses() {
   for (const line of lines) {
     const pid = line.split(/\s+/)[0]
     const cmd = line.slice(pid.length).trim()
-    let cwd = null
+    let cwd
     try {
       const out = execFileSync('lsof', ['-a', '-d', 'cwd', '-p', pid, '-Fn'], {
         encoding: 'utf8',

@@ -66,9 +66,12 @@ import {
  * Match all paths except for:
  * 1 /api routes
  * 2 /_next (Next.js internals)
- * 3 /fonts (inside /public)
- * 4 /examples (inside /public)
- * 5 all root files inside /public (e.g. /favicon.ico)
+ * 3 /_static (the one directory inside /public)
+ * 4 all root files inside /public (e.g. /favicon.ico)
+ *
+ * `/fonts` and `/examples` were on this list until AGL-2076. Neither
+ * directory has ever existed in `apps/tenant/public` — they are leftovers
+ * from the starter kit — and excluding them cost customers the slugs.
  *
  * Here's a breakdown of each matcher item:
  * @example
@@ -90,7 +93,31 @@ export const config = {
     // '/(\\?\\!favicon.ico|robots.txt)',
     // '/(\\?\\!_next|_static|api)/:path*',
     // '/_sites/:path*',
-    '/((?!api|_next|_static|fonts|examples|[\\w-]+\\.\\w+).*)',
+    //
+    // The exclusions are anchored to a WHOLE first segment (AGL-2076). They
+    // used to be bare prefixes — `(?!api|_next|_static|fonts|examples|…)` —
+    // and a bare prefix swallows every slug that merely starts with one: an
+    // author's `/api-docs`, `/apiary`, `/fontsize` or `/examples-gallery`
+    // never reached this middleware, so no host rewrite happened and Next
+    // matched the path as `[host]` with an EMPTY slug. Measured on production
+    // before the change: `/apitest` answered 404 with
+    // `x-matched-path: /[host]/[[...slug]]` and a host parameter of
+    // "apitest". `(?![\w-])` is the boundary rather than `(?:\/|$)` because
+    // Next wraps this source in a larger regex with optional `.rsc`/`.json`
+    // suffixes, where a `$` would no longer mean end-of-path.
+    //
+    // `fonts` and `examples` are GONE rather than anchored. They came from
+    // the Vercel platforms starter kit this app was forked from, and
+    // `apps/tenant/public` holds `_static/`, `favicon.ico` and `robots.txt` —
+    // it has never held either directory. They were costing every customer
+    // two perfectly ordinary page slugs to protect nothing.
+    //
+    // The three that remain are real: `/api/*` are this app's route handlers,
+    // `/_next/*` is Next's own output, `/_static/*` is the public directory.
+    // They are also the three that `RESERVED_SCREEN_ROUTE_SEGMENTS` refuses
+    // as slugs, so the console tells an author instead of publishing a page
+    // to an address that cannot answer.
+    '/((?!(?:api|_next|_static)(?![\\w-])|[\\w-]+\\.\\w+).*)',
     // Per-host SEO files, rewritten to the api routes with the resolved
     // tenant host (SEO Toolkit).
     '/sitemap.xml',

@@ -67,7 +67,7 @@ const isSameSiteAbsoluteUrl = (url: string): boolean => {
  * workspace domain (AGL-465), may be continued to — anything else absolute
  * or protocol-relative would make the post-auth redirect an open redirect.
  */
-const isSafeContinueUrl = (url: string): boolean =>
+export const isSafeContinueUrl = (url: string): boolean =>
   (url.startsWith('/') && !url.startsWith('//')) || isSameSiteAbsoluteUrl(url)
 
 export function useContinueUrlDecoded(): UseContinueUrlDecodedResponse {

@@ -416,7 +416,7 @@ export class ZoomablePanningComponent extends Component<ZoomablePanningComponent
       const finger2 = e.touches[1]
       const currentPinZoomLength = this.getPinchZoomLength(finger1 as any, finger2 as any)
 
-      let scaleMultiplier = 1
+      let scaleMultiplier: number
 
       if (realPinch) {
         scaleMultiplier = currentPinZoomLength / this.pinchZoomLength

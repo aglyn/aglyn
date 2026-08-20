@@ -33,7 +33,31 @@ function fakeFirestore() {
   return {
     docs,
     collection: () => ({
-      doc: (id: string) => ({ id }),
+      doc: (id: string) => ({
+        id,
+        // AGL-2416: the counter is now an atomic increment plus a read-back,
+        // not a read-modify-write transaction. `increment` is applied from the
+        // sentinel's real `operand`, so mutating the production call to
+        // `increment(0)` changes what this store holds instead of being absorbed.
+        set: async (value: Record<string, unknown>) => {
+          const prior = docs.get(id) ?? {}
+          const next: Record<string, unknown> = { ...prior }
+          for (const [field, raw] of Object.entries(value)) {
+            const operand = (raw as { operand?: unknown })?.operand
+            next[field] =
+                typeof operand === 'number'
+                  ? (Number(prior[field]) || 0) + operand
+                  : raw
+          }
+          docs.set(id, next as never)
+        },
+        get: async () => {
+          return {
+            exists: docs.has(id),
+            get: (field: string) => (docs.get(id) as never)?.[field],
+          }
+        },
+      }),
     }),
     runTransaction: async (fn: (tx: unknown) => Promise<number>) =>
       fn({

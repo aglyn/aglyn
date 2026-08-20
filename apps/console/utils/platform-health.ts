@@ -77,9 +77,9 @@ export const HEALTH_PROBES: readonly HealthProbeDescriptor[] = [
     path: '/api/health/billing',
     auth: 'public',
     meaning:
-      'Stripe still has an enabled destination for us and its deliveries are landing. Degraded means Stripe is trying to tell us about money and cannot — subscriptions, refunds and entitlements stop moving while checkout keeps taking payments.',
+      'Stripe still has an enabled destination for us, subscribed to every event we need, whose deliveries land AND actually move something. Degraded means Stripe is trying to tell us about money and it is not getting through — subscriptions, refunds and entitlements stop moving while checkout keeps taking payments.',
     remedy:
-      'Read the code: endpoint-missing or endpoint-disabled is a Stripe dashboard fix, deliveries-failing is ours (signature, a rolled secret, a wedged handler). Run `npm run audit:stripe-webhook` for the full join. A quiet window with no events is healthy, not blind — this never keys on the absence of deliveries.',
+      'Read the code. endpoint-missing / endpoint-disabled is a Stripe dashboard fix. events-unsubscribed names the exact event that fell off the destination — `npm run setup:stripe` re-adds it (this is the AGL-1798 shape: no failed delivery, no error, just silence). deliveries-failing is ours (signature, a rolled secret). handlers-inert is the worst one and the least obvious: deliveries ARE landing and answering 200, and the handler is doing nothing with them — check what stopped being registered, then read the `inert: true` events in stripeEvents for the ids and types. Run `npm run audit:stripe-webhook` for the full join. A quiet window with no events is healthy, not blind — this never keys on the absence of deliveries.',
   },
   {
     id: 'errorBeacon',
@@ -100,6 +100,16 @@ export const HEALTH_PROBES: readonly HealthProbeDescriptor[] = [
       'A restore point exists and is recent. Degraded means the worst day would have nothing to restore from — the failure that went unnoticed for eleven days in AGL-1490.',
     remedy:
       'Read the state histogram: NOT_AVAILABLE backups are the Google-managed ones failing, a stale export age means the weekly export job stopped running.',
+  },
+  {
+    id: 'crons',
+    label: 'Scheduled jobs',
+    path: '/api/health/crons',
+    auth: 'public',
+    meaning:
+      'Every scheduled job is still BEING SCHEDULED. Degraded means one of them stopped firing and said nothing — the failure everything else here is blind to, because every other cron signal is triggered by a run. Downstream of these rows are metered billing, GDPR erasures, the audit archive and scheduled publishing: a silently unscheduled job means customers are not billed, or data is not reaped, with the rest of this board green.',
+    remedy:
+      "Read the row. job-silent names a job that has run before and missed its window — check `.github/workflows/scheduled-crons.yml` still carries its `- cron:` line, then the workflow's recent runs (GitHub disables scheduled workflows on a repo with no activity for 60 days, which produces exactly this). job-never-reported means it has not run ONCE since we started watching: usually a route that 404s in production because the promotion never happened. plugin-jobs-beat is the only real Cloud Scheduler job — `gcloud scheduler jobs list --project=aglyn-main` — and it also reads silent when AGLYN_JOB_RUNNER_URL points at another deployment. beats-unavailable is our own Firestore read, not the jobs. A job in a legitimately idle stretch is green on purpose and never counts here.",
   },
   {
     id: 'rateLimits',
@@ -215,6 +225,69 @@ function checkFacts(name: string, check: Record<string, unknown>): string[] {
   if (sinceLast !== null) facts.push(`last fallback ${sinceLast} min ago`)
   const creations = num(check['recentOrgCreations'])
   if (creations !== null) facts.push(`${creations} orgs created in window`)
+  /*==========================================
+   * THE 200-THAT-DID-NOTHING, WORDED (AGL-1954 / AGL-1948).
+   *
+   * `handlers-inert` and `events-unsubscribed` are the two billing codes an
+   * operator has never seen before, and both describe a system that looks
+   * fine from every other angle. A bare code on the board would send someone
+   * to Stripe's dashboard, where everything is green — which is exactly the
+   * wrong place and exactly what happened on 2026-08-14. So the board says
+   * the number AND what it means.
+   *=========================================*/
+  const inert = num(check['inert'])
+  if (inert !== null) {
+    facts.push(
+      inert === 0
+        ? 'every delivery in window moved something'
+        : `${inert} deliver${inert === 1 ? 'y' : 'ies'} answered 200 and moved NOTHING`,
+    )
+  } else if ('inert' in check) {
+    facts.push('could not tell whether deliveries did anything')
+  }
+  const unsubscribed = check['unsubscribedEvents']
+  if (Array.isArray(unsubscribed)) {
+    facts.push(
+      unsubscribed.length === 0
+        ? 'every required event subscribed'
+        : `NOT subscribed: ${unsubscribed.join(', ')}`,
+    )
+  } else if ('unsubscribedEvents' in check) {
+    facts.push('the destination did not state its subscriptions')
+  }
+  /*==========================================
+   * A JOB THAT STOPPED BEING SCHEDULED, WORDED (AGL-1955).
+   *
+   * The row's name is the job id, which says nothing about when it was
+   * supposed to run — and the whole point of the check is that "quiet" and
+   * "healthy" look identical until you know the schedule. So the board says
+   * the cadence, the last time it reported, and, when it is red, the run it
+   * missed. Someone reading this at 3am should be able to go straight to the
+   * workflow file without opening the issue history.
+   *=========================================*/
+  const schedule = check['schedule']
+  if (typeof schedule === 'string') {
+    const runner = check['runner']
+    facts.push(
+      `${runner === 'cloud-scheduler' ? 'Cloud Scheduler' : 'GitHub Actions'} · ${schedule} UTC`,
+    )
+  }
+  if ('lastBeatAgeMinutes' in check) {
+    const age = num(check['lastBeatAgeMinutes'])
+    facts.push(
+      age === null
+        ? 'has NEVER reported a run'
+        : age < 120
+          ? `last ran ${age} min ago`
+          : `last ran ${Math.round((age / 60) * 10) / 10} h ago`,
+    )
+  }
+  const dueAt = check['dueAt']
+  if (typeof dueAt === 'string' && check['ok'] !== true) {
+    facts.push(`should have run at ${dueAt}`)
+  }
+  const graceMinutes = num(check['graceMinutes'])
+  if (graceMinutes !== null) facts.push(`grace ${graceMinutes} min`)
   const windowMinutes = num(check['windowMinutes'])
   if (windowMinutes !== null) facts.push(`window ${windowMinutes} min`)
   const threshold = num(check['threshold'])

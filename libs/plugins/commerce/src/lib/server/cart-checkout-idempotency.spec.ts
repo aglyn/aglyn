@@ -19,6 +19,7 @@ import type {
   PluginApiRequest,
   PluginApiResponse,
 } from '@aglyn/aglyn/server'
+import { storefrontProcessingCostCents } from '@aglyn/aglyn/server'
 import { cartCheckoutHandler } from './cart-checkout'
 
 /**
@@ -554,14 +555,19 @@ describe('a coupon and a gift card both reach the session (AGL-2112)', () => {
     docs.set('hosts/host-1/giftCards/BIG', { balanceCents: 4000 })
     await post({ couponCode: 'SAVE10', giftCardCode: 'BIG' })
     // Business digital is 2%: 2% of 8000 = 160. Reduced by 4800 of 8000, so
-    // 160 × 3200/8000 = 64. The compounding defect sent 72
-    // (160 × 0.9 = 144, then 144 × 4000/8000).
+    // the TAKE is 160 × 3200/8000 = 64. The compounding defect sent 72
+    // (160 × 0.9 = 144, then 144 × 4000/8000). Stripe's own cost on the 3200¢
+    // the card actually runs for is added on top since AGL-2152 — subtracted
+    // out here so the scaling is still what is under test.
+    const expected = 64 + storefrontProcessingCostCents(3200)
     expect(
       sessionCalls()[0].params.get(
         'payment_intent_data[application_fee_amount]',
       ),
-    ).toBe('64')
-    expect(sessionCalls()[0].params.get('metadata[feeCents]')).toBe('64')
+    ).toBe(String(expected))
+    expect(sessionCalls()[0].params.get('metadata[feeCents]')).toBe(
+      String(expected),
+    )
   })
 
   /**
@@ -601,14 +607,18 @@ describe('a product doc with no type (AGL-2251)', () => {
 
   it('is priced as PHYSICAL, the same as buy-now prices it', async () => {
     await post()
-    // Business physical is 0%, so no application fee is sent at all. Read as
-    // the digital 2% it used to take, this would be '160'.
-    expect(
+    // Business physical is 0%, so the fee carries NO TAKE — only Stripe's own
+    // cost on the charge (AGL-2152). Read as the digital 2% it used to take,
+    // there would be 160¢ of take on top of that.
+    const sent = Number(
       sessionCalls()[0].params.get(
         'payment_intent_data[application_fee_amount]',
       ),
-    ).toBeNull()
-    expect(sessionCalls()[0].params.get('metadata[feeCents]')).toBe('0')
+    )
+    expect(sent - storefrontProcessingCostCents(8000)).toBe(0)
+    expect(sessionCalls()[0].params.get('metadata[feeCents]')).toBe(
+      String(sent),
+    )
   })
 
   /**
@@ -628,7 +638,7 @@ describe('a product doc with no type (AGL-2251)', () => {
       sessionCalls()[0].params.get(
         'payment_intent_data[application_fee_amount]',
       ),
-    ).toBe('160')
+    ).toBe(String(160 + storefrontProcessingCostCents(8000)))
   })
 })
 
@@ -673,31 +683,39 @@ describe('a platform fee that rounds to zero (AGL-2256)', () => {
     }
   })
 
-  it('still takes a cent rather than dropping the fee entirely', async () => {
+  it('still takes a cent of TAKE rather than dropping it entirely', async () => {
     await post()
+    const expected = 1 + storefrontProcessingCostCents(98)
     expect(
       sessionCalls()[0].params.get(
         'payment_intent_data[application_fee_amount]',
       ),
-    ).toBe('1')
-    expect(sessionCalls()[0].params.get('metadata[feeCents]')).toBe('1')
+    ).toBe(String(expected))
+    expect(sessionCalls()[0].params.get('metadata[feeCents]')).toBe(
+      String(expected),
+    )
   })
 
   /**
    * THE OTHER BRANCH, and the one an "assert the fee is 1" test alone would
-   * leave unproven: a plan whose rate is genuinely 0 must still send nothing.
-   * Stripe rejects a zero application fee, and inventing a cent on an
-   * advertised 0% tier would be a pricing lie.
+   * leave unproven: a plan whose rate is genuinely 0 must invent no TAKE —
+   * a cent of margin on an advertised 0% tier would be a pricing lie. Since
+   * AGL-2152 the parameter is still emitted, carrying Stripe's cost and
+   * nothing else, because that cost is real money leaving the platform's
+   * balance whatever the take rate is.
    */
-  it('sends NOTHING on a plan whose rate is a real zero', async () => {
+  it('takes no margin on a plan whose rate is a real zero', async () => {
     mockOrg.org.plan = 'advanced'
     await post()
-    expect(
+    const sent = Number(
       sessionCalls()[0].params.get(
         'payment_intent_data[application_fee_amount]',
       ),
-    ).toBeNull()
-    expect(sessionCalls()[0].params.get('metadata[feeCents]')).toBe('0')
+    )
+    expect(sent - storefrontProcessingCostCents(98)).toBe(0)
+    expect(sessionCalls()[0].params.get('metadata[feeCents]')).toBe(
+      String(sent),
+    )
   })
 
   /**
@@ -715,12 +733,12 @@ describe('a platform fee that rounds to zero (AGL-2256)', () => {
       variants: [{ id: 'default', priceUsd: 40, inventory: null }],
     })
     await post()
-    // Scale digital is 1% of 8000 = 80.
+    // Scale digital is 1% of 8000 = 80 of take, plus the card cost.
     expect(
       sessionCalls()[0].params.get(
         'payment_intent_data[application_fee_amount]',
       ),
-    ).toBe('80')
+    ).toBe(String(80 + storefrontProcessingCostCents(8000)))
   })
 })
 

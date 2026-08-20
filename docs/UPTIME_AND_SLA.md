@@ -147,6 +147,7 @@ Console: https://console.cloud.google.com/monitoring/uptime?project=aglyn-main
 | `billing-webhook` | `app.aglyn.com/api/health/billing` | HTTP 2xx and `$.status == "ok"` | 5 min |
 | `beacon-heartbeat console` | `app.aglyn.com/api/health/error-beacon` | HTTP 2xx and `$.status == "ok"` | 15 min |
 | `beacon-heartbeat tenant` | `aglyn.com/api/health/error-beacon` | HTTP 2xx and `$.status == "ok"` | 15 min |
+| `scheduled-jobs` | `app.aglyn.com/api/health/crons` | HTTP 2xx and `$.status == "ok"` | 15 min |
 | Cloud Functions | `execution_count{status != ok}` | > 2 failures in 5 min | metric |
 | Cloud Scheduler | job attempt logged at `severity >= ERROR` | any | log match |
 
@@ -240,8 +241,28 @@ Notes that keep these honest:
   `https://app.aglyn.com/api/billing/webhook` (`endpoint-missing` — nothing is
   even being attempted), when Stripe has disabled it (`endpoint-disabled`),
   when Stripe attempted and **failed** deliveries in the trailing hour
-  (`deliveries-failing` — the AGL-1551 / AGL-1560 shape), or when the census
+  (`deliveries-failing` — the AGL-1551 / AGL-1560 shape), when a REQUIRED
+  event type has fallen off the destination (`events-unsubscribed` — the
+  AGL-1798 shape, and the quietest of them: Stripe simply stops sending that
+  one, so there is no failed delivery to count and every other number reads a
+  perfectly healthy zero), when a delivery **landed, answered 200 and moved
+  nothing** (`handlers-inert`, AGL-1954), or when the census
   could not be taken at all (`stripe-unavailable`; unknown is never a pass).
+  `handlers-inert` is the one that closes the last blind spot in this check:
+  Stripe scores the status code, so a handler that drops the work silently
+  keeps `delivery_success` true and `undelivered` at zero. The webhook now
+  reports what it **committed** rather than that it ran — a write observed
+  from inside the call that commits it, never a note beside one — and stamps
+  `inert: true` on the event's own `stripeEvents` claim when a required event
+  produced neither a committed effect nor a **named** deliberate skip. The
+  naming is what keeps this off the ordinary traffic that correctly does
+  nothing (a tenant shopper's subscription, a marketplace refund, a `won`
+  dispute nobody claimed); conflating those with a silent drop would be alert
+  fatigue, which is its own failure. **Residual gap:**
+  `checkout.session.completed` is owned entirely by the plugins and is
+  recorded as a deliberate skip — closing that half needs the plugin handlers
+  to report `claimed` (the AGL-2429 mechanism exists but is wired only for
+  `charge.dispute.*`).
   **It cannot page for lack of business:** the verdict never keys on the
   absence of events, so a quiet night scores zero failed deliveries and reads
   healthy for the right reason. Events emitted and events processed are
@@ -274,6 +295,41 @@ Notes that keep these honest:
   check period (15 min). The heartbeat log id is *not* `client-errors` on
   purpose — writing there at `severity >= ERROR` would trip the existing
   policy on every probe, building the alert fatigue this exists to prevent.
+- `scheduled-jobs` is the AGL-1955 half of the dead-man's switch, and it is
+  the second condition here that watches for **silence**. The `Cloud
+  Scheduler` row below it can only report the *presence* of a failed attempt:
+  a job that is deleted, paused, or whose `- cron:` line was edited away
+  produces no attempt, so it trips neither that policy nor
+  `scheduled-crons.yml`'s non-200 check, and quiet reads exactly like healthy.
+  **What is downstream of these jobs is metered billing, GDPR erasures, the
+  audit archive and scheduled publishing** — a silently unscheduled job means
+  customers are not billed, or data is not reaped, with every other row on
+  this page green.
+  Each job stamps `platformCronBeats/{jobId}` when it is invoked; the endpoint
+  compares each mark against that job's own cron expression and 503s naming
+  the ones that should have run and did not (`job-silent`), never ran at all
+  since we started watching (`job-never-reported`), or whose marks it could
+  not read (`beats-unavailable`). The inventory and verdict logic are
+  `SCHEDULED_JOBS` / `cronJobsHealth` in `health-report.ts`, spec-covered
+  branch by branch, and `scheduled-crons-wiring.spec.ts` fails the build when
+  a schedule is deleted from the workflow without its inventory row.
+  **Nothing on a schedule winds it** — the reader is the uptime probe and the
+  staff Health page, so there is no cron here that could itself stop
+  unnoticed, which is the AGL-1923 argument for a graded switch over a
+  `conditionAbsent` policy.
+  **It cannot page for a quiet week:** the mark is stamped by the INVOCATION,
+  not by the work, and the expected time comes from the job's cron rather than
+  a fixed interval — so `usage-email`, which runs hourly on the 1st and 2nd
+  and not at all afterwards, reads green for the twenty-nine days it is
+  deliberately idle. Grace per job is generous on purpose (6h daily, 24h
+  weekly, 90 min for the frequent sweeps): GitHub delays scheduled workflows
+  routinely, and a row that reds on ordinary lateness is one people mute.
+  **Clearing event:** the next invocation of that job; nothing latches.
+  **Owed:** the uptime check in the table above is not created yet — this
+  lands read-only against production, so somebody has to add it by hand in
+  Monitoring. Until then the endpoint is watched by the staff Health page
+  (Staff → Health, `Scheduled jobs`) and by anything that curls it, and it
+  answers the same 200/503 either way.
 - `customer-site` asserts on the demo site's own content. If someone renames
   the demo site's title away from "Aglyn Demo", this check goes red — update
   the content matcher, don't delete the check.

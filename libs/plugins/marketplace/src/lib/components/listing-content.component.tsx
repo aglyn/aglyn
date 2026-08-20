@@ -23,6 +23,8 @@ import {
   listingArtifactLabel,
   listingInclusions,
   hasLivePurchaseOf,
+  hasOrgLicenceOf,
+  licensedOrgIdsFor,
   installTargetsFor,
   isPrivateListing,
   resolveInstallPlan,
@@ -476,7 +478,15 @@ export function MarketplaceListingContent({
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const { install, installPlan, buy, uninstall } = useMarketplaceActions(hostId)
+  // Hoisted above the actions hook (AGL-2331): a purchase licenses an
+  // ORGANIZATION, so `buy` has to name the workspace it is buying for rather
+  // than let the server infer it from whichever site the surface happens to
+  // be acting through.
+  const orgId = useHostOrgId(hostId)
+  const { install, installPlan, buy, uninstall } = useMarketplaceActions(
+    hostId,
+    orgId,
+  )
   /** The uninstall awaiting its impact check and confirmation (AGL-1027). */
   const [pendingUninstall, setPendingUninstall] = useState<{
     scope: 'org' | 'host'
@@ -567,7 +577,7 @@ export function MarketplaceListingContent({
   // `orgs/{o}/installs/{id}` and applies to every site. Reading only
   // `components` above never sees either, so an installed plugin read as
   // "not installed" here; the two pins tell the honest story, host over org.
-  const orgId = useHostOrgId(hostId)
+  // (`orgId` is resolved above, where `buy` needs it.)
   const { data: hostPin } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId, 'installs', listingId || '-missing-'),
     [firestore, hostId, listingId],
@@ -851,9 +861,40 @@ export function MarketplaceListingContent({
   // must agree about is the refunded one, and they disagreed: the page said
   // "Purchased" and hid the buy button, the install routes answered 402, and
   // the buyer could neither install nor buy it again.
+  //
+  // ORG-SCOPED SINCE AGL-2331. `hasLivePurchaseOf` answers "did this PERSON
+  // buy it", which is no longer the question either the install routes or the
+  // checkout guard ask: a licence belongs to a workspace, so the acting org is
+  // what decides whether this page may install. Reading the person's answer
+  // here would put the CTA back in the disagreement AGL-2158 closed — an
+  // agency owner would see "Purchased" in a client workspace that holds no
+  // licence, and the install would 402.
   const purchased = useMemo(
-    () => hasLivePurchaseOf(purchaseDocs ?? [], listingId),
-    [purchaseDocs, listingId],
+    () => hasOrgLicenceOf(purchaseDocs ?? [], listingId, { orgId, uid: user?.uid }),
+    [purchaseDocs, listingId, orgId, user?.uid],
+  )
+  /**
+   * The buyer holds a licence for this listing — in some OTHER workspace
+   * (AGL-2331).
+   *
+   * The state that has no honest rendering without it: an agency developer who
+   * bought this component for one client opens it in the next client's
+   * workspace and sees a plain Buy button, with nothing to distinguish "you
+   * have never bought this" from "you own one, it just does not cover the
+   * workspace you are standing in". Both are a purchase — but only one of them
+   * is a surprise when the invoice arrives.
+   *
+   * Reads the buyer's OWN purchase documents, which the rules have always let
+   * them read, so this needs no cross-org read to answer.
+   */
+  const licensedElsewhere = useMemo(
+    () =>
+      !purchased &&
+      hasLivePurchaseOf(purchaseDocs ?? [], listingId) &&
+      licensedOrgIdsFor(purchaseDocs ?? [], listingId).some(
+        (licensed) => licensed !== orgId,
+      ),
+    [purchased, purchaseDocs, listingId, orgId],
   )
 
   // `!== 'loading'` and not `=== 'success'` (AGL-1066): a refused read now
@@ -1730,6 +1771,21 @@ export function MarketplaceListingContent({
                             <MenuItem value="host">{'This site only'}</MenuItem>
                           </TextField>
                         ) : null}
+                        {/* YOU OWN ONE — JUST NOT HERE (AGL-2331).
+                            A purchase licenses the organization that made it,
+                            so an agency owner who bought this for one client
+                            arrives in the next client's workspace to a plain
+                            Buy button. Saying nothing would make the second
+                            charge look like a double charge; this names the
+                            reason before the money moves, and the licences
+                            list says which workspace holds the first one. */}
+                        {mustBuy && licensedElsewhere ? (
+                          <Alert severity="info" sx={{ mb: 1 }}>
+                            {'You already own this in another workspace. A ' +
+                              'licence covers one organization, so this one ' +
+                              'needs its own.'}
+                          </Alert>
+                        ) : null}
                         {/* The org-scope panel owns install once anything is
                             pinned (AGL-997) — it offers add, remove, update
                             and promote, all of which this single button
@@ -1806,7 +1862,9 @@ export function MarketplaceListingContent({
                                 : installed
                                   ? `Update to v${offeredVersion}`
                                   : mustBuy
-                                    ? `Buy for $${priceUsd}`
+                                    ? licensedElsewhere
+                                      ? `Buy for this workspace — $${priceUsd}`
+                                      : `Buy for $${priceUsd}`
                                     : unreviewedInstall
                                       ? `Install unreviewed v${listing?.latestVersion} for testing`
                                     : orgTargeting || installTargets.length > 1

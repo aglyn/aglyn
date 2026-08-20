@@ -863,3 +863,178 @@ describe('flagOrderRestock — reads and refusals', () => {
     )
   })
 })
+
+// ---------------------------------------------------------------------------
+// The lines the reversal actually took back (AGL-2325)
+// ---------------------------------------------------------------------------
+
+/**
+ * A line-scoped refund asks about the lines it withdrew, and only those.
+ *
+ * AGL-2325 was filed while a refund was an AMOUNT and nothing more — "$17 of a
+ * $62 order" selected no line — so the flag had no honest choice but to name
+ * every tracked line and label the total an upper bound. AGL-2454 ended that:
+ * `refund.ts` now records `refundedLineItemIds` WITH the money, and it lands
+ * before this flag re-reads the order. A one-line refund on a three-line order
+ * that still asks about all three is the same over-statement this issue is
+ * about, arriving by the door that opened after it was written.
+ */
+describe('flagOrderRestock — the lines the reversal took back', () => {
+  /** Two tracked lines: 3 tees at index 0, 2 mugs at index 1. */
+  function seedTwoLineOrder(overrides: Record<string, any> = {}): void {
+    seedProduct('prod-mug', [{ id: 'var-only', inventory: 5 }])
+    seedOrder({
+      status: 'paid',
+      lineItems: [
+        {
+          productId: 'prod-tee',
+          variantId: 'var-large',
+          name: 'Cotton tee',
+          quantity: 3,
+          unitAmountCents: 2000,
+        },
+        {
+          productId: 'prod-mug',
+          variantId: 'var-only',
+          name: 'Mug',
+          quantity: 2,
+          unitAmountCents: 100,
+        },
+      ],
+      ...overrides,
+    })
+  }
+
+  it('asks about the refunded line only, not the whole order', async () => {
+    seedTwoLineOrder({ refundedLineItemIds: [1] })
+    await flagOrderRestock({
+      hostId: HOST,
+      orderId: ORDER,
+      kind: 'refund',
+      closedTheOrder: false,
+    })
+    expect(order().restockCheck.units).toBe(2)
+    expect(order().restockCheck.lines).toEqual([
+      expect.objectContaining({ productId: 'prod-mug', quantity: 2 }),
+    ])
+  })
+
+  it('re-asks when a second partial withdraws a line the open question misses', async () => {
+    // Two partial refunds, one line each. The open-question guard used to
+    // swallow the second outright, so the merchant was asked about one line
+    // and the other line's units stayed off the shelf with nothing recording
+    // that they had gone.
+    seedTwoLineOrder({ refundedLineItemIds: [1] })
+    await flagOrderRestock({
+      hostId: HOST,
+      orderId: ORDER,
+      kind: 'refund',
+      closedTheOrder: false,
+    })
+    expect(order().restockCheck.units).toBe(2)
+    docs.set(`hosts/${HOST}/orders/${ORDER}`, {
+      ...order(),
+      refundedLineItemIds: [1, 0],
+    })
+    await flagOrderRestock({
+      hostId: HOST,
+      orderId: ORDER,
+      kind: 'refund',
+      closedTheOrder: true,
+    })
+    // One question, now covering both lines — not a second prompt beside the
+    // first, and not the first one standing while a line goes unmentioned.
+    expect(restockEvents()).toHaveLength(2)
+    expect(order().restockCheck.units).toBe(5)
+    expect(order().restockCheck.fullyReversed).toBe(true)
+    expect(
+      order()
+        .restockCheck.lines.map((line: any) => line.productId)
+        .sort(),
+    ).toEqual(['prod-mug', 'prod-tee'])
+  })
+
+  it('stays silent when a second partial withdraws a line already asked about', async () => {
+    // The guard the case above narrows, not one it removes: re-refunding the
+    // SAME line adds nothing a merchant looking at the open prompt does not
+    // already have.
+    seedTwoLineOrder({ refundedLineItemIds: [1] })
+    await flagOrderRestock({
+      hostId: HOST,
+      orderId: ORDER,
+      kind: 'refund',
+      closedTheOrder: false,
+    })
+    const first = order().restockCheck.flaggedAtMs
+    await flagOrderRestock({
+      hostId: HOST,
+      orderId: ORDER,
+      kind: 'refund',
+      closedTheOrder: false,
+    })
+    expect(restockEvents()).toHaveLength(1)
+    expect(order().restockCheck.flaggedAtMs).toBe(first)
+  })
+
+  it('CONTROL: an amount-only refund keeps the whole-order upper bound', async () => {
+    // No `refundedLineItemIds` is the pre-AGL-2454 refund and still the
+    // shape of one requested by amount. Nothing says which line came back,
+    // so the flag degrades to the bound it has always carried.
+    seedTwoLineOrder()
+    await flagOrderRestock({
+      hostId: HOST,
+      orderId: ORDER,
+      kind: 'refund',
+      closedTheOrder: false,
+    })
+    expect(order().restockCheck.units).toBe(5)
+  })
+
+  it('CONTROL: a chargeback takes the whole charge, whatever lines a refund named', async () => {
+    // A dispute reverses the entire payment. An earlier line-scoped partial
+    // must not narrow it to the one line that admin picked.
+    seedTwoLineOrder({ refundedLineItemIds: [1] })
+    await flagOrderRestock({
+      hostId: HOST,
+      orderId: ORDER,
+      kind: 'chargeback',
+      closedTheOrder: true,
+    })
+    expect(order().restockCheck.units).toBe(5)
+  })
+
+  it('CONTROL: a full refund asks about every line, however it was requested', async () => {
+    seedTwoLineOrder({ refundedLineItemIds: [1] })
+    await flagOrderRestock({
+      hostId: HOST,
+      orderId: ORDER,
+      kind: 'refund',
+      closedTheOrder: true,
+    })
+    expect(order().restockCheck.units).toBe(5)
+  })
+
+  it('CONTROL: an open question written before line indexes still suppresses', async () => {
+    // A check flagged by the shipped code carries no line indexes, so nothing
+    // can prove a new reversal adds a line it misses. Suppressing is the
+    // behaviour that check was written under, and it is the safe read.
+    seedTwoLineOrder({
+      refundedLineItemIds: [0],
+      restockCheck: {
+        kind: 'refund',
+        lines: [{ productId: 'prod-mug', variantId: 'var-only', quantity: 2 }],
+        units: 2,
+        fullyReversed: false,
+        flaggedAtMs: 100,
+      },
+    })
+    await flagOrderRestock({
+      hostId: HOST,
+      orderId: ORDER,
+      kind: 'refund',
+      closedTheOrder: false,
+    })
+    expect(order().restockCheck.flaggedAtMs).toBe(100)
+    expect(restockEvents()).toHaveLength(0)
+  })
+})

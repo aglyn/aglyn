@@ -31,6 +31,7 @@ import { consolePluginLoader } from '../constants/console-plugin-loader'
 import { useHostDisabledPlugins } from './host-id-provider'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useReleaseFlags } from '../hooks/use-release-flags'
+import { useUrlNamesOrg } from '../hooks/use-url-names-org'
 import { loadOrgRealmPlugins } from '../utils/realm-plugins.client'
 
 /**
@@ -106,6 +107,9 @@ export default function ConsolePluginsGate({
 }) {
   const { org, orgId, ready: orgReady } = useCurrentOrg()
   const { data: user } = useUser()
+  // Only the URL can say which workspace the session belongs to (AGL-1937).
+  // See the loading effect below for why this gate is here.
+  const namesOrg = useUrlNamesOrg()
   const [readyForOrg, setReadyForOrg] = useState<string | null>(null)
   const { flagsReady, enabledKey } = useEffectiveEnabledPlugins()
   const enabledPluginIds = useEnabledPluginIds()
@@ -115,10 +119,32 @@ export default function ConsolePluginsGate({
   if (readyForOrg) hasLoadedOnce.current = true
 
   useEffect(() => {
+    // Nothing loads until the URL names a workspace (AGL-1937).
+    //
+    // This gate is mounted in `app/providers.tsx`, above EVERY console route
+    // — the workspace picker included, which every new signup crosses. On an
+    // org-less route `useCurrentOrg().orgId` is the ambient fallback (a
+    // remembered selection, else the user's FIRST org), so merely landing on
+    // the picker used to `ensure` that org's console chunks, mint an ID token
+    // and fetch its trusted-realm marketplace bundles — for a workspace
+    // nobody had opened, moments before the user picks a different one.
+    //
+    // That is not a wasted fetch a later navigation corrects: a loaded chunk
+    // cannot unload and the ConsoleExtension registry is a module-global
+    // union, so the wrong org's code stays resident for the session.
+    //
+    // "Don't start on an org-less route" rather than "reload per org": the
+    // AGL-758 latch below exists precisely so a workspace switch does not
+    // blank the tree, and unloading is not on the table.
+    //
+    // `useUrlNamesOrg` is derived from the URL alone, so it has no loading
+    // window of its own — it answers false for "this route names no
+    // workspace", never for "not read yet" (AGL-1113).
+    //
     // Wait for Remote Config activation (AGL-422) so a release-flagged-off
     // plugin never loads on the registry defaults and then sticks (loaded
     // chunks can't unload).
-    if (!orgId || !flagsReady) return undefined
+    if (!namesOrg || !orgId || !flagsReady) return undefined
     let active = true
     void (async () => {
       await consolePluginLoader.ensure(enabledKey.split(','), ['console'])
@@ -137,7 +163,7 @@ export default function ConsolePluginsGate({
     }
     // `user` identity churns with token refreshes; orgId names the session.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgId, flagsReady, enabledKey])
+  }, [namesOrg, orgId, flagsReady, enabledKey])
 
   // This gate sits ABOVE the whole route tree — the app bar and nav strip
   // included — so holding here blanks the entire window, not just the page
@@ -154,7 +180,11 @@ export default function ConsolePluginsGate({
   // (`useEnabledPluginIds`), so a switch can keep the previous tree mounted:
   // the new workspace's plugin tabs simply appear when their chunks land,
   // and the old workspace's never leak in.
-  if (orgId && !hasLoadedOnce.current && readyForOrg !== orgId) {
+  //
+  // An org-less route holds for nothing (AGL-1937): the load never starts
+  // there, so without `namesOrg` the picker would sit behind this splash
+  // waiting on a `readyForOrg` that can never arrive.
+  if (namesOrg && orgId && !hasLoadedOnce.current && readyForOrg !== orgId) {
     return <BootSplash />
   }
   // Plugin-registered app providers (AGL-419) wrap every console page —
@@ -216,11 +246,17 @@ export function withSitePlugins<P extends object>(
 
 export function useSitePluginsReady(): boolean {
   const { orgId } = useCurrentOrg()
+  // Same fallback-org gate as the console gate above (AGL-1937). Every
+  // `withSitePlugins` route lives under `/[orgSlug]/hosts/[host]/…`, so this
+  // never withholds the canvas from a page that has one — the org-less
+  // system-email editor deliberately calls `ensure` itself (AGL-759) rather
+  // than resolving a plugin set from whichever org the scope fell back to.
+  const namesOrg = useUrlNamesOrg()
   const [ready, setReady] = useState(false)
   const { flagsReady, enabledKey } = useEffectiveEnabledPlugins()
 
   useEffect(() => {
-    if (!orgId || !flagsReady) return undefined
+    if (!namesOrg || !orgId || !flagsReady) return undefined
     let active = true
     setReady(false)
     void consolePluginLoader.ensure(enabledKey.split(','), ['site']).then(() => {
@@ -229,7 +265,7 @@ export function useSitePluginsReady(): boolean {
     return () => {
       active = false
     }
-  }, [orgId, flagsReady, enabledKey])
+  }, [namesOrg, orgId, flagsReady, enabledKey])
 
   return ready
 }

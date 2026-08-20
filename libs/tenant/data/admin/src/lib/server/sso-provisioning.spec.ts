@@ -302,6 +302,61 @@ describe('the service metadata an IdP is configured with (AGL-1381)', () => {
       acsUrl: 'https://auth.aglyn.com/__/auth/handler',
     })
   })
+
+  /**
+   * AGL-2020. The fourth arm used to read
+   *
+   *   `${process.env['NEXT_PUBLIC_FIREBASE_PROJECT_ID'] || 'aglyn-main'}.firebaseapp.com`
+   *
+   * so an install that set none of the four variables got OUR project's auth
+   * origin — written into the operator's own GCIP SAML provider as
+   * `rpEntityId`/`callbackURL`, and printed in their console as the Reply URL
+   * to paste into their IdP. Both halves point a third party's SAML assertions
+   * at infrastructure the operator does not own, and nothing says so.
+   *
+   * There is no safe "off" value to degrade to here: an empty authDomain emits
+   * `https:///__/auth/handler`, which GCIP accepts and which then fails every
+   * assertion with nothing in the config that looks wrong. So this throws.
+   *
+   * Both directions are pinned. Testing only the unset shape would pass on an
+   * implementation that threw unconditionally.
+   */
+  describe('with nothing configured (AGL-2020)', () => {
+    it('throws rather than emitting our project', () => {
+      env({})
+      expect(() => ssoServiceMetadata()).toThrow(/NEXT_PUBLIC_FIREBASE_PROJECT_ID/)
+    })
+
+    it('lets no aglyn-main origin reach the caller, by either route', () => {
+      // The whole point. Asserting only on the thrown MESSAGE would pass
+      // vacuously while the function happily RETURNED our origin, so this
+      // examines whichever of the two the call produces.
+      env({})
+      let outcome: string
+      try {
+        outcome = JSON.stringify(ssoServiceMetadata())
+      } catch (error) {
+        outcome = String((error as Error).message)
+      }
+      expect(outcome).not.toContain('aglyn-main')
+      expect(outcome).not.toContain('firebaseapp.com')
+    })
+
+    it('treats a declared-but-empty project id as unset', () => {
+      // `NEXT_PUBLIC_FIREBASE_PROJECT_ID=` is exactly what the template ships.
+      env({ NEXT_PUBLIC_FIREBASE_PROJECT_ID: '   ' })
+      expect(() => ssoServiceMetadata()).toThrow()
+    })
+
+    it('still resolves when the operator DOES set their project id', () => {
+      // The other direction. Without this the guard could be throwing
+      // unconditionally and the first three tests would not notice.
+      env({ NEXT_PUBLIC_FIREBASE_PROJECT_ID: 'acme-selfhost' })
+      expect(ssoServiceMetadata().authDomain).toBe(
+        'acme-selfhost.firebaseapp.com',
+      )
+    })
+  })
 })
 
 describe('GCIP pool display names', () => {

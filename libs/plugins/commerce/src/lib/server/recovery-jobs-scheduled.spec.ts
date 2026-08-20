@@ -69,14 +69,24 @@ const JOBS: Array<{ name: string; scan: string; module: string }> = [
     scan: 'scanRestockAlerts',
     module: 'server/process-restock.ts',
   },
+  // AGL-2473. The dropship supplier POST left the webhook's response path and
+  // became a queue row; if nothing drains it, a paid order is never routed and
+  // the change has made the bug WORSE rather than better — silent before,
+  // silent now, with a row nobody reads. This is the same shape as the two
+  // above, which is why it is asserted in the same table.
+  {
+    name: 'supplier-webhook-delivery',
+    scan: 'scanSupplierDeliveries',
+    module: 'server/supplier-outbox.ts',
+  },
 ]
 
 describe('AGL-2227 · the commerce recovery passes are actually scheduled', () => {
   const serverBarrel = source('server.ts')
 
   it('asserts over a real, non-empty job table', () => {
-    expect(JOBS.length).toBe(2)
-    expect(new Set(JOBS.map((job) => job.scan)).size).toBe(2)
+    expect(JOBS.length).toBe(3)
+    expect(new Set(JOBS.map((job) => job.scan)).size).toBe(3)
   })
 
   it.each(JOBS)('$name is registered as a plugin job', ({ name }) => {
@@ -127,9 +137,19 @@ describe('AGL-2227 · the commerce recovery passes are actually scheduled', () =
     expect(serverBarrel).toContain(
       `registerPluginApiRoute('commerce/process-restock'`,
     )
-    for (const { module } of JOBS) {
-      expect(source(module)).toContain(`x-cron-secret`)
+    // The two AGL-2227 passes only. The AGL-2473 supplier drain has NO HTTP
+    // door and deliberately so: the other two predate the beat and kept their
+    // routes for manual invocation, while a public door onto a queue that
+    // POSTs merchant-configured endpoints is attack surface bought for nothing
+    // — the beat is the only caller, and a stuck row is retried on the next
+    // tick without anyone pressing anything.
+    for (const modulePath of [
+      'server/process-abandoned.ts',
+      'server/process-restock.ts',
+    ]) {
+      expect(source(modulePath)).toContain(`x-cron-secret`)
     }
+    expect(source('server/supplier-outbox.ts')).not.toContain('x-cron-secret')
   })
 })
 

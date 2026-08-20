@@ -10,8 +10,13 @@
  */
 
 import { onSchedule } from 'firebase-functions/scheduler'
+import { beforeUserCreated } from 'firebase-functions/identity'
+import { HttpsError } from 'firebase-functions/https'
 import { defineSecret } from 'firebase-functions/params'
 import * as logger from 'firebase-functions/logger'
+import { getApps, initializeApp } from 'firebase-admin/app'
+import { getFirestore } from 'firebase-admin/firestore'
+import { signupsCreationVerdict } from './signups-lock'
 
 /**
  * Shared secret for the tenant's job runner. Must match `PLUGIN_JOBS_SECRET`
@@ -114,3 +119,108 @@ export const pluginJobsBeat = onSchedule(
     }
   },
 )
+
+
+/*==============================================================
+ * THE SIGNUPS LOCK, AT ACCOUNT CREATION (AGL-1531)
+ *=============================================================*/
+
+/**
+ * Admin SDK, initialised once and lazily.
+ *
+ * Top-level `initializeApp()` would run on every cold start of every
+ * function in this package, including the every-minute job beat that has no
+ * use for it. `getApps()` makes a second call a no-op, which is what lets
+ * the beat and the blocking function share one process safely.
+ */
+function firestore() {
+  if (getApps().length === 0) initializeApp()
+  return getFirestore()
+}
+
+/**
+ * `lockdowns/feature--signups` — the SAME document the staff panic page
+ * writes through /api/admin/lockdown, spelled out because
+ * `featureLockdownDocId('signups')` lives in a library this package cannot
+ * import. Pinned by the wiring guard: a typo here would produce a valve that
+ * reads a document nothing ever writes, and therefore never refuses
+ * anything, silently and forever.
+ */
+const SIGNUPS_LOCK_COLLECTION = 'lockdowns'
+const SIGNUPS_LOCK_DOC = 'feature--signups'
+
+/**
+ * REFUSE ACCOUNT CREATION WHILE THE SIGNUPS LOCK IS ENGAGED (AGL-1531).
+ *
+ * The lock already refused the session mint, the legal-acceptance recorder
+ * and the signup-page doors — so a bot wave's accounts were unusable, but
+ * they were still CREATED, accumulating in the pool and against the Auth
+ * quotas. Account creation is client -> Firebase Auth: a blocking function
+ * is the only thing that can sit in front of it, which is what this is.
+ *
+ * ONE CHOKEPOINT, THREE DOORS. `beforeUserCreated` fires for every way an
+ * account can come into existence — email/password
+ * (`createUserWithEmailAndPassword` on /signup), Google
+ * (`signInWithPopup`/`signInWithRedirect` on /signup and /signin, which
+ * create the account on first sign-in), and SAML/OIDC SSO (/sso). This
+ * handler is deliberately blind to which: it reads no provider, no email and
+ * no `event.data.tenantId`, so there is nowhere for a per-door carve-out to
+ * be added later. AGL-1993's two pools are covered by the same blindness —
+ * SSO creates into a per-org GCIP tenant pool and everything else into the
+ * project pool, and this refuses either.
+ *
+ * CREATION ONLY. There is deliberately no `beforeUserSignedIn` sibling. That
+ * one fires for EXISTING accounts, and registering it would put every
+ * sign-in — including the permanent break-glass account of AGL-1888, whose
+ * whole purpose is to be reachable when nothing else is — behind this read
+ * and this fail-closed posture. The lock stops accounts being born; it never
+ * stops one coming home.
+ *
+ * NO STAFF BYPASS, which is not an omission: an account being created has no
+ * claim yet, so a bypass here could only ever fire on a misattributed one.
+ * `LOCKDOWN_FEATURE_STAFF_BYPASS.signups` has said `false` since AGL-1510
+ * for exactly this reason.
+ *
+ * Cost while the lever is off: one Firestore `get` per account created,
+ * ever — not per sign-in, not per request. Nothing here is on a hot path.
+ *
+ * !!! DEPLOY: this only exists in production once `firebase deploy --only
+ * functions` has run AND Identity Platform shows the `beforeCreate` trigger
+ * registered. Merging changes nothing. The staff lockdown page reports
+ * whether the trigger is registered, so the gap is visible rather than
+ * assumed.
+ */
+export const beforeSignupCreate = beforeUserCreated(async () => {
+  const verdict = await signupsCreationVerdict(async () => {
+    const snapshot = await firestore()
+      .collection(SIGNUPS_LOCK_COLLECTION)
+      .doc(SIGNUPS_LOCK_DOC)
+      .get()
+    return snapshot.exists
+      ? (snapshot.data() as { untilMs?: number })
+      : null
+  }, Date.now())
+
+  if (!verdict.refused) return
+
+  // Logged before the throw because a refusal is otherwise invisible: the
+  // caller sees a generic Auth error and nothing on the Aglyn side records
+  // that the brake bit. `cause` is the field that matters during an
+  // incident — `unreadable` means the lever may not even be pulled.
+  logger.warn('signup refused at creation', { cause: verdict.cause })
+
+  // THROWN, not returned. A returned value MODIFIES the user being created;
+  // only a thrown error refuses the operation. A `return` here would be a
+  // lock that runs, decides "refuse", and creates the account anyway.
+  // ONE sentence for both causes. `unreadable` is a fail-closed refusal and
+  // the operator needs to know that (the log line above says so), but the
+  // person at the signup form cannot act on the difference, and "our
+  // database is unreachable" is an operational detail that does not belong
+  // in an error handed to an anonymous caller. The wording matches the
+  // `signups` notice in the lockdown library so the two doors read alike.
+  throw new HttpsError(
+    'permission-denied',
+    'New signups are temporarily paused. Existing accounts can sign in and ' +
+      'work as usual.',
+  )
+})

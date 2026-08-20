@@ -327,7 +327,14 @@ const EDITOR_WRITABLE_HOST_SUBCOLLECTIONS: Record<string, string> = {
   variables: 'Design tokens and site variables, edited in the besigner.',
   functions: 'Site functions, authored in the console function editor.',
   workflows: 'Automation graphs, authored in the workflow builder.',
-  actions: 'Workflow actions, written by the interaction builder dialog.',
+  actions:
+    'Workflow actions and element interactions. CREATE is API-only since ' +
+    'AGL-2266 — the catch-all named none of the three creators and nothing ' +
+    'counted the documents, so /api/hosts/resources now holds ' +
+    '`ACTIONS_MAX_PER_HOST`. Update and delete stay client-side: the actions ' +
+    'card toggles `enabled` and both surfaces retire one by stamping ' +
+    '`deletedAt`, and the cap counts LIVE rows so that soft delete frees a ' +
+    'slot.',
   overlays: 'Modal/drawer overlays, written by the interaction builder dialog.',
   experiments:
     'A/B variants, created and retired by the interactions provider.',
@@ -558,6 +565,35 @@ describe('every host subcollection is classified (AGL-2038)', () => {
         false,
       ])
     }
+  })
+
+  /**
+   * The two client-direct classes AGL-2266 closed, asserted against the FILE.
+   *
+   * `actions` was in none of the three lists — the catch-all is permissive by
+   * default, so a subcollection nobody classified is granted — and entries are
+   * re-granted by a dedicated block the exclusion lists cannot speak for. Both
+   * are read here rather than remembered, because "somebody added it" is the
+   * assumption `screenAnalytics` disproved.
+   *
+   * FORCED RED: remove `'actions'` from the create list, or restore the editor
+   * branch on the entries `allow create`, and this fails naming which.
+   */
+  it('denies the two client-direct creates AGL-2266 closed', () => {
+    // CREATE only: the actions card and the interactions provider both retire
+    // an action with a client UPDATE (`deletedAt`), and the cap counts live
+    // rows so that soft delete frees a slot.
+    expect(rules.excluded.create).toContain('actions')
+    expect(rules.excluded.update).not.toContain('actions')
+    expect(rules.excluded.delete).not.toContain('actions')
+
+    // Entries have a dedicated block, so the lists above say nothing about
+    // them and the grant has to be read where it is written.
+    const entriesBlock = read(RULES_FILE)
+      .split('match /collections/{collectionId}/entries/{entryId} {')[1]
+      .split('allow update:')[0]
+    expect(entriesBlock).toContain('allow create: if isStaff();')
+    expect(entriesBlock).not.toContain('canWriteHostContent')
   })
 
   it('keeps the classifications from going stale', () => {

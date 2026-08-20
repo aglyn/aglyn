@@ -57,6 +57,19 @@ const BASE_ENV = {
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // The REAL classifier, ledger and write observer (AGL-1954), never stubs.
+  // The route's "did this delivery do anything" verdict is the thing under
+  // test in `billing-webhook-inert.spec.ts`, and a hand-written double here
+  // would let this suite keep passing while the real rule changed under it.
+  classifyWebhookDelivery: jest.requireActual(
+    '@aglyn/aglyn/app-utils/webhook-delivery',
+  ).classifyWebhookDelivery,
+  createWebhookEffectLedger: jest.requireActual(
+    '@aglyn/aglyn/app-utils/webhook-delivery',
+  ).createWebhookEffectLedger,
+  observeWrites: jest.requireActual(
+    '@aglyn/aglyn/app-utils/webhook-delivery',
+  ).observeWrites,
   // The REAL predicate, not a re-typed triple (AGL-1715). A hand-written mock
   // of a single-source list is the drift this guard exists to prevent: the
   // spec would keep passing while the route's real answer changed.

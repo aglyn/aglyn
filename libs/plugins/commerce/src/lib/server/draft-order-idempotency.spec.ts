@@ -19,6 +19,7 @@ import type {
   PluginApiRequest,
   PluginApiResponse,
 } from '@aglyn/aglyn/server'
+import { storefrontProcessingCostCents } from '@aglyn/aglyn/server'
 import { draftOrderHandler } from './draft-order'
 
 /**
@@ -456,11 +457,13 @@ describe('a product doc with no type (AGL-2251)', () => {
     const result = await post({}, { 'idempotency-key': 'no-type' })
 
     expect(result.status).toBe(200)
-    // Business physical is 0%, so nothing is sent. The digital rate this used
-    // to take would be 2% of $900 = '1800'.
-    expect(
+    // Business physical is 0%, so the fee carries NO TAKE — only Stripe's own
+    // cost on the charge, passed through since AGL-2152. The digital rate this
+    // used to take would add 2% of $900 = 1800¢ on top.
+    const sent = Number(
       stripeCalls[0].params.get('payment_intent_data[application_fee_amount]'),
-    ).toBeNull()
+    )
+    expect(sent - storefrontProcessingCostCents(90000)).toBe(0)
   })
 
   it('POSITIVE CONTROL: an explicit digital product still pays 2%', async () => {
@@ -475,7 +478,7 @@ describe('a product doc with no type (AGL-2251)', () => {
 
     expect(
       stripeCalls[0].params.get('payment_intent_data[application_fee_amount]'),
-    ).toBe('1800')
+    ).toBe(String(1800 + storefrontProcessingCostCents(90000)))
   })
 })
 

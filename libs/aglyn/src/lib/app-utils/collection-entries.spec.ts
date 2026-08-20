@@ -149,8 +149,13 @@ describe('collectionEntryTokens (AGL-551)', () => {
     expect(tokens['entry.body']).toBe('# Body')
     expect(tokens['entry.slug']).toBe('hello')
     expect(tokens['entry.url']).toBe('/blog/hello')
+    // Through the shared formatter, not a bare `toLocaleDateString()`: the
+    // contract is that the token carries what the ONE formatter produces
+    // (AGL-1926). Written the old way this asserted only that two calls on
+    // the developer's machine agreed, and went red in any zone that moved
+    // the instant across midnight.
     expect(tokens['entry.date']).toBe(
-      new Date(1_700_000_000 * 1000).toLocaleDateString(),
+      formatCollectionEntryDate({ seconds: 1_700_000_000 }),
     )
   })
 
@@ -742,7 +747,7 @@ describe('expandCollectionEntries (AGL-551)', () => {
     expect(nodes[childIds[0]].parentId).toBe('list')
     const firstTitleId = `${childIds[0].replace(/item$/, '')}title`
     expect(nodes[firstTitleId].props.children).toBe(
-      `Hello world — ${new Date(1_700_000_000 * 1000).toLocaleDateString()}`,
+      `Hello world — ${formatCollectionEntryDate({ seconds: 1_700_000_000 })}`,
     )
     const firstLinkId = `${childIds[0].replace(/item$/, '')}link`
     expect(nodes[firstLinkId].props.href).toBe('/blog/hello-world')
@@ -1246,7 +1251,7 @@ describe('expandCollectionRelated (AGL-582)', () => {
       {
         title: 'Match',
         url: '/blog/match',
-        date: new Date(1_700_000_000 * 1000).toLocaleDateString(),
+        date: formatCollectionEntryDate({ seconds: 1_700_000_000 }),
         excerpt: 'A match',
         category: 'News',
       },
@@ -1370,7 +1375,11 @@ describe('expandCollectionEntryMeta (AGL-1385)', () => {
       showDate: true,
       showCategory: true,
       showTags: true,
-      date: new Date(1_754_714_956 * 1000).toLocaleDateString(),
+      // 2025-08-09T05:29:16Z — before dawn UTC, so this instant is the
+      // PREVIOUS day in every American zone. Written as a bare
+      // `toLocaleDateString()` it asserted the developer's zone; the stamped
+      // prop is the shared formatter's answer (AGL-1926).
+      date: formatCollectionEntryDate({ seconds: 1_754_714_956 }),
       category: 'Guides',
       tags: 'forms, datasets',
     })
@@ -1458,18 +1467,23 @@ describe('formatCollectionEntryDate (AGL-1459)', () => {
   /** 2026-07-15T12:00:00Z — mid-month and midday, so no zone moves it. */
   const seconds = 1_784_116_800
   const at = { seconds }
-  const date = new Date(seconds * 1000)
 
   it('leaves the shipped format byte-identical to what the block emits today', () => {
     // The whole point of the default option: an author who opens the new
     // dropdown and closes it must not restyle 11 published pages.
-    expect(formatCollectionEntryDate(at)).toBe(date.toLocaleDateString())
-    expect(formatCollectionEntryDate(at, COLLECTION_ENTRY_DATE_FORMAT_DEFAULT))
-      .toBe(date.toLocaleDateString())
+    //
+    // Asserted against the LITERAL production spelling, not against
+    // `date.toLocaleDateString()` (AGL-1926). Comparing the formatter to a
+    // bare call was a check that could not fail while the formatter WAS a
+    // bare call — it agreed on any machine by construction, including the
+    // machines where the two now legitimately differ. `7/15/2026` is what
+    // aglyn.com serves.
+    expect(formatCollectionEntryDate(at)).toBe('7/15/2026')
+    expect(
+      formatCollectionEntryDate(at, COLLECTION_ENTRY_DATE_FORMAT_DEFAULT),
+    ).toBe('7/15/2026')
     // And so must an unknown value from a hand-edited document.
-    expect(formatCollectionEntryDate(at, 'nonsense' as never)).toBe(
-      date.toLocaleDateString(),
-    )
+    expect(formatCollectionEntryDate(at, 'nonsense' as never)).toBe('7/15/2026')
   })
 
   it('produces the article frame’s "Jul 2026" byline shape', () => {
@@ -1489,14 +1503,16 @@ describe('formatCollectionEntryDate (AGL-1459)', () => {
     )
   })
 
-  it('writes ISO from the LOCAL calendar day, never a UTC shift', () => {
-    // `toISOString().slice(0, 10)` would date a 8pm-local post tomorrow.
-    const local = formatCollectionEntryDate(at, 'iso')
-    expect(local).toBe(
-      `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-` +
-        `${String(date.getDate()).padStart(2, '0')}`,
-    )
-    expect(local).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  it('writes ISO from the PINNED calendar day, not the runtime’s', () => {
+    // This used to read the local calendar day through `getFullYear`/
+    // `getMonth`/`getDate`, which made the entry's date a property of
+    // whoever rendered it — the server said one day and the visitor's
+    // browser said another, which is the mismatch AGL-1926 is about. The
+    // day is now read in the pinned zone, the same one the three
+    // `toLocaleDateString` branches use, so all four agree.
+    const pinned = formatCollectionEntryDate(at, 'iso')
+    expect(pinned).toBe('2026-07-15')
+    expect(pinned).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 
   it('empties an unpublished entry rather than printing the epoch', () => {
@@ -1667,7 +1683,7 @@ describe('expandCollectionEntryMeta honours author and date format (AGL-1459)', 
         categories,
       )
       expect(nodes['meta'].props.date).toBe(
-        new Date(1_784_116_800 * 1000).toLocaleDateString(),
+        formatCollectionEntryDate({ seconds: 1_784_116_800 }),
       )
     }
     // And a bound token stays literal for later substitution, as before.

@@ -46,6 +46,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
+import StaffFreeWorkspaceCapCard from '../../../../components/staff-free-workspace-cap-card.component'
 import StaffOrgActions, {
   overrideCount,
 } from '../../../../components/staff-org-actions.component'
@@ -191,6 +192,14 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+          <StaffOnly>
+            {/* The free-workspace ceiling (AGL-2265). It belongs above the
+                org list because it is the only control on this page that is
+                about the POPULATION of workspaces rather than about one of
+                them, and because it is the answer to the question the list
+                keeps raising: why does this account have so many. */}
+            <StaffFreeWorkspaceCapCard />
+          </StaffOnly>
           {/* Card-framed header + filters (AGL-385), consistent with the
               user-management page. */}
           <StaffOnly>

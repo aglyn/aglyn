@@ -224,6 +224,67 @@ describe('the category catalog', () => {
     }
   })
 
+  describe('no category hint claims a report reaches an authority (AGL-2045)', () => {
+    // The `csam` hint read "Reported to the authorities and handled outside the
+    // normal queue." Nothing reported anything to anyone: no CyberTipline
+    // submission, no report generation, no preservation handling, no runbook
+    // step. The runbook's own limits list says "No NCMEC mechanics."
+    //
+    // The forced red for this block was restoring that exact sentence — the
+    // shape the regression actually takes — and both assertions below went red
+    // on it. A test that only pinned the new string would have gone red on any
+    // reword too, which is how a guard gets loosened until it checks nothing.
+
+    /**
+     * Claims that the OPERATOR tells somebody official.
+     *
+     * Actor-based on purpose. The sentence we want to keep — "Please also
+     * report it directly to NCMEC" — names the *reporter* as the one who
+     * files, and a keyword regex on "report … to NCMEC" cannot tell the two
+     * apart. So each pattern pins a subject: a bare passive participle with
+     * nobody doing it, an explicit passive, or a first-person promise.
+     */
+    const OPERATOR_CLAIMS_TO_NOTIFY = [
+      // "Reported to the authorities …" — the exact defect, subjectless.
+      /(^|[.!?]\s+)(reported|referred|forwarded|filed|submitted|passed)\b/i,
+      // "… is reported to …", "… will be forwarded to …"
+      /\b(is|are|was|were|gets?|will be|has been|have been)\s+(?:\w+\s+){0,2}(reported|referred|forwarded|filed|submitted|passed|escalated)\s+to\b/i,
+      // "We report / we notify / we alert …"
+      /\bwe\s+(?:will\s+|do\s+|always\s+)?(report|notify|refer|forward|file|submit|alert|contact|inform)\b/i,
+    ]
+
+    it('does not tell a reporter that we notify anyone official', () => {
+      for (const category of ABUSE_REPORT_CATEGORIES) {
+        for (const pattern of OPERATOR_CLAIMS_TO_NOTIFY) {
+          // Asserted on the bare hint, not on an `id: hint` label — the first
+          // pattern anchors on a sentence start, and a prefix would move the
+          // defect off that anchor and quietly stop catching it. Jest prints
+          // the received hint, which identifies the category anyway.
+          expect(category.hint).not.toMatch(pattern)
+        }
+      }
+    })
+
+    it('sends the csam reporter to the CyberTipline themselves', () => {
+      // The reason the false promise mattered: a reporter who believes the
+      // filing is done may not make one. Removing the claim without giving
+      // them the route would leave that person no better off.
+      const csam = abuseReportCategory('csam')
+      expect(csam?.hint).toContain('report.cybertip.org')
+      expect(csam?.hint).toMatch(/do not rely on this form alone/i)
+    })
+
+    it('still promises the handling that is real', () => {
+      // The half of the old sentence that was true, and the half a self-hoster
+      // can also keep: urgent, out of the normal queue, escalated to whoever
+      // runs this deployment.
+      const csam = abuseReportCategory('csam')
+      expect(csam?.severity).toBe('urgent')
+      expect(csam?.hint).toMatch(/outside the normal queue/i)
+      expect(csam?.hint).toMatch(/escalated to the operator/i)
+    })
+  })
+
   describe('the published contact address is the OPERATOR of this install', () => {
     // This block replaces a single assertion that read
     //   expect(ABUSE_REPORT_CONTACT_EMAIL).toBe('support@aglyn.com')

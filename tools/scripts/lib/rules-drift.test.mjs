@@ -765,12 +765,25 @@ describe('the checker is wired (workflow + package.json)', () => {
       // AGL-2379 / AGL-2240 — no model-provider key reachable from the client
       // bundle. A security control that ran in no workflow at all.
       'check:provider-key-exposure',
+      // AGL-1890 — no tracked source file may contain a raw NUL byte. A NUL
+      // in git's first-8000-byte window makes a file BINARY: no diff, no
+      // blame, no grep, so no change to it has ever been reviewed. AGL-1323
+      // removed the one known instance and recorded a FACT that it was the
+      // only one; two more arrived within fifteen days. This is the fact as
+      // an exit code, and its only home is this workflow.
+      'test:nul-bytes',
+      'check:nul-bytes',
       // AGL-1882 — the off-project backup-copy comparator's pure-node half.
       // Its live half is scheduled in backup-copies.yml (it needs a Cloud
       // Storage credential); this half needs nothing, and it is the ONLY
       // place the verdict's success branch is ever executed, because no
       // off-project copy exists for production to demonstrate it with.
       'test:backup-copies',
+      // AGL-2480 — eslint over `tools/` itself. `tools/` is in no nx project
+      // (there is no `tools/project.json`), so `nx affected -t lint` has never
+      // reached any of its 214 `.mjs` files — the tree every other guard on
+      // this list is written in. This step is the only thing that lints them.
+      'check:lint-tools',
     ]) {
       // Match the STEP syntax, not the bare script name — the workflow's own
       // comments mention these scripts, and an assertion a comment can
@@ -811,6 +824,9 @@ describe('the checker is wired (workflow + package.json)', () => {
       'test:backfill-core', // AGL-2376
       'test:legal-drift', // AGL-2379
       'check:provider-key-exposure', // AGL-2379 / AGL-2240
+      'test:nul-bytes', // AGL-1890
+      'check:nul-bytes', // AGL-1890
+      'check:lint-tools', // AGL-2480
     ]) {
       assert.ok(
         typeof pkg.scripts[script] === 'string' && pkg.scripts[script] !== '',

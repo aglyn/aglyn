@@ -54,6 +54,7 @@ import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import { collapseAdminUserRows } from '../../../../utils/collapse-admin-user-rows'
 
 interface AdminUser {
   uid: string
@@ -146,9 +147,18 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
 
   const [search, setSearch] = useState('')
   const visible = useMemo(() => {
+    // One row per human across EVERY loaded page (AGL-2005). The route
+    // collapses the twins, but it can only merge the rows it is handed at
+    // once, and it is handed one page: the project pool paginates 200 at a
+    // time and the SSO tenant users are appended only on the LAST page. So
+    // past the first page the emailless twin and the real record arrive in
+    // different responses, and this list — which concatenates them — showed
+    // Zach's two rows again, the twin with no merged chip on it. Re-applied
+    // here, where the list is actually assembled.
+    const merged = collapseAdminUserRows(users)
     const term = search.trim().toLowerCase()
-    if (!term) return users
-    return users.filter((record) =>
+    if (!term) return merged
+    return merged.filter((record) =>
       [record.email, record.displayName, record.uid]
         .filter(Boolean)
         .join(' ')

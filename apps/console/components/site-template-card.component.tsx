@@ -16,6 +16,11 @@
  */
 'use client'
 
+import {
+  isBelowMarketplacePriceFloor,
+  marketplacePriceCostNote,
+  marketplacePriceFloorHint,
+} from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -154,6 +159,14 @@ export function SiteTemplateCard(props: { hostId: string }) {
             />
             <TextField
               label="Price (USD, 0 = free)"
+              // The minimum paid price (AGL-2343): marketplace checkout is a
+              // destination charge, so Stripe's fee is debited from the
+              // PLATFORM and at $1 it exceeds the whole platform cut. The
+              // publish route refuses anything under the floor.
+              error={isBelowMarketplacePriceFloor(price)}
+              helperText={
+                marketplacePriceCostNote(price) ?? marketplacePriceFloorHint()
+              }
               value={price}
               onChange={(event) =>
                 setPrice(event.target.value.replace(/[^0-9]/g, ''))
@@ -170,7 +183,7 @@ export function SiteTemplateCard(props: { hostId: string }) {
           <Button
             variant="contained"
             color="primary"
-            disabled={!name.trim() || busy}
+            disabled={!name.trim() || busy || isBelowMarketplacePriceFloor(price)}
             onClick={handlePublish}
           >
             {busy ? 'Publishing…' : 'Publish'}

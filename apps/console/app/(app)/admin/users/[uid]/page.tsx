@@ -334,7 +334,22 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                           <Chip
                             size="small"
                             color="primary"
-                            label={`Staff: ${detail.user.staffRole ?? 'super'}`}
+                            /*
+                              `?? 'support'`, not `?? 'super'` (AGL-2024).
+                              AGL-2131 brought the last two fail-OPEN defaults
+                              down to `support` — /api/admin/org-override and
+                              the Firestore rules — but this label was not a
+                              gate, so the sweep did not reach it. It is the
+                              one surface that TELLS a staff member what a
+                              claim-less account can do, and it said `super`
+                              while every gate in the product resolved that
+                              same token to `support`. Read literally, it
+                              invited exactly the wrong triage: someone
+                              investigating a 403 would see "Staff: super" and
+                              go looking for the bug somewhere other than the
+                              missing claim.
+                            */
+                            label={`Staff: ${detail.user.staffRole ?? 'support'}`}
                           />
                         ) : (
                           <Chip size="small" label="Customer account" />
@@ -345,7 +360,8 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                       <Typography variant="caption" color="text.secondary">
                         {[
                           detail.user.staff
-                            ? `Staff (${detail.user.staffRole ?? 'super'})`
+                            ? // Same default as the chip above (AGL-2024).
+                              `Staff (${detail.user.staffRole ?? 'support'})`
                             : 'Not staff',
                           detail.memberships.length
                             ? detail.memberships

@@ -659,7 +659,6 @@ describe('a partial refund reverses the seller share proportionally (AGL-2299)',
     // partial, a full refund pulls 4305 rather than the whole 8000.
     let reversed = 0
     let refunded = 5000
-    let refundedFlag = false
     fetchMock.mockImplementation(async (url: any, init?: any) => {
       const address = String(url)
       if (address === 'https://api.stripe.com/v1/charges/ch_1') {
@@ -687,9 +686,8 @@ describe('a partial refund reverses the seller share proportionally (AGL-2299)',
 
     await marketplaceBillingWebhookHandler(partial(5000))
     refunded = 10825
-    refundedFlag = true
     await marketplaceBillingWebhookHandler(
-      refundEvent({ refunded: refundedFlag, amount_refunded: 10825 }) as any,
+      refundEvent({ refunded: true, amount_refunded: 10825 }) as any,
     )
 
     expect(posts.map((post) => new URLSearchParams(String(post.init.body)).get('amount'))).toEqual([

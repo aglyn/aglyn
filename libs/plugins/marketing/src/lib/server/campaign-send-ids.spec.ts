@@ -159,7 +159,36 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   orgDataCollectionForHost: jest.fn(),
   orgDataQueryForHost: jest.fn(),
   meterHostEmail: async () => undefined,
-  campaignEmailSendsForMonth: async () => 0,
+  /*
+   * AGL-2267/AGL-2409. The barrel factory is a CLOSED WORLD — anything the
+   * sender imports and this object omits arrives as `undefined` and throws at
+   * the call — so the org-scoped cap and the platform send-rate governor have
+   * to be listed here even where neither is what the file is testing.
+   *
+   * Permissive on purpose: this file is about something else, and a cap or a
+   * ceiling that refused here would make every assertion below a test of the
+   * cap. `campaign-send.spec.ts` owns the enforcement.
+   */
+  orgCampaignEmailSendsForMonth: async () => 0,
+  reserveCampaignEmailSends: async ({ count }: any) => ({
+    ok: true,
+    reservation: { orgId: 'org-1', month: '2026-08', reserved: count },
+    used: 0,
+    limit: 500,
+  }),
+  reconcileCampaignSendReservation: async () => undefined,
+  readEmailSendRateConfig: async () => ({
+    perHour: 100_000,
+    enabled: true,
+    updatedAtMs: null,
+    updatedByEmail: null,
+    note: '',
+  }),
+  readEmailSendRateWindow: async () => ({
+    windowStartMs: 0,
+    resetMs: 3_600_000,
+    used: 0,
+  }),
 }))
 
 jest.mock('@aglyn/shared-util-email', () => ({

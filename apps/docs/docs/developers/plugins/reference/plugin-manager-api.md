@@ -68,6 +68,21 @@ idempotent. Handlers run sequentially with no error isolation, deliberately:
 isolating them would trade a duplicated side effect for a dropped one, which
 is the worse trade on a money path.
 
+A handler may return `{ claimed: true }` to tell the platform it **recognised**
+the event as its own — it found the order, the purchase, the booking. Returning
+nothing keeps the previous meaning ("not mine"), so existing handlers need no
+change. Every registered handler still runs after one has claimed; the claim is
+a report, never a dispatch rule.
+
+:::tip Claim your chargebacks
+The one event where this matters today is `charge.dispute.*`. A dispute carries
+no metadata, so plugins self-select by joining on the payment intent — and a
+plugin that finds nothing looks identical to a plugin that failed. The console
+route raises a staff alert for any dispute **nothing** claimed, because that is
+money moving with no record of it anywhere. If your plugin owns disputes, claim
+the ones it handles, or every one of them will be reported as a platform fault.
+:::
+
 :::caution A 500 does not always mean a redelivery
 A throw that reaches the route **after any dispatch has begun** makes the
 platform **hold** its Stripe-event idempotency claim instead of releasing it,

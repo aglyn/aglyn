@@ -19,6 +19,7 @@
 import {
   buildRoute,
   createResourceUid,
+  MEDIA_ALT_MAX_LENGTH,
   pluginDocsHelp,
   Route,
 } from '@aglyn/aglyn'
@@ -46,6 +47,7 @@ import {
 } from '@mui/material'
 import {
   collection,
+  deleteField,
   doc,
   limit,
   query,
@@ -63,6 +65,7 @@ interface EventDraft {
   organizer: string
   description: string
   coverImage: string
+  coverImageAlt: string
   status: 'draft' | 'published'
 }
 
@@ -75,6 +78,7 @@ interface EventRecord {
   organizer?: string
   description?: string
   coverImage?: string
+  coverImageAlt?: string
   status?: 'draft' | 'published'
   deletedAt?: unknown
 }
@@ -218,6 +222,18 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
               ...(draft.coverImage.trim() && {
                 coverImage: draft.coverImage.trim(),
               }),
+              // AGL-2418. This is a `merge` write, so clearing the box has
+              // to DELETE the key — leaving it out would silently keep the
+              // old sentence describing a picture that changed, which is
+              // worse than never having offered the field. Tied to the
+              // cover: a description with no image describes nothing.
+              ...(draft.coverImage.trim() && draft.coverImageAlt.trim()
+                ? {
+                    coverImageAlt: draft.coverImageAlt
+                      .trim()
+                      .slice(0, MEDIA_ALT_MAX_LENGTH),
+                  }
+                : { coverImageAlt: deleteField() }),
               status: draft.status,
               updatedAt: Timestamp.now(),
               ...(draft.id ? {} : { createdAt: Timestamp.now() }),
@@ -342,6 +358,7 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
                       organizer: event.organizer ?? '',
                       description: event.description ?? '',
                       coverImage: event.coverImage ?? '',
+                      coverImageAlt: event.coverImageAlt ?? '',
                       status: event.status ?? 'draft',
                     })
                   }
@@ -368,6 +385,7 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
                 organizer: '',
                 description: '',
                 coverImage: '',
+                coverImageAlt: '',
                 status: 'draft',
               })
             }
@@ -461,6 +479,38 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
             }
             size="small"
           />
+          {/*
+            AGL-2418, matching the collection entry editor's wording. Shown
+            only beside a cover, because a description with nothing to
+            describe is a field nobody can answer. Left empty the thumbnail
+            renders `alt=""`, which is right here — the title sits next to
+            it — so this is for the cover that carries something the title
+            does not: a face, a venue, a poster with the lineup on it.
+          */}
+          {draft?.coverImage?.trim() ? (
+            <TextField
+              label="Cover image description"
+              placeholder="What the picture shows"
+              value={draft?.coverImageAlt ?? ''}
+              onChange={(event) =>
+                setDraft((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        coverImageAlt: event.target.value.slice(
+                          0,
+                          MEDIA_ALT_MAX_LENGTH,
+                        ),
+                      }
+                    : prev,
+                )
+              }
+              size="small"
+              helperText={
+                'Read aloud by screen readers. Leave empty if the picture is decorative.'
+              }
+            />
+          ) : null}
           <TextField
             label="Description"
             value={draft?.description ?? ''}

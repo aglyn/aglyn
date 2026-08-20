@@ -31,10 +31,14 @@ import {
 import {
   ApiErrors,
   type ApiScope,
+  checkRateLimit,
   consumeRateLimit,
   firebaseAdmin,
   getOrgDoc,
+  isValidApiKeyFormat,
   lockdownRefusal,
+  peekRateLimit,
+  type RateLimitState,
   rateLimitHeaders,
   verifyApiKey,
   withResponseHeaders,
@@ -55,6 +59,93 @@ function extractToken(request: Request): string {
   const authorization = request.headers.get('authorization') ?? ''
   if (authorization.startsWith('Bearer ')) return authorization.slice(7).trim()
   return (request.headers.get('x-api-key') ?? '').trim()
+}
+
+/**
+ * How many *unproductive* key lookups one client IP may spend per window
+ * (AGL-2414).
+ *
+ * ## What was uncapped
+ *
+ * `verifyApiKey` short-circuits on `isValidApiKeyFormat` before touching
+ * Firestore, so junk is genuinely free. But the token prefix is published in
+ * the docs and the suffix is any 24+ `[A-Za-z0-9_-]`, so anyone can mint an
+ * unlimited supply of tokens that *look* like keys — and each one cost one
+ * Firestore document read, unauthenticated, from anywhere, with nothing in
+ * front of it. The per-key `consumeRateLimit` below cannot help: it needs an
+ * identity to key on, and the whole point of these requests is that they
+ * resolve to none. The route is `force-dynamic`, so there is no edge cache
+ * either. Measured 401 latency was flat across a burst — no throttling at any
+ * layer.
+ *
+ * ## Why the budget only charges FAILURES
+ *
+ * Charging every pre-auth request would put a second, IP-shaped cap in front
+ * of a billed product surface, and `apps/docs/api/rate-limits.md` promises
+ * exactly one: 120/min *per key*. Two integrations behind one corporate NAT
+ * would then throttle each other on a limit neither can see in any header.
+ * Charging only the lookups that came back EMPTY makes this budget mean one
+ * narrow thing — "wasted Firestore reads from this IP" — which is the defect
+ * AGL-2414 describes and nothing else. A healthy integration's keys resolve,
+ * so it contributes zero and can never be refused by its own traffic.
+ *
+ * ## The number
+ *
+ * 60 per minute is one wasted read per second, sustained, per IP. Above that
+ * an IP is either attacking or has a client looping on a key that no longer
+ * exists, and a `429` with `Retry-After` is the right answer to both. The
+ * residual cost, stated plainly: while an IP is over budget, a request from
+ * that same IP carrying a VALID key is refused too, because the only way to
+ * know it was valid is the read this is declining to spend. Confined to that
+ * IP and to the remainder of a fixed 60-second window.
+ *
+ * ## Per-instance ON PURPOSE — the opposite call to AGL-1679
+ *
+ * AGL-1679 moved the per-key limit to a durable counter because a
+ * per-instance cap is not a real ceiling. That reasoning does not transfer:
+ * the durable counter costs a Firestore write plus a read, so spending one to
+ * avoid a single read would make this a *net amplifier* of the exact cost it
+ * exists to bound. `checkRateLimit` for volume, `consumeRateLimit` for
+ * consequence — this is volume. The bound is therefore per instance, and a
+ * caller wide enough to be answered by many instances gets `60 × instances`.
+ * That is still a bound where there was none, and it holds without spending
+ * anything on the unauthenticated path.
+ */
+export const PREAUTH_LOOKUP_LIMIT = 60
+
+/** Window for {@link PREAUTH_LOOKUP_LIMIT}, fixed, matching the per-key one. */
+export const PREAUTH_LOOKUP_WINDOW_MS = 60_000
+
+/**
+ * Per-instance store for the pre-auth budget. Module-scoped and private: it
+ * must never share the module-level default store with `checkRateLimit`'s
+ * other callers, or an `errors:{ip}` bucket and an `apiv1-preauth:{ip}`
+ * bucket could be made to collide.
+ */
+const preAuthLookups = new Map<string, RateLimitState>()
+
+/** Test seam: forget this instance's pre-auth budget. */
+export function resetPreAuthLookupBudgetForTests(): void {
+  preAuthLookups.clear()
+}
+
+/**
+ * Client IP, first `x-forwarded-for` hop then `x-real-ip` — the same
+ * derivation `/api/orgs/create`, the passkey routes and the password-reset
+ * throttle already key their IP limits on, so this control is exactly as
+ * trustworthy as the ones already shipping and not a new assumption.
+ *
+ * `'unknown'` when neither header is present. That shares one bucket across
+ * every header-less caller, which is the safe direction to be wrong in: it
+ * over-counts (refuses sooner) rather than handing each caller a fresh
+ * budget. On Vercel the platform sets the header on every request, so this
+ * is a local-dev and self-host path.
+ */
+function clientIp(request: Request): string {
+  const forwarded = (request.headers.get('x-forwarded-for') ?? '')
+    .split(',')[0]
+    .trim()
+  return forwarded || request.headers.get('x-real-ip') || 'unknown'
 }
 
 /** Current billing month key, `YYYY-MM`, matching the usage rollup. */
@@ -153,8 +244,37 @@ export async function authenticateApiV1(
   const token = extractToken(request)
   if (!token) return ApiErrors.unauthorized()
 
+  // AGL-2414: bound the read amplification BEFORE spending the read. See
+  // PREAUTH_LOOKUP_LIMIT for why this budget is IP-keyed, per-instance, and
+  // charged only on lookups that resolve to nothing.
+  const budgetKey = `apiv1-preauth:${clientIp(request)}`
+  const budgetOptions = {
+    limit: PREAUTH_LOOKUP_LIMIT,
+    windowMs: PREAUTH_LOOKUP_WINDOW_MS,
+    store: preAuthLookups,
+  }
+  const budget = peekRateLimit(budgetKey, budgetOptions)
+  if (!budget.allowed) {
+    // No `X-RateLimit-*`. Those headers describe the 120/min budget of a
+    // specific key, and this refusal happens precisely because we declined to
+    // find out which key — reporting a per-key budget here would be a number
+    // about nobody. Same reasoning as the 401 that carries none, and
+    // `apps/docs/api/rate-limits.md` states it for both.
+    return ApiErrors.rateLimited(
+      Math.max(1, Math.ceil((budget.resetMs - Date.now()) / 1000)),
+    )
+  }
+
   const verified = await verifyApiKey(token)
-  if (!verified) return ApiErrors.unauthorized()
+  if (!verified) {
+    // `isValidApiKeyFormat` is the same predicate `verifyApiKey` short-circuits
+    // on, so this charges the budget when — and only when — a Firestore read
+    // was actually spent. A malformed token cost nothing and is charged
+    // nothing; making it free is what keeps this budget a truthful count of
+    // reads rather than a second, undocumented request cap.
+    if (isValidApiKeyFormat(token)) checkRateLimit(budgetKey, budgetOptions)
+    return ApiErrors.unauthorized()
+  }
 
   // From here the key is known, so the rate-limit budget is knowable — and a
   // client that reads it off every response shouldn't lose it on exactly the

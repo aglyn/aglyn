@@ -24,6 +24,7 @@ import { useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import HubTabs from '../../../../components/hub-tabs.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
+import OrgLicencesPanel from '../../../../components/org-licences-panel.component'
 import OrgPublishPanel from '../../../../components/org-publish-panel.component'
 import OrgSellerPanel from '../../../../components/org-seller-panel.component'
 import PluginWidgetSlot from '../../../../components/plugin-widget-slot.component'
@@ -205,6 +206,27 @@ const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
                         orgSlug={orgSlug}
                       />
                     </Stack>
+                  ),
+                },
+                {
+                  // WHAT THIS WORKSPACE OWNS (AGL-2331). A purchase licenses
+                  // an organization, so "do we already own this, or was that
+                  // the other client?" became a real question the console
+                  // could not answer anywhere. Beside Installed rather than
+                  // inside it, because a licence and an install are different
+                  // things now: an org can hold a licence nobody has installed
+                  // yet, and a member can install something they never bought.
+                  //
+                  // Buyer-side, so it is NOT gated on `publishToMarketplace`
+                  // like the seller tabs below — the person who needs it is a
+                  // buyer, and often not a publisher at all.
+                  id: 'licences',
+                  label: 'Licences',
+                  content: (
+                    <OrgLicencesPanel
+                      orgId={currentOrg?.$id ?? null}
+                      orgSlug={orgSlug}
+                    />
                   ),
                 },
                 // Seller area (AGL-776/798/801): one tab each for the

@@ -39,24 +39,32 @@ export type HostResourceKind =
   | 'register'
   | 'template'
   | 'webhook'
+  // AGL-2266: two client-direct classes with no cap on any plan. `action`
+  // is a flat host subcollection; `entry` is the one nested resource here
+  // and needs `parentId` (the content collection it belongs to).
+  | 'action'
+  | 'entry'
 
 /**
  * Creates a quota-governed host resource through the console API
  * (AGL-473). `data` must be JSON-plain — no Firestore Timestamps; the
  * route stamps `createdAt`/`updatedAt` server-side when absent. Pass `id`
  * when the caller pre-generates the id (e.g. to write a first `versions`
- * doc under it). Throws with the server's message on denial (quota,
- * entitlement, role), for the caller's snackbar.
+ * doc under it). Pass `parentId` for a nested resource — `entry`, which
+ * hangs off `hosts/{hostId}/collections/{parentId}` (AGL-2266). Throws with
+ * the server's message on denial (quota, entitlement, role), for the
+ * caller's snackbar.
  */
 export function useHostResourceApi(): (options: {
   hostId: string
   resource: HostResourceKind
   data: Record<string, unknown>
   id?: string
+  parentId?: string
 }) => Promise<{ id: string }> {
   const { data: user } = useUser()
   return useCallback(
-    async ({ hostId, resource, data, id }) => {
+    async ({ hostId, resource, data, id, parentId }) => {
       const idToken = await (user as any)?.getIdToken?.()
       const response = await fetch('/api/hosts/resources', {
         method: 'POST',
@@ -64,7 +72,13 @@ export function useHostResourceApi(): (options: {
           'Content-Type': 'application/json',
           ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         },
-        body: JSON.stringify({ hostId, resource, data, ...(id ? { id } : {}) }),
+        body: JSON.stringify({
+          hostId,
+          resource,
+          data,
+          ...(id ? { id } : {}),
+          ...(parentId ? { parentId } : {}),
+        }),
       })
       const result = await response.json().catch(() => ({}))
       if (!response.ok) {

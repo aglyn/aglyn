@@ -66,7 +66,20 @@ const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
  * discount, and cash / QR-card / reservation-folio settlement through
  * the server-priced pos-order API. Receipts print via the browser.
  */
-export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
+export function PosConsolePage({
+  hostId,
+  permissions,
+}: ConsolePluginPageProps) {
+  // `managePos` IS READ HERE (AGL-2474). The key was declared by
+  // COMMERCE_PERMISSIONS and consulted by nothing — this page had no
+  // permission check of any kind. `pos-order.ts` is the enforcement point and
+  // refuses the sale regardless; this only stops the console offering a
+  // register to somebody the API will turn down.
+  //
+  // `!== false` rather than a truthy test on purpose: the prop is optional and
+  // is absent while the permission map loads, and treating "not yet known" as
+  // "denied" is how a gate flashes a refusal at somebody who is allowed.
+  const canUsePos = permissions?.managePos !== false
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -442,6 +455,23 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
     win.focus()
     win.print()
   }, [lastReceipt])
+
+  if (!canUsePos) {
+    return (
+      <>
+        <NextPageTitle screen={'POS'} />
+        <Box sx={{ p: 4 }}>
+          <Typography variant="h6" gutterBottom>
+            You do not have access to the point of sale
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            An org admin can restore it by granting the &quot;Use the point of
+            sale&quot; permission.
+          </Typography>
+        </Box>
+      </>
+    )
+  }
 
   return (
     <>

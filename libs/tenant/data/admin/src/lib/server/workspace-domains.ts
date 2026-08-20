@@ -396,6 +396,32 @@ export interface ProjectDomainStatus {
   detail?: string
 }
 
+/**
+ * Whether a probed state means visitors may be sent to the domain (AGL-2011).
+ *
+ * The ONE definition of "serving", because it has to be. The predicate lived
+ * inline in `/api/domains/attach` and again in
+ * `/api/admin/finish-domain-attachments`, and the sweeper's own comment says
+ * why that is dangerous: "A sweeper that used a looser definition of `serving`
+ * than the door it is completing for would re-introduce the bug that door was
+ * fixed to avoid." Two copies held that invariant by hand; a third — the staff
+ * re-attach — is where a hand-held invariant stops being held.
+ *
+ * `certificate-pending` is NOT serving (AGL-1996): Vercel has accepted and
+ * routed the name but no certificate exists yet, so the destination answers
+ * with a TLS error. `unknown` and `skipped` ARE, deliberately — a status probe
+ * that could not answer is not evidence of a problem, and treating it as one
+ * would strand every domain on a deployment with no Vercel API to ask.
+ */
+export function domainStateServes(state: ProjectDomainState): boolean {
+  return (
+    state !== 'not-attached' &&
+    state !== 'ownership-pending' &&
+    state !== 'dns-misconfigured' &&
+    state !== 'certificate-pending'
+  )
+}
+
 function statusFor(
   domain: string,
   state: ProjectDomainState,

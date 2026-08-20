@@ -15,9 +15,13 @@
  * limitations under the License.
  */
 
-import { type PluginApiHandler } from '@aglyn/aglyn/server'
+import { writeCronBeat, type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { CampaignSendError, performCampaignSend } from './campaign-send'
+import {
+  CampaignSendDeferredError,
+  CampaignSendError,
+  performCampaignSend,
+} from './campaign-send'
 
 /**
  * Scheduled-campaign processor (AGL-272): scheduler-invoked (Cloud
@@ -46,6 +50,15 @@ export const campaignProcessScheduledHandler: PluginApiHandler = async (
 
   try {
     const firestore = firebaseAdmin.app().firestore()
+    // AGL-1955 — the mark `/api/health/crons` reads to notice this job going
+    // AWAY. This is the one route in the set that has already been sold,
+    // wired and completely inert once (AGL-2134): the composer wrote
+    // `status: 'scheduled'` and nothing ever POSTed here, so a customer's
+    // campaign sat in the collection until somebody cancelled it. Nothing
+    // downstream ages when this stops — a fortnight with no due campaign
+    // produces exactly the same silence as a deleted schedule — so the
+    // invocation itself is the only honest thing to watch.
+    await writeCronBeat(firestore, 'campaigns-process-scheduled')
     const due = await firestore
       .collectionGroup('campaigns')
       .where('status', '==', 'scheduled')
@@ -83,6 +96,39 @@ export const campaignProcessScheduledHandler: PluginApiHandler = async (
         })
         results.push(result)
       } catch (error) {
+        /*
+         * DEFERRED IS NOT FAILED (AGL-2409).
+         *
+         * The platform send-rate governor had no room for this campaign in
+         * the current hour and NOTHING WAS SENT — the admission check runs
+         * before the first message and before any counter moves, which is
+         * what makes this safe to retry. So the claim is released by putting
+         * the row back to `scheduled`, and the next 15-minute run picks it up.
+         *
+         * Marking it `failed` here — which is the right answer for every
+         * other `CampaignSendError`, an empty audience or a stopped
+         * experiment — would turn a ramp into a lost campaign that the
+         * merchant has to notice in the History list and re-create by hand.
+         * That is the failure mode the ceiling exists to avoid making worse.
+         */
+        if (error instanceof CampaignSendDeferredError) {
+          await campaignDoc.ref
+            .set(
+              {
+                status: 'scheduled',
+                deferredReason: error.message,
+                deferredUntilMs: error.retryAtMs,
+              },
+              { merge: true },
+            )
+            .catch(() => undefined)
+          results.push({
+            campaignId: campaignDoc.id,
+            deferred: true,
+            retryAtMs: error.retryAtMs,
+          })
+          continue
+        }
         const message =
           error instanceof CampaignSendError
             ? error.message

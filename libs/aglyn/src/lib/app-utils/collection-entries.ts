@@ -93,6 +93,61 @@ export interface CollectionCategory {
 }
 
 /**
+ * How many LIVE entries one content collection may hold (AGL-2266).
+ *
+ * `hosts/{hostId}/collections/{cid}/entries/{eid}` had a DEDICATED rules block
+ * re-granting `create` to any editor, client-direct — deliberately, because the
+ * name-based exclusions on the host catch-all must not reach entries — so it
+ * was the one quota-governed shape under a host with no quota at all. A free
+ * org could mint unbounded Firestore documents from the browser.
+ *
+ * This is a flat PLATFORM cap, not a plan dimension. AGL-1387 declined
+ * `collectionsPerHost` and this does not re-open it: nothing here is priced,
+ * no `OrgEntitlements` key is added, and every plan gets the same number. It is
+ * the `WEBHOOK_MAX_PER_HOST` (AGL-1360) / `NON_PAGE_SCREEN_MAX_PER_HOST`
+ * (AGL-1399) shape, which both issues invented for exactly this: uncapped
+ * infrastructure behind a $0 subscription.
+ *
+ * ## Per COLLECTION, paired with {@link COLLECTIONS_MAX_PER_HOST}
+ *
+ * A per-HOST entry cap would need a count across every collection the host
+ * holds, which is a collection-group read the entry documents carry no `hostId`
+ * to scope. Per collection is one `count()` on the collection the create is
+ * addressed to — the same read every other cap on `/api/hosts/resources`
+ * already pays — and the host is bounded by the PRODUCT of the two numbers,
+ * which is why the sibling cap had to land in the same change. One of the two
+ * alone bounds nothing: unbounded collections each holding 10,000 entries is
+ * the same unbounded store, spelled differently.
+ *
+ * ## Why 10,000
+ *
+ * A blog publishing daily reaches it after twenty-seven years; the largest
+ * content collection in production holds double digits. The failure mode of a
+ * flat cap set too low is blocking real authoring with an error the price list
+ * cannot explain, so it is sized to the heaviest plausible library rather than
+ * to today's data. It also bounds the cost of the console's own listing, which
+ * reads entries with `limit(200)` and would otherwise page through a store with
+ * no ceiling.
+ */
+export const ENTRIES_MAX_PER_COLLECTION = 10000
+
+/**
+ * How many LIVE content collections one host may hold (AGL-2266).
+ *
+ * The other half of the entry bound above, and the reason it means anything.
+ * Collection creation was already server-owned — the rules deny client `create`
+ * and `/api/hosts/collections` claims the slug transactionally (AGL-978) — so
+ * the collection had a WRITER with authority and simply no number to enforce.
+ *
+ * Again a platform cap and not `collectionsPerHost`: AGL-1387 decided
+ * collections are not a thing customers are charged for, and that decision is
+ * untouched. 100 is far past any real site's taxonomy — production's busiest
+ * host has a handful — and short enough that the entries ceiling above
+ * multiplies out to a bounded store rather than an unbounded one.
+ */
+export const COLLECTIONS_MAX_PER_HOST = 100
+
+/**
  * One published content-collection entry as the compose pipeline sees it
  * (AGL-551). Mirrors the tenant's `CollectionEntrySummary` without the
  * Firestore dependency so the expansion stays pure.
@@ -240,46 +295,83 @@ export function normalizeCollectionEntryDateFormat(
  * replaced, character for character — because the block is live on published
  * entries and opening a dropdown must not restyle them.
  *
- * `locale` is normally left off, so the site renders in the runtime's locale
- * as it always has; it exists so a caller that must pin the output (and the
- * specs that assert the frame's shape) can say so rather than assume.
+ * ## Why the runtime gets no say (AGL-1926)
+ *
+ * Every branch pins BOTH the locale and the time zone, and the answer is a
+ * pure function of the timestamp. It used to pass `locale` straight through
+ * (normally `undefined`) with no `timeZone` at all, so the output was a
+ * function of the RUNTIME: `en-US` + UTC on a Vercel server, the visitor's
+ * own locale and zone in their browser. That is fine while only the server
+ * ever calls it — the string is stamped into node props at compose time and
+ * both sides then agree on it — but it makes the function a hydration
+ * mismatch waiting for its first client-side caller, and `catch-all-client`
+ * was exactly that caller. A post published at 02:30 UTC is dated the 10th by
+ * the server and the 9th by every visitor west of Greenwich; React reports
+ * the difference as a text mismatch (the live React #418 on tenant-web,
+ * AGL-1926) and then reconciles against a DOM it no longer describes, which
+ * is where the `removeChild`/`insertBefore` pair comes from.
+ *
+ * The pinned values are the ones production already emits, so no published
+ * page changes: Vercel runs UTC with an `en-US` ICU default, which is why
+ * every entry date served from aglyn.com today reads `8/9/2026`. Pinning
+ * makes that byte-for-byte guaranteed instead of a property of the host.
+ *
+ * `locale` still exists for a caller that must render in a different one; it
+ * now defaults to the value the server was picking implicitly rather than to
+ * "whatever this runtime happens to be".
  */
+export const COLLECTION_ENTRY_DATE_LOCALE = 'en-US'
+
+/**
+ * The zone the calendar day is read in. Entry timestamps are absolute
+ * instants; the day they are ATTRIBUTED to has to be one both sides agree on,
+ * and UTC is the only zone a server and an unknown visitor share.
+ */
+export const COLLECTION_ENTRY_DATE_TIME_ZONE = 'UTC'
+
 export function formatCollectionEntryDate(
   publishedAt: { seconds: number } | null | undefined,
   format?: CollectionEntryDateFormat,
-  locale?: string,
+  locale: string = COLLECTION_ENTRY_DATE_LOCALE,
 ): string {
   const seconds = publishedAt?.seconds
   if (!seconds) return ''
   const date = new Date(seconds * 1000)
+  const timeZone = COLLECTION_ENTRY_DATE_TIME_ZONE
   switch (normalizeCollectionEntryDateFormat(format)) {
     case 'monthYear':
       return date.toLocaleDateString(locale, {
         month: 'short',
         year: 'numeric',
+        timeZone,
       })
     case 'mediumDate':
       return date.toLocaleDateString(locale, {
         month: 'short',
         day: 'numeric',
         year: 'numeric',
+        timeZone,
       })
     case 'longDate':
       return date.toLocaleDateString(locale, {
         month: 'long',
         day: 'numeric',
         year: 'numeric',
+        timeZone,
       })
     case 'iso':
-      // The LOCAL calendar day, not `toISOString()`: a post published at 8pm
-      // local time is not dated tomorrow.
+      // The calendar day in the pinned zone, not `toISOString()`'s slice by
+      // luck and not the RUNTIME's local day: `getFullYear`/`getMonth`/
+      // `getDate` read the host's zone, so this branch moved an entry by a
+      // day depending on who rendered it. The UTC accessors are the same
+      // reading the three `toLocaleDateString` branches above now take.
       return (
-        `${date.getFullYear()}-` +
-        `${String(date.getMonth() + 1).padStart(2, '0')}-` +
-        `${String(date.getDate()).padStart(2, '0')}`
+        `${date.getUTCFullYear()}-` +
+        `${String(date.getUTCMonth() + 1).padStart(2, '0')}-` +
+        `${String(date.getUTCDate()).padStart(2, '0')}`
       )
     default:
-      return date.toLocaleDateString(locale)
+      return date.toLocaleDateString(locale, { timeZone })
   }
 }
 
@@ -1053,6 +1145,12 @@ export interface CollectionRelatedItem {
    * one reference keeps working across sites and CDN route changes.
    */
   coverImage?: string
+  /**
+   * The author's description of that cover (AGL-2418). Travels WITH
+   * `coverImage`, and absent means "fall back to the title" rather than
+   * "silent" — on this block the cover is the link's own content.
+   */
+  coverImageAlt?: string
 }
 
 /**
@@ -1147,12 +1245,14 @@ export function expandCollectionRelated<
       return {
         title: entry.title ?? '',
         url: `/${source.slug}/${entry.slug ?? ''}`,
+        // Through the one formatter (AGL-1926), not a second inline
+        // `toLocaleDateString()`. It produced the same bytes only because
+        // this runs on the server, where the implicit locale and zone happen
+        // to be the ones `formatCollectionEntryDate` now pins; a related-post
+        // card is the same published date as the byline above it and must not
+        // be able to disagree with it.
         ...(entry.publishedAt?.seconds
-          ? {
-              date: new Date(
-                entry.publishedAt.seconds * 1000,
-              ).toLocaleDateString(),
-            }
+          ? { date: formatCollectionEntryDate(entry.publishedAt) }
           : {}),
         ...(entry.excerpt ? { excerpt: entry.excerpt } : {}),
         // AGL-1457: the block owns its markup, so there is no template to
@@ -1160,6 +1260,11 @@ export function expandCollectionRelated<
         // stamped field. Absent covers omit the key rather than stamping an
         // empty string, so the render asks one question, not two.
         ...(entry.coverImage ? { coverImage: entry.coverImage } : {}),
+        // Only alongside a cover, and only when authored (AGL-2418) — a
+        // description with no picture is dead weight on every stamped node.
+        ...(entry.coverImage && (entry as any).coverImageAlt
+          ? { coverImageAlt: (entry as any).coverImageAlt }
+          : {}),
         ...(categoryName ? { category: categoryName } : {}),
       }
     })

@@ -29,6 +29,7 @@ import {
   createOrganization,
   emailUnverifiedResponse,
   firebaseAdmin,
+  freeWorkspaceCapRefusalResponse,
   isImpersonationSession,
   lockdownRefusal,
   meterOrgEmail,
@@ -153,6 +154,11 @@ async function handler(request: Request): Promise<Response> {
       name,
       slug,
       ownerUid: decoded.uid,
+      // The free-workspace ceiling (AGL-2265) — three per account by default,
+      // moved from the staff console without a deploy. Staff provisioning on
+      // a customer's behalf is exempt: a ceiling that stops support from
+      // fixing a workspace produces the ticket it was meant to prevent.
+      bypassFreeWorkspaceCap: decoded['staff'] === true,
       ownerEmail: decoded.email ?? null,
       // Not `decoded['name']` (AGL-1131): a SAML assertion puts its mapped
       // attributes under `firebase.sign_in_attributes` and never promotes
@@ -219,6 +225,11 @@ async function handler(request: Request): Promise<Response> {
     if (error instanceof OrgSlugTakenError) {
       return Response.json({ error: 'That workspace URL is taken' }, { status: 409 })
     }
+    // AGL-2265. Before the 500, and with the numbers in the body: the client
+    // forwards `error` to the workspace picker, so this is copy a person
+    // reads. Returns null for anything else, so a real fault still 500s.
+    const capped = freeWorkspaceCapRefusalResponse(error)
+    if (capped) return capped
     console.error(error)
     return Response.json({ error: 'Organization creation failed' }, { status: 500 })
   }

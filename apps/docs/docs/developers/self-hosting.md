@@ -154,6 +154,19 @@ product claims nothing, and `NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED` must
 be exactly `true` before anything states a registration. Naming an agent never
 implies one.
 
+**Registering is only half the duty.** §512(c)(2) also requires the agent's
+name, address, **phone number** and email to be *available to the public
+through your service* — a separate obligation the Copyright Office filing does
+not discharge. Set all four (`_NAME`, `_ADDRESS`, `_PHONE`, `_EMAIL`) and the
+public abuse-report form publishes them where a copyright holder composing a
+notice will see them. `_NAME` and `_ADDRESS` are what gate the block: without
+both, nothing renders, because a mailbox with no legal person or no physical
+address behind it is not a designation. Omitting `_PHONE` or `_EMAIL` leaves
+that line out rather than inventing one — and leaves you short of §512(c)(2),
+which enumerates all four. Publishing the same details on your own copyright
+policy page is still yours to do; the form is a second surface, not a
+substitute.
+
 ## Which addresses this install calls its own {#addresses}
 
 The operator identity above says who you are. This section is about where your
@@ -335,9 +348,14 @@ answers `501` and names them, and no report is ever sent to Aglyn.
 
 Scope the key when you create it. Linear can restrict a personal API key to
 **Create issues** and to **specific teams** — do both, so a leaked key cannot
-read your backlog. Use a team of its own rather than your delivery team: an
-unbounded inbound stream in the team you plan releases from destroys the open
-count you steer by.
+read your backlog. Keep inbound reports out of whatever queue you plan
+releases from: unbounded inbound volume in that queue destroys the count you
+steer by.
+
+`LINEAR_CUSTOMER_REPORTS_PROJECT_ID` is optional. Set it to file into a
+specific project inside that team, if you separate intake by project rather
+than by team. Left unset the report still files, into the team's own backlog —
+a missing project is a vaguer destination, never a lost report.
 
 Both are **server-only**. Never prefix either with `NEXT_PUBLIC_`, which would
 inline a workspace-wide credential into the browser bundle.

@@ -597,6 +597,8 @@ describe('billingWebhookHealth (AGL-1924)', () => {
     undelivered: 0,
     emitted: 12,
     processed: 12,
+    inert: 0,
+    unsubscribedEvents: [] as readonly string[],
   }
 
   it('is ok when the destination is enabled and nothing failed to deliver', () => {
@@ -611,7 +613,14 @@ describe('billingWebhookHealth (AGL-1924)', () => {
     // deliveries is legitimate, and a freshness rule would page on it. The
     // verdict never keys on absence.
     const check = billingWebhookHealth(
-      { endpointStatus: 'enabled', undelivered: 0, emitted: 0, processed: 0 },
+      {
+        endpointStatus: 'enabled',
+        undelivered: 0,
+        emitted: 0,
+        processed: 0,
+        inert: 0,
+        unsubscribedEvents: [],
+      },
       90,
     )
     expect(check.ok).toBe(true)
@@ -632,7 +641,14 @@ describe('billingWebhookHealth (AGL-1924)', () => {
     // Total silent failure: Stripe stops ATTEMPTING, so `undelivered` reads
     // zero and a delivery-only rule would call this healthy.
     const check = billingWebhookHealth(
-      { endpointStatus: 'disabled', undelivered: 0, emitted: 40, processed: 0 },
+      {
+        endpointStatus: 'disabled',
+        undelivered: 0,
+        emitted: 40,
+        processed: 0,
+        inert: 0,
+        unsubscribedEvents: [],
+      },
       90,
     )
     expect(check.ok).toBe(false)
@@ -641,7 +657,14 @@ describe('billingWebhookHealth (AGL-1924)', () => {
 
   it('goes red when the destination is gone entirely', () => {
     const check = billingWebhookHealth(
-      { endpointStatus: 'missing', undelivered: 0, emitted: 40, processed: 0 },
+      {
+        endpointStatus: 'missing',
+        undelivered: 0,
+        emitted: 40,
+        processed: 0,
+        inert: 0,
+        unsubscribedEvents: [],
+      },
       90,
     )
     expect(check.ok).toBe(false)
@@ -651,7 +674,14 @@ describe('billingWebhookHealth (AGL-1924)', () => {
   it('reports the endpoint problem in preference to the delivery count', () => {
     // The more actionable statement, and it EXPLAINS the other number.
     const check = billingWebhookHealth(
-      { endpointStatus: 'missing', undelivered: 9, emitted: 40, processed: 0 },
+      {
+        endpointStatus: 'missing',
+        undelivered: 9,
+        emitted: 40,
+        processed: 0,
+        inert: 0,
+        unsubscribedEvents: [],
+      },
       90,
     )
     expect(check.code).toBe('endpoint-missing')
@@ -694,6 +724,112 @@ describe('billingWebhookHealth (AGL-1924)', () => {
   it('describes its own window, so the body needs no external key', () => {
     expect(billingWebhookHealth(HEALTHY, 90).windowMinutes).toBe(60)
     expect(billingWebhookHealth(HEALTHY, 90, 15).windowMinutes).toBe(15)
+  })
+
+  /*==========================================
+   * THE 200-THAT-DID-NOTHING (AGL-1954).
+   *
+   * Every assertion above is satisfied by a handler that answers 200 and
+   * drops the work on the floor: the destination is enabled, Stripe records
+   * a successful delivery, `undelivered` stays zero. These are the ones that
+   * are not.
+   *=========================================*/
+
+  it('goes red when a delivery landed and moved NOTHING', () => {
+    const check = billingWebhookHealth({ ...HEALTHY, inert: 1 }, 90)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('handlers-inert')
+    expect(healthHttpStatus(healthStatus({ billingWebhook: check }))).toBe(503)
+  })
+
+  it('goes red on ONE inert delivery — the floor follows from the definition', () => {
+    // Unlike `processed`, this count has no organic baseline to clear: a
+    // legitimately irrelevant event NAMES its reason and never reaches here.
+    expect(billingWebhookHealth({ ...HEALTHY, inert: 1 }, 90).ok).toBe(false)
+    expect(billingWebhookHealth({ ...HEALTHY, inert: 0 }, 90).ok).toBe(true)
+  })
+
+  it('stays ok when the inert arm could not be read at all', () => {
+    // Same rule as `processed`: a Firestore hiccup must not manufacture a
+    // billing page when Stripe has already answered the question that matters.
+    const check = billingWebhookHealth({ ...HEALTHY, inert: null }, 90)
+    expect(check.ok).toBe(true)
+    expect(check.inert).toBeNull()
+  })
+
+  it('CLEARS: an inert window does not latch', () => {
+    // AGL-1843's lesson. This is an event, not a condition — the trailing
+    // window on the reader is what makes it self-clearing.
+    expect(billingWebhookHealth({ ...HEALTHY, inert: 4 }, 90).ok).toBe(false)
+    expect(billingWebhookHealth(HEALTHY, 90).ok).toBe(true)
+  })
+
+  it('takes an inert threshold, so an incident can be muted without a deploy', () => {
+    expect(billingWebhookHealth({ ...HEALTHY, inert: 2 }, 90, 60, 0, 5).ok).toBe(
+      true,
+    )
+    expect(billingWebhookHealth({ ...HEALTHY, inert: 6 }, 90, 60, 0, 5).ok).toBe(
+      false,
+    )
+  })
+
+  it('reports every code that EXPLAINS inertness in preference to it', () => {
+    // A handler with nothing to do because Stripe stopped sending is not a
+    // broken handler. Naming the symptom over the cause is how an operator
+    // gets sent to the wrong file.
+    expect(
+      billingWebhookHealth(
+        { ...HEALTHY, endpointStatus: 'missing', inert: 9 },
+        90,
+      ).code,
+    ).toBe('endpoint-missing')
+    expect(
+      billingWebhookHealth({ ...HEALTHY, undelivered: 3, inert: 9 }, 90).code,
+    ).toBe('deliveries-failing')
+    expect(
+      billingWebhookHealth(
+        { ...HEALTHY, unsubscribedEvents: ['charge.refunded'], inert: 9 },
+        90,
+      ).code,
+    ).toBe('events-unsubscribed')
+  })
+
+  /*==========================================
+   * SUBSCRIPTION COVERAGE (AGL-1948 / AGL-1798).
+   *=========================================*/
+
+  it('goes red when a REQUIRED event is not subscribed, with everything else green', () => {
+    // The AGL-1798 shape exactly: `charge.refunded` missing from the live
+    // destination. Stripe stops SENDING, so there is no failed delivery, no
+    // rejected request and no inert handler — every other count reads a
+    // perfectly healthy zero.
+    const check = billingWebhookHealth(
+      { ...HEALTHY, unsubscribedEvents: ['charge.refunded'] },
+      90,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('events-unsubscribed')
+    expect(check.unsubscribedEvents).toEqual(['charge.refunded'])
+  })
+
+  it('ranks a missing subscription ABOVE a delivery failure', () => {
+    // Both are real, and this one names the exact event to re-add.
+    const check = billingWebhookHealth(
+      { ...HEALTHY, undelivered: 4, unsubscribedEvents: ['invoice.paid'] },
+      90,
+    )
+    expect(check.code).toBe('events-unsubscribed')
+  })
+
+  it('stays ok when the endpoint did not state its subscriptions', () => {
+    // An unanswered question is not an answer, and the check already has
+    // `stripe-unavailable` for a census it could not take.
+    const check = billingWebhookHealth(
+      { ...HEALTHY, unsubscribedEvents: null },
+      90,
+    )
+    expect(check.ok).toBe(true)
+    expect(check.unsubscribedEvents).toBeNull()
   })
 })
 

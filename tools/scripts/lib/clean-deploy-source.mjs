@@ -109,7 +109,7 @@ export function evaluateDeploySource({ porcelain, allowDirty, fileLabel }) {
  */
 export function assertCleanDeploySource(filePath, options = {}) {
   const { allowDirty = false, fileLabel = filePath } = options
-  let porcelain = null
+  let porcelain
   try {
     // cwd is the file's own directory so the check hits the repo (and, in a
     // worktree, the WORKTREE) that actually owns the file, wherever the

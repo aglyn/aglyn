@@ -403,7 +403,7 @@ export function analyzeAppRouterGraph(root) {
   const sources = new Map()
   const read = (file) => {
     if (sources.has(file)) return sources.get(file)
-    let source = ''
+    let source
     try {
       source = readFileSync(file, 'utf8')
     } catch {

@@ -17,7 +17,9 @@
 'use client'
 
 import {
+  orgRoleTier,
   resolveOrgPermissions,
+  resolveRolePermissions,
   toLegacyPermissions,
   type AglynOrgCustomRole,
   type AglynOrgMember,
@@ -33,14 +35,19 @@ import firestoreOneShotRetry from '../utils/firestore-one-shot-retry'
 
 export type { OrgPermissions }
 
-const ALL_TRUE: OrgPermissions = {
-  createHosts: true,
-  editHosts: true,
-  editBilling: true,
-  publishToMarketplace: true,
-  installPlugins: true,
-  manageMembers: true,
-}
+/**
+ * The fail-open map used WHILE LOADING and on read failure.
+ *
+ * Built through `resolveRolePermissions('admin')` since AGL-2474 rather than
+ * written out as the six literals: a hardcoded six left every plugin-declared
+ * key `undefined` until the member doc arrived, so a POS page gated on
+ * `managePos` flashed "not permitted" at an admin on every navigation — a
+ * loading default that answered the question instead of deferring it. A
+ * function, not a const, because plugins register at module scope and this
+ * module can be evaluated first.
+ */
+const allTrueWhileLoading = (): OrgPermissions & Record<string, boolean> =>
+  resolveRolePermissions('admin')
 
 const ALL_GRANTED = resolveOrgPermissions({ role: 'owner' })
 
@@ -54,7 +61,8 @@ const ALL_GRANTED = resolveOrgPermissions({ role: 'owner' })
  * point, this hook only hides/disables surfaces.
  */
 export function useOrgPermissions(): {
-  permissions: OrgPermissions
+  /** The legacy six PLUS every registered plugin key (AGL-2474). */
+  permissions: OrgPermissions & Record<string, boolean>
   /** Granular permission check (AGL-243). */
   can: (permission: OrgPermission) => boolean
   /** The full resolved permission map. */
@@ -74,12 +82,20 @@ export function useOrgPermissions(): {
     isOwner: boolean
     orgId: string | undefined
     role: OrgRole | undefined
+    /**
+     * The member doc's raw override map (AGL-2474). Kept because the dotted
+     * `granted` map above cannot represent a plugin-declared key, so the only
+     * way the console can honour a revoked `managePos` is to read the
+     * overrides the server reads.
+     */
+    overrides: Record<string, boolean> | undefined
     loaded: boolean
   }>({
     granted: ALL_GRANTED,
     isOwner: true,
     orgId: undefined,
     role: undefined,
+    overrides: undefined,
     loaded: false,
   })
 
@@ -93,6 +109,7 @@ export function useOrgPermissions(): {
         isOwner: true,
         orgId: undefined,
         role: undefined,
+        overrides: undefined,
         loaded: true,
       })
       return
@@ -132,6 +149,7 @@ export function useOrgPermissions(): {
           isOwner: role === 'owner' || role === 'admin',
           orgId,
           role,
+          overrides: member.permissions as Record<string, boolean>,
           loaded: true,
         })
       } catch {
@@ -145,9 +163,18 @@ export function useOrgPermissions(): {
   }, [user, firestore, orgId, orgsLoading])
 
   return {
+    // PLUGIN KEYS RIDE ALONG (AGL-2474), in the server resolver's own order:
+    // tier defaults first, then the dotted catalog's projection over them.
+    // `toLegacyPermissions` returns a fixed SIX-KEY literal, so returning it
+    // alone is what severed the client half of the plugin permission registry
+    // — `ConsolePluginPageProps.permissions` could never carry `managePos`
+    // however the org was configured, while the API resolved it correctly.
     permissions: state.loaded
-      ? toLegacyPermissions(state.granted, state.role)
-      : ALL_TRUE,
+      ? {
+          ...resolveRolePermissions(orgRoleTier(state.role), state.overrides),
+          ...toLegacyPermissions(state.granted, state.role),
+        }
+      : allTrueWhileLoading(),
     can: (permission) => state.granted[permission],
     granted: state.granted,
     isOwner: state.isOwner,

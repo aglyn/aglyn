@@ -40,6 +40,8 @@ import { getApps, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore'
 
+import { putMediaDocument } from './lib/media-counter.mjs'
+
 if (
   !process.env.FIRESTORE_EMULATOR_HOST ||
   !process.env.FIREBASE_AUTH_EMULATOR_HOST
@@ -559,16 +561,26 @@ const mediaFixtures = [
   ['seed-team-photo', 'team.jpg', ['team'], 'teamphoto/800/500'],
   ['seed-loaf', 'loaf.jpg', ['bread'], 'loaf/600/600'],
 ]
+// Through the shared writer so `counters/media` moves with the documents
+// (AGL-1488) — this seed is re-run constantly, and the helper's delta rule is
+// what keeps a second run from over-counting what the first already counted.
 for (const [id, fileName, tags, seed] of mediaFixtures) {
-  await put(hostRef.collection('media').doc(id), {
-    fileName,
-    contentType: 'image/jpeg',
-    sizeBytes: 120000,
-    url: `https://picsum.photos/seed/${seed}`,
-    tags,
-    alt: fileName.replace('.jpg', ''),
-    createdAt: now,
+  await putMediaDocument({
+    firestore,
+    scopeRef: hostRef,
+    mediaId: id,
+    data: {
+      fileName,
+      contentType: 'image/jpeg',
+      sizeBytes: 120000,
+      url: `https://picsum.photos/seed/${seed}`,
+      tags,
+      alt: fileName.replace('.jpg', ''),
+      createdAt: now,
+      updatedAt: now,
+    },
   })
+  written += 1
 }
 // A media folder (AGL-818) + a foldered asset so the docs media shot shows
 // folders rendered as grid cards (folders-first). The three fixtures above
@@ -593,16 +605,23 @@ await put(hostRef.collection('mediaFolders').doc('seed-folder-blog'), {
   parentId: null,
   createdAt: now,
 })
-await put(hostRef.collection('media').doc('seed-blog-cover'), {
-  fileName: 'blog-cover.jpg',
-  contentType: 'image/jpeg',
-  sizeBytes: 90000,
-  url: 'https://picsum.photos/seed/blogcover/600/400',
-  folderId: 'seed-folder-blog',
-  tags: ['blog'],
-  alt: 'blog cover',
-  createdAt: now,
+await putMediaDocument({
+  firestore,
+  scopeRef: hostRef,
+  mediaId: 'seed-blog-cover',
+  data: {
+    fileName: 'blog-cover.jpg',
+    contentType: 'image/jpeg',
+    sizeBytes: 90000,
+    url: 'https://picsum.photos/seed/blogcover/600/400',
+    folderId: 'seed-folder-blog',
+    tags: ['blog'],
+    alt: 'blog cover',
+    createdAt: now,
+    updatedAt: now,
+  },
 })
+written += 1
 
 // Bookings page queries orderBy('startsAtMs', 'desc') — number required.
 await put(hostRef.collection('services').doc('seed-tasting'), {

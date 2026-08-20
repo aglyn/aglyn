@@ -56,7 +56,33 @@ let mockPath: string
 const rateLimitDocs = new Map<string, Record<string, unknown>>()
 const fakeFirestore = {
   collection: (name: string) => ({
-    doc: (id: string) => ({ path: `${name}/${id}` }),
+    doc: (id: string) => ({
+      path: `${name}/${id}`,
+      // AGL-2416: the counter is an atomic increment plus a read-back, not a
+      // read-modify-write transaction. The sentinel's real `operand` is
+      // applied, so mutating the production call to `increment(0)` changes
+      // what this store holds instead of being silently absorbed.
+      set: async (value: Record<string, unknown>) => {
+        const path = `${name}/${id}`
+        const prior = rateLimitDocs.get(path) ?? {}
+        const next: Record<string, unknown> = { ...prior }
+        for (const [field, raw] of Object.entries(value)) {
+          const operand = (raw as { operand?: unknown })?.operand
+          next[field] =
+            typeof operand === 'number'
+              ? (Number(prior[field]) || 0) + operand
+              : raw
+        }
+        rateLimitDocs.set(path, next)
+      },
+      get: async () => {
+        const path = `${name}/${id}`
+        return {
+          exists: rateLimitDocs.has(path),
+          get: (field: string) => rateLimitDocs.get(path)?.[field],
+        }
+      },
+    }),
   }),
   runTransaction: async (fn: (tx: unknown) => Promise<number>) => {
     const tx = {
@@ -77,7 +103,16 @@ const fakeFirestore = {
 
 jest.mock('./../../../libs/tenant/data/admin/src/lib/server/firebase-admin', () => ({
   __esModule: true,
-  firebaseAdmin: { app: () => ({ firestore: () => fakeFirestore }) },
+  firebaseAdmin: {
+    app: () => ({ firestore: () => fakeFirestore }),
+    // AGL-2416: the counter reaches for the `FieldValue.increment` sentinel
+    // off this namespace. The real module has it; without it here the call
+    // throws and the limiter silently degrades to its per-instance fallback,
+    // which is a false GREEN for every durability assertion in this file.
+    firestore: Object.assign(() => fakeFirestore, {
+      FieldValue: { increment: (n: number) => ({ operand: n }) },
+    }),
+  },
 }))
 
 jest.mock('@aglyn/tenant-data-admin', () => {

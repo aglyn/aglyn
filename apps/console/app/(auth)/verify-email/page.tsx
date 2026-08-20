@@ -23,6 +23,7 @@
 // One brand string is not worth that edge.
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
+import { useContinueUrlDecoded } from '@aglyn/shared-util-next'
 import { LoadingTextComponent } from '@aglyn/shared-ui-jsx/components/loading-text.component'
 import {
   Button,
@@ -37,6 +38,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth, useSigninCheck } from '@aglyn/tenant-feature-instance'
 import AuthFormComponent from '../../../components/auth-form.component'
 import hardNavigate from '../../../utils/hard-navigate'
+import { verifiedContinueTarget } from '../../../utils/verified-continue-target'
 
 // How often we silently re-check verification while the user is on this page —
 // so clicking the emailed link in another tab lets them straight through here
@@ -79,6 +81,14 @@ function VerifyEmail() {
   const [error, setError] = useState<string | null>(null)
   const sentOnceRef = useRef(false)
 
+  // Where the layout sent them from (AGL-1730). Every exit from this page
+  // used to hard-navigate to `/`, so a deep link that hit the verification
+  // wall — a billing page, an invite, a plugin's settings — was thrown away
+  // the moment the account became usable. `useContinueUrlDecoded` already
+  // drops anything that isn't a same-app or same-site URL; the target helper
+  // additionally refuses the auth routes, which as a destination are a loop.
+  const [continueUrl] = useContinueUrlDecoded()
+
   // Land the user in the app the moment their email is verified. A hard
   // navigation (not client push) re-initialises auth so the gate re-reads a
   // fresh, verified ID token instead of a cached signed-in-check result.
@@ -86,8 +96,8 @@ function VerifyEmail() {
     const user = firebaseAuth.currentUser
     if (!user) return
     await user.getIdToken(true).catch(() => undefined)
-    hardNavigate('/')
-  }, [firebaseAuth])
+    hardNavigate(verifiedContinueTarget(continueUrl) ?? '/')
+  }, [continueUrl, firebaseAuth])
 
   const sendLink = useCallback(async () => {
     const user = firebaseAuth.currentUser

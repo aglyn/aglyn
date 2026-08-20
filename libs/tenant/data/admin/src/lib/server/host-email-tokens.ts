@@ -58,7 +58,7 @@ export async function renderHostEmailWithTokens(
   merge: Record<string, string> = {},
   options: { origin?: string } = {},
 ): Promise<RenderedHostEmail | null> {
-  let host: HostTokenSource | null = null
+  let host: HostTokenSource | null
   try {
     const snapshot = await firestore.collection('hosts').doc(hostId).get()
     host = snapshot.exists ? (snapshot.data() as HostTokenSource) : null

@@ -195,6 +195,11 @@ one people list — is priced as an **audience band**, not a hard cap:
 - On **Free**, the band is a hard limit: new visitors past 100 keep their member
   accounts and orders, but no CRM record is kept. The count of missed sign-ups is
   recorded and will be shown on the contacts page once it opens.
+- **The billed count is your list size at the end of the month**, not its size on any
+  other day. Your list is a running total rather than a monthly tally, so a month has
+  to be charged on one moment in it, and that moment is the last daily reading taken
+  before the month closes. Contacts added after a month ends belong to the new month;
+  contacts deleted after it ends do not undo the month that already ran.
 
 ## Organization data
 
@@ -205,6 +210,10 @@ one people list — is priced as an **audience band**, not a hard cap:
 - Extra datasets are a monthly **[add-on](add-ons.md)** ($2/mo on Starter and Pro, $1/mo
   on Business); storage beyond the included size is **metered overage** at $0.25 per
   GB-month on your monthly invoice.
+- **The billed size is what you were storing at the end of the month**, on the same
+  basis as the audience band above: the last daily reading taken before the month
+  closes. Clearing datasets after a month has ended lowers the next invoice, not the
+  one for the month that just finished.
 
 ## API access
 
@@ -281,6 +290,13 @@ recurring member subscriptions alike. A paid booking is a service sale and sits 
 that same digital line rather than carrying a rate of its own; see
 [Bookings](../../commerce-and-bookings/bookings/overview.md#payments-and-fees).
 Selling requires a paid plan with commerce.
+
+**In-person sales carry the same rate.** The fee is charged on the sale, not on the
+tender, so a cash sale or a charge-to-room sale at the register is priced exactly like
+a card sale. Card sales have the fee deducted from the Stripe payout; cash and
+room-charge sales have no payout to deduct from, so their fees are added to your next
+monthly invoice as a usage line. See
+[POS &amp; reservations](../../commerce-and-bookings/commerce/pos-and-reservations.md#platform-fees-at-the-register).
 
 - **Annual billing** — a toggle on the plan cards; annual billing is the discounted
   headline price (e.g. Pro $39/mo billed annually vs $56 month-to-month).

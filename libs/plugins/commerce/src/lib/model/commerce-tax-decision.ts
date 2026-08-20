@@ -199,3 +199,94 @@ export const STOREFRONT_TAX_POS_STRIPE_MESSAGE =
   'This store uses automatic tax, which the register can’t calculate for an ' +
   'in-person sale. The store owner can switch Taxes to Manual and add a rate ' +
   'for the store address in Commerce → Settings → Taxes.'
+
+/**
+ * WHICH MACHINERY produced the tax on a storefront sale (AGL-1904).
+ *
+ * The canonical home for the union, because two different things need it:
+ * the `storefrontTaxCollected` record that Aglyn's own return reads
+ * (`server/storefront-tax.ts`, which re-exports this) and the `taxMode` field
+ * stamped on the merchant's ORDER (AGL-2451). One union, so the two can never
+ * disagree about what a value means.
+ *
+ *   - **`stripe-automatic`** — Stripe Tax computed it, against whichever
+ *     account `automatic_tax.liability` names. On a storefront session that is
+ *     AGLYN's platform account (MEASURED — see `server/storefront-tax.ts`).
+ *   - **`manual`** — the merchant's own configured rate, applied to their own
+ *     declared origin. Aglyn's registrations never enter into it.
+ *   - **`none`** — no tax was charged on this sale.
+ *
+ * ABSENT is a fourth state and is NOT `none`: it means "not recorded", which
+ * is what every order written before AGL-2451 genuinely is. Nothing may
+ * default it — see `describeOrderTaxMode` and the warning on `liftLegacyOrder`.
+ */
+export type StorefrontTaxMode = 'stripe-automatic' | 'manual' | 'none'
+
+/**
+ * THE derivation, in one place, for every path that resolves a tax mode.
+ *
+ * `automatic` is `automatic_tax.enabled` on the Stripe object, or
+ * `decision.kind === 'stripe-automatic'` where the sale never reaches Stripe
+ * at all (the register's cash and folio tenders). It is **never** "were there
+ * tax lines": a manual-mode subscription renewal carries a real Stripe Tax
+ * Rate (AGL-1751) and a manual cart or draft order has since AGL-1953, so
+ * their invoices and sessions arrive with populated tax breakdowns that are
+ * byte-indistinguishable from a Stripe Tax one. Summing lines would silently
+ * book merchant-configured tax as Aglyn-collected. **Read the flag.**
+ *
+ * `taxCents` only ever separates `manual` from `none`, and only when the flag
+ * is off: a `stripe-automatic` sale stays `stripe-automatic` at zero tax,
+ * because "Stripe Tax answered not-collecting" is itself the audit answer to
+ * why a jurisdiction is absent from a return.
+ */
+export function storefrontTaxMode(input: {
+  automatic: boolean
+  taxCents: number
+}): StorefrontTaxMode {
+  if (input.automatic) return 'stripe-automatic'
+  return Number(input.taxCents ?? 0) > 0 ? 'manual' : 'none'
+}
+
+/**
+ * The same derivation, from a `StorefrontTaxDecision` — for the paths that
+ * resolve tax before any Stripe object exists (`pos-order.ts`,
+ * `draft-order.ts`). `exempt` and `none` both charge nothing and land on
+ * `none`; `undecided` never reaches a write, because every caller refuses it.
+ */
+export function storefrontTaxModeForDecision(
+  decision: StorefrontTaxDecision,
+  taxCents: number,
+): StorefrontTaxMode {
+  return storefrontTaxMode({
+    automatic: decision.kind === 'stripe-automatic',
+    taxCents,
+  })
+}
+
+/**
+ * How the tax on ONE order was computed, in the merchant's words (AGL-2451).
+ *
+ * Describes the MECHANISM and makes **no remittance determination** — the same
+ * constraint AGL-2440's report ships under. Who owes which authority what is a
+ * legal conclusion that attaches by operation of law (AGL-1904/AGL-1956); it
+ * belongs to counsel, and a sentence in an order dialog is the wrong place to
+ * take it.
+ *
+ * An absent mode answers "not recorded", never "no tax" — every order written
+ * before this shipped has no stamp, and rendering that as `none` would state a
+ * tax fact nobody recorded.
+ */
+export function describeOrderTaxMode(
+  mode: StorefrontTaxMode | undefined | null,
+): string {
+  if (mode === 'stripe-automatic') {
+    return 'Calculated automatically by Stripe Tax at checkout, from the shopper’s address.'
+  }
+  if (mode === 'manual') {
+    return 'Calculated from this store’s own configured tax rate.'
+  }
+  if (mode === 'none') {
+    return 'No sales tax was calculated on this order.'
+  }
+  return 'How this tax was calculated was not recorded on this order.'
+}

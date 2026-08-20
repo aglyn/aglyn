@@ -2098,6 +2098,105 @@ export function resolveTransactionFeePct(
 }
 
 /**
+ * Stripe's processing cost on ONE storefront destination charge, in cents
+ * (AGL-2152) — the dearest enabled method's percentage plus the fixed 30¢,
+ * rounded UP on the percentage so the answer is never a cent short of what
+ * Stripe actually debits.
+ *
+ * WHO PAYS THIS. Every storefront charge is a DESTINATION charge:
+ * `payment_intent_data[transfer_data][destination]` names the merchant's
+ * connected account and no `transfer_data[amount]` is sent, so Stripe moves
+ * the whole charge to the merchant and debits its processing fee from the
+ * PLATFORM's balance. Aglyn's net on an order is therefore
+ *
+ *     application_fee_amount − (processing% × charge + 30¢)
+ *
+ * and with `application_fee_amount` at 0 — which is what
+ * `transactionFeePhysicalPct: 0` produced on Pro, Business, Scale, Advanced,
+ * Agency and Enterprise — that net is NEGATIVE on every single sale. A flat
+ * percentage cannot repair it either: Starter's 2% is below even the cheapest
+ * processing rate, so Starter lost money at every order size too, and any rate
+ * above it still loses until the order clears `30¢ ÷ (take − processing)`. The
+ * fixed 30¢ is why a percentage alone can never reach break-even on small
+ * orders, and why this returns a CENTS amount rather than a rate.
+ *
+ * WHY THE DEAREST METHOD AND NOT 2.9%. The shopper picks how to pay AFTER the
+ * session is created, and `application_fee_amount` is a fixed number Stripe
+ * will not let us revise once the charge settles. No storefront path pins
+ * `payment_method_types`, so the platform's payment method configuration
+ * decides the set — and per AGL-2343 that configuration has `klarna` and
+ * `affirm` on beside the card family. Pricing this at the card rate would be
+ * wrong exactly on the orders where it cost the most, which is the same
+ * reasoning `marketplaceBreakEvenUsd` already applies to the listing floor;
+ * these are deliberately the SAME two constants so the two cannot drift.
+ *
+ * THE ONE-LINE LEVER. On a card-family order this over-recovers by the spread
+ * between the two rates. Pinning `payment_method_types` on the storefront
+ * sessions to the card family would make 2.9% the true binding rate, and
+ * `STOREFRONT_PROCESSING_PERCENT` below is then the single identifier to
+ * repoint. That is a product decision about which payment methods a storefront
+ * offers, not this one; it is recorded on AGL-2152 and in the Pricing Decision
+ * Log so it can be taken deliberately.
+ */
+// `STOREFRONT_PROCESSING_PERCENT` and `STOREFRONT_PROCESSING_FIXED_CENTS` are
+// declared beside the marketplace processing constants they are defined from,
+// further down this file — a `const` cannot be read before its declaration is
+// evaluated, and this function is only ever CALLED, never evaluated at import.
+export function storefrontProcessingCostCents(chargeCents: number): number {
+  if (!Number.isFinite(chargeCents) || chargeCents <= 0) return 0
+  return (
+    Math.ceil((chargeCents * STOREFRONT_PROCESSING_PERCENT) / 100) +
+    STOREFRONT_PROCESSING_FIXED_CENTS
+  )
+}
+
+/**
+ * The Stripe Connect `application_fee_amount` for ONE storefront sale
+ * (AGL-2152) — the platform's advertised take PLUS Stripe's processing cost,
+ * passed through at cost.
+ *
+ *     fee = take%(feeBaseCents) + processing%(chargeCents) + 30¢
+ *
+ * so Aglyn's net per order is AT LEAST the advertised take, at every order
+ * size down to Stripe's own 50¢ charge minimum, and never negative. Zach
+ * lifted the September-1 price lock for this one change on 2026-08-19 ("make
+ * sure we are not losing money"); see the Pricing Decision Log entry of the
+ * same date. No advertised PLATFORM rate moved — a 0% tier is still 0%
+ * platform take — what changed is that the card cost stops being absorbed
+ * silently by Aglyn.
+ *
+ * `feeBaseCents` is the GOODS the take is a cut of (discounts already applied,
+ * tax and shipping excluded — that has always been the basis, AGL-2317).
+ * `chargeCents` is what Stripe will actually run the card for, which is goods
+ * + tax + shipping, and defaults to `feeBaseCents` for the paths where they
+ * are the same number. Passing the goods figure for a charge that also carries
+ * tax would under-recover by the processing rate on the difference.
+ *
+ * Clamped to `chargeCents` because Stripe rejects an application fee larger
+ * than the charge. That clamp can only bind below ~32¢, under Stripe's own 50¢
+ * charge minimum, so it never trims a real order's fee.
+ */
+export function resolveTransactionFeeCents(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  productType: 'physical' | 'digital' | 'service',
+  feeBaseCents: number,
+  chargeCents: number = feeBaseCents,
+): number {
+  const charge =
+    Number.isFinite(chargeCents) && chargeCents > 0 ? Math.round(chargeCents) : 0
+  if (charge <= 0) return 0
+  const base =
+    Number.isFinite(feeBaseCents) && feeBaseCents > 0
+      ? Math.round(feeBaseCents)
+      : 0
+  const pct = resolveTransactionFeePct(org, productType)
+  // The `Math.max(1, …)` every door already applied: a rate above zero on
+  // goods the shopper pays for is a fee however small it rounds to.
+  const take = pct > 0 && base > 0 ? Math.max(1, Math.round((base * pct) / 100)) : 0
+  return Math.min(charge, take + storefrontProcessingCostCents(charge))
+}
+
+/**
  * Platform take rate % for a MARKETPLACE listing sale (AGL-1543), priced
  * off the SELLER org. Resolved through `resolveOrgEntitlements` — so a
  * dead subscription prices as free-plan (30%) even while the stale `plan`
@@ -2180,6 +2279,25 @@ export const MARKETPLACE_PROCESSING_FIXED_CENTS = 30
  */
 export const MARKETPLACE_ASSUMED_TAX_PERCENT = 8.25
 
+/**
+ * The processing rate a STOREFRONT destination charge is priced against
+ * (AGL-2152), and the one identifier to repoint if the storefront's payment
+ * method set changes.
+ *
+ * Deliberately its OWN name rather than a direct use of the marketplace
+ * constants, while being defined as one of them: the two surfaces share
+ * Stripe's published rates and today share the platform's payment method
+ * configuration, but they are separate product decisions. A future choice to
+ * pin `payment_method_types` on storefront sessions to the card family — and
+ * so to recover at `MARKETPLACE_PROCESSING_PERCENT_CARD` — must not silently
+ * lower the marketplace listing floor, which is derived from the same figure
+ * for a different flow.
+ */
+export const STOREFRONT_PROCESSING_PERCENT = MARKETPLACE_PROCESSING_PERCENT_BNPL
+/** Stripe's per-transaction fixed component, in cents. Not rate-dependent. */
+export const STOREFRONT_PROCESSING_FIXED_CENTS =
+  MARKETPLACE_PROCESSING_FIXED_CENTS
+
 /** Where the money goes on one sale of a paid listing (AGL-2343). */
 export interface MarketplaceSaleEconomics {
   /** The listing price. */
@@ -2244,12 +2362,11 @@ export function marketplaceSaleEconomics(
  * `marketplaceSaleEconomics` — the rounding in there is what decides the
  * answer at these amounts, and a closed form would drift from it silently.
  *
- * THIS IS NOT A FLOOR AND NOTHING ENFORCES IT. Pricing for the September 1
- * beta is locked, and a minimum price is publisher-facing policy rather than
- * an implementation detail: it would appear in the publish form's validation
- * copy and in the publisher handbook, and the right number depends on which
- * payment methods stay enabled. So this is shown and not imposed; the decision
- * is recorded on AGL-2343.
+ * THIS IS NOW THE ENFORCED FLOOR. Zach lifted the September 1 pricing lock for
+ * this one decision on 2026-08-19 — "make a minimum price floor that does not
+ * cause us to lose money" — so `marketplaceMinPriceUsd` returns this figure and
+ * every publish door refuses a paid listing under it. Recorded in the Pricing
+ * Decision Log and on AGL-2343.
  */
 export function marketplaceBreakEvenUsd(
   feePercent: number = bindingMarketplaceFeePct(),
@@ -2273,37 +2390,97 @@ export function marketplaceBreakEvenUsd(
 }
 
 /**
- * The sentence a publish form shows under its price field when the price does
- * not cover the cost of taking the payment (AGL-2343), or `undefined` when
- * there is nothing to say.
+ * THE MINIMUM PRICE a paid marketplace listing may carry (AGL-2343).
  *
- * ADVISORY. It does not disable the publish button and no route refuses the
- * price — see `marketplaceBreakEvenUsd` for why a floor is not being set here.
+ * Zach lifted the September 1 pricing lock for this decision on 2026-08-19:
+ * *"make a minimum price floor that does not cause us to lose money"*. So the
+ * floor is not a chosen round number — it is the break-even price itself, the
+ * cheapest whole dollar at which `marketplaceSaleEconomics` stops returning a
+ * negative platform net, computed at the take rate that breaks even LATEST and
+ * the dearest payment method the live configuration enables. Today that is $3.
+ *
+ * DERIVED, NEVER RESTATED. A second hand-written copy of this number in a
+ * publish route or a form is the artifact that decays into a route refusing a
+ * price a form invited, so both the server-side validator
+ * (`MARKETPLACE_MIN_PRICE_USD` in the marketplace model) and every price field
+ * read this. If the payment method set changes, or the plan table's lowest
+ * take rate moves, the floor moves with them on the next call.
+ *
+ * ZERO IS NOT BELOW THE FLOOR. A free listing takes no payment at all, so it
+ * costs nothing to process; the floor is a minimum on PAID listings only.
+ */
+export function marketplaceMinPriceUsd(): number {
+  return marketplaceBreakEvenUsd()
+}
+
+/**
+ * Whether a price is a PAID price that the floor refuses (AGL-2343) — the one
+ * predicate a form uses to mark its price field in error and hold its publish
+ * button, so that the button and the server agree about what is publishable.
+ *
+ * Rounds first because every publish route does, and a form's value is a
+ * string mid-type: `'2.6'` is stored as $3 and must read as allowed here, or
+ * the button would refuse a price the route accepts.
+ */
+export function isBelowMarketplacePriceFloor(priceUsd: unknown): boolean {
+  const price = Math.round(Number(priceUsd) || 0)
+  return price > 0 && price < marketplaceMinPriceUsd()
+}
+
+/**
+ * The sentence a publish form shows under its price field when the price is
+ * below the floor (AGL-2343), or `undefined` when there is nothing to say.
+ *
+ * NOT ADVISORY ANY MORE. The same figure is enforced by every publish route
+ * through `publishPreconditionRefusal`, so this text has to read as a
+ * requirement rather than a warning — a publisher who is told "consider
+ * raising it" and then refused has been lied to by the form. It still explains
+ * WHY, because a bare minimum with no arithmetic behind it reads as an
+ * arbitrary tax on cheap listings.
+ *
  * Shared by every publish form rather than written into each, because the
  * figure has to be the same one in all of them and the wording is the only
  * place a publisher ever sees it.
  *
- * Quoted at the 20% take rate, which is the band that breaks even LATEST, so
- * the advice holds for a free-plan publisher too.
+ * Quoted at the take rate that breaks even LATEST, so the sentence holds for a
+ * free-plan publisher too.
  */
 export function marketplacePriceCostNote(
   priceUsd: unknown,
 ): string | undefined {
   const price = Math.round(Number(priceUsd) || 0)
-  const breakEven = marketplaceBreakEvenUsd()
+  const minimum = marketplaceMinPriceUsd()
   // A free listing takes no payment, so it costs nothing to process and has
   // nothing to warn about — silence there is the point, not an oversight.
-  if (!(price > 0) || price >= breakEven) return undefined
+  if (!isBelowMarketplacePriceFloor(price)) return undefined
   const { processingCents, platformFeeCents } = marketplaceSaleEconomics(
     price,
     bindingMarketplaceFeePct(),
   )
   const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
   return (
-    `Processing a $${price} payment costs about ${usd(processingCents)}, ` +
-    `more than the ${usd(platformFeeCents)} platform fee — a price this low ` +
-    `does not cover the cost of taking it. $${breakEven} or more does, and a ` +
-    `free listing takes no payment at all.`
+    `Too low to publish. Processing a $${price} payment costs about ` +
+    `${usd(processingCents)}, more than the ${usd(platformFeeCents)} platform ` +
+    `fee — the sale would lose money. The minimum paid price is ` +
+    `$${minimum}, and a free listing ($0) takes no payment at all.`
+  )
+}
+
+/**
+ * The standing helper sentence a price field shows when there is nothing wrong
+ * (AGL-2343): the minimum stated up front, so a publisher meets it while
+ * typing instead of discovering it as a refusal.
+ *
+ * Zach's rule — a capability that is not surfaced in the console does not
+ * count as shipped — applies to a REFUSAL as much as to a feature: a floor
+ * only a route knows about is a trap.
+ *
+ * @param suffix whatever else that particular form needs to say, appended.
+ */
+export function marketplacePriceFloorHint(suffix?: string): string {
+  return (
+    `0 for free, or $${marketplaceMinPriceUsd()} and up for a paid listing.` +
+    (suffix ? ` ${suffix}` : '')
   )
 }
 

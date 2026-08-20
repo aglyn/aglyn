@@ -60,6 +60,8 @@ import { getApps, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 
+import { putMediaDocument } from '../scripts/lib/media-counter.mjs'
+
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const PORT = Number(process.env.WIRE_PORT ?? 4500)
 const BASE = process.env.WIRE_BASE_URL ?? `http://localhost:${PORT}`
@@ -843,11 +845,24 @@ if (!consoleUp) {
     // A private asset that exists ONLY in the emulator — which is also what
     // pins these probes to it: a console pointed anywhere else answers 404
     // here (missing asset), never 200.
-    await orgRef.collection('media').doc(PROBE_MEDIA_ID).set({
-      fileName: 'agl-1800-wire-probe.png',
-      contentType: 'image/png',
-      private: true,
-      createdAt: Date.now(),
+    // `countTowardCounter: false`, deliberately and explicitly (AGL-1488).
+    // This probe creates its own fixture and DELETES it at teardown below;
+    // the delete is a bare `.delete()` with no counter decrement, so moving
+    // the counter on the way in would leave the org over-counted by one
+    // whenever a run aborts between the two. Every other script writes media
+    // through this helper WITH the counter — the skip is an argument here
+    // rather than the silent default four call sites arrived at.
+    await putMediaDocument({
+      firestore: db,
+      scopeRef: orgRef,
+      mediaId: PROBE_MEDIA_ID,
+      countTowardCounter: false,
+      data: {
+        fileName: 'agl-1800-wire-probe.png',
+        contentType: 'image/png',
+        private: true,
+        createdAt: Date.now(),
+      },
     })
 
     // F5 lifted the platform lock, but the console holds the platform scope

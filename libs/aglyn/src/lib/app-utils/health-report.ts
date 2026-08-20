@@ -805,6 +805,23 @@ export interface BillingWebhookFacts {
    * matters.
    */
   processed: number | null
+  /**
+   * Deliveries that answered 200 and moved NOTHING inside the window
+   * (AGL-1954) — a required event type that produced neither a committed
+   * effect nor a named deliberate skip. See `webhook-delivery.ts` for why
+   * that is a defect by construction and a legitimate no-op is not one.
+   *
+   * Null when the Firestore arm could not run, and null is NOT red on its
+   * own: Stripe already answered the question that matters, and a health
+   * check that reds on its own read failure trains people to ignore it.
+   */
+  inert: number | null
+  /**
+   * Required event types the destination is NOT subscribed to (AGL-1948 /
+   * AGL-1798). Empty is the healthy answer; null means the endpoint did not
+   * report its subscriptions and the coverage question is unanswered.
+   */
+  unsubscribedEvents: readonly string[] | null
 }
 
 export interface BillingWebhookCheck extends HealthCheck {
@@ -812,6 +829,8 @@ export interface BillingWebhookCheck extends HealthCheck {
   undelivered: number | null
   emitted: number | null
   processed: number | null
+  inert: number | null
+  unsubscribedEvents: readonly string[] | null
   /** The trailing window the counts cover, so the body is self-describing. */
   windowMinutes: number
 }
@@ -840,11 +859,28 @@ export const WEBHOOK_FAILURE_WINDOW_MINUTES = 60
  */
 export const MAX_FAILED_DELIVERIES_PER_WINDOW = 0
 
+/**
+ * Inert deliveries tolerated in the window (AGL-1954).
+ *
+ * Zero — and unlike `processed`, the count this check reports but refuses to
+ * gate on because no defensible floor exists before the beta produces a
+ * baseline, this one's floor follows from the definition. A delivery is
+ * counted inert only when a required event type produced neither a committed
+ * effect nor a NAMED deliberate skip (`classifyWebhookDelivery`). No
+ * legitimate traffic pattern generates one: a tenant shopper's subscription,
+ * a marketplace refund, a `won` dispute nobody claimed all name their reason
+ * and classify as `ignored`. So any at all is the statement "Stripe told us
+ * about money and nothing here moved" — the same "any at all" rule the
+ * rate-limiter degradation markers use (AGL-1679).
+ */
+export const MAX_INERT_DELIVERIES_PER_WINDOW = 0
+
 export function billingWebhookHealth(
   facts: BillingWebhookFacts | null,
   ms: number,
   windowMinutes: number = WEBHOOK_FAILURE_WINDOW_MINUTES,
   threshold: number = MAX_FAILED_DELIVERIES_PER_WINDOW,
+  inertThreshold: number = MAX_INERT_DELIVERIES_PER_WINDOW,
 ): BillingWebhookCheck {
   // A null census is degraded, the same rule `signupsHealth` and
   // `rateLimitsHealth` follow: an alarm that cannot see the thing it watches
@@ -860,6 +896,8 @@ export function billingWebhookHealth(
       undelivered: null,
       emitted: null,
       processed: null,
+      inert: null,
+      unsubscribedEvents: null,
       windowMinutes,
     }
   }
@@ -870,6 +908,8 @@ export function billingWebhookHealth(
     undelivered: facts.undelivered,
     emitted: facts.emitted,
     processed: facts.processed,
+    inert: facts.inert,
+    unsubscribedEvents: facts.unsubscribedEvents,
     windowMinutes,
   }
 
@@ -884,8 +924,31 @@ export function billingWebhookHealth(
   if (facts.endpointStatus === 'disabled') {
     return { ...base, ok: false, code: 'endpoint-disabled' }
   }
+  // A required event the destination does not carry (AGL-1948 / AGL-1798),
+  // ABOVE the delivery counts because it explains a silence they cannot see.
+  // An unsubscribed event produces no delivery to fail, no request to reject
+  // and no inert handler either — Stripe simply stops sending, and every
+  // count below reads a perfectly healthy zero for as long as it lasts. It
+  // also outranks `deliveries-failing` on actionability: this one names the
+  // exact event to re-add, and `npm run setup:stripe` fixes it in a minute.
+  //
+  // `null` — the endpoint did not state its subscriptions — is deliberately
+  // NOT red. It is a question that went unanswered, not an answer, and the
+  // check already has `stripe-unavailable` for a census it could not take.
+  if (facts.unsubscribedEvents && facts.unsubscribedEvents.length > 0) {
+    return { ...base, ok: false, code: 'events-unsubscribed' }
+  }
   if (facts.undelivered > threshold) {
     return { ...base, ok: false, code: 'deliveries-failing' }
+  }
+  // THE 200-THAT-DID-NOTHING (AGL-1954), and it is LAST on purpose: every
+  // code above explains why a handler would have had nothing to do, so
+  // reporting inertness over one of them would name the symptom instead of
+  // the cause. Reached only when Stripe holds an enabled destination
+  // subscribed to everything we asked for and delivered successfully — at
+  // which point "a delivery moved nothing" has no innocent explanation left.
+  if (facts.inert !== null && facts.inert > inertThreshold) {
+    return { ...base, ok: false, code: 'handlers-inert' }
   }
   return { ...base, ok: true }
 }
@@ -981,5 +1044,530 @@ export function meteredPricingHealth(
     ok: false,
     code: 'metered-price-asymmetric',
     unbilledInterval: facts.yearly ? 'month' : 'year',
+  }
+}
+
+/*==========================================
+ * SCHEDULED JOBS, WATCHED BY ABSENCE (AGL-1955).
+ *
+ * ## The failure this exists for
+ *
+ * `Cloud Scheduler job run failed (aglyn-main)` is a log-match on
+ * `resource.type="cloud_scheduler_job" AND severity >= ERROR`, and the
+ * `scheduled-crons.yml` workflow goes red on a non-200. Both of those are
+ * triggered BY A RUN. A job that is deleted, paused, or whose `- cron:` line
+ * is edited away produces no attempt, therefore no error entry, therefore no
+ * red workflow, therefore nothing. Quiet reads as healthy — the same shape
+ * AGL-1923 closed for the error beacon, one subsystem over.
+ *
+ * What is downstream of these jobs is not cosmetic: `report-usage` is the
+ * only writer that meters a closed month into Stripe, `run-erasures` is the
+ * GDPR deletion runner, `audit-archive` moves and then DELETES audit rows,
+ * and `plugin-jobs-beat` is the only thing that makes scheduled publishing
+ * and booking-hold expiry happen at all. A silently unscheduled job means
+ * customers are not billed, or data is not reaped, behind a green board.
+ *
+ * ## The two properties that make this work
+ *
+ * **It does not need the job to be alive to fire.** That is the whole bug.
+ * The verdict is computed by the READER — `/api/health/crons`, wound by the
+ * uptime probe and by any staff member opening the Health page — against
+ * marks the jobs left behind. Nothing here is on a schedule that could
+ * itself stop; that would only move the problem one layer out, which is the
+ * AGL-1923 argument for a graded switch over a `conditionAbsent` policy.
+ *
+ * **It cannot false-alarm on a legitimately idle period.** The mark is
+ * stamped by the INVOCATION, not by the work: a `finish-domain-attachments`
+ * run with no pending host still beats, and a quiet week for
+ * `reap-plugin-artifacts` still beats. And the expected time is computed
+ * from the job's own cron expression rather than from a fixed interval, so
+ * `usage-email` — hourly, but only on the 1st and 2nd of the month — is
+ * green for the twenty-nine days it is deliberately not running. A fixed
+ * "expect one every hour" rule would have paged on the 3rd, every month.
+ *
+ * ## Why an output age rule was not enough on its own
+ *
+ * AGL-1843's `exportsHealth` watches the weekly export by the age of what it
+ * PRODUCES, and that is the better rule where an output exists — it catches
+ * "ran and failed" as well as "never ran". Most of these jobs have no such
+ * output. `backfill-scope` is detect-only and deliberately writes nothing.
+ * `usage-alerts` produces a notification only when somebody is over budget.
+ * `reap-plugin-artifacts` deletes nothing in a normal week. For those, the
+ * only honest thing whose age moves on every run is a mark the run itself
+ * leaves — so that is what this reads. `exportsHealth` stays where it is:
+ * the two are complementary, and `firestore-export` is watched by both.
+ *
+ * ## It must be able to go GREEN
+ *
+ * Nothing latches. A job that missed a fire and then runs again stamps a
+ * fresh mark and reads healthy on the next probe — the AGL-1843 rule, whose
+ * clearing event here is named and is "the next invocation of that job".
+ *=========================================*/
+
+/** Where the marks live. One document per job id, written by the job. */
+export const CRON_BEAT_COLLECTION = 'platformCronBeats'
+
+/**
+ * The document that records when this deployment STARTED watching.
+ *
+ * Without it a job that has never reported cannot be told apart from a job
+ * that has stopped reporting, and every board would come up red on the day
+ * the feature deploys — for `usage-email`, red until the 1st of the next
+ * month. The rule this enables is stated once, in `cronJobsHealth`: a job
+ * with no mark is only silent once a scheduled fire time has passed SINCE
+ * we started watching.
+ *
+ * Not a reserved id: Firestore reserves `__.*__`, and this is a plain slug
+ * that no job id can collide with (job ids never contain the word `watch`,
+ * and the wiring spec asserts the inventory's ids against the workflow).
+ */
+export const CRON_BEAT_WATCH_DOC = 'watch-window'
+
+/** Who fires the job. The two are operated, and fail, differently. */
+export type CronRunner = 'github-actions' | 'cloud-scheduler'
+
+export interface ScheduledJob {
+  /** Stable id. The Firestore document id, and the health check's name. */
+  id: string
+  label: string
+  /**
+   * Five-field cron, UTC. The SAME string the scheduler holds — the wiring
+   * spec asserts each one against `.github/workflows/scheduled-crons.yml`,
+   * so an edit there that is not made here fails the build rather than
+   * quietly changing what "on time" means.
+   */
+  cron: string
+  runner: CronRunner
+  /** What the scheduler actually invokes, for the operator reading a red row. */
+  target: string
+  /**
+   * How late a run may be before the row goes red.
+   *
+   * Generous on purpose, and the generosity is not padding. GitHub only runs
+   * scheduled workflows from the default branch and delays them under load —
+   * routinely by minutes, occasionally by an hour. The question this check
+   * answers is "is this job still scheduled at all", not "did it start on the
+   * second"; a grace that reds on ordinary lateness is alert fatigue, and an
+   * alert people learn to ignore is the failure this issue is about wearing
+   * a different hat.
+   */
+  graceMinutes: number
+  /** What stops happening when this job stops. Rendered on the board. */
+  drives: string
+}
+
+/**
+ * THE INVENTORY.
+ *
+ * Twelve GitHub Actions schedules (`.github/workflows/scheduled-crons.yml`)
+ * and one real Cloud Scheduler job (firebase-schedule-pluginJobsBeat-us-central1),
+ * confirmed as the only job in `aglyn-main` on 2026-08-20.
+ *
+ * `report-usage` appears TWICE and is two jobs, not one. The 02:00 run
+ * rolls up the closed month and is the only run that ever reaches Stripe;
+ * the 07:00 `?month=current` run writes the in-progress figure every usage
+ * budget reads (AGL-2219). Either can stop without the other, and folding
+ * them into one row would hide exactly that.
+ */
+export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
+  {
+    id: 'report-usage',
+    label: 'Metered usage rollup (closed month)',
+    cron: '0 2 * * *',
+    runner: 'github-actions',
+    target: '/api/billing/report-usage',
+    graceMinutes: 360,
+    drives:
+      'The only run that meters a closed month into Stripe. If it stops, customers are not billed for what they used.',
+  },
+  {
+    id: 'audit-archive',
+    label: 'Audit archive',
+    cron: '0 3 * * *',
+    runner: 'github-actions',
+    target: '/api/admin/audit-archive',
+    graceMinutes: 360,
+    drives:
+      'Moves adminAudit rows past the 90-day window into Storage and deletes them from Firestore. If it stops, the retention promise is not being kept.',
+  },
+  {
+    id: 'run-erasures',
+    label: 'GDPR erasure runner',
+    cron: '0 4 * * *',
+    runner: 'github-actions',
+    target: '/api/admin/run-erasures',
+    graceMinutes: 360,
+    drives:
+      'Executes accepted erasure requests. If it stops, personal data a customer asked us to delete is still here, and the clock on that request is still running.',
+  },
+  {
+    id: 'report-usage-current',
+    label: 'Metered usage rollup (current month)',
+    cron: '0 7 * * *',
+    runner: 'github-actions',
+    target: '/api/billing/report-usage?month=current',
+    graceMinutes: 360,
+    drives:
+      'Writes the in-progress month figure (AGL-2219). If it stops, every usage budget on the platform is structurally unable to fire and the Billing card stops totalling.',
+  },
+  {
+    id: 'usage-alerts',
+    label: 'Usage budget alerts',
+    cron: '0 8 * * *',
+    runner: 'github-actions',
+    target: '/api/billing/usage-alerts',
+    graceMinutes: 360,
+    drives:
+      'Evaluates usage budgets and notifies. If it stops, an org sails past its budget with no warning and finds out on the invoice.',
+  },
+  {
+    id: 'usage-email',
+    label: 'Monthly usage summaries',
+    // Hourly across the FIRST TWO DAYS only (AGL-2409). The idle-period case
+    // this whole check had to get right: for twenty-nine days a month this
+    // job is correctly doing nothing, and must read green while it does.
+    cron: '0 * 1-2 * *',
+    runner: 'github-actions',
+    target: '/api/billing/usage-email',
+    graceMinutes: 360,
+    drives:
+      "Mails each org last month's usage summary, chunked across 48 hourly windows. If it stops, the month's summaries are simply never sent.",
+  },
+  {
+    id: 'firestore-export',
+    label: 'Weekly Firestore export',
+    cron: '0 5 * * 1',
+    runner: 'github-actions',
+    target: '/api/admin/firestore-export',
+    graceMinutes: 1440,
+    drives:
+      'Starts the independent GCS export — the restore point that exists because the managed backups kept flipping to NOT_AVAILABLE (AGL-1843). Also watched by output age on /api/health/backups.',
+  },
+  {
+    id: 'reap-plugin-artifacts',
+    label: 'Plugin artifact reaper',
+    cron: '30 5 * * 1',
+    runner: 'github-actions',
+    target: '/api/admin/reap-plugin-artifacts',
+    graceMinutes: 1440,
+    drives:
+      'Deletes orphaned plugin bundles from the artifacts bucket. If it stops, storage grows without bound and nothing says so.',
+  },
+  {
+    id: 'reverify-plugin-versions',
+    label: 'Plugin verdict re-verification',
+    cron: '0 6 * * 1',
+    runner: 'github-actions',
+    target: '/api/admin/reverify-plugin-versions',
+    graceMinutes: 1440,
+    drives:
+      'Re-checks stored plugin verdicts against the current verifier (AGL-1086). If it stops, a regression on a live version is never noticed.',
+  },
+  {
+    id: 'backfill-scope',
+    label: 'Scope-drift detection',
+    cron: '30 6 * * 1',
+    runner: 'github-actions',
+    target: '/api/admin/backfill-scope',
+    graceMinutes: 1440,
+    drives:
+      'Reports documents with no visibleTo — invisible to every site-scoped read (AGL-1478). Detect-only by construction, so it has no output whose age could stand in for this mark.',
+  },
+  {
+    id: 'campaigns-process-scheduled',
+    label: 'Scheduled email campaigns',
+    cron: '*/15 * * * *',
+    runner: 'github-actions',
+    target: '/api/campaigns/process-scheduled',
+    graceMinutes: 90,
+    drives:
+      'Claims and sends due campaigns. If it stops, a campaign the composer showed as Scheduled sits there and never sends — the AGL-2134 shape, which is sold on /product/marketing.',
+  },
+  {
+    id: 'finish-domain-attachments',
+    label: 'Custom domain re-check',
+    cron: '*/20 * * * *',
+    runner: 'github-actions',
+    target: '/api/admin/finish-domain-attachments',
+    graceMinutes: 90,
+    drives:
+      'Re-checks pending custom domains after the certificate or DNS settles (AGL-2010). If it stops, a correctly-configured domain stays dark until a human presses Re-attach.',
+  },
+  {
+    id: 'plugin-jobs-beat',
+    label: 'Plugin job beat',
+    // Cloud Scheduler says `every 1 minutes`; the equivalent five-field
+    // expression is what this check evaluates against.
+    cron: '* * * * *',
+    runner: 'cloud-scheduler',
+    target: 'firebase-schedule-pluginJobsBeat-us-central1 → tenant /api/plugins/run-jobs',
+    graceMinutes: 30,
+    drives:
+      'The only thing that runs scheduled publishing and booking-hold expiry (AGL-1159). It is also the one job that can fail by pointing at the WRONG deployment (AGL-2176) — the mark is stamped by the tenant runner that answers, so a beat aimed elsewhere reads as silence here.',
+  },
+] as const
+
+/** One job's most recent mark, as read from `CRON_BEAT_COLLECTION`. */
+export interface CronBeat {
+  jobId: string
+  /** Epoch ms of the invocation that left the mark. */
+  atMs: number
+}
+
+export interface CronJobCheck extends HealthCheck {
+  /** The schedule this row was judged against, so the body is self-describing. */
+  schedule: string
+  runner: CronRunner
+  /** Minutes since the job last reported. Null when it never has. */
+  lastBeatAgeMinutes: number | null
+  /**
+   * The most recent fire time the job should already have reported for, ISO.
+   * Null when no such time has passed since we started watching — which is
+   * the healthy reading for a job that is legitimately idle.
+   */
+  dueAt: string | null
+  graceMinutes: number
+}
+
+/**
+ * A cron field, expanded to the set of values it matches.
+ *
+ * Supports a star, `a`, `a-b`, `a,b,c` and a trailing `/n` step on any of
+ * them — every form the inventory and `scheduled-crons.yml` use, and nothing
+ * else. An unparsable field returns null, which the caller treats as "matches
+ * nothing". A schedule that can never fire then produces a null `dueAt` and
+ * a green row rather than a permanent red one, and the wiring spec is what
+ * catches the typo — a monitor that reds on its own parse bug teaches people
+ * to ignore it.
+ */
+function expandCronField(
+  field: string,
+  min: number,
+  max: number,
+): Set<number> | null {
+  const values = new Set<number>()
+  for (const part of field.split(',')) {
+    const [range, stepRaw] = part.split('/')
+    const step = stepRaw === undefined ? 1 : Number.parseInt(stepRaw, 10)
+    if (!Number.isFinite(step) || step <= 0) return null
+    let from: number
+    let to: number
+    if (range === '*') {
+      from = min
+      to = max
+    } else if (range.includes('-')) {
+      const [a, b] = range.split('-')
+      from = Number.parseInt(a, 10)
+      to = Number.parseInt(b, 10)
+    } else {
+      from = Number.parseInt(range, 10)
+      to = stepRaw === undefined ? from : max
+    }
+    if (!Number.isFinite(from) || !Number.isFinite(to)) return null
+    if (from < min || to > max || from > to) return null
+    for (let value = from; value <= to; value += step) values.add(value)
+  }
+  return values.size ? values : null
+}
+
+interface ParsedCron {
+  minute: Set<number> | null
+  hour: Set<number> | null
+  dayOfMonth: Set<number> | null
+  month: Set<number> | null
+  dayOfWeek: Set<number> | null
+  /** True when either day field is restricted — the standard OR applies. */
+  domRestricted: boolean
+  dowRestricted: boolean
+}
+
+function parseCron(expression: string): ParsedCron | null {
+  const fields = expression.trim().split(/\s+/)
+  if (fields.length !== 5) return null
+  const [minute, hour, dayOfMonth, month, dayOfWeek] = fields
+  const parsed: ParsedCron = {
+    minute: expandCronField(minute, 0, 59),
+    hour: expandCronField(hour, 0, 23),
+    dayOfMonth: expandCronField(dayOfMonth, 1, 31),
+    month: expandCronField(month, 1, 12),
+    dayOfWeek: expandCronField(dayOfWeek, 0, 6),
+    domRestricted: dayOfMonth !== '*',
+    dowRestricted: dayOfWeek !== '*',
+  }
+  if (
+    !parsed.minute ||
+    !parsed.hour ||
+    !parsed.dayOfMonth ||
+    !parsed.month ||
+    !parsed.dayOfWeek
+  ) {
+    return null
+  }
+  return parsed
+}
+
+/**
+ * Does this UTC date fall on a day the expression can fire?
+ *
+ * The day-of-month / day-of-week OR is the standard cron rule: when BOTH are
+ * restricted the job fires on either, not on both. No expression in the
+ * inventory restricts both, and the rule is implemented anyway so that one
+ * added later is not silently misjudged.
+ */
+function cronDayMatches(parsed: ParsedCron, date: Date): boolean {
+  if (!parsed.month.has(date.getUTCMonth() + 1)) return false
+  const domHit = parsed.dayOfMonth.has(date.getUTCDate())
+  const dowHit = parsed.dayOfWeek.has(date.getUTCDay())
+  if (parsed.domRestricted && parsed.dowRestricted) return domHit || dowHit
+  if (parsed.domRestricted) return domHit
+  if (parsed.dowRestricted) return dowHit
+  return true
+}
+
+/**
+ * The latest time at or before `atMs` that `expression` fires, UTC.
+ *
+ * Null when the expression is unparsable, or when it does not fire inside
+ * the lookback — 45 days, which comfortably clears the longest gap any
+ * inventory entry has (`usage-email`'s twenty-nine idle days).
+ *
+ * Whole non-matching DAYS are skipped rather than walked minute by minute,
+ * so the worst case is ~45 day checks plus 1,440 minute checks rather than
+ * 64,800 of them.
+ */
+export function previousCronFire(
+  expression: string,
+  atMs: number,
+  lookbackDays = 45,
+): number | null {
+  const parsed = parseCron(expression)
+  if (!parsed) return null
+  // Floor to the minute: a fire at 05:00:00 counts as due at 05:00:30.
+  let cursor = Math.floor(atMs / 60_000) * 60_000
+  const floor = cursor - lookbackDays * 86_400_000
+  while (cursor >= floor) {
+    const date = new Date(cursor)
+    if (!cronDayMatches(parsed, date)) {
+      // Jump to 23:59 of the previous UTC day.
+      const startOfDay = Date.UTC(
+        date.getUTCFullYear(),
+        date.getUTCMonth(),
+        date.getUTCDate(),
+      )
+      cursor = startOfDay - 60_000
+      continue
+    }
+    if (
+      parsed.hour.has(date.getUTCHours()) &&
+      parsed.minute.has(date.getUTCMinutes())
+    ) {
+      return cursor
+    }
+    cursor -= 60_000
+  }
+  return null
+}
+
+/**
+ * The scheduled jobs, reduced to one health check per job (AGL-1955).
+ *
+ * `beats` null means the marks could not be read at all — degraded for every
+ * row, the same rule `signupsHealth`, `rateLimitsHealth` and `beaconHealth`
+ * follow. An alarm that cannot see the thing it watches must say so rather
+ * than report calm; here it is the literal condition the issue is about.
+ *
+ * `watchStartedAtMs` is when this deployment first read the marks. A job with
+ * no mark is silent only once a fire time has passed SINCE then — otherwise
+ * every row would be red on the day this deploys, and `usage-email` would
+ * stay red until the 1st.
+ *
+ * Pure on purpose, like its siblings: the route reads, this decides, the
+ * spec exercises every branch without a network.
+ */
+export function cronJobsHealth(
+  beats: readonly CronBeat[] | null,
+  watchStartedAtMs: number,
+  ms: number,
+  now: number = Date.now(),
+  jobs: readonly ScheduledJob[] = SCHEDULED_JOBS,
+): Record<string, CronJobCheck> {
+  const byId = new Map((beats ?? []).map((beat) => [beat.jobId, beat.atMs]))
+  const checks: Record<string, CronJobCheck> = {}
+  for (const job of jobs) {
+    const lastBeatMs = byId.get(job.id) ?? null
+    const lastBeatAgeMinutes =
+      lastBeatMs === null ? null : Math.round((now - lastBeatMs) / 60_000)
+    // The most recent fire time that is already past its grace. Everything
+    // more recent than that is a run we are still waiting for, on time.
+    const dueMs = previousCronFire(job.cron, now - job.graceMinutes * 60_000)
+    const base = {
+      ms,
+      schedule: job.cron,
+      runner: job.runner,
+      lastBeatAgeMinutes,
+      dueAt: dueMs === null ? null : new Date(dueMs).toISOString(),
+      graceMinutes: job.graceMinutes,
+    }
+    if (beats === null) {
+      checks[job.id] = { ...base, ok: false, code: 'beats-unavailable' }
+      continue
+    }
+    if (dueMs === null) {
+      // Nothing was due inside the lookback. Green, and honestly so.
+      checks[job.id] = { ...base, ok: true }
+      continue
+    }
+    if (lastBeatMs === null) {
+      // Never reported. Only a defect once a fire time has passed since we
+      // started watching — before that it is a job we have not met yet.
+      const overdue = dueMs > watchStartedAtMs
+      checks[job.id] = overdue
+        ? { ...base, ok: false, code: 'job-never-reported' }
+        : { ...base, ok: true, code: 'awaiting-first-run' }
+      continue
+    }
+    checks[job.id] =
+      lastBeatMs < dueMs
+        ? { ...base, ok: false, code: 'job-silent' }
+        : { ...base, ok: true }
+  }
+  return checks
+}
+
+/**
+ * The mark a run leaves, and the only write on the beat path.
+ *
+ * Structurally typed against firebase-admin's Firestore rather than importing
+ * it: this module is pure and is imported by tenant Server Components, and a
+ * health verdict library that drags in the admin SDK would be a new reason
+ * for a page to fail. The console routes, the marketing plugin's scheduled
+ * campaign processor and the tenant job runner all pass their own handle.
+ *
+ * NEVER THROWS. A beat that cannot be written must not take down the job it
+ * is describing — the monitor becoming the outage is its own failure mode.
+ * It returns false instead, and a write that keeps failing shows up where it
+ * should: as a silent job on the board.
+ */
+export interface CronBeatStore {
+  collection(name: string): {
+    doc(id: string): {
+      set(data: Record<string, unknown>, options?: unknown): Promise<unknown>
+    }
+  }
+}
+
+export async function writeCronBeat(
+  store: CronBeatStore,
+  jobId: string,
+  now: number = Date.now(),
+): Promise<boolean> {
+  try {
+    await store
+      .collection(CRON_BEAT_COLLECTION)
+      .doc(jobId)
+      .set({ jobId, atMs: now, at: new Date(now).toISOString() }, { merge: true })
+    return true
+  } catch {
+    return false
   }
 }

@@ -26,6 +26,7 @@ import {
 } from '@aglyn/aglyn'
 import { useRemoteConfig, useUser } from '@aglyn/tenant-feature-instance'
 import useCurrentOrg from './use-current-org'
+import { useUrlNamesOrg } from './use-url-names-org'
 import { fetchAndActivate, getValue } from 'firebase/remote-config'
 import {
   createContext,
@@ -101,17 +102,35 @@ export function ReleaseFlagsProvider(props: ReleaseFlagsProviderProps) {
   // (tenant runtime, both API dispatchers, the edit-bar routes) applies the
   // override unconditionally and refuses the work regardless.
   const { org, orgId, ready: orgReady } = useCurrentOrg()
+  // Whether the URL names a workspace at all (AGL-1935). `useCurrentOrg`
+  // deliberately falls back to a remembered selection and then to the user's
+  // FIRST org, because org-less pages still need an org to ACT on — but a
+  // rollout bucket is not an action, it is an answer about a workspace, and
+  // on the picker, `/manage/*` and `/admin/*` there is no workspace to answer
+  // about. Derived from the URL alone, so it has no loading window: false
+  // means "this route names none", never "not read yet".
+  const namesOrg = useUrlNamesOrg()
   // The rollout subject is the ORG, and nothing else (AGL-1656). This used
   // to fall back to `user.uid`, which bucketed two teammates in one
   // workspace into different halves of the same percentage — and disagreed
   // with the server, which fell back to a hostId. Three subjects for one
   // question. Outside an org scope there is no workspace to roll out to, so
   // a null subject resolves fully-enabled flags only.
-  const subjectId = orgId ?? null
-  const releaseFlagOverrides = org?.releaseFlags
+  //
+  // That last sentence used to describe a branch nothing could reach
+  // (AGL-1935): `orgId` is undefined only for a user who belongs to no org at
+  // all, never merely because the route is org-less. `namesOrg` is what makes
+  // the documented behaviour true — and it is the same predicate the chrome
+  // (AGL-1130) and the plugin gate (AGL-1937) gate on, so one route cannot
+  // disagree with another about which workspace it is in.
+  const subjectId = namesOrg ? (orgId ?? null) : null
+  const releaseFlagOverrides = namesOrg ? org?.releaseFlags : undefined
   const overrides = useMemo(
-    () => (orgReady ? parseOrgReleaseFlagOverrides(releaseFlagOverrides) : {}),
-    [orgReady, releaseFlagOverrides],
+    () =>
+      orgReady && namesOrg
+        ? parseOrgReleaseFlagOverrides(releaseFlagOverrides)
+        : {},
+    [orgReady, namesOrg, releaseFlagOverrides],
   )
 
   const [activated, setActivated] = useState(false)

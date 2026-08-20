@@ -47,6 +47,11 @@ import { cache } from 'react'
 import { findUserByUidAcrossPools } from './auth-pools'
 import firebaseAdmin from './firebase-admin'
 import {
+  enforceFreeWorkspaceCapInTransaction,
+  readFreeWorkspaceCapConfig,
+  type FreeWorkspaceCapConfig,
+} from './free-workspace-cap'
+import {
   deleteMemberHostProjections,
   syncHostProjectionForMembers,
   syncMemberHostProjections,
@@ -163,6 +168,16 @@ export interface CreateOrganizationOptions {
   ownerUid: string
   ownerEmail?: string | null
   ownerDisplayName?: string | null
+  /**
+   * Skip the AGL-2265 free-workspace ceiling.
+   *
+   * For staff provisioning on a customer's behalf and for the migration and
+   * backfill scripts — a ceiling that stops support from fixing a workspace
+   * is a ceiling that produces the ticket it was meant to prevent. Never set
+   * from a self-serve path; `/api/orgs/create` passes the staff claim and
+   * nothing else.
+   */
+  bypassFreeWorkspaceCap?: boolean
 }
 
 /**
@@ -177,6 +192,15 @@ export async function createOrganization(
   const { name, slug, ownerUid, ownerEmail, ownerDisplayName } = options
   const db = firestore()
   const orgId = createResourceUid()
+  // The free-workspace ceiling (AGL-2265). Read OUTSIDE the transaction —
+  // it is a platform setting on a 15s cache, not a document this creation
+  // races with, and putting it in the read set would make every workspace
+  // creation on the platform contend on one document. `ready` rides along so
+  // the verdict knows the difference between "staff set no limit" and "we
+  // could not read it", and never treats the second as the first.
+  const capConfig: FreeWorkspaceCapConfig | null = options.bypassFreeWorkspaceCap
+    ? null
+    : await readFreeWorkspaceCapConfig()
   await db.runTransaction(async (tx) => {
     const reservation = await tx.get(db.collection('orgSlugs').doc(slug))
     // Tombstones (renamed-away slugs) are claimable by new orgs (AGL-585).
@@ -190,11 +214,29 @@ export async function createOrganization(
     ) {
       throw new OrgSlugTakenError(slug)
     }
+    // Last read, first write: the ceiling counts inside this transaction, so
+    // a retry recounts, and it writes the per-owner marker that makes two
+    // concurrent creates by one account contend. Throws
+    // `FreeWorkspaceCapError`, which the API routes turn into a 403 with the
+    // numbers in it.
+    if (capConfig) {
+      await enforceFreeWorkspaceCapInTransaction({
+        tx,
+        firestore: db,
+        uid: ownerUid,
+        config: capConfig,
+      })
+    }
     tx.set(db.collection('orgSlugs').doc(slug), { orgId })
     tx.set(db.collection('orgs').doc(orgId), {
       name,
       slug,
       ownerUid,
+      // Stamped once and never mutated — `transferOrgOwnership` moves
+      // `ownerUid` and deliberately leaves this alone (AGL-2265). It is what
+      // stops "hand the workspace to an alt account, create another, take it
+      // back" from being a way past the free-workspace ceiling.
+      createdByUid: ownerUid,
       hosts: {},
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
@@ -1139,6 +1181,13 @@ export async function backfillMemberIdentity(
  * roster; the previous owner steps down to admin. One transaction across
  * the org doc, both member docs and both reverse-index entries, then the
  * host projections re-sync.
+ *
+ * **It moves `ownerUid` and must never touch `createdByUid`** (AGL-2265).
+ * That field is the creator attribution the free-workspace ceiling counts
+ * against, and it is what stops a transfer from being a way to launder the
+ * count: hand a workspace to an alt account, create a fourth, take it back.
+ * Nothing here writes it, and `free-workspace-cap.spec.ts` runs exactly that
+ * sequence to keep it that way.
  */
 export async function transferOrgOwnership(
   orgId: string,

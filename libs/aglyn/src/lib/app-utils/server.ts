@@ -60,6 +60,9 @@ export * from './plan-entitlements'
 export * from './bandwidth-cap'
 export * from './form-abuse-ceiling'
 export * from './health-report'
+// Did a webhook delivery actually DO anything (AGL-1954)? After
+// `health-report`, whose billing verdict consumes the counts this produces.
+export * from './webhook-delivery'
 export * from './support-tiers'
 export * from './release-flags'
 // Who runs THIS deployment, and where its notices go (AGL-2016). Ordered
@@ -121,6 +124,8 @@ export * from './media-folders'
 export * from './media-metadata'
 export * from './media-ref'
 export * from './author-css'
+// The isomorphic HTML rule (AGL-1901), after the CSS one it depends on.
+export * from './author-html'
 export * from './dataset-models'
 export * from './dataset-csv'
 export * from './marketplace-merge'

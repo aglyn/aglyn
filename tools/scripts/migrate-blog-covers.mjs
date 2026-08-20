@@ -41,6 +41,8 @@ import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 
+import { putMediaDocument } from './lib/media-counter.mjs'
+
 // Load admin creds from the repo's local env files so this script is
 // self-contained (the invocation is a single allow-listed `node …` command;
 // secrets are never printed). Already-set process.env wins.
@@ -183,8 +185,19 @@ for (const cover of COVERS) {
   // 5. Refresh the media doc. Clear stale WebP variants so the CDN serves the
   //    new PNG for every width; stamp createdAt if it was missing (so the DAM
   //    default "Newest" sort stops hiding it).
-  await mediaDoc.ref.set(
-    {
+  //
+  // Through the shared writer so `counters/media` follows the bytes
+  // (AGL-1488). This is the migration case rather than the seed case: the
+  // document already exists, so the COUNT does not move and the BYTES move by
+  // the signed difference between the new PNG and whatever the doc recorded
+  // before. Overwriting an asset's `sizeBytes` while leaving the counter
+  // alone is the same defect as creating one without it — the counter just
+  // drifts by the delta instead of by the whole file.
+  await putMediaDocument({
+    firestore,
+    scopeRef: hostRef,
+    mediaId,
+    data: {
       contentType: 'image/png',
       sizeBytes: bytes.length,
       url,
@@ -196,8 +209,7 @@ for (const cover of COVERS) {
         : { createdAt: FieldValue.serverTimestamp() }),
       updatedAt: FieldValue.serverTimestamp(),
     },
-    { merge: true },
-  )
+  })
 
   // 6. Repoint the blog entry's cover to the stable URL — but only if it
   //    isn't already pointing there (entries may already carry the absolute

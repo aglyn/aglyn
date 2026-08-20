@@ -18,14 +18,15 @@
 
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn'
 import {
+  billableScreenIds,
   buildScreenRouteEntries,
   composeScreenRoutePath,
   createResourceUid,
   decodeStoredNodes,
   findScreenIdByRoutePath,
   normalizeScreenSlug,
-  SCREEN_KIND_TEMPLATE,
-  screenClaimsToBeAPage,
+  reservedScreenRouteMessage,
+  reservedScreenRouteSegment,
   screenRoutePathToUrl,
   wouldCreateScreenCycle,
   type ScreenRouteNode,
@@ -181,23 +182,29 @@ function Screens(props) {
     { idField: '$id' },
   )
   const routingMap = hostData?.screens as Record<ScreenUid, string> | undefined
-  // Counted off the UNFILTERED `data`, and off the routing map first
-  // (AGL-1383): a published screen counts whatever its own document says about
-  // itself, so that flipping `kind` or `deletedAt` cannot buy a free page. The
-  // `screens` list above drops those two for the hierarchy table, which is the
-  // right filter for a table and the wrong one for a quota. Same rule as the
-  // server's `billableScreenIds`, restated on the row shape this page holds —
-  // a precheck that warns on a different number than the API enforces is worse
-  // than no precheck at all, and since AGL-1400 it needs no collection read to
-  // stay in step: `kind: 'template'` is the exclusion, on the screen itself.
+  // Counted off the UNFILTERED `data` by THE server's rule, not by a copy of
+  // it (AGL-2093). The `screens` list above drops soft-deleted and email
+  // documents for the hierarchy table, which is the right filter for a table
+  // and the wrong one for a quota, so this maps the raw rows into the shape
+  // `billableScreenIds` reads and asks it.
+  //
+  // It used to restate the rule — routed-first (AGL-1383), minus templates
+  // (AGL-1400) — with a comment saying a precheck that warns on a different
+  // number than the API enforces is worse than no precheck at all. It then
+  // drifted anyway: the restatement never learned AGL-2093's error-screen
+  // bound, so on a host holding five `kind: 'error'` screens this offered room
+  // /api/hosts/resources refused. The rule moved to `screen-route.ts` (which
+  // the client barrel exports) so there is nothing left to restate.
   const billableScreenCount = useMemo(
     () =>
-      (data ?? []).filter((screen: any) => {
-        if (screen.kind === SCREEN_KIND_TEMPLATE) return false
-        return (
-          routingMap?.[screen.$id] !== undefined || screenClaimsToBeAPage(screen)
-        )
-      }).length,
+      billableScreenIds(
+        (data ?? []).map((screen: any) => ({
+          id: screen.$id,
+          kind: screen.kind,
+          deletedAt: screen.deletedAt,
+        })),
+        routingMap,
+      ).size,
     [data, routingMap],
   )
   const screensById = useMemo(() => {
@@ -255,6 +262,20 @@ function Screens(props) {
       // request paths against the host's `screens` routing map, so the slug
       // must both live on the screen doc and be registered in that map.
       const path = normalizeScreenSlug(slugInput)
+      // A handful of addresses the published site cannot answer, whatever the
+      // routing map says (AGL-2076) — refused BEFORE the conflict read, since
+      // no amount of the host's own state changes the answer. Without this the
+      // page was created, published, listed as live, and served the framework's
+      // own `404.html`; the only way to find out was to curl for
+      // `x-matched-path`.
+      const reserved = reservedScreenRouteSegment(path)
+      if (reserved) {
+        dequeueLoading()
+        return enqueueSnackbar(reservedScreenRouteMessage(reserved), {
+          variant: 'warning',
+          persist: false,
+        })
+      }
       if (path) {
         const hostSnapshot = await getDoc(doc(firestore, 'hosts', hostId))
         const owner = findScreenIdByRoutePath(hostSnapshot.get('screens'), path)

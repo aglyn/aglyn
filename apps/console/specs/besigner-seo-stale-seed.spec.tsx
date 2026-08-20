@@ -76,8 +76,18 @@ const mockUpdateScreenDoc = jest.fn((data: Record<string, unknown>) => {
   return Promise.resolve()
 })
 
+/**
+ * Creating an action/entry is a SERVER call since AGL-2266, so this closed-world
+ * factory has to name the hook or the component throws and every assertion
+ * below reads the crash as the behaviour under test. A `jest.fn` rather than an
+ * inert arrow: these suites are about writes that must NOT happen, and this is
+ * the one write that would now happen somewhere else.
+ */
+const mockCreateResource = jest.fn(async () => ({ id: 'created-id' }))
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
+  useHostResourceApi: () => mockCreateResource,
   useHost: () => ({ doc: { data: {}, status: 'success', fromCache: false } }),
   useHostActivityLogger: () => jest.fn(),
   useScreen: () => ({
@@ -141,6 +151,17 @@ jest.mock('@aglyn/aglyn', () => ({
   decodeStoredNodes: () => ({}),
   findScreenIdByRoutePath: () => undefined,
   normalizeScreenSlug: (value: string) => value,
+  // The REAL rule, not a stub (AGL-2076). The besigner's Slug field refuses a
+  // reserved address, and a double that answered a constant here would either
+  // hide the refusal or invent one — an unfaithful fake fabricates false
+  // greens and false reds alike. It is a pure function over a string, so
+  // there is nothing to fake.
+  reservedScreenRouteMessage: jest.requireActual(
+    '@aglyn/aglyn/app-utils/screen-route',
+  ).reservedScreenRouteMessage,
+  reservedScreenRouteSegment: jest.requireActual(
+    '@aglyn/aglyn/app-utils/screen-route',
+  ).reservedScreenRouteSegment,
   screenRoutePathToUrl: () => '',
   wouldCreateScreenCycle: () => false,
 }))

@@ -4,7 +4,25 @@ service cloud.firestore {
     function isSignedIn() { return request.auth != null; }
     // Staff access is a Firebase custom claim set via
     // tools/scripts/set-staff-claim.mjs (Aglyn Admin Console, AGL-42).
-    function isStaff() { return isSignedIn() && request.auth.token.staff == true; }
+    //
+    // Read with `.get()` — the `staffRole()` idiom below — and NOT as
+    // `request.auth.token.staff`, which is an ERROR for the 99.99% of sessions
+    // that carry no such claim rather than a `false` (AGL-2479). The outcome
+    // never differed: `isStaff()` is only ever the first disjunct of an `||` or
+    // the left of an `&&`, and CEL absorbs an error against a `true` and
+    // propagates it as a deny against a `false` — exactly what a `false` does.
+    // There is no `!isStaff()` anywhere in this file, which is the one shape
+    // that WOULD have differed.
+    //
+    // The MESSAGE differed, and that is the whole reason this changed. Every
+    // ordinary denial in the emulator read `Property staff is undefined on
+    // object for 'create' @ L<the allow line>`, so the reported cause of a
+    // refusal was a red herring pointing at this function, on every rule, for
+    // every non-staff user. Three stale tests were misfiled as a rules bug on
+    // exactly that evidence. Denials now name the line that actually refused.
+    function isStaff() {
+      return isSignedIn() && request.auth.token.get('staff', false) == true;
+    }
     // Staff RBAC (AGL-206): roles ride a second claim. A missing role means
     // 'support', the LEAST privileged (AGL-2131) — it meant 'super' here
     // long after AGL-495 inverted that default in every API route, so a
@@ -205,6 +223,17 @@ service cloud.firestore {
       // ownership transfer in /api/orgs/settings; `hosts` only by the host
       // APIs and the erase path. A bare client write of any of them bypasses
       // the index/projection maintenance that makes the value mean anything.
+      //
+      // `createdByUid` joins that identity set (AGL-2265), and it is the one
+      // key here that is never written again after the org exists. It is the
+      // creator attribution the free-workspace ceiling counts against —
+      // stamped once inside `createOrganization`'s transaction and mutated by
+      // nothing, `transferOrgOwnership` included — which is precisely what
+      // stops "hand a workspace to an alt account, create a fourth, take it
+      // back" from being a way past the ceiling. A client able to write it
+      // could clear its own attribution and mint free workspaces without
+      // limit, so this deny IS the control rather than paperwork around it.
+      //
       // The only client Web SDK write to a top-level org document is still
       // the erasure batch (re-swept for AGL-1824), so none of the seven has a
       // client writer to lose.
@@ -233,7 +262,7 @@ service cloud.firestore {
       // site — the exact over-entitlement AGL-2439 closes.
       allow update: if (isSuperStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
-            ['slug', 'ownerUid', 'hosts', 'sso',
+            ['slug', 'ownerUid', 'createdByUid', 'hosts', 'sso',
              'plan', 'entitlements', 'releaseFlags',
              'seatAddons', 'registerAllocations', 'collaboratorAllocations',
              'storageOverage',
@@ -243,7 +272,8 @@ service cloud.firestore {
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode'])) ||
         (isBillingStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
-            ['slug', 'ownerUid', 'hosts', 'enabledPlugins', 'sso',
+            ['slug', 'ownerUid', 'createdByUid', 'hosts', 'enabledPlugins',
+             'sso',
              'plan', 'entitlements', 'releaseFlags',
              'seatAddons', 'registerAllocations', 'collaboratorAllocations',
              'storageOverage',
@@ -254,8 +284,8 @@ service cloud.firestore {
              'erasureRequestedAt'])) ||
         (canManageOrg() && orgNotSuspended() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
-            ['slug', 'ownerUid', 'hosts', 'plan', 'entitlements',
-             'releaseFlags',
+            ['slug', 'ownerUid', 'createdByUid', 'hosts', 'plan',
+             'entitlements', 'releaseFlags',
              'enabledPlugins', 'seatAddons', 'registerAllocations',
              'collaboratorAllocations', 'storageOverage', 'bandwidthCap',
              'stripeCustomerId', 'subscription',
@@ -710,6 +740,23 @@ service cloud.firestore {
     // defeats the whole point, and one that could read them could enumerate
     // which buckets are near their cap.
     match /rateLimits/{bucketId} {
+      allow read, write: if false;
+    }
+
+    // Scheduled-job heartbeats (AGL-1955): one doc per cron job, stamped by
+    // the run itself through the Admin SDK, read by /api/health/crons to
+    // notice a job that STOPPED being scheduled. Deny ALL client access — a
+    // client that could write one could forge a heartbeat for a job that is
+    // not running, which is precisely the silence the check exists to break;
+    // a client that could read them could enumerate the platform's job
+    // schedule and when each last ran.
+    //
+    // Unmatched paths deny anyway; this match exists to carry the record.
+    // The health endpoint is PUBLIC and reports these, so what it exposes was
+    // a deliberate decision: job ids, cron expressions and ages, every one of
+    // which is already in the open-source repo. The documents themselves stay
+    // closed because the collection is the write side.
+    match /platformCronBeats/{jobId} {
       allow read, write: if false;
     }
 
@@ -1482,6 +1529,29 @@ service cloud.firestore {
         // did. Checked for these six specifically: the rules file contains no
         // dedicated `match` block for any of the names, so nothing re-grants
         // them one line below.
+        //
+        // `actions` joins CREATE ONLY (AGL-2266), the `formSubmissions`
+        // asymmetry for the `webhooks` reason. It was in NONE of these lists —
+        // the catch-all is permissive by default, so a subcollection nobody
+        // classified is granted — and the import route's own table had already
+        // written down what that meant: "no `RESOURCES` entry and no quota key
+        // anywhere; all three creators write the document client-direct." A
+        // free org could mint unbounded Firestore documents from the browser
+        // against a $0 subscription, which is the AGL-1360 / AGL-1399 shape:
+        // uncapped infrastructure rather than a bypass of anything we sell.
+        // /api/hosts/resources now owns the create and counts live rows
+        // against `ACTIONS_MAX_PER_HOST`.
+        //
+        // Update and delete stay OPEN, and that is the decision rather than an
+        // oversight. The actions card toggles `enabled`, the besigner's
+        // interactions provider flips one in place, and both RETIRE an action
+        // by stamping `deletedAt` — a soft delete, which is a client update.
+        // Following `counters` onto all three lists would break every one of
+        // those surfaces to close nothing: neither operation creates a
+        // document, so neither can raise the count the cap is about. The cap
+        // counts LIVE rows, so the soft delete frees a slot, which is the
+        // property that makes leaving update open safe rather than merely
+        // convenient.
         allow create: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'variables',
@@ -1489,8 +1559,8 @@ service cloud.firestore {
               'locations', 'products', 'components', 'registers', 'installs',
               'templates', 'collections', 'datasets', 'webhooks', 'orders',
               'counters', 'analytics', 'screenAnalytics', 'members',
-              'mediaTombstones', 'formSubmissions', 'carts', 'checkouts',
-              'giftCards', 'stripeTaxRates', 'restockAlerts',
+              'mediaTombstones', 'formSubmissions', 'actions', 'carts',
+              'checkouts', 'giftCards', 'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation']));
         // `templates` is excluded from update as well as create: its
         // dedicated block above freezes `source`, and leaving it here would
@@ -1616,22 +1686,35 @@ service cloud.firestore {
       // `publishedAt` is frozen alongside them because it is what the live
       // listing sorts and filters on.
       //
-      // CREATE stays open to an author, with one condition: the console's
-      // entry editor writes `status: 'draft'` on the create and never names
-      // status again, so a draft create is authoring and a create that
-      // arrives already `published` is a publish wearing a create's clothes —
-      // which is the shape the freeze on update would otherwise hand it. An
-      // absent status defaults to draft, so an author writing no status at
-      // all is admitted.
+      // CREATE is API-ONLY since AGL-2266, and this block is where that had to
+      // be said. The catch-all's name-based exclusions cannot reach entries —
+      // that is the whole reason this dedicated block exists — so entries were
+      // the one quota-governed content shape under a host that no cap could be
+      // attached to, and a free org could mint unbounded Firestore documents
+      // from the browser. `ENTRIES_MAX_PER_COLLECTION` is now counted from a
+      // server read in /api/hosts/resources, paired with
+      // `COLLECTIONS_MAX_PER_HOST` on /api/hosts/collections because either
+      // number alone bounds nothing.
+      //
+      // The draft condition this replaces has NOT been dropped, it has moved
+      // where it cannot be argued with: `status` is off that route's field
+      // allow-list and `'draft'` is stamped server-side, so a create arriving
+      // as `published` is not refused — it is impossible to express. The rule
+      // it enforced still holds on UPDATE below, which is where publishing
+      // actually happens.
+      //
+      // UPDATE stays open, and it is what keeps the entry editor client-direct:
+      // the console's save is a `setDoc(…, { merge: true })`, which is a create
+      // only for the FIRST save. Every later save of the same entry is an
+      // update and never touches this route.
       //
       // DELETE stays open to an author, unlike a screen's. There is no paired
       // routing-map write to leave half-applied, and an entry is the one
       // content shape where the console offers deletion as ordinary editing.
+      // It also frees a slot under the cap, which is the property that lets a
+      // host at the ceiling recover without support.
       match /collections/{collectionId}/entries/{entryId} {
-        allow create: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
-            (canPublishHostContent(hostId) ||
-              request.resource.data.get('status', 'draft') == 'draft'));
+        allow create: if isStaff();
         allow update: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
             (canPublishHostContent(hostId) ||
@@ -2067,8 +2150,23 @@ service cloud.firestore {
       // The seller is an ORG (AGL-652), so the sales side is a membership
       // check, not a uid match — a uid never equals an org id, and leaving
       // the old comparison would hide every publisher's own revenue.
+      //
+      // THE BUYING SIDE IS AN ORG TOO SINCE AGL-2331. A purchase licenses the
+      // installing organization, so the workspace that holds a licence has to
+      // be able to SEE it: without this clause the only person who could read
+      // an org's own licence was whoever happened to click Buy, and a
+      // colleague — or their replacement after they leave — saw a listing the
+      // org already paid for as unbought. `buyerUid` stays for the buyer's own
+      // receipt and for pre-AGL-2331 purchases, which carry no `buyerOrgId` at
+      // all and would otherwise become unreadable by anyone.
+      //
+      // The `is string` test is what keeps a legacy document from building the
+      // path `orgs//members/{uid}` — the membership `exists()` must be asked
+      // about a real org or not asked at all.
       allow read: if isStaff() || (isSignedIn() &&
         (resource.data.buyerUid == request.auth.uid ||
+         (resource.data.buyerOrgId is string &&
+          exists(/databases/$(database)/documents/orgs/$(resource.data.buyerOrgId)/members/$(request.auth.uid))) ||
          exists(/databases/$(database)/documents/orgs/$(resource.data.sellerOrgId)/members/$(request.auth.uid))));
       allow write: if false;
     }

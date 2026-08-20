@@ -271,7 +271,9 @@ async function fetchJson(url, init) {
   try {
     response = await fetch(url, init)
   } catch (error) {
-    throw new Error(`Network error fetching ${url}: ${error.message}`)
+    throw new Error(`Network error fetching ${url}: ${error.message}`, {
+      cause: error,
+    })
   }
   const body = await response.text()
   if (!response.ok) {
@@ -326,6 +328,7 @@ export async function fetchLiveDatabaseRules({ token, databaseUrl }) {
   } catch (error) {
     throw new Error(
       `Network error fetching ${databaseUrl}/.settings/rules.json: ${error.message}`,
+      { cause: error },
     )
   }
   const body = await response.text()

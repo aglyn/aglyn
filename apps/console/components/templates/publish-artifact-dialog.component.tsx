@@ -16,7 +16,11 @@
  */
 'use client'
 
-import { marketplacePriceCostNote } from '@aglyn/aglyn'
+import {
+  isBelowMarketplacePriceFloor,
+  marketplacePriceCostNote,
+  marketplacePriceFloorHint,
+} from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -182,15 +186,18 @@ export function PublishArtifactDialog({
             size="small"
             label="Price (USD)"
             placeholder="0 = free"
-            // What a very low price costs to process (AGL-2343). Marketplace
-            // checkout is a destination charge, so Stripe's fee comes out of
-            // the PLATFORM's balance while the seller is transferred a fixed
-            // share — at $1 the fee is larger than the whole platform cut.
-            // Advisory: nothing here refuses the price, because a minimum is
-            // publisher-facing policy and pricing is locked for the beta.
+            // The minimum price (AGL-2343). Marketplace checkout is a
+            // destination charge, so Stripe's fee comes out of the PLATFORM's
+            // balance while the seller is transferred a fixed share — at $1 the
+            // fee is larger than the whole platform cut. The publish route
+            // refuses anything under the floor, so the field says so before the
+            // publisher gets there and the button holds.
+            error={isBelowMarketplacePriceFloor(price)}
             helperText={
               marketplacePriceCostNote(price) ??
-              'Paid listings need payouts set up on your marketplace profile'
+              marketplacePriceFloorHint(
+                'Paid listings need payouts set up on your marketplace profile.',
+              )
             }
             value={price}
             onChange={(event) =>
@@ -209,7 +216,7 @@ export function PublishArtifactDialog({
           size="small"
           variant="contained"
           color="primary"
-          disabled={busy || !name.trim()}
+          disabled={busy || !name.trim() || isBelowMarketplacePriceFloor(price)}
           onClick={() => void handlePublish()}
         >
           {busy ? 'Publishing…' : 'Publish'}

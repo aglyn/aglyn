@@ -28,6 +28,18 @@
  * the session request IS the contract this file pins.
  */
 
+// The acting org (AGL-2331). Checkout resolves the workspace a licence is
+// being bought for through the caller's own membership — never a request-body
+// field — so the handler cannot open a session without one. These suites are
+// about the take rate, the tax code and the kill switch, so the membership is
+// simply present and permitted.
+jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
+  resolveOrgPermissions: async () => ({
+    orgId: 'buyer-org',
+    permissions: { installPlugins: true },
+  }),
+}))
+
 jest.mock('./publisher-profile', () => ({
   canActAsPublisher: async () => false,
   resolvePublisherProfile: async () =>
@@ -456,5 +468,92 @@ describe('a listing the platform has switched off is not for sale (AGL-2288)', (
     const res = await buy({ reviewStatus: 'rejected' })
     expect(res.statusCode).toBe(404)
     expect(stripeCalls).toHaveLength(0)
+  })
+})
+
+/**
+ * THE CLASSIFICATION IS A DECISION, NOT AN INHERITANCE (AGL-1553).
+ *
+ * The line item is built ad hoc from `price_data`, so before this it carried
+ * a `name` and nothing else. With no `tax_code`, Stripe classified every
+ * marketplace sale by falling back to the ACCOUNT-LEVEL preset — which is
+ * `txcd_10103001`, set by hand in the Dashboard for Aglyn's own subscription
+ * products (AGL-1537/1877).
+ *
+ * That produced the right number by luck. It is also the exact classification
+ * Aglyn affirmatively represents to the Texas Comptroller: the pending private
+ * letter ruling request states at Part 4.5 ¶ 4 that "the payment processor's
+ * tax classification applied to these charges is the software-as-a-service
+ * category", and at Part 6.1 proposes the charges are data processing services
+ * under Tax Code § 151.0035, of which § 151.351 exempts 20% — tax on 80% of
+ * the charge. AGL-1817 verified that against a LIVE calculation: $6.60 on a
+ * $100.00 charge at an 8.25% Texas address, i.e. 8.25% × $80.
+ *
+ * So the value below is not an engineering guess; changing it changes what a
+ * signed filing says is true. What was wrong was that nothing in the request
+ * said it. Re-preset the account for any other product line — storefront
+ * goods, bookings — and marketplace sales would have silently re-classified,
+ * moving the Texas base off 80% with no diff, no test, and no symptom short of
+ * reconciling a return.
+ */
+describe('the marketplace line item names its own tax code (AGL-1553)', () => {
+  it('sends the SaaS/business-use code on the product, not whatever the account preset happens to be', async () => {
+    seed()
+    const res = makeRes()
+    await checkoutHandler(makeReq(), res)
+    expect(res.statusCode).toBe(200)
+    // On the SESSION-CREATION request itself, not some helper's return value:
+    // the tax code only does anything if it is in the form body Stripe is
+    // posted. Asserting the URL alongside it keeps this honest if the handler
+    // ever grows a second outbound call.
+    expect(stripeCalls[0].url).toBe(
+      'https://api.stripe.com/v1/checkout/sessions',
+    )
+    expect(
+      stripeCalls[0].params.get('line_items[0][price_data][product_data][tax_code]'),
+    ).toBe('txcd_10103001')
+  })
+
+  it('names it on EVERY sale, not just the default-priced one', async () => {
+    // The code rides on the line item, so it has to survive every branch that
+    // rebuilds one — a different price, a different seller rate, a listing
+    // whose title is missing and falls back to the generic name.
+    for (const listing of [
+      { priceUsd: 3, displayName: 'Cheapest allowed listing' },
+      { priceUsd: 1000, displayName: 'Ceiling-priced listing' },
+      { priceUsd: 25, displayName: undefined },
+    ]) {
+      seed({ listing })
+      stripeCalls.length = 0
+      const res = makeRes()
+      await checkoutHandler(makeReq(), res)
+      expect(`${listing.priceUsd} → ${res.statusCode}`).toBe(
+        `${listing.priceUsd} → 200`,
+      )
+      expect(
+        `${listing.priceUsd} → ${stripeCalls[0].params.get(
+          'line_items[0][price_data][product_data][tax_code]',
+        )}`,
+      ).toBe(`${listing.priceUsd} → txcd_10103001`)
+    }
+  })
+
+  it('keeps the tax code beside the behaviour that makes it computable', async () => {
+    // The three parameters are load-bearing as a SET (AGL-1544): a tax code
+    // with `automatic_tax` off computes nothing, and `exclusive` is what keeps
+    // the tax OFF the seller's fixed transfer. Asserting them together stops a
+    // future edit from keeping the code while dropping the thing that applies
+    // it.
+    seed()
+    const res = makeRes()
+    await checkoutHandler(makeReq(), res)
+    const { params } = stripeCalls[0]
+    expect(params.get('line_items[0][price_data][product_data][tax_code]')).toBe(
+      'txcd_10103001',
+    )
+    expect(params.get('automatic_tax[enabled]')).toBe('true')
+    expect(params.get('line_items[0][price_data][tax_behavior]')).toBe(
+      'exclusive',
+    )
   })
 })

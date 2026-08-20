@@ -261,6 +261,28 @@ account that the rule *cannot* refuse still has staff — the simplest being an 
 a domain you did not list. Otherwise a misconfigured tenant id locks you out of the
 console you would fix it from.
 
+#### Your SSO auth origin must be configured (AGL-2020)
+
+The Reply/ACS URL and Entity ID your customers paste into their IdP are **derived from
+your configuration**, in this order — the first one set wins:
+
+1. `NEXT_PUBLIC_FIREBASE_AUTH_HANDLER_HOST` — an explicit override.
+2. `auth.<NEXT_PUBLIC_WORKSPACE_DOMAIN>` — set by the template, so this normally wins.
+3. `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` — your project's own `*.firebaseapp.com`.
+4. `<NEXT_PUBLIC_FIREBASE_PROJECT_ID>.firebaseapp.com`.
+
+**With all four blank, SSO setup now fails with a message naming them.** That is
+deliberate, and it is the one place in this runbook where a missing value is not
+allowed to degrade quietly. There is no safe "off" value: an empty auth origin
+produces `https:///__/auth/handler`, which Google accepts when written and which then
+rejects every assertion afterwards, with nothing in the config that looks wrong.
+
+Until this was fixed the fourth line defaulted to **Aglyn's own Firebase project**, so
+an install with none of the four set wrote our auth origin into *your* GCIP SAML
+provider and displayed it in *your* console as the URL to hand your identity provider.
+If you configured SSO on a build older than this fix, re-check the Reply/ACS URL shown
+on the org's SSO card and re-save the provider — it must name a host you operate.
+
 ## 5. Put a reverse proxy in front
 
 Terminate TLS at your proxy (Caddy, nginx, Traefik) and route:

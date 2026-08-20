@@ -46,7 +46,7 @@
  */
 
 import {
-  hasLivePurchaseOf,
+  hasOrgLicenceOf,
   type PurchaseLiveness,
 } from '../model/marketplace'
 
@@ -62,16 +62,47 @@ interface LivePurchaseQuery {
   firestore: FirebaseFirestore.Firestore
   /** The authenticated caller's uid — never a value from the request body. */
   buyerUid: string
+  /**
+   * THE ORGANIZATION BEING INSTALLED INTO (AGL-2331) — required, because a
+   * licence belongs to an org and asking this question without one can only be
+   * answered by the legacy grant.
+   *
+   * Every caller resolves it SERVER-SIDE from an authenticated membership
+   * (`resolveOrgPermissions`), never from a request body field. It is
+   * deliberately not optional: the gate that decides who gets paid content
+   * must not be satisfiable by forgetting an argument, and a required property
+   * makes every one of the nine doors a compile error until it is wired.
+   *
+   * The empty string is legal and means "this site has no owning org" — see
+   * `purchaseEntitlesOrg`, which never matches a document against it.
+   */
+  buyerOrgId: string
   listingId: string
 }
 
 /**
- * True when this buyer holds a purchase of this listing that still entitles.
+ * True when this ORGANIZATION holds a live licence for this listing
+ * (AGL-2331); see `purchaseEntitlesOrg` in the model for the licensing model
+ * and the legacy grant, which is where the reasoning lives.
  *
  * A FULLY refunded purchase (`refundedAt`, stamped by the `charge.refunded`
  * branch of the marketplace billing webhook) reads as absent. Re-buying after a
  * refund writes a fresh session-keyed doc, so a legitimate second purchase
  * still installs and a refunded one sitting beside it does not veto it.
+ *
+ * TWO queries, not one, and not an `in` filter over both fields — Firestore
+ * has no disjunction across different fields that also keeps the `listingId`
+ * equality, and the honest question genuinely is a union of two populations:
+ * the org's licences, and this person's pre-AGL-2331 purchases. Both are
+ * equality-only conjunctions, so both are served by the automatic single-field
+ * indexes exactly as the original query was — no composite index, nothing to
+ * deploy.
+ *
+ * The org query is skipped entirely when there is no org, and the legacy query
+ * when there is no uid, so the common path (an org-stamped licence for a
+ * signed-in member) still costs the two reads it always did plus one for the
+ * grandfather — and the grandfather query is against a set that can only
+ * shrink.
  *
  * Callers gate on this only when `priceUsd > 0` and the caller is not the
  * publisher — a free listing and a publisher installing their own work never
@@ -80,18 +111,43 @@ interface LivePurchaseQuery {
 export async function hasLivePurchase({
   firestore,
   buyerUid,
+  buyerOrgId,
   listingId,
 }: LivePurchaseQuery): Promise<boolean> {
-  if (!buyerUid || !listingId) return false
-  const purchases = await firestore
-    .collection('marketplacePurchases')
-    .where('buyerUid', '==', buyerUid)
-    .where('listingId', '==', listingId)
-    .limit(PURCHASE_SCAN_LIMIT)
-    .get()
-  return hasLivePurchaseOf(
-    purchases.docs.map((purchase) => purchase.data() as PurchaseLiveness),
+  if (!listingId) return false
+  if (!buyerUid && !buyerOrgId) return false
+  const purchases = firestore.collection('marketplacePurchases')
+  const [byOrg, byUid] = await Promise.all([
+    buyerOrgId
+      ? purchases
+          .where('buyerOrgId', '==', buyerOrgId)
+          .where('listingId', '==', listingId)
+          .limit(PURCHASE_SCAN_LIMIT)
+          .get()
+      : null,
+    // The legacy grant (AGL-2331). Kept as its own read rather than folded
+    // into the org query, because the documents it exists to find are exactly
+    // the ones with no `buyerOrgId` to match on — an org-keyed query cannot
+    // see them at all, which is precisely how a naive cutover would have
+    // revoked every purchase made before it.
+    buyerUid
+      ? purchases
+          .where('buyerUid', '==', buyerUid)
+          .where('listingId', '==', listingId)
+          .limit(PURCHASE_SCAN_LIMIT)
+          .get()
+      : null,
+  ])
+  // `hasOrgLicenceOf` re-tests the listing id the queries already filtered on,
+  // deliberately: it is the same shared predicate the listing page and the
+  // checkout guard call, so the one place that decides who owns what has one
+  // implementation rather than a server-shaped variant of it.
+  return hasOrgLicenceOf(
+    [...(byOrg?.docs ?? []), ...(byUid?.docs ?? [])].map(
+      (purchase) => purchase.data() as PurchaseLiveness,
+    ),
     listingId,
+    { orgId: buyerOrgId, uid: buyerUid },
   )
 }
 
@@ -106,6 +162,7 @@ export async function hasLivePurchase({
 export async function requirePurchase({
   firestore,
   buyerUid,
+  buyerOrgId,
   listingId,
   priceUsd,
   ownsListing,
@@ -115,6 +172,11 @@ export async function requirePurchase({
   ownsListing: boolean
 }): Promise<{ error: string; priceUsd: number } | null> {
   if (!(priceUsd > 0) || ownsListing) return null
-  const live = await hasLivePurchase({ firestore, buyerUid, listingId })
+  const live = await hasLivePurchase({
+    firestore,
+    buyerUid,
+    buyerOrgId,
+    listingId,
+  })
   return live ? null : { error: 'Purchase required', priceUsd }
 }

@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module'
 import globals from 'globals'
 import nextPlugin from '@next/eslint-plugin-next'
 import tsPlugin from '@typescript-eslint/eslint-plugin'
@@ -16,6 +17,33 @@ import noPlanGatedEntitlement from './tools/lint-rules/no-plan-gated-entitlement
 import noRemoteImageService from './tools/lint-rules/no-remote-image-service.mjs'
 import noSxAfterSpread from './tools/lint-rules/no-sx-after-spread.mjs'
 import noUnguardedLoadingHook from './tools/lint-rules/no-unguarded-loading-hook.mjs'
+
+/**
+ * The React version, stated rather than detected (AGL-2479).
+ *
+ * `eslint-plugin-react@7.37.5` is the LAST published release and its peer
+ * range tops out at `eslint ^9.7`; there is no version of it that supports
+ * ESLint 10, which f6a39902e moved us to. Its version DETECTION path —
+ * `getReactVersionFromContext` → `detectReactVersion` → `resolveBasedir` —
+ * calls `context.getFilename()`, one of the deprecated rule-context methods
+ * ESLint 10 REMOVED. So every react rule that asks what version we are on
+ * throws at rule-load time, and the whole lint run dies with
+ * `Error while loading rule 'react/no-direct-mutation-state'`.
+ *
+ * Detection exists only to answer this question. Answering it directly skips
+ * the removed API entirely — and is what eslint-plugin-react's own docs
+ * recommend over `'detect'` regardless, since detection re-resolves `react`
+ * from disk. Read from the installed package so it cannot go stale against
+ * `package.json`.
+ *
+ * Only the five projects that spread `nx.configs['flat/react']` were red —
+ * that preset carries no `settings.react` of its own, while the root's
+ * `flat/react-typescript` blocks are scoped to `.ts`/`.tsx` and so never
+ * matched the `eslint.config.mjs` files the crash was reported on. This
+ * setting is unscoped on purpose: it must reach every config that turns a
+ * react rule on, whichever preset put it there.
+ */
+const reactVersion = createRequire(import.meta.url)('react/package.json').version
 
 // Local rules that guard Aglyn-specific invariants (not published as a plugin).
 const aglynPlugin = {
@@ -93,6 +121,8 @@ export default [
       import: importPlugin,
       aglyn: aglynPlugin,
     },
+    // See `reactVersion` above: unscoped so it reaches every react rule.
+    settings: { react: { version: reactVersion } },
   },
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
@@ -343,6 +373,19 @@ export default [
     // five shipped instances before anything in the toolchain noticed
     // (AGL-1240/1284). Scoped here because this is where node props are
     // spread; widen it the first time the shape appears outside.
+    //
+    // `basePath` is what makes any of that true (AGL-2030). This is the only
+    // block in the file scoped by PATH rather than by extension, and eslint
+    // resolves `files` against the directory of the config that OWNS the
+    // block — which, once nx lints a project through its own
+    // `libs/plugins/<name>/eslint.config.mjs`, is that project directory.
+    // `libs/plugins/**/*.tsx` re-based to `libs/plugins/mui/libs/plugins/**`
+    // and matched nothing, so the rule resolved to NO severity in all 13
+    // plugin projects and CI has never once run it. Anchoring with `**/`
+    // cannot fix this the way it does elsewhere: relative to the project
+    // directory the paths do not contain `libs/plugins` at all. Pinning the
+    // base to this file's own directory does.
+    basePath: import.meta.dirname,
     files: ['libs/plugins/**/*.tsx'],
     rules: { 'aglyn/no-sx-after-spread': 'error' },
   },
@@ -352,7 +395,7 @@ export default [
     // far. Keeping every import in one module means a breaking upgrade is a
     // one-file change instead of a search-and-replace across the console.
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
-    ignores: ['apps/console/components/layouts/app-bar-menubar.component.tsx'],
+    ignores: ['**/components/layouts/app-bar-menubar.component.tsx'],
     rules: {
       'no-restricted-imports': [
         'error',

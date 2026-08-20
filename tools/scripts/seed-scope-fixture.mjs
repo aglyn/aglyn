@@ -47,6 +47,8 @@ import { getApps, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 
+import { putMediaDocument } from './lib/media-counter.mjs'
+
 if (
   !process.env.FIRESTORE_EMULATOR_HOST ||
   !process.env.FIREBASE_AUTH_EMULATOR_HOST
@@ -193,21 +195,31 @@ async function main() {
     { merge: true },
   )
 
+  // Through the shared writer so the org's `counters/media` moves with these
+  // documents (AGL-1488). Note the third write carries NO `sizeBytes` — it is
+  // a scope patch onto a document seeded above — and the helper resolves the
+  // size the document will actually hold after the merge rather than reading
+  // the absent field as zero, which would silently subtract the asset's own
+  // bytes back out of the counter.
   for (const id of ['scope-media-logo', 'scope-media-internal']) {
-    await orgRef.collection('media').doc(id).set(
-      {
+    await putMediaDocument({
+      firestore: db,
+      scopeRef: orgRef,
+      mediaId: id,
+      data: {
         fileName: `${id}.png`,
         contentType: 'image/png',
         sizeBytes: 1024,
         createdAt: FieldValue.serverTimestamp(),
       },
-      { merge: true },
-    )
+    })
   }
-  await orgRef.collection('media').doc('scope-media-preset').set(
-    { fileName: 'preset.png', contentType: 'image/png', visibleTo: ['org'] },
-    { merge: true },
-  )
+  await putMediaDocument({
+    firestore: db,
+    scopeRef: orgRef,
+    mediaId: 'scope-media-preset',
+    data: { fileName: 'preset.png', contentType: 'image/png', visibleTo: ['org'] },
+  })
   await orgRef.collection('mediaFolders').doc('scope-folder-internal').set(
     { name: 'Internal', parentId: null, order: 0 },
     { merge: true },

@@ -155,6 +155,117 @@ describe('AGL-1485 · every media creator writes the same document', () => {
 })
 
 /**
+ * The same ground, one tier down: the SCRIPTS (AGL-1488).
+ *
+ * AGL-1485 attributed a measured 8-document / 561,000-byte shortfall on
+ * `hosts/DXnRbPH4CQ` to the legacy route above. It cannot have been — that
+ * route had no host branch at all. The actual generators were four Admin-SDK
+ * call sites in `tools/scripts/**`, which write `{hosts|orgs}/{id}/media/{id}`
+ * straight past every route and therefore past every counter write.
+ *
+ * The direction is always the same, which is why it went unnoticed: the
+ * counter comes out LOW. A low `counters/media` measures the free tier's
+ * 250 MB band against less storage than exists, so the customer is
+ * UNDER-limited rather than locked out — and since AGL-1473 made the counter
+ * a billing input, the metered plans UNDER-bill. Nothing complains.
+ *
+ * Discovered, not listed, for the reason the block above gives: the thing
+ * that failed was an inventory. A script is a WRITER here if it names a media
+ * collection and does something other than read it — so a fifth seed is
+ * caught by arriving.
+ */
+const SHARED_MEDIA_WRITER = 'putMediaDocument'
+const MEDIA_COLLECTION_MJS = "collection('media')"
+
+/**
+ * The module that DEFINES the shared writer, and its test. Excluded by path
+ * because they are the fixed point of the rule, not exceptions to it.
+ */
+const MEDIA_WRITER_MODULE = ['tools', 'scripts', 'lib', 'media-counter'].join('/')
+
+/**
+ * Read-only is derived, never asserted by a name list: a script whose every
+ * media reference is immediately `.get()` is reading a library, not minting
+ * into one. `backfill-media-refs.mjs` is the live example — it reads media to
+ * repair `nodes` on screens and forms, and must not be held to a counter it
+ * never moves.
+ */
+function onlyReadsMedia(source: string): boolean {
+  const occurrences = source.split(MEDIA_COLLECTION_MJS).slice(1)
+  return occurrences.every((rest) => rest.startsWith('.get('))
+}
+
+/**
+ * Both halves matter, and the second one is not decoration.
+ *
+ * Reaching a media collection BY HAND (`collection('media')`) is how a new
+ * writer arrives, and it is what this must catch. But once a script is fixed
+ * it no longer contains that token at all — so a rule that discovered only on
+ * the raw token would empty itself out the moment the fix landed and pass
+ * forever afterwards over zero files. That is the guard-that-cannot-fail
+ * shape, and it is exactly what the first draft of this block did: it went
+ * from four writers to none and reported green.
+ *
+ * Discovering on the helper too keeps the fixed callers in the list, so
+ * un-wiring one is visible here rather than silent.
+ */
+const SCRIPT_MEDIA_WRITERS = walk(
+  resolve(REPO_ROOT, 'tools'),
+  (name) => name.endsWith('.mjs'),
+)
+  .filter((file) => {
+    if (file.includes(MEDIA_WRITER_MODULE)) return false
+    const source = read(file)
+    const reachesByHand =
+      source.includes(MEDIA_COLLECTION_MJS) && !onlyReadsMedia(source)
+    return reachesByHand || source.includes(SHARED_MEDIA_WRITER)
+  })
+  .map(repoPath)
+  .sort()
+
+describe('AGL-1488 · every script that writes media moves `counters/media`', () => {
+  it('discovers the script writers rather than trusting a list', () => {
+    // Four when this was filed — the demo seed (shared by the host and org
+    // demo scripts), the e2e seed, the scope fixture and the blog-cover
+    // migration — plus the lockdown e2e probe. A fifth arriving lands here.
+    expect(SCRIPT_MEDIA_WRITERS.length).toBeGreaterThanOrEqual(4)
+    expect(SCRIPT_MEDIA_WRITERS).toContain('tools/scripts/lib/seed-demo.mjs')
+    expect(SCRIPT_MEDIA_WRITERS).toContain('tools/scripts/seed-e2e.mjs')
+    expect(SCRIPT_MEDIA_WRITERS).toContain('tools/scripts/seed-scope-fixture.mjs')
+    expect(SCRIPT_MEDIA_WRITERS).toContain('tools/scripts/migrate-blog-covers.mjs')
+  })
+
+  it('a read-only media consumer is not held to the counter', () => {
+    // The negative control. Without it the rule above could be satisfied by a
+    // predicate that matches everything, and "all writers comply" would be a
+    // statement about nothing.
+    expect(SCRIPT_MEDIA_WRITERS).not.toContain(
+      'tools/scripts/backfill-media-refs.mjs',
+    )
+  })
+
+  it.each(SCRIPT_MEDIA_WRITERS)('%s writes through the shared helper', (file) => {
+    // Not "contains an increment". The counter and the document have to be
+    // written by the SAME function, or they drift again the first time a
+    // caller returns early between them — which is how four call sites
+    // arrived at the same omission independently.
+    //
+    // Asserted on a verdict rather than on the source, for the reason the
+    // block above gives: a failure should print what is wrong, not 700 lines
+    // of seed fixture.
+    const source = read(resolve(REPO_ROOT, file))
+    const verdict = source.includes(SHARED_MEDIA_WRITER)
+      ? []
+      : [
+          `${file} writes a media document without \`${SHARED_MEDIA_WRITER}()\` — ` +
+            'the document lands and `counters/media` does not move, so the ' +
+            'scope is under-reported for good (AGL-1488)',
+        ]
+    expect(verdict).toEqual([])
+  })
+})
+
+/**
  * The deletion itself. Assembled from segments so this file is not its own
  * counter-example when it scans the tree below.
  */

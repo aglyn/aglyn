@@ -19,6 +19,7 @@ import {
   listPluginJobs,
   pluginJobKey,
   runPluginJobs,
+  writeCronBeat,
 } from '@aglyn/aglyn/server'
 import {
   filterEnabledPluginsByReleaseFlags,
@@ -65,11 +66,33 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   await serverPluginLoader.ensureAll(['tenantApi'])
-  const stateRef = firebaseAdmin
-    .app()
-    .firestore()
-    .collection('platform')
-    .doc('pluginJobs')
+  const firestore = firebaseAdmin.app().firestore()
+  /*==========================================
+   * THE MARK THE CLOUD SCHEDULER BEAT LEAVES (AGL-1955).
+   *
+   * `firebase-schedule-pluginJobsBeat-us-central1` is the project's ONLY
+   * Cloud Scheduler job, and it is the one the console cannot see: it is not
+   * in `scheduled-crons.yml`, it deploys separately from the apps, and every
+   * signal about it — the `Cloud Scheduler job run failed` log-match — needs
+   * an attempt to exist before it can say anything. Deleted, paused, or
+   * pointed at a DIFFERENT deployment (AGL-2176, where the default URL was
+   * one customer's published site) all produce the same nothing.
+   *
+   * Stamped HERE rather than in `cloud/functions`, deliberately. This is the
+   * far end of the beat, so the mark proves the whole path: the job fired,
+   * it carried the right secret, and it landed on THIS deployment. A mark
+   * written by the function itself would still be stamped by a beat aimed
+   * at somebody else's server.
+   *
+   * `platform/pluginJobs` beside it cannot stand in for this — those marks
+   * only move when a job is actually DUE, so a quiet hour is indistinguish-
+   * able from a dead beat, which is the whole bug.
+   *
+   * One small write a minute, ~43k a month. Bounded and cheap, and the
+   * alternative is a read-then-write that costs more to do less.
+   *=========================================*/
+  await writeCronBeat(firestore, 'plugin-jobs-beat')
+  const stateRef = firestore.collection('platform').doc('pluginJobs')
   const now = Date.now()
   // The beat fires every minute, and this read used to happen before anything
   // could be found due — 43,200 reads a month to be told nothing had changed

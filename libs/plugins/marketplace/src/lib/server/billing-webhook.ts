@@ -801,10 +801,10 @@ async function recordDisputeOrphanIfMarketplace(
   firestore: FirebaseFirestore.Firestore,
   object: any,
   paymentIntentId: string,
-): Promise<void> {
+): Promise<boolean> {
   const chargeId = String(object?.charge ?? '')
   const stripeKey = process.env.STRIPE_SECRET_KEY
-  if (!chargeId || !stripeKey) return
+  if (!chargeId || !stripeKey) return false
   const charge = await stripeGet(
     `https://api.stripe.com/v1/charges/${chargeId}`,
     stripeKey,
@@ -814,9 +814,9 @@ async function recordDisputeOrphanIfMarketplace(
       'Could not classify a dispute with no matching purchase — orphan NOT parked (AGL-2148)',
       { chargeId, paymentIntentId, status: charge.status },
     )
-    return
+    return false
   }
-  if (charge.body?.metadata?.type !== 'marketplace-purchase') return
+  if (charge.body?.metadata?.type !== 'marketplace-purchase') return false
   await recordRefundOrphan(firestore, {
     kind: 'dispute',
     id: String(object?.id ?? ''),
@@ -826,6 +826,11 @@ async function recordDisputeOrphanIfMarketplace(
     currency: String(object?.currency ?? 'usd'),
     stripeCustomerId: '',
   })
+  // Parked, so it IS marketplace's — the route must not also alert on it
+  // (AGL-2429). The three early exits above return false on purpose: two of
+  // them mean "could not classify", and a dispute nobody could classify is
+  // exactly what the route's unattributed alert exists to catch.
+  return true
 }
 
 /**
@@ -857,7 +862,7 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
     object?.payment_status === 'paid'
   ) {
     // Sellers are orgs (AGL-652) — the ledger records which ORG earned it.
-    const { listingId, buyerUid, sellerOrgId, feeCents, transferCents } =
+    const { listingId, buyerUid, buyerOrgId, sellerOrgId, feeCents, transferCents } =
       object.metadata ?? {}
     if (listingId && buyerUid && sellerOrgId) {
       // The remittance-correct split (AGL-1544), read ONCE and used by both
@@ -889,6 +894,26 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
         .set({
           listingId,
           buyerUid,
+          // THE ORG THE PURCHASE LICENSES (AGL-2331).
+          //
+          // The one field that makes this document an ORGANIZATIONAL licence
+          // rather than a personal one. `hasLivePurchase` keys the eight
+          // paid-content doors and the duplicate-purchase guard on it; a
+          // document written without it falls back to the legacy person-scoped
+          // grant, which is exactly right for the purchases that predate
+          // AGL-2331 and exactly wrong for anything written after it. Checkout
+          // therefore refuses to open a session that cannot name a validated
+          // buyer org, so `metadata.buyerOrgId` is present on every session
+          // this branch can see from now on.
+          //
+          // Written CONDITIONALLY, and the merge is why: a redelivery of an
+          // older session — Stripe retries for up to three days — carries no
+          // `buyerOrgId`, and `{ merge: true }` with an explicit `undefined`
+          // is a no-op in the Admin SDK but an explicit `''` is not. Spreading
+          // nothing keeps a redelivery from overwriting a real org id with an
+          // empty string, which would strip the licence off the org that
+          // bought it.
+          ...(buyerOrgId ? { buyerOrgId: String(buyerOrgId) } : {}),
           sellerOrgId,
           // Gross − tax − transfer = the platform fee, which feeCents also
           // records independently from the rate resolved at checkout.
@@ -1125,6 +1150,11 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
   if (type === 'charge.dispute.created' || type === 'charge.dispute.closed') {
     const disputeId = String(object?.id ?? '')
     const paymentIntentId = String(object?.payment_intent ?? '')
+    // Reported to the route so it can tell "marketplace handled it" from
+    // "nothing handled it" (AGL-2429). Left false by the guard below on
+    // purpose: a dispute carrying no payment intent cannot be joined to a
+    // purchase, which is a fault, not a routine miss.
+    let claimed = false
     if (disputeId && paymentIntentId) {
       const firestore = firebaseAdmin.app().firestore()
       const purchases = await firestore
@@ -1133,6 +1163,7 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
         .limit(1)
         .get()
       if (!purchases.empty) {
+        claimed = true
         const purchase = purchases.docs[0]
         const status = String(object?.status ?? '')
         if (type === 'charge.dispute.created') {
@@ -1181,8 +1212,13 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
         // parking. A `created` landing in the same window loses nothing but
         // the staff flag — the `closed` that follows days later always finds
         // the purchase document.
-        await recordDisputeOrphanIfMarketplace(firestore, object, paymentIntentId)
+        claimed = await recordDisputeOrphanIfMarketplace(
+          firestore,
+          object,
+          paymentIntentId,
+        )
       }
     }
+    return { claimed }
   }
 }

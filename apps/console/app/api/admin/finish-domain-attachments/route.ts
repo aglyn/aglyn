@@ -16,8 +16,13 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { firebaseAdmin, projectDomainStatus } from '@aglyn/tenant-data-admin'
+import {
+  domainStateServes,
+  firebaseAdmin,
+  projectDomainStatus,
+} from '@aglyn/tenant-data-admin'
 import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
+import { recordCronBeat } from '../../../../utils/cron-beat'
 import { upsertSubdomainRedirect } from '../../../../utils/server/subdomain-redirect'
 
 /** Hosts examined per run — a ceiling on time and Vercel API calls. */
@@ -65,6 +70,11 @@ async function handler(request: Request): Promise<Response> {
   if (!isCronAuthorized(headers)) {
     return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   }
+  // AGL-1955 — the mark `/api/health/crons` reads to notice this job going
+  // AWAY. Stamped on the invocation, not on the work, so a run that finds
+  // nothing to do still proves the schedule is alive; POST only, because a
+  // human's GET is not the scheduler and must not stand in for it.
+  if (method === 'POST') await recordCronBeat('finish-domain-attachments')
   const token = process.env.VERCEL_TOKEN
   const projectId = process.env.VERCEL_TENANT_PROJECT_ID
   const teamId = process.env.VERCEL_TEAM_ID
@@ -110,12 +120,10 @@ async function handler(request: Request): Promise<Response> {
       // Deliberately the SAME predicate as the attach route, including
       // `certificate-pending` (AGL-1996). A sweeper that used a looser
       // definition of "serving" than the door it is completing for would
-      // re-introduce the bug that door was fixed to avoid.
-      const serves =
-        status.state !== 'not-attached' &&
-        status.state !== 'ownership-pending' &&
-        status.state !== 'dns-misconfigured' &&
-        status.state !== 'certificate-pending'
+      // re-introduce the bug that door was fixed to avoid — and until
+      // AGL-2011 that sameness was two hand-kept copies of four comparisons,
+      // held by this comment. It is now literally one function.
+      const serves = domainStateServes(status.state)
       if (!serves) {
         stillPending.push(domain)
         continue

@@ -125,6 +125,52 @@ const section = (name, status, detail) => {
 }
 
 // ── 3. Vercel env sync ─────────────────────────────────────────────────────
+
+/**
+ * Which environments a key may be written to (AGL-2401).
+ *
+ * This block used to send EVERY key to `['production', 'preview']`. A Vercel
+ * env var is one record with one value and a `target` array, so that single
+ * line is what put the live `STRIPE_SECRET_KEY`, the live
+ * `STRIPE_WEBHOOK_SECRET`, `CRON_SECRET`, `ANTHROPIC_API_KEY` and a
+ * `VERCEL_TOKEN` into preview with the production value — identical by
+ * construction, not by anyone pasting them twice.
+ *
+ * That matters beyond the one-off cleanup AGL-2401 and AGL-2403 describe: a
+ * bootstrap is re-runnable and is what a self-host operator runs too, so
+ * leaving this line alone would silently re-create the condition the moment
+ * anyone ran it again after the rotation.
+ *
+ * DENY BY DEFAULT. A key reaches preview only if it is named below with a
+ * reason, because the two failure directions are not symmetric:
+ *
+ *   wrongly production-only -> a preview build lacks a setting. Visible,
+ *                              harmless, one edit to fix.
+ *   wrongly shared          -> a production credential is live in an
+ *                              environment with a weaker deployment gate, and
+ *                              nothing about it looks wrong.
+ *
+ * Nothing here is ever written to `development`: that target is what
+ * `vercel env pull` hands a laptop, and no value this script holds belongs in
+ * a file on a developer's machine.
+ */
+const SHARED_WITH_PREVIEW = {
+  AGLYN_TENANT_HOST_CNAME: 'a CNAME hostname — public DNS, authorizes nothing',
+  NEXT_PUBLIC_AGLYN_TENANT_HOST_CNAME: 'the same hostname, already inlined into the client bundle',
+  AGLYN_TENANT_DEMO: 'the demo site identifier',
+  STRIPE_METER_EVENT_NAME: 'a meter event name — a label, not a credential',
+  VERCEL_TEAM_ID: 'an account identifier, visible in every dashboard URL',
+  VERCEL_TENANT_PROJECT_ID: 'a project identifier',
+}
+
+/**
+ * `STRIPE_PRICE_*` is deliberately absent from the list above even though a
+ * price id is not secret: a price id belongs to ONE Stripe mode, so a live
+ * price id in a preview running a test-mode key resolves to a plausible id
+ * that no test-mode call can use. Production-only keeps the mode consistent.
+ */
+const envTarget = (key) => (SHARED_WITH_PREVIEW[key] ? ['production', 'preview'] : ['production'])
+
 {
   const token = process.env.VERCEL_TOKEN
   const teamQuery = process.env.VERCEL_TEAM_ID
@@ -169,11 +215,15 @@ const section = (name, status, detail) => {
         continue
       }
       const present = keys.filter((key) => process.env[key])
+      // Name the split in the output. The whole defect this replaced was
+      // invisible precisely because the summary only ever counted variables.
+      const shared = present.filter((key) => SHARED_WITH_PREVIEW[key])
+      const spread = `${present.length - shared.length} production-only, ${shared.length} +preview`
       if (!APPLY) {
         section(
           `Vercel env (${label})`,
           'DRY',
-          `would upsert ${present.length}/${keys.length} vars`,
+          `would upsert ${present.length}/${keys.length} vars (${spread})`,
         )
         continue
       }
@@ -191,7 +241,7 @@ const section = (name, status, detail) => {
               key,
               value: process.env[key],
               type: key.startsWith('NEXT_PUBLIC_') ? 'plain' : 'encrypted',
-              target: ['production', 'preview'],
+              target: envTarget(key),
             }),
           },
         )
@@ -200,7 +250,7 @@ const section = (name, status, detail) => {
       section(
         `Vercel env (${label})`,
         failures ? 'FAIL' : 'OK',
-        `${present.length - failures}/${present.length} vars upserted`,
+        `${present.length - failures}/${present.length} vars upserted (${spread})`,
       )
     }
   }

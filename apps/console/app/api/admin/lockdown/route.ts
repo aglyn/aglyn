@@ -72,6 +72,7 @@ import {
   invalidateUserLockdownCache,
   isImpersonationSession,
   lockdownJsonResponse,
+  readSignupsCreationTriggerStatus,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
@@ -130,6 +131,35 @@ function auditLockShape(lock: {
     // storage default is applied here so a row about a pre-AGL-1511 lock
     // reads `full` rather than a gap the reader has to interpret.
     mode: lock.mode === 'read-only' ? 'read-only' : 'full',
+  }
+}
+
+/**
+ * The AGL-1526 raw-URL revocation, flattened onto the audit row.
+ *
+ * Absent entirely when rotation was not attempted (any non-`security` lock,
+ * any read-only lock, any unlock), so the row never implies a revocation
+ * that policy declined to perform. When it DID run, `truncated` rides along
+ * — a capped scan leaves live raw URLs behind, and an incident reviewer
+ * reading "rotated: 5000" must be able to see that it was not all of them.
+ */
+function auditRotationShape(
+  results: Array<{
+    scanned: number
+    rotated: number
+    failed: number
+    truncated: boolean
+    ok: boolean
+  }> = [],
+): Record<string, unknown> {
+  if (!results.length) return {}
+  const sum = (pick: (r: (typeof results)[number]) => number) =>
+    results.reduce((total, entry) => total + (pick(entry) || 0), 0)
+  return {
+    downloadTokensRotated: sum((r) => r.rotated),
+    downloadTokensScanned: sum((r) => r.scanned),
+    downloadTokenFailures: sum((r) => r.failed),
+    downloadTokenRotationTruncated: results.some((r) => r.truncated || !r.ok),
   }
 }
 
@@ -524,15 +554,33 @@ async function handler(request: Request): Promise<Response> {
       // The current-state read for the staff page: the lockdowns collection
       // (platform + user scopes). Org/host lockdowns live on their own docs
       // and are visible on the org/host staff surfaces.
-      const snapshot = await firestore
-        .collection(LOCKDOWNS_COLLECTION)
-        .limit(200)
-        .get()
+      //
+      // Alongside it, and NOT after it: whether the signups lock's
+      // creation-level valve is armed (AGL-1531). That answer lives in
+      // Identity Platform rather than in this repo, so the panic page can
+      // only state it by asking. In parallel because the panic page's load
+      // time is the one thing an incident cannot spend.
+      const [snapshot, signupsCreationTrigger] = await Promise.all([
+        firestore.collection(LOCKDOWNS_COLLECTION).limit(200).get(),
+        // Never allowed to take the panic page down. This probe reaches an
+        // API outside this deployment; if it fails in a way its own guards
+        // did not anticipate, the page must still render every lock — an
+        // unknown valve is a caveat, an unrenderable page is an outage.
+        Promise.resolve()
+          .then(() => readSignupsCreationTriggerStatus())
+          .catch(() => ({
+            status: 'unknown' as const,
+            reason: 'The Identity Platform probe failed on this server.',
+          })),
+      ])
       const records = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }))
-      return Response.json({ records }, { status: 200 })
+      return Response.json(
+        { records, signupsCreationTrigger },
+        { status: 200 },
+      )
     }
 
     if (method !== 'POST') {
@@ -849,6 +897,12 @@ async function handler(request: Request): Promise<Response> {
           locked: action === 'lock',
           ...(action === 'lock' ? auditLockShape(lock) : {}),
           tokensRevoked: result.tokensRevoked,
+          // AGL-1526 completion, on the row: how many raw
+          // `firebasestorage.googleapis.com?...&token=` URLs this lock
+          // actually killed. Recorded even when it is zero, because
+          // "rotation ran and found nothing" and "rotation never ran" are
+          // different facts to an incident reviewer.
+          ...auditRotationShape(result.downloadTokensRotated),
         },
       })
       return actionResponse({ firestore, scope, targetId, action, extra: result })
@@ -884,6 +938,7 @@ async function handler(request: Request): Promise<Response> {
       after: {
         locked: action === 'lock',
         ...(action === 'lock' ? auditLockShape(lock) : {}),
+        ...auditRotationShape(result.downloadTokensRotated),
       },
     })
     return actionResponse({ firestore, scope, targetId, action, extra: result })

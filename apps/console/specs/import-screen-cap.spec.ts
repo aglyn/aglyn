@@ -90,6 +90,15 @@ function collectionRef(path: string): any {
     limit: () => ref,
     where: () => ref,
     select: () => ref,
+    // The flat platform caps ask `count()` first and only pay for the id scan
+    // when the answer says a refusal is possible (AGL-2266). A double without
+    // it makes the route throw, and every assertion here would read the crash
+    // as the cap misfiring.
+    count: () => ({
+      get: async () => ({
+        data: () => ({ count: (store.get(path) ?? new Map()).size }),
+      }),
+    }),
     get: async () => ({
       docs: [...(store.get(path) ?? new Map()).entries()].map(([id, data]) =>
         snapshotOf(path, id, data),
@@ -123,6 +132,32 @@ const mockFirestore = {
     },
     commit: async () => undefined,
   }),
+  /**
+   * The screens leg commits in a transaction since AGL-2370, so the double
+   * has to have one. Deliberately the SIMPLEST faithful model — reads see the
+   * store, writes buffer and apply on commit, a read after a write throws as
+   * the server does — because what this suite asserts is the ARITHMETIC of the
+   * cap. The concurrency property it cannot see is asserted by
+   * `import-screen-cap-is-atomic.spec.ts`, whose double serializes.
+   */
+  runTransaction: async (body: (tx: any) => Promise<any>) => {
+    const buffered: Array<() => void> = []
+    const result = await body({
+      get: async (ref: any) => {
+        if (buffered.length) {
+          throw new Error('Firestore transactions cannot read after a write')
+        }
+        return ref.get()
+      },
+      set: (ref: any, data: Doc, options?: { merge?: boolean }) => {
+        buffered.push(() => {
+          writes.push({ path: ref.path, data, merge: Boolean(options?.merge) })
+        })
+      },
+    })
+    for (const write of buffered) write()
+    return result
+  },
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
@@ -158,6 +193,11 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/name-search'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/binding-tokens'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
+  // The REAL flat platform caps (AGL-2266) — the import route reads both.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/actions'),
+  ...jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/collection-entries',
+  ),
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
     query: {},

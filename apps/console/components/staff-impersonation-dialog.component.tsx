@@ -26,7 +26,8 @@ import {
   DialogTitle,
   TextField,
 } from '@mui/material'
-import { signInWithCustomToken, type Auth } from 'firebase/auth'
+import { type Auth } from 'firebase/auth'
+import { signInWithPooledCustomToken } from '../utils/pooled-custom-token'
 import { useCallback, useState, type ReactNode } from 'react'
 
 /**
@@ -111,7 +112,13 @@ export function useImpersonationReason(options: {
       // impersonation banner (claims.impersonatedBy) offers the exit.
       // The named-app auth instance — bare getAuth() resolves the '[DEFAULT]'
       // app, which this app never registers.
-      await signInWithCustomToken(options.auth, payload.token)
+      // The target may be an SSO user whose token is minted in their org's
+      // GCIP tenant (AGL-1993) — exchange it in that pool, not ours.
+      await signInWithPooledCustomToken(
+        options.auth,
+        payload.token,
+        payload.tenantId,
+      )
       window.location.assign('/')
     } catch (error) {
       console.error(error)

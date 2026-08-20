@@ -194,7 +194,7 @@ describe('withdrawing consent removes the analytics cookies (AGL-1606)', () => {
 
     it('expires every analytics cookie at every rung, and touches nothing else', () => {
       const { writes, restore } = captureCookieWrites()
-      let cleared: string[] = []
+      let cleared: string[]
       try {
         cleared = clearAnalyticsCookies('www.acme.co.uk')
       } finally {

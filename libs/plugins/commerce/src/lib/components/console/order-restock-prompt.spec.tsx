@@ -182,6 +182,43 @@ describe('the restock prompt renders while the question is open (AGL-1806)', () 
     expect(screen.getByText(/upper bound/)).toBeTruthy()
   })
 
+  /**
+   * A LINE-SCOPED partial does not leave the merchant guessing (AGL-2325).
+   *
+   * "these units are an upper bound — only you know which goods returned" was
+   * written when a refund was an amount and named no line. A refund that DID
+   * name its lines has already answered that question, and repeating the old
+   * sentence over a prompt listing exactly the withdrawn line tells the
+   * merchant the record is vaguer than it is.
+   */
+  it('says which lines a line-scoped partial withdrew, not "upper bound"', () => {
+    show({
+      ...refundedOrder,
+      status: 'paid',
+      refundedLineItemIds: [1],
+      restockCheck: {
+        ...openCheck,
+        lines: [
+          {
+            productId: 'p2',
+            variantId: 'v2',
+            quantity: 2,
+            name: 'Tea towel',
+            variantLabel: 'Blue',
+            lineIndex: 1,
+          },
+        ],
+        units: 2,
+        fullyReversed: false,
+      },
+    })
+    expect(
+      screen.getByText(/2 units may need restocking after this refund/),
+    ).toBeTruthy()
+    expect(screen.queryByText(/upper bound/)).toBeNull()
+    expect(screen.getByText(/withdrawn by this refund/)).toBeTruthy()
+  })
+
   it('keeps the chargeback default-NO wording', () => {
     show({
       ...refundedOrder,

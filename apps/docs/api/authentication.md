@@ -64,11 +64,13 @@ lacks returns `403` `insufficient_scope`. Grant the least a key needs.
 | `contacts:read` | List and read contacts. |
 | `contacts:write` | Add contacts, edit their name, tags and notes, and delete them. Never changes the email a contact is identified by, or where it came from. |
 | `sites:read` | List sites and read their details. |
+| `sites:publish` | Refresh a site's live pages so writes made over the API appear immediately. Changes no content. |
 | `forms:read` | Read a site's form submissions. |
 | `forms:write` | Mark a site's form submissions read or unread, and delete them. Never edits what a visitor typed. |
 | `orders:read` | Read a site's store orders. |
 | `products:read` | Read a site's products, variants, prices and stock. |
 | `media:read` | List files in the organization library and in a site's media. |
+| `media:write` | Upload files to the organization library and to a site's media. Cannot replace, edit or delete an existing file. |
 
 `forms:write` is deliberately narrow. It grants the `read` flag and the delete, and
 nothing that rewrites a submission's `fields` — a submission is a record of what a

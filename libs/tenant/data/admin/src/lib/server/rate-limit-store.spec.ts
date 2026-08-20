@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { FieldValue } from 'firebase-admin/firestore'
 import {
   consumeRateLimit,
   currentRateLimitDegradation,
@@ -26,16 +27,99 @@ import {
 } from './rate-limit-store'
 
 /**
- * A Firestore stand-in with just enough transaction semantics: documents in a
- * Map, `runTransaction` executed inline. The point of the durable limiter is
- * that state outlives one instance, so the fake keeps a store the test can
- * inspect and reuse across calls.
+ * A Firestore stand-in with REAL semantics for the two shapes this module
+ * uses, because an unfaithful one fabricates both false greens and false
+ * reds here.
+ *
+ * ## Why it models a document VERSION
+ *
+ * The counter used to be `runTransaction(read, write)`. A double that simply
+ * runs the callback inline has no read set and no version, so no two
+ * transactions can ever conflict — and a contention test written against it
+ * passes under the OLD code as readily as the new, proving nothing. This one
+ * stamps a version on every write, records the versions a transaction READ,
+ * and aborts the attempt if any of them moved before the commit. That is the
+ * optimistic-concurrency rule Firestore actually applies, and it is what lets
+ * `contentionNegativeControl` below go red on demand.
+ *
+ * ## Why writes carry the real `operand`
+ *
+ * `FieldValue.increment(n)` is applied by reading `operand` off the sentinel
+ * rather than assuming `+1`, so mutating the production call to
+ * `increment(0)` — or to a plain assignment — changes what this store holds
+ * and fails the assertions, instead of being silently absorbed.
+ *
+ * Every read and write yields to the event loop first, so concurrent callers
+ * really do interleave rather than running to completion one at a time.
  */
 function fakeFirestore() {
+  /** path → fields. Exposed: several tests assert on the stored document. */
   const docs = new Map<string, Record<string, unknown>>()
+  /** path → monotonic version, bumped by every write. */
+  const versions = new Map<string, number>()
   let failNext = false
+  const counts = { reads: 0, writes: 0, aborts: 0 }
+  /** Ordered op log — lets a test assert the WRITE precedes the READ. */
+  const log: string[] = []
+
+  /** One round trip. `setImmediate` so concurrent callers interleave. */
+  const hop = () => new Promise((resolve) => setImmediate(resolve))
+
+  function applyWrite(
+    path: string,
+    value: Record<string, unknown>,
+    merge: boolean,
+  ) {
+    const prior = docs.get(path) ?? {}
+    const next: Record<string, unknown> = merge ? { ...prior } : {}
+    for (const [field, raw] of Object.entries(value)) {
+      if (raw instanceof FieldValue) {
+        const operand = (raw as unknown as { operand?: unknown }).operand
+        if (typeof operand !== 'number') {
+          throw new Error(`unsupported sentinel on ${field}`)
+        }
+        next[field] = (Number(prior[field]) || 0) + operand
+      } else {
+        next[field] = raw
+      }
+    }
+    docs.set(path, next)
+    versions.set(path, (versions.get(path) ?? 0) + 1)
+  }
+
+  function snapshot(path: string) {
+    const data = docs.get(path)
+    return {
+      exists: docs.has(path),
+      get: (field: string) => data?.[field],
+    }
+  }
+
+  function docRef(path: string) {
+    return {
+      path,
+      set: async (value: Record<string, unknown>, options?: { merge?: boolean }) => {
+        await hop()
+        if (failNext) throw new Error('firestore unavailable')
+        counts.writes += 1
+        log.push('write')
+        applyWrite(path, value, options?.merge === true)
+      },
+      get: async () => {
+        await hop()
+        if (failNext) throw new Error('firestore unavailable')
+        counts.reads += 1
+        log.push('read')
+        return snapshot(path)
+      },
+    }
+  }
+
   const api = {
     docs,
+    versions,
+    counts,
+    log,
     failFrom: () => {
       failNext = true
     },
@@ -43,20 +127,53 @@ function fakeFirestore() {
       failNext = false
     },
     collection: (name: string) => ({
-      doc: (id: string) => ({ path: `${name}/${id}` }),
+      doc: (id: string) => docRef(`${name}/${id}`),
     }),
-    runTransaction: async (fn: (tx: unknown) => Promise<number>) => {
+    runTransaction: async (
+      fn: (tx: unknown) => Promise<number>,
+      options?: { maxAttempts?: number },
+    ) => {
       if (failNext) throw new Error('firestore unavailable')
-      const tx = {
-        get: async (ref: { path: string }) => ({
-          exists: docs.has(ref.path),
-          get: (field: string) => docs.get(ref.path)?.[field],
-        }),
-        set: (ref: { path: string }, value: Record<string, unknown>) => {
-          docs.set(ref.path, { ...(docs.get(ref.path) ?? {}), ...value })
-        },
+      // Firestore's own default. The production counter no longer opens a
+      // transaction at all, but the degradation and signup-refusal markers
+      // still do, and the negative control below deliberately does.
+      const maxAttempts = options?.maxAttempts ?? 5
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        const readVersions = new Map<string, number>()
+        const pending: Array<[string, Record<string, unknown>, boolean]> = []
+        const tx = {
+          get: async (ref: { path: string }) => {
+            await hop()
+            counts.reads += 1
+            readVersions.set(ref.path, versions.get(ref.path) ?? 0)
+            return snapshot(ref.path)
+          },
+          set: (
+            ref: { path: string },
+            value: Record<string, unknown>,
+            opts?: { merge?: boolean },
+          ) => {
+            pending.push([ref.path, value, opts?.merge === true])
+          },
+        }
+        const result = await fn(tx)
+        // The commit is its own round trip, which is the window another
+        // writer slips through.
+        await hop()
+        const stale = [...readVersions].some(
+          ([path, version]) => (versions.get(path) ?? 0) !== version,
+        )
+        if (stale) {
+          counts.aborts += 1
+          continue
+        }
+        for (const [path, value, merge] of pending) applyWrite(path, value, merge)
+        counts.writes += 1
+        return result
       }
-      return fn(tx)
+      // gRPC ABORTED — what Firestore returns once a transaction has lost its
+      // optimistic race too many times.
+      throw Object.assign(new Error('too much contention'), { code: 10 })
     },
   }
   return api
@@ -166,7 +283,22 @@ describe('AGL-1679 · a degraded window leaves a durable record', () => {
   })
 
   /** The marker is written fire-and-forget; let its microtasks land. */
-  const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+  /**
+   * Drain the queues until the fire-and-forget markers have committed.
+   *
+   * One `setTimeout(0)` was enough while the double ran transactions inline.
+   * It no longer is: `fakeFirestore` yields on every read and on the commit,
+   * so a marker takes several turns to land, and a single tick made these
+   * assertions race the write they were checking for. Draining both the
+   * timer and check phases repeatedly is deterministic where a longer single
+   * wait would only be luckier.
+   */
+  const settle = async () => {
+    for (let i = 0; i < 10; i += 1) {
+      await new Promise((resolve) => setImmediate(resolve))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    }
+  }
 
   const markers = (firestore: ReturnType<typeof fakeFirestore>) =>
     [...firestore.docs.entries()].filter(([path]) =>
@@ -239,7 +371,22 @@ describe('AGL-1679 · a degraded window leaves a durable record', () => {
 })
 
 describe('recordSignupRefusal (AGL-1907)', () => {
-  const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+  /**
+   * Drain the queues until the fire-and-forget markers have committed.
+   *
+   * One `setTimeout(0)` was enough while the double ran transactions inline.
+   * It no longer is: `fakeFirestore` yields on every read and on the commit,
+   * so a marker takes several turns to land, and a single tick made these
+   * assertions race the write they were checking for. Draining both the
+   * timer and check phases repeatedly is deterministic where a longer single
+   * wait would only be luckier.
+   */
+  const settle = async () => {
+    for (let i = 0; i < 10; i += 1) {
+      await new Promise((resolve) => setImmediate(resolve))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    }
+  }
   const refusalDocs = (firestore: ReturnType<typeof fakeFirestore>) =>
     [...firestore.docs.entries()].filter(([path]) =>
       path.startsWith(`${RATE_LIMIT_COLLECTION}/${SIGNUP_REFUSAL_DOC_PREFIX}`),
@@ -350,19 +497,31 @@ describe('AGL-2404 · a contended counter refuses instead of hanging', () => {
     ...extra,
   })
 
-  /** A store that is UP but whose transaction for this doc never settles. */
+  /**
+   * A store that is UP but whose write for this doc never settles. Since
+   * AGL-2416 the counter is `set` + `get` rather than a transaction, so the
+   * hang has to be staged on the write — the round trip that now happens
+   * first.
+   */
   function hangingFirestore() {
     return {
-      collection: () => ({ doc: (id: string) => ({ path: id }) }),
-      runTransaction: () => new Promise(() => undefined),
+      collection: () => ({
+        doc: (id: string) => ({
+          path: id,
+          set: () => new Promise(() => undefined),
+          get: () => new Promise(() => undefined),
+        }),
+      }),
     }
   }
 
   /** A store that rejects with a gRPC status code. */
   function codeFirestore(code: number) {
+    const reject = () => Promise.reject(Object.assign(new Error('x'), { code }))
     return {
-      collection: () => ({ doc: (id: string) => ({ path: id }) }),
-      runTransaction: () => Promise.reject(Object.assign(new Error('x'), { code })),
+      collection: () => ({
+        doc: (id: string) => ({ path: id, set: reject, get: reject }),
+      }),
     }
   }
 
@@ -423,8 +582,13 @@ describe('AGL-2404 · a contended counter refuses instead of hanging', () => {
     // must keep the pre-existing posture so a Firestore blip never locks real
     // visitors out of a customer's site.
     const down = {
-      collection: () => ({ doc: (id: string) => ({ path: id }) }),
-      runTransaction: () => Promise.reject(new Error('firestore unavailable')),
+      collection: () => ({
+        doc: (id: string) => ({
+          path: id,
+          set: () => Promise.reject(new Error('firestore unavailable')),
+          get: () => Promise.reject(new Error('firestore unavailable')),
+        }),
+      }),
     }
     const result = await consumeRateLimit('form:h:ip', opts(down))
     expect(result.degraded).toBe(true)
@@ -433,19 +597,253 @@ describe('AGL-2404 · a contended counter refuses instead of hanging', () => {
     expect(currentRateLimitDegradation()?.count).toBe(1)
   })
 
-  it('bounds the transaction attempts the SDK may spend', async () => {
-    // The default 5 attempts, each behind a growing backoff, is how one hot
-    // document becomes ten seconds of held function. An abandoned transaction
-    // must stop adding to the contention its caller was refused for.
-    const seen: Array<Record<string, unknown>> = []
-    const firestore = {
-      collection: () => ({ doc: (id: string) => ({ path: id }) }),
-      runTransaction: (_fn: unknown, options: Record<string, unknown>) => {
-        seen.push(options)
-        return Promise.resolve(1)
+  it('opens NO transaction, so there is no retry storm left to bound', async () => {
+    // What the old bound was for: the counter was a read-modify-write
+    // transaction, whose default 5 attempts behind a growing backoff is how
+    // one hot document became ten seconds of held function. AGL-2416 removed
+    // the read set, so the retry loop it was capping no longer exists. This
+    // asserts the removal rather than the cap — if a transaction ever comes
+    // back to this path, its retries need bounding again and this goes red.
+    const opened: unknown[] = []
+    const firestore = fakeFirestore()
+    const wrapped = {
+      ...firestore,
+      runTransaction: (...args: unknown[]) => {
+        opened.push(args)
+        return (firestore.runTransaction as any)(...args)
       },
     }
-    await consumeRateLimit('apiv1:k', opts(firestore))
-    expect(seen[0]?.['maxAttempts']).toBe(3)
+    const result = await consumeRateLimit('apiv1:k', opts(wrapped))
+
+    expect(result.allowed).toBe(true)
+    expect(opened).toHaveLength(0)
+    // …and it costs exactly what the transaction cost: one write, one read.
+    expect(firestore.counts.writes).toBe(1)
+    expect(firestore.counts.reads).toBe(1)
+  })
+})
+
+/**
+ * AGL-2416 — the counter's storage shape.
+ *
+ * Measured in production on 2026-08-19 against `/api/protection/unlock` with
+ * a fresh key each time: sequential traffic refused cleanly at the 10th
+ * attempt, but **two** concurrent requests on one key already produced a 504,
+ * and 4 and 5 concurrent produced two each. Two is not attack-shaped — it is
+ * a double-submit, a mobile retry, or two visitors behind one NAT. And the
+ * published 120/min per API key is not reachable *without* concurrency, so an
+ * integration built to the documented budget met this by design.
+ *
+ * The cause was the counter being a read-modify-write `runTransaction` on a
+ * single document per (key, window): optimistic concurrency, one hot doc, so
+ * writers abort each other. This block asserts the replacement, and — first —
+ * that the double it is asserted against can produce contention at all.
+ */
+describe('AGL-2416 · the counter is an atomic increment, not a read-modify-write', () => {
+  const opts = (firestore: unknown, extra?: Record<string, unknown>) => ({
+    firestore,
+    limit: 10,
+    windowMs: 60_000,
+    now: 10_000,
+    ...extra,
+  })
+
+  const burst = (n: number, run: (i: number) => Promise<unknown>) =>
+    Promise.all(Array.from({ length: n }, (_unused, i) => run(i)))
+
+  // The fail-soft case below opens a degradation episode. Left standing it
+  // would leak into whatever runs next, so it is closed here rather than
+  // relying on test order.
+  beforeEach(() => {
+    resetRateLimitDegradationForTests()
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
+  })
+  afterEach(() => {
+    jest.restoreAllMocks()
+    resetRateLimitDegradationForTests()
+  })
+
+  /**
+   * The counter EXACTLY as it was before this change, driven through the same
+   * double: read the count, add one, write it back, inside a transaction
+   * capped at the 3 attempts AGL-2404 set.
+   */
+  function legacyReadModifyWrite(
+    firestore: ReturnType<typeof fakeFirestore>,
+    path = `${RATE_LIMIT_COLLECTION}/legacy_10000`,
+  ) {
+    return firestore.runTransaction(
+      async (tx: any) => {
+        const snapshot = await tx.get({ path })
+        const next = ((snapshot.exists ? snapshot.get('count') : 0) ?? 0) + 1
+        tx.set({ path }, { count: next }, { merge: true })
+        return next
+      },
+      { maxAttempts: 3 },
+    )
+  }
+
+  /**
+   * NEGATIVE CONTROL, and the reason the rest of this block means anything.
+   *
+   * A Firestore double that runs `runTransaction` inline has no read set and
+   * no document version, so no two transactions can ever conflict — and every
+   * assertion below would pass just as happily against the OLD code. This
+   * test drives the OLD shape through the SAME double and requires it to
+   * contend: transactions abort, and some exhaust their attempts and reject
+   * with gRPC `ABORTED`. If this ever goes green, the double has stopped
+   * modelling contention and the greens beneath it are worthless.
+   */
+  it('NEGATIVE CONTROL — the read-modify-write it replaced really does contend here', async () => {
+    const firestore = fakeFirestore()
+    const settled = await Promise.allSettled(
+      Array.from({ length: 8 }, () => legacyReadModifyWrite(firestore)),
+    )
+
+    expect(firestore.counts.aborts).toBeGreaterThan(0)
+    const rejected = settled.filter((r) => r.status === 'rejected')
+    expect(rejected.length).toBeGreaterThan(0)
+    expect((rejected[0] as PromiseRejectedResult).reason.code).toBe(10)
+  })
+
+  it('reaches a decision for every caller in a concurrent burst', async () => {
+    const firestore = fakeFirestore()
+    const results = (await burst(8, () =>
+      consumeRateLimit('apiv1:key', opts(firestore)),
+    )) as Array<Awaited<ReturnType<typeof consumeRateLimit>>>
+
+    // The old shape, at this concurrency, aborted and rejected (above). Not
+    // one caller here is refused on contention or dropped to the fallback.
+    expect(results.every((r) => r.contended === false)).toBe(true)
+    expect(results.every((r) => r.degraded === false)).toBe(true)
+    expect(firestore.counts.aborts).toBe(0)
+    // Every increment landed: 8 requests, 8 counted.
+    const [counter] = [...firestore.docs.values()]
+    expect(counter['count']).toBe(8)
+  })
+
+  it('holds at higher concurrency than the limit itself', async () => {
+    const firestore = fakeFirestore()
+    const results = (await burst(24, () =>
+      consumeRateLimit('apiv1:key', opts(firestore)),
+    )) as Array<Awaited<ReturnType<typeof consumeRateLimit>>>
+
+    expect(results.every((r) => r.contended === false)).toBe(true)
+    const [counter] = [...firestore.docs.values()]
+    expect(counter['count']).toBe(24)
+  })
+
+  it('CANNOT over-admit: going concurrent never widens the cap', async () => {
+    const firestore = fakeFirestore()
+    const results = (await burst(24, () =>
+      consumeRateLimit('apiv1:key', opts(firestore)),
+    )) as Array<Awaited<ReturnType<typeof consumeRateLimit>>>
+
+    // The property the whole limiter exists for. Racing yourself must never
+    // buy more than the limit — that was the AGL-794 defect, and trading a
+    // transaction for an atomic increment must not reintroduce it.
+    expect(results.filter((r) => r.allowed).length).toBeLessThanOrEqual(10)
+  })
+
+  it('the cap still holds under the production measurement shape', async () => {
+    // AGL-2416's own method: burst on a fresh key, then keep probing
+    // SEQUENTIALLY inside the same window and count total admissions. On
+    // production this admitted exactly 10 and refused the 11th.
+    const firestore = fakeFirestore()
+    const results = (await burst(4, () =>
+      consumeRateLimit('unlock:h:s:ip', opts(firestore)),
+    )) as Array<Awaited<ReturnType<typeof consumeRateLimit>>>
+    let admitted = results.filter((r) => r.allowed).length
+
+    for (let i = 0; i < 20; i += 1) {
+      const next = await consumeRateLimit('unlock:h:s:ip', opts(firestore))
+      if (next.allowed) admitted += 1
+    }
+
+    // At most the limit, and — because the burst was small and the counter
+    // monotonic — exactly it here. No free guesses, no over-count.
+    expect(admitted).toBe(10)
+  })
+
+  it('may refuse EARLY under concurrency, and never late — the documented cost', async () => {
+    // The trade this change makes. The read-back can observe other writers'
+    // increments, so at the window's edge concurrent callers can all see the
+    // post-burst total and all be refused. "Exactly `limit` admitted" becomes
+    // "at most `limit`", short by at most `concurrency - 1`.
+    const firestore = fakeFirestore()
+    for (let i = 0; i < 9; i += 1) {
+      await consumeRateLimit('apiv1:key', opts(firestore))
+    }
+
+    const results = (await burst(4, () =>
+      consumeRateLimit('apiv1:key', opts(firestore)),
+    )) as Array<Awaited<ReturnType<typeof consumeRateLimit>>>
+    const admitted = results.filter((r) => r.allowed).length
+
+    // One slot was left. Never more than one is handed out…
+    expect(admitted).toBeLessThanOrEqual(1)
+    // …and the shortfall is bounded by the concurrency, not unbounded.
+    expect(admitted).toBeGreaterThanOrEqual(1 - (4 - 1))
+  })
+
+  it('writes BEFORE it reads — the ordering that stops it under-counting', async () => {
+    // Read-then-write is a read-modify-write again, only without the
+    // transaction that made it safe: two callers would both read N and both
+    // report N + 1, and the cap would leak by exactly the concurrency.
+    const firestore = fakeFirestore()
+    await consumeRateLimit('apiv1:key', opts(firestore))
+    expect(firestore.log).toEqual(['write', 'read'])
+  })
+
+  it('a call abandoned on its budget has already counted — over, never under', async () => {
+    // The transaction this replaced committed nothing when it timed out,
+    // which is how AGL-2416 could observe "10 admitted, 11th refused" after a
+    // burst of 504s. The increment now lands first, so an abandoned caller
+    // spends the slot it was refused for. Asserted rather than left to be
+    // discovered: it is a real semantic change, and it errs in the only safe
+    // direction — the counter over-counts, so nobody buys budget by timing
+    // out.
+    const docs = new Map<string, Record<string, unknown>>()
+    const slowReadBack = {
+      collection: () => ({
+        doc: (id: string) => ({
+          path: id,
+          set: async (value: Record<string, unknown>) => {
+            const operand = (value['count'] as { operand: number }).operand
+            docs.set(id, {
+              count: (Number(docs.get(id)?.['count']) || 0) + operand,
+            })
+          },
+          // The write landed; the read-back never returns.
+          get: () => new Promise(() => undefined),
+        }),
+      }),
+    }
+
+    const result = await consumeRateLimit(
+      'apiv1:key',
+      opts(slowReadBack, { budgetMs: 25 }),
+    )
+    expect(result.contended).toBe(true)
+    expect(result.allowed).toBe(false)
+    expect([...docs.values()][0]?.['count']).toBe(1)
+  })
+
+  it('fails SOFT, not OPEN, when the store accepts the write and shows no count', async () => {
+    // The one branch that exists because the store is misbehaving. Reading
+    // the absent count as 0 would mean "no requests yet" and admit everyone —
+    // fail-open, from the failure path.
+    const blind = {
+      collection: () => ({
+        doc: (id: string) => ({
+          path: id,
+          set: async () => undefined,
+          get: async () => ({ exists: false, get: () => undefined }),
+        }),
+      }),
+    }
+    const result = await consumeRateLimit('apiv1:key', opts(blind))
+    expect(result.degraded).toBe(true)
+    expect(result.contended).toBe(false)
   })
 })

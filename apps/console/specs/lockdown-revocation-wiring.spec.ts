@@ -15,6 +15,14 @@
  * limitations under the License.
  */
 
+// This spec has no import and no export of its own, so TypeScript would treat
+// it as a global script and its top-level `const`s would collide with the
+// sibling lockdown spec's (`mockDeleteSentinel`, `mockServerTimestamp`) —
+// 24 errors across two console tsconfigs, invisible to jest because babel
+// transpiles each file separately (AGL-1526).
+export {}
+
+
 /**
  * THE REVOCATION ITSELF (AGL-1724) — `applyOrgLockdown` unmocked.
  *
@@ -87,7 +95,25 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       mockRevoked.push(uid)
     },
   }),
+  // The AGL-1526 raw-URL revocation is the lock core's fifth effect. This
+  // spec is about the THIRD (sessions), so rotation is stubbed to a no-op
+  // — but the POLICY predicate is the real one, because a lock this spec
+  // arms as `security`/`full` does reach it, and a stub that answered
+  // `false` would quietly exercise a lock path production never takes.
+  // `lockdown-download-token-rotation.spec.ts` is where rotation is
+  // asserted; here it only has to not lie.
+  lockRotatesDownloadTokens: jest.requireActual(
+    '../../../libs/tenant/data/admin/src/lib/server/media-download-tokens',
+  ).lockRotatesDownloadTokens,
+  rotateScopeDownloadTokens: async () => [],
 }))
+
+// Keep the rotation module's `firebase-admin` import from reaching for a
+// real app when the predicate above is required.
+jest.mock(
+  '../../../libs/tenant/data/admin/src/lib/server/firebase-admin',
+  () => ({ __esModule: true, firebaseAdmin: { app: () => ({}) } }),
+)
 
 /**
  * A Firestore double with the semantics this module actually depends on

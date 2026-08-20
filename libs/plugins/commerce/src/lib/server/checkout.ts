@@ -319,8 +319,10 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       ownerOrg.org as any,
       lifted.type ?? 'physical',
     )
-    const feeCents =
-      feePct > 0 ? Math.max(1, Math.round((amountCents * feePct) / 100)) : 0
+    // `feeCents` is NOT computed here any more (AGL-2152): Stripe's processing
+    // cost is charged on the whole card total, so the fee cannot be known until
+    // the manual tax and the shipping options are resolved below. See the
+    // `resolveTransactionFeeCents` call after the shipping plan.
     const referer = String(req.headers.referer ?? '')
     const origin = `https://${req.headers.host}`
     const backUrl = referer.startsWith('http') ? referer : origin
@@ -584,6 +586,44 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         .json({ error: CommerceModel.CART_UNPRICEABLE_SHIPPING_MESSAGE })
     }
 
+    // THE PLATFORM FEE (AGL-2152). Formerly `feePct` of the goods and nothing
+    // else, which on a DESTINATION charge meant Aglyn paid Stripe 2.9% + 30¢
+    // out of its own balance and — on every tier carrying
+    // `transactionFeePhysicalPct: 0` — collected nothing back. The advertised
+    // platform take is unchanged; the card cost is now passed through at cost
+    // so the net per order is the take rather than the take minus Stripe's fee.
+    //
+    // The charge base is everything Stripe will run the card for: the goods
+    // after the coupon, the manual tax line, and the DEAREST shipping option on
+    // the session. The dearest, not the cheapest, because the shopper picks
+    // after the session is created and `application_fee_amount` is a fixed
+    // number Stripe will not let us revise — under-reaching would put the
+    // difference back on Aglyn. A store on Stripe Tax is the one residual: its
+    // tax is computed by Stripe after this point and cannot be seen from here.
+    const shippingCeilingCents = shippingPlan.options.reduce(
+      (most, option) => Math.max(most, Math.max(0, Number(option.amountCents ?? 0))),
+      0,
+    )
+    // A SUBSCRIPTION keeps the old items-only figure. Stripe offers a
+    // Subscription no `application_fee_amount`, only
+    // `application_fee_percent`, which cannot carry a fixed 30¢ — so the
+    // recurring path cannot recover the card cost this way and is left exactly
+    // as it was rather than half-changed. It is still an uncovered cost; see
+    // the AGL-2152 note. This branch never reaches
+    // `payment_intent_data[application_fee_amount]` (the emission below is
+    // gated on `!isSubscription`); it feeds `metadata[feeCents]`, the figure
+    // the webhook records as what Aglyn keeps.
+    const feeCents = isSubscription
+      ? feePct > 0
+        ? Math.max(1, Math.round((amountCents * feePct) / 100))
+        : 0
+      : Aglyn.resolveTransactionFeeCents(
+          ownerOrg.org as any,
+          lifted.type ?? 'physical',
+          amountCents,
+          amountCents + taxCents + shippingCeilingCents,
+        )
+
     // The unit price Stripe actually charges — the coupon is priced INTO it
     // rather than sent as a Stripe discount, which is why `amount_discount` is
     // 0 on every buy-now session and the discount has to ride the metadata
@@ -672,6 +712,32 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
             'subscription_data[metadata][type]': 'commerce-subscription',
             'subscription_data[metadata][hostId]': hostId,
             'subscription_data[metadata][productId]': productId,
+            // WHICH RATE this subscription will bill, on the subscription
+            // itself (AGL-2323).
+            //
+            // The rate above is attached to `line_items[0]` and Checkout
+            // carries it onto the subscription item, where it bills correctly
+            // and forever. But the id it lands on is then visible to nothing
+            // we own: `line_items` is not expanded on a delivered
+            // `checkout.session.completed`, and the subscription object the
+            // renewal webhook reads does not restate it either.
+            //
+            // That is what made AGL-2323's second half unanswerable. Tax rates
+            // are immutable, so a merchant correcting 8.25% → 6.25% mints a
+            // NEW object and every existing subscriber keeps billing the old
+            // one — correct behaviour for an immutable object, and invisible
+            // drift without this. Naming the rate here makes the live Stripe
+            // subscription self-describing, so the set of subscribers a
+            // correction would affect can be enumerated before anyone decides
+            // whether to touch them.
+            //
+            // Metadata only. Nothing here changes what is charged.
+            ...(recurringTaxRateId
+              ? {
+                  'subscription_data[metadata][taxRateId]': recurringTaxRateId,
+                  'subscription_data[metadata][taxPct]': String(taxPct),
+                }
+              : {}),
           }
         : {}),
       // One-time sales keep the AGL-1711 construction — an ordinary product
@@ -693,7 +759,9 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         ? { 'line_items[0][tax_rates][0]': recurringTaxRateId }
         : {}),
       ...(useStripeTax ? { 'automatic_tax[enabled]': 'true' } : {}),
-      // Stripe rejects a zero application fee — omit it on 0% plans.
+      // Stripe rejects a zero application fee. Since AGL-2152 a one-time
+      // charge always carries at least the card cost, so this guard only
+      // still fires for a charge base that resolved to nothing at all.
       ...(!isSubscription && feeCents > 0
         ? { 'payment_intent_data[application_fee_amount]': String(feeCents) }
         : {}),
@@ -716,6 +784,20 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       ...(variantId ? { 'metadata[variantId]': variantId } : {}),
       'metadata[quantity]': String(quantity),
       'metadata[feeCents]': String(feeCents),
+      // The same two facts on the SESSION, because that is the object
+      // `billing-webhook.ts` is handed when it writes the subscription record
+      // (AGL-2323). Mirrored rather than moved: the subscription copy above is
+      // what a Stripe-side enumeration reads, this one is what our own
+      // database gets. Absent on every path with no merchant rate to name — a
+      // Stripe Tax sale computes against Aglyn's registrations and has no rate
+      // object of the merchant's own (AGL-1904), and a one-time sale mints
+      // none at all.
+      ...(recurringTaxRateId
+        ? {
+            'metadata[taxRateId]': recurringTaxRateId,
+            'metadata[taxPct]': String(taxPct),
+          }
+        : {}),
       // The order's decomposition, snapshotted as we compute it (AGL-1711).
       // Two of these three are invisible to Stripe's own `total_details` BY
       // OUR OWN CONSTRUCTION — the manual tax goes over as an ordinary

@@ -238,6 +238,54 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
                 </Typography>
               ) : null}
             </Typography>
+            {/* CARD PROCESSING, PASSED THROUGH AT COST (AGL-2152).
+
+                Unconditional, including on the 0% plans, because it is
+                exactly those plans where the merchant would otherwise read
+                "0%" and be surprised by a deduction. Their PLATFORM fee
+                really is zero — the figure below is Stripe's own charge for
+                taking the payment, which every storefront sale incurs and
+                which used to be absorbed silently out of the platform's
+                balance rather than passed through.
+
+                Named as a range rather than one number because the buyer
+                chooses the payment method after the session is created:
+                cards settle at the low end, buy-now-pay-later at the high
+                end, and the deduction is sized for the dearest so a sale can
+                never cost more to process than it collects. */}
+            <Typography variant="body2" color="text.secondary">
+              {'Card processing is passed through at cost on top of that: ' +
+                `${Aglyn.MARKETPLACE_PROCESSING_PERCENT_CARD}–` +
+                `${Aglyn.MARKETPLACE_PROCESSING_PERCENT_BNPL}% + ` +
+                `${Aglyn.MARKETPLACE_PROCESSING_FIXED_CENTS}¢ per online ` +
+                'sale, what Stripe charges to take the payment. It is not a ' +
+                `${Aglyn.PLATFORM_BRAND_LEGAL_NAME} margin.`}
+            </Typography>
+            {/* EVERY TENDER, AND HOW EACH IS COLLECTED (AGL-2111).
+
+                Until now this card said "per sale" and meant it for online and
+                card sales only: cash and room-charge sales at the register
+                recorded no fee at all, so a merchant could read this sentence,
+                ring everything as cash, and pay nothing. The fee now attaches
+                to the sale on every tender, which makes the sentence above
+                true — and creates a second, visible collection route the
+                merchant has to be told about BEFORE it appears on their
+                invoice, because it is money leaving by a door they have never
+                seen it leave by.
+
+                Shown only when a rate actually applies: on a 0% plan there is
+                nothing to collect either way, and the paragraph would be noise
+                on the card of the merchants who upgraded to escape fees. */}
+            {physicalPct > 0 || digitalPct > 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                {'The fee is charged on the sale, not on how it was paid — ' +
+                  'in-person cash and room-charge sales carry it too. On card ' +
+                  'sales it is deducted from your Stripe payout; on cash and ' +
+                  'room-charge sales there is no payout to deduct from, so it ' +
+                  `is added to your monthly ${Aglyn.PLATFORM_BRAND_LEGAL_NAME} ` +
+                  'invoice instead.'}
+              </Typography>
+            ) : null}
           </>
         )}
         {/*

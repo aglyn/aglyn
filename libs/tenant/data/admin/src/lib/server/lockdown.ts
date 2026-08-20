@@ -55,6 +55,7 @@ import {
   resolveLockdown,
   userLockdownDocId,
 } from '@aglyn/aglyn/server'
+import { getApp } from 'firebase-admin/app'
 import firebaseAdmin from './firebase-admin'
 
 /**
@@ -467,4 +468,114 @@ export function lockdownJsonResponse(
       },
     },
   )
+}
+
+/**
+ * IS THE CREATION-LEVEL VALVE ACTUALLY ARMED? (AGL-1531)
+ *
+ * The signups feature lock refuses the session mint, the acceptance recorder
+ * and the signup-page doors from code that ships with every deploy. It also
+ * refuses account CREATION — but only through a Firebase Auth
+ * `beforeUserCreated` blocking function in `cloud/functions`, which merging
+ * does not deploy and deploying does not necessarily register. Identity
+ * Platform holds that registration, not this repo.
+ *
+ * So the staff page had a way to be confidently wrong: the switch reads
+ * LOCKED either way, and an operator during a bot wave would have no way to
+ * tell "creation is refused" from "creation is still wide open and only
+ * sessions are being turned away". This is the read that closes that gap —
+ * the panic surface states which of the two it is instead of implying the
+ * stronger one.
+ *
+ * `unknown` is a first-class answer and is NEVER rendered as armed. The
+ * probe needs a credential with the identitytoolkit scope and an outbound
+ * call; a deployment where either is missing must report that it does not
+ * know, because "we could not check" and "it is on" are the two answers an
+ * incident cannot afford to have confused.
+ */
+/**
+ * A STRING discriminant, not a `boolean | null`. `strictNullChecks` is off
+ * repo-wide, so `null` is assignable to every member and a `armed: null` arm
+ * cannot narrow — the compiler collapses the union and the "unknown" case
+ * silently stops being distinguishable from the other two. Which is the one
+ * distinction this type exists to hold.
+ */
+export type SignupsCreationTriggerStatus =
+  | { status: 'armed'; functionUri: string | null; updateTime: string | null }
+  | { status: 'absent' }
+  | { status: 'unknown'; reason: string }
+
+/** Bounded: the panic page must render even when this call is the slow one. */
+const IDENTITY_CONFIG_TIMEOUT_MS = 4_000
+
+export async function readSignupsCreationTriggerStatus(): Promise<SignupsCreationTriggerStatus> {
+  let token: string | undefined
+  let projectId: string | undefined
+  try {
+    // `getApp()`, not `firebaseAdmin.app()`: the local shim narrows the app
+    // to its four accessors and drops `options`, which is where the
+    // credential and the project id live. Same acquisition path as the
+    // error-beacon target (`client-error-report.ts`).
+    const app = getApp()
+    projectId = (app.options.projectId ??
+      process.env['NEXT_PUBLIC_FIREBASE_PROJECT_ID']) as string | undefined
+    token = (await app.options.credential?.getAccessToken())?.access_token
+  } catch {
+    token = undefined
+  }
+  if (!token || !projectId) {
+    return {
+      status: 'unknown',
+      reason:
+        'No admin credential or project id on this deployment, so the ' +
+        'Identity Platform config could not be read.',
+    }
+  }
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), IDENTITY_CONFIG_TIMEOUT_MS)
+  try {
+    const response = await fetch(
+      `https://identitytoolkit.googleapis.com/admin/v2/projects/${encodeURIComponent(projectId)}/config`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
+      },
+    )
+    if (!response.ok) {
+      return {
+        status: 'unknown',
+        reason: `Identity Platform config read returned ${response.status}.`,
+      }
+    }
+    const payload = (await response.json()) as {
+      blockingFunctions?: {
+        triggers?: Record<
+          string,
+          { functionUri?: string; updateTime?: string } | undefined
+        >
+      }
+    }
+    // The trigger key Identity Platform uses is `beforeCreate`; the Firebase
+    // SDK's `beforeUserCreated` is what registers it. Absent means the valve
+    // is not deployed OR was deployed and never registered — indistinguishable
+    // from here, and both mean the same thing to an operator: creation is not
+    // being refused.
+    const trigger = payload.blockingFunctions?.triggers?.['beforeCreate']
+    if (!trigger) return { status: 'absent' }
+    return {
+      status: 'armed',
+      functionUri: trigger.functionUri ?? null,
+      updateTime: trigger.updateTime ?? null,
+    }
+  } catch (error: any) {
+    return {
+      status: 'unknown',
+      reason:
+        error?.name === 'AbortError'
+          ? 'Identity Platform config read timed out.'
+          : 'Identity Platform config could not be read.',
+    }
+  } finally {
+    clearTimeout(timer)
+  }
 }

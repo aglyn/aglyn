@@ -136,7 +136,7 @@ export async function resolveNativeCheckoutMode(
   // environment where the module never loaded — throws SYNCHRONOUSLY, before
   // there is a promise to attach a handler to. Only the block form covers both.
   // Either way the answer is the same and it is the safe one: the redirect.
-  let on = false
+  let on: boolean
   try {
     on = await isServerReleaseFlagOnForOrg(NATIVE_CHECKOUT_FLAG, orgId ?? null)
   } catch {

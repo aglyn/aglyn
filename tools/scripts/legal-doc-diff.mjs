@@ -190,7 +190,9 @@ function resolveFromPointerFiles(legalDir) {
   try {
     entries = readdirSync(legalDir)
   } catch (error) {
-    throw new Error(`cannot read ${legalDir}: ${error.message}`)
+    throw new Error(`cannot read ${legalDir}: ${error.message}`, {
+      cause: error,
+    })
   }
   const docs = []
   for (const file of entries.filter((f) => f.endsWith('.gdoc')).sort()) {

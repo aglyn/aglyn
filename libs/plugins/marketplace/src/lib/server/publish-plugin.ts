@@ -44,7 +44,7 @@ import {
 } from '@aglyn/aglyn/app-utils/publisher-attestation'
 import { createHash } from 'crypto'
 import {
-  MARKETPLACE_MAX_PRICE_USD,
+  marketplacePriceRefusal,
   missingPublicListingContent,
   validateListingContent,
 } from '../model/marketplace'
@@ -215,10 +215,14 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
   if (!contentVerdict.ok) {
     return res.status(400).json({ error: contentVerdict.error })
   }
-  if (priceUsd < 0 || priceUsd > MARKETPLACE_MAX_PRICE_USD) {
-    return res
-      .status(400)
-      .json({ error: `Price must be 0–${MARKETPLACE_MAX_PRICE_USD} USD` })
+  // The price floor and ceiling, from ONE validator (AGL-2343): a paid listing
+  // under `MARKETPLACE_MIN_PRICE_USD` loses money on every sale, because
+  // marketplace checkout is a destination charge whose Stripe fee is debited
+  // from the platform's balance. Also enforced in `publishPreconditionRefusal`
+  // below, so a door that drops this line is still covered.
+  const priceRefusal = marketplacePriceRefusal(priceUsd)
+  if (priceRefusal) {
+    return res.status(400).json({ error: priceRefusal })
   }
   if (!displayName.trim() || !bundleBase64) {
     return res.status(400).json({ error: 'Missing displayName or bundle' })

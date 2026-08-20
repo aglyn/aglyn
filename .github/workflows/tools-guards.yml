@@ -231,6 +231,28 @@ jobs:
 
       - run: npm run test:erase-cli
 
+      # AGL-1889. The finder that decides whether a persisted synthetic `$id`
+      # is still in production, and — the part worth a CI step — the gate that
+      # stops it reporting a vacuous zero. A sweep for a key that is MISSING
+      # fails by saying "none", which is the same word a clean database
+      # produces, so `assertPositiveControl` throws unless the sweep can
+      # demonstrate it saw the key nested in besigner node maps where it
+      # legitimately lives. Pure logic, no credentials.
+      - run: npm run test:synthetic-id
+
+      # AGL-1488. The shared writer every seed and migration script now uses
+      # to land a media document, so the document and `counters/media` cannot
+      # come apart. That counter gates the storage quota and, since AGL-1473,
+      # is a billing input — four script call sites wrote media documents past
+      # it independently, and the drift always runs one way: the counter reads
+      # LOW, so the customer is under-limited and the metered plans under-bill.
+      #
+      # The test's Firestore double models read-before-write, which is not
+      # decoration: the first version of the helper read the counter AFTER
+      # setting the document, which the real Admin SDK rejects outright, and a
+      # laxer double reported it green.
+      - run: npm run test:media-counter
+
       # AGL-1734. The demo org has to be several visibly different businesses:
       # the founding demo spends its largest block switching between sites in
       # one org, and a switcher showing one bakery three times argues the
@@ -505,3 +527,52 @@ jobs:
       # in rules-drift.test.mjs actually asserts, so deleting this step turns
       # three other active workflows red.
       - run: npm run check:provider-key-exposure
+
+      # AGL-1890. No tracked source file may contain a raw NUL byte.
+      #
+      # A NUL in a blob's first 8000 bytes makes the file BINARY to git: no
+      # diff, no `git log -p`, no blame, and `grep` skips it. That is not a
+      # cosmetic problem — it means NO change to that file has ever been
+      # reviewed, including whatever is in it right now.
+      # `apps/console/utils/analytics-day-cache.ts` landed that way and stayed
+      # unreviewable for six days over 6.7 KB of caching logic; read as text
+      # for the first time, it held two real defects.
+      #
+      # AGL-1323 removed the repo's one known instance and recorded that it
+      # was the only one. Two more arrived within fifteen days, because
+      # nothing stopped them — that issue left a fact, and a fact cannot fail.
+      # This is that fact as an exit code.
+      #
+      # Stricter than git on purpose: it flags a NUL at ANY offset, not only
+      # inside git's window. The second offender sat at byte 9188, where git
+      # still called the file text — a landmine that flips the whole file to
+      # binary on the next edit that grows anything above it, on a commit with
+      # no visible relationship to the cause.
+      #
+      # Two steps, self-test first, as everywhere else here: the self-test
+      # rebuilds both real offenders and asserts they are caught, so the
+      # repo-wide green that follows is worth something.
+      - run: npm run test:nul-bytes
+
+      - run: npm run check:nul-bytes
+
+      # AGL-2480 — eslint over `tools/` itself. There is no `tools/project.json`,
+      # so `tools/` is in NO nx project and `nx affected -t lint` has never
+      # reached one of its 214 `.mjs` files. That is the whole tree this
+      # workflow's other twenty-odd guards are WRITTEN IN: the drift checkers,
+      # the deploy tooling, the erase-org CLI, all eight local lint rules.
+      #
+      # The root config already has a `**/*.mjs` block written for exactly
+      # these files — AGL-1815 added it, and its comment names
+      # `tools/scripts/**` by hand as the reason. Nothing has ever run it over
+      # them. It found 18 real errors on the first pass, six of them
+      # `preserve-caught-error` in the network and filesystem paths of the
+      # deploy tooling, where the discarded `cause` is the ENOENT or the
+      # connect-timeout an operator needs to see.
+      #
+      # Here rather than in a `tools/project.json` on purpose: adding an nx
+      # project to hold a lint target would put `tools/` in the project graph
+      # and subject it to `@nx/enforce-module-boundaries`, which is a much
+      # larger change than running a linter. This workflow is already the
+      # unconditional home for every other pure-node `tools/` guard.
+      - run: npm run check:lint-tools

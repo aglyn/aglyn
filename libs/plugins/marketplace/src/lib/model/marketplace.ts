@@ -26,6 +26,7 @@
 // Server Component) while `@aglyn/aglyn/server` carries `node:fs` (illegal in
 // the browser). Neither is safe from here; the deep path has no dependencies.
 import { isFirstPartyMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
+import { marketplaceMinPriceUsd } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { MarketplaceArtifactType } from '@aglyn/aglyn/app-utils/marketplace-provenance'
 import type { ListingVerificationRequest } from '@aglyn/aglyn/app-utils/marketplace-verification'
 import {
@@ -936,6 +937,58 @@ export const MARKETPLACE_PLATFORM_FEE_PERCENT_FREE_PLAN = 30
 export const MARKETPLACE_MAX_PRICE_USD = 1000
 
 /**
+ * One-time listing price FLOOR for a PAID listing (whole USD, AGL-2343).
+ *
+ * Marketplace checkout is a destination charge with no `application_fee_amount`
+ * — deliberately, so the sales tax stays with the platform that owes it
+ * (AGL-1544) — which means Stripe debits its fee from the PLATFORM's balance.
+ * Stripe's fixed 30¢ dominates at low prices, so under this figure the
+ * platform's cut is smaller than the cost of collecting it and every sale is a
+ * loss. Zach lifted the September 1 pricing lock for this on 2026-08-19:
+ * "make a minimum price floor that does not cause us to lose money."
+ *
+ * NOT A CHOSEN NUMBER. `marketplaceMinPriceUsd` derives it from the plan
+ * table's lowest take rate and the dearest enabled payment method; this is a
+ * re-export so that the routes and the console forms cannot quote different
+ * minimums at the same publisher. Zero stays legal — a free listing takes no
+ * payment and costs nothing to process.
+ */
+export const MARKETPLACE_MIN_PRICE_USD = marketplaceMinPriceUsd()
+
+/**
+ * The refusal message for a listing price, or `undefined` when the price may
+ * be published (AGL-2343).
+ *
+ * ONE VALIDATOR FOR SEVEN DOORS. Each publish route used to inline its own
+ * range check against the maximum — and `publish-theme.ts` and
+ * `publish-layout.ts` had none at all, so a $250,000 theme was publishable.
+ * The doors call this, and `publishPreconditionRefusal` calls it too, so a
+ * route that forgets is still covered.
+ *
+ * Takes the price the route already rounded: a listing price is whole dollars
+ * everywhere, and a validator that accepted $2.99 would be validating a number
+ * that is never stored.
+ */
+export function marketplacePriceRefusal(priceUsd: number): string | undefined {
+  if (!Number.isFinite(priceUsd) || priceUsd < 0) {
+    return `Price must be 0 (free) or $${MARKETPLACE_MIN_PRICE_USD}–$${MARKETPLACE_MAX_PRICE_USD} USD`
+  }
+  if (priceUsd > MARKETPLACE_MAX_PRICE_USD) {
+    return `Price must be 0 (free) or $${MARKETPLACE_MIN_PRICE_USD}–$${MARKETPLACE_MAX_PRICE_USD} USD`
+  }
+  // Zero is not "below the floor" — it is the free listing, which takes no
+  // payment at all and so costs nothing to process.
+  if (priceUsd > 0 && priceUsd < MARKETPLACE_MIN_PRICE_USD) {
+    return (
+      `A paid listing must be at least $${MARKETPLACE_MIN_PRICE_USD} USD — ` +
+      `below that, processing the payment costs more than the platform fee ` +
+      `on the sale. Use 0 for a free listing.`
+    )
+  }
+  return undefined
+}
+
+/**
  * Component ids publishable to the marketplace. Mirrors the persisted ids in
  * plugins-mui (plugin.spec.ts) minus `reusableInstance` — nested
  * instances would smuggle references to another tenant's private
@@ -1593,6 +1646,16 @@ export interface PurchaseLiveness {
   /** Stamped when a full refund or a lost dispute un-buys the listing. */
   refundedAt?: unknown
   listingId?: unknown
+  /**
+   * THE ORGANIZATION THE LICENCE BELONGS TO (AGL-2331).
+   *
+   * Absent on every purchase written before AGL-2331 — see
+   * `purchaseEntitlesOrg` for what that absence means and why it is never
+   * treated as "no licence".
+   */
+  buyerOrgId?: unknown
+  /** The person who paid. Kept for the receipt trail and the legacy grant. */
+  buyerUid?: unknown
 }
 
 /**
@@ -1626,3 +1689,115 @@ export function hasLivePurchaseOf(
       purchase?.listingId === listingId && isLivePurchase(purchase),
   )
 }
+/**
+ * WHO A PURCHASE LICENSES (AGL-2331).
+ *
+ * ## The model
+ *
+ * **A marketplace purchase licenses an ORGANIZATION, not a person.** That is
+ * not a new decision — it is the one already published. The Marketplace
+ * Publisher Agreement §8.1 says a paid Artifact is licensed "to the installing
+ * organization", and §2 grants the right to sublicense "to organizations that
+ * install it". Until now the code enforced a per-PERSON licence instead, and
+ * the mismatch cut both ways: an agency developer who is an owner across five
+ * client workspaces bought once and installed into all five, and — because the
+ * duplicate-purchase guard shares this predicate — could not buy a second
+ * licence even when they wanted to. Conforming the code to the published terms
+ * is the smaller of the two changes; the alternative amends a version-pinned
+ * legal document and stops every publisher until they re-accept it.
+ *
+ * Three consequences follow, and all three are the point:
+ *
+ * 1. A licence held by org A does not install into org B. The agency buys per
+ *    client workspace, which is what the agreement says they are buying.
+ * 2. Buying a second licence is a real second sale, not a `409`.
+ * 3. Any member of the owning org with `installPlugins` may install what the
+ *    ORG bought — including colleagues who were not the buyer, and including
+ *    the buyer's replacement after they leave. A licence that evaporates when
+ *    one employee's account is deleted is not an organizational licence.
+ *
+ * ## The legacy grant, and why it never expires
+ *
+ * A purchase written before this change carries NO `buyerOrgId` — there was
+ * no buyer org anywhere in the pipeline to record. Those are real purchases by
+ * real customers, and reinterpreting one as "licensed to no organization"
+ * would revoke access somebody paid for. So a purchase with no `buyerOrgId` at
+ * all keeps its ORIGINAL, person-scoped meaning, forever: it entitles the uid
+ * that bought it, in every org that uid can install into. Nothing is
+ * migrated, nothing is claimed by the first org to use it, and nothing is
+ * revoked — the ambiguity resolves in the customer's favour by construction,
+ * with no backfill to get right and no window during which a paying customer
+ * is locked out.
+ *
+ * The grandfather is bounded by time rather than policed: it can only ever
+ * apply to purchases already written, because from AGL-2331 onward checkout
+ * refuses to open a session that does not name a validated buyer org. It is
+ * therefore a shrinking set that never grows, not a hole left open.
+ *
+ * `orgId` may be empty (a site with no owning org). That is not a licence to
+ * anything, so only the legacy uid grant can hold — never a `buyerOrgId ===
+ * ''` match, which is why the org branch tests for a non-empty string on the
+ * document itself rather than comparing the two values directly.
+ */
+export function purchaseEntitlesOrg(
+  purchase: PurchaseLiveness | null | undefined,
+  actor: { orgId?: string | null; uid?: string | null },
+): boolean {
+  if (!isLivePurchase(purchase)) return false
+  const purchaseOrgId = purchase?.buyerOrgId
+  if (typeof purchaseOrgId === 'string' && purchaseOrgId) {
+    return Boolean(actor.orgId) && purchaseOrgId === actor.orgId
+  }
+  // Legacy: no buyer org was ever recorded, so it means what it meant when it
+  // was sold. Never revoked, never migrated.
+  return Boolean(actor.uid) && purchase?.buyerUid === actor.uid
+}
+
+/**
+ * True when these purchase documents include one that licenses `orgId` for
+ * `listingId` — the org-scoped counterpart of `hasLivePurchaseOf`.
+ *
+ * Same shape and same home as the liveness predicate, and for the same reason
+ * (AGL-2158): the install routes, the checkout duplicate guard and the listing
+ * page all have to answer "does this workspace hold a licence" identically, and
+ * the way they came apart last time was four characters of predicate copied
+ * into a component.
+ */
+export function hasOrgLicenceOf(
+  purchases: readonly (PurchaseLiveness | null | undefined)[] | null | undefined,
+  listingId: string,
+  actor: { orgId?: string | null; uid?: string | null },
+): boolean {
+  if (!listingId) return false
+  return (purchases ?? []).some(
+    (purchase) =>
+      purchase?.listingId === listingId && purchaseEntitlesOrg(purchase, actor),
+  )
+}
+
+/**
+ * Every org id these purchases license for `listingId`, in document order.
+ *
+ * What the console renders so a buyer can see WHICH workspace a licence they
+ * paid for belongs to (AGL-2331) — the question that has no answer at all
+ * while entitlement is person-scoped, and the one an agency has to answer
+ * before deciding whether it needs another.
+ *
+ * Legacy person-scoped purchases contribute no org id, because they name
+ * none; a caller rendering this list has to say so rather than invent one.
+ */
+export function licensedOrgIdsFor(
+  purchases: readonly (PurchaseLiveness | null | undefined)[] | null | undefined,
+  listingId: string,
+): string[] {
+  const seen: string[] = []
+  for (const purchase of purchases ?? []) {
+    if (purchase?.listingId !== listingId || !isLivePurchase(purchase)) continue
+    const orgId = purchase?.buyerOrgId
+    if (typeof orgId === 'string' && orgId && !seen.includes(orgId)) {
+      seen.push(orgId)
+    }
+  }
+  return seen
+}
+

@@ -442,11 +442,20 @@ function FirebaseAppLayout(props: FirebaseAppLayoutProps) {
         firebaseConfig={fbClientAppOptions}
         appName={FIREBASE_CLIENT_APP_NAME}
       >
-        <ReleaseFlagsProvider>
-          <OrgScopeProvider>
+        {/* The org scope wraps the flags provider, not the other way round
+            (AGL-1935). `ReleaseFlagsProvider` reads `useCurrentOrg()` for the
+            rollout subject and the per-org overrides staff set at
+            /admin/orgs (AGL-1635/1656), and `useCurrentOrg` resolves through
+            `useOrgScope`. It landed here first (AGL-229) and AGL-236 nested
+            the org scope INSIDE it, which left the flags provider reading the
+            OrgScopeContext DEFAULT — `currentOrg: null` — forever. React
+            gives no signal for that: the console simply resolved every flag
+            against a null subject and silently ignored every override. */}
+        <OrgScopeProvider>
+          <ReleaseFlagsProvider>
             <AnalyticsGlobalEvents>{children}</AnalyticsGlobalEvents>
-          </OrgScopeProvider>
-        </ReleaseFlagsProvider>
+          </ReleaseFlagsProvider>
+        </OrgScopeProvider>
       </FirebaseServicesProvider>
     </NoSsr>
   )

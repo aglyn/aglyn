@@ -131,7 +131,12 @@ async function handler(request: Request): Promise<Response> {
         after: { email: target.email ?? null, tenantId: tenantId ?? null },
         at: FieldValue.serverTimestamp(),
       })
-    return Response.json({ token }, { status: 200 })
+    // The pool rides along with the token (AGL-1993). Scoping the MINT is only
+    // half of it: `signInWithCustomToken` reads the pool off the client's auth
+    // instance, so without this the caller cannot place the instance in the
+    // tenant and the exchange the comment above warns about is exactly what
+    // happens. Same contract as `/api/presence/token` and the session exchange.
+    return Response.json({ token, tenantId: tenantId ?? null }, { status: 200 })
   } catch (error) {
     console.error(error)
     return Response.json({ error: 'Impersonation failed' }, { status: 500 })

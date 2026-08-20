@@ -61,6 +61,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 import { resolveOrgPermissions as mockResolveGranular } from '@aglyn/aglyn'
 
+import { registerPluginPermissions } from '@aglyn/aglyn/server'
+
 import { resolveOrgPermissions } from './org-permissions'
 
 beforeEach(() => {
@@ -246,5 +248,93 @@ describe('resolveOrgPermissions — custom roles and overrides', () => {
     const resolved = await resolveOrgPermissions('view', { orgId: 'org-1' })
     expect(resolved.orgWide).toBe(true)
     expect(resolved.permissions.manageMembers).toBe(true)
+  })
+})
+
+/**
+ * PLUGIN-DECLARED KEYS SURVIVE AND ARE OVERRIDABLE (AGL-2474).
+ *
+ * The server half of AGL-435 always spread plugin tier defaults into the
+ * resolved map, so `managePos` arrived here looking wired. What did not exist
+ * was any way to change it: the dotted catalog `toLegacyPermissions` projects
+ * has no plugin keys in it, so a per-member override naming one was read by
+ * nothing. A permission that cannot be revoked is not a control.
+ */
+describe('plugin-declared permissions resolve and can be overridden (AGL-2474)', () => {
+  beforeAll(() => {
+    registerPluginPermissions([
+      {
+        key: 'runtimeTestPerm',
+        pluginId: 'test-plugin',
+        label: 'Runtime test permission',
+        defaults: { admin: true, editor: true, viewer: false },
+      },
+    ])
+  })
+
+  it('an org-wide admin gets the tier default', async () => {
+    members.set('org-1:boss', { role: 'admin', allHosts: true })
+    const resolved = await resolveOrgPermissions('boss', { orgId: 'org-1' })
+    expect(resolved.permissions.runtimeTestPerm).toBe(true)
+  })
+
+  it('a per-member override REVOKES it from an org-wide admin', async () => {
+    members.set('org-1:boss', {
+      role: 'admin',
+      allHosts: true,
+      permissions: { runtimeTestPerm: false },
+    })
+    const resolved = await resolveOrgPermissions('boss', { orgId: 'org-1' })
+    expect(resolved.permissions.runtimeTestPerm).toBe(false)
+    // The override must not leak into the built-in keys.
+    expect(resolved.permissions.manageMembers).toBe(true)
+  })
+
+  it('a per-member override GRANTS it to an org-wide viewer', async () => {
+    members.set('org-1:watcher', {
+      role: 'viewer',
+      allHosts: true,
+      permissions: { runtimeTestPerm: true },
+    })
+    const resolved = await resolveOrgPermissions('watcher', { orgId: 'org-1' })
+    expect(resolved.permissions.runtimeTestPerm).toBe(true)
+  })
+
+  it('a site collaborator gets it from their HOST role', async () => {
+    members.set('org-1:contractor', {
+      role: 'editor',
+      allHosts: false,
+      hostAccess: { 'host-a': 'editor' },
+    })
+    const resolved = await resolveOrgPermissions('contractor', {
+      hostId: 'host-a',
+    })
+    expect(resolved.orgWide).toBe(false)
+    expect(resolved.permissions.runtimeTestPerm).toBe(true)
+  })
+
+  it('a per-member override REVOKES it from a site collaborator too', async () => {
+    // The person actually standing at the register is often the contractor.
+    // A revocation that applied only to org-wide members would read as
+    // enforced on the roster screen and do nothing where it mattered.
+    members.set('org-1:contractor', {
+      role: 'editor',
+      allHosts: false,
+      hostAccess: { 'host-a': 'editor' },
+      permissions: { runtimeTestPerm: false },
+    })
+    const resolved = await resolveOrgPermissions('contractor', {
+      hostId: 'host-a',
+    })
+    expect(resolved.permissions.runtimeTestPerm).toBe(false)
+    // Their site-level standing is untouched.
+    expect(resolved.permissions.editHosts).toBe(true)
+  })
+
+  it('a denied member has no plugin grant at all', async () => {
+    const resolved = await resolveOrgPermissions('stranger', {
+      orgId: 'org-1',
+    })
+    expect(resolved.permissions.runtimeTestPerm).toBe(false)
   })
 })

@@ -150,7 +150,16 @@ export const ENTERPRISE_HIGHLIGHTS: Array<{
     // Enterprise exactly as on every paid tier, so a bare "sales" promises a
     // 0% that is not on the price list (AGL-2297, re-broken and re-fixed in
     // AGL-2365).
-    label: '0% platform fees on storefront sales and bookings',
+    //
+    // "plus card processing at cost" is AGL-2152. The PLATFORM fee really is
+    // 0% and the predicate below still says so; what the old label left out is
+    // that a storefront sale is a Stripe destination charge, so Stripe's own
+    // fee is debited from the platform's balance on every order. Aglyn used to
+    // absorb it silently — an Enterprise card promising a free payment rail
+    // that cost Aglyn ~$1,450 a month on a $50k-GMV storefront.
+    label:
+      '0% platform fees on storefront sales and bookings, plus card ' +
+      'processing at cost',
     holds: (org) =>
       resolveTransactionFeePct(org, 'physical') === 0 &&
       resolveTransactionFeePct(org, 'digital') === 0,
@@ -698,7 +707,13 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                       : 'No API access'}
                   </Typography>
                   {/* Declining platform-fee ladder (AGL-892): charged at
-                      checkout as the Stripe Connect application fee;
+                      checkout as the Stripe Connect application fee. "Plus
+                      card processing at cost" is AGL-2152: a storefront sale
+                      is a DESTINATION charge, so Stripe's own fee is debited
+                      from the platform's balance, and a card advertising 0%
+                      with nothing beside it promised a merchant a free
+                      payment rail that Aglyn was paying for out of pocket on
+                      every order. The PLATFORM rates below did not move;
                       memberships, gated content and paid BOOKINGS all bill at
                       the digital rate (AGL-2315 — a booking is a service sale
                       and resolves through the same `'service'`/digital axis,
@@ -709,8 +724,9 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                         entitlements.transactionFeeDigitalPct > 0
                         ? `${entitlements.transactionFeePhysicalPct}% physical · ` +
                           `${entitlements.transactionFeeDigitalPct}% digital, ` +
-                          'membership & booking fees'
-                        : '0% platform fees'
+                          'membership & booking fees, plus card processing ' +
+                          'at cost'
+                        : '0% platform fees, plus card processing at cost'
                       : 'No storefront'}
                   </Typography>
                 </Stack>

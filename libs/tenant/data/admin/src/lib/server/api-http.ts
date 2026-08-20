@@ -93,6 +93,28 @@ export const ApiErrors = {
     errorResponse(409, 'conflict', 'Conflicts with the current state', init),
   methodNotAllowed: (init?: ApiResponseInit) =>
     errorResponse(405, 'method_not_allowed', 'Method not allowed', init),
+  /**
+   * The three refusals an upload can produce that a JSON-only API never could
+   * (AGL-2463). Built here rather than at the call site so `/v1` keeps ONE
+   * error envelope — a client branching on `error.type` must not meet a bare
+   * `{ error: '<sentence>' }` on the one surface that handles bytes.
+   */
+  unsupportedMediaType: (init?: ApiResponseInit) =>
+    errorResponse(415, 'unsupported_media_type', 'Unsupported file type', init),
+  payloadTooLarge: (init?: ApiResponseInit) =>
+    errorResponse(413, 'payload_too_large', 'File too large', init),
+  /**
+   * 451, matching the console's own media chokepoints: the asset is refused
+   * because its content hash is on the takedown ledger, which is a legal
+   * verdict rather than a permission or a quota.
+   */
+  unavailableForLegalReasons: (init?: ApiResponseInit) =>
+    errorResponse(
+      451,
+      'unavailable_for_legal_reasons',
+      'This file has been removed and cannot be uploaded',
+      init,
+    ),
   rateLimited: (retryAfterSec: number, headers?: Record<string, string>) =>
     errorResponse(429, 'rate_limited', 'Too many requests', {
       headers: { 'Retry-After': String(Math.max(1, retryAfterSec)), ...headers },
@@ -221,6 +243,45 @@ export function checkRateLimit(
   state.count += 1
   return {
     allowed: state.count <= limit,
+    limit,
+    remaining: Math.max(0, limit - state.count),
+    resetMs: state.windowStartMs + windowMs,
+  }
+}
+
+/**
+ * Report `key`'s window WITHOUT counting a request against it (AGL-2414).
+ *
+ * `checkRateLimit` fuses "is there budget" with "spend some", which is the
+ * right shape when every call is a request to be counted. It is the wrong
+ * shape when the budget meters something the caller has not done *yet* and
+ * may never do — `/api/v1` gates the Firestore key lookup on an IP's budget
+ * of *unproductive* lookups, so it has to ask before the lookup and only
+ * charge if the lookup came back empty. Asking with `checkRateLimit` would
+ * charge every request, including the successful ones, which is precisely the
+ * customer-visible cap that budget must not become.
+ *
+ * `allowed` answers "would the NEXT call be admitted", i.e. `count < limit` —
+ * one off from `checkRateLimit`'s post-increment `count <= limit`, and the
+ * same verdict for the same request. `remaining` is what is left now, so an
+ * untouched or expired window reports the full `limit` rather than
+ * `limit - 1`.
+ */
+export function peekRateLimit(
+  key: string,
+  options?: RateLimitOptions,
+): RateLimitResult {
+  const limit = options?.limit ?? DEFAULT_RATE_LIMIT
+  const windowMs = options?.windowMs ?? DEFAULT_RATE_WINDOW_MS
+  const now = options?.now ?? Date.now()
+  const store = options?.store ?? defaultStore
+
+  const state = store.get(key)
+  if (!state || now - state.windowStartMs >= windowMs) {
+    return { allowed: true, limit, remaining: limit, resetMs: now + windowMs }
+  }
+  return {
+    allowed: state.count < limit,
     limit,
     remaining: Math.max(0, limit - state.count),
     resetMs: state.windowStartMs + windowMs,

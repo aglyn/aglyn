@@ -349,7 +349,13 @@ export function lockdownStopsMediaDelivery(
  *
  * **Out of this control's reach entirely:** free-tier raw
  * `firebasestorage.googleapis.com` URLs — no code of ours runs there.
- * Stated on AGL-1520; token rotation on lock is the filed follow-up.
+ * Stated on AGL-1520, and now answered elsewhere rather than here: a
+ * `security` lock rotates those objects' download tokens
+ * (`media-download-tokens.ts`, AGL-1526), which kills the URL at Google's
+ * edge. That is a SIBLING control, not an extension of this one — it is
+ * `security`-only, it is irreversible for embeds, and like this gate it
+ * stops only new origin fetches (AGL-1615). Bytes already cached anywhere
+ * remain out of reach of both.
  */
 const MEDIA_CDN_LOCK_TTL_MS = 15_000
 
@@ -390,7 +396,7 @@ async function mediaCdnScopeLocked(scope: MediaCdnScope): Promise<boolean> {
   let pending = lockPending.get(key)
   if (!pending) {
     pending = (async () => {
-      let blocked = false
+      let blocked: boolean
       try {
         const nowMs = Date.now()
         // Platform first: cached, and a platform security lock is the panic

@@ -33,6 +33,7 @@ import {
 import { alertLowStockCrossing } from './low-stock'
 import { decrementVariantStock } from './reserve-stock'
 import { posMaxDiscountPct } from '../plugin-config'
+import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 
 /**
  * The settlement claim (AGL-1691) now lives in `@aglyn/aglyn/server`
@@ -117,6 +118,22 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     // nothing a real projection can produce.
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
     if (memberRole !== 'admin' && memberRole !== 'editor') {
+      return res.status(403).json({ error: 'Not permitted' })
+    }
+    // THE `managePos` PERMISSION, actually read (AGL-2474). The allowlist
+    // above is a HOST-level fact and stays — it is what the Firestore rules
+    // enforce and dropping it would widen this route. This is the org-level
+    // half: `managePos` was declared by COMMERCE_PERMISSIONS, resolved into
+    // every permission map, displayed nowhere and read by nothing, so the
+    // capability was inert. Both must hold, matching the marketplace
+    // install/publish routes' resolveOrgPermissions + memberRoles pairing.
+    //
+    // Behaviour is unchanged for anyone who has not been given an explicit
+    // override: `managePos` defaults to true for the admin and editor tiers,
+    // which is exactly the set the allowlist already admits. What it adds is
+    // the ability to REVOKE POS from one admin without demoting them.
+    const membership = await resolveOrgPermissions(decoded.uid, { hostId })
+    if (!membership.permissions.managePos) {
       return res.status(403).json({ error: 'Not permitted' })
     }
     const ownerOrg = await getOrgForHost(hostId)
@@ -312,7 +329,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     // Gated on what the shopper actually pays for goods, so a 100% cashier
     // discount still takes nothing — the fee is a cut of the goods, and there
     // are none left to cut.
-    const feeCents =
+    const takeFeeCents =
       feeApplies && chargedItemsCents > 0
         ? Math.max(1, scaledFeeCents)
         : scaledFeeCents
@@ -358,20 +375,107 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       rate && !taxSettings.pricesIncludeTax
         ? CommerceModel.computeTaxCents(itemsCents - discountCents, rate.pct)
         : 0
-    // `feeCents` rides the CARD totals only. Cash and folio tenders never
-    // touch Stripe, so there is no charge to take an application fee out of —
-    // recording one on those orders would put a number in the merchant's
-    // ledger that nothing will ever collect. (Whether Aglyn should invoice a
-    // fee on cash at all is a pricing decision, not a bug: AGL-2111.)
+    /*==========================================
+     * THE FEE ATTACHES TO THE SALE, NOT TO THE TENDER (AGL-2111).
+     *
+     * It used to ride the CARD totals only, and the argument was mechanical:
+     * cash and folio never touch Stripe, so there is no charge to take an
+     * `application_fee_amount` out of, so record nothing. That left a merchant
+     * on a non-zero rate one tap away from paying Aglyn nothing forever —
+     * ring every in-person sale as cash. Zach's decision, 2026-08-19: close
+     * it. The tender is at most an input to the RATE; it is never a switch
+     * that zeroes the fee.
+     *
+     * ## Cash is genuinely different from card, and the difference argues for
+     * ## the SAME rate, not a lower one
+     *
+     * On a card sale the fee becomes `application_fee_amount` on a DESTINATION
+     * charge, and Stripe's own processing (2.9% + 30¢) is debited from the
+     * PLATFORM's balance beside it (AGL-2071). At the Starter physical rate of
+     * 2% the fee does not even cover that processing — Aglyn nets negative on
+     * the card leg. So the take rate demonstrably is NOT a processing
+     * pass-through with margin on top; there is no processing component in it
+     * to strip out for a tender that skips Stripe.
+     *
+     * What the fee buys is the same on both tenders: the catalogue that priced
+     * the basket, the stock that decremented, the tax that computed, the order
+     * record, the receipt, the reporting, the register itself. Aglyn's cost
+     * basis on a cash sale is LOWER (no Stripe fee at all), so the same
+     * percentage is more profitable there, not less justified.
+     *
+     * And any gap between tenders is itself the defect: a cheaper cash rate
+     * would still pay a merchant to steer customers to cash. Parity is the
+     * only rate at which the tender stops being a pricing lever.
+     *
+     * ## What changes is COLLECTION, not the rate
+     *
+     * There is still no charge to net it from, so the fee is ACCRUED against
+     * the org's month (`offlineFees` below) and swept onto the
+     * org's own monthly Aglyn invoice by `report-usage` — option 2 on
+     * AGL-2111, the `aglyn_metered_usage` meter that already carries every
+     * other overage. `feeCollection` on the order says which of the two routes
+     * this sale's fee took, so a merchant reconciling a payout can tell "short
+     * by the fee" from "billed for it next month".
+     *
+     * `feeCents` does not enter `totalCents` (see `computeOrderTotals`), so
+     * the shopper pays exactly what they paid before — this moves no price at
+     * the till, on either tender.
+     *=========================================*/
+    // STRIPE'S CARD COST, ON THE CARD TENDER ONLY (AGL-2152). `takeFeeCents`
+    // above is the platform's advertised take and every tender carries it
+    // (AGL-2111). This term is different in kind: it is not a rate, it is the
+    // 2.9% + 30¢ Stripe debits from the PLATFORM's balance when a destination
+    // charge settles — which the AGL-2111 note beside it already observes the
+    // take does not cover. Cash and folio never reach Stripe, so there is no
+    // such cost to pass through and adding one would invoice a merchant for a
+    // fee nobody paid.
+    //
+    // The base is exactly what the card runs for: the goods after the
+    // cashier's discount, plus the origin tax. A till knows both — there is no
+    // shopper-chosen shipping and no Stripe Tax to wait on — so unlike the
+    // online doors this one recovers the cost exactly.
+    const feeCents =
+      payment === 'link'
+        ? takeFeeCents +
+          Aglyn.storefrontProcessingCostCents(chargedItemsCents + taxCents)
+        : takeFeeCents
     const totals = CommerceModel.computeOrderTotals(lineItems, {
-      discountCents,
-      taxCents,
-    })
-    const cardTotals = CommerceModel.computeOrderTotals(lineItems, {
       discountCents,
       taxCents,
       feeCents,
     })
+    // Kept as a distinct name because the card branch reads it for the Stripe
+    // parameters and the metadata witness; the two are now the same figure by
+    // construction, which is the point of this change.
+    const cardTotals = totals
+    // How this sale's fee reaches Aglyn. `payout` = netted from the merchant's
+    // Stripe transfer at settlement; `invoice` = accrued here and billed on
+    // the org's next Aglyn invoice. Written on every POS order that carries a
+    // fee, so the collection route is a recorded fact rather than something a
+    // reader has to infer from the tender.
+    const feeCollection: 'payout' | 'invoice' =
+      payment === 'link' ? 'payout' : 'invoice'
+    // WHERE THE INVOICED HALF ACCRUES (AGL-2111): one document per org-month,
+    // `orgs/{id}/offlineFees/{YYYY-MM}`, read by `report-usage` and added to
+    // the org-month's `billedCents` — the same `aglyn_metered_usage` meter
+    // that already carries dataset, API and contact overage. Nothing new has
+    // to be minted in Stripe for this to bill.
+    //
+    // Keyed by ORG, not by host: the org is the billing subject (AGL-238), and
+    // a merchant with three storefronts gets one line rather than three.
+    //
+    // An org with no id is not billable and must not silently accrue into
+    // `orgs//offlineFees/…`; the sale still rings, and the fee is forgone
+    // rather than written somewhere no invoice will ever find it.
+    const offlineFeeMonth = offlineFeeMonthKey()
+    const offlineFeeOrgId = String(ownerOrg?.org?.id ?? '')
+    const offlineFeeRef = offlineFeeOrgId
+      ? firestore
+          .collection('orgs')
+          .doc(offlineFeeOrgId)
+          .collection('offlineFees')
+          .doc(offlineFeeMonth)
+      : null
 
     // Deterministic tender rejections run BEFORE the claim is taken, so they
     // never burn the key (AGL-1691): "cash received is short" is a 400 the
@@ -478,11 +582,22 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           // chosen location exists nowhere but on this document.
           ...(locationId ? { locationId } : {}),
           lineItems,
-          // The CARD totals — the only tender that carries a platform fee
-          // (AGL-2110). `totalCents` is identical either way; `feeCents` is
-          // what the merchant's payout is short by, and it belongs on the
-          // document that records the charge.
+          // `feeCents` is what the merchant's payout is short by, and it
+          // belongs on the document that records the charge. Every tender
+          // carries the fee since AGL-2111; this is the one that is netted
+          // from the payout rather than invoiced, and `feeCollection` says so.
           totals: cardTotals,
+          // WHICH TAX THIS SALE CARRIED (AGL-2451), from the decision resolved
+          // above. The register never reaches `stripe-automatic` — AGL-2145
+          // refuses that store in person, because there is no shopper address
+          // at a till — so this is `manual` or `none`, and the QR session
+          // carries the same figure over as `metadata[taxCents]` for the
+          // webhook to restate when the card is actually charged.
+          taxMode: CommerceModel.storefrontTaxModeForDecision(
+            taxDecision,
+            taxCents,
+          ),
+          ...(feeCents > 0 ? { feeCollection } : {}),
           customerEmail: customerEmail || null,
           timeline: [{ atMs: Date.now(), event: 'pos-card-pending' }],
           createdAtMs: Date.now(),
@@ -639,12 +754,44 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         ...(locationId ? { locationId } : {}),
         lineItems,
         totals,
+        // WHICH TAX THIS SALE CARRIED (AGL-2451). Cash and folio never reach
+        // Stripe at all, so no Stripe object will ever state this and NOTHING
+        // else can supply it later — the decision resolved above is the only
+        // witness there will be, and here is the one moment it can be written
+        // down.
+        taxMode: CommerceModel.storefrontTaxModeForDecision(
+          taxDecision,
+          taxCents,
+        ),
+        // AGL-2111: the fee is on `totals` for this tender too, and this says
+        // it will arrive on the org's Aglyn invoice rather than as a short
+        // payout — there is no payout, the merchant kept the cash.
+        ...(feeCents > 0 ? { feeCollection } : {}),
         customerEmail: customerEmail || null,
         timeline: [paidEvent],
         ...(payment === 'folio' ? { reservationId } : {}),
         createdAtMs: Date.now(),
         createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       })
+      // ACCRUED IN THE SAME TRANSACTION AS THE ORDER (AGL-2111), so an order
+      // and the fee it owes cannot diverge: either both land or neither does.
+      // A separate write after the commit would drop the accrual on any crash
+      // in the window and under-bill silently, which is the failure mode this
+      // whole issue is about.
+      //
+      // `increment` rather than read-modify-write: two registers can ring
+      // simultaneously, and a lost update here is lost revenue.
+      if (feeCents > 0 && offlineFeeRef) {
+        transaction.set(
+          offlineFeeRef,
+          {
+            month: offlineFeeMonth,
+            feeCents: firebaseAdmin.firestore.FieldValue.increment(feeCents),
+            orders: firebaseAdmin.firestore.FieldValue.increment(1),
+          },
+          { merge: true },
+        )
+      }
     })
 
     // Folio (AGL-317): the stay settles the charge at check-out. The guest
@@ -778,7 +925,21 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     const contactName =
       contactEmail && contactEmail === folioGuestEmail ? folioGuestName : ''
     if (contactEmail) {
-      void upsertHostContact({
+      // AWAITED, AND ITS FAILURE SWALLOWED (AGL-2473). `void` meant the
+      // contact write was a promise nobody held: a serverless container is
+      // free to freeze the moment the response is written, so on a cold-ish
+      // instance the attribution simply did not happen, silently and
+      // unreproducibly. Awaiting is what makes it durable.
+      //
+      // A BARE `await` would have been worse than the bug. This line sits
+      // PAST the point of no return — the order is committed, the cash is in
+      // the drawer, the stock is decremented — so letting a rejection reach
+      // the `catch` below would answer a completed sale with a 500, release
+      // the settlement claim, and invite the cashier to ring the same basket
+      // again on the same key. A duplicate paid order is a far larger defect
+      // than a missing contact row. So the failure is logged and dropped
+      // here, and the sale still returns 200.
+      await upsertHostContact({
         hostId,
         email: contactEmail,
         ...(contactName ? { name: contactName } : {}),
@@ -810,6 +971,8 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
               ? `Room charge ($${(totals.totalCents / 100).toFixed(2)})`
               : `In-store purchase ($${(totals.totalCents / 100).toFixed(2)})`,
         },
+      }).catch((error) => {
+        console.error('[pos-order] contact upsert failed', error)
       })
     }
     const cashPayload = {
@@ -830,4 +993,25 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     await claim?.release()
     return res.status(500).json({ error: 'Sale failed' })
   }
+}
+
+/**
+ * The billing month a non-card POS fee accrues into (AGL-2111): `YYYY-MM` in
+ * **UTC**, byte-identical to the key `apps/console/utils/billing-month.ts`
+ * mints and to the twelve other month counters on the platform
+ * (`orgs/{id}/apiUsage/*`, `orgs/{id}/assistUsage/*`, the per-host counters).
+ *
+ * It has to be UTC and it has to be this exact expression: `report-usage`
+ * sweeps `previousMonth()` in UTC and reads the accrual document by that key,
+ * so a local-time month would strand every sale rung in the offset window on a
+ * document no sweep ever looks at — which is uncollected revenue that leaves
+ * no trace. `offline-pos-fee-month-key.spec.ts` pins the two against each
+ * other rather than trusting the comment.
+ *
+ * Local rather than imported because `apps/console` is an app: a plugin
+ * library cannot import from it, and the repo's other eleven copies of this
+ * one-liner are the established shape.
+ */
+export function offlineFeeMonthKey(now: Date = new Date()): string {
+  return now.toISOString().slice(0, 7)
 }

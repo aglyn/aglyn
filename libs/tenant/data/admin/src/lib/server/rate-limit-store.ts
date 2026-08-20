@@ -331,36 +331,31 @@ export function recordSignupRefusal(
 }
 
 /**
- * Wall-clock budget for one durable counter transaction (AGL-2404).
+ * Wall-clock budget for one durable counter round trip (AGL-2404).
  *
  * Without a bound this function could not fail at all — it could only hang.
- * `runTransaction` on a single hot document contends, retries with backoff,
- * and on a contended key routinely outran the platform's function ceiling, so
- * the request died as a **504 with no body and no `Retry-After`** instead of
- * the cheap 429 the limiter exists to produce. Measured against production on
- * 2026-08-19 at `/api/protection/unlock`: sequential traffic refused cleanly
- * at the 10th attempt, while **two** concurrent requests on one key were
- * already enough to produce a 504 at ~10.3 s — the account-default function
- * ceiling, since that route declares no `maxDuration`.
+ * The counter used to be a read-modify-write `runTransaction` on a single hot
+ * document: it contended, retried with backoff, and on a contended key
+ * routinely outran the platform's function ceiling, so the request died as a
+ * **504 with no body and no `Retry-After`** instead of the cheap 429 the
+ * limiter exists to produce. Measured against production on 2026-08-19 at
+ * `/api/protection/unlock`: sequential traffic refused cleanly at the 10th
+ * attempt, while **two** concurrent requests on one key were already enough
+ * to produce a 504 at ~10.3 s — the account-default function ceiling, since
+ * that route declares no `maxDuration`.
+ *
+ * AGL-2416 removed the read-modify-write (see {@link consumeRateLimit}), so
+ * the retry storm this bound was catching should no longer occur. The bound
+ * STAYS: it is what makes the function answerable at all, and a store that is
+ * slow for any other reason — a hot document at Firestore's own single-doc
+ * write ceiling, a network stall — must still produce a decision rather than
+ * a held function.
  *
  * 2.5 s is chosen to sit far below the smallest ceiling any caller runs at
- * (10 s at the Vercel account default) while leaving room for a normal
- * transaction, which measured ~0.6 s end to end on the same endpoint. The
- * point is not to make the limiter faster; it is to make it *answerable*, so
- * that a contended key produces a decision rather than a held function.
+ * (10 s at the Vercel account default) while leaving room for the two round
+ * trips below, which measured ~0.6 s end to end on the same endpoint.
  */
 export const RATE_LIMIT_TRANSACTION_BUDGET_MS = 2_500
-
-/**
- * Attempts the SDK may spend before it gives up on its own.
- *
- * The default is 5, each separated by a growing backoff — which is how a
- * single contended document turns into ten seconds of held function. Three
- * bounds the work the *abandoned* transaction goes on doing after this
- * function has already stopped waiting for it, so a refused caller stops
- * adding to the contention it was refused for.
- */
-const RATE_LIMIT_TRANSACTION_ATTEMPTS = 3
 
 /**
  * Thrown when the durable counter could not reach a decision inside
@@ -412,6 +407,50 @@ async function withBudget<T>(work: Promise<T>, budgetMs: number): Promise<T> {
   } finally {
     if (timer) clearTimeout(timer)
   }
+}
+
+/**
+ * Add one to `ref`'s counter and report the total (AGL-2416).
+ *
+ * Two round trips, in this order and no other. The write MUST land before the
+ * read: reading first and writing second is a read-modify-write again, only
+ * without the transaction that made it safe, which would under-count under
+ * concurrency and let a caller widen its own cap by racing itself.
+ *
+ * `merge: true` creates the document on the first request of a window —
+ * `increment` on a missing field starts from zero — so no separate create is
+ * needed, and `windowStartMs`/`expiresAt` are re-stamped idempotently on every
+ * write rather than only on the first.
+ *
+ * A read-back that carries no usable count means the store accepted a write
+ * and then failed to show it. That is a malfunction, not contention, so it
+ * throws a plain error and takes the fail-SOFT path — the same posture as any
+ * other store failure. Returning `0` instead would read as "no requests yet"
+ * and admit every caller: fail-open, from the one branch that exists because
+ * the store is misbehaving.
+ */
+async function countOne(
+  ref: any,
+  windowStartMs: number,
+  resetMs: number,
+  windowMs: number,
+): Promise<number> {
+  await ref.set(
+    {
+      count: firebaseAdmin.firestore.FieldValue.increment(1),
+      windowStartMs,
+      // For a Firestore TTL policy on `expiresAt` — without one these
+      // documents accumulate forever. See docs/RATE_LIMITING.md.
+      expiresAt: new Date(resetMs + windowMs),
+    },
+    { merge: true },
+  )
+  const snapshot = await ref.get()
+  const observed = Number(snapshot?.get?.('count'))
+  if (!Number.isFinite(observed) || observed < 1) {
+    throw new Error('rate-limit counter read-back returned no count')
+  }
+  return observed
 }
 
 export interface DurableRateLimitOptions {
@@ -488,12 +527,52 @@ function bucketId(key: string, windowStartMs: number): string {
  * double-submitting: the keys are per (host, screen, IP), per uid, or per API
  * key, so a legitimate visitor essentially never races themselves.
  *
- * What this deliberately does NOT do is make the counter cheaper. Bringing
- * the contention threshold up — a sharded counter, or an atomic
- * `FieldValue.increment` with a read-back instead of a read-modify-write
- * transaction — is a change to the storage shape shared by nine auth
- * surfaces, and belongs behind a load rehearsal rather than in the same pass
- * as the bound that stops the bleeding.
+ * ## The counter is an atomic increment, not a transaction (AGL-2416)
+ *
+ * It used to be `runTransaction(read count, write count + 1)`. That is
+ * optimistic concurrency on ONE document, so two writers in flight at once
+ * already race: measured in production on 2026-08-19, **two** concurrent
+ * requests on a single fresh key were enough to make a transaction lose,
+ * retry, and blow past its budget. Two is ordinary client behaviour — a
+ * double-submit, a mobile retry, two visitors behind one NAT — and the
+ * documented 120/min per API key is not even reachable without concurrency,
+ * so an integration built to the published budget met this by design.
+ *
+ * `set({count: increment(1)}, {merge: true})` is applied by the server with
+ * no read set to conflict over, so concurrent writers do not abort each
+ * other. The decision then needs the value, which costs a read back — the
+ * same two round trips a transaction spent, and the same billing: one
+ * document read plus one document write.
+ *
+ * **The trade is exactness for headroom, and it is deliberately biased.** The
+ * read-back can observe increments from writers that landed after ours, so
+ * under `C` concurrent requests a caller may see a count up to `C - 1` higher
+ * than its own position. The consequences, precisely:
+ *
+ * - It can only ever refuse EARLY, never late. The count is monotonic within
+ *   a window and always includes this request's own increment, so an admitted
+ *   request is one where at most `limit` increments had landed. The cap can
+ *   never be exceeded, and going concurrent can never widen it.
+ * - "Exactly `limit` admitted" becomes "**at most** `limit` admitted". At the
+ *   window's edge, `C` simultaneous requests can all read the same post-burst
+ *   total and all be refused, so as few as `limit - C + 1` are admitted where
+ *   `limit` would have been. Bounded by the concurrency, confined to one
+ *   window, and in the customer-favourable direction for a *security* limiter
+ *   — which is what all nine of this store's call sites are.
+ * - A fixed-window limiter already admits up to `2 × limit` across a window
+ *   boundary, so exactness was never a property this shape had end to end.
+ * - **A call abandoned on its budget may already have counted.** The write
+ *   lands before the read-back, so a caller that gives up during the read-back
+ *   still spent its increment. The transaction it replaced committed nothing
+ *   when it timed out — which is exactly how AGL-2416 could observe "10
+ *   admitted" after a burst of 504s — so this is a genuine change, not a
+ *   restatement. It errs in the same safe direction: the counter over-counts,
+ *   so the cap still cannot be exceeded, and a caller can never buy budget by
+ *   timing out.
+ *
+ * The failure classification above is unchanged and still load-bearing: the
+ * budget can still elapse on a genuinely slow store, and when it does the
+ * answer is still a refusal rather than a degradation.
  */
 export async function consumeRateLimit(
   key: string,
@@ -512,28 +591,10 @@ export async function consumeRateLimit(
       .collection(RATE_LIMIT_COLLECTION)
       .doc(bucketId(key, windowStartMs))
 
-    // Explicit type argument: `firestore` is `any`, so the transaction's
-    // promise infers as `any` and would widen the counter to `unknown`.
+    // Explicit type argument: `firestore` is `any`, so the helper's promise
+    // infers as `any` and would widen the counter to `unknown`.
     const count = await withBudget<number>(
-      firestore.runTransaction(
-        async (tx: any) => {
-          const snapshot = await tx.get(ref)
-          const next = ((snapshot.exists ? snapshot.get('count') : 0) ?? 0) + 1
-          tx.set(
-            ref,
-            {
-              count: next,
-              windowStartMs,
-              // For a Firestore TTL policy on `expiresAt` — without one these
-              // documents accumulate forever. See docs/RATE_LIMITING.md.
-              expiresAt: new Date(resetMs + windowMs),
-            },
-            { merge: true },
-          )
-          return next
-        },
-        { maxAttempts: RATE_LIMIT_TRANSACTION_ATTEMPTS },
-      ),
+      countOne(ref, windowStartMs, resetMs, windowMs),
       options?.budgetMs ?? RATE_LIMIT_TRANSACTION_BUDGET_MS,
     )
 

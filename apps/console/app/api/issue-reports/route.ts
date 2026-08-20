@@ -15,13 +15,24 @@
  * limitations under the License.
  */
 
+import { randomUUID } from 'node:crypto'
+// The deep path, not the `@aglyn/aglyn` barrel: the barrel reaches
+// `createContext` and is CLIENT-ONLY, which App Router forbids in a server
+// graph — `nx build` would fail at promotion time, not here (AGL-1349).
+import {
+  RELEASE_FLAGS,
+  isReleaseFlagOnForOrg,
+} from '@aglyn/aglyn/app-utils/release-flags'
 import { BUILD_ID, PACKAGE_VERSION } from '@aglyn/shared-data-enums'
 import {
   consumeRateLimit,
   emailUnverifiedResponse,
   firebaseAdmin,
   getOrgForUser,
+  getOrgReleaseFlagOverrides,
+  getServerReleaseFlagValues,
   isImpersonationSession,
+  resolveOrgIdForHost,
 } from '@aglyn/tenant-data-admin'
 import { summarizeUserAgent } from '../_lib/security-alerts'
 import {
@@ -40,21 +51,28 @@ import {
 // report would only cost us the report.
 
 /**
- * Customer issue reports (AGL-2185) → Linear team `CUS`.
+ * Customer issue reports (AGL-2185) → the Linear "Customer bug reports"
+ * project.
  *
- * Zach asked for an issue-reporting tool in the console, "tracked in linear …
- * but a new linear team and not our primary one". Support tickets already
+ * Zach asked for an issue-reporting tool in the console, "tracked in a
+ * separate linear project then our primary one". Support tickets already
  * exist but start on Pro, so a Free or Starter org that hits a bug has no
  * channel at all — and a ticket is a support conversation, not a tracked
  * defect. This is the defect channel, open to every signed-in member.
  *
- * ## Why the reports do not go to `AGL`
+ * ## Why the reports are kept out of the engineering queue
  *
- * `AGL`'s open count is the Sept-1 release signal. An unbounded inbound
- * stream lands in `CUS` instead; triage promotes a genuinely release-blocking
- * report into `AGL` by hand. That separation is enforced by configuration
- * (`LINEAR_CUSTOMER_REPORTS_TEAM_ID`), not by a convention someone has to
- * remember.
+ * The primary project is our own triaged backlog, where the `launch-blocker`
+ * label and the issue state mean specific things. Customer reports arrive
+ * unfiltered, at whatever severity the reporter felt. Inbound volume is not
+ * something we control, so mixing the two would let it drift our release
+ * counts while burying real customer pain under internal tasks.
+ *
+ * The destination is configuration
+ * (`LINEAR_CUSTOMER_REPORTS_TEAM_ID` + `LINEAR_CUSTOMER_REPORTS_PROJECT_ID`),
+ * not a convention someone has to remember. Triage promotes a genuinely
+ * release-blocking report by creating a LINKED issue in the primary project;
+ * the report itself is never moved or relabelled.
  *
  * ## Refusal order, and why it is not the Assist order
  *
@@ -66,13 +84,28 @@ import {
  *
  * ## Trust boundary
  *
- * Only four values arrive from the client — `kind`, `summary`, `description`
- * and `route` (plus a viewport, coerced to integers). Everything else the
- * issue records is derived server-side: the reporter from the verified token,
- * the org from the membership read, the host and user-agent from request
- * headers, the version and build id from this build's own constants. That is
- * the point — a report a customer can forge is a report a triager cannot
- * trust. `../_lib/linear-issues` escapes what remains.
+ * Six values arrive from the client — `kind`, `summary`, `description`,
+ * `route`, a viewport coerced to integers, and two ids (`orgId`, `hostId`)
+ * that are HINTS, not assertions: both are re-resolved against this session's
+ * own access before anything is recorded, so naming an org or a site the
+ * reporter cannot reach yields no org and no site rather than someone else's.
+ *
+ * Everything else the issue records is derived server-side: the reporter from
+ * the verified token, the org, plan and role from the membership read, the
+ * release-flag state from the resolved org, the console host and user-agent
+ * from request headers, the version and build id from this build's own
+ * constants, and the correlation id generated here. That is the point — a
+ * report a customer can forge is a report a triager cannot trust.
+ * `../_lib/linear-issues` escapes what remains.
+ *
+ * ## What is deliberately NOT attached
+ *
+ * No credentials or tokens of any kind — not the caller's id token, not the
+ * Linear key, no cookie or session material. No IP address: it identifies the
+ * reporter's location and adds nothing a triager can act on. Nothing about any
+ * other customer — every id recorded is one this session already had access
+ * to. Release flags are recorded as KEYS only, which name product surfaces
+ * rather than carrying any value or subject data.
  */
 
 /** One report per member per minute, 20 an hour — durable, cross-instance. */
@@ -81,7 +114,90 @@ const PER_HOUR = 20
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * The site the reporter says they were on — recorded only if they can see it.
+ *
+ * The client knows the host id; the server must not take its word for it. An
+ * unverified id would let any signed-in member stamp another customer's site
+ * onto a report, which is both a privacy leak into our tracker and a way to
+ * send triage after the wrong system. Two reads decide it, mirroring the
+ * `hosts/usage` contract: direct host membership, else org membership over
+ * the host's owning org.
+ *
+ * Failure is "no site", never an error: a bad id must not cost us the report.
+ */
+async function verifiedHost(
+  uid: string,
+  hostId: unknown,
+): Promise<{ hostId: string; hostName: string | null } | null> {
+  const id = String(hostId ?? '').trim()
+  if (!id || id.length > 200) return null
+  try {
+    const firestore = firebaseAdmin.app().firestore()
+    const snapshot = await firestore.collection('hosts').doc(id).get()
+    if (!snapshot.exists) return null
+
+    let allowed = Boolean((snapshot.get('memberRoles') ?? {})[uid])
+    if (!allowed) {
+      const orgId = await resolveOrgIdForHost(id)
+      if (orgId) {
+        allowed = (
+          await firestore
+            .collection('orgs')
+            .doc(orgId)
+            .collection('members')
+            .doc(uid)
+            .get()
+        ).exists
+      }
+    }
+    if (!allowed) return null
+
+    const name = snapshot.get('displayName') ?? snapshot.get('subdomain')
+    return { hostId: id, hostName: name ? String(name) : null }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Which release flags are ON for this org, so a report against a flagged-off
+ * surface is recognisable rather than triaged as a phantom bug.
+ *
+ * Keys only. A flag key names a product surface — it is not a secret, and it
+ * carries nothing about any other customer. `null` means the read failed,
+ * which the issue renders distinctly from "none are on": those are different
+ * facts and collapsing them would make an empty list unfalsifiable.
+ */
+async function releaseFlagsOnForOrg(
+  orgId: string | null,
+): Promise<string[] | null> {
+  try {
+    const [values, overrides] = await Promise.all([
+      getServerReleaseFlagValues(),
+      getOrgReleaseFlagOverrides(orgId),
+    ])
+    return RELEASE_FLAGS.filter((definition) =>
+      isReleaseFlagOnForOrg(
+        definition.key,
+        // `isReleaseFlagOn` dereferences the value, so a key the Remote
+        // Config template has not got yet would throw and blank the WHOLE
+        // row — one newly-registered flag costing every other flag's state.
+        // The registry default is what the gate itself falls back to.
+        values?.[definition.key] ?? { enabled: definition.defaultEnabled },
+        orgId,
+        overrides,
+      ),
+    ).map((definition) => definition.key)
+  } catch {
+    return null
+  }
+}
+
 export async function POST(request: Request): Promise<Response> {
+  // Generated before anything can fail, so the log line for a refused or
+  // broken request carries the same id the reporter is handed.
+  const correlationId = randomUUID()
   const authorization = request.headers.get('authorization') ?? ''
   const idToken = authorization.startsWith('Bearer ')
     ? authorization.slice('Bearer '.length)
@@ -162,6 +278,14 @@ export async function POST(request: Request): Promise<Response> {
     )
     const userAgent = request.headers.get('user-agent')
 
+    // Both scoped to this session: the host is verified against what the
+    // reporter may actually see, and the flags are read for the org the
+    // membership lookup returned — never for an org id the payload asserted.
+    const [host, releaseFlagsOn] = await Promise.all([
+      verifiedHost(decoded.uid, payload?.['hostId']),
+      releaseFlagsOnForOrg(resolved?.orgId ?? null),
+    ])
+
     const title = reportTitle(kind, summary)
     const body = buildReportBody(description.slice(0, MAX_DESCRIPTION), {
       kind,
@@ -176,6 +300,12 @@ export async function POST(request: Request): Promise<Response> {
       orgId: resolved?.orgId ?? null,
       orgName: resolved?.org?.name ?? null,
       orgPlan: (resolved?.org?.plan as string | undefined) ?? null,
+      orgRole: (resolved?.member?.role as string | undefined) ?? null,
+      orgRoleId: (resolved?.member?.roleId as string | undefined) ?? null,
+      hostId: host?.hostId ?? null,
+      hostName: host?.hostName ?? null,
+      correlationId,
+      releaseFlagsOn,
       version: PACKAGE_VERSION,
       buildId: BUILD_ID,
       contactConsent: payload?.['contactConsent'] === true,
@@ -187,12 +317,34 @@ export async function POST(request: Request): Promise<Response> {
       // Never 200 on a report that was not filed. The reporter still has
       // their text in the open dialog, which is the whole reason this says
       // so plainly instead of closing on a false success.
-      console.error('[issue-reports] Linear filing failed', created.reason)
+      //
+      // Told plainly rather than queued for retry, deliberately. A durable
+      // queue needs a writer, a retry worker AND a reader, and the failure
+      // this repo keeps finding is the third one missing — a queue nobody
+      // drains loses reports exactly like a dropped POST, but silently and
+      // with a green check on top. The reporter keeps their text, learns it
+      // did not send, and gets an id support can find the log line by.
+      console.error('[issue-reports] Linear filing failed', {
+        correlationId,
+        reason: created.reason,
+        uid: decoded.uid,
+      })
       return Response.json(
-        { error: 'We could not file that report just now. Please try again.' },
+        {
+          error:
+            'We could not file that report just now. Your text is still ' +
+            'here — try again, or quote this reference to support: ' +
+            correlationId,
+          correlationId,
+        },
         { status: 502 },
       )
     }
+    console.info('[issue-reports] filed', {
+      correlationId,
+      reference: created.identifier,
+      uid: decoded.uid,
+    })
 
     // The Linear URL is deliberately NOT returned: it is an internal tracker
     // link a customer cannot open, and handing it back only invites them to

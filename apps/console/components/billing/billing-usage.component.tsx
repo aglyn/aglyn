@@ -559,9 +559,17 @@ export function BillingUsageComponent(props: BillingUsageProps) {
           sx={{ display: 'block', mt: -1.5, mb: 2 }}
         >
           {contactsBilled
-            ? `Audience overage: ${contactQuota.overageContacts.toLocaleString()} ` +
+            ? // "if your audience ends the month at this size" is the basis,
+              // not a hedge (AGL-2399). The meter above is a LIVE head count —
+              // the right thing for a band you are enforced against right now —
+              // while the invoice charges the last reading taken before the
+              // month closes. So this total is a projection of a figure that is
+              // not fixed until the month is, and a bare "this month" claimed a
+              // certainty the meter cannot have on the 3rd.
+              `Audience overage: ${contactQuota.overageContacts.toLocaleString()} ` +
               `over the included band at $${contactQuota.overageRateUsd}/1,000 ` +
-              `— ≈$${contactQuota.overageMonthlyUsd.toFixed(2)} this month.`
+              `— ≈$${contactQuota.overageMonthlyUsd.toFixed(2)} if your audience ` +
+              `ends the month at this size.`
             : // Worded to `billing-and-plans/overview.md` (AGL-1601/1603),
               // which tells the same customer that the Contacts page isn't
               // available yet, that paid audience overage is not billed while

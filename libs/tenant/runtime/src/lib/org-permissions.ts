@@ -23,6 +23,9 @@ import {
   resolveRolePermissions,
   toLegacyPermissions,
   type OrgPermissionSet,
+  type ResolvedOrgPermissionSet,
+  listPluginPermissionKeys,
+  ORG_ROLE_TIER,
 } from '@aglyn/aglyn/server'
 import {
   resolveMemberOrgPermissions,
@@ -30,7 +33,7 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 
-export type { OrgPermissionSet }
+export type { OrgPermissionSet, ResolvedOrgPermissionSet }
 
 export interface ResolvedOrgPermissions {
   /** Org the permissions were resolved in (null before the first org). */
@@ -38,7 +41,11 @@ export interface ResolvedOrgPermissions {
   role: OrgRole | null
   /** Owner/admin of the org — full account-level control. */
   isOwner: boolean
-  permissions: OrgPermissionSet
+  /**
+   * Widened past the legacy six (AGL-2474) so a route can read a
+   * plugin-declared key such as `permissions.managePos` without a cast.
+   */
+  permissions: ResolvedOrgPermissionSet
   /**
    * The member's reach across the org (AGL-1026). `false` for a site
    * collaborator, whose membership exists only to carry access to named
@@ -64,16 +71,42 @@ export interface ResolvedOrgPermissions {
 // deliberately absent as a VALUE here (AGL-2334): it is a per-site grant, so
 // no org role maps onto it and `hostRoleFor` can never produce one for an
 // `allHosts` member. Kept as the narrow union so that stays enforced.
+// One table, shared with the console since AGL-2474 (`ORG_ROLE_TIER`): a
+// second copy here is how the client and the server come to disagree about
+// what an owner is. The local NAME stays — `org-permissions-client-server-
+// agree.spec.ts` matches on this expression's source text.
 const ORG_ROLE_PERMISSION_BASE: Record<OrgRole, 'admin' | 'editor' | 'viewer'> =
-  {
-    owner: 'admin',
-    admin: 'admin',
-    editor: 'editor',
-    viewer: 'viewer',
-  }
+  ORG_ROLE_TIER as Record<OrgRole, 'admin' | 'editor' | 'viewer'>
 
-const ALL_TRUE: OrgPermissionSet = resolveRolePermissions('admin')
-const NONE: OrgPermissionSet = resolveRolePermissions('viewer')
+// EVALUATED PER CALL, not once at module load (AGL-2474). Plugins register
+// their permission keys at module scope (`registerCommerceApi`), and whether
+// that has happened by the time THIS module is first imported is import-order
+// luck. Snapshotting here produced a map with no plugin keys at all, so an
+// owner on the fresh-account path read `managePos === undefined` — falsy, and
+// denied — while an identical owner resolved a millisecond later through the
+// membership path got `true`. The cost is one small object per call.
+const allTrue = (): ResolvedOrgPermissionSet => resolveRolePermissions('admin')
+const none = (): ResolvedOrgPermissionSet => resolveRolePermissions('viewer')
+
+/**
+ * Per-member overrides for PLUGIN-declared keys (AGL-2474). The dotted
+ * granular catalog that `toLegacyPermissions` translates knows nothing about
+ * them, so without this pass a plugin key could not be revoked from a member
+ * who has it by tier default, nor granted to one who does not — the override
+ * map on the member doc is already typed `Record<string, boolean>` and has
+ * always been able to CARRY the key; nothing read it.
+ */
+function pluginPermissionOverrides(
+  overrides: Record<string, boolean> | null | undefined,
+): Record<string, boolean> {
+  const applied: Record<string, boolean> = {}
+  if (!overrides) return applied
+  for (const key of listPluginPermissionKeys()) {
+    const value = overrides[key]
+    if (typeof value === 'boolean') applied[key] = value
+  }
+  return applied
+}
 
 /**
  * Permissions that are about the ORG, not about a site (AGL-1026).
@@ -95,14 +128,14 @@ const ORG_LEVEL_PERMISSIONS = [
 ] as const
 
 /** On the roster but with no standing here — or not on it at all. */
-const DENIED: ResolvedOrgPermissions = {
+const denied = (): ResolvedOrgPermissions => ({
   orgId: null,
   role: null,
   isOwner: false,
-  permissions: NONE,
+  permissions: none(),
   orgWide: false,
   hostRole: null,
-}
+})
 
 /**
  * Org-role permission resolver (AGL-238, replacing the manager-seat
@@ -127,12 +160,12 @@ export async function resolveOrgPermissions(
       // No org at all → fresh account, acts as its future org's owner.
       // An org WAS targeted but the uid is not on the roster → no access.
       return orgId
-        ? { ...DENIED, orgId }
+        ? { ...denied(), orgId }
         : {
             orgId: null,
             role: null,
             isOwner: true,
-            permissions: ALL_TRUE,
+            permissions: allTrue(),
             orgWide: true,
             hostRole: null,
           }
@@ -153,7 +186,7 @@ export async function resolveOrgPermissions(
     // every site in the org. When a host is named and they have no access to
     // it, that is simply no access — being on the roster is not a grant.
     if (!orgWide) {
-      if (context.hostId && !hostRole) return { ...DENIED, orgId: membership.orgId }
+      if (context.hostId && !hostRole) return { ...denied(), orgId: membership.orgId }
       return {
         orgId: membership.orgId,
         role,
@@ -165,6 +198,16 @@ export async function resolveOrgPermissions(
           ...resolveRolePermissions(hostRole ?? 'viewer'),
           ...Object.fromEntries(
             ORG_LEVEL_PERMISSIONS.map((key) => [key, false]),
+          ),
+          // Plugin-key overrides apply to a collaborator TOO (AGL-2474).
+          // Their six built-in keys are deliberately their HOST role's and
+          // not their org role's, but a plugin key revoked on the member doc
+          // is a revocation either way — skipping it here would mean an admin
+          // could take `managePos` off an org-wide member and silently fail to
+          // take it off the contractor actually standing at the register.
+          // ORG_LEVEL_PERMISSIONS still wins above for the keys it names.
+          ...pluginPermissionOverrides(
+            membership.member.permissions as Record<string, boolean>,
           ),
         },
         orgWide: false,
@@ -192,6 +235,13 @@ export async function resolveOrgPermissions(
       permissions: {
         ...resolveRolePermissions(ORG_ROLE_PERMISSION_BASE[role]),
         ...toLegacyPermissions(granular, role),
+        // LAST, so a per-member override wins (AGL-2474). The legacy spread
+        // above rebuilds all six keys from the dotted catalog every time and
+        // would otherwise stomp nothing here — but plugin keys are absent from
+        // that catalog entirely, so they have to be laid back on explicitly.
+        ...pluginPermissionOverrides(
+          membership.member.permissions as Record<string, boolean>,
+        ),
       },
       orgWide: true,
       hostRole: hostRole ?? ORG_ROLE_PERMISSION_BASE[role],
@@ -202,14 +252,14 @@ export async function resolveOrgPermissions(
     // context-free fresh-account case keeps the owner default.
     if (context.orgId || context.hostId) {
       console.error('org-permissions resolve failed (failing closed)', error)
-      return { ...DENIED, orgId: context.orgId ?? null }
+      return { ...denied(), orgId: context.orgId ?? null }
     }
     console.error('org-permissions resolve failed (no org targeted)', error)
     return {
       orgId: null,
       role: null,
       isOwner: true,
-      permissions: ALL_TRUE,
+      permissions: allTrue(),
       orgWide: true,
       hostRole: null,
     }

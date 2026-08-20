@@ -362,7 +362,7 @@ test('the CLI exits NON-ZERO when a real file gains a colour', () => {
 
   const scratch = join(REPO_ROOT, 'tools', 'scripts', '.tmp-baseline-red.json')
   let exitCode = 0
-  let output = ''
+  let output
   try {
     execFileSync(
       process.execPath,

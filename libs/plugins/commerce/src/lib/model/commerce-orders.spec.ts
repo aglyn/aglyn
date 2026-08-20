@@ -593,6 +593,48 @@ describe('liftLegacyOrder', () => {
     }
     expect(liftLegacyOrder(shaped).status).toBe('fulfilled')
   })
+
+  /**
+   * `taxMode` MUST NOT BE DEFAULTED HERE (AGL-2451), and this is the guard
+   * that keeps a future tidy-up from adding it beside the synthesised
+   * `totals.taxCents: 0` two lines away.
+   *
+   * This runs on the READ path — the analytics card and two other call sites —
+   * and its result is spread into merge writes. A fabricated `none` would
+   * therefore travel back to Firestore and overwrite a real `stripe-automatic`:
+   * the converter-on-partial-writes hazard, in a place where the destroyed
+   * value is a tax fact about whose registration held the money. An absent
+   * mode means NOT RECORDED, which is what every pre-AGL-2451 order genuinely
+   * is.
+   */
+  it('never invents a taxMode, even where it invents totals', () => {
+    const lifted = liftLegacyOrder({
+      productId: 'p1',
+      amountCents: 2500,
+    })
+    // It DID synthesise the totals — so the absence below is a decision, not
+    // an artefact of this function leaving the row alone.
+    expect(lifted.totals?.taxCents).toBe(0)
+    expect(lifted.taxMode).toBeUndefined()
+    expect('taxMode' in lifted).toBe(false)
+  })
+
+  /** And a real stamp survives the lift on both branches. */
+  it('carries a recorded taxMode through', () => {
+    expect(
+      liftLegacyOrder({
+        status: 'paid',
+        taxMode: 'stripe-automatic',
+        lineItems: [
+          { productId: 'x', name: 'X', quantity: 1, unitAmountCents: 100 },
+        ],
+      }).taxMode,
+    ).toBe('stripe-automatic')
+    expect(
+      liftLegacyOrder({ productId: 'p1', amountCents: 100, taxMode: 'manual' })
+        .taxMode,
+    ).toBe('manual')
+  })
 })
 
 describe('orderContainsProduct', () => {

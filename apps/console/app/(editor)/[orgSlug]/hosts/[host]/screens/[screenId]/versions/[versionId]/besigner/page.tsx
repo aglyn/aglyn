@@ -562,6 +562,12 @@ function BesignerPage(props) {
     : undefined
   const slugConflict = Boolean(slugOwner && slugOwner !== screenId)
   const unpublishedAncestor = Boolean(normalizedSlug && !composedPath)
+  // An address the published site cannot answer, whatever the routing map says
+  // (AGL-2076). Read off the COMPOSED path so a `search` nested under a parent
+  // — `docs/search`, which serves fine — is not refused with it.
+  const reservedSegment = Aglyn.reservedScreenRouteSegment(
+    composedPath ?? normalizedSlug,
+  )
 
   // Routing entries for this screen plus all descendants under a candidate
   // screens map; null removes entries whose chain no longer resolves.
@@ -572,7 +578,7 @@ function BesignerPage(props) {
   )
 
   const handlePublish = useCallback(async () => {
-    if (slugConflict || unpublishedAncestor) return
+    if (slugConflict || unpublishedAncestor || reservedSegment) return
     // Captured BEFORE the writes below (AGL-1588). `routingMap` is a live
     // subscription with latency compensation, so by the time the write chain
     // resolves the snapshot has already grown the entry being added — reading
@@ -638,6 +644,7 @@ function BesignerPage(props) {
   }, [
     slugConflict,
     unpublishedAncestor,
+    reservedSegment,
     normalizedSlug,
     composedPath,
     candidateById,
@@ -688,11 +695,13 @@ function BesignerPage(props) {
         })
         return
       }
-      if (slugConflict || unpublishedAncestor) {
+      if (slugConflict || unpublishedAncestor || reservedSegment) {
         enqueueSnackbar(
           slugConflict
             ? 'Another screen is already published at this path'
-            : 'Publish the parent screen first',
+            : reservedSegment
+              ? Aglyn.reservedScreenRouteMessage(reservedSegment)
+              : 'Publish the parent screen first',
           { variant: 'warning', persist: false },
         )
         return
@@ -732,6 +741,7 @@ function BesignerPage(props) {
     normalizedSlug,
     slugConflict,
     unpublishedAncestor,
+    reservedSegment,
     composedPath,
     candidateById,
     screensById,
@@ -1233,32 +1243,37 @@ function BesignerPage(props) {
               fullWidth
               value={slugValue}
               onChange={(e) => setSlugInput(e.target.value)}
-              error={slugConflict || unpublishedAncestor}
+              error={Boolean(
+                slugConflict || unpublishedAncestor || reservedSegment,
+              )}
               helperText={
                 slugConflict
                   ? 'Another screen already uses this path'
-                  : unpublishedAncestor
-                    ? 'A parent screen has no slug yet — publish the parent first'
-                    : isCollectionTemplate
-                      ? templateRoutes
-                        ? `A collection template — renders ${templateRoutes}, not this path`
-                        : 'A collection template — not served at a path of its own'
-                      : composedPath
-                        ? `Served at ${Aglyn.screenRoutePathToUrl(composedPath)}`
-                        : publishedPath
-                          ? `Currently published at ${Aglyn.screenRoutePathToUrl(publishedPath)}`
-                          : 'Not published'
+                  : reservedSegment
+                    ? Aglyn.reservedScreenRouteMessage(reservedSegment)
+                    : unpublishedAncestor
+                      ? 'A parent screen has no slug yet — publish the parent first'
+                      : isCollectionTemplate
+                        ? templateRoutes
+                          ? `A collection template — renders ${templateRoutes}, not this path`
+                          : 'A collection template — not served at a path of its own'
+                        : composedPath
+                          ? `Served at ${Aglyn.screenRoutePathToUrl(composedPath)}`
+                          : publishedPath
+                            ? `Currently published at ${Aglyn.screenRoutePathToUrl(publishedPath)}`
+                            : 'Not published'
               }
             />
             <Button
               size="small"
               variant="outlined"
               onClick={handlePublish}
-              disabled={
+              disabled={Boolean(
                 slugConflict ||
-                unpublishedAncestor ||
-                (!normalizedSlug && !publishedPath)
-              }
+                  unpublishedAncestor ||
+                  reservedSegment ||
+                  (!normalizedSlug && !publishedPath),
+              )}
               sx={{ mt: 0.5, flexShrink: 0 }}
             >
               {normalizedSlug ? 'Publish' : 'Unpublish'}

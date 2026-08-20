@@ -88,7 +88,9 @@ async function fetchJson(url, token) {
   try {
     response = await fetch(url, { headers: authHeaders(token) })
   } catch (error) {
-    throw new Error(`Network error fetching ${url}: ${error.message}`)
+    throw new Error(`Network error fetching ${url}: ${error.message}`, {
+      cause: error,
+    })
   }
   const body = await response.text()
   if (!response.ok) {
