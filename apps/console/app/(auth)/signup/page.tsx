@@ -19,8 +19,10 @@
 
 import {
   PLAN_LABELS,
+  campaignEventParams,
   generateOrgSlug,
   onboardingDestination,
+  parseCampaignAttribution,
   parseOnboardingPlanIntent,
   PLATFORM_BRAND_NAME,
 } from '@aglyn/aglyn'
@@ -87,6 +89,7 @@ import hardNavigate from '../../../utils/hard-navigate'
 import { markInteractiveSignIn } from '../../../utils/interactive-signin'
 import { markSignUpOrgFailure } from '../../../utils/signup-org-failure'
 import { rememberOnboardingPlanIntent } from '../../../utils/onboarding-plan-intent'
+import { rememberSignUpCampaign } from '../../../utils/signup-campaign'
 import isMobileBrowser from '../../../utils/is-mobile-browser'
 import { createGoogleOAuthProvider } from '../../../utils/oauth-providers'
 import guardPopupLoading from '../../../utils/popup-loading-guard'
@@ -334,6 +337,21 @@ function SignUp() {
     () => parseOnboardingPlanIntent(searchParams),
     [searchParams],
   )
+  // Which campaign produced this signup (AGL-1731) — the same hop, the same
+  // defensive posture. Parsed once, from an ALLOWLIST of three `utm_` keys,
+  // so the rest of whatever a marketing link carries never reaches either
+  // exit. See `campaign-attribution.ts` for why the allowlist is the privacy
+  // mechanism rather than a convenience.
+  const campaign = useMemo(
+    () => parseCampaignAttribution(searchParams),
+    [searchParams],
+  )
+  // The GA4 params, memoised so the redirect hook below is not handed a new
+  // object every render.
+  const campaignParams = useMemo(
+    () => campaignEventParams(campaign),
+    [campaign],
+  )
   // Org workspace subdomains can't run OAuth — hand sign-in to the auth
   // host and skip the local form/redirect-result entirely (AGL-465).
   const delegation = useDelegateWorkspaceSignIn('signup')
@@ -378,6 +396,10 @@ function SignUp() {
         credential.user.uid,
         planIntent,
       )
+      // The redirect door is the MAJORITY door — most sign-ups are on a
+      // phone — so leaving it out would attribute the minority of them
+      // (AGL-1731/AGL-1942).
+      await rememberSignUpCampaign(firestore, credential.user.uid, campaign)
       await provisionAndLandSignUp(
         credential,
         derivePersonalOrgName(credential.user),
@@ -385,13 +407,17 @@ function SignUp() {
         false,
       )
     },
-    [firestore, planIntent],
+    [firestore, planIntent, campaign],
   )
   useGoogleRedirectResult(
     'sign_up',
     setError,
     delegation === 'off',
     handleRedirectCredential,
+    // The redirect door fires its own `sign_up` inside the hook — the page
+    // that started the flow is gone by then — so the campaign has to be
+    // handed across rather than read there (AGL-1731).
+    campaignParams,
   )
   // Hold the loading splash during the post-auth redirect window instead of
   // flashing the form back at the user (AGL-476).
@@ -467,6 +493,10 @@ function SignUp() {
               : searchParams?.get('consent') === 'required'
                 ? 'google_signin'
                 : 'google_popup',
+            // Which campaign produced this account (AGL-1731). Spread rather
+            // than assigned, so an organic signup carries no campaign keys at
+            // all instead of three empty ones.
+            ...campaignParams,
           })
           // Record the acceptance FIRST (AGL-1497). Both branches below can
           // end in `window.location.assign`, which tears this page down — a
@@ -503,6 +533,14 @@ function SignUp() {
             credential.user.uid,
             planIntent,
           )
+          // And where the account came FROM (AGL-1731), on the same document
+          // and for the same reason: the hit that just fired answers "how
+          // many signups did the campaign produce", and nothing else in the
+          // system can answer "how much revenue did it produce" — that
+          // arrives weeks later from a Stripe webhook with no browser and no
+          // memory of a URL. Awaited alongside the intent because the
+          // provision below can end in a hard navigation.
+          await rememberSignUpCampaign(firestore, credential.user.uid, campaign)
           // Only the email/password branch has form values to keep; the
           // Google branches carry their name on the token, and the session
           // route seeds from that (AGL-1127).

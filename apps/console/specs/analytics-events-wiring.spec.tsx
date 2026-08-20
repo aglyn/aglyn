@@ -84,6 +84,16 @@ jest.mock('@aglyn/aglyn', () => ({
   generateOrgSlug: (value: string) => value.toLowerCase(),
   onboardingDestination: (slug: string) => `/${slug}`,
   parseOnboardingPlanIntent: () => null,
+  // AGL-1731. The REAL contract, not a stub — the `method` assertions below
+  // are exact-equality, so a stub that invented campaign params would red
+  // them, and one that returned nothing would hide a wiring regression. The
+  // URLs these cases use name no campaign, so the honest answer is "none".
+  parseCampaignAttribution: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/campaign-attribution',
+  ).parseCampaignAttribution,
+  campaignEventParams: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/campaign-attribution',
+  ).campaignEventParams,
 }))
 jest.mock('@aglyn/shared-data-forms', () => ({
   FIELD_SCHEMA_EMAIL: { name: 'email' },

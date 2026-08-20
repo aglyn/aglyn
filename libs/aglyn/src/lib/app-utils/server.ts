@@ -48,6 +48,10 @@ export * from './org-permissions'
 export * from './password-policy'
 export * from './idp-profile'
 export * from './onboarding-deep-link'
+// Where an account came from (AGL-1731). Beside the plan intent because
+// they are the same hop — the marketing CTA's query string — and both are
+// remembered on `users/{uid}` across the verification wall.
+export * from './campaign-attribution'
 export * from './deployment-shape'
 // The docs-help subset the first-party plugin consoles read (AGL-2213) — the
 // console's own registry lives in apps/console/constants and a lib cannot

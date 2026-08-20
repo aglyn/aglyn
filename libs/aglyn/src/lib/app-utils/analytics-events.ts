@@ -181,8 +181,24 @@ export interface AnalyticsItem {
  */
 export interface AnalyticsEventParams {
   // --- Acquisition (GTM §6: signups, cost/lead by channel) -----------------
-  /** GA4 recommended. Real account creation only, never a sign-in. */
-  sign_up: { method: SignUpMethod }
+  /**
+   * GA4 recommended. Real account creation only, never a sign-in.
+   *
+   * The three campaign params are optional and come from
+   * `campaignEventParams` (AGL-1731) — present when the signup URL named a
+   * campaign, absent entirely otherwise. They are what lets a September ad
+   * spend be evaluated: without them a paid click, an organic visit and a
+   * partner link arrive indistinguishable and the money cannot be traced to
+   * an account. Named `campaign_*` rather than `utm_*` because these are our
+   * own registered dimensions and the `utm_` spellings belong to GA's
+   * automatic campaign collection.
+   */
+  sign_up: {
+    method: SignUpMethod
+    campaign_source?: string
+    campaign_medium?: string
+    campaign_name?: string
+  }
   /** GA4 recommended. Returning user only. */
   login: { method: LoginMethod }
   /**

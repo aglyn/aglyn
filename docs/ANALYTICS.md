@@ -1298,6 +1298,77 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
   Leave all of it that way — the live privacy policy's flat "we do not sell or
   share" denial rests on it.
 
+### 12. Where an account came from is captured at signup (AGL-1731)
+
+Until this landed, `sign_up` carried `method` and nothing else, so a paid
+click, an organic visit and a partner link arrived indistinguishable. That is
+free while nothing is being spent and expensive the day advertising starts,
+because **attribution is not retroactive either**: a signup that lands
+unattributed is unattributed forever, and a September ad spend with no
+attribution cannot be evaluated at all.
+
+`libs/aglyn/src/lib/app-utils/campaign-attribution.ts` owns the contract.
+Three parameters, allowlisted:
+
+| URL parameter  | `sign_up` param   | Stored as         |
+| -------------- | ----------------- | ----------------- |
+| `utm_source`   | `campaign_source` | `source`          |
+| `utm_medium`   | `campaign_medium` | `medium`          |
+| `utm_campaign` | `campaign_name`   | `campaign`        |
+
+**Renamed off the `utm_` spellings on purpose.** These are our own registered
+dimensions; the `utm_` names belong to GA's automatic campaign collection, and
+a custom parameter wearing a name the platform also owns is how one dimension
+quietly comes to mean two things.
+
+**`utm_term` and `utm_content` are deliberately out**, matching the refusal the
+tenant's own first-party collector already made (`apps/tenant/app/api/analytics/collect/route.ts`):
+keyword- and variant-level labels multiply cardinality without answering a
+question anyone asks of a signup, and a keyword string is the likeliest of the
+five to carry something a person typed. `gclid` is out too — it is an
+ads-click identifier and this property runs with ads personalization off in all
+307 regions.
+
+**The allowlist is the privacy mechanism, not a convenience.** A parser that
+copied "the campaign-ish parameters" would be one marketing link away from
+putting `?email=` on `users/{uid}`. On top of the allowlist each value is
+trimmed, refused if email-shaped, and capped at 100 characters — and that
+scrub lives in the parser rather than in `sanitizeEventParams`, because a
+campaign leaves the process **twice** and only one exit is sanitized:
+
+- onto the GA4 `sign_up` hit, which does pass `sanitizeEventParams`;
+- into **`users/{uid}.signupCampaign`**, which does not.
+
+#### Why it is stored on the account, and why that is the erasure-safe shape
+
+The hit answers "how many signups did the campaign produce". It cannot answer
+the question the spend is judged on — "how much **revenue**" — because that
+arrives weeks later from a Stripe webhook with no browser session and no
+memory of a URL. So the campaign is remembered on the account, the same
+document and the same wire-form-plus-re-parse contract as the AGL-1535 plan
+intent it sits beside (`apps/console/utils/signup-campaign.ts`).
+
+A **field on `users/{uid}`** rather than a `signupCampaigns` collection,
+deliberately. `eraseUser` does a `recursiveDelete(users/{uid})` and the
+personal-data export reads the document whole, so a field there is erased and
+disclosed automatically. AGL-1448 had to go and find three org-keyed
+collections the cascade could not see; the invisible shape is always a new
+top-level collection or a doc keyed outside those trees, and a field on a
+document already swept is the one shape that cannot become a fourth.
+
+Unlike the plan intent it is **never consumed and never expires** — it is a
+fact about how the account began, and a campaign that stopped being true after
+seven days could not be joined to a purchase that closed in week three, which
+is the join it exists for.
+
+Wired on all four doors: the password and Google-popup doors in
+`apps/console/app/(auth)/signup/page.tsx`, and the mobile **redirect** door —
+the majority door — inside `apps/console/hooks/use-google-redirect-result.tsx`,
+which has to be handed the params because the page carrying the marketing URL
+is gone by the time the redirect lands. `login` never carries them: a
+returning user's session was not produced by today's campaign, and stamping
+one on it would credit the ad for revenue it did not cause.
+
 ### Still outstanding
 
 0. **Register five more custom dimensions** (AGL-1562), all **event-scoped**,
@@ -1313,6 +1384,17 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
    | Link domain    | `link_domain`   | Outbound destination — the GitHub/docs leading indicator                                             |
    | Link id        | `link_id`       | Which outbound link, by label                                                                        |
    | Surface        | `surface`       | `site` vs `docs` (AGL-1579); Hostname covers the domains, this covers surfaces sharing one           |
+
+0c. **Register the three campaign dimensions** (AGL-1731), all
+   **event-scoped**, and do it BEFORE the first ad runs — an unregistered
+   param is collected but not reportable, so the campaign would be on every
+   hit and in no report:
+
+   | Dimension name  | Event parameter   | Why                                                          |
+   | --------------- | ----------------- | ------------------------------------------------------------ |
+   | Campaign source | `campaign_source` | Which channel bought the signup — the axis spend is judged on |
+   | Campaign medium | `campaign_medium` | `cpc` vs `email` vs `referral`                                |
+   | Campaign name   | `campaign_name`   | Which push, so two campaigns can be compared                  |
 
    **AGL-1579 adds nothing to this list.** Docs pageviews use only built-in
    dimensions, and the `click` events it produces come from GA4's enhanced
