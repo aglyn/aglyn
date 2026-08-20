@@ -371,3 +371,244 @@ describe('remote batch reconciliation (AGL-1363)', () => {
     expect(unreachable()).toEqual([])
   })
 })
+
+/**
+ * AGL-1958 — the second half of AGL-677 constraint 3.
+ *
+ * The first half (asserted at the top of this file) keeps a colleague's edit
+ * OUT of your undo stack. That is necessary and it is not sufficient, and the
+ * gap was live in production: every snapshot already on the stack was taken
+ * before one of your edits, therefore before their edit arrived, so restoring
+ * one wholesale reverted their node too. Worse, the restored map is diffed
+ * against the co-editing shadow like any other local change, so the revert
+ * was published back to its author under YOUR session id — their work gone on
+ * their own screen, with no signal and nothing to restore it from.
+ *
+ * The fix is an epoch stamp per snapshot plus a per-node mark of when a peer
+ * last touched it, so a restore keeps anything the snapshot predates. These
+ * tests are written against the REAL canvas: the rule is about what the
+ * canvas ends up holding, not about which method was called.
+ */
+describe('undo against a co-editor (AGL-1958)', () => {
+  const ROOT = Aglyn.CANVAS_ROOT_ELEMENT_ID
+
+  const TREE = {
+    [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['mine', 'theirs'] },
+    mine: {
+      $id: 'mine',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'mine v0' },
+    },
+    theirs: {
+      $id: 'theirs',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'theirs v0' },
+    },
+  }
+
+  const children = (nodeId: string): string | undefined =>
+    (Aglyn.canvas.nodes.get(nodeId) as { props?: { children?: string } })?.props
+      ?.children
+
+  /** A peer's change to one node, through the real apply path. */
+  const remote = (nodeId: string, node: Record<string, unknown>) =>
+    applyRemoteNode(nodeId, {
+      by: 'peer-tab',
+      at: Date.now(),
+      json: JSON.stringify(node),
+    })
+
+  /** A local edit that records exactly one undo step. */
+  const localEdit = (nodeId: string, text: string) =>
+    Aglyn.canvas.transact(() => {
+      const node = Aglyn.canvas.nodes.get(nodeId) as {
+        props: { children?: string }
+      }
+      node.props.children = text
+    })
+
+  beforeEach(() => {
+    flushRemoteReconcile()
+    Aglyn.canvas.reset()
+    Aglyn.canvas.setNodes(TREE as never)
+    Aglyn.canvas.updateInitialNodes()
+  })
+
+  afterAll(() => {
+    Aglyn.canvas.reset()
+  })
+
+  it('rewinds my node and keeps the edit a peer made after my snapshot', () => {
+    localEdit('mine', 'mine v1')
+    expect(Aglyn.canvas.canUndo).toBe(true)
+
+    remote('theirs', {
+      $id: 'theirs',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'theirs v1' },
+    })
+    flushRemoteReconcile()
+    expect(children('theirs')).toBe('theirs v1')
+
+    Aglyn.canvas.undo()
+
+    // Mine rewinds — undo still does its job.
+    expect(children('mine')).toBe('mine v0')
+    // Theirs survives. Before AGL-1958 this read 'theirs v0', and the diff
+    // against the co-editing shadow then published that revert back to them.
+    expect(children('theirs')).toBe('theirs v1')
+  })
+
+  it('keeps a node the peer CREATED after my snapshot', () => {
+    localEdit('mine', 'mine v1')
+
+    remote('fresh', {
+      $id: 'fresh',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'brand new' },
+    })
+    // The peer republishes the parent's child list in the same update.
+    remote(ROOT, {
+      $id: ROOT,
+      componentId: 'div',
+      nodes: ['mine', 'theirs', 'fresh'],
+    })
+    flushRemoteReconcile()
+
+    Aglyn.canvas.undo()
+
+    // Before AGL-1958 the snapshot had no 'fresh' key, so the wholesale
+    // replace deleted it outright.
+    expect(Aglyn.canvas.nodes.has('fresh')).toBe(true)
+    expect(children('fresh')).toBe('brand new')
+    // And it is still reachable: the parent's list came in the same batch,
+    // so the parent is marked too and its list survives with the child.
+    expect(Aglyn.canvas.nodes.get(ROOT)?.nodes).toContain('fresh')
+  })
+
+  it('keeps a node the peer DELETED after my snapshot deleted', () => {
+    localEdit('mine', 'mine v1')
+
+    applyRemoteNode('theirs', { by: 'peer-tab', at: Date.now(), deleted: true })
+    flushRemoteReconcile()
+    expect(Aglyn.canvas.nodes.has('theirs')).toBe(false)
+
+    Aglyn.canvas.undo()
+
+    // An absence is a remote state as much as a value is: restoring the
+    // snapshot must not resurrect what they removed.
+    expect(Aglyn.canvas.nodes.has('theirs')).toBe(false)
+    expect(children('mine')).toBe('mine v0')
+  })
+
+  it('still rewinds a node the peer touched BEFORE my snapshot', () => {
+    // The ordering that must NOT be preserved: their change is already in
+    // the snapshot, so undo has to restore it like any other node — or undo
+    // would quietly stop working on every node anyone has ever co-edited.
+    remote('theirs', {
+      $id: 'theirs',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'theirs v1' },
+    })
+    flushRemoteReconcile()
+
+    // My snapshot is taken AFTER their edit, so it contains 'theirs v1'.
+    localEdit('theirs', 'i changed it too')
+    expect(children('theirs')).toBe('i changed it too')
+
+    Aglyn.canvas.undo()
+
+    expect(children('theirs')).toBe('theirs v1')
+  })
+
+  it('resolves a node we both changed to the peer, per-node last-writer-wins', () => {
+    localEdit('theirs', 'my take')
+
+    remote('theirs', {
+      $id: 'theirs',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'their take' },
+    })
+    flushRemoteReconcile()
+
+    Aglyn.canvas.undo()
+
+    // Same rule the per-node mirror applies everywhere else (AGL-677), not
+    // a new one: the later writer holds the node.
+    expect(children('theirs')).toBe('their take')
+  })
+
+  it('redo replays my edit and still leaves the peer alone', () => {
+    localEdit('mine', 'mine v1')
+
+    remote('theirs', {
+      $id: 'theirs',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'theirs v1' },
+    })
+    flushRemoteReconcile()
+
+    Aglyn.canvas.undo()
+    expect(Aglyn.canvas.canRedo).toBe(true)
+    Aglyn.canvas.redo()
+
+    expect(children('mine')).toBe('mine v1')
+    expect(children('theirs')).toBe('theirs v1')
+  })
+
+  // Negative control: the preservation is scoped to co-editing, not a blanket
+  // "undo never removes nodes". A node the LOCAL user added is still undone.
+  it('undo still removes a node I added myself', () => {
+    Aglyn.canvas.transact(() => {
+      Aglyn.canvas.setNode(
+        {
+          $id: 'localKid',
+          componentId: 'muiTypography',
+          props: { children: 'local' },
+        } as never,
+        ROOT,
+      )
+    })
+    expect(Aglyn.canvas.nodes.has('localKid')).toBe(true)
+
+    Aglyn.canvas.undo()
+
+    expect(Aglyn.canvas.nodes.has('localKid')).toBe(false)
+  })
+
+  // Negative control: a fresh document must not inherit the previous one's
+  // marks, or an undo there would preserve node ids that mean something else.
+  it('reset drops the marks, so undo is wholesale again', () => {
+    localEdit('mine', 'mine v1')
+    remote('theirs', {
+      $id: 'theirs',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'theirs v1' },
+    })
+    flushRemoteReconcile()
+
+    Aglyn.canvas.reset()
+    Aglyn.canvas.setNodes(TREE as never)
+    Aglyn.canvas.updateInitialNodes()
+    expect(Aglyn.canvas.canUndo).toBe(false)
+
+    // Edit the very node the PREVIOUS document had marked, then rewind it.
+    // Asserting on an untouched node would pass either way — the re-seeded
+    // value and the snapshot value are the same string, so preserving and
+    // restoring are indistinguishable. Only a local edit separates them.
+    localEdit('theirs', 'edited after the reset')
+    Aglyn.canvas.undo()
+
+    // No marks carried over, so 'theirs' rewinds like any other local node.
+    // With a stale mark it would have been preserved at the edited value.
+    expect(children('theirs')).toBe('theirs v0')
+  })
+})

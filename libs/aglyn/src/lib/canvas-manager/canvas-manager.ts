@@ -181,10 +181,27 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
   }
 }
 
+/**
+ * One recorded state, plus the {@link CanvasManager._epoch} it was taken at.
+ *
+ * The epoch is what makes a whole-document snapshot safe to restore in a
+ * co-editing session (AGL-1958). Restoring the map wholesale reverts every
+ * node in it — including nodes a *colleague* changed after the snapshot was
+ * taken, whose new values the snapshot has never seen. Stamping each entry
+ * lets {@link CanvasManager.restoreSnapshot} tell "this remote change is
+ * already in the snapshot" from "this remote change happened later and the
+ * snapshot would undo it", which is exactly the distinction a plain
+ * `Map<K, T>` cannot express.
+ */
+interface HistorySnapshot<K extends string, T> {
+  nodes: Map<K, T>
+  epoch: number
+}
+
 class HistoryManager<K extends string, T> {
   public present = observable.map<K, T>({})
-  public past = observable.array<Map<K, T>>([], { deep: false })
-  public future = observable.array<Map<K, T>>([], { deep: false })
+  public past = observable.array<HistorySnapshot<K, T>>([], { deep: false })
+  public future = observable.array<HistorySnapshot<K, T>>([], { deep: false })
 
   constructor() {
     makeObservable(this, {
@@ -208,9 +225,9 @@ class HistoryManager<K extends string, T> {
   }
 
   public toJSON(): {
-    past: IObservableArray<Map<K, T>>
+    past: IObservableArray<HistorySnapshot<K, T>>
     present: ObservableMap<K, T>
-    future: IObservableArray<Map<K, T>>
+    future: IObservableArray<HistorySnapshot<K, T>>
   } {
     return {
       past: toJS(this.past),
@@ -227,15 +244,15 @@ class HistoryManager<K extends string, T> {
     return this.future.length >= 1
   }
 
-  public undo(): Map<K, T> {
+  public undo(epoch: number): HistorySnapshot<K, T> {
     if (!this.canUndo) throw new Error('No history to undo')
-    this.future.push(toJS(this.present))
+    this.future.push({ nodes: toJS(this.present), epoch })
     return this.past.pop()!
   }
 
-  public redo(): Map<K, T> {
+  public redo(epoch: number): HistorySnapshot<K, T> {
     if (!this.canRedo) throw new Error('No history to redo')
-    this.past.push(toJS(this.present))
+    this.past.push({ nodes: toJS(this.present), epoch })
     return this.future.pop()!
   }
 
@@ -255,9 +272,9 @@ class HistoryManager<K extends string, T> {
     return this
   }
 
-  public saveHistory(): this {
+  public saveHistory(epoch: number): this {
     this.clearFuture()
-    this.past.push(toJS(this.present))
+    this.past.push({ nodes: toJS(this.present), epoch })
     return this
   }
 }
@@ -278,6 +295,13 @@ export class CanvasManager {
   private _history: HistoryManager<NodeId, NodeSchema<any>>
   /** The open {@link transact} burst, if any. See that method. */
   private _coalescing: { key: string; at: number } | undefined = undefined
+  /**
+   * Monotonic counter, bumped once per node a REMOTE session changes. See
+   * {@link markRemoteNode} and {@link restoreSnapshot} (AGL-1958).
+   */
+  private _epoch = 0
+  /** Node id → the {@link _epoch} at which a remote session last touched it. */
+  private _foreignAt = new Map<NodeId, number>()
 
   constructor(public aglyn: Aglyn) {
     makeObservable<CanvasManager, '_initial' | '_initialConfirmed'>(this, {
@@ -520,19 +544,79 @@ export class CanvasManager {
   }
 
   public redo(): this {
-    const state = this._history.redo()
-    const json = Object.fromEntries(state!.entries())
-    this.setNodes(json)
-    return this
+    return this.restoreSnapshot(this._history.redo(this._epoch))
   }
   public undo(): this {
-    const state = this._history.undo()
-    const json = Object.fromEntries(state!.entries())
-    this.setNodes(json)
-    return this
+    return this.restoreSnapshot(this._history.undo(this._epoch))
   }
   public saveHistory(): this {
-    this._history.saveHistory()
+    this._history.saveHistory(this._epoch)
+    return this
+  }
+  /**
+   * Records that a REMOTE session changed `nodeId`, so a later local undo
+   * does not roll that change back (AGL-1958).
+   *
+   * Call this from the co-editing apply path for every node a peer creates,
+   * changes or deletes — including the delete, whose absence is as much a
+   * remote state as a value is.
+   *
+   * ## Why this is needed at all
+   *
+   * Applying a remote change deliberately does NOT record local history
+   * (AGL-677 rule 1), which keeps a colleague's edit out of your undo
+   * stack. That is necessary and it is not sufficient. Every entry already
+   * in the stack is a snapshot of the WHOLE document taken before one of
+   * your edits, and a colleague's later edit is by definition not in it. So
+   * an undo that replays such a snapshot wholesale reverts their node too,
+   * and — because the reverted map is then diffed against the co-editing
+   * shadow like any other local edit — publishes that revert back to them
+   * under YOUR session id. Their work is destroyed on their screen, with no
+   * signal and nothing that restores it.
+   *
+   * Measured before this fix: a peer's edit came back reverted, and a node
+   * the peer had CREATED was deleted outright.
+   */
+  public markRemoteNode(nodeId: NodeId): this {
+    if (!nodeId) return this
+    this._foreignAt.set(nodeId, ++this._epoch)
+    return this
+  }
+  /**
+   * Restores a history snapshot, keeping every node a remote session has
+   * touched SINCE that snapshot was taken (AGL-1958).
+   *
+   * The epoch comparison is the whole mechanism, and it is what keeps undo
+   * honest rather than merely safe:
+   *
+   * * `foreignAt > snapshot.epoch` — the peer's change landed *after* this
+   *   snapshot, so the snapshot predates it and would roll it back. Keep
+   *   what is live now: the current value, or the node's absence when the
+   *   peer deleted it.
+   * * `foreignAt <= snapshot.epoch` — the snapshot was taken after the
+   *   peer's change and therefore already contains it. Restore it normally,
+   *   or undo would stop rewinding your own edits to co-edited nodes.
+   *
+   * A node both you and a peer changed resolves to the peer's value, which
+   * is the same last-writer-wins rule the per-node mirror applies
+   * everywhere else (AGL-677) rather than a new one invented here.
+   *
+   * A peer that adds a child republishes the parent's child list, so the
+   * parent is marked too and its list survives with the child.
+   */
+  private restoreSnapshot(
+    snapshot: HistorySnapshot<NodeId, NodeSchema<any>>,
+  ): this {
+    const json: Record<NodeId, NodeSchema<any>> = Object.fromEntries(
+      snapshot.nodes.entries(),
+    )
+    for (const [nodeId, at] of this._foreignAt) {
+      if (at <= snapshot.epoch) continue
+      const live = this.nodes.get(nodeId)
+      if (live) json[nodeId] = live
+      else delete json[nodeId]
+    }
+    this.setNodes(json as NodesMap)
     return this
   }
   /**
@@ -607,6 +691,11 @@ export class CanvasManager {
     this.clearHistory()
     this._initial = undefined
     this._initialConfirmed = true
+    // A new document gets a new epoch line. Stale marks would otherwise
+    // preserve node ids that mean something else here (AGL-1958).
+    this._foreignAt.clear()
+    this._epoch = 0
+    this._history.clearFuture()
     return this
   }
   /**

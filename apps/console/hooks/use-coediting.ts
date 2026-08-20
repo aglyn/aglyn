@@ -59,13 +59,32 @@ import { TAB_SESSION_ID, type PresenceSession } from './use-presence'
  * single most common edit. A mobx `autorun` over the serialized map sees
  * every change however it was made.
  *
- * **Remote changes never touch local undo.** `HistoryManager` snapshots the
- * whole document, so pushing a remote edit onto `past` would let a local
- * undo erase a colleague's work (constraint 3). Applying goes through
- * `setNodes(partial, merge)`, which does not call `saveHistory`. Undo
- * therefore stays local-only and honest: it rewinds *your* edits and leaves
- * theirs alone. Operation-based collaborative undo is still future work,
- * but nothing here makes it worse.
+ * **Remote changes never touch local undo, and local undo never touches
+ * them.** These are two rules, and the first alone is not enough.
+ *
+ * Applying a remote change goes through `setNodes(partial, merge)`, which
+ * does not call `saveHistory` — so a colleague's edit never lands on your
+ * `past` and cannot be rewound by an undo it was never part of
+ * (constraint 3).
+ *
+ * That says nothing about the snapshots already on the stack. `HistoryManager`
+ * records the WHOLE document, and every entry was taken before one of your
+ * edits — i.e. before their edit arrived. Restoring one wholesale therefore
+ * reverted their node as well, and since the restored map is diffed against
+ * `shadowRef` like any other local change, the revert was published straight
+ * back to them under *this* tab's session id: their work destroyed on their
+ * own screen, silently, with nothing left to restore it. Measured, not
+ * theorised — see the AGL-1958 specs.
+ *
+ * So `applyRemoteNode` also calls `canvas.markRemoteNode`, and undo/redo
+ * restore through `CanvasManager.restoreSnapshot`, which keeps any node a
+ * peer touched after the snapshot was taken. Undo stays local-only and
+ * honest in both directions: it rewinds *your* edits and leaves theirs
+ * alone.
+ *
+ * Operation-based collaborative undo is still future work (AGL-1958): undo
+ * remains whole-document snapshots plus this overlay, so there is still no
+ * per-user redo across a session. What is closed is the data loss.
  */
 
 /** How long to coalesce local edits before publishing them. */
@@ -309,6 +328,9 @@ export function applyRemoteNode(nodeId: string, entry: MirrorEntry): boolean {
       if (!Aglyn.canvas.nodes.has(nodeId)) return false
       recordPrior(nodeId)
       Aglyn.canvas.nodes.delete(nodeId)
+      // A remote DELETE is a remote state too: without the mark, an undo
+      // restoring an older snapshot would put the node back (AGL-1958).
+      Aglyn.canvas.markRemoteNode(nodeId)
       scheduleRemoteReconcile()
       return true
     })
@@ -318,6 +340,12 @@ export function applyRemoteNode(nodeId: string, entry: MirrorEntry): boolean {
     const node = JSON.parse(entry.json)
     recordPrior(nodeId)
     Aglyn.canvas.setNodes({ [nodeId]: node } as never, true)
+    // Keeping this out of local undo (above) stops a remote edit being
+    // rewound by an undo it is not part of. The mark is the other half:
+    // it stops the snapshots ALREADY on the stack — every one of which
+    // predates this change — from rolling it back and republishing the
+    // rollback to its author (AGL-1958).
+    Aglyn.canvas.markRemoteNode(nodeId)
     scheduleRemoteReconcile()
     return true
   } catch {
