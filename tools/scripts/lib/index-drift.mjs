@@ -348,3 +348,203 @@ export function describeOverride(entry) {
     : '(no indexes: EXEMPT)'
   return `${entry.id} — ${scopes}${entry.ttl ? ', ttl: true' : ''}`
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * DEPLOY PLANNING (AGL-2015)
+ *
+ * `compareIndexes` above answers "does the project match the file". These
+ * functions answer the next question — "what would it take to make it match" —
+ * and they are here rather than in a module of their own because the reader
+ * and the writer must never diverge in how they decide two entries are the
+ * same thing. That is the AGL-1509 rule the rules scripts already follow: a
+ * deploy that normalizes differently from the checker that verifies it will
+ * re-create an index on every run and report drift forever.
+ *
+ * ⚠️ THE PLAN IS DELIBERATELY ADDITIVE. `firebase deploy --only
+ * firestore:indexes` RECONCILES: it deletes whatever the project has and the
+ * file does not list, `fieldOverrides` included. That is how AGL-866 actually
+ * destroyed the `versions.nodes` exemption, and how AGL-1801 nearly disabled a
+ * live TTL policy. A self-hoster's first index deploy is the one case where
+ * reconciliation is harmless (the project is empty), but the same operator
+ * runs the same command again later against a project that is not — so the
+ * plan NEVER deletes. Prod-only entries are reported as `notDeleted` and the
+ * operator is told which ones and why, which is a strictly better answer than
+ * doing it silently.
+ *
+ * ⚠️ TTL IS NOT PLANNED HERE. `ttl: true` in the file is applied by
+ * tools/scripts/set-firestore-ttl.mjs, and the split is not arbitrary: writing
+ * `ttlConfig` through `fields.patch` in the same call that writes `indexConfig`
+ * makes one failure mode indistinguishable from the other, and the TTL script
+ * already owns the eight documented policies. Missing TTL is surfaced as
+ * `ttlOwed` and pointed at that script instead of being silently skipped —
+ * "not planned" must never read as "not needed".
+ */
+
+/**
+ * The `fields.patch` document id for a field path. Firestore escapes any path
+ * that is not a bare identifier with backticks; every override this repo ships
+ * is a bare identifier, so this is a guard against a future one that is not,
+ * rather than a transformation that fires today.
+ */
+export function fieldResourceId(fieldPath) {
+  const path = String(fieldPath ?? '')
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(path)) return path
+  return `\`${path.replace(/\\/g, '\\\\').replace(/`/g, '\\`')}\``
+}
+
+/**
+ * The Admin API `Index` body for one file entry: everything except the
+ * `collectionGroup`, which is in the URL, and the trailing `__name__`, which
+ * Firestore appends itself and REJECTS when sent explicitly at the implicit
+ * direction.
+ */
+export function compositeCreateBody(index) {
+  const body = {
+    queryScope: index.queryScope || 'COLLECTION',
+    fields: stripImplicitNameField(index.fields).map((field) => {
+      const out = { fieldPath: field.fieldPath }
+      if (field.order) out.order = field.order
+      if (field.arrayConfig) out.arrayConfig = field.arrayConfig
+      return out
+    }),
+  }
+  if (index.density) body.density = index.density
+  return body
+}
+
+/**
+ * The `fields.patch` body for one file `fieldOverrides` entry.
+ *
+ * `indexes: []` is the EXEMPTION — indexing switched off for that field — and
+ * it is the single most consequential thing this script writes: it is what
+ * keeps the large besigner `nodes` blobs out of the index, and without it
+ * Firestore tries to index them and REJECTS THE WRITE on the 40KB index-entry
+ * limit. An empty array is therefore a real value that must be sent, never an
+ * absent one to be omitted.
+ */
+export function fieldPatchBody(entry) {
+  return {
+    indexConfig: {
+      indexes: (entry.indexes ?? []).map((index) => {
+        const field = { fieldPath: entry.fieldPath }
+        if (index.order) field.order = index.order
+        if (index.arrayConfig) field.arrayConfig = index.arrayConfig
+        return {
+          queryScope: index.queryScope || 'COLLECTION',
+          // The FIELD'S OWN PATH, not `*`. `*` is the wildcard the
+          // database-wide `__default__` config uses, and sending it on a
+          // single-field override is a different statement. This matches what
+          // `ListFields` reports back for a configured field, which is what
+          // makes a patch round-trip through check-index-drift.mjs cleanly
+          // instead of reading as drift on the very next run.
+          fields: [field],
+        }
+      }),
+    },
+  }
+}
+
+/**
+ * Turn a `compareIndexes` report plus the file it was compared against into an
+ * ordered, additive deploy plan.
+ *
+ * @returns {{
+ *   creates: object[],
+ *   patches: object[],
+ *   notDeleted: { composite: string[], overrides: object[] },
+ *   ttlOwed: object[],
+ *   ttlAtRisk: object[],
+ *   empty: boolean,
+ * }}
+ */
+export function planIndexDeploy({ report, fileIndexes, fileOverrides }) {
+  // Composite entries are diffed by canonical key, so the plan maps each
+  // file-only key back to the file entries that produced it. Duplicates are
+  // kept: `diffCounts` reports a doubled file entry twice, and creating it
+  // twice is how the operator SEES the duplicate rather than having it
+  // absorbed here.
+  const byKey = new Map()
+  for (const index of fileIndexes ?? []) {
+    const key = compositeKey(index)
+    if (!byKey.has(key)) byKey.set(key, [])
+    byKey.get(key).push(index)
+  }
+  const taken = new Map()
+  const creates = []
+  for (const key of report.composite.fileOnly) {
+    const candidates = byKey.get(key) ?? []
+    const used = taken.get(key) ?? 0
+    const entry = candidates[Math.min(used, candidates.length - 1)]
+    taken.set(key, used + 1)
+    if (!entry) continue
+    creates.push({
+      key,
+      collectionGroup: entry.collectionGroup,
+      body: compositeCreateBody(entry),
+    })
+  }
+
+  const fileById = new Map()
+  for (const entry of fileOverrides ?? []) {
+    fileById.set(overrideId(entry), entry)
+  }
+
+  const patches = []
+  const ttlOwed = []
+  const seen = new Set()
+  const queue = [
+    ...report.overrides.fileOnly.map((entry) => ({ id: entry.id, why: 'absent from the project' })),
+    ...report.overrides.differing.map((entry) => ({
+      id: entry.id,
+      why: entry.reasons.join('; '),
+      indexReasons: entry.reasons.filter((r) => r.startsWith('index scopes differ')),
+      ttlOnly: entry.reasons.every((r) => !r.startsWith('index scopes differ')),
+    })),
+  ]
+  for (const item of queue) {
+    if (seen.has(item.id)) continue
+    seen.add(item.id)
+    const source = fileById.get(item.id)
+    if (!source) continue
+    // A difference that is ONLY about TTL is not fixable by an indexConfig
+    // patch. Patching anyway would rewrite the field, report success, and
+    // leave the TTL exactly as wrong as it was — a green run that fixed
+    // nothing, which is the failure shape this repo keeps finding.
+    if (item.ttlOnly) {
+      ttlOwed.push({ id: item.id, why: item.why })
+      continue
+    }
+    patches.push({
+      id: item.id,
+      collectionGroup: source.collectionGroup,
+      fieldPath: source.fieldPath,
+      exempt: (source.indexes ?? []).length === 0,
+      why: item.why,
+      body: fieldPatchBody(source),
+    })
+    if (source.ttl === true) {
+      ttlOwed.push({
+        id: item.id,
+        why: 'the file declares "ttl": true; this script does not write TTL policies',
+      })
+    }
+  }
+
+  // The dangerous direction, reported and never acted on. A live TTL policy in
+  // this bucket is the AGL-1801 event itself: `firebase deploy` would have
+  // disabled it, and the whole point of the separate bucket is that this
+  // script does not.
+  const ttlAtRisk = report.overrides.prodOnly.filter((entry) => entry.ttl)
+
+  return {
+    creates,
+    patches,
+    notDeleted: {
+      composite: report.composite.prodOnly,
+      overrides: report.overrides.prodOnly,
+    },
+    ttlOwed,
+    ttlAtRisk,
+    empty: creates.length === 0 && patches.length === 0,
+  }
+}

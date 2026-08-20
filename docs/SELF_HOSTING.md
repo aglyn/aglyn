@@ -186,29 +186,47 @@ and the Admin SDK, not direct client reads.
 
 ### 3b. Firestore indexes — do not skip this
 
-Rules decide who may read; **indexes decide whether the read works at all.**
-The repo carries 44 composite indexes and 23 single-field overrides. Without
-them the console comes up and then fails in pieces: every query needing a
-composite index throws `FAILED_PRECONDITION`, and — worse — the field
-overrides that *exempt* the large Besigner `nodes` blobs from indexing are
-missing, so Firestore tries to index them and can **reject the write**. Saving
-a screen is the first thing you will do and among the first things to break.
+Rules decide who may read; **indexes decide whether the read works at all** —
+and, through the field overrides, whether some writes are accepted. Everything
+in [`cloud/firebase-firestore.indexes.json`](../cloud/firebase-firestore.indexes.json)
+has to be applied. Without it the console comes up and then fails in pieces,
+in two ways that feel like different bugs:
 
-This one needs the Firebase CLI, because index reconciliation has no
-service-account REST path the way rules do:
+- every query needing a composite index throws `FAILED_PRECONDITION`, so the
+  product degrades feature by feature; and
+- **worse**, the overrides that *exempt* the large Besigner `nodes` blobs from
+  indexing are missing, so Firestore tries to index the blob and **rejects the
+  write** on its 40KB index-entry limit. Saving a screen is the first thing you
+  will do and among the first things to break.
+
+Same shape as the rules deploys above — same `.env`, same service account, no
+`firebase login`, idempotent:
 
 ```bash
-npx firebase login
-npx firebase deploy --only firestore:indexes \
-  --project "$FIREBASE_PROJECT_ID" --config cloud/firebase.json
+node tools/scripts/deploy-firestore-indexes.mjs --dry-run   # show the plan
+node tools/scripts/deploy-firestore-indexes.mjs
 ```
 
-⚠️ This deploy **deletes anything in your project that is not in the file**.
-That is what you want on a fresh project. On a project you have hand-tuned,
-read [`FIRESTORE_MANUAL_CONFIG.md`](FIRESTORE_MANUAL_CONFIG.md) first.
+The service account needs the **Cloud Datastore Owner** role (or
+`datastore.indexes.create` + `datastore.indexes.update`).
 
-Composite index builds are asynchronous: `deploy` returning is not "ready".
-Watch Firestore → Indexes until they read **Enabled**.
+**This script only ever adds.** If your project has an index the file does not
+list, it is reported and left alone. That is the deliberate difference from
+`npx firebase deploy --only firestore:indexes`, which *reconciles* — it
+**deletes** whatever the file does not list, `fieldOverrides` included. On a
+fresh project the two are equivalent; on a project you have since hand-tuned,
+they are very much not, and the reconciling one has destroyed a live index
+exemption here before. If you prefer the CLI anyway, read
+[`FIRESTORE_MANUAL_CONFIG.md`](FIRESTORE_MANUAL_CONFIG.md) first.
+
+TTL policies are **not** written by this script — that is 3c below. Anything
+owed is printed at the end of the run so it cannot be silently skipped.
+
+Index builds are asynchronous: a successful run means *accepted*, not *ready*,
+and a query against a still-building index fails exactly as it did before.
+Watch them finish with `npm run check:index-drift`, which lists anything still
+building and, when it reports no drift, is your evidence that the project
+matches the file.
 
 ### 3c. TTL policies
 
