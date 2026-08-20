@@ -34,10 +34,15 @@ import { reserveHandler } from './reserve'
  * api.stripe.com, localhost carries the LIVE secret key. Firestore is an
  * in-memory map so the tests COUNT the reservation holds that actually landed.
  *
- * NOT covered here, deliberately: two CONCURRENT submits with two different
- * keys still both pass the out-of-transaction availability read and create two
- * holds — that is the transactional-guard follow-up the issue notes, a
- * different defect from the unkeyed retry.
+ * CONCURRENCY IS COVERED HERE NOW (AGL-2450, and AGL-1848 which reported the
+ * same defect independently). This header used to end by disclaiming it — "two
+ * CONCURRENT submits with two different keys still both pass the
+ * out-of-transaction availability read", filed as a follow-up — and that
+ * sentence outlived the fix it described. Anyone reading down to it would have
+ * believed an open hole in a file that closes it, which is how a fixed defect
+ * gets rebuilt. The `two guests cannot hold the same dates` block below is the
+ * coverage; the availability re-read now happens inside the writing
+ * transaction in `reserve.ts`.
  */
 
 // ---------------------------------------------------------------------------
