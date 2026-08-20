@@ -192,17 +192,20 @@ describe('purchase carries billing_interval only when it is known (AGL-1640)', (
   })
 
   it('sends annual when the invoice said year', async () => {
-    await sendGa4Purchase({ ...purchase, billingInterval: 'annual' })
+    await sendGa4Purchase({
+        items: [], ...purchase, billingInterval: 'annual' })
     expect(sentParams().billing_interval).toBe('annual')
   })
 
   it('sends monthly when the invoice said month', async () => {
-    await sendGa4Purchase({ ...purchase, billingInterval: 'monthly' })
+    await sendGa4Purchase({
+        items: [], ...purchase, billingInterval: 'monthly' })
     expect(sentParams().billing_interval).toBe('monthly')
   })
 
   it('omits the key entirely when the invoice did not say', async () => {
-    await sendGa4Purchase({ ...purchase, billingInterval: undefined })
+    await sendGa4Purchase({
+        items: [], ...purchase, billingInterval: undefined })
     const params = sentParams()
     expect(params.billing_interval).toBeUndefined()
     // Absent, not present-and-empty: GA counts a key it receives.
@@ -304,6 +307,7 @@ describe('purchase carries billing_interval only when it is known (AGL-1640)', (
 
     it('stamps traffic_type on a purchase the buyer declared internal', async () => {
       await sendGa4Purchase({
+        items: [],
         transactionId: 'in_1',
         value: 10,
         currency: 'usd',
@@ -319,6 +323,7 @@ describe('purchase carries billing_interval only when it is known (AGL-1640)', (
 
     it('stamps a refund and a cancellation the same way', async () => {
       await sendGa4Refund({
+        items: [],
         transactionId: 'in_1',
         value: 10,
         currency: 'usd',
@@ -340,6 +345,7 @@ describe('purchase carries billing_interval only when it is known (AGL-1640)', (
 
     it('leaves a REAL customer hit completely alone', async () => {
       await sendGa4Purchase({
+        items: [],
         transactionId: 'in_2',
         value: 10,
         currency: 'usd',
@@ -371,6 +377,7 @@ describe('purchase carries billing_interval only when it is known (AGL-1640)', (
     // verbatim and reported as NOT synthesized, which is what distinguishes an
     // attributable sale from one that merely has the money right.
     const result = await sendGa4Purchase({
+        items: [],
       ...purchase,
       clientId: '555444333.1755100000',
     })

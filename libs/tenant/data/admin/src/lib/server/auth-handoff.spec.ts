@@ -137,7 +137,7 @@ async function authorized(overrides: { nowMs?: number } = {}) {
     isMember: member,
     nowMs: overrides.nowMs ?? NOW,
   })
-  if (!result.ok) throw new Error(`authorize refused: ${result.reason}`)
+  if (result.ok === false) throw new Error(`authorize refused: ${result.reason}`)
   return { started: started!, secret: result.secret }
 }
 

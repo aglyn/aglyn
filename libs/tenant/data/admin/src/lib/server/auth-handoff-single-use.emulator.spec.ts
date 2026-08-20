@@ -92,7 +92,7 @@ describeOrSkip('§7.1 concurrent redemption (emulator)', () => {
       uid: 'u1',
       isMember: async () => true,
     })
-    if (!auth.ok) throw new Error(`authorize refused: ${auth.reason}`)
+    if (auth.ok === false) throw new Error(`authorize refused: ${auth.reason}`)
 
     const attempt = () =>
       redeemConsoleHandoff({
@@ -150,7 +150,7 @@ describeOrSkip('§7.1 concurrent redemption (emulator)', () => {
 
     expect(results.filter((r) => r.ok)).toHaveLength(1)
     expect(
-      results.filter((r) => !r.ok && r.reason === 'already-redeemed'),
+      results.filter((r) => r.ok === false && r.reason === 'already-redeemed'),
     ).toHaveLength(7)
   })
 
