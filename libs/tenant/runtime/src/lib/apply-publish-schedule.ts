@@ -294,10 +294,15 @@ export async function applyDuePublishSchedule(options: {
       // `publishScreenRoute` cannot see (AGL-1562, AGL-1589). Awaited, not
       // floated: this render/beat is the only thing keeping the process
       // alive. It never throws, and it returns immediately when the
-      // Measurement Protocol is not configured — which is the tenant app's
-      // current state: GA4_MEASUREMENT_ID / GA4_API_SECRET are not set on the
-      // aglyn-tenant Vercel project (checked 2026-08-14), so this is a clean
-      // no-op until they are added. See docs/ANALYTICS.md.
+      // Measurement Protocol is not configured — the normal state on a
+      // self-hosted deployment and in development.
+      //
+      // ⚠️ NOT the state of our own tenant app any more. This comment used to
+      // say GA4_MEASUREMENT_ID / GA4_API_SECRET were unset on the
+      // aglyn-tenant Vercel project; both landed on 2026-08-17 12:15 UTC and
+      // the sender is LIVE on this path. The stale version of this note is
+      // part of what made a 2026-08-19 smoke pass conclude every server-side
+      // event was dead (AGL-2327). See docs/ANALYTICS.md.
       await sendGa4SitePublished({ hostId, firstPublish })
     } else {
       await docRef.update(applied)

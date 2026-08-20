@@ -24,6 +24,34 @@
  * contract, not an implementation detail.
  */
 
+/**
+ * Where each GA4 beacon was fired FROM — `after` or a bare `void` (AGL-2327).
+ *
+ * Counting `after()` calls is not enough and was measured failing to fail on
+ * the console's own route: a handler that schedules anything else through
+ * `after()` satisfies a count with the revenue beacon still fired and
+ * forgotten. So the beacon records where it was invoked from instead.
+ */
+const mockGa4Scheduling: Array<'after' | 'bare'> = []
+let mockInsideAfter = false
+
+/**
+ * Next's real `after` throws outside a request scope, and this handler is
+ * driven directly rather than through a route. The double runs the work
+ * immediately — so every existing assertion in this file, which observes the
+ * effect, is unchanged — while recording that it went through `after` at all.
+ */
+jest.mock('next/server', () => ({
+  after: (work: () => unknown) => {
+    mockInsideAfter = true
+    try {
+      void work()
+    } finally {
+      mockInsideAfter = false
+    }
+  },
+}))
+
 jest.mock('@aglyn/tenant-data-admin', () => {
   const writes: Array<{ path: string; data: Record<string, unknown> }> = []
   const store: Record<string, Record<string, unknown> | undefined> = {}
@@ -69,12 +97,14 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       input: Ga4PurchaseInput,
     ): Promise<Ga4SendResult> => {
       ga4.push(input)
+      mockGa4Scheduling.push(mockInsideAfter ? 'after' : 'bare')
       return { sent: true, synthesizedClientId: false }
     },
     sendGa4Refund: async (
       input: Ga4PurchaseInput,
     ): Promise<Ga4SendResult> => {
       ga4Refunds.push(input)
+      mockGa4Scheduling.push(mockInsideAfter ? 'after' : 'bare')
       return { sent: true, synthesizedClientId: false }
     },
     firebaseAdmin: {
@@ -294,6 +324,25 @@ describe('GA4 purchase reporting (AGL-1561)', () => {
     await marketplaceBillingWebhookHandler(completedSession() as any)
 
     expect(JSON.stringify(adminMock.__ga4)).not.toContain('@')
+  })
+
+  it('the beacon is SCHEDULED through `after()`, not fired and forgotten (AGL-2327)', async () => {
+    // AGL-1133 measured on production that a bare `void promise` in a route
+    // handler never runs: the serverless function is frozen the moment the
+    // response is sent. The console's own route was migrated to `after()` for
+    // exactly that reason (AGL-2346) — and this handler, which runs inside
+    // that same invocation, was not. So marketplace revenue really was
+    // shipping to nothing, and not for the credentials reason AGL-2327
+    // assumed: the credentials landed 2026-08-17.
+    //
+    // Every other GA assertion in this file passes identically either way,
+    // because they observe the CALL. This one observes the scheduling.
+    mockGa4Scheduling.length = 0
+
+    await marketplaceBillingWebhookHandler(completedSession() as any)
+
+    expect(adminMock.__ga4).toHaveLength(1)
+    expect(mockGa4Scheduling).toEqual(['after'])
   })
 })
 

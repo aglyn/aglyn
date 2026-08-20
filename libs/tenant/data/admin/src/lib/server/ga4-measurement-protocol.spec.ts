@@ -19,9 +19,12 @@
  * AGL-1589 — the server-side `site_published` sender.
  *
  * Two properties are worth pinning. The first is that ABSENT CONFIG IS NOT AN
- * ERROR: `GA4_MEASUREMENT_ID` / `GA4_API_SECRET` exist only in the console's
- * environment today, and this code runs in the tenant app — so the normal
- * state, right now and on every self-hosted deployment, is a clean no-op. The
+ * ERROR — the normal state on every self-hosted deployment and in development
+ * is a clean no-op. (This note used to add "and on the tenant app, where the
+ * variables are not set". That stopped being true on 2026-08-17 12:15 UTC,
+ * when both keys landed on all three production projects, and leaving it
+ * standing manufactured a false "every server-side event is dead" finding two
+ * days later — AGL-2327.) The
  * second is that one host is one synthetic GA user, however many of its
  * screens go live on a timer; a random client id per publish would inflate
  * the activation metric, which is the exact failure the event is meant to

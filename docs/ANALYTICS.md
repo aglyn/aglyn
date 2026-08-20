@@ -355,13 +355,23 @@ deterministically from the Stripe customer. **The money is then right and the
 channel is unknown**, and the fallback is reported in the return value so it can
 be alarmed on if it becomes common.
 
-> 🚨 **`purchase` reaches nothing today, and the reason changed.** AGL-1551 —
-> the platform webhook rejecting every Stripe delivery with `400 Invalid
-signature` — is **fixed and closed** (2026-08-14), so deliveries now arrive
-> and the `invoice.paid` branch does call the sender. The remaining blocker is
-> entirely the environment: see _The env-var verdict_ below. The sender returns
-> `{ sent: false, reason: 'not-configured' }` without logging, so this failure
-> is completely silent from the application side.
+> ✅ **`purchase` reaches GA4. The blocker moved twice and is now gone**
+> (AGL-2327). AGL-1551 — the platform webhook rejecting every Stripe delivery
+> with `400 Invalid signature` — was fixed and closed 2026-08-14. The env-var
+> blocker that replaced it was fixed **2026-08-17 12:15 UTC**, when
+> `GA4_MEASUREMENT_ID` and `GA4_API_SECRET` landed on all three production
+> projects (see _Environment variables_).
+>
+> ⚠️ **Do not quote the paragraph this replaced.** It said "`purchase` reaches
+> nothing today", and it stayed on the page after it stopped being true — a
+> 2026-08-19 smoke pass read it and concluded every server-side event was dead
+> in production, which was wrong and would have been acted on.
+>
+> The silence property still holds and is still the real hazard: the sender
+> returns `{ sent: false, reason: 'not-configured' }` **without logging**, so a
+> configuration regression is invisible from the application side. That is why
+> the verdict has to be re-derived from a deployment's own env key list rather
+> than remembered from this document.
 
 #### What `purchase` will report once it is on, and where it disagrees with Stripe
 
@@ -374,7 +384,7 @@ none of them yet observable since nothing has sent:
 | 1   | Subscription `value` is `amount_paid / 100` off `invoice.paid`, keyed on the **invoice id**        | Correct, and includes **renewals** — GA "revenue" is billings, not new-business MRR. Do not read it as either without splitting on `billing_interval` and first-vs-repeat      |
 | 2   | Marketplace `value` is `amount_total / 100` — the **tax-inclusive gross**                          | Overstates our revenue: the ledger doc written two lines above splits `taxCents` and `transferCents`, and the seller's share is not ours. GA will not match the Stripe balance |
 | 3   | `billing_interval` falls back to `'monthly'` whenever the price interval is absent or unrecognised | An annual plan whose line item does not expose `recurring.interval` reports as monthly, quietly biasing the §6 annual-mix metric toward monthly                                |
-| 4   | Marketplace `clientId` reads `metadata.ga_client_id`, which **nothing ever writes**                | Dead read. Marketplace purchases always fall back to a synthesized client id, so marketplace revenue is permanently unattributable to a session or channel                     |
+| 4   | ~~Marketplace `clientId` reads `metadata.ga_client_id`, which nothing ever writes~~ — **FIXED**    | The marketplace checkout now captures the id with `readGaClientId` and writes `metadata[ga_client_id]` (`libs/plugins/marketplace/src/lib/server/checkout.ts`), so a marketplace sale joins the session that produced it. Kept here struck through, not deleted, because the un-fixed version was quoted as current state after the fix landed |
 
 (1) is a reporting instruction, not a defect. (2), (3) and (4) are defects and
 are filed separately — see AGL-1637's child issues. (4) in particular is the
@@ -777,9 +787,13 @@ The pinned case in `apply-publish-schedule.spec.ts` did what it was written to
 do: it went red the moment the executor learned to register a route, and now
 asserts the other half of the argument — that a republish reports nothing.
 
-> **Deployment gap:** `GA4_MEASUREMENT_ID` / `GA4_API_SECRET` are not set on
-> the **aglyn-tenant** Vercel project, which is where this code runs, so the
-> event is a clean no-op there today. See the table below.
+> **Deployment gap — CLOSED 2026-08-17** (AGL-1846/AGL-2327). This said
+> `GA4_MEASUREMENT_ID` / `GA4_API_SECRET` were not set on the **aglyn-tenant**
+> project, which is where this code runs, so the event was a clean no-op
+> there. Both keys landed on the tenant project's production deployment at
+> 12:15 UTC that day and the scheduled-publish sender is live. See the
+> _Environment variables_ table, and re-derive the verdict from a deployment's
+> own env key list rather than from this line.
 
 ### 6. Authored events go through the same door, under a different name (AGL-1587)
 
@@ -1369,6 +1383,37 @@ is gone by the time the redirect lands. `login` never carries them: a
 returning user's session was not produced by today's campaign, and stamping
 one on it would credit the ad for revenue it did not cause.
 
+### 13. Why a server event can still report nothing with the credentials in place (AGL-2327)
+
+Three distinct causes have been mistaken for each other, twice. Check them in
+this order, because each one makes the next invisible:
+
+1. **Credentials.** ✅ Resolved 2026-08-17 12:15 UTC. Re-derive it from
+   `GET /v13/deployments/{id}` — a deployment's own env key list — never from
+   `vercel env ls`, never from the project's env list, and never from this
+   document. Always diff an older deployment as a negative control.
+2. **Scheduling.** A bare `void somePromise()` in a route handler **does not
+   run**: AGL-1133 measured on production that the serverless function is
+   frozen the moment the response is sent. The console's `/api/billing/webhook`
+   was migrated to `after()` for exactly this (AGL-2346) — and the marketplace
+   handler, which runs **inside that same invocation**, was not. So marketplace
+   `purchase` and `refund` were genuinely reporting to nothing, with the
+   credentials present and the sender returning `{ sent: true }` to a caller
+   that never got resumed. Fixed in `libs/plugins/marketplace/src/lib/server/billing-webhook.ts`;
+   pinned by `billing-webhook.spec.ts`'s "the beacon is SCHEDULED through
+   `after()`" case, which records **where** the beacon was fired from rather
+   than counting `after()` calls — a count was measured failing to fail,
+   because these handlers schedule other work through `after()` too.
+3. **Dimension registration.** An unregistered param is collected and never
+   reportable, which from the report end is indistinguishable from the event
+   not carrying it. This is where a still-missing breakdown most likely lives
+   now. See "Still outstanding" below.
+
+The sender is silent by design on cause 1 — `{ sent: false, reason:
+'not-configured' }`, no log — and cause 2 is silent by construction, because
+the process is gone. Neither shows up as an error anywhere, which is why the
+order above matters more than usual.
+
 ### Still outstanding
 
 0. **Register five more custom dimensions** (AGL-1562), all **event-scoped**,
@@ -1384,6 +1429,12 @@ one on it would credit the ad for revenue it did not cause.
    | Link domain    | `link_domain`   | Outbound destination — the GitHub/docs leading indicator                                             |
    | Link id        | `link_id`       | Which outbound link, by label                                                                        |
    | Surface        | `surface`       | `site` vs `docs` (AGL-1579); Hostname covers the domains, this covers surfaces sharing one           |
+
+0d. **Register `plan` and `tenure_days`** (AGL-2327). Both are sent by
+   `sendGa4SubscriptionCancelled` and appear on **neither** the registered list
+   above **nor** either outstanding list — so the churn event arrives as one
+   undifferentiated count and plan-tier churn mix and tenure-at-cancellation,
+   the two numbers it exists for, are unreachable. Event-scoped.
 
 0c. **Register the three campaign dimensions** (AGL-1731), all
    **event-scoped**, and do it BEFORE the first ad runs — an unregistered

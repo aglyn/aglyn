@@ -163,11 +163,25 @@ interface Ga4Credentials {
 
 /**
  * Absent config is the normal state on self-hosted deployments and in
- * development — not an error, and not worth a log line per event. It is also
- * the current state of the TENANT deployment (AGL-1589): neither variable is
- * set on the aglyn-tenant Vercel project (checked 2026-08-14), so
- * `sendGa4SitePublished` no-ops there until they are added, exactly as
- * intended. See docs/ANALYTICS.md.
+ * development — not an error, and not worth a log line per event.
+ *
+ * ⚠️ It is NO LONGER the state of our own production deployments, and this
+ * comment saying otherwise is how that fact got lost twice (AGL-2327).
+ * `GA4_MEASUREMENT_ID` and `GA4_API_SECRET` are present on the production
+ * deployments of `aglyn-console`, `aglyn-tenant` AND `aglyn-docs` since
+ * **2026-08-17 12:15 UTC** — verified against `GET /v13/deployments/{id}`,
+ * which returns the env key list a running lambda actually has, with an older
+ * deployment as a negative control. `vercel env ls` and the project's own env
+ * list cannot answer this question; only the deployment can.
+ *
+ * So a server-side event missing from GA4 today is **not** explained by
+ * credentials, and must not be written off as "the transport is dead". A
+ * 2026-08-19 smoke pass reached exactly that conclusion off the stale version
+ * of this note, four days after the flip landed. Look at dimension
+ * registration (AGL-1637 item 3) and at how the beacon is SCHEDULED
+ * (AGL-2346/AGL-2327 — a bare `void` in a route handler never runs) instead.
+ *
+ * See docs/ANALYTICS.md §"Environment variables".
  */
 function ga4Credentials(): Ga4Credentials | null {
   const measurementId = process.env.GA4_MEASUREMENT_ID || ''

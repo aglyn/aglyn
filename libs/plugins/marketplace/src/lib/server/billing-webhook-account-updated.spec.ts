@@ -30,6 +30,18 @@
 const syncConnectAccountStatus = jest.fn(async () => 1)
 const purchaseSet = jest.fn(async () => undefined)
 
+/**
+ * Next's real `after` throws outside a request scope, and this spec drives the
+ * handler directly rather than through a route. The double runs the work
+ * immediately, so every assertion here — all of which observe the EFFECT —
+ * reads exactly as it did before the beacons moved onto `after()` (AGL-2327).
+ */
+jest.mock('next/server', () => ({
+  after: (work: () => unknown) => {
+    void work()
+  },
+}))
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   syncConnectAccountStatus: (...args: unknown[]) =>
     syncConnectAccountStatus(...(args as [])),
