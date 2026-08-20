@@ -17,6 +17,7 @@
 'use client'
 
 import {
+  hostAsksAboutAdvertising,
   hostConsentRequired,
   isConsentToolDisabled,
   resolveGaMeasurementId,
@@ -86,6 +87,7 @@ export function ConsentBannerCard(props: ConsentBannerCardProps) {
   const mode = resolveHostConsentMode(host)
   const hasGa = Boolean(resolveGaMeasurementId(host))
   const machineryLive = hostConsentRequired(host)
+  const asksAds = hostAsksAboutAdvertising(host)
 
   const handleToggle = useCallback(
     async (active: boolean) => {
@@ -97,6 +99,31 @@ export function ConsentBannerCard(props: ConsentBannerCardProps) {
           ? 'Consent tool on — visitor tracking follows your consent mode'
           : 'Consent tool off — analytics loads for every visitor, unasked',
         { variant: active ? 'success' : 'warning', persist: false },
+      )
+    },
+    [firestore, hostId, enqueueSnackbar],
+  )
+
+  /**
+   * The advertising question (AGL-1649).
+   *
+   * Turning it ON grants NOTHING. It adds a second question to the banner and
+   * the privacy-choices panel, so a visitor has somewhere to say yes; until
+   * one does, `ad_storage` and its two siblings stay denied exactly as they
+   * are today. Off is written as a field DELETE rather than `false`, matching
+   * `consent.disabled`, so an untouched host document carries no consent keys
+   * at all.
+   */
+  const handleAdvertising = useCallback(
+    async (active: boolean) => {
+      await updateDoc(doc(firestore, 'hosts', hostId), {
+        'consent.advertising': active ? true : deleteField(),
+      })
+      enqueueSnackbar(
+        active
+          ? 'Visitors will be asked about advertising — nothing is granted until one says yes'
+          : 'Advertising storage stays denied for every visitor',
+        { variant: 'success', persist: false },
       )
     },
     [firestore, hostId, enqueueSnackbar],
@@ -189,6 +216,36 @@ export function ConsentBannerCard(props: ConsentBannerCardProps) {
             </RadioGroup>
           </FormControl>
         ) : null}
+        {!disabled ? (
+          <FormControlLabel
+            control={
+              <Switch
+                checked={asksAds}
+                onChange={(event) => handleAdvertising(event.target.checked)}
+                disabled={!hasGa}
+              />
+            }
+            label={
+              <span>
+                {'Also ask visitors about advertising storage'}
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  component="span"
+                  sx={{ display: 'block' }}
+                >
+                  {'Off by default. Google Analytics runs with advertising ' +
+                    'storage denied unless a visitor explicitly allows it, ' +
+                    'so Google Ads linking and remarketing audiences ' +
+                    'collect nothing. Turn this on to add a second, ' +
+                    'separate question to the banner — turning it on grants ' +
+                    'nothing on its own, and a visitor who allows analytics ' +
+                    'is not thereby allowing advertising.'}
+                </Typography>
+              </span>
+            }
+          />
+        ) : null}
         {/*
          * Status, worded as consequences. The dangerous combination is
          * GA-configured + tool off: tracking every visitor without asking is
@@ -217,6 +274,14 @@ export function ConsentBannerCard(props: ConsentBannerCardProps) {
                 'page) is the opt-out — it cannot be removed by a ' +
                 'template. Global Privacy Control is honored as an ' +
                 'automatic opt-out.'}
+          </Alert>
+        ) : null}
+        {asksAds && machineryLive ? (
+          <Alert severity="info">
+            {'Advertising is a second, separate question. Visitors who ' +
+              'allow only analytics keep advertising storage denied, and a ' +
+              'visitor tracked under implied consent is never treated as ' +
+              'having allowed advertising — that needs an explicit yes.'}
           </Alert>
         ) : null}
         {!hasGa && !disabled ? (

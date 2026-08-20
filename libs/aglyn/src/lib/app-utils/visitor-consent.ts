@@ -31,6 +31,13 @@
  *   never transmitted, and blocking them would show MORE popups), the
  *   first-party pageview beacon (cookieless, stores no visitor identifier —
  *   AGL-82), and the stored consent choice itself.
+ * - **Consent-gated: `advertising`** (AGL-1649) — GA4's `ad_storage`,
+ *   `ad_user_data` and `ad_personalization`. OFF for every site unless the
+ *   host turns the question on, and granted only by an explicit visitor yes
+ *   to that specific category: never by the implied default, never by a
+ *   record written before the category existed. A host who needs Ads storage
+ *   previously had one workaround — switch the whole tool off and run their
+ *   own CMP — which is why this exists.
  * - **Consent-gated: `analytics`.** Today that is the customer-configured
  *   Google Analytics tag — a third-party identifier-setting script — plus
  *   the CROSS-VISIT persistence of the `aglyn:visitor` experiment id (the id
@@ -88,6 +95,21 @@ export interface VisitorConsentHost {
      * by surprise.
      */
     mode?: 'geo' | 'strict'
+    /**
+     * Host opt-in to ASKING about advertising storage (AGL-1649). PERSISTED
+     * NAME. Absent or `false` — the default for every site that exists — means
+     * the visitor is asked about analytics only and the three advertising
+     * signals stay denied, which is where AGL-1622 put them.
+     *
+     * `true` adds a SECOND question to the banner and the privacy-choices
+     * panel. It does not grant anything by itself: it creates the opportunity
+     * for a visitor to say yes, which is the thing a host previously could not
+     * obtain without switching the whole tool off and running their own CMP.
+     *
+     * Strictly `=== true`, like {@link isConsentToolDisabled}: a truthy string
+     * out of a hand-edited host document must not turn a consent category on.
+     */
+    advertising?: boolean
   } | null
 }
 
@@ -98,11 +120,14 @@ export type HostConsentMode = 'geo' | 'strict'
 export type VisitorConsentPosture = 'opt-in' | 'opt-out'
 
 /**
- * Consent-gated feature categories. `analytics` is the only gated category
- * today; the stored shape is keyed by category so adding one (e.g.
- * `marketing`) extends rather than migrates.
+ * Consent-gated feature categories.
+ *
+ * `advertising` (AGL-1649) is gated ONLY where the host opted in — see
+ * {@link hostAsksAboutAdvertising}. The stored shape is keyed by category, so
+ * this extended rather than migrated, and a record written before it existed
+ * reads as "never asked", never as a grant.
  */
-export type VisitorConsentCategory = 'analytics'
+export type VisitorConsentCategory = 'analytics' | 'advertising'
 
 /**
  * A visitor's recorded consent state. The five are DISTINCT on purpose:
@@ -147,6 +172,26 @@ export function analyticsGrantedByStatus(
 }
 
 /**
+ * Whether a status can carry an advertising grant at all (AGL-1649).
+ *
+ * NARROWER than {@link analyticsGrantedByStatus} by one status, and that one
+ * is the whole point: `implied` grants analytics (the opt-out posture
+ * defaults a visitor in) and must never grant advertising. Advertising
+ * carries obligations analytics does not, particularly in prior-consent
+ * regions, and "implied consent to advertising" would be a declaration to
+ * Google with nothing on file behind it — the same defect shape as
+ * pre-consent loading, which AGL-1622 exists to have closed.
+ *
+ * A `true` here is necessary, never sufficient: the visitor must ALSO have
+ * answered yes to this specific category.
+ */
+export function advertisingGrantedByStatus(
+  status: VisitorConsentStatus,
+): boolean {
+  return status === 'accepted'
+}
+
+/**
  * Strict GA measurement-id check (AGL-138) — the id lands inside an inline
  * script, so the format gate is load-bearing, not cosmetic.
  */
@@ -182,7 +227,25 @@ export function resolveHostConsentMode(
 export function consentGatedCategories(
   host: VisitorConsentHost | null | undefined,
 ): VisitorConsentCategory[] {
-  return resolveGaMeasurementId(host) ? ['analytics'] : []
+  if (!resolveGaMeasurementId(host)) return []
+  return hostAsksAboutAdvertising(host)
+    ? ['analytics', 'advertising']
+    : ['analytics']
+}
+
+/**
+ * Whether this site asks its visitors about advertising storage (AGL-1649).
+ *
+ * Two conditions, both required. The host has to have opted in — the flag is
+ * off for every site that exists and stays off unless someone turns it on —
+ * and the site has to actually have an analytics tag, because advertising
+ * storage here is GA4's `ad_storage` and there is nothing to ask about
+ * without one. A banner with no question behind it is decoration (AGL-1498).
+ */
+export function hostAsksAboutAdvertising(
+  host: VisitorConsentHost | null | undefined,
+): boolean {
+  return host?.consent?.advertising === true && !!resolveGaMeasurementId(host)
 }
 
 /**
@@ -265,6 +328,17 @@ export interface StoredVisitorConsent {
   status: VisitorConsentStatus
   /** The category grant, derived from `status` at store time. */
   analytics: boolean
+  /**
+   * The advertising grant (AGL-1649). ABSENT on every record written before
+   * the category existed, and absent reads as `false` — "was never asked"
+   * is not "said yes". Reading it the other way would hand Google a basis
+   * for every visitor who ever clicked Allow on an analytics-only banner.
+   *
+   * Only an EXPLICIT accept can carry one: an `implied` default never does,
+   * because being defaulted into analytics in an opt-out region is not a
+   * visitor answering a question about advertising.
+   */
+  advertising?: boolean
   /** ISO country at decision time, when known — the `implied,us` shape. */
   country?: string | null
 }
@@ -484,6 +558,70 @@ export function analyticsConsentSignals(
   }
 }
 
+/** The four signals when advertising is in play (AGL-1649). */
+export interface VisitorConsentSignals {
+  analytics_storage: AnalyticsConsentSignal
+  ad_storage: AnalyticsConsentSignal
+  ad_user_data: AnalyticsConsentSignal
+  ad_personalization: AnalyticsConsentSignal
+}
+
+/**
+ * The consent-mode payload for a pair of category grants (AGL-1649).
+ *
+ * A SEPARATE function from {@link analyticsConsentSignals} rather than a
+ * widening of it, deliberately. AGL-1649 says not to widen those three
+ * literals, and the reason survives this change: a caller that only knows
+ * about analytics should be unable to express a grant it has no answer for.
+ * Reaching an advertising grant now requires calling something else and
+ * passing it, which is a thing a reviewer can see in a diff.
+ *
+ * Advertising is clamped to analytics. `ad_storage: 'granted'` with
+ * `analytics_storage: 'denied'` is not a state this tool can reach honestly —
+ * every refusal path (declined, opted out, GPC) withdraws both together — so
+ * the clamp makes the impossible state unrepresentable rather than merely
+ * unreached.
+ */
+export function consentModeSignals(grants: {
+  analytics: boolean
+  advertising: boolean
+}): VisitorConsentSignals {
+  const analytics = grants.analytics === true
+  const advertising = analytics && grants.advertising === true
+  const ads: AnalyticsConsentSignal = advertising ? 'granted' : 'denied'
+  return {
+    analytics_storage: analytics ? 'granted' : 'denied',
+    ad_storage: ads,
+    ad_user_data: ads,
+    ad_personalization: ads,
+  }
+}
+
+/**
+ * Whether advertising storage may run for this visitor on this site.
+ *
+ * THREE independent conditions, and all of them are load-bearing:
+ *
+ * 1. The host asks about advertising at all. A record that says yes is
+ *    ignored on a site that never turned the category on — which covers a
+ *    host switching it back off, and covers a stale record generally.
+ * 2. The record's status can carry a grant (an explicit accept, never an
+ *    implied default).
+ * 3. The record actually says yes to this category.
+ *
+ * Absent, unreadable or legacy records all answer `false`, which is the same
+ * answer they gave before the category existed.
+ */
+export function advertisingGrantedByRecord(
+  host: VisitorConsentHost | null | undefined,
+  stored: StoredVisitorConsent | null | undefined,
+): boolean {
+  if (!hostAsksAboutAdvertising(host)) return false
+  if (!stored) return false
+  if (!advertisingGrantedByStatus(stored.status)) return false
+  return stored.advertising === true
+}
+
 /**
  * The consent-mode `default` declaration that goes in front of the tag
  * (AGL-1622), for injection into the same inline block that creates
@@ -527,6 +665,32 @@ export function analyticsConsentSignals(
  */
 export const GA_CONSENT_DEFAULT_SNIPPET = `gtag('consent', 'default', ${JSON.stringify(
   analyticsConsentSignals(true),
+)});`
+
+/**
+ * The same declaration for a visitor who granted ADVERTISING too (AGL-1649).
+ *
+ * A second CONSTANT rather than a parameterised builder, for the reason the
+ * first one is a constant: it lands inside an inline script (the AGL-138
+ * concern), and a constant cannot interpolate anything. Both values are
+ * literals fixed at module load; the only thing the caller chooses is which
+ * of the two to emit.
+ *
+ * Reached only where {@link advertisingGrantedByRecord} says yes — host
+ * opted in, explicit accept, explicit yes to this category — which is
+ * evaluated client-side after hydration, like every other part of this gate.
+ * The ISR property is unaffected: the cached HTML contains neither snippet,
+ * because the whole block is inside the client-side `analyticsAllowed`
+ * condition.
+ *
+ * Declaring the grant as the DEFAULT rather than sending a later `update` is
+ * what keeps the tag's first hit correct. An update would arrive after
+ * `config`, so the session's first pageview — usually the entire session for
+ * a marketing visit — would carry the denied state the visitor did not
+ * choose.
+ */
+export const GA_CONSENT_DEFAULT_WITH_ADS_SNIPPET = `gtag('consent', 'default', ${JSON.stringify(
+  consentModeSignals({ analytics: true, advertising: true }),
 )});`
 
 /**
@@ -608,7 +772,10 @@ export function residentGaMeasurementIds(): string[] {
  * The re-grant restores ANALYTICS only — the tool never asked about
  * advertising, so the ad signals stay denied in both directions.
  */
-export function setResidentAnalyticsTags(granted: boolean): string[] {
+export function setResidentAnalyticsTags(
+  granted: boolean,
+  advertising = false,
+): string[] {
   if (typeof window === 'undefined') return []
   const ids = residentGaMeasurementIds()
   const scope = window as unknown as Record<string, unknown>
@@ -623,7 +790,7 @@ export function setResidentAnalyticsTags(granted: boolean): string[] {
       ;(send as (...args: unknown[]) => void)(
         'consent',
         'update',
-        analyticsConsentSignals(granted),
+        consentModeSignals({ analytics: granted, advertising }),
       )
     }
   } catch {
@@ -660,6 +827,11 @@ export function readStoredVisitorConsent(
       // Derived, never trusted from storage: a hand-edited record must not
       // grant what its status does not.
       analytics: analyticsGrantedByStatus(status),
+      // Same discipline for advertising (AGL-1649), plus one more clause:
+      // the key has to be PRESENT and true. Absent is a record written
+      // before the category existed — never asked, which is not a yes.
+      advertising:
+        advertisingGrantedByStatus(status) && parsed.advertising === true,
       country: typeof parsed.country === 'string' ? parsed.country : null,
     }
   } catch {
@@ -689,13 +861,26 @@ export function readStoredVisitorConsent(
  */
 export function storeVisitorConsent(
   hostId: string,
-  state: { status: VisitorConsentStatus; country?: string | null },
+  state: {
+    status: VisitorConsentStatus
+    country?: string | null
+    /**
+     * The visitor's answer to the advertising question (AGL-1649). Omitted
+     * by every caller that does not ask one, and omitted means NO.
+     */
+    advertising?: boolean
+  },
 ): StoredVisitorConsent {
   const stored: StoredVisitorConsent = {
     v: 1,
     at: Date.now(),
     status: state.status,
     analytics: analyticsGrantedByStatus(state.status),
+    // Derived at store time exactly as `analytics` is, so a caller cannot
+    // persist a grant the status does not support — a refusal always writes
+    // `false` here even if the panel's checkbox was left ticked.
+    advertising:
+      advertisingGrantedByStatus(state.status) && state.advertising === true,
     country: state.country ?? null,
   }
   if (typeof window !== 'undefined') {
@@ -716,7 +901,7 @@ export function storeVisitorConsent(
     // leaves gtag.js live and it re-writes `_ga_<id>` on its next enhanced
     // measurement event. Sweeping first would delete three cookies and
     // immediately get one back.
-    setResidentAnalyticsTags(stored.analytics)
+    setResidentAnalyticsTags(stored.analytics, stored.advertising === true)
     if (!stored.analytics) {
       clearAnalyticsCookies()
     }

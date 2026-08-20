@@ -29,7 +29,10 @@ import {
   analyticsMayEmit,
 } from '@aglyn/aglyn/app-utils/analytics-environment'
 import {
+  advertisingGrantedByRecord,
   GA_CONSENT_DEFAULT_SNIPPET,
+  GA_CONSENT_DEFAULT_WITH_ADS_SNIPPET,
+  hostAsksAboutAdvertising,
   hostConsentRequired,
   isAnalyticsAllowed,
   resolveGaMeasurementId,
@@ -301,6 +304,14 @@ export default function SiteAnalytics({
   const analyticsAllowed = consentRequired
     ? consent.ready && isAnalyticsAllowed(host, consent.stored)
     : true
+  // Advertising storage (AGL-1649). Off unless the host turned the question
+  // on AND this visitor explicitly answered yes to that category; every
+  // other path — including a visitor merely defaulted into analytics —
+  // leaves the three advertising signals denied, exactly as AGL-1622 set
+  // them. Resolved client-side like the rest of the gate, so the ISR-cached
+  // HTML carries neither snippet.
+  const advertisingAllowed =
+    consentRequired && advertisingGrantedByRecord(host, consent.stored)
 
   return (
     <>
@@ -391,7 +402,11 @@ export default function SiteAnalytics({
           <Script id="ga-init" strategy="afterInteractive">
             {'window.dataLayer=window.dataLayer||[];' +
               'function gtag(){dataLayer.push(arguments);}' +
-              (consentRequired ? GA_CONSENT_DEFAULT_SNIPPET : '') +
+              (consentRequired
+                ? advertisingAllowed
+                  ? GA_CONSENT_DEFAULT_WITH_ADS_SNIPPET
+                  : GA_CONSENT_DEFAULT_SNIPPET
+                : '') +
               // Internal-traffic stamp (AGL-2064), OUR property only. See the
               // block comment below the JSX for why this is a constant string
               // evaluated in the browser and why its position in the snippet
@@ -433,6 +448,7 @@ export default function SiteAnalytics({
           stored={consent.stored}
           posture={consent.posture}
           country={consent.country}
+          advertising={hostAsksAboutAdvertising(host)}
         />
       ) : null}
     </>

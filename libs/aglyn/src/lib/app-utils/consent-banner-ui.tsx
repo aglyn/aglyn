@@ -156,26 +156,41 @@ export interface ConsentBannerUiProps {
   /** Region at decision time, recorded onto explicit choices. */
   country?: string | null
   /**
+   * Whether this site asks about advertising storage (AGL-1649). Resolved by
+   * the caller from the host document, because this component is also
+   * mounted by the console preview against a simulated host.
+   *
+   * `false` — the default and the state of every existing site — renders
+   * exactly the single-question surface AGL-1498 shipped.
+   */
+  advertising?: boolean
+  /**
    * Simulator seam (console preview): when set, decisions are reported here
    * INSTEAD of being persisted, so previewing as-if-from-the-EU never
    * writes a real consent record. Production leaves it unset.
    */
-  onDecision?: (status: VisitorConsentStatus) => void
+  onDecision?: (status: VisitorConsentStatus, advertising?: boolean) => void
 }
 
 export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | null {
-  const { hostId, stored, posture, country, onDecision } = props
+  const { hostId, stored, posture, country, advertising, onDecision } = props
   const [preferencesOpen, setPreferencesOpen] = useState(false)
   const [analyticsChecked, setAnalyticsChecked] = useState(
     stored?.analytics === true,
   )
+  // Starts UNTICKED unless the visitor previously said yes to this exact
+  // category (AGL-1649). A pre-ticked advertising box is consent by
+  // inattention, which is the thing a banner is supposed to replace.
+  const [adsChecked, setAdsChecked] = useState(stored?.advertising === true)
 
   // The change-your-mind paths: the window event, and a `#aglyn-consent`
   // link click anywhere in the page (capture, so canvas link handling that
   // stops propagation cannot swallow it).
   useEffect(() => {
     const open = () => {
-      setAnalyticsChecked(readStoredVisitorConsent(hostId)?.analytics === true)
+      const current = readStoredVisitorConsent(hostId)
+      setAnalyticsChecked(current?.analytics === true)
+      setAdsChecked(current?.advertising === true)
       setPreferencesOpen(true)
     }
     const onClick = (event: MouseEvent) => {
@@ -197,11 +212,15 @@ export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | nul
     }
   }, [hostId])
 
-  const decide = (status: VisitorConsentStatus) => {
+  // `ads` is only ever passed through; `storeVisitorConsent` re-derives it
+  // against the status, so a refusal cannot carry a grant however this is
+  // called.
+  const decide = (status: VisitorConsentStatus, ads = false) => {
+    const granted = advertising === true && ads
     if (onDecision) {
-      onDecision(status)
+      onDecision(status, granted)
     } else {
-      storeVisitorConsent(hostId, { status, country })
+      storeVisitorConsent(hostId, { status, country, advertising: granted })
     }
     setPreferencesOpen(false)
   }
@@ -244,6 +263,23 @@ export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | nul
           />
           {'Analytics (Google Analytics) — how the site is used'}
         </label>
+        {advertising ? (
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              margin: '0 0 12px',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={adsChecked}
+              onChange={(event) => setAdsChecked(event.target.checked)}
+            />
+            {'Advertising — personalised ads and measuring ad performance'}
+          </label>
+        ) : null}
         <div
           style={{
             display: 'flex',
@@ -262,7 +298,15 @@ export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | nul
           <button
             type="button"
             style={PRIMARY_BUTTON}
-            onClick={() => decide(analyticsChecked ? 'accepted' : refusalStatus)}
+            onClick={() =>
+              decide(
+                analyticsChecked ? 'accepted' : refusalStatus,
+                // Advertising cannot outlive analytics: unticking analytics
+                // and leaving advertising ticked is a refusal of both, which
+                // `consentModeSignals` also clamps independently.
+                analyticsChecked && adsChecked,
+              )
+            }
           >
             {'Save choices'}
           </button>
@@ -288,9 +332,15 @@ export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | nul
           }}
         >
           <p style={{ margin: 0, flex: '1 1 260px' }}>
-            {'This site would like to use analytics (Google Analytics) to ' +
-              'understand how it is used. Analytics only runs if you allow ' +
-              'it — everything else works either way.'}
+            {advertising
+              ? 'This site would like to use analytics (Google Analytics) ' +
+                'to understand how it is used, and advertising cookies to ' +
+                'personalise ads and measure how they perform. Neither runs ' +
+                'unless you allow it — everything else works either way. ' +
+                'Use Preferences to choose them separately.'
+              : 'This site would like to use analytics (Google Analytics) to ' +
+                'understand how it is used. Analytics only runs if you allow ' +
+                'it — everything else works either way.'}
           </p>
           <div
             style={{
@@ -305,6 +355,7 @@ export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | nul
               style={LINK_BUTTON}
               onClick={() => {
                 setAnalyticsChecked(stored != null && stored.analytics)
+                setAdsChecked(stored != null && stored.advertising === true)
                 setPreferencesOpen(true)
               }}
             >
@@ -320,9 +371,9 @@ export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | nul
             <button
               type="button"
               style={PRIMARY_BUTTON}
-              onClick={() => decide('accepted')}
+              onClick={() => decide('accepted', advertising === true)}
             >
-              {'Allow'}
+              {advertising ? 'Allow all' : 'Allow'}
             </button>
           </div>
         </div>
@@ -339,11 +390,9 @@ export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | nul
       aria-label="Privacy choices"
       style={PILL_STYLE}
       onClick={() => {
-        setAnalyticsChecked(
-          onDecision
-            ? stored?.analytics === true
-            : readStoredVisitorConsent(hostId)?.analytics === true,
-        )
+        const current = onDecision ? stored : readStoredVisitorConsent(hostId)
+        setAnalyticsChecked(current?.analytics === true)
+        setAdsChecked(current?.advertising === true)
         setPreferencesOpen(true)
       }}
     >
