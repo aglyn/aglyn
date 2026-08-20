@@ -256,3 +256,60 @@ describe('the host key actually reaches the boundary (AGL-2342)', () => {
     expect(code).not.toMatch(/<SiteStatusScreen/)
   })
 })
+
+/**
+ * A 404 with no `<title>` at all (AGL-2291), measured across the live
+ * marketing routes. `notFound()` serves Next's empty `__next_error__`
+ * document, so there is no head for `generateMetadata` to fill — this is the
+ * one surface that has to write its own tab, after mount.
+ */
+describe('the tab title (AGL-2291)', () => {
+  beforeEach(() => {
+    document.title = ''
+  })
+
+  it('names the page and the SITE, not the platform', async () => {
+    mockFetch(() => ({ ok: false, status: 404, body: { error: 'Not found' } }))
+
+    renderBoundary()
+
+    await waitFor(() =>
+      expect(document.title).toBe(
+        'We can’t find that page – Northwind Coffee',
+      ),
+    )
+    // The whole white-label rule in one assertion: a 404 on somebody else's
+    // site must not read as ours.
+    expect(document.title).not.toMatch(/Aglyn/i)
+  })
+
+  it('prefers the designed screen’s own authored title, verbatim', async () => {
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      body: {
+        ...DESIGNED_PAYLOAD,
+        data: {
+          host: { $id: 'host-1' },
+          screen: { data: { $id: 'nf', seo: { title: 'Lost your way?' } } },
+        },
+      },
+    }))
+
+    renderBoundary()
+
+    await screen.findByTestId('designed-screen')
+    // AGL-1341's rule, unchanged here: an authored title takes no suffix.
+    await waitFor(() => expect(document.title).toBe('Lost your way?'))
+  })
+
+  it('writes nothing while the answer is still unknown', async () => {
+    // The tab must not say "not found" and then be replaced a moment later,
+    // any more than the body may.
+    ;(global as any).fetch = jest.fn(() => new Promise(() => undefined))
+
+    renderBoundary()
+
+    await waitFor(() => expect(document.title).toBe(''))
+  })
+})
