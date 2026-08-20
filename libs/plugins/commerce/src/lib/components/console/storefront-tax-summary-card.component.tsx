@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
+
 'use client'
 
 import { pluginDocsHelp } from '@aglyn/aglyn'
@@ -205,11 +207,11 @@ export function StorefrontTaxSummaryCard(props: StorefrontTaxSummaryCardProps) {
         {
           key: 'aglynLiable',
           bucket: payload.summary.aglynLiable,
-          title: 'Tax Stripe calculated against Aglyn’s registrations',
+          title: `Tax Stripe calculated against ${PLATFORM_BRAND_NAME}’s registrations`,
           how:
             'Automatic tax was on for these sales. Stripe computed the rate ' +
-            'against the tax registrations on Aglyn’s platform account, and ' +
-            'Aglyn holds what was collected.',
+            `against the tax registrations on ${PLATFORM_BRAND_NAME}’s platform ` +
+            `account, and ${PLATFORM_BRAND_NAME} holds what was collected.`,
         },
         {
           key: 'merchantManual',
@@ -239,7 +241,7 @@ export function StorefrontTaxSummaryCard(props: StorefrontTaxSummaryCardProps) {
         anchor: '#storefront-sales-tax',
         excerpt:
           'What your storefront collected in sales tax, grouped by how each ' +
-          'figure was calculated. Aglyn does not provide tax advice.',
+          `figure was calculated. ${PLATFORM_BRAND_NAME} does not provide tax advice.`,
       })}
       contentGutterX
       contentGutterY
@@ -293,8 +295,12 @@ export function StorefrontTaxSummaryCard(props: StorefrontTaxSummaryCardProps) {
               These figures show what was collected and how each was
               calculated. Who must remit sales tax to a given authority depends
               on the jurisdiction and on marketplace facilitator rules, and
-              Aglyn does not make that determination for you.{' '}
-              <strong>Aglyn does not provide tax advice.</strong> Please
+              {PLATFORM_BRAND_NAME} does not make that determination for you.
+              {' '}
+              <strong>
+                {PLATFORM_BRAND_NAME} does not provide tax advice.
+              </strong>{' '}
+              Please
               confirm your obligations with a qualified tax professional.
             </Alert>
 

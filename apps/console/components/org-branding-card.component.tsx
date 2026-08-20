@@ -21,6 +21,7 @@ import {
   checkEntitlement,
   resolveBrandingProfile,
 } from '@aglyn/aglyn'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Alert, Box, Button, Stack, TextField, Typography } from '@mui/material'
@@ -201,7 +202,7 @@ export function OrgBrandingCard() {
             placeholder="No support link is shown"
             value={draft.supportUrl}
             onChange={(event) => set('supportUrl')(event.target.value)}
-            helperText="Linked from branded surfaces and email footers. Leave it blank and no support link appears at all — your customers are never sent to Aglyn."
+            helperText={`Linked from branded surfaces and email footers. Leave it blank and no support link appears at all — your customers are never sent to ${PLATFORM_BRAND_NAME}.`}
           />
           <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
             <Box
