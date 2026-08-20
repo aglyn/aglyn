@@ -123,6 +123,15 @@ follow, and nothing in the code that does it for you. Until that is settled, the
 only correct action a staff member can take on a `csam` report is preserve,
 suppress, and escalate to Zach — do not improvise a filing, and do not assume
 someone else has already made one.
+
+The public form no longer implies otherwise (AGL-2045). Its `csam` hint used to
+read *"Reported to the authorities and handled outside the normal queue"*, which
+was half true and dangerous in the false half: a reporter who believes the
+filing is done may not make one, so the sentence could **replace** a real
+CyberTipline report. It now describes only the handling — urgent, out of the
+normal queue, escalated to the operator — and tells the reporter to file with
+NCMEC at `report.cybertip.org` themselves. Assume every reporter has done that
+and that we have not.
 :::
 
 ## Which lever answers which report {#which-lever}
@@ -230,18 +239,26 @@ usually quarantining the specific asset rather than locking the site.
 **The site owner has a right to counter-notice.** That path now exists — see
 [Counter-notices](#counter-notices) below.
 
-:::danger The designated agent is still not filed
-The counter-notice path and the repeat-infringer policy are built (AGL-1983).
-**The registration is not.**
+:::warning The agent is filed. The publication half is not.
+**Registered.** Copyright Office designated-agent record `DMCA-1038349`, active
+since **2026-08-18**, next renewal **2029-08-18**. Agent: *Copyright Compliance
+Department*, `dmca@aglyn.com`, `512-222-8232`, c/o Northwest Registered Agent,
+LLC., 5900 Balcones Drive STE 100, Austin, TX 78731. Earlier text on this page
+and on AGL-1618 said no filing existed; that was corrected 2026-08-19.
 
-§512(c)(2) makes registering a designated agent with the U.S. Copyright Office a
-**precondition** of the safe harbour, not a formality. Until that filing is made
-and renewed, a provider does not get the limitation on liability at all, however
-well it handles notices.
+**What is still outstanding is publication, and it is a real condition, not
+paperwork.** §512(c)(2) requires those same four details — name, address,
+*phone*, email — to be available to the public through the service, and
+§512(i)(1)(A) conditions the entire safe harbour on having informed subscribers
+of the repeat-infringer policy. Neither is on `/legal/dmca` yet (AGL-2035,
+AGL-2007), and `/legal/dmca` is besigner-published content, so closing them is a
+publication pass rather than a repo edit.
 
-So: handle notices by the process below because it is right and because it will
-matter later — not because a legal protection is already in place. Do not tell a
-reporter or a customer that we are operating inside the safe harbour.
+Two things follow for you. **Details on the filing and details on the page must
+match** — if you are ever asked to correct one, correct both. And until the
+publication lands, **still do not tell a reporter or a customer that we are
+operating inside the safe harbour**: the registration is necessary and is not
+sufficient.
 :::
 
 ## Counter-notices — the put-back {#counter-notices}
@@ -408,10 +425,16 @@ incident.
   to `/api/report-abuse`; the address printed on the form is
   `support@aglyn.com`.
 - **No NCMEC mechanics.** See [CSAM](#csam) — preserve, suppress, escalate.
-- **No designated agent is filed with the U.S. Copyright Office.** The
-  counter-notice path and the repeat-infringer policy are built; the
-  registration that is a *precondition* of the safe harbour is not. See [the
-  DMCA path](#dmca).
+  Still true, and the public form now says so by omission rather than
+  claiming the opposite (AGL-2045). Building a real reporting path —
+  registered CyberTipline account, the §2258A duties that attach with it,
+  and retention — is a decision for Zach, not something to improvise on a
+  live report.
+- **The designated agent is filed; the required publication is not.** The
+  registration is live (`DMCA-1038349`, active 2026-08-18). What is missing is
+  the §512(c)(2) publication of the agent's four details and the §512(i)
+  repeat-infringer policy text on `/legal/dmca` — AGL-2035 and AGL-2007, both a
+  besigner publication pass. See [the DMCA path](#dmca).
 - **Forwarding a counter-notice is a manual send.** The queue records that you
   forwarded it and schedules the put-back; it does not email the complainant for
   you. You send the copy — including the subscriber's name, address and phone,

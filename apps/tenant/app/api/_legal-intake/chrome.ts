@@ -47,6 +47,7 @@
 import {
   OPERATOR_CONTACT_UNSET,
   operatorContactLine,
+  operatorDmcaAgent,
   operatorIdentity,
 } from '@aglyn/aglyn/server'
 
@@ -239,6 +240,77 @@ export const NO_CHANNEL_ADVICE =
  * needs.
  */
 export const EXAMPLE_URL = 'https://example.com/page'
+
+/**
+ * The §512(c)(2) designated-agent block, or `''` when none is configured.
+ *
+ * ## Why this exists (AGL-2035, AGL-2007)
+ *
+ * §512(c)(2) does not merely require a provider to *have* a designated agent.
+ * It requires the agent's **"name, address, phone number, and electronic mail
+ * address"** to be *"available to the public through its service, including on
+ * its website in a location accessible to the public"* — and 37 CFR 201.38
+ * repeats the duty. Registering with the Copyright Office and publishing are
+ * two separate obligations; doing one does not discharge the other.
+ *
+ * AGL-2016 built `operatorDmcaAgent()` and every `NEXT_PUBLIC_OPERATOR_DMCA_
+ * AGENT_*` variable behind it — and then nothing in the product read it.
+ * Configuration that no surface renders publishes nothing, so the statutory
+ * publication duty was unmet on every deployment however carefully the
+ * operator filled the values in. This is the reader.
+ *
+ * The primary surface is still the operator's own Copyright/DMCA policy page,
+ * which on our install is besigner-published content and not in this repo.
+ * This block is the second surface and the one that matters operationally: it
+ * sits on the page a copyright holder is already looking at while composing
+ * the notice, so they can address it correctly without hunting for a policy
+ * page first.
+ *
+ * ## What is deliberately conditional
+ *
+ * * **Nothing renders at all** when name or address is unset. A block naming
+ *   a mailbox with no legal person or no physical address behind it is not a
+ *   designation, and an empty heading reads as one.
+ * * **The Copyright Office sentence renders only from `registered`**, never
+ *   inferred from the block being filled in. An operator who entered an agent
+ *   so their form has a name on it has not thereby claimed a federal
+ *   registration, and the product must not upgrade their configuration into a
+ *   legal assertion on their behalf. Same rule AGL-2016 set for the claim.
+ * * **A missing phone or email omits that line** rather than printing a
+ *   placeholder. Note that an operator who omits either has *not* satisfied
+ *   §512(c)(2), which enumerates all four; the product cannot invent the value
+ *   and will not pretend the omission is fine. `developers/self-hosting.md`
+ *   says so where an operator setting these will read it.
+ */
+export function designatedAgentHtml(): string {
+  const agent = operatorDmcaAgent()
+  if (!agent) return ''
+  // Plain paragraphs rather than a `<dl>`: the shared stylesheet has no
+  // definition-list rules, and `legal-intake-chrome.spec.ts` asserts the two
+  // forms render a byte-identical stylesheet, so a block that needs new CSS to
+  // look right is a block that invites a local override in one route only.
+  const line = (label: string, value: string | null): string =>
+    value
+      ? `<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</p>`
+      : ''
+  const email = agent.email
+    ? `<p><strong>Email:</strong> <a href="mailto:${escapeHtml(
+        agent.email,
+      )}">${escapeHtml(agent.email)}</a></p>`
+    : ''
+  const registered = agent.registered
+    ? `<p class="hint">This agent is registered with the U.S. Copyright Office
+    under 17 U.S.C. §512(c)(2). The details above are the details on file.</p>`
+    : ''
+  return `<div class="note">
+  <p><strong>Designated agent for copyright notices</strong></p>
+  ${line('Agent', agent.name)}
+  ${line('Address', agent.address)}
+  ${line('Telephone', agent.phone)}
+  ${email}
+  ${registered}
+</div>`
+}
 
 /** An HTML response with the no-store/noindex headers both intakes need. */
 export const html = (body: string, status = 200): Response =>

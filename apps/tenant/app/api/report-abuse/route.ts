@@ -102,6 +102,7 @@ import {
   clientIp,
   contactHtml,
   contactText,
+  designatedAgentHtml,
   documentHtml,
   escapeHtml,
   EXAMPLE_URL,
@@ -208,6 +209,7 @@ service.</div>
     <p class="hint">Leave these blank unless you chose “Copyright
     infringement (DMCA)”. A copyright notice is a legal statement and cannot be
     anonymous.</p>
+    ${designatedAgentHtml()}
     <div class="field">
       <label for="dmcaWork">The work being infringed</label>
       <textarea id="dmcaWork" name="dmcaWork"

@@ -154,6 +154,19 @@ product claims nothing, and `NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED` must
 be exactly `true` before anything states a registration. Naming an agent never
 implies one.
 
+**Registering is only half the duty.** §512(c)(2) also requires the agent's
+name, address, **phone number** and email to be *available to the public
+through your service* — a separate obligation the Copyright Office filing does
+not discharge. Set all four (`_NAME`, `_ADDRESS`, `_PHONE`, `_EMAIL`) and the
+public abuse-report form publishes them where a copyright holder composing a
+notice will see them. `_NAME` and `_ADDRESS` are what gate the block: without
+both, nothing renders, because a mailbox with no legal person or no physical
+address behind it is not a designation. Omitting `_PHONE` or `_EMAIL` leaves
+that line out rather than inventing one — and leaves you short of §512(c)(2),
+which enumerates all four. Publishing the same details on your own copyright
+policy page is still yours to do; the form is a second surface, not a
+substitute.
+
 ## Which addresses this install calls its own {#addresses}
 
 The operator identity above says who you are. This section is about where your

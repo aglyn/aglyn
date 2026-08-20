@@ -89,8 +89,13 @@ export const STRIKE_LEDGER_SUBCOLLECTION = 'dmcaStrikes'
  * Strikes at which each consequence begins.
  *
  * Three is the termination threshold, which is the number the phrase "repeat
- * infringer" is conventionally read against and the number our published
- * policy will state. The two below it exist so termination is never the first
+ * infringer" is conventionally read against and the number the operator's own
+ * published repeat-infringer policy has to state — §512(i)(1)(A) conditions the
+ * whole safe harbour on subscribers having been *informed* of the policy, so a
+ * threshold this ledger enforces silently earns nothing (AGL-2044, AGL-2007).
+ * On a self-host install that policy is the operator's document, not ours: they
+ * inherit a working ledger and owe their own text. The two below it exist so
+ * termination is never the first
  * thing a customer hears about a problem: a subscriber who does not know they
  * are on a strike cannot correct their behaviour, and a policy that only
  * speaks at the end is one a court can call unreasonable in its
