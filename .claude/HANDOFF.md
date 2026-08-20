@@ -1,4 +1,46 @@
-# HANDOFF — 2026-08-19. **v1.0.0-beta.3 IS PROMOTED, DEPLOYED AND TAGGED.**
+# HANDOFF
+
+## STATE — 2026-08-20 01:30
+
+**Production: `06e98a9e9`, tagged `v1.0.0-beta.6`, deploy-verified.**
+console + tenant `=HEAD` and serving; docs + plugins path-current (zero files
+under their paths in the range).
+
+`v1.0.0-beta.5` (`f2bac3cd1`) merged and **never served** — both production
+builds errored on a misplaced `'use client'`. It is deliberately UNTAGGED. See
+[[project_versioning_scheme]].
+
+### What shipped in the two promotions
+- beta.5: 88 commits / 119 issues. Rules + indexes deployed from the promoted
+  SHA; `check:rules-drift` clean on all three rulesets, `check:index-drift`
+  46/46 composite + 24/24 overrides.
+- beta.6: 8 commits — the build fix (`2bf0acbab`), the directive guard
+  (`993b92554`), and the Dependabot batch (eslint 9→10, dev tools, config).
+
+### ⚑ THE GATE NOW OWES FOUR THINGS
+`typecheck` · guards/lint · `test` · **`nx build console --prod` + `nx build
+tenant --prod`**. beta.5 went green on typecheck + 40 guard steps + 13,957
+tests while the app did not compile. New guard:
+`libs/aglyn/src/lib/app-utils/use-client-directive-first.spec.ts`.
+
+### Backlog audit (full write-up on AGL-2193)
+- Backlog **229**; `launch-blocker` still open **31** (22 backlog + 9 elsewhere).
+- **62 issues moved to Done** this pass, 53 of them via
+  `check:shipped-not-closed --deployed`.
+- ~18 of the 31 need Zach (legal filings, pricing/tax decisions, dashboards);
+  ~13 are agent-runnable.
+- **Zach froze new issue creation.** Fix and record on the existing issue; do
+  not file.
+
+### Owed / open
+- AGL-2367 — `orders.createdAtMs` collection-group index is in NO index file;
+  the AGL-2358 stock reconciler cannot run. Not covered by a clean drift run.
+- `storefrontTaxCollected (hostId, paidAt)` deployed, was still BUILDING at last
+  check — re-read before trusting the merchant tax card.
+- Dependabot agent holding PRs 870, 880, 883, 884. It has been told main is clear.
+
+---
+
 
 ## State
 
