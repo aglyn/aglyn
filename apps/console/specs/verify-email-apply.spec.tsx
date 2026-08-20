@@ -33,7 +33,7 @@
  *     state, instead of a success-shaped redirect.
  */
 
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import VerifyEmail from '../app/(auth)/verify-email/page'
 import AuthenticatingLayout from '../components/layouts/authenticating.layout'
@@ -43,6 +43,13 @@ const mockReplace = jest.fn()
 const mockPush = jest.fn()
 const mockAssign = jest.fn()
 const mockPushContinued = jest.fn()
+
+/**
+ * The raw `continue` value on the URL (AGL-1730). Deliberately UNFILTERED —
+ * the hook's own safety predicate is bypassed here so the page's fallback is
+ * the thing under test, not the hook's.
+ */
+let mockContinueUrl = ''
 
 /** What the auth instance holds (the BROWSER's session, not the code's). */
 let mockCurrentUser: Record<string, unknown> | null = null
@@ -83,9 +90,14 @@ jest.mock(
 )
 jest.mock('@aglyn/shared-ui-theme', () => ({ mergeSxProps: () => ({}) }))
 jest.mock('@aglyn/aglyn', () => ({ parseOnboardingPlanIntent: () => null }))
+// The hooks are stubbed, but `isSafeContinueUrl` is the REAL predicate: the
+// open-redirect refusal is one of the things under test here, and a hand-rolled
+// double of it would fabricate a green.
 jest.mock('@aglyn/shared-util-next', () => ({
+  ...jest.requireActual('@aglyn/shared-util-next'),
   continueParam: (value: string) => `continue=${value}`,
   useContinueUrl: () => ['', '', mockPushContinued],
+  useContinueUrlDecoded: () => [mockContinueUrl, mockPushContinued],
 }))
 // The navigation seam — jsdom's `location.assign` is read-only, so the page
 // hard-navigates through this module precisely so specs can observe it.
@@ -136,6 +148,7 @@ beforeEach(() => {
   jest.clearAllMocks()
   mockCurrentUser = null
   mockSigninCheck = { status: 'loading' }
+  mockContinueUrl = ''
   setLocation('?mode=verifyEmail&oobCode=CODE123')
   // The auto-send effect posts to /api/auth/send-verification once the page
   // settles into the signed-in-unverified state.
@@ -251,6 +264,130 @@ describe('AGL-1524 · the apply owns the page while a code is present', () => {
     await flush()
 
     expect(mockReplace).toHaveBeenCalledWith('/signin?verified=1')
+  })
+})
+
+describe('AGL-1730 · a verified account lands where it was sent from', () => {
+  const signedInUnverified = () => {
+    const sessionUser = makeUser(false)
+    mockCurrentUser = sessionUser
+    mockSigninCheck = {
+      status: 'success',
+      data: { signedIn: true, user: sessionUser },
+    }
+    return sessionUser
+  }
+
+  it('the applied code lands on the continue destination, not /', async () => {
+    mockContinueUrl = '/acme/billing?plan=pro&interval=year'
+    signedInUnverified()
+    mockApplyActionCode.mockResolvedValue(undefined)
+
+    render(<VerifyEmail />)
+    await flush()
+
+    expect(mockAssign).toHaveBeenCalledWith(
+      '/acme/billing?plan=pro&interval=year',
+    )
+  })
+
+  it('an unsafe continue value falls back to / (never an open redirect)', async () => {
+    mockContinueUrl = 'https://evil.example.com/harvest'
+    signedInUnverified()
+    mockApplyActionCode.mockResolvedValue(undefined)
+
+    render(<VerifyEmail />)
+    await flush()
+
+    expect(mockAssign).toHaveBeenCalledWith('/')
+  })
+
+  it('a continue pointing back at the auth wall falls back to / (no loop)', async () => {
+    // `/verify-email` as the destination is an address-bar loop: the page
+    // re-mounts, reads the same continue, and hard-navigates to itself again.
+    mockContinueUrl = '/verify-email?continue=%2Fverify-email'
+    signedInUnverified()
+    mockApplyActionCode.mockResolvedValue(undefined)
+
+    render(<VerifyEmail />)
+    await flush()
+
+    expect(mockAssign).toHaveBeenCalledWith('/')
+  })
+
+  it('the “I’ve verified” button honours continue', async () => {
+    setLocation('?continue=%2Facme%2Fbilling')
+    mockContinueUrl = '/acme/billing'
+    const sessionUser = signedInUnverified()
+    // Verified in the other tab: the reload picks it up.
+    sessionUser.reload = jest.fn(async () => {
+      sessionUser.emailVerified = true
+      return undefined
+    })
+
+    render(<VerifyEmail />)
+    await flush()
+
+    fireEvent.click(screen.getByText(/I’ve verified/))
+    await flush()
+
+    expect(mockAssign).toHaveBeenCalledWith('/acme/billing')
+  })
+
+  it('the alreadyVerified resend answer honours continue', async () => {
+    setLocation('?continue=%2Facme%2Fbilling')
+    mockContinueUrl = '/acme/billing'
+    signedInUnverified()
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ alreadyVerified: true }),
+    })) as unknown as typeof fetch
+
+    render(<VerifyEmail />)
+    await flush()
+
+    expect(mockAssign).toHaveBeenCalledWith('/acme/billing')
+  })
+
+  it('a verified session that should not be here honours continue', async () => {
+    setLocation('?continue=%2Facme%2Fbilling')
+    mockContinueUrl = '/acme/billing'
+    const sessionUser = makeUser(true)
+    mockCurrentUser = sessionUser
+    mockSigninCheck = {
+      status: 'success',
+      data: { signedIn: true, user: sessionUser },
+    }
+
+    render(<VerifyEmail />)
+    await flush()
+
+    expect(mockAssign).toHaveBeenCalledWith('/acme/billing')
+  })
+
+  it('a continue value does NOT unhold the mid-apply redirect (AGL-1524 stands)', async () => {
+    mockContinueUrl = '/acme/billing'
+    const sessionUser = makeUser(true)
+    mockCurrentUser = sessionUser
+    mockSigninCheck = {
+      status: 'success',
+      data: { signedIn: true, user: sessionUser },
+    }
+    let resolveApply!: () => void
+    mockApplyActionCode.mockImplementation(
+      () => new Promise<void>((resolve) => (resolveApply = resolve)),
+    )
+
+    render(<VerifyEmail />)
+    await flush()
+
+    expect(mockAssign).not.toHaveBeenCalled()
+    expect(sessionUser.getIdToken).not.toHaveBeenCalled()
+
+    await act(async () => resolveApply())
+    await flush()
+    expect(mockAssign).toHaveBeenCalledWith('/acme/billing')
   })
 })
 
