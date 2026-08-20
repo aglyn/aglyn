@@ -16,6 +16,7 @@
  */
 
 import { decodeStoredNodes } from '@aglyn/aglyn/server'
+import { TENANT_EMAILS } from '@aglyn/shared-util-email'
 
 /**
  * Where an asset is used (AGL-176/AGL-845/AGL-1413).
@@ -58,6 +59,8 @@ export type MediaReferenceKind =
   | 'entry'
   | 'component'
   | 'site'
+  /** A site's own transactional email template (AGL-1867). */
+  | 'email'
 
 /** One place an asset is referenced from. */
 export interface MediaReference {
@@ -147,7 +150,55 @@ export interface MediaScanOptions {
  */
 export const HOSTS_PER_SCAN = 25
 
-/** Screens, layouts or components read per site. Mirrors `where-used`. */
+/**
+ * The host subcollections Pass 1 walks, and the row kind each produces.
+ *
+ * `emailTemplates` joined them for AGL-1867. It fits the existing machinery
+ * exactly — a parent document holding a `versionId`, with the node tree on
+ * `…/versions/{versionId}` — so it inherits the version passes, the read
+ * budget and the coverage flag rather than needing a pass of its own. It is
+ * also the cheapest member by a wide margin: the catalog is code-defined and
+ * fixed (`TENANT_EMAILS`), and a template document only exists once somebody
+ * has pressed Design, so most sites have none at all.
+ *
+ * ## What is still NOT here, stated rather than papered over
+ *
+ * Plugin-owned documents — the other half of AGL-1867 — are not in this list
+ * and could not honestly be added to it by hand. They are ordinary host
+ * subcollections with no namespace, no prefix and no registry: neither
+ * `ConsoleExtension` nor `PluginManifest` declares the collections a plugin
+ * writes, and a sweep of the repo turns up 83 candidate names of which many
+ * are not host-scoped at all. `host-subcollection-write-deny-coverage.spec.ts`
+ * made this argument first and it still holds — "a hand-written classification
+ * of all of them would be a large list of guesses dressed as decisions, and
+ * the first stale entry is where the next hole hides."
+ *
+ * The gap is real and not theoretical: a commerce product carries `imageUrl`
+ * and `mediaUrls`, so a product photo used nowhere else still reports as
+ * unused today. Closing it properly needs a DECLARED registry — plugins
+ * naming the collections they own, enforced at build time the way the
+ * deny-coverage guard is — which is a schema change rather than a scan
+ * change. Until that exists the delete confirmation names this blind spot in
+ * words instead of implying it away; see `media-usage-copy.ts`.
+ */
+const SCANNED_HOST_COLLECTIONS = [
+  'screens',
+  'layouts',
+  'components',
+  'emailTemplates',
+] as const
+
+const HOST_COLLECTION_KIND: Record<
+  (typeof SCANNED_HOST_COLLECTIONS)[number],
+  Extract<MediaReferenceKind, 'screen' | 'layout' | 'component' | 'email'>
+> = {
+  screens: 'screen',
+  layouts: 'layout',
+  components: 'component',
+  emailTemplates: 'email',
+}
+
+/** Screens, layouts, components or email templates read per site. */
 const DOCS_PER_COLLECTION = 200
 
 /**
@@ -286,6 +337,26 @@ export function referencingFieldPath(
 const displayNameOf = (snapshot: FirebaseFirestore.DocumentSnapshot): string =>
   String(snapshot.get('displayName') ?? snapshot.get('name') ?? snapshot.id)
 
+/**
+ * Catalog name for an email template id (AGL-1867).
+ *
+ * An email template document is keyed by its catalog key and carries no
+ * `displayName`, so `displayNameOf` would land on the raw id — `abandoned-cart`
+ * where the console everywhere else says "Abandoned cart". The catalog is
+ * code-defined and fixed, so this is a lookup rather than a read. A key with
+ * no catalog entry falls back to the id rather than being hidden: a template
+ * for an email the catalog has since dropped still references the asset.
+ */
+const emailTemplateName = (key: string): string =>
+  TENANT_EMAILS.find((entry) => entry.key === key)?.name ?? key
+
+/** The name a reference row shows, by kind. */
+const rowNameOf = (
+  kind: MediaReferenceKind,
+  snapshot: FirebaseFirestore.DocumentSnapshot,
+): string =>
+  kind === 'email' ? emailTemplateName(snapshot.id) : displayNameOf(snapshot)
+
 /** Slice an array into fixed-size chunks so a batch can be interrupted. */
 function chunked<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = []
@@ -347,11 +418,14 @@ export async function scanMediaReferences(
     }
   }
 
-  /** A screen/layout/component still owing version reads. */
+  /** A screen/layout/component/email template still owing version reads. */
   interface PendingParent {
     host: MediaScanHost
     parent: FirebaseFirestore.QueryDocumentSnapshot
-    kind: Extract<MediaReferenceKind, 'screen' | 'layout' | 'component'>
+    kind: Extract<
+      MediaReferenceKind,
+      'screen' | 'layout' | 'component' | 'email'
+    >
     liveVersionId?: string
     /** Already reported, so no version of it needs reading. */
     settled: boolean
@@ -367,7 +441,7 @@ export async function scanMediaReferences(
     references.push({
       kind: item.kind,
       id: item.parent.id,
-      name: displayNameOf(item.parent),
+      name: rowNameOf(item.kind, item.parent),
       hostId: item.host.id,
       hostSubdomain: item.host.subdomain,
       versionId,
@@ -377,7 +451,7 @@ export async function scanMediaReferences(
 
   // ── Pass 1: the documents, and the entries ─────────────────────────────
   for (const host of hosts.slice(0, HOSTS_PER_SCAN)) {
-    for (const collectionName of ['screens', 'layouts', 'components'] as const) {
+    for (const collectionName of SCANNED_HOST_COLLECTIONS) {
       if (!budget.open) {
         liveTruncated = true
         break
@@ -391,12 +465,7 @@ export async function scanMediaReferences(
         .get()
       budget.charge(page.size)
       if (page.size > DOCS_PER_COLLECTION) liveTruncated = true
-      const kind =
-        collectionName === 'screens'
-          ? 'screen'
-          : collectionName === 'layouts'
-            ? 'layout'
-            : 'component'
+      const kind = HOST_COLLECTION_KIND[collectionName]
 
       for (const parent of page.docs.slice(0, DOCS_PER_COLLECTION)) {
         if (parent.get('deletedAt')) continue
@@ -422,7 +491,7 @@ export async function scanMediaReferences(
           references.push({
             kind,
             id: parent.id,
-            name: displayNameOf(parent),
+            name: rowNameOf(kind, parent),
             hostId: host.id,
             hostSubdomain: host.subdomain,
             ...(liveVersionId ? { versionId: liveVersionId, live: true } : {}),

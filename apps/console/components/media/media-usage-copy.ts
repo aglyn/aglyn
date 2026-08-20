@@ -85,6 +85,33 @@ export function mediaUsageAssurance(
   return scan.coverage === 'published' ? 'none-published' : 'none'
 }
 
+/**
+ * The surfaces the scan actually reads, named in the author's words.
+ *
+ * Kept as one constant because two sentences state it and they drifted apart
+ * once already (AGL-1413). `email` joined the list in AGL-1867.
+ */
+export const SCANNED_SURFACES =
+  'page, layout, component, email, site setting, or content entry'
+
+/**
+ * The part of a site this scan still cannot see (AGL-1867).
+ *
+ * Plugin-owned documents are ordinary host subcollections with nothing
+ * declaring them, so they are outside the corpus and cannot be brought in by
+ * a hand-written list — see the note on `SCANNED_HOST_COLLECTIONS` in
+ * `scan-media-references.ts`. The gap is not hypothetical: a commerce product
+ * carries `imageUrl` and `mediaUrls`, so a product photo used nowhere else
+ * comes back with an empty result today.
+ *
+ * That makes this sentence load-bearing rather than decorative. `full`
+ * coverage means every document the scan KNOWS ABOUT was read, and until the
+ * corpus is complete the difference between that and "nothing uses it" has to
+ * be said out loud — the same rule the coverage flag itself exists to keep.
+ */
+export const PLUGIN_BLIND_SPOT =
+  'Plugin content, such as products, is outside this check.'
+
 /** The drawer's "Used on" panel, when the scan found nothing. */
 export function usagePanelEmptyMessage(coverage: MediaScanCoverage): string {
   switch (mediaUsageAssurance({ coverage, count: 0 })) {
@@ -96,13 +123,10 @@ export function usagePanelEmptyMessage(coverage: MediaScanCoverage): string {
     case 'none-published':
       return (
         'Nothing published uses this file. Older and unpublished versions ' +
-        'were not all checked.'
+        `were not all checked. ${PLUGIN_BLIND_SPOT}`
       )
     default:
-      return (
-        'Not used by any page, layout, component, site setting, or content ' +
-        'entry.'
-      )
+      return `Not used by any ${SCANNED_SURFACES}. ${PLUGIN_BLIND_SPOT}`
   }
 }
 
@@ -137,12 +161,11 @@ export function deleteConfirmationNote(
     case 'none-published':
       return (
         ' Nothing published uses it. Older and unpublished versions were not ' +
-        'all checked.'
+        `all checked. ${PLUGIN_BLIND_SPOT}`
       )
     default:
-      return (
-        ' Nothing on this site uses it — no page, layout, component, site ' +
-        'setting, or content entry.'
-      )
+      // Deliberately NOT "nothing on this site uses it": that sentence
+      // claimed the whole site while the scan reads a known subset of it.
+      return ` Nothing checked uses it — no ${SCANNED_SURFACES}. ${PLUGIN_BLIND_SPOT}`
   }
 }

@@ -313,6 +313,9 @@ beforeEach(() => {
     ['screen-social-png', 'screen-social.png'],
     ['cover-png', 'cover.png'],
     ['orphan-png', 'orphan.png'],
+    ['email-png', 'email-hero.png'],
+    ['email-bytes-png', 'email-packed.png'],
+    ['email-header-png', 'email-header.png'],
   ] as const) {
     seed(`orgs/${ORG_ID}/media`, id, {
       fileName,
@@ -376,6 +379,45 @@ beforeEach(() => {
   })
   seed(`hosts/${HOST_ID}/components/component-feature/versions`, 'feature-live', {
     nodes: compressedNodes(nodesReferencing('mockup-png')),
+  })
+
+  // ── Email templates (AGL-1867) ─────────────────────────────────────────
+  // A site's transactional emails are authored in the besigner and stored at
+  // `hosts/{h}/emailTemplates/{key}`, with the tree on the version. An image
+  // used ONLY here reported as unused, and the panel is what an author reads
+  // immediately before deleting it.
+  //
+  // Stored as a PLAIN MAP, which is the production form and is NOT what the
+  // issue assumed: `host-email-render.ts` states it outright, and the email
+  // besigner's save is a bare `setDoc` with no converter — unlike a screen
+  // version, which is msgpack bytes. So the plain map is the real positive
+  // control here, and the compressed sibling below is the future-proofing.
+  seed(`hosts/${HOST_ID}/emailTemplates`, 'order-receipt', {
+    templateKey: 'order-receipt',
+    versionId: 'receipt-live',
+  })
+  seed(`hosts/${HOST_ID}/emailTemplates/order-receipt/versions`, 'receipt-live', {
+    nodes: nodesReferencing('email-png'),
+  })
+  // The same shape stored COMPRESSED. Nothing writes this today, but the
+  // scan decodes through `decodeStoredNodes` either way, so if the email
+  // besigner ever adopts the converter the hole does not quietly reopen.
+  seed(`hosts/${HOST_ID}/emailTemplates`, 'back-in-stock', {
+    templateKey: 'back-in-stock',
+    versionId: 'restock-live',
+  })
+  seed(`hosts/${HOST_ID}/emailTemplates/back-in-stock/versions`, 'restock-live', {
+    nodes: compressedNodes(nodesReferencing('email-bytes-png')),
+  })
+  // A template's own FIELDS, free with the collection read — the same class
+  // of miss as a screen's `seo.image`.
+  seed(`hosts/${HOST_ID}/emailTemplates`, 'gift-card', {
+    templateKey: 'gift-card',
+    versionId: 'gift-live',
+    headerImage: refTo('email-header-png'),
+  })
+  seed(`hosts/${HOST_ID}/emailTemplates/gift-card/versions`, 'gift-live', {
+    nodes: { root: { $id: 'root', componentId: 'container' } },
   })
 
   // ── Content collections ────────────────────────────────────────────────
@@ -471,6 +513,64 @@ describe('media usage scan — the rest of the corpus it never read', () => {
   it('names a screen by its displayName rather than its document id', async () => {
     const result = await scan('hero-png')
     expect(result.references[0].name).toBe('Home')
+  })
+})
+
+/**
+ * AGL-1867. An image used ONLY in one of a site's transactional emails came
+ * back with an empty result — under `full` coverage, which is the one reading
+ * that lets the delete proceed with a clean bill of health.
+ */
+describe('media usage scan — email templates', () => {
+  it('finds an asset used only in an email template', async () => {
+    const result = await scan('email-png')
+    expect(kindsFor(result)).toEqual(['email:order-receipt'])
+    expect(result.references[0]).toMatchObject({
+      versionId: 'receipt-live',
+      live: true,
+    })
+  })
+
+  /**
+   * The panel deep-links by version, and the row has to name the template the
+   * way the console does everywhere else. An email template document carries
+   * no `displayName` — its id IS the catalog key — so without the lookup the
+   * author reads `order-receipt` where the rest of the console says
+   * "Order receipt".
+   */
+  it('names a template from the catalog, not its raw key', async () => {
+    const result = await scan('email-png')
+    expect(result.references[0].name).toBe('Order receipt')
+  })
+
+  /**
+   * Future-proofing rather than a live case: emails are stored as a plain map
+   * today. If the besigner ever adopts the converter that screens use, this
+   * is what stops the gap silently reopening — a scan that stringifies a raw
+   * Buffer produces a haystack containing none of the document's strings.
+   */
+  it('finds one in the compressed storage form too', async () => {
+    const result = await scan('email-bytes-png')
+    expect(kindsFor(result)).toEqual(['email:back-in-stock'])
+  })
+
+  it("finds an asset on the template document's own fields", async () => {
+    const result = await scan('email-header-png')
+    expect(result.references).toEqual([
+      expect.objectContaining({
+        kind: 'email',
+        id: 'gift-card',
+        field: 'headerImage',
+      }),
+    ])
+  })
+
+  /**
+   * The negative control. Without it every assertion above could pass against
+   * a scan that reports every email template for every asset.
+   */
+  it('does not report an email template that holds nothing', async () => {
+    expect(kindsFor(await scan('orphan-png'))).toEqual([])
   })
 })
 

@@ -218,7 +218,7 @@ const SCOPE_CHUNK_SIZE = 100
  * carries what the client needs to deep-link back to the resource.
  */
 interface MediaUsageRef {
-  kind: 'screen' | 'layout' | 'entry' | 'component' | 'site'
+  kind: 'screen' | 'layout' | 'entry' | 'component' | 'site' | 'email'
   id: string
   name: string
   hostId: string
@@ -238,6 +238,7 @@ const REF_KIND_LABEL: Record<MediaUsageRef['kind'], string> = {
   entry: 'Content',
   component: 'Component',
   site: 'Site settings',
+  email: 'Email',
 }
 
 
@@ -2506,6 +2507,17 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           orgSlug,
           host: reference.hostSubdomain,
           layoutId: reference.id,
+        })
+      }
+      // A site email (AGL-1867). The template key is the document id, and
+      // the version the scan matched is the one worth opening — the same
+      // deep-link shape screens get, pointed at the email besigner.
+      if (reference.kind === 'email' && reference.versionId) {
+        return buildRoute(Route.HOST_EMAIL_BESIGNER, {
+          orgSlug,
+          host: reference.hostSubdomain,
+          templateKey: reference.id,
+          versionId: reference.versionId,
         })
       }
       if (reference.kind === 'entry') {

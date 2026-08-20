@@ -36,6 +36,7 @@ import {
   deleteConfirmationNote,
   type MediaScanCoverage,
   mediaUsageAssurance,
+  PLUGIN_BLIND_SPOT,
   provesUnused,
   usagePanelEmptyMessage,
 } from './media-usage-copy'
@@ -111,6 +112,47 @@ describe('the sentences themselves', () => {
       { coverage: 'full' as const, names: ['Home'] },
     ]) {
       expect(deleteConfirmationNote(scan).trim().length).toBeGreaterThan(0)
+    }
+  })
+
+  /**
+   * AGL-1867. `full` coverage means "every document the scan knows about",
+   * and the scan does not know about plugin-owned collections — a commerce
+   * product carries `imageUrl`, so a product photo used nowhere else still
+   * comes back empty. The coverage flag cannot express that, because it
+   * reports how much of the CORPUS was read and this is a hole in the corpus
+   * itself. So the sentence has to carry it.
+   *
+   * Asserted for every empty result including `full`: that is the one an
+   * author acts on, and the one that used to claim the whole site.
+   */
+  it('names the plugin blind spot on every empty result', () => {
+    for (const coverage of COVERAGES) {
+      const panel = usagePanelEmptyMessage(coverage)
+      const confirmation = deleteConfirmationNote({ coverage, names: [] })
+      // `partial`/`unknown` already refuses to claim anything, so it needs no
+      // scope caveat; the two that DO make a claim must carry one.
+      if (coverage === 'partial') continue
+      expect({ coverage, panel }).toEqual({
+        coverage,
+        panel: expect.stringContaining(PLUGIN_BLIND_SPOT),
+      })
+      expect({ coverage, confirmation }).toEqual({
+        coverage,
+        confirmation: expect.stringContaining(PLUGIN_BLIND_SPOT),
+      })
+    }
+  })
+
+  /**
+   * The specific overreach AGL-1867 removed. "Nothing on this site uses it"
+   * is a claim about the site; the scan can only speak for what it read.
+   */
+  it('never claims the whole site', () => {
+    for (const coverage of COVERAGES) {
+      expect(
+        deleteConfirmationNote({ coverage, names: [] }).toLowerCase(),
+      ).not.toContain('nothing on this site')
     }
   })
 
