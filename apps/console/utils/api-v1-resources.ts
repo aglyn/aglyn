@@ -1821,7 +1821,7 @@ async function createMedia(
     const bucket = firebaseAdmin
       .app()
       .storage()
-      .bucket(process.env['NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET'])
+      .bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET)
     await bucket.file(objectPath).save(buffer, {
       contentType,
       metadata: {
