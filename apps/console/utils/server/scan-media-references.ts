@@ -165,21 +165,59 @@ export const HOSTS_PER_SCAN = 25
  *
  * Plugin-owned documents — the other half of AGL-1867 — are not in this list
  * and could not honestly be added to it by hand. They are ordinary host
- * subcollections with no namespace, no prefix and no registry: neither
- * `ConsoleExtension` nor `PluginManifest` declares the collections a plugin
- * writes, and a sweep of the repo turns up 83 candidate names of which many
- * are not host-scoped at all. `host-subcollection-write-deny-coverage.spec.ts`
- * made this argument first and it still holds — "a hand-written classification
- * of all of them would be a large list of guesses dressed as decisions, and
- * the first stale entry is where the next hole hides."
+ * subcollections with no namespace, no prefix and no registry, and a sweep of
+ * the repo turns up 95 distinct collection names of which many are not
+ * host-scoped or not media-bearing at all. How many ARE host-scoped depends
+ * on which path shapes the sweep recognises — three common ones find 37, a
+ * wider sweep finds low fifties — and that a name's own scope cannot be
+ * counted reliably is this problem in miniature.
+ * `host-subcollection-write-deny-coverage.spec.ts` made this argument first
+ * and it still holds — "a hand-written classification of all of them would be
+ * a large list of guesses dressed as decisions, and the first stale entry is
+ * where the next hole hides."
  *
  * The gap is real and not theoretical: a commerce product carries `imageUrl`
- * and `mediaUrls`, so a product photo used nowhere else still reports as
- * unused today. Closing it properly needs a DECLARED registry — plugins
- * naming the collections they own, enforced at build time the way the
- * deny-coverage guard is — which is a schema change rather than a scan
- * change. Until that exists the delete confirmation names this blind spot in
- * words instead of implying it away; see `media-usage-copy.ts`.
+ * and `mediaUrls` (`libs/plugins/commerce/src/lib/server/product.ts`), so a
+ * product photo used nowhere else still reports as unused today.
+ *
+ * ## The registry this needs is NOT the one it sounds like (AGL-1867)
+ *
+ * An earlier draft of this note said the fix was plugins "naming the
+ * collections they own, enforced at build time", a schema change to the
+ * plugin manifest. That would enforce nothing, and the reason is worth
+ * writing down before somebody spends a week on it.
+ *
+ * "Plugin" means two disjoint things here:
+ *
+ *  - a SANDBOXED marketplace plugin, which declares a `PluginManifest` and
+ *    runs in an iframe on a separate origin. It has NO Firestore access at
+ *    all: `plugin-bridge.ts` is the whole protocol and its guest verbs are
+ *    `ready`, `resize`, `event`, `fetch-request` and `error`. There is no
+ *    data verb, and `parseGuestMessage` rejects anything else. A manifest
+ *    field declaring what such a plugin writes would govern the empty set.
+ *  - a FIRST-PARTY feature plugin under `libs/plugins/*` — 13 of them, listed
+ *    in `plugins.config.json` — compiled into the apps and using the ordinary
+ *    Firestore SDKs directly. These are the ones that write media-bearing
+ *    documents, and they declare their UI placement (`ConsoleExtension`) and
+ *    nothing about their data.
+ *
+ * So the blind spot is bounded and enumerable — 13 in-repo plugins, not an
+ * open set of third-party writers — and closing it does NOT need a write
+ * chokepoint (there is none: ~100 client-direct write sites in `libs/plugins`
+ * plus the admin SDK, and a product EDIT deliberately bypasses even the
+ * quota-enforcing resources route). A scanner needs only the READ side: a
+ * declared list of (collection, media-bearing field paths), kept honest the
+ * way the deny-coverage guard is kept honest — a DERIVED sweep of
+ * `libs/plugins/**` for host subcollection writes, checked against a declared
+ * classification, so a new collection fails the build until somebody says
+ * whether it carries media.
+ *
+ * That is tractable, and it is deliberately not being done days before a
+ * feature freeze: the work is classifying several dozen collections one at a
+ * time, on the path behind a delete confirmation, which is the wrong thing to
+ * rush.
+ * Until it exists the delete confirmation names this blind spot in words
+ * instead of implying it away; see `media-usage-copy.ts`.
  */
 const SCANNED_HOST_COLLECTIONS = [
   'screens',

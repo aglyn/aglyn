@@ -100,9 +100,10 @@ export const SCANNED_SURFACES =
  * Plugin-owned documents are ordinary host subcollections with nothing
  * declaring them, so they are outside the corpus and cannot be brought in by
  * a hand-written list — see the note on `SCANNED_HOST_COLLECTIONS` in
- * `scan-media-references.ts`. The gap is not hypothetical: a commerce product
- * carries `imageUrl` and `mediaUrls`, so a product photo used nowhere else
- * comes back with an empty result today.
+ * `scan-media-references.ts`, which also records why the registry that would
+ * close this is a read-side one and not a plugin-manifest field. The gap is
+ * not hypothetical: a commerce product carries `imageUrl` and `mediaUrls`, so
+ * a product photo used nowhere else comes back with an empty result today.
  *
  * That makes this sentence load-bearing rather than decorative. `full`
  * coverage means every document the scan KNOWS ABOUT was read, and until the
