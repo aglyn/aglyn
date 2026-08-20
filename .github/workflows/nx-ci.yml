@@ -3,10 +3,19 @@ name: NX CI
 on:
   push:
     branches:
-      - main
+      # Sept-1 freeze (Zach, 2026-08-20): the push trigger moved from `main`
+      # to `production`. With many agents landing on `main` continuously this
+      # workflow was running dozens of times an hour and every red notified
+      # him, so CI became noise rather than signal. It is a RELEASE gate until
+      # launch: `main` is verified before promotion by `tools/gate.sh`
+      # (AGL-2090), and the promotion PR still runs `pull_request` below.
+      # RESTORE `main` AFTER LAUNCH — until then a break can sit on `main`
+      # unnoticed until someone runs the gate.
+      - production
   pull_request:
 
-# AGL-2378. A push to main is grouped by its own COMMIT, so pushes never
+# AGL-2378. A push (now `production` only — see the trigger above) is grouped
+# by its own COMMIT, so pushes never
 # contend and no commit is left without a verdict — this workflow is the only
 # home of `typecheck`, `docs:typecheck`, the three generated-artifact gates,
 # the revenue-truth spec, `check:app-router-graph` and `nx affected`, so a

@@ -43,7 +43,13 @@ name: Auth domains drift
 on:
   push:
     branches:
-      - main
+      # Sept-1 freeze (Zach, 2026-08-20): `main` removed from the push trigger.
+      # Many agents land on `main` continuously, so this ran constantly and every
+      # red notified him. It is a RELEASE gate until launch. For the drift checks
+      # this is also the more honest baseline: they compare LIVE against
+      # `origin/production`, so a rules/index deploy made ahead of a promotion
+      # reads as drift on `main` while being exactly correct.
+      # RESTORE `main` AFTER LAUNCH.
       - production
     paths:
       - cloud/firebase-auth-domains.json
