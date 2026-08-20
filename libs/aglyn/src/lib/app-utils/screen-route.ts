@@ -255,8 +255,17 @@ export const SCREEN_KIND_ERROR = 'error'
  * bound: at most one exempt screen per error slot. It is `.length` of the slot
  * list rather than a literal `4` so the two can never disagree.
  *
- * Checked at the moment of the STAMP, against the post-state — the AGL-1390
- * shape. The tempting alternative is to enforce "bound to a slot" as an
+ * Checked in TWO places, and the second is the one that makes the number true
+ * (AGL-2093). At the moment of the STAMP, against the post-state — the
+ * AGL-1390 shape, which produces the refusal worth reading because it can name
+ * the four slots. And inside `billableScreenIds` itself, where a live error
+ * screen past this bound is counted as an ordinary page: the stamp is not the
+ * only writer, and a crafted import bundle carrying `kind: 'error'` on all 200
+ * of its screens passed no bound at all until the rule owned one. An exclusion
+ * enforced only at the write paths somebody remembered is the sentence this arc
+ * has now repeated six times.
+ *
+ * The tempting alternative is to enforce "bound to a slot" as an
  * invariant, promoting a screen back to a page whenever its slot is cleared;
  * that is AGL-1390's refuse-the-clear bug wearing a different hat, because
  * promotion raises the count and a host at its cap could then never unassign an

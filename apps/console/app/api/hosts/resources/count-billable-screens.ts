@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-import { SCREEN_KIND_TEMPLATE, screenClaimsToBeAPage } from '@aglyn/aglyn/server'
+import {
+  ERROR_SCREEN_MAX_PER_HOST,
+  SCREEN_KIND_ERROR,
+  SCREEN_KIND_TEMPLATE,
+  screenClaimsToBeAPage,
+} from '@aglyn/aglyn/server'
 
 /** The shape this reads off a Firestore snapshot — kept structural so the
  * unit test doesn't need the admin SDK. */
@@ -174,6 +179,7 @@ export function billableScreenIds(
   routingMap?: ScreenRoutingMap,
 ): Set<string> {
   const routed = new Set(Object.keys(routingMap ?? {}))
+  const exemptErrors = exemptErrorScreenIds(screens)
   const billable = new Set<string>()
   for (const screen of screens) {
     if (screen.kind === SCREEN_KIND_TEMPLATE) continue
@@ -181,9 +187,69 @@ export function billableScreenIds(
       kind: screen.kind as string,
       deletedAt: screen.deletedAt,
     })
-    if (routed.has(screen.id) || claimsToBeAPage) billable.add(screen.id)
+    // A `kind: 'error'` screen OVER the slot bound is a page again (AGL-2093).
+    const exemptionSpent =
+      screen.kind === SCREEN_KIND_ERROR &&
+      screen.deletedAt == null &&
+      !exemptErrors.has(screen.id)
+    if (routed.has(screen.id) || claimsToBeAPage || exemptionSpent) {
+      billable.add(screen.id)
+    }
   }
   return billable
+}
+
+/**
+ * The live `kind: 'error'` screens whose billing exemption actually HOLDS —
+ * at most {@link ERROR_SCREEN_MAX_PER_HOST} of them (AGL-2093).
+ *
+ * ## Why the bound lives here and not at one endpoint
+ *
+ * AGL-2092 introduced the exemption and bounded it at four — one per
+ * `HostErrorScreens` slot — by checking the post-state at the moment
+ * /api/hosts/screens STAMPS the kind. That made the claim true of the assign
+ * route and false end to end, because the stamp is not the only writer:
+ * `SITE_EXPORT_FIELDS.screens` carries `kind`, so a hand-edited bundle could
+ * declare `kind: 'error'` on all 200 of its screens and /api/hosts/import
+ * excluded every one of them from `screensPerHost` — never passing the bound,
+ * never binding a slot. N unbilled screens, one file.
+ *
+ * That is the arc's fifth repetition of one sentence (AGL-1173, AGL-1383,
+ * AGL-1387, AGL-1390, AGL-1400): *an exclusion enforced at a write path is
+ * enforced only at the write paths somebody remembered.* So the bound moves
+ * into the rule the enforcement points SHARE. However a screen came to say
+ * `kind: 'error'` — assign, import, or the next writer — a host gets four
+ * unbilled ones and the rest spend the plan's allowance exactly as pages do.
+ *
+ * ## Which four
+ *
+ * The lowest ids, sorted. The choice is arbitrary and the DETERMINISM is not:
+ * every enforcement point models a post-state by re-running this over a
+ * different row set, and a rule that picked "the first four encountered" would
+ * hand two callers different answers for the same host. The SIZE of the exempt
+ * set never depends on the order — it is `min(live errors, 4)` — so only which
+ * ids a refusal message names can move, never whether one is refused.
+ *
+ * Tombstones are excluded for `nonPageScreenIds`' reason: a cap counting
+ * soft-deleted rows is AGL-1173's bug one cap over, where deleting an error
+ * screen never frees its slot.
+ *
+ * The stamp-time bound in /api/hosts/screens is deliberately KEPT. It is the
+ * better refusal — it names the four slots and arrives before the write — and
+ * this is the backstop under it, so no writer can mint a fifth unbilled error
+ * screen even by a path that never consults it.
+ */
+export function exemptErrorScreenIds(
+  screens: ReadonlyArray<BillableScreenSource>,
+): Set<string> {
+  const live: Array<string> = []
+  for (const screen of screens) {
+    if (screen.kind !== SCREEN_KIND_ERROR) continue
+    if (screen.deletedAt != null) continue
+    live.push(screen.id)
+  }
+  if (live.length <= ERROR_SCREEN_MAX_PER_HOST) return new Set(live)
+  return new Set(live.sort().slice(0, ERROR_SCREEN_MAX_PER_HOST))
 }
 
 /**
@@ -210,6 +276,13 @@ export function billableScreenIds(
  *    outranks the document (AGL-1383), so such a screen is a page somebody is
  *    already paying for; charging it to the infrastructure cap as well would be
  *    counting one document twice. The two sets partition the live screens.
+ *
+ * Taking the complement is also what makes AGL-2093's bound arrive here for
+ * free: an error screen past `ERROR_SCREEN_MAX_PER_HOST` becomes billable
+ * above, so it leaves this set in the same act. The partition holds — every
+ * live screen is in exactly one of the two — and the fifth error screen is
+ * bounded by the PLAN rather than by the flat 5,000, which is the stronger of
+ * the two numbers on every finite tier.
  */
 export function nonPageScreenIds(
   screens: ReadonlyArray<BillableScreenSource>,
