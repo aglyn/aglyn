@@ -355,12 +355,10 @@ Notes that keep these honest:
   each is honest about what it reads; none of them is an error rate, and
   dressing one up as one would be worse than the gap. The unblocking decision
   is a Vercel log drain into GCP Logging: it closes this, closes AGL-1799, and
-  makes every "check the runtime log" instruction in the tree executable. The
-  policy is then a log-based counter on
-  `httpRequest.status >= 500`, threshold to be tuned against a real beta
-  baseline. AGL-1921 carries the fallback design (a first-party *server*-error
-  beacon, the same trick AGL-1538 plays for the browser) for the case where
-  the drain is not bought.
+  makes every "check the runtime log" instruction in the tree executable.
+  **Partly closed since 2026-08-20** by AGL-1921's fallback arm — see the
+  runbook below for what now reaches GCP, what still does not, and the
+  ordered steps that finish it.
 - **Vercel function errors and logs.** The same root cause as the row above,
   from the operator's side: a `console.error` written during an incident is
   gone before anyone reads it. **Upgrade path:** Vercel Pro unlocks log drains
@@ -380,6 +378,85 @@ Notes that keep these honest:
 - **Email delivery** (Resend outages) and **DNS**: no synthetic coverage. Each
   has failed loudly rather than silently so far; revisit if that stops being
   true.
+
+### The server-error runbook (AGL-1921)
+
+**What shipped in code, 2026-08-20.** `onRequestError` in
+`apps/console/instrumentation.ts` and `apps/tenant/instrumentation.ts` — Next's
+own hook for an uncaught error in any render or route handler — reports through
+`reportServerError` into a **new `server-errors` log** in `aglyn-main`, under the
+same admin credential and the same Cloud Logging transport the AGL-1538 client
+beacon uses. Entries carry the `ReportedErrorEvent` `@type`, so Error Reporting
+groups them, *and* they are real log entries a log-match policy can page on.
+
+Three properties worth knowing before you tune anything:
+
+- **A separate log id, on purpose.** `server-errors`, never `client-errors`. The
+  existing `Client error beacon` policy keys on the latter; merging them would
+  make it fire for both and force triage to start by asking which it was.
+- **The route PATTERN is reported, never the resolved path.** A resolved console
+  path carries the org slug and document ids, and this payload leaves our origin
+  for a Google log.
+- **Writes are budgeted at 60/minute per instance**, with a suppression count
+  logged on rollover. The event being watched for is a spike, and a spike is
+  exactly when an unbounded reporter turns one incident into a billing incident
+  on a $20/month budget. The counter only has to cross a threshold, not be exact.
+
+**What it still cannot see, and this is why the issue stays open.** It is a
+fallback, not the fix. It misses an error that kills the process before the
+handler runs, a platform-level 5xx that never reaches our code (a Vercel
+function timeout, an OOM, a cold-start 502), and anything thrown in the edge
+runtime, where firebase-admin cannot be loaded. A log drain sees all of them.
+
+#### Ordered steps — Zach
+
+**No GCP resource was created for this.** Steps 1 and 2 are free and can be done
+today; step 3 onward costs money and is a decision, not a task.
+
+1. **Free, and does the most: an alert policy on the new log.** The beacon is
+   already writing, so this needs no Vercel change at all. In `aglyn-main` →
+   Monitoring → Alerting, create a **log-based alert** on
+
+   ```
+   logName="projects/aglyn-main/logs/server-errors" AND severity>=ERROR
+   ```
+
+   Notify the existing `zach@aglyn.com` channel. Start it as a *log-match*
+   (pages on the first entry) for the beta window — volume is near zero today,
+   so a first-error page is informative rather than noisy — and convert it to a
+   counter with a threshold once a baseline exists. Log-based metrics and alert
+   policies are not separately billed; the log entries themselves fall under the
+   Logging free tier at this volume.
+2. **Free: confirm it can go red.** Do not trust an untested alarm. The AGL-1923
+   beacon heartbeat already proves the credential and transport this path shares
+   — check `/api/health/error-beacon` is green on both deployments, which is the
+   dead-man's switch for server-error reporting too. Then force one real server
+   error on a preview deployment and confirm the entry lands and the policy
+   fires.
+3. **Billable, and the real fix: a Vercel log drain into GCP Logging.**
+   Log drains require **Vercel Pro** (~$20/user/month; tracked as AGL-723,
+   already targeted for mid-September). Once on Pro: Vercel → each of
+   `aglyn-console` and `aglyn-tenant` → Integrations → Log Drains → add a drain
+   to GCP Logging. Verify with `GET /v2/integrations/log-drains`, which returns
+   `[]` on both projects today — that empty array is the current evidence of the
+   gap, so it is also the check that the drain took.
+4. **After the drain, the policy this issue originally specified.** A log-based
+   counter metric on
+
+   ```
+   resource.type="global" AND logName=~"vercel" AND httpRequest.status>=500
+   ```
+
+   with a threshold policy — proposed `> 5` in 5 minutes, `ALIGN_DELTA` /
+   `REDUCE_SUM`, grouped by project. Re-tune against the beta baseline; the
+   point of the beta window is to get one.
+5. **Then reconcile the two.** With the drain live, the drain sees a superset of
+   what the beacon sees, and keeping both would double-page. Keep the beacon —
+   it survives a Vercel outage and a plan downgrade — but demote its policy to
+   the counter form so the drain's policy is the one that pages.
+
+Until step 3 lands, AGL-1921 stays open and this section is the honest statement
+of how much of the server tier is actually watched.
 
 ### Cost and plumbing
 

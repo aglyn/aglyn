@@ -63,3 +63,59 @@ export async function register(): Promise<void> {
     console.error('AGL-1500: boot warm-up failed to start', error)
   }
 }
+
+/**
+ * Server-side error reporting (AGL-1921).
+ *
+ * Until now the entire server tier was outside the alerting system. Eleven
+ * policies over eight uptime checks, and not one could see a server error
+ * rate: they answer "is `/api/health` up", so a route can 500 for every
+ * paying visitor while every check stays green. Server errors lived only in
+ * the Vercel runtime log, which retains ~60 minutes and drains nowhere
+ * (AGL-1799), so there was nothing in `aglyn-main` for a policy to key on.
+ *
+ * `onRequestError` is Next's own hook for exactly this — it fires for an
+ * uncaught error in any render or route handler — so the report is made from
+ * inside the process that failed, with the route pattern Next resolved rather
+ * than one we re-derive. Writing straight to Cloud Logging under the admin
+ * credential, rather than POSTing to our own `/api/errors`, means an incident
+ * that is already breaking our routes does not need one more of them to work.
+ *
+ * This is AGL-1921's FALLBACK arm and does not close the issue. It cannot see
+ * an error that kills the process before the handler runs, or a platform-level
+ * 5xx that never reaches our code. A Vercel log drain sees both and remains
+ * the real fix; `docs/UPTIME_AND_SLA.md` carries the blind spots and the
+ * runbook.
+ *
+ * Same runtime guard as `register`: the edge bundle must never see
+ * firebase-admin, so the import lives inside the `nodejs` branch.
+ */
+export async function onRequestError(
+  error: unknown,
+  request: { path: string; method: string },
+  context: { routePath?: string; routeType?: string },
+): Promise<void> {
+  if (process.env.NEXT_RUNTIME !== 'nodejs') return
+
+  try {
+    const { reportServerError } = await import('@aglyn/tenant-data-admin')
+    const err = error as { message?: unknown; stack?: unknown; digest?: unknown }
+    await reportServerError(
+      {
+        message: typeof err?.message === 'string' ? err.message : String(error),
+        stack: typeof err?.stack === 'string' ? err.stack : undefined,
+        // The PATTERN, never `request.path` — the resolved path carries the
+        // host slug and whatever a visitor typed, and this payload leaves
+        // our origin.
+        route: context.routePath,
+        routeType: context.routeType,
+        method: request.method,
+        digest: typeof err?.digest === 'string' ? err.digest : undefined,
+      },
+      { service: 'tenant-web' },
+    )
+  } catch {
+    // Never throw out of the error hook: this runs while a request is already
+    // failing, and a throw here would replace the real error with this one.
+  }
+}

@@ -232,6 +232,187 @@ export async function reportClientErrors(
 }
 
 /**
+ * The log the SERVER half writes to (AGL-1921).
+ *
+ * DELIBERATELY NOT `client-errors`. The `Client error beacon` policy is a
+ * log-match on that log id, and a server 5xx is a different incident with a
+ * different first move — a browser error is one visitor's broken render, a
+ * 500 rate is every visitor's. Merging the streams would make the existing
+ * policy fire for both and force triage to start by asking which it was.
+ * A sibling log id also lets the counter this whole issue is about key on
+ * server errors ALONE.
+ */
+export const SERVER_ERROR_LOG_ID = 'server-errors'
+
+/**
+ * One server-side error, as `onRequestError` sees it.
+ *
+ * `route` is the route PATTERN (`/[host]/[[...slug]]`), never the resolved
+ * path: the resolved path carries org slugs, document ids and whatever a
+ * visitor typed into a URL, and this payload leaves our origin for a Google
+ * log. The pattern is what you group and alert on anyway.
+ */
+export interface ServerErrorEvent {
+  message: string
+  stack?: string
+  route?: string
+  method?: string
+  routeType?: string
+  digest?: string
+}
+
+/**
+ * Per-instance write budget (AGL-1921).
+ *
+ * The failure this exists to observe is a SPIKE, and a spike is exactly when
+ * an unbounded reporter turns one incident into two — a 500 on a hot path
+ * can run at request rate, and every entry is a billable Logging write on an
+ * account whose whole monitoring budget is $20/month. The budget is per
+ * instance and per minute, so the shape of the spike still reaches Logging
+ * (the counter only needs to cross a threshold, not be exact) while the cost
+ * stays bounded no matter how hard the incident pushes.
+ *
+ * Suppression is REPORTED, never silent: when the window rolls over, one
+ * summary line records how many were dropped. A monitoring path that hides
+ * its own lossiness is the thing this repo keeps finding.
+ */
+const SERVER_ERROR_BUDGET_PER_WINDOW = 60
+const SERVER_ERROR_WINDOW_MS = 60_000
+let serverErrorWindowStartedAt = 0
+let serverErrorsWritten = 0
+let serverErrorsSuppressed = 0
+
+/** What happened to one `reportServerError` call, for tests and callers. */
+export type ServerErrorOutcome = 'written' | 'suppressed' | 'dropped'
+
+/**
+ * Forwards ONE server-side error to Cloud Logging under the admin credential.
+ *
+ * This is AGL-1921's fallback arm, and it is a fallback on purpose: it cannot
+ * see an error that kills the process before the handler runs, nor a
+ * platform-level 5xx that never reaches our code at all. A Vercel log drain
+ * would see both. What this does buy is the case that matters most and is
+ * most likely — our own route handlers and renders throwing — reported
+ * through a transport that already works, on an account we already pay for.
+ * `docs/UPTIME_AND_SLA.md` carries the blind spots in writing, because
+ * partial visibility whose gaps are documented beats none.
+ *
+ * It shares `beaconLoggingTarget` with the client reporter deliberately: that
+ * makes AGL-1923's heartbeat a dead-man's switch for THIS path too. The
+ * failures that would silence server-error reporting — expired key, revoked
+ * `logging.logEntries.create`, exhausted quota — are the same environmental
+ * ones the heartbeat already probes, and it probes them through this exact
+ * credential.
+ *
+ * Fail-soft and never throws: this runs inside `onRequestError`, so throwing
+ * here would turn an observed error into a second one during an incident.
+ */
+export async function reportServerError(
+  event: ServerErrorEvent,
+  options: { service: string },
+): Promise<ServerErrorOutcome> {
+  const message = clampString(event.message, MAX_MESSAGE)
+  if (!message) return 'dropped'
+
+  const now = Date.now()
+  if (now - serverErrorWindowStartedAt >= SERVER_ERROR_WINDOW_MS) {
+    if (serverErrorsSuppressed > 0) {
+      console.warn(
+        JSON.stringify({
+          tag: 'AGL-1921:server-error-beacon',
+          suppressed: serverErrorsSuppressed,
+          written: serverErrorsWritten,
+          windowMs: SERVER_ERROR_WINDOW_MS,
+        }),
+      )
+    }
+    serverErrorWindowStartedAt = now
+    serverErrorsWritten = 0
+    serverErrorsSuppressed = 0
+  }
+  if (serverErrorsWritten >= SERVER_ERROR_BUDGET_PER_WINDOW) {
+    serverErrorsSuppressed += 1
+    return 'suppressed'
+  }
+
+  const target = await beaconLoggingTarget()
+  if (!target) {
+    console.warn(
+      JSON.stringify({ tag: 'AGL-1921:server-error-beacon', drop: 1, reason: 'no-credential' }),
+    )
+    return 'dropped'
+  }
+
+  const stack = clampString(event.stack, MAX_STACK)
+  const hasStack = stack.includes('\n')
+  const version = process.env['VERCEL_GIT_COMMIT_SHA']?.slice(0, 7)
+  try {
+    const response = await fetch('https://logging.googleapis.com/v2/entries:write', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${target.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        logName: `projects/${target.projectId}/logs/${SERVER_ERROR_LOG_ID}`,
+        resource: { type: 'global' },
+        entries: [
+          {
+            severity: 'ERROR',
+            jsonPayload: {
+              '@type':
+                'type.googleapis.com/google.devtools.clouderrorreporting.v1beta1.ReportedErrorEvent',
+              serviceContext: { service: options.service, version },
+              // Same rule as the client half: Error Reporting groups by
+              // parsing `message` as a stack trace, and an event without one
+              // must carry `context.reportLocation` or ingestion drops it.
+              message: hasStack ? stack : message,
+              context: {
+                ...(hasStack
+                  ? {}
+                  : {
+                      reportLocation: {
+                        filePath: clampString(event.route, MAX_URL) || 'unknown',
+                        lineNumber: 0,
+                        functionName: clampString(event.routeType, 32) || 'server',
+                      },
+                    }),
+              },
+              // Outside `serviceContext` so Error Reporting ignores them and
+              // a log-match policy can still filter on them.
+              route: clampString(event.route, MAX_URL) || undefined,
+              method: clampString(event.method, 16) || undefined,
+              digest: clampString(event.digest, 64) || undefined,
+            },
+          },
+        ],
+      }),
+      signal: AbortSignal.timeout(REPORT_TIMEOUT_MS),
+    })
+    if (!response.ok) {
+      console.warn(
+        JSON.stringify({
+          tag: 'AGL-1921:server-error-beacon',
+          status: response.status,
+          drop: 1,
+        }),
+      )
+      return 'dropped'
+    }
+    serverErrorsWritten += 1
+    return 'written'
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        tag: 'AGL-1921:server-error-beacon',
+        transport: String(error).slice(0, 200),
+      }),
+    )
+    return 'dropped'
+  }
+}
+
+/**
  * The log the beacon's heartbeat is written to (AGL-1923).
  *
  * DELIBERATELY NOT `client-errors`. The `Client error beacon` alert policy is
