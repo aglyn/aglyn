@@ -16,6 +16,7 @@
  */
 
 import {
+  COLLECTIONS_MAX_PER_HOST,
   createResourceUid,
   hostCollectionKind,
   pluginRequestFromWeb,
@@ -325,6 +326,27 @@ async function handler(request: Request): Promise<Response> {
 
       const docRef = collectionsRef.doc(id)
       if (action === 'create') {
+        /**
+         * The flat platform cap (AGL-2266), counted inside the transaction
+         * that already owns the slug claim — so it is serialized against a
+         * concurrent create for free, which is the AGL-2231 property this
+         * route happened to have before it had a number to enforce.
+         *
+         * Not `collectionsPerHost`. AGL-1387 declined that as a PLAN
+         * dimension and nothing here re-opens it: no `OrgEntitlements` key,
+         * no variation by plan, nothing on the price list. What it bounds is
+         * infrastructure — it is the other half of
+         * `ENTRIES_MAX_PER_COLLECTION`, because a per-collection entry
+         * ceiling behind an unbounded supply of collections is the same
+         * unbounded store spelled differently.
+         *
+         * ALL READS BEFORE THE WRITE: this is the last read in the body.
+         */
+        const held = (await transaction.get(collectionsRef.count())).data()
+          .count
+        if (held >= COLLECTIONS_MAX_PER_HOST) {
+          return { overCap: true as const }
+        }
         transaction.create(docRef, { ...fields, createdAt: Timestamp.now() })
       } else {
         const existing = await transaction.get(docRef)
@@ -349,6 +371,13 @@ async function handler(request: Request): Promise<Response> {
             ? `Another collection already serves /${slug}`
             : `Another collection already serves /collections/${slug}`,
       }, { status: 409 })
+    }
+    if ('overCap' in result) {
+      return Response.json({
+        error:
+          `This site holds the maximum of ${COLLECTIONS_MAX_PER_HOST} ` +
+          'collections — delete one to make room',
+      }, { status: 403 })
     }
     if ('missing' in result) {
       return Response.json({ error: 'Unknown collection' }, { status: 404 })

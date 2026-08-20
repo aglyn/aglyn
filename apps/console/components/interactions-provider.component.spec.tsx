@@ -47,8 +47,18 @@ jest.mock('./interaction-builder-dialog.component', () => ({
 }))
 
 const buildQueries: Array<() => unknown> = []
+/**
+ * Creating an action/entry is a SERVER call since AGL-2266, so this closed-world
+ * factory has to name the hook or the component throws and every assertion
+ * below reads the crash as the behaviour under test. A `jest.fn` rather than an
+ * inert arrow: these suites are about writes that must NOT happen, and this is
+ * the one write that would now happen somewhere else.
+ */
+const mockCreateResource = jest.fn(async () => ({ id: 'created-id' }))
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
+  useHostResourceApi: () => mockCreateResource,
   useFirestoreCollection: (buildQuery: () => unknown) => {
     buildQueries.push(buildQuery)
     return { data: [], status: 'success', error: undefined }

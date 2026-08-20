@@ -34,7 +34,10 @@ import InteractionBuilderDialog, {
   type InteractionBuilderState,
   PickModeBanner,
 } from './interaction-builder-dialog.component'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useHostResourceApi,
+} from '@aglyn/tenant-feature-instance'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 
 export interface InteractionsProviderProps {
@@ -62,6 +65,9 @@ export interface InteractionsProviderProps {
 export function InteractionsProvider(props: InteractionsProviderProps) {
   const { hostId, screenId, disabled, children } = props
   const firestore = useFirestore()
+  // Action creation is server-owned since AGL-2266 (the cap); every other
+  // action write on this surface stays client-direct.
+  const createResource = useHostResourceApi()
   const { enqueueSnackbar } = useSnackbar()
   const [builder, setBuilder] = useState<InteractionBuilderState | null>(null)
 
@@ -175,8 +181,24 @@ export function InteractionsProvider(props: InteractionsProviderProps) {
               console.error('Preset interaction rejected:', problem, draft)
               continue
             }
+            /**
+             * Server-created since AGL-2266, and this loop is why the cap
+             * had to exist: one preset wires several actions per click, with
+             * nothing bounding how many times a click can happen. The route
+             * counts live rows against `ACTIONS_MAX_PER_HOST` inside the
+             * transaction that writes, so the loop stops at the ceiling
+             * instead of running past it — a refusal here breaks out rather
+             * than reporting a count it did not achieve.
+             */
+            const id = createResourceUid()
+            await createResource({
+              hostId,
+              resource: 'action',
+              id,
+              data: { name: (candidate as any)?.name ?? 'Interaction' },
+            })
             await setDoc(
-              doc(firestore, 'hosts', hostId, 'actions', createResourceUid()),
+              doc(firestore, 'hosts', hostId, 'actions', id),
               {
                 ...candidate,
                 createdAt: Timestamp.now(),
@@ -249,6 +271,7 @@ export function InteractionsProvider(props: InteractionsProviderProps) {
     actionDocs,
     experimentDocs,
     firestore,
+    createResource,
     hostId,
     screenId,
     disabled,

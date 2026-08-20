@@ -93,6 +93,61 @@ export interface CollectionCategory {
 }
 
 /**
+ * How many LIVE entries one content collection may hold (AGL-2266).
+ *
+ * `hosts/{hostId}/collections/{cid}/entries/{eid}` had a DEDICATED rules block
+ * re-granting `create` to any editor, client-direct — deliberately, because the
+ * name-based exclusions on the host catch-all must not reach entries — so it
+ * was the one quota-governed shape under a host with no quota at all. A free
+ * org could mint unbounded Firestore documents from the browser.
+ *
+ * This is a flat PLATFORM cap, not a plan dimension. AGL-1387 declined
+ * `collectionsPerHost` and this does not re-open it: nothing here is priced,
+ * no `OrgEntitlements` key is added, and every plan gets the same number. It is
+ * the `WEBHOOK_MAX_PER_HOST` (AGL-1360) / `NON_PAGE_SCREEN_MAX_PER_HOST`
+ * (AGL-1399) shape, which both issues invented for exactly this: uncapped
+ * infrastructure behind a $0 subscription.
+ *
+ * ## Per COLLECTION, paired with {@link COLLECTIONS_MAX_PER_HOST}
+ *
+ * A per-HOST entry cap would need a count across every collection the host
+ * holds, which is a collection-group read the entry documents carry no `hostId`
+ * to scope. Per collection is one `count()` on the collection the create is
+ * addressed to — the same read every other cap on `/api/hosts/resources`
+ * already pays — and the host is bounded by the PRODUCT of the two numbers,
+ * which is why the sibling cap had to land in the same change. One of the two
+ * alone bounds nothing: unbounded collections each holding 10,000 entries is
+ * the same unbounded store, spelled differently.
+ *
+ * ## Why 10,000
+ *
+ * A blog publishing daily reaches it after twenty-seven years; the largest
+ * content collection in production holds double digits. The failure mode of a
+ * flat cap set too low is blocking real authoring with an error the price list
+ * cannot explain, so it is sized to the heaviest plausible library rather than
+ * to today's data. It also bounds the cost of the console's own listing, which
+ * reads entries with `limit(200)` and would otherwise page through a store with
+ * no ceiling.
+ */
+export const ENTRIES_MAX_PER_COLLECTION = 10000
+
+/**
+ * How many LIVE content collections one host may hold (AGL-2266).
+ *
+ * The other half of the entry bound above, and the reason it means anything.
+ * Collection creation was already server-owned — the rules deny client `create`
+ * and `/api/hosts/collections` claims the slug transactionally (AGL-978) — so
+ * the collection had a WRITER with authority and simply no number to enforce.
+ *
+ * Again a platform cap and not `collectionsPerHost`: AGL-1387 decided
+ * collections are not a thing customers are charged for, and that decision is
+ * untouched. 100 is far past any real site's taxonomy — production's busiest
+ * host has a handful — and short enough that the entries ceiling above
+ * multiplies out to a bounded store rather than an unbounded one.
+ */
+export const COLLECTIONS_MAX_PER_HOST = 100
+
+/**
  * One published content-collection entry as the compose pipeline sees it
  * (AGL-551). Mirrors the tenant's `CollectionEntrySummary` without the
  * Firestore dependency so the expansion stays pure.

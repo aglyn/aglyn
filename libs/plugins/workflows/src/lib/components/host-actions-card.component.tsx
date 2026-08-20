@@ -66,6 +66,7 @@ import { useCallback, useState, useMemo } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
+  useHostResourceApi,
   useOrgDataScope,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
@@ -165,6 +166,9 @@ export function HostActionsCard(props: {
   // instead of offering rows from a path nothing else reads.
   const { scope: dataScope } = useOrgDataScope({ hostId })
   const firestore = useFirestore()
+  // Action creation is server-owned since AGL-2266 (the cap); every other
+  // action write on this surface stays client-direct.
+  const createResource = useHostResourceApi()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
 
@@ -443,6 +447,35 @@ export function HostActionsCard(props: {
        * The guard WRAPS the write — the interaction builder's early return
        * is the shape you can keep while losing the protection.
        */
+      /**
+       * The action DOCUMENT is created by the server (AGL-2266).
+       *
+       * `hosts/{hostId}/actions` was in none of the host catch-all's exclusion
+       * lists, so any editor could create one client-direct on any plan and
+       * nothing counted them. /api/hosts/resources now owns the create and
+       * holds `ACTIONS_MAX_PER_HOST` from a server read.
+       *
+       * Only the create moves, and it writes a SHELL. The merge-set below is
+       * untouched and still carries the whole candidate — trigger, steps,
+       * conditions, the explicit nulls AGL-274/557 depend on — so no field can
+       * be lost to the route's allow-list, and for an existing action this
+       * path does not run at all.
+       */
+      if (!draft.id) {
+        try {
+          await createResource({
+            hostId,
+            resource: 'action',
+            id,
+            data: { name: candidate.name ?? draft.name ?? 'Untitled action' },
+          })
+        } catch (error: any) {
+          return void enqueueSnackbar(
+            error?.message ?? 'Could not create the interaction',
+            { variant: 'error' },
+          )
+        }
+      }
       const verdict = await writeGuardedBySeed(
         {
           subject: 'action',
@@ -498,6 +531,7 @@ export function HostActionsCard(props: {
   }, [
     draft,
     firestore,
+    createResource,
     hostId,
     enqueueSnackbar,
     actionsFromCache,

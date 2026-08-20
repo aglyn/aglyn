@@ -1482,6 +1482,29 @@ service cloud.firestore {
         // did. Checked for these six specifically: the rules file contains no
         // dedicated `match` block for any of the names, so nothing re-grants
         // them one line below.
+        //
+        // `actions` joins CREATE ONLY (AGL-2266), the `formSubmissions`
+        // asymmetry for the `webhooks` reason. It was in NONE of these lists —
+        // the catch-all is permissive by default, so a subcollection nobody
+        // classified is granted — and the import route's own table had already
+        // written down what that meant: "no `RESOURCES` entry and no quota key
+        // anywhere; all three creators write the document client-direct." A
+        // free org could mint unbounded Firestore documents from the browser
+        // against a $0 subscription, which is the AGL-1360 / AGL-1399 shape:
+        // uncapped infrastructure rather than a bypass of anything we sell.
+        // /api/hosts/resources now owns the create and counts live rows
+        // against `ACTIONS_MAX_PER_HOST`.
+        //
+        // Update and delete stay OPEN, and that is the decision rather than an
+        // oversight. The actions card toggles `enabled`, the besigner's
+        // interactions provider flips one in place, and both RETIRE an action
+        // by stamping `deletedAt` — a soft delete, which is a client update.
+        // Following `counters` onto all three lists would break every one of
+        // those surfaces to close nothing: neither operation creates a
+        // document, so neither can raise the count the cap is about. The cap
+        // counts LIVE rows, so the soft delete frees a slot, which is the
+        // property that makes leaving update open safe rather than merely
+        // convenient.
         allow create: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'variables',
@@ -1489,8 +1512,8 @@ service cloud.firestore {
               'locations', 'products', 'components', 'registers', 'installs',
               'templates', 'collections', 'datasets', 'webhooks', 'orders',
               'counters', 'analytics', 'screenAnalytics', 'members',
-              'mediaTombstones', 'formSubmissions', 'carts', 'checkouts',
-              'giftCards', 'stripeTaxRates', 'restockAlerts',
+              'mediaTombstones', 'formSubmissions', 'actions', 'carts',
+              'checkouts', 'giftCards', 'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation']));
         // `templates` is excluded from update as well as create: its
         // dedicated block above freezes `source`, and leaving it here would
@@ -1616,22 +1639,35 @@ service cloud.firestore {
       // `publishedAt` is frozen alongside them because it is what the live
       // listing sorts and filters on.
       //
-      // CREATE stays open to an author, with one condition: the console's
-      // entry editor writes `status: 'draft'` on the create and never names
-      // status again, so a draft create is authoring and a create that
-      // arrives already `published` is a publish wearing a create's clothes —
-      // which is the shape the freeze on update would otherwise hand it. An
-      // absent status defaults to draft, so an author writing no status at
-      // all is admitted.
+      // CREATE is API-ONLY since AGL-2266, and this block is where that had to
+      // be said. The catch-all's name-based exclusions cannot reach entries —
+      // that is the whole reason this dedicated block exists — so entries were
+      // the one quota-governed content shape under a host that no cap could be
+      // attached to, and a free org could mint unbounded Firestore documents
+      // from the browser. `ENTRIES_MAX_PER_COLLECTION` is now counted from a
+      // server read in /api/hosts/resources, paired with
+      // `COLLECTIONS_MAX_PER_HOST` on /api/hosts/collections because either
+      // number alone bounds nothing.
+      //
+      // The draft condition this replaces has NOT been dropped, it has moved
+      // where it cannot be argued with: `status` is off that route's field
+      // allow-list and `'draft'` is stamped server-side, so a create arriving
+      // as `published` is not refused — it is impossible to express. The rule
+      // it enforced still holds on UPDATE below, which is where publishing
+      // actually happens.
+      //
+      // UPDATE stays open, and it is what keeps the entry editor client-direct:
+      // the console's save is a `setDoc(…, { merge: true })`, which is a create
+      // only for the FIRST save. Every later save of the same entry is an
+      // update and never touches this route.
       //
       // DELETE stays open to an author, unlike a screen's. There is no paired
       // routing-map write to leave half-applied, and an entry is the one
       // content shape where the console offers deletion as ordinary editing.
+      // It also frees a slot under the cap, which is the property that lets a
+      // host at the ceiling recover without support.
       match /collections/{collectionId}/entries/{entryId} {
-        allow create: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
-            (canPublishHostContent(hostId) ||
-              request.resource.data.get('status', 'draft') == 'draft'));
+        allow create: if isStaff();
         allow update: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
             (canPublishHostContent(hostId) ||

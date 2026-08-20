@@ -44,6 +44,7 @@ import { observer } from 'mobx-react-lite'
 import { useCallback, useMemo, useState } from 'react'
 import {
   useFirestore,
+  useHostResourceApi,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { HelpTip } from '@aglyn/shared-ui-jsx'
@@ -201,6 +202,9 @@ function TargetPicker(props: {
 export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
   const { hostId, state, existing, existingFromCache, onClose } = props
   const firestore = useFirestore()
+  // Action creation is server-owned since AGL-2266 (the cap); every other
+  // action write on this surface stays client-direct.
+  const createResource = useHostResourceApi()
   const { enqueueSnackbar } = useSnackbar()
 
   const { data: workflowDocs } = useFirestoreCollection<any>(
@@ -447,6 +451,26 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
      * while losing the protection, which is how AGL-1356's page lost it
      * twice.
      */
+    /**
+     * The action DOCUMENT is created by the server (AGL-2266) — see the
+     * actions card for the whole reason. Only the create moves; the merge-set
+     * inside the guard below still writes the entire candidate.
+     */
+    if (!state.id) {
+      try {
+        await createResource({
+          hostId,
+          resource: 'action',
+          id,
+          data: { name: (candidate as any)?.name ?? 'Untitled interaction' },
+        })
+      } catch (error: any) {
+        return void enqueueSnackbar(
+          error?.message ?? 'Could not create the interaction',
+          { variant: 'error' },
+        )
+      }
+    }
     let verdict: Awaited<ReturnType<typeof writeGuardedBySeed>>
     try {
       // `candidate` is already pruned of `undefined` (AGL-570); wrap the
@@ -491,6 +515,7 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
     state.id,
     candidate,
     firestore,
+    createResource,
     hostId,
     enqueueSnackbar,
     onClose,

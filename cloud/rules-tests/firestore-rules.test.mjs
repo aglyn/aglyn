@@ -1042,13 +1042,25 @@ describe('hosts', () => {
         }),
       )
     }
-    // Entries are a separate resource underneath and stay fully writable.
-    await assertSucceeds(
+    // Entries are a separate resource underneath. CREATE became API-only in
+    // AGL-2266 — it was the last client-direct document class with no cap on
+    // any plan — while update and delete stay client-side, which is what keeps
+    // the entry editor working: its save is a merge-set, so only the FIRST
+    // save of a new entry is a create.
+    await mustDeny(
+      'creating a collection entry client-direct',
       setDoc(
         doc(authed(EDITOR), 'hosts', HOST, 'collections', 'blog', 'entries', 'e1'),
         { title: 'Hello' },
       ),
     )
+    // Seeded through the admin context, as /api/hosts/resources would.
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'hosts', HOST, 'collections', 'blog', 'entries', 'e1'),
+        { title: 'Hello', status: 'draft' },
+      )
+    })
     await assertSucceeds(
       updateDoc(
         doc(authed(EDITOR), 'hosts', HOST, 'collections', 'blog', 'entries', 'e1'),
@@ -1646,8 +1658,14 @@ describe('hosts', () => {
    * this is the long tail that a narrowing change would silently take out.
    */
   it('ordinary authoring still works for every catch-all collection (AGL-2038)', async () => {
+    // `actions` LEFT this list in AGL-2266, for the `inventoryAdjustments`
+    // reason one operation over: its CREATE is now API-only, so it fails the
+    // create leg below by design, while update and delete stay client-side
+    // (the actions card toggles `enabled`; both surfaces retire one by
+    // stamping `deletedAt`). The three legs are asserted separately in
+    // `an editor cannot create an action client-direct (AGL-2266)`.
     const AUTHORING = [
-      'actions', 'overlays', 'experiments', 'campaigns', 'emailTemplates',
+      'overlays', 'experiments', 'campaigns', 'emailTemplates',
       'coupons', 'discounts', 'memberPosts', 'reviews', 'siteMembers',
       'subscriptions', 'suppliers', 'events', 'bookings', 'activity',
       'settings', 'media', 'mediaFolders', 'leads',
@@ -1693,6 +1711,47 @@ describe('hosts', () => {
         deleteDoc(doc(authed(EDITOR), 'hosts', HOST, name, 'agl2038-new')),
       )
     }
+  })
+
+  /**
+   * `actions`, the split AGL-2266 made (create denied, update/delete open).
+   *
+   * The collection was in NONE of the three exclusion lists, so the catch-all
+   * granted an editor unbounded client creates on any plan — the AGL-1360
+   * shape, uncapped infrastructure behind a $0 subscription — and the import
+   * route's own table had already written down that nothing counted them.
+   * /api/hosts/resources now owns the create and holds `ACTIONS_MAX_PER_HOST`.
+   *
+   * Both halves, because one list is not denial and denial of all three would
+   * have broken every surface that edits one: the actions card toggles
+   * `enabled`, and both it and the besigner's interactions provider retire an
+   * action by stamping `deletedAt`, which is an UPDATE. The cap counts live
+   * rows, so that soft delete frees a slot — which is what makes leaving
+   * update open safe rather than merely convenient.
+   */
+  it('an editor cannot create an action client-direct (AGL-2266)', async () => {
+    await mustDeny(
+      'creating a hosts/{hostId}/actions document',
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'actions', 'agl2266-new'), {
+        name: 'Minted from the browser',
+      }),
+    )
+    // The server path — /api/hosts/resources uses the Admin SDK — still lands.
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'hosts', HOST, 'actions', 'agl2266-new'),
+        { name: 'Created by the route' },
+      )
+    })
+    // And the two operations the console really makes stay client-side.
+    await assertSucceeds(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'actions', 'agl2266-new'), {
+        enabled: false,
+      }),
+    )
+    await assertSucceeds(
+      deleteDoc(doc(authed(EDITOR), 'hosts', HOST, 'actions', 'agl2266-new')),
+    )
   })
 
   /**
@@ -4113,10 +4172,14 @@ describe('a host-scope suspension freezes the client SDK too (AGL-1965)', () => 
         categories: ['x'],
       }),
     )
+    // An entry UPDATE, not a create (AGL-2266). Creating one is now denied
+    // outright by the entries block, so a create here would pass whether or
+    // not suspension worked — a guard that cannot fail. The update is the leg
+    // this test is actually about, and `e1` exists in the LOCKED_HOST fixture.
     await mustDeny(
-      'a collection entry create on a suspended site',
-      setDoc(
-        doc(editor(), 'hosts', LOCKED_HOST, 'collections', 'col-1', 'entries', 'e2'),
+      'a collection entry update on a suspended site',
+      updateDoc(
+        doc(editor(), 'hosts', LOCKED_HOST, 'collections', 'col-1', 'entries', 'e1'),
         { title: 'Free gift card' },
       ),
     )

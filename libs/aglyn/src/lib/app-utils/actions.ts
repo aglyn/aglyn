@@ -726,6 +726,44 @@ export interface HostWebhook {
 }
 
 export const WEBHOOK_MAX_PER_HOST = 5
+
+/**
+ * How many LIVE action documents one host may hold (AGL-2266).
+ *
+ * `hosts/{hostId}/actions` was in NO exclusion list in
+ * `cloud/firebase-firestore.rules`, so the host catch-all's `allow create`
+ * granted it to any editor, client-direct, on any plan — and the import
+ * route's own table said so in as many words: *"no `RESOURCES` entry and no
+ * quota key anywhere; all three creators write the document client-direct."*
+ * A free org could therefore mint unbounded Firestore documents from the
+ * browser against a $0 subscription. Unbounded infrastructure, not a bypass of
+ * anything we sell, which is `WEBHOOK_MAX_PER_HOST`'s (AGL-1360) and
+ * `NON_PAGE_SCREEN_MAX_PER_HOST`'s (AGL-1399) shape exactly: a flat PLATFORM
+ * cap with no `OrgEntitlements` key, no variation by plan, and nothing on the
+ * price list to explain.
+ *
+ * ## Not gated on the `actions` entitlement, deliberately
+ *
+ * `actions` is a Pro feature and `interactions` is free, and BOTH write this
+ * collection — the interaction builder and the besigner's preset wiring create
+ * the same document type the Pro actions card does. Gating creation on the
+ * paid flag would take element interactions away from every free and starter
+ * site, which is a pricing change wearing a cap's clothes. The runtime already
+ * checks the entitlement where it decides what may RUN
+ * (`run-event-actions.ts`), which is the right place for it.
+ *
+ * ## Why 500
+ *
+ * Sized to the busiest plausible site rather than to today's data. An action
+ * is authored per interactive element, so a heavy marketing site with dropdown
+ * choreography on every section reaches tens; presets wire a handful at a
+ * time. 500 is far past anything authoring produces and well short of what a
+ * script in a loop wants, which is the only property a flat cap needs. Live
+ * documents only — the interactions provider soft-deletes with `deletedAt`, so
+ * counting tombstones would be AGL-1173's bug one collection over, where
+ * removing an interaction never frees its slot.
+ */
+export const ACTIONS_MAX_PER_HOST = 500
 /** Outbound URLs must be public https — first-line SSRF guard. */
 export const WEBHOOK_URL_PATTERN =
   /^https:\/\/(?!localhost)(?!127\.)(?!0\.)(?!10\.)(?!172\.(1[6-9]|2\d|3[01])\.)(?!192\.168\.)(?!169\.254\.)[^\s]+$/i

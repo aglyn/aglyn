@@ -61,6 +61,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   useFirestore,
+  useHostResourceApi,
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
@@ -115,6 +116,9 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
   const firestore = useFirestore()
+  // Entry creation is server-owned since AGL-2266 (the cap); every other
+  // entry write on this page stays client-direct.
+  const createResource = useHostResourceApi()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const logActivity = useHostActivityLogger(hostId)
@@ -582,6 +586,43 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     const id = editor.id ?? Aglyn.createResourceUid()
     const timestamp = Timestamp.now()
     /**
+     * A NEW entry is created by the server (AGL-2266).
+     *
+     * `hosts/{h}/collections/{c}/entries/{e}` was the last client-direct
+     * create with no cap on any plan — a free org could mint unbounded
+     * Firestore documents from the browser — so the rules now deny client
+     * `create` and /api/hosts/resources counts live rows against
+     * `ENTRIES_MAX_PER_COLLECTION` inside the transaction that writes.
+     *
+     * Only the CREATE moves. The `setDoc(…, { merge: true })` below is
+     * unchanged and still carries the whole payload; for a new entry it is now
+     * an UPDATE of the draft the server just made, which the entries rule
+     * block still grants an author. Splitting it that way is what keeps every
+     * field the editor writes — including the `deleteField()` sentinels, which
+     * do not survive a JSON hop to a route — on the one write that has always
+     * owned them.
+     *
+     * `status`/`createdAt` are consequently NOT in the payload below any more:
+     * the server stamps both, and an author (who may write but not publish) is
+     * refused an update naming `status` at all.
+     */
+    if (!editor.id) {
+      try {
+        await createResource({
+          hostId,
+          resource: 'entry',
+          parentId: selected.$id,
+          id,
+          data: { title, slug: slugify(title) },
+        })
+      } catch (error: any) {
+        return void enqueueSnackbar(
+          error?.message ?? 'Could not create the entry',
+          { variant: 'error' },
+        )
+      }
+    }
+    /**
      * Never write an entry seeded from a read we cannot trust (AGL-1066,
      * AGL-1358, AGL-1449).
      *
@@ -646,7 +687,6 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
               .split(',')
               .map((tag) => tag.trim())
               .filter(Boolean),
-            ...(editor.id ? {} : { status: 'draft', createdAt: timestamp }),
             updatedAt: timestamp,
           },
           { merge: true },
@@ -673,6 +713,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     selected,
     firestore,
     hostId,
+    createResource,
     entriesStatus,
     entriesFromCache,
     enqueueSnackbar,
