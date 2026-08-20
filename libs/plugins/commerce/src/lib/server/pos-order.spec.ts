@@ -72,16 +72,44 @@ function makeSnapshot(path: string) {
   }
 }
 
+/**
+ * `FieldValue.increment` as Firestore actually applies it (AGL-2111).
+ *
+ * The offline-fee accrual is written with `set(..., { merge: true })` carrying
+ * increment sentinels, and a double that stored the sentinel object verbatim
+ * would report green for a counter that never counted — and would make two
+ * sales look identical to one. So the sentinel is RESOLVED here, against the
+ * value already in the document, with a missing field treated as 0, which is
+ * Firestore's own rule.
+ *
+ * `arrayUnion` is deliberately left as an opaque sentinel: the AGL-1760 folio
+ * tests assert on that exact shape.
+ */
+function resolveIncrements(
+  existing: Record<string, any> | undefined,
+  value: Record<string, any>,
+): Record<string, any> {
+  const resolved: Record<string, any> = {}
+  for (const [key, raw] of Object.entries(value)) {
+    if (raw && typeof raw === 'object' && '__increment' in raw) {
+      const base = Number(existing?.[key] ?? 0)
+      resolved[key] = (Number.isFinite(base) ? base : 0) + raw.__increment
+    } else {
+      resolved[key] = raw
+    }
+  }
+  return resolved
+}
+
 function makeDocRef(path: string): any {
   return {
     id: path.split('/').pop() as string,
     path,
     get: async () => makeSnapshot(path),
     set: async (value: Record<string, any>, options?: { merge?: boolean }) => {
-      docs.set(
-        path,
-        options?.merge ? { ...(docs.get(path) ?? {}), ...value } : value,
-      )
+      const existing = docs.get(path)
+      const applied = resolveIncrements(existing, value)
+      docs.set(path, options?.merge ? { ...(existing ?? {}), ...applied } : applied)
     },
     /**
      * The atomic claim. Firestore's `create()` rejects when the document
@@ -216,6 +244,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       FieldValue: {
         serverTimestamp: () => '<server-timestamp>',
         arrayUnion: (value: any) => ({ __arrayUnion: value }),
+        // Resolved by `resolveIncrements` on write — see the note there.
+        increment: (value: number) => ({ __increment: value }),
       },
     },
   },
@@ -714,17 +744,176 @@ describe('POS card sales carry the platform fee (AGL-2110)', () => {
   })
 
   /**
-   * Cash never touches Stripe, so there is no charge to take a fee out of.
-   * Recording one would put a number in the merchant's ledger that nothing
-   * will ever collect — see AGL-2111 for the pricing question that is.
+   * A cash sale reaches no Stripe charge, and it still carries the fee —
+   * AGL-2111 answered the pricing question this test used to record as
+   * settled. It stays here as the CARD-side regression: the card path must be
+   * byte-for-byte what it was, and this is the sale beside it.
    */
-  it('records no fee on a cash sale, and still rings the sale', async () => {
+  it('records the fee on a cash sale too, and still rings the sale', async () => {
     await post({ payment: 'cash', cashReceivedCents: 400 })
     expect(stripeCalls).toHaveLength(0)
-    expect(orderDocs()[0]?.totals?.feeCents).toBe(0)
-    // Not passing on a refusal: the sale landed at its full amount.
+    expect(orderDocs()[0]?.totals?.feeCents).toBe(8)
+    // Not passing it on: the shopper's total is untouched, exactly as on card.
     expect(orderDocs()[0]?.totals?.totalCents).toBe(400)
     expect(orderDocs()[0]?.status).toBe('paid')
+  })
+})
+
+/**
+ * THE PLATFORM FEE FOLLOWS THE SALE, NOT THE TENDER (AGL-2111).
+ *
+ * Cash and folio tenders recorded `feeCents: 0`, deliberately, because there
+ * is no Stripe charge to take an `application_fee_amount` out of. The
+ * consequence was an avoidance route a merchant could simply choose: ring
+ * every in-person sale as cash and pay the platform nothing, while the
+ * identical basket on a card paid the plan's rate.
+ *
+ * Zach's decision, 2026-08-19: the same rate on every tender. Cash is cheaper
+ * for us, not dearer — no Stripe processing is debited against it — so a
+ * discount for cash would be unjustified as well as leaving the incentive
+ * intact. What differs is COLLECTION: there is no payout to net it from, so
+ * the fee accrues to `orgs/{id}/offlineFees/{YYYY-MM}` and `report-usage`
+ * sweeps it onto the org's own monthly invoice.
+ *
+ * `mockOrg` is on Business — 2% digital, a deliberate 0% physical — so the
+ * digital product below is the one that can tell a rate from a zero.
+ */
+describe('the platform fee follows the sale, not the tender (AGL-2111)', () => {
+  /** $4.00 digital at Business's 2% = 8¢. */
+  const DIGITAL_PRODUCT = {
+    name: 'Recipe PDF',
+    type: 'digital',
+    status: 'active',
+    variants: [{ id: 'default', priceUsd: 4, inventory: null }],
+  }
+
+  /** The org-month accrual document, by the same UTC key the handler mints. */
+  function accrual() {
+    const month = new Date().toISOString().slice(0, 7)
+    return docs.get(`orgs/org-1/offlineFees/${month}`)
+  }
+
+  beforeEach(() => {
+    docs.set('hosts/host-1/products/product-1', DIGITAL_PRODUCT)
+    docs.set('hosts/host-1/reservations/stay-1', {
+      status: 'checked-in',
+      guestEmail: 'Guest@example.com',
+      guestName: 'Ada',
+    })
+  })
+
+  it("charges a CASH sale the plan's rate — 2% of $4.00, the same 8c a card sale is charged", async () => {
+    await post({ payment: 'cash', cashReceivedCents: 400 })
+    // The FIGURE, not a comparison against whatever the card leg happens to
+    // total. AGL-2152 is adding Stripe's own processing cost to the CARD
+    // tender beside this one, and that cost is real on card and absent on
+    // cash — so an `expect(cash).toBe(card)` here would be asserting the two
+    // are identical in a way the platform's economics say they are not. What
+    // must be equal is the PLATFORM'S TAKE, and 8 is Business's 2% of $4.00.
+    expect(orderDocs()[0]?.totals?.feeCents).toBe(8)
+  })
+
+  it('charges a FOLIO (room-charge) sale the same fee', async () => {
+    const result = await post({ payment: 'folio', reservationId: 'stay-1' })
+    expect(result.status).toBe(200)
+    expect(orderDocs()[0]?.totals?.feeCents).toBe(8)
+    // The guest's folio line is the SALE, not the sale plus our cut — the fee
+    // is the merchant's cost, and billing it to the room would be a surcharge.
+    const folio = docs.get('hosts/host-1/reservations/stay-1')?.folio
+    expect(folio?.__arrayUnion?.amountCents).toBe(400)
+  })
+
+  it('does not raise what the shopper pays on any tender', async () => {
+    await post({ payment: 'cash', cashReceivedCents: 400 })
+    expect(orderDocs()[0]?.totals?.totalCents).toBe(400)
+  })
+
+  /*=====================================================================
+   * WIRED TO A COLLECTION ROUTE, not just written down. A fee recorded on an
+   * order that no invoice ever reads is the same zero it replaced.
+   *====================================================================*/
+
+  it('accrues the cash fee to the org-month `report-usage` sweeps', async () => {
+    await post({ payment: 'cash', cashReceivedCents: 400 })
+    expect(accrual()?.feeCents).toBe(8)
+    expect(accrual()?.orders).toBe(1)
+    expect(orderDocs()[0]?.feeCollection).toBe('invoice')
+  })
+
+  it('accrues a folio fee to the same org-month document', async () => {
+    await post({ payment: 'folio', reservationId: 'stay-1' })
+    expect(accrual()?.feeCents).toBe(8)
+    expect(orderDocs()[0]?.feeCollection).toBe('invoice')
+  })
+
+  it('ADDS across sales rather than overwriting the month', async () => {
+    await post({ payment: 'cash', cashReceivedCents: 400 })
+    await post({ payment: 'cash', cashReceivedCents: 400 })
+    await post({ payment: 'folio', reservationId: 'stay-1' })
+    expect(accrual()?.feeCents).toBe(24)
+    expect(accrual()?.orders).toBe(3)
+  })
+
+  it('keys the accrual by the UTC billing month the sweep reads', async () => {
+    await post({ payment: 'cash', cashReceivedCents: 400 })
+    // The same expression `apps/console/utils/billing-month.ts` uses. A
+    // local-time key would strand every sale rung in the offset window on a
+    // document no sweep ever opens.
+    const month = new Date().toISOString().slice(0, 7)
+    expect(/^\d{4}-\d{2}$/.test(month)).toBe(true)
+    expect(docs.has(`orgs/org-1/offlineFees/${month}`)).toBe(true)
+    expect(docs.get(`orgs/org-1/offlineFees/${month}`)?.month).toBe(month)
+  })
+
+  /*=====================================================================
+   * NEGATIVE CONTROLS.
+   *====================================================================*/
+
+  it('a CARD sale accrues NOTHING — Stripe already took it', async () => {
+    await post({ payment: 'link' })
+    expect(accrual()).toBeUndefined()
+    expect(orderDocs()[0]?.feeCollection).toBe('payout')
+    // And the card path still collects the way it always did — through
+    // Stripe, at charge time. The EXACT figure is asserted by the AGL-2110
+    // suite above (and moved by AGL-2152); what this negative control has to
+    // prove is that the card tender did not ALSO accrue an invoice line,
+    // which would bill the merchant twice for one sale.
+    expect(
+      Number(
+        stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
+      ),
+    ).toBeGreaterThan(0)
+  })
+
+  it('a 0%-rate line accrues nothing and records no collection route', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Flat white',
+      type: 'physical',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 4, inventory: null }],
+    })
+    const result = await post({ payment: 'cash', cashReceivedCents: 400 })
+    expect(result.status).toBe(200)
+    expect(orderDocs()[0]?.totals?.feeCents).toBe(0)
+    expect(orderDocs()[0]?.feeCollection).toBeUndefined()
+    expect(accrual()).toBeUndefined()
+  })
+
+  it('a 100% comp takes nothing, and accrues nothing', async () => {
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 0,
+      discountPct: 100,
+    })
+    expect(result.status).toBe(200)
+    expect(orderDocs()[0]?.totals?.feeCents).toBe(0)
+    expect(accrual()).toBeUndefined()
+  })
+
+  it('scales the cash fee by the cashier discount, as the card fee is', async () => {
+    await post({ payment: 'cash', cashReceivedCents: 200, discountPct: 50 })
+    expect(orderDocs()[0]?.totals?.feeCents).toBe(4)
+    expect(accrual()?.feeCents).toBe(4)
   })
 })
 

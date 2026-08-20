@@ -238,6 +238,31 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
                 </Typography>
               ) : null}
             </Typography>
+            {/* EVERY TENDER, AND HOW EACH IS COLLECTED (AGL-2111).
+
+                Until now this card said "per sale" and meant it for online and
+                card sales only: cash and room-charge sales at the register
+                recorded no fee at all, so a merchant could read this sentence,
+                ring everything as cash, and pay nothing. The fee now attaches
+                to the sale on every tender, which makes the sentence above
+                true — and creates a second, visible collection route the
+                merchant has to be told about BEFORE it appears on their
+                invoice, because it is money leaving by a door they have never
+                seen it leave by.
+
+                Shown only when a rate actually applies: on a 0% plan there is
+                nothing to collect either way, and the paragraph would be noise
+                on the card of the merchants who upgraded to escape fees. */}
+            {physicalPct > 0 || digitalPct > 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                {'The fee is charged on the sale, not on how it was paid — ' +
+                  'in-person cash and room-charge sales carry it too. On card ' +
+                  'sales it is deducted from your Stripe payout; on cash and ' +
+                  'room-charge sales there is no payout to deduct from, so it ' +
+                  `is added to your monthly ${Aglyn.PLATFORM_BRAND_LEGAL_NAME} ` +
+                  'invoice instead.'}
+              </Typography>
+            ) : null}
           </>
         )}
         {/*

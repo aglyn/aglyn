@@ -632,6 +632,7 @@ async function handler(request: Request): Promise<Response> {
         contactsSnap,
         counterTotals,
         assistUsageSnap,
+        offlineFeesSnap,
       ] = await Promise.all([
         Promise.all(hostRefs.map(usageFor)),
         orgRef.get(),
@@ -667,6 +668,15 @@ async function handler(request: Request): Promise<Response> {
         // so the one cost line big enough to matter was absent from the
         // document every cost reader on the platform reads.
         orgRef.collection('assistUsage').doc(month).get(),
+        // Platform fee on POS sales that never touched Stripe (AGL-2111).
+        // Cash and folio tenders have no charge to net an
+        // `application_fee_amount` out of, so `pos-order.ts` accrues the fee
+        // here — in the same transaction as the order — and this is the only
+        // place it can reach an invoice. PRICED, unlike `assistUsage` beside
+        // it: this is not a cost we absorb, it is the platform fee the
+        // merchant's own plan already charges, collected on the one channel
+        // where Stripe cannot collect it for us.
+        orgRef.collection('offlineFees').doc(month).get(),
       ])
       // One read of the org doc for every quota decision below — the four
       // meters must agree about which plan they are pricing against.
@@ -863,11 +873,33 @@ async function handler(request: Request): Promise<Response> {
       const assistCostRaw = Number(assistUsageSnap.get('estCostUsd') ?? 0)
       const assistCostUsd =
         Number.isFinite(assistCostRaw) && assistCostRaw > 0 ? assistCostRaw : 0
+      /*==========================================
+       * THE POS FEE THAT STRIPE CANNOT COLLECT (AGL-2111).
+       *
+       * Already cents, already the plan's own rate, already floored — the
+       * register computed it per line by product type at the moment of sale
+       * (`pos-order.ts`), which is the only place the basket exists. Nothing
+       * is re-derived here: a second fee model would drift from the first, and
+       * the figure on the order document is what the merchant was told.
+       *
+       * Defensive read because this document is written by a different
+       * service: a negative, a NaN or a stringly-typed value must bill zero
+       * rather than reduce a real invoice. `Math.round` because a cent is the
+       * unit the meter is priced in ($0.01/unit), and a fractional value would
+       * be handed to Stripe as a string it would round differently.
+       *=========================================*/
+      const offlineFeeRaw = Number(offlineFeesSnap.get('feeCents') ?? 0)
+      const offlinePosFeeCents =
+        Number.isFinite(offlineFeeRaw) && offlineFeeRaw > 0
+          ? Math.round(offlineFeeRaw)
+          : 0
+      const offlinePosFeeOrders = Number(offlineFeesSnap.get('orders') ?? 0)
       const billedCents =
         billedEstimate.billedCents +
         Math.round(dataQuota.overageMonthlyUsd * 100) +
         Math.round(apiQuota.overageMonthlyUsd * 100) +
-        Math.round(contactsOverageUsd * 100)
+        Math.round(contactsOverageUsd * 100) +
+        offlinePosFeeCents
       const usageRef = orgRef.collection('usage').doc(month)
       const existing = await usageRef.get()
       if (existing.get('reportedAt')) {
@@ -1033,6 +1065,17 @@ async function handler(request: Request): Promise<Response> {
           // AGL-2280 — see where it is computed. Priced into COGS, never into
           // `billedCents`.
           assistCostUsd,
+          // The cash/folio POS platform fee this month (AGL-2111), and the
+          // number of sales it came from. Recorded ALWAYS, including at zero,
+          // so "this store took no cash" is legible as a fact rather than as
+          // a missing field — and so a merchant querying why their invoice
+          // moved has the count beside the amount. Unlike `assistCostUsd`
+          // above, this IS inside `billedCents`.
+          offlinePosFeeCents,
+          offlinePosFeeOrders:
+            Number.isFinite(offlinePosFeeOrders) && offlinePosFeeOrders > 0
+              ? Math.round(offlinePosFeeOrders)
+              : 0,
           // Email sends and workflow/action runs (AGL-1134), summed across
           // the org's hosts. COUNTS for this month — see `orgCounterTotals`
           // for the unit and the double-count argument.

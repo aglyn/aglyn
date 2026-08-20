@@ -282,6 +282,13 @@ that same digital line rather than carrying a rate of its own; see
 [Bookings](../../commerce-and-bookings/bookings/overview.md#payments-and-fees).
 Selling requires a paid plan with commerce.
 
+**In-person sales carry the same rate.** The fee is charged on the sale, not on the
+tender, so a cash sale or a charge-to-room sale at the register is priced exactly like
+a card sale. Card sales have the fee deducted from the Stripe payout; cash and
+room-charge sales have no payout to deduct from, so their fees are added to your next
+monthly invoice as a usage line. See
+[POS &amp; reservations](../../commerce-and-bookings/commerce/pos-and-reservations.md#platform-fees-at-the-register).
+
 - **Annual billing** — a toggle on the plan cards; annual billing is the discounted
   headline price (e.g. Pro $39/mo billed annually vs $56 month-to-month).
 - **Plan switches** on an active subscription apply in place (no second checkout), and
