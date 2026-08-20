@@ -107,6 +107,16 @@ jest.mock('@aglyn/aglyn', () => ({
   onboardingDestination: (slug: string, intent: unknown) =>
     intent ? `/${slug}/billing` : `/${slug}`,
   parseOnboardingPlanIntent: () => mockPlanIntent,
+  // AGL-1731. The REAL contract rather than a stub: the signup page parses a
+  // campaign off the same `useSearchParams` these cases already drive, and a
+  // stub that invented params would change what this file's assertions see.
+  // These URLs name no campaign, so the honest answer is "none".
+  parseCampaignAttribution: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/campaign-attribution',
+  ).parseCampaignAttribution,
+  campaignEventParams: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/campaign-attribution',
+  ).campaignEventParams,
 }))
 jest.mock('@aglyn/shared-data-forms', () => ({
   FIELD_SCHEMA_EMAIL: { name: 'email' },

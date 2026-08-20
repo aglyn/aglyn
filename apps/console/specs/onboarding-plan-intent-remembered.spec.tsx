@@ -82,6 +82,12 @@ jest.mock('@aglyn/aglyn', () => ({
   ...jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/onboarding-deep-link',
   ),
+  // The campaign contract rides the same hop (AGL-1731) and the signup page
+  // parses it off the same `useSearchParams` these cases drive. Real, not
+  // stubbed, for the same reason the deep-link parser above is.
+  ...jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/campaign-attribution',
+  ),
 }))
 jest.mock('@aglyn/shared-data-forms', () => ({
   FIELD_SCHEMA_EMAIL: { name: 'email' },
