@@ -15,6 +15,14 @@
  * limitations under the License.
  */
 
+// This spec has no import and no export of its own, so TypeScript would treat
+// it as a global script and its top-level `const`s would collide with the
+// sibling lockdown spec's (`mockDeleteSentinel`, `mockServerTimestamp`) —
+// 24 errors across two console tsconfigs, invisible to jest because babel
+// transpiles each file separately (AGL-1526).
+export {}
+
+
 /**
  * THE REVOCATION ITSELF (AGL-1724) — `applyOrgLockdown` unmocked.
  *
