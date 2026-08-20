@@ -117,6 +117,14 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   invalidateFeatureLockdownCache: () => undefined,
   invalidatePlatformLockdownCache: () => undefined,
   invalidateUserLockdownCache: () => undefined,
+  // AGL-1531. The collection listing now also reports whether the signups
+  // lock's creation-level blocking function is registered in Identity
+  // Platform. No credential and no network here, so the honest answer for
+  // this harness is the one the real probe gives when it cannot look.
+  readSignupsCreationTriggerStatus: async () => ({
+    status: 'unknown',
+    reason: 'not probed in tests',
+  }),
 }))
 
 /** The `suspended*` half of what the real org/host helpers write. */

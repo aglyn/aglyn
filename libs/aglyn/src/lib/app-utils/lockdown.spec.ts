@@ -36,6 +36,7 @@ import {
   lockdownRefusalText,
   lockdownRetryAfterSeconds,
   parseLockdownRefusal,
+  signupsCreationVerdict,
   normalizeHostLockdown,
   normalizeLockdownDoc,
   normalizeOrgLockdown,
@@ -817,5 +818,97 @@ describe('AGL-2016 · the lockdown notice addresses the OPERATOR', () => {
     const notice = lockdownNotice(state({ scope: 'org', reason: 'billing' }))
     expect(notice.contact).toBeUndefined()
     expect(notice.title).toBe('Account on hold')
+  })
+})
+
+describe('AGL-1531 · the signups lock refuses account CREATION', () => {
+  const NOW = 1_700_000_000_000
+  const reads =
+    (value: { untilMs?: number } | null) =>
+    async () =>
+      value
+
+  it('admits when the lock document is absent', async () => {
+    await expect(signupsCreationVerdict(reads(null), NOW)).resolves.toEqual({
+      refused: false,
+    })
+  })
+
+  it('refuses while the lock is engaged', async () => {
+    await expect(signupsCreationVerdict(reads({}), NOW)).resolves.toEqual({
+      refused: true,
+      cause: 'locked',
+    })
+  })
+
+  it('admits again once the window has expired, with no write', async () => {
+    await expect(
+      signupsCreationVerdict(reads({ untilMs: NOW - 1 }), NOW),
+    ).resolves.toEqual({ refused: false })
+  })
+
+  it('still refuses one millisecond before the window closes', async () => {
+    await expect(
+      signupsCreationVerdict(reads({ untilMs: NOW + 1 }), NOW),
+    ).resolves.toEqual({ refused: true, cause: 'locked' })
+  })
+
+  /**
+   * The equivalence that stops the copy from becoming a second, disagreeing
+   * panic lever: for every state the sibling helper judges, the creation
+   * verdict must agree about what "active" means. Without this the two
+   * could drift on the boundary case above and nothing would say so.
+   */
+  it('agrees with isLockdownActive on every state, boundary included', async () => {
+    const cases: Array<{ untilMs?: number } | null> = [
+      null,
+      {},
+      { untilMs: NOW - 1 },
+      { untilMs: NOW },
+      { untilMs: NOW + 1 },
+      { untilMs: Number.MAX_SAFE_INTEGER },
+    ]
+    for (const state of cases) {
+      const verdict = await signupsCreationVerdict(reads(state), NOW)
+      expect(verdict.refused).toBe(isLockdownActive(state, NOW))
+    }
+  })
+
+  it('FAILS CLOSED when the lock read throws', async () => {
+    await expect(
+      signupsCreationVerdict(async () => {
+        throw new Error('firestore unavailable')
+      }, NOW),
+    ).resolves.toEqual({ refused: true, cause: 'unreadable' })
+  })
+
+  it('FAILS CLOSED when the lock read never answers', async () => {
+    // A hang is the failure mode fail-open would miss entirely: the promise
+    // does not reject, so a bare try/catch would sit on the account-creation
+    // critical path until Identity Platform's own timeout.
+    await expect(
+      signupsCreationVerdict(() => new Promise(() => undefined), NOW, 10),
+    ).resolves.toEqual({ refused: true, cause: 'unreadable' })
+  })
+
+  it('does not refuse a slow-but-successful read', async () => {
+    await expect(
+      signupsCreationVerdict(
+        () => new Promise((resolve) => setTimeout(() => resolve(null), 5)),
+        NOW,
+        200,
+      ),
+    ).resolves.toEqual({ refused: false })
+  })
+
+  /**
+   * The three doors are one door here (AGL-1531). Email/password, Google and
+   * SSO all end at Firebase Auth account creation, so the decision takes no
+   * identity at all — there is nowhere to put a per-provider carve-out.
+   */
+  it('takes no identity, so no door can be exempted', () => {
+    // Reader + clock, and nothing else before the optional timeout. There is
+    // no uid, no email, no provider and no tenant to branch on.
+    expect(signupsCreationVerdict.length).toBe(2)
   })
 })

@@ -283,7 +283,7 @@ page.
 
 | Feature key | What it stops | Reach for it when |
 |---|---|---|
-| `signups` | New account creation (all four doors — the signup form, both Google flows, and the sign-in page's new-account bounce). Accounts created *after* the lock began are refused a session; every existing account signs in untouched. | Bot registration wave, free-tier abuse storm |
+| `signups` | New account creation (all four doors — the signup form, both Google flows, and the sign-in page's new-account bounce). Accounts created *after* the lock began are refused a session; every existing account signs in untouched. With the blocking function registered (see below) the Auth records are refused too, so nothing is created at all. | Bot registration wave, free-tier abuse storm |
 | `uploads` | New media bytes (upload, signed-URL upload, replace). Browsing, organizing, restoring, and serving existing media all keep working. | Malware/abuse report in the DAM |
 | `checkout` | **New** Stripe checkout sessions only — console plan upgrades and marketplace purchases. Existing subscriptions, invoices, and the pay-your-way-out path for billing-locked orgs are untouched, and the notice says explicitly that it is *not* a payment failure. | Stripe integration bug mid-charge |
 | `marketplace-installs` | Installing anything from the marketplace (all artifact kinds, including re-copying an updated artifact). Everything already installed keeps working; publishing, reviews, and abuse reports stay open. | A malicious listing slips review (the per-plugin kill switch takes out one listing; this is the wider valve) |
@@ -304,6 +304,58 @@ reproduce an install, or make one AI call to verify the fix before lifting it.
 `checkout` grants **no** staff bypass: a staff-created checkout session is
 still a real charge, and verification belongs in Stripe test mode. `signups`
 is decided by account age, not claims — there is no bypass to grant.
+
+### `signups` also refuses account CREATION — if the valve is armed
+
+Everything else on this page is enforced by code that ships with every deploy.
+`signups` is the exception, and the difference is worth understanding before
+you need it.
+
+The lock has always refused the **session mint**, the legal-acceptance
+recorder, and the signup-page doors. That makes a wave's accounts unusable —
+but account creation itself is client → Firebase Auth, with no Aglyn server in
+front of it, so the Auth records were still being *created*: unusable, but
+accumulating in the pool and against the Auth quotas.
+
+Refusing creation needs a Firebase Auth **`beforeUserCreated` blocking
+function**, which lives in `cloud/functions` and is registered in **Identity
+Platform**, not in this repo. Two consequences:
+
+- **Merging does not deploy it.** It ships with `firebase deploy --only
+  functions`, and the `beforeCreate` trigger must then show up in the Identity
+  Platform blocking-functions config.
+- **The switch looks identical either way.** So the Lockdown page reads the
+  Identity Platform config on load and states, under the `signups` row, which
+  world you are in: *"Account creation is REFUSED too"*, *"Account creation is
+  NOT refused"*, or *"UNKNOWN"*. **Unknown is never rendered as armed** — if
+  the page cannot confirm the valve, treat the lock as sessions-only.
+
+**It fails CLOSED.** If the function cannot read `lockdowns/feature--signups`
+— Firestore unreachable, or the read exceeding its 2.5 s budget — the account
+is **refused**. This is deliberately the opposite of `getFeatureLockdown`,
+which fails open for signed-in traffic. The reasoning: an account created
+while Firestore is unreadable cannot finish signing up anyway (the profile,
+the acceptance record and the workspace all live in Firestore), so failing
+open buys an orphan Auth record rather than a working signup; a brake that
+releases itself under load is not a brake, and a bot wave is exactly the load
+that makes reads fail; and Identity Platform already fails closed one level up
+— if the function errors or times out it refuses the operation, and that is
+not configurable.
+
+**If it ever needs to be taken out of the path in a hurry:** unregister the
+`beforeCreate` trigger in the Identity Platform console. No deploy, no code
+change, and it is the same console you are already in.
+
+**It never touches sign-in.** There is deliberately no `beforeUserSignedIn`
+sibling — that one fires for *existing* accounts and would put every sign-in,
+including the permanent break-glass account, behind this read and this
+fail-closed posture. The lock stops accounts being born; it never stops one
+coming home.
+
+**All three doors, both pools.** Email/password, Google and SSO all end at
+Firebase Auth account creation, and the handler reads no provider, no email
+and no `tenantId` — so SSO's per-org GCIP tenant pool is refused on the same
+terms as the project pool.
 
 **Expiry** works the same as every scope: when the optional end time passes,
 the feature restores itself with no staff action and no write.

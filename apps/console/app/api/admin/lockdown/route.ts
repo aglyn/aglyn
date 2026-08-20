@@ -72,6 +72,7 @@ import {
   invalidateUserLockdownCache,
   isImpersonationSession,
   lockdownJsonResponse,
+  readSignupsCreationTriggerStatus,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
@@ -553,15 +554,33 @@ async function handler(request: Request): Promise<Response> {
       // The current-state read for the staff page: the lockdowns collection
       // (platform + user scopes). Org/host lockdowns live on their own docs
       // and are visible on the org/host staff surfaces.
-      const snapshot = await firestore
-        .collection(LOCKDOWNS_COLLECTION)
-        .limit(200)
-        .get()
+      //
+      // Alongside it, and NOT after it: whether the signups lock's
+      // creation-level valve is armed (AGL-1531). That answer lives in
+      // Identity Platform rather than in this repo, so the panic page can
+      // only state it by asking. In parallel because the panic page's load
+      // time is the one thing an incident cannot spend.
+      const [snapshot, signupsCreationTrigger] = await Promise.all([
+        firestore.collection(LOCKDOWNS_COLLECTION).limit(200).get(),
+        // Never allowed to take the panic page down. This probe reaches an
+        // API outside this deployment; if it fails in a way its own guards
+        // did not anticipate, the page must still render every lock — an
+        // unknown valve is a caveat, an unrenderable page is an outage.
+        Promise.resolve()
+          .then(() => readSignupsCreationTriggerStatus())
+          .catch(() => ({
+            status: 'unknown' as const,
+            reason: 'The Identity Platform probe failed on this server.',
+          })),
+      ])
       const records = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }))
-      return Response.json({ records }, { status: 200 })
+      return Response.json(
+        { records, signupsCreationTrigger },
+        { status: 200 },
+      )
     }
 
     if (method !== 'POST') {
