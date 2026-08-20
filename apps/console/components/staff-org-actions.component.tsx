@@ -237,6 +237,30 @@ export const overrideCount = (org: any): number =>
  * hold, from the `/api/admin/run-erasures` cron or by hand with
  * tools/scripts/erase-tenant.mjs, both of which are `eraseOrg` (AGL-1481).
  */
+/**
+ * How many raw download links a lock actually killed (AGL-1615).
+ *
+ * The payload carries one result PER STORAGE PREFIX — an org lock scans its
+ * own tree and every one of its sites' — so it is summed here rather than
+ * printed. An EMPTY array means rotation was not attempted at all (this was
+ * not a full `security` lock), which is a different fact from an entry
+ * reporting zero, and both correctly render nothing.
+ *
+ * Defensive about the shape because this reads a route payload rather than a
+ * typed value: anything unexpected renders nothing, which is the safe
+ * reading — the alternative is a toast asserting a PERMANENT revocation that
+ * may not have happened.
+ */
+function rotatedLinks(results: unknown): string {
+  if (!Array.isArray(results) || !results.length) return ''
+  const total = results.reduce(
+    (sum: number, entry: any) => sum + (Number(entry?.rotated) || 0),
+    0,
+  )
+  if (!total) return ''
+  return `, ${total} raw file link(s) permanently killed`
+}
+
 export interface StaffOrgActionsProps {
   /** The org doc, with `$id`. Null/undefined disables every action. */
   org: any
@@ -326,6 +350,11 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
               (payload?.tokensRevoked
                 ? `, ${payload.tokensRevoked} member session(s) revoked`
                 : '') +
+              // AGL-1615: the route has reported this since AGL-1526 and
+              // nothing rendered it, so an operator could perform a
+              // PERMANENT revocation of every published raw file link and
+              // never be told it happened.
+              rotatedLinks(payload?.downloadTokensRotated) +
               ' (audited)'
           : 'Organization unsuspended — sites come back online (audited)',
         { variant: 'success', persist: false },
@@ -923,8 +952,14 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
               : 'Every published site of this organization returns 503 ' +
                 'now, member writes are blocked, and members see a ' +
                 'suspension notice. Security and manual suspensions also ' +
-                'log the members out. No data is deleted; this is ' +
-                'reversible. Audited.'}
+                'log the members out, and a SECURITY suspension in full ' +
+                'mode permanently rotates every raw file download link the ' +
+                'workspace has published — those links stay dead after the ' +
+                'suspension is lifted. No data is deleted; the suspension ' +
+                'itself is reversible. It stops new delivery and is not a ' +
+                'recall: anything already downloaded, cached in a browser ' +
+                'or held by a downstream CDN, a scraper or an archive stays ' +
+                'where it is. Audited.'}
           </Typography>
           {!suspender?.suspended ? (
             <>

@@ -79,6 +79,7 @@ export * from './release-flags'
 export * from './operator-identity'
 export * from './lockdown'
 export * from './media-quarantine'
+export * from './media-takedown-reach'
 export * from './upload-inspection'
 export * from './abuse-report'
 // The other three quarters of §512 (AGL-1983): the put-back procedure that

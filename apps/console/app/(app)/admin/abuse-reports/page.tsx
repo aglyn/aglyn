@@ -1117,7 +1117,7 @@ function AdminAbuseReports() {
                         </Stack>
                         <Typography variant="caption" color="text.secondary">
                           {
-                            'Lockdown suspends the site or the whole workspace; Disabled files takes one uploaded file off the CDN worldwide and leaves the site serving. Copy the ids above — neither page is pre-filled from here, deliberately, so the target is typed by the person who decided on it.'
+                            'Lockdown suspends the site or the whole workspace; Disabled files stops one uploaded file being served and leaves the site serving. NEITHER is a recall: both stop new delivery, and neither reaches bytes a browser, a downstream CDN, a scraper or an archive already holds — so treat a public file as already distributed when you decide what to promise a complainant. Copy the ids above — neither page is pre-filled from here, deliberately, so the target is typed by the person who decided on it.'
                           }
                         </Typography>
                       </Stack>

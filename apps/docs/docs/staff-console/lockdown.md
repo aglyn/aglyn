@@ -508,14 +508,49 @@ not erased — so the customer's storage usage and invoice are unchanged. The
 customer notice says so explicitly, because someone whose file stops loading
 will otherwise assume their data was deleted.
 
-**How fast it bites, and what it cannot reach.** A warm server refuses within
-about 15 seconds of the write, and restores just as fast on a lift — the
-refusal is never cached, precisely so a lift takes effect immediately. What
-quarantine cannot recall is bytes *already* in a cache: a browser may hold an
-image up to 60 seconds, and the CDN edge may hold an image up to an hour. For
-an urgent takedown, quarantine stops the bleeding at the origin immediately but
-is not a purge; if the file must be unreachable everywhere *now*, quarantine it
-and then lock the scope as well.
+**How fast it bites, and what it cannot reach (AGL-1615).** The console now
+states this to the operator on the Disabled files page itself, from one shared
+model (`mediaTakedownReachLines()`), so this section and that page cannot drift
+apart. In full:
+
+| Surface | Stopped? | Worst case |
+|---|---|---|
+| Our origin | yes | ~15 s — and a lift is just as fast, because the refusal is never cached |
+| The raw Storage download link | yes, **immediately** | the object's token is rotated; **permanent**, see below |
+| A browser holding the ordinary URL | yes | 60 s (`max-age=60`) |
+| The CDN edge, for an **image** | yes | ~1 h (`s-maxage=3600`) plus one stale serve. Video, PDFs and other types are `private` since AGL-1515 and are never edge-held |
+| A browser holding the content-hashed permanent URL | **no** | that form promises never to change, so nothing can expire it early, and there is no per-file purge |
+| Anything already downloaded | **no** | a browser cache, a corporate proxy, a downstream CDN, a scraper, an archive snapshot |
+
+**A takedown stops new delivery. It is not a recall.** Say that to a
+complainant in those words. "Stopped within 15 seconds at origin, up to an
+hour at the edge for an already-cached image" is what safe-harbour
+"expeditious" contemplates, and it is *not* the same promise as "the file is
+gone". Treat any public asset with real traffic as already distributed.
+
+**The raw download link, and why it is the one irreversible part.** A media
+document also carries a `url` pointing at
+`firebasestorage.googleapis.com?alt=media&token=…`, served by Google, where
+none of our code runs — so the deny list is not slow there, it is never
+consulted. That is the delivery path for every free-tier workspace, every
+private asset and every embed predating AGL-829. Quarantine therefore rotates
+that object's token, which kills the published link at once. It cannot be
+undone: releasing the quarantine restores CDN delivery but does **not**
+resurrect that particular URL, so any page still embedding it stays broken.
+The switch is on by default (a legal or malware takedown with a live public
+URL is a takedown that failed) and can be turned off for a precautionary one
+you expect to lift. Rotation reaches the **one object** whose document the
+operator looked up — a digest key covers copies in other workspaces, and those
+keep their own links until they are taken down individually.
+
+**What was considered and rejected.** A Vercel edge purge would close the
+image window, but it puts a credentialled third-party call on the takedown
+path: fail hard and a Vercel outage becomes a takedown outage; fail soft and
+you have a purge you cannot rely on, which is worse than none because you
+believe in it. Shortening the image `s-maxage` trades a measured hit rate on
+the DAM grid's hot path (AGL-1515) for a faster worst case in a rare event.
+Neither reaches bytes already delivered, which is the part that actually
+matters.
 
 **Where it shows up.** A quarantined asset carries a red **Disabled** badge in
 the DAM grid, for staff and for the workspace that owns it, and the badge

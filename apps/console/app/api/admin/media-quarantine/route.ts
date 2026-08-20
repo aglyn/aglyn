@@ -123,6 +123,7 @@ import {
   firebaseAdmin,
   invalidateMediaQuarantineCache,
   isImpersonationSession,
+  rotateDownloadTokenForObject,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 
@@ -188,6 +189,13 @@ interface ResolvedAsset {
   fileName: string | null
   contentSha256: string | null
   contentHash: string | null
+  /**
+   * Where the bytes are, so a takedown can revoke the raw download URL that
+   * `serveMediaCdn` never sees (AGL-1615). Read here rather than rebuilt
+   * from the scope and the media id: a folder move changes the object path
+   * and leaves the document the only place that knows it.
+   */
+  storagePath: string | null
   deleted: boolean
 }
 
@@ -235,6 +243,7 @@ async function resolveAsset(
       fileName: value('fileName'),
       contentSha256: value('contentSha256'),
       contentHash: value('contentHash'),
+      storagePath: value('storagePath'),
       // Soft-deleted assets are still worth quarantining — a DMCA notice
       // does not stop mattering because the customer moved the file to the
       // trash, and a restore would bring it straight back. Reported rather
@@ -672,6 +681,58 @@ async function handler(request: Request): Promise<Response> {
     // converges within the reader's 15s TTL.
     invalidateMediaQuarantineCache()
 
+    /**
+     * REVOKE THE RAW DOWNLOAD URL (AGL-1615) — the only part of a takedown
+     * that is a genuine invalidation rather than a cache window expiring.
+     *
+     * A media document's `url` points at `firebasestorage.googleapis.com`,
+     * where no code of ours runs, so the deny list written above is not
+     * merely slow on that path — it is never consulted. And that path is
+     * the delivery path for every free-tier workspace, every private asset
+     * and every embed predating AGL-829, because the DAM and
+     * `GET /api/v1/media` both fall back to `url` with no `cdnPath`.
+     * Rotating the object's token makes Google's edge answer 403 at once.
+     *
+     * Four properties, each of which the spec pins:
+     *
+     *  * **Set only, never release.** There is no un-rotate and none is
+     *    offered: minting a fresh token on release would hand back a
+     *    WORKING raw URL under a new value while every embed of the old one
+     *    stays broken. The irreversibility is real, and the console states
+     *    it before the operator acts rather than after.
+     *  * **Refusable.** Quarantine's promise is reversibility, and this is
+     *    the one part that is not, so `revokeRawUrl: false` lets an
+     *    operator keep that promise intact for a precautionary takedown.
+     *    The default is ON, because for a legal or malware takedown a
+     *    publicly-fetchable URL that outlives the takedown is not a
+     *    residual — it is the takedown failing.
+     *  * **Fail soft, and REPORT.** A Storage outage must not become a
+     *    takedown outage, so the deny-list entry lands regardless — and the
+     *    response says what actually happened, so the console can state it
+     *    rather than assume it.
+     *  * **One object, the one this operator was looking at.** A hash key
+     *    covers every document sharing those bytes in every workspace;
+     *    chasing them all would mean a collection-group scan on a takedown
+     *    path. Stated as a limit in the runbook, not implied away.
+     */
+    const revokeRawUrl = body?.['revokeRawUrl'] !== false
+    const revocation =
+      action === 'quarantine' && revokeRawUrl && asset?.storagePath
+        ? await rotateDownloadTokenForObject({
+            storagePath: asset.storagePath,
+            // Resolved HERE, from the same admin app this route already
+            // takes Firestore off, rather than left to the module's own
+            // lookup. The admin app is initialized with no default bucket,
+            // so every caller has to name it — and passing it keeps the
+            // storage dependency visible at the call site instead of hidden
+            // two modules away.
+            bucket: firebaseAdmin
+              .app()
+              .storage()
+              .bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET),
+          })
+        : { rotated: false, reason: 'skipped' as const }
+
     // One row PER KEY. A release that cleared two entries is two facts, and
     // collapsing them would leave the second one with no record that it was
     // ever in force.
@@ -691,6 +752,10 @@ async function handler(request: Request): Promise<Response> {
           quarantined: action === 'quarantine',
           ...auditEntryShape(entry),
         },
+        // An IRREVERSIBLE act on customer data with no record is a control
+        // nobody can explain a year later (AGL-1615).
+        rawUrlRevoked: revocation.rotated,
+        rawUrlRevocation: revocation.reason,
         at: FieldValue.serverTimestamp(),
       })
     }
@@ -719,6 +784,12 @@ async function handler(request: Request): Promise<Response> {
         verified,
         readAtMs: Date.now(),
         confirmed,
+        // What the takedown actually reached beyond our own origin
+        // (AGL-1615). `false` here is not a failure — it is most often
+        // `no-token`, an object that never had a raw URL to revoke — so the
+        // reason travels with it and the console renders the reason.
+        rawUrlRevoked: revocation.rotated,
+        rawUrlRevocation: revocation.reason,
         notice: verified ? mediaQuarantineNotice(verified) : null,
         ...assetPayload(asset, key, assetKeys, entriesAfter),
       },
