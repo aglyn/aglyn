@@ -17,7 +17,7 @@
 
 'use client'
 
-import { Alert, Box, Button, Link, Stack, Typography } from '@mui/material'
+import { Alert, Button, Link, Stack, Typography } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -140,35 +140,33 @@ export function LegalReacceptanceBanner() {
   const superseded = status.reacceptanceReason === 'version-superseded'
 
   return (
-    <Box sx={{ px: 2, pt: 2 }}>
-      <Alert
-        severity="info"
-        action={
-          <Button size="small" disabled={busy} onClick={() => void accept()}>
-            {busy ? 'Recording…' : 'I agree'}
-          </Button>
-        }
-      >
-        <Stack spacing={0.5}>
-          <Typography variant="body2">
-            {superseded
-              ? `${PLATFORM_BRAND_NAME}’s `
-              : `Please confirm you agree to ${PLATFORM_BRAND_NAME}’s `}
-            <LegalLinks />
-            {superseded
-              ? ` have been updated. Please review and confirm you agree to continue.`
-              : '.'}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {superseded
-              ? `You last agreed to version ${
-                  status.latestAcceptedVersion ?? '—'
-                }; the current version is ${status.currentVersion}.`
-              : 'We have no record of your acceptance on this account.'}
-          </Typography>
-        </Stack>
-      </Alert>
-    </Box>
+    <Alert
+      severity="info"
+      action={
+        <Button size="small" disabled={busy} onClick={() => void accept()}>
+          {busy ? 'Recording…' : 'I agree'}
+        </Button>
+      }
+    >
+      <Stack spacing={0.5}>
+        <Typography variant="body2">
+          {superseded
+            ? `${PLATFORM_BRAND_NAME}’s `
+            : `Please confirm you agree to ${PLATFORM_BRAND_NAME}’s `}
+          <LegalLinks />
+          {superseded
+            ? ` have been updated. Please review and confirm you agree to continue.`
+            : '.'}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {superseded
+            ? `You last agreed to version ${
+                status.latestAcceptedVersion ?? '—'
+              }; the current version is ${status.currentVersion}.`
+            : 'We have no record of your acceptance on this account.'}
+        </Typography>
+      </Stack>
+    </Alert>
   )
 }
 

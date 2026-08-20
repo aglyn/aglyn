@@ -224,6 +224,25 @@ function HostsContent() {
                     // host docs; the switcher reads the hostMemberships
                     // projection, which had to learn the field separately
                     // before the two actually matched (AGL-1071).
+                    // The Live/Draft pill sits in the header's ACTION slot
+                    // (top-right) rather than above the domain rows: inline in
+                    // the content it shared a line with the first
+                    // `HostInfoItem` label and read as part of it.
+                    action: (() => {
+                      const status = describeHostStatus(host as never)
+                      return (
+                        <Tooltip title={status.detail}>
+                          <Chip
+                            size="small"
+                            label={status.label}
+                            color={status.color}
+                            variant={
+                              status.color === 'default' ? 'outlined' : 'filled'
+                            }
+                          />
+                        </Tooltip>
+                      )
+                    })(),
                     avatar: (
                       <HostIcon
                         host={host}
@@ -301,30 +320,6 @@ function HostsContent() {
                   }
                 >
                   <Typography color="textSecondary" component="div">
-                    {/*
-                      The Live/Draft pill the mockup puts on every card
-                      (AGL-2166), derived from `host.screens` — the routing
-                      map publishing writes — so it costs no extra read on
-                      a page that can list a hundred sites.
-                     */}
-                    {(() => {
-                      const status = describeHostStatus(host as never)
-                      return (
-                        <Tooltip title={status.detail}>
-                          <Chip
-                            size="small"
-                            label={status.label}
-                            color={status.color}
-                            variant={
-                              status.color === 'default'
-                                ? 'outlined'
-                                : 'filled'
-                            }
-                            sx={{ mb: 1 }}
-                          />
-                        </Tooltip>
-                      )
-                    })()}
                     <HostInfoItem
                       label={`${branding.productName} Domain`}
                       value={hostPlatformDomain(hostAddress(host))}
