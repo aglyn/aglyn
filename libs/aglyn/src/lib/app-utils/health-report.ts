@@ -805,6 +805,23 @@ export interface BillingWebhookFacts {
    * matters.
    */
   processed: number | null
+  /**
+   * Deliveries that answered 200 and moved NOTHING inside the window
+   * (AGL-1954) — a required event type that produced neither a committed
+   * effect nor a named deliberate skip. See `webhook-delivery.ts` for why
+   * that is a defect by construction and a legitimate no-op is not one.
+   *
+   * Null when the Firestore arm could not run, and null is NOT red on its
+   * own: Stripe already answered the question that matters, and a health
+   * check that reds on its own read failure trains people to ignore it.
+   */
+  inert: number | null
+  /**
+   * Required event types the destination is NOT subscribed to (AGL-1948 /
+   * AGL-1798). Empty is the healthy answer; null means the endpoint did not
+   * report its subscriptions and the coverage question is unanswered.
+   */
+  unsubscribedEvents: readonly string[] | null
 }
 
 export interface BillingWebhookCheck extends HealthCheck {
@@ -812,6 +829,8 @@ export interface BillingWebhookCheck extends HealthCheck {
   undelivered: number | null
   emitted: number | null
   processed: number | null
+  inert: number | null
+  unsubscribedEvents: readonly string[] | null
   /** The trailing window the counts cover, so the body is self-describing. */
   windowMinutes: number
 }
@@ -840,11 +859,28 @@ export const WEBHOOK_FAILURE_WINDOW_MINUTES = 60
  */
 export const MAX_FAILED_DELIVERIES_PER_WINDOW = 0
 
+/**
+ * Inert deliveries tolerated in the window (AGL-1954).
+ *
+ * Zero — and unlike `processed`, the count this check reports but refuses to
+ * gate on because no defensible floor exists before the beta produces a
+ * baseline, this one's floor follows from the definition. A delivery is
+ * counted inert only when a required event type produced neither a committed
+ * effect nor a NAMED deliberate skip (`classifyWebhookDelivery`). No
+ * legitimate traffic pattern generates one: a tenant shopper's subscription,
+ * a marketplace refund, a `won` dispute nobody claimed all name their reason
+ * and classify as `ignored`. So any at all is the statement "Stripe told us
+ * about money and nothing here moved" — the same "any at all" rule the
+ * rate-limiter degradation markers use (AGL-1679).
+ */
+export const MAX_INERT_DELIVERIES_PER_WINDOW = 0
+
 export function billingWebhookHealth(
   facts: BillingWebhookFacts | null,
   ms: number,
   windowMinutes: number = WEBHOOK_FAILURE_WINDOW_MINUTES,
   threshold: number = MAX_FAILED_DELIVERIES_PER_WINDOW,
+  inertThreshold: number = MAX_INERT_DELIVERIES_PER_WINDOW,
 ): BillingWebhookCheck {
   // A null census is degraded, the same rule `signupsHealth` and
   // `rateLimitsHealth` follow: an alarm that cannot see the thing it watches
@@ -860,6 +896,8 @@ export function billingWebhookHealth(
       undelivered: null,
       emitted: null,
       processed: null,
+      inert: null,
+      unsubscribedEvents: null,
       windowMinutes,
     }
   }
@@ -870,6 +908,8 @@ export function billingWebhookHealth(
     undelivered: facts.undelivered,
     emitted: facts.emitted,
     processed: facts.processed,
+    inert: facts.inert,
+    unsubscribedEvents: facts.unsubscribedEvents,
     windowMinutes,
   }
 
@@ -884,8 +924,31 @@ export function billingWebhookHealth(
   if (facts.endpointStatus === 'disabled') {
     return { ...base, ok: false, code: 'endpoint-disabled' }
   }
+  // A required event the destination does not carry (AGL-1948 / AGL-1798),
+  // ABOVE the delivery counts because it explains a silence they cannot see.
+  // An unsubscribed event produces no delivery to fail, no request to reject
+  // and no inert handler either — Stripe simply stops sending, and every
+  // count below reads a perfectly healthy zero for as long as it lasts. It
+  // also outranks `deliveries-failing` on actionability: this one names the
+  // exact event to re-add, and `npm run setup:stripe` fixes it in a minute.
+  //
+  // `null` — the endpoint did not state its subscriptions — is deliberately
+  // NOT red. It is a question that went unanswered, not an answer, and the
+  // check already has `stripe-unavailable` for a census it could not take.
+  if (facts.unsubscribedEvents && facts.unsubscribedEvents.length > 0) {
+    return { ...base, ok: false, code: 'events-unsubscribed' }
+  }
   if (facts.undelivered > threshold) {
     return { ...base, ok: false, code: 'deliveries-failing' }
+  }
+  // THE 200-THAT-DID-NOTHING (AGL-1954), and it is LAST on purpose: every
+  // code above explains why a handler would have had nothing to do, so
+  // reporting inertness over one of them would name the symptom instead of
+  // the cause. Reached only when Stripe holds an enabled destination
+  // subscribed to everything we asked for and delivered successfully — at
+  // which point "a delivery moved nothing" has no innocent explanation left.
+  if (facts.inert !== null && facts.inert > inertThreshold) {
+    return { ...base, ok: false, code: 'handlers-inert' }
   }
   return { ...base, ok: true }
 }

@@ -60,6 +60,9 @@ export * from './plan-entitlements'
 export * from './bandwidth-cap'
 export * from './form-abuse-ceiling'
 export * from './health-report'
+// Did a webhook delivery actually DO anything (AGL-1954)? After
+// `health-report`, whose billing verdict consumes the counts this produces.
+export * from './webhook-delivery'
 export * from './support-tiers'
 export * from './release-flags'
 // Who runs THIS deployment, and where its notices go (AGL-2016). Ordered

@@ -22,7 +22,19 @@
 // wrong number rather than a missing nicety.
 import { after } from 'next/server'
 
-import { buildRoute, Route, runBillingWebhookHandlers } from '@aglyn/aglyn/server'
+// DID THIS DELIVERY DO ANYTHING? (AGL-1954) Every other signal on this route
+// describes the REQUEST — the 200, Stripe's `delivery_success`, the
+// idempotency claim — and all three read green for a handler that answers 200
+// and drops the work. The ledger records what actually COMMITTED, and the
+// classifier separates "moved nothing" from "correctly moved nothing".
+import {
+  buildRoute,
+  classifyWebhookDelivery,
+  createWebhookEffectLedger,
+  observeWrites,
+  Route,
+  runBillingWebhookHandlers,
+} from '@aglyn/aglyn/server'
 import {
   findOrgIdByStripeCustomer,
   firebaseAdmin,
@@ -330,6 +342,64 @@ async function handler(request: Request): Promise<Response> {
    */
   let dispatchEntered = false
 
+  /**
+   * WHAT THIS DELIVERY ACTUALLY COMMITTED (AGL-1954).
+   *
+   * `dispatchEntered` above answers "did control reach a branch", which is
+   * the AGL-2157 question and deliberately coarse. It is NOT the question
+   * here: in the AGL-1798 shape control reached everything it was supposed
+   * to and there was simply no work registered, so "a branch was entered"
+   * reads exactly as it does on a healthy delivery.
+   *
+   * So each branch reports one of two things and never neither:
+   *
+   * * `effect(name)` — AFTER a durable write commits, so a throw between the
+   *   two cannot claim an effect that never landed.
+   * * `skip(reason)` — when the branch consciously decides the event is not
+   *   its business. This is the half that stops the alarm firing on every
+   *   tenant shopper's subscription and every marketplace refund, i.e. the
+   *   half that stops it being muted.
+   *
+   * Falling off the end having said neither is `inert`, and inert is the
+   * defect: an event we went out of our way to subscribe to arrived, and
+   * nothing in this process can account for it.
+   */
+  const ledger = createWebhookEffectLedger()
+
+  /**
+   * The route's own Firestore handle, wrapped so every write it COMMITS
+   * lands in the ledger (AGL-1954).
+   *
+   * Deliberately not the same handle the idempotency claim above is made
+   * through: the claim is written on every delivery, so counting it would
+   * make every delivery look like it did something — the exact blindness
+   * this is here to remove.
+   *
+   * A function rather than a value because the branches below each open
+   * their own handle inline, and rewriting them into one shared const would
+   * be a far larger diff across a file that is the security boundary for
+   * every Stripe delivery.
+   */
+  const observed = () =>
+    observeWrites(firebaseAdmin.app().firestore(), ledger)
+
+  /**
+   * Did any branch on THIS ROUTE take the event? (AGL-1954)
+   *
+   * `checkout.session.completed` is subscribed, required, and has no branch
+   * here at all — commerce, marketplace and bookings own it end to end
+   * inside their own handlers, writing through their own Firestore handles
+   * that this route cannot see. A delivery of one is not evidence of
+   * anything from where this code stands, in either direction.
+   *
+   * So it is recorded as a deliberate skip rather than left to fall through
+   * into `inert`, which would fire the alarm on the single most common event
+   * we receive. The honest close for that half is `claimed` on the plugin
+   * handlers — the AGL-2429 mechanism exists but is wired only for
+   * `charge.dispute.*` today — and it belongs in those plugins, not here.
+   */
+  let routeHandled = false
+
   try {
     if (
       type === 'customer.subscription.created' ||
@@ -337,13 +407,10 @@ async function handler(request: Request): Promise<Response> {
       type === 'customer.subscription.deleted'
     ) {
       dispatchEntered = true // AGL-2157
+      routeHandled = true // AGL-1954
       const orgId = object?.metadata?.orgId
       const orgRef = orgId
-        ? firebaseAdmin
-            .app()
-            .firestore()
-            .collection('orgs')
-            .doc(String(orgId))
+        ? observed().collection('orgs').doc(String(orgId))
         : null
       // THE EXISTENCE CHECK (AGL-1763), and it is ONE read, hoisted rather
       // than added. `metadata.orgId` is caller data: Stripe echoes back
@@ -357,6 +424,12 @@ async function handler(request: Request): Promise<Response> {
       // subscription event costs at most one org read where it used to cost up
       // to two. Reading before the writes is safe because nothing here touches
       // `name`, `slug` or `discount`.
+      // NOT OURS, and it says so (AGL-1954). A tenant shopper's product
+      // subscription carries no `metadata.orgId` naming one of OUR
+      // workspaces, so this branch correctly moves nothing — and an alarm
+      // that could not tell that from a broken mirror would fire on ordinary
+      // merchant traffic until somebody muted it.
+      if (!orgRef) ledger.skip('subscription-names-no-workspace')
       const orgSnapshot = orgRef ? await orgRef.get() : null
       if (orgRef && !orgSnapshot?.exists) {
         await recordOrphanedSubscription({
@@ -368,6 +441,11 @@ async function handler(request: Request): Promise<Response> {
             typeof object?.customer === 'string' ? object.customer : null,
           plan: String(object?.metadata?.plan ?? ''),
         })
+        // An orphan record IS an effect — the delivery produced a durable,
+        // readable statement about an unreconcilable paying customer. Naming
+        // it here is also what keeps the AGL-1954 alarm off a shape the
+        // route already handles deliberately.
+        ledger.effect('orphan-recorded')
       }
       if (orgRef && orgSnapshot?.exists) {
         const canceled = type === 'customer.subscription.deleted'
@@ -456,6 +534,12 @@ async function handler(request: Request): Promise<Response> {
         // other failure — a `.catch(() => …)` here would read a permission or
         // transport error as "the org is gone" and record a lie.
         const mirrored = await updateExisting(orgRef, { plan, ...discountUpdate })
+        // NOT noted here, deliberately (AGL-1954). `updateExisting` writes
+        // through the OBSERVED handle above, so `orgs.update` reaches the
+        // ledger from inside the call that commits it. A note beside this
+        // line would survive the write being removed — and a mirror that
+        // silently stops landing while `updateExisting` still answers true
+        // is precisely the 200-that-did-nothing this is trying to catch.
         if (!mirrored) {
           await recordOrphanedSubscription({
             orgId: String(orgId),
@@ -465,6 +549,7 @@ async function handler(request: Request): Promise<Response> {
             stripeCustomerId,
             plan: String(plan),
           })
+          ledger.effect('orphan-recorded')
         }
         // What moved behind `canManageOrg()` (AGL-1028). This also mirrors a
         // bare `billingStatus` string back onto the org doc for the dunning
@@ -734,7 +819,15 @@ async function handler(request: Request): Promise<Response> {
       type === 'invoice.payment_failed'
     ) {
       dispatchEntered = true // AGL-2157
+      routeHandled = true // AGL-1954
       const customerId = String(object?.customer ?? '')
+      // NOT OURS, and it says so (AGL-1954). An invoice with no customer, or
+      // one whose customer does not resolve through the `stripeCustomers`
+      // index only `writeOrgBilling` stamps, belongs to a tenant storefront
+      // or a marketplace sale — the plugins below own those. Naming the
+      // reason is what keeps this off the alarm; leaving it unnamed would
+      // fire on the most common invoice event we receive.
+      if (!customerId) ledger.skip('invoice-has-no-customer')
       if (customerId) {
         // Was `.where('stripeCustomerId', '==', …)` on the orgs collection.
         // That field lives in a subcollection now (AGL-1028), where the same
@@ -743,6 +836,7 @@ async function handler(request: Request): Promise<Response> {
         // `stripeCustomers` mapping doc instead: an O(1) get, no index, and it
         // stops the webhook scanning `orgs` at all.
         const orgId = await findOrgIdByStripeCustomer(customerId)
+        if (!orgId) ledger.skip('invoice-customer-is-not-a-workspace')
         if (orgId) {
           const amount = Number(object?.amount_due ?? object?.amount_paid ?? 0)
           const dollars = (amount / 100).toFixed(2)
@@ -790,9 +884,7 @@ async function handler(request: Request): Promise<Response> {
           if (type === 'invoice.paid') {
             if (revenue) {
               const { invoiceId, ...recorded } = revenue
-              await firebaseAdmin
-                .app()
-                .firestore()
+              await observed()
                 .collection('platformRevenue')
                 .doc(invoiceId)
                 .set({
@@ -801,6 +893,11 @@ async function handler(request: Request): Promise<Response> {
                   recordedAt:
                     firebaseAdmin.firestore.FieldValue.serverTimestamp(),
                 })
+            } else {
+              // An invoice this deployment cannot decompose into revenue —
+              // a $0 or fully-credited invoice, say. Deliberate, and named
+              // so it is not mistaken for a dropped write.
+              ledger.skip('invoice-carries-no-platform-revenue')
             }
           }
           if (type === 'invoice.paid') {
@@ -851,7 +948,7 @@ async function handler(request: Request): Promise<Response> {
           // time, so emit the canonical path; the reader normalizes anything
           // legacy that predates this.
           const orgSlug = (
-            await firebaseAdmin.app().firestore().collection('orgs').doc(orgId).get()
+            await observed().collection('orgs').doc(orgId).get()
           ).get('slug') as string | undefined
           // Tag the INVOICE itself with the workspace (AGL-941).
           //
@@ -891,6 +988,13 @@ async function handler(request: Request): Promise<Response> {
               ),
             ))
           }
+          // Reaching the admin notification means the invoice resolved to a
+          // workspace and every mirror above ran for it. `after()` defers the
+          // send, but the DECISION to notify this workspace about this
+          // invoice is the durable consequence of the delivery, and it is the
+          // one that stops for all three invoice types at once if this branch
+          // ever goes quiet.
+          ledger.effect('org-admins-notified')
           after(() => notifyOrgAdmins(orgId, {
             type:
               type === 'invoice.payment_failed'
@@ -940,18 +1044,28 @@ async function handler(request: Request): Promise<Response> {
     // than guessed.
     if (type === 'charge.refunded') {
       dispatchEntered = true // AGL-2157
+      routeHandled = true // AGL-1954
       const invoiceId =
         typeof object?.invoice === 'string'
           ? object.invoice
           : String(object?.invoice?.id ?? '')
       const customerId = String(object?.customer ?? '')
       const refundedCents = Number(object?.amount_refunded ?? 0)
+      // NOT OURS, and it says so (AGL-1954). The double test below is the
+      // claiming rule this branch has always used: a subscription charge
+      // carries an INVOICE and a customer that resolves through
+      // `stripeCustomers`; a storefront order's or marketplace sale's charge
+      // carries neither, and the plugins own those. Refunds are the single
+      // most common event type on this endpoint that we correctly do nothing
+      // with, so an unnamed no-op here would be the loudest false alarm.
+      if (!(invoiceId && customerId && refundedCents > 0)) {
+        ledger.skip('refund-is-not-a-subscription-charge')
+      }
       if (invoiceId && customerId && refundedCents > 0) {
         const orgId = await findOrgIdByStripeCustomer(customerId)
+        if (!orgId) ledger.skip('refund-customer-is-not-a-workspace')
         if (orgId) {
-          const revenueRef = firebaseAdmin
-            .app()
-            .firestore()
+          const revenueRef = observed()
             .collection('platformRevenue')
             .doc(invoiceId)
           const revenueSnapshot = await revenueRef.get()
@@ -996,6 +1110,9 @@ async function handler(request: Request): Promise<Response> {
               stripeCustomerId: customerId,
             }).catch(() => undefined))
           } else if (!revenueSnapshot.exists && object?.refunded === true) {
+            // A pre-AGL-1811 invoice has no row to stamp; the GA reversal IS
+            // the whole consequence of this delivery, and it is a real one.
+            ledger.effect('ga-refund-reported')
             after(() => sendGa4Refund({
               transactionId: invoiceId,
               value: refundedCents / 100,
@@ -1003,6 +1120,11 @@ async function handler(request: Request): Promise<Response> {
               items: [],
               stripeCustomerId: customerId,
             }).catch(() => undefined))
+          } else {
+            // The row exists and the cumulative total has not moved — a
+            // redelivery of a refund already recorded, which SHOULD converge
+            // to nothing. Deliberate, named, and not an alarm.
+            ledger.skip('refund-already-recorded')
           }
         }
       }
@@ -1055,6 +1177,7 @@ async function handler(request: Request): Promise<Response> {
     let unattributedDispute: Record<string, unknown> | null = null
     if (type === 'charge.dispute.created' || type === 'charge.dispute.closed') {
       dispatchEntered = true // AGL-2157
+      routeHandled = true // AGL-1954
       const disputeId = String(object?.id ?? '')
       const paymentIntentId =
         typeof object?.payment_intent === 'string'
@@ -1066,10 +1189,7 @@ async function handler(request: Request): Promise<Response> {
           : String(object?.charge?.id ?? '')
       const disputedCents = Math.max(0, Number(object?.amount ?? 0))
       const lost = type === 'charge.dispute.closed' && object?.status === 'lost'
-      const revenueCollection = firebaseAdmin
-        .app()
-        .firestore()
-        .collection('platformRevenue')
+      const revenueCollection = observed().collection('platformRevenue')
       // Payment intent first, charge second — an invoice records both, but a
       // pre-AGL-2120 row records neither, so a miss is expected on history
       // and is reported rather than treated as "not ours".
@@ -1145,9 +1265,7 @@ async function handler(request: Request): Promise<Response> {
         // Every platform dispute reaches staff, won or lost — `created` is
         // the actionable one and `closed` is the outcome. Best-effort: a
         // failed audit append must not 500 a billing webhook.
-        await firebaseAdmin
-          .app()
-          .firestore()
+        await observed()
           .collection('adminAudit')
           .add({
             actorUid: 'system:stripe-webhook',
@@ -1220,6 +1338,17 @@ async function handler(request: Request): Promise<Response> {
             disputedCents,
           })
         }
+        if (!unattributedDispute) {
+          // `won` or `warning_closed`, claimed by nobody. The comment above
+          // spells out why nobody is woken: no money moved. That is a
+          // DECISION, so it is named rather than left to look like a
+          // dropped write (AGL-1954).
+          ledger.skip('dispute-closed-without-loss')
+        }
+      } else {
+        // A dispute carrying neither a payment intent nor a charge — nothing
+        // to join on in any direction. Nothing to do, said out loud.
+        ledger.skip('dispute-carries-no-charge-reference')
       }
     }
 
@@ -1269,9 +1398,7 @@ async function handler(request: Request): Promise<Response> {
       // `adminAudit` filling its window with high-frequency system actions
       // (AGL-2324). Neither can throw: `notifyStaff` never does, and the
       // audit add is caught.
-      await firebaseAdmin
-        .app()
-        .firestore()
+      await observed()
         .collection('adminAudit')
         .add({
           actorUid: 'system:stripe-webhook',
@@ -1301,6 +1428,69 @@ async function handler(request: Request): Promise<Response> {
         }.`,
         link: buildRoute(Route.ADMIN_OVERVIEW),
       })
+    }
+
+    /*==========================================
+     * DID ANY OF THAT DO ANYTHING? (AGL-1954)
+     *
+     * The 200 below is about to satisfy Stripe, the delivery log, the
+     * idempotency claim in `stripeEvents` and `/api/health/billing`'s
+     * delivery counts — all of them, identically, whether the dispatch above
+     * moved a workspace's plan or moved nothing at all. AGL-1798 lived in
+     * that gap: `charge.refunded` was not subscribed, the revocation had no
+     * trigger, and every signal we had read green.
+     *
+     * `classifyWebhookDelivery` reads the ledger the branches above filled
+     * in. `inert` means: an event type we deliberately asked Stripe to send
+     * us arrived, no plugin claimed it, nothing durable was written, and no
+     * branch could name a reason. There is no innocent reading of that.
+     *
+     * THE MARKER goes on the event's OWN claim document rather than into a
+     * new collection, which is the AGL-1679 marker pattern adapted to
+     * something better: the document already exists (the claim was created
+     * at the top), so this needs no new collection, no rules deploy and no
+     * second TTL policy — and it carries the event id and type, so the
+     * incident is diagnosable rather than merely counted.
+     *
+     * `inertAtMs` is a NUMBER and the field is new, deliberately: the health
+     * probe's existing `processed` aggregation ranges over `receivedAt`, and
+     * a marker sharing that field would inflate the count it reads. A range
+     * on one field is served by the automatic single-field index, so the
+     * reader needs no composite index.
+     *
+     * BEST-EFFORT, in a try/catch rather than a trailing `.catch()`: by this
+     * point the dispatch has committed its side effects, so a throw here
+     * would 500 a webhook whose work is done and — by the AGL-2157 rule
+     * above — would HOLD the idempotency claim, turning a diagnostic into a
+     * lost delivery. A monitoring write must never be able to cost one. The
+     * `console.error` is the floor under it, so the failure to record is not
+     * itself silent.
+     *=========================================*/
+    if (!routeHandled) ledger.skip('handled-by-plugins-only')
+    const delivery = classifyWebhookDelivery({
+      type,
+      effects: ledger.effects,
+      skips: ledger.skips,
+      claimed: dispatch?.claimed === true,
+    })
+    if (delivery.outcome === 'inert') {
+      console.error(
+        '[billing/webhook] a delivery we ASKED FOR moved nothing at all',
+        { eventId, type },
+      )
+      if (eventRef) {
+        try {
+          await eventRef.set(
+            { inert: true, inertAtMs: Date.now(), inertType: type },
+            { merge: true },
+          )
+        } catch (markerError) {
+          console.error(
+            '[billing/webhook] could not record an inert delivery',
+            { eventId, type, markerError },
+          )
+        }
+      }
     }
     return Response.json({ received: true }, { status: 200 })
   } catch (error) {

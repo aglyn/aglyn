@@ -85,6 +85,7 @@ import {
   healthStatus,
   memoizeWithTtl,
   meteredPricingHealth,
+  unsubscribedRequiredEvents,
   WEBHOOK_FAILURE_WINDOW_MINUTES,
   type BillingWebhookCheck,
   type BillingWebhookFacts,
@@ -188,6 +189,46 @@ async function processedInWindow(cutoffMs: number): Promise<number | null> {
   }
 }
 
+/**
+ * How many deliveries answered 200 and moved NOTHING in the window (AGL-1954).
+ *
+ * The count this probe was missing, and the one every other number it reads
+ * is blind to: Stripe scores the status code, `undelivered` scores what
+ * Stripe could not deliver, and `processed` scores what our handler CLAIMED
+ * — which a handler that does nothing still does. The webhook writes
+ * `inertAtMs` onto the event's own claim document when a required event type
+ * produced neither a committed effect nor a named deliberate skip.
+ *
+ * A range on ONE field, so the automatic single-field index serves it: this
+ * needs NO composite index and no `firebase-firestore.indexes.json` change,
+ * exactly like the `receivedAt` aggregation above. `inertAtMs` exists only on
+ * inert deliveries — the ordinary claim documents carry `type` and
+ * `receivedAt` and nothing else — so the two counts cannot contaminate each
+ * other.
+ *
+ * An aggregation, so it reads zero documents: nothing here to leak or to pay
+ * for. Returns null rather than throwing, and `billingWebhookHealth` treats
+ * null as "unanswered", never as red — a Firestore hiccup must not
+ * manufacture a billing page.
+ */
+async function inertInWindow(cutoffMs: number): Promise<number | null> {
+  try {
+    void firebaseAdmin
+    const db = getFirestore(getApp())
+    const claimCollection = deploymentLivemode(process.env)
+      ? LIVE_EVENT_COLLECTION
+      : TEST_EVENT_COLLECTION
+    const snapshot = await db
+      .collection(claimCollection)
+      .where('inertAtMs', '>=', cutoffMs)
+      .count()
+      .get()
+    return snapshot.data().count
+  } catch {
+    return null
+  }
+}
+
 const billingProbe = memoizeWithTtl<BillingWebhookCheck>(
   PROBE_TTL_MS,
   async () => {
@@ -217,7 +258,11 @@ const billingProbe = memoizeWithTtl<BillingWebhookCheck>(
       const url = webhookUrl()
       const match = (endpoints.data.data ?? []).find(
         (entry) => (entry as { url?: string })?.url === url,
-      ) as { status?: string } | undefined
+      ) as { status?: string; enabled_events?: string[] } | undefined
+      const [processed, inert] = await Promise.all([
+        processedInWindow(cutoffMs),
+        inertInWindow(cutoffMs),
+      ])
       const facts: BillingWebhookFacts = {
         endpointStatus: !match
           ? 'missing'
@@ -226,7 +271,30 @@ const billingProbe = memoizeWithTtl<BillingWebhookCheck>(
             : 'disabled',
         undelivered: (failures.data.data ?? []).length,
         emitted: (emitted.data.data ?? []).length,
-        processed: await processedInWindow(cutoffMs),
+        processed,
+        inert,
+        /*==========================================
+         * SUBSCRIPTION COVERAGE (AGL-1948 / AGL-1798).
+         *
+         * The destination-is-enabled test above cannot see an event type
+         * REMOVED from it — Stripe simply stops sending that one, so there is
+         * no failed delivery to count and no inert handler either. That is
+         * how `charge.refunded` went missing while AGL-1546's entitlement
+         * revocation quietly had no trigger.
+         *
+         * Comes off the endpoint object this probe already fetched, so it
+         * costs no extra Stripe call. `null` when the endpoint is missing
+         * entirely or did not state its subscriptions: an unanswered question
+         * is not an answer, and the check has `endpoint-missing` for the
+         * former already.
+         *
+         * The event NAMES are carried in the body, not just a count, because
+         * the remedy is "re-add this exact event". They are Stripe's public
+         * API vocabulary — no customer, no account, no secret.
+         *=========================================*/
+        unsubscribedEvents: match?.enabled_events
+          ? unsubscribedRequiredEvents(match.enabled_events)
+          : null,
       }
       return billingWebhookHealth(facts, Date.now() - startedAt)
     } catch {

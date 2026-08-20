@@ -77,9 +77,9 @@ export const HEALTH_PROBES: readonly HealthProbeDescriptor[] = [
     path: '/api/health/billing',
     auth: 'public',
     meaning:
-      'Stripe still has an enabled destination for us and its deliveries are landing. Degraded means Stripe is trying to tell us about money and cannot — subscriptions, refunds and entitlements stop moving while checkout keeps taking payments.',
+      'Stripe still has an enabled destination for us, subscribed to every event we need, whose deliveries land AND actually move something. Degraded means Stripe is trying to tell us about money and it is not getting through — subscriptions, refunds and entitlements stop moving while checkout keeps taking payments.',
     remedy:
-      'Read the code: endpoint-missing or endpoint-disabled is a Stripe dashboard fix, deliveries-failing is ours (signature, a rolled secret, a wedged handler). Run `npm run audit:stripe-webhook` for the full join. A quiet window with no events is healthy, not blind — this never keys on the absence of deliveries.',
+      'Read the code. endpoint-missing / endpoint-disabled is a Stripe dashboard fix. events-unsubscribed names the exact event that fell off the destination — `npm run setup:stripe` re-adds it (this is the AGL-1798 shape: no failed delivery, no error, just silence). deliveries-failing is ours (signature, a rolled secret). handlers-inert is the worst one and the least obvious: deliveries ARE landing and answering 200, and the handler is doing nothing with them — check what stopped being registered, then read the `inert: true` events in stripeEvents for the ids and types. Run `npm run audit:stripe-webhook` for the full join. A quiet window with no events is healthy, not blind — this never keys on the absence of deliveries.',
   },
   {
     id: 'errorBeacon',
@@ -215,6 +215,36 @@ function checkFacts(name: string, check: Record<string, unknown>): string[] {
   if (sinceLast !== null) facts.push(`last fallback ${sinceLast} min ago`)
   const creations = num(check['recentOrgCreations'])
   if (creations !== null) facts.push(`${creations} orgs created in window`)
+  /*==========================================
+   * THE 200-THAT-DID-NOTHING, WORDED (AGL-1954 / AGL-1948).
+   *
+   * `handlers-inert` and `events-unsubscribed` are the two billing codes an
+   * operator has never seen before, and both describe a system that looks
+   * fine from every other angle. A bare code on the board would send someone
+   * to Stripe's dashboard, where everything is green — which is exactly the
+   * wrong place and exactly what happened on 2026-08-14. So the board says
+   * the number AND what it means.
+   *=========================================*/
+  const inert = num(check['inert'])
+  if (inert !== null) {
+    facts.push(
+      inert === 0
+        ? 'every delivery in window moved something'
+        : `${inert} deliver${inert === 1 ? 'y' : 'ies'} answered 200 and moved NOTHING`,
+    )
+  } else if ('inert' in check) {
+    facts.push('could not tell whether deliveries did anything')
+  }
+  const unsubscribed = check['unsubscribedEvents']
+  if (Array.isArray(unsubscribed)) {
+    facts.push(
+      unsubscribed.length === 0
+        ? 'every required event subscribed'
+        : `NOT subscribed: ${unsubscribed.join(', ')}`,
+    )
+  } else if ('unsubscribedEvents' in check) {
+    facts.push('the destination did not state its subscriptions')
+  }
   const windowMinutes = num(check['windowMinutes'])
   if (windowMinutes !== null) facts.push(`window ${windowMinutes} min`)
   const threshold = num(check['threshold'])

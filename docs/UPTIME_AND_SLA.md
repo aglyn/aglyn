@@ -240,8 +240,28 @@ Notes that keep these honest:
   `https://app.aglyn.com/api/billing/webhook` (`endpoint-missing` — nothing is
   even being attempted), when Stripe has disabled it (`endpoint-disabled`),
   when Stripe attempted and **failed** deliveries in the trailing hour
-  (`deliveries-failing` — the AGL-1551 / AGL-1560 shape), or when the census
+  (`deliveries-failing` — the AGL-1551 / AGL-1560 shape), when a REQUIRED
+  event type has fallen off the destination (`events-unsubscribed` — the
+  AGL-1798 shape, and the quietest of them: Stripe simply stops sending that
+  one, so there is no failed delivery to count and every other number reads a
+  perfectly healthy zero), when a delivery **landed, answered 200 and moved
+  nothing** (`handlers-inert`, AGL-1954), or when the census
   could not be taken at all (`stripe-unavailable`; unknown is never a pass).
+  `handlers-inert` is the one that closes the last blind spot in this check:
+  Stripe scores the status code, so a handler that drops the work silently
+  keeps `delivery_success` true and `undelivered` at zero. The webhook now
+  reports what it **committed** rather than that it ran — a write observed
+  from inside the call that commits it, never a note beside one — and stamps
+  `inert: true` on the event's own `stripeEvents` claim when a required event
+  produced neither a committed effect nor a **named** deliberate skip. The
+  naming is what keeps this off the ordinary traffic that correctly does
+  nothing (a tenant shopper's subscription, a marketplace refund, a `won`
+  dispute nobody claimed); conflating those with a silent drop would be alert
+  fatigue, which is its own failure. **Residual gap:**
+  `checkout.session.completed` is owned entirely by the plugins and is
+  recorded as a deliberate skip — closing that half needs the plugin handlers
+  to report `claimed` (the AGL-2429 mechanism exists but is wired only for
+  `charge.dispute.*`).
   **It cannot page for lack of business:** the verdict never keys on the
   absence of events, so a quiet night scores zero failed deliveries and reads
   healthy for the right reason. Events emitted and events processed are

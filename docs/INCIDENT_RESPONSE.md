@@ -95,7 +95,8 @@ every customer is a reference.
    survived, and everything reconstructed later is thinner.
 2. **Read the alert body before acting.** Each health endpoint carries its own
    verdict reason: `endpoint-missing` / `endpoint-disabled` /
-   `deliveries-failing` / `stripe-unavailable` for billing;
+   `events-unsubscribed` / `deliveries-failing` / `handlers-inert` /
+   `stripe-unavailable` for billing;
    `no-credential` / `http-401` / `http-429` / `transport-TimeoutError` for the
    beacon. `docs/UPTIME_AND_SLA.md` maps every one to what it means.
 3. **Preserve evidence before fixing**, if there is any chance of a data
