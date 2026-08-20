@@ -20,6 +20,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { claimAttempt } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
 
 /**
  * Reserve a stay (AGL-310): server-side quote + availability check,
@@ -75,7 +76,16 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
       ? await firestore.collection('profiles').doc(String(ownerId)).get()
       : null
     const accountId = ownerProfile?.get('stripeAccountId')
-    if (!accountId || !ownerProfile?.get('stripeChargesEnabled')) {
+    if (
+      !connectLinkageIsReady(
+        {
+          accountId,
+          chargesEnabled: ownerProfile?.get('stripeChargesEnabled'),
+          accountLivemode: ownerProfile?.get('stripeAccountLivemode'),
+        },
+        { subject: `reserve host ${hostId}` },
+      )
+    ) {
       return res.status(409).json({ error: 'Payments are not set up yet' })
     }
 

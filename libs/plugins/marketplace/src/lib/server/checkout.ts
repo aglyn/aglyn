@@ -16,6 +16,7 @@
  */
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
 import {
   buildRoute,
   checkEntitlement,
@@ -300,7 +301,16 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     }
     const publisher = await resolvePublisherProfile(firestore, sellerOrgId)
     const accountId = publisher?.stripeAccountId
-    if (!accountId || !publisher?.stripeChargesEnabled) {
+    if (
+      !connectLinkageIsReady(
+        {
+          accountId,
+          chargesEnabled: publisher?.stripeChargesEnabled,
+          accountLivemode: publisher?.stripeAccountLivemode,
+        },
+        { subject: `marketplace publisher org ${sellerOrgId}` },
+      )
+    ) {
       return res
         .status(409)
         .json({ error: 'The publisher has not enabled payouts yet' })

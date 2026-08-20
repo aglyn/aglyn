@@ -3211,6 +3211,21 @@ describe('pre-release hardening guards', () => {
         handle: 'owner-pub', displayName: 'Owner', stripeAccountId: 'acct_x',
       }),
     )
+    // AGL-2471. `stripeAccountLivemode` is an INPUT to the sale gate: an owner
+    // who could write it could assert their own test-mode account into live
+    // readiness and rebuild the exact defect that shipped three unusable
+    // storefronts. `stripePayoutsEnabled` was left writable when AGL-1547
+    // added it — a seller could forge their own "payouts are enabled" banner.
+    await assertFails(
+      setDoc(doc(authed(OWNER), 'profiles', OWNER), {
+        handle: 'owner-pub', displayName: 'Owner', stripeAccountLivemode: true,
+      }),
+    )
+    await assertFails(
+      setDoc(doc(authed(OWNER), 'profiles', OWNER), {
+        handle: 'owner-pub', displayName: 'Owner', stripePayoutsEnabled: true,
+      }),
+    )
     // A brand-new profile likewise can't smuggle the payout fields in on create.
     await assertFails(
       setDoc(doc(authed(EDITOR), 'profiles', EDITOR), {
@@ -3366,6 +3381,19 @@ describe('pre-release hardening guards', () => {
     await assertFails(
       updateDoc(doc(authed(OWNER), 'publisherProfiles', ORG), {
         stripeChargesEnabled: true,
+      }),
+    )
+    // AGL-2471: the field the marketplace sale gate compares against the
+    // platform's Stripe mode. Writable by a publisher, it would let a
+    // test-mode account sell.
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'publisherProfiles', ORG), {
+        stripeAccountLivemode: true,
+      }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'publisherProfiles', ORG), {
+        stripePayoutsEnabled: true,
       }),
     )
     // ...but a manager may still edit the cosmetic fields on an existing

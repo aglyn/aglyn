@@ -74,6 +74,7 @@ import {
   resolveOrgIdForHost,
   renderHostEmailWithTokens,
 } from '@aglyn/tenant-data-admin'
+import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
 import {
   isEmailConfigured,
@@ -296,7 +297,16 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         ? await firestore.collection('profiles').doc(String(ownerUid)).get()
         : null
       chargeAccountId = String(ownerProfile?.get('stripeAccountId') ?? '')
-      if (!chargeAccountId || !ownerProfile?.get('stripeChargesEnabled')) {
+      if (
+        !connectLinkageIsReady(
+          {
+            accountId: chargeAccountId,
+            chargesEnabled: ownerProfile?.get('stripeChargesEnabled'),
+            accountLivemode: ownerProfile?.get('stripeAccountLivemode'),
+          },
+          { subject: `booking host ${hostId}` },
+        )
+      ) {
         return res.status(409).json({ error: 'Payments are not set up yet' })
       }
 

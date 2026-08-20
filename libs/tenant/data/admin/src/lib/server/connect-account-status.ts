@@ -63,6 +63,11 @@ export interface ConnectAccountStatusEvent {
  * Mirrors a connected account's charge/payout readiness onto whichever
  * documents in `collection` name it in `stripeAccountId`.
  *
+ * @param eventLivemode `event.livemode` from the enclosing `account.updated`
+ *   event (AGL-2471) — NOT `event.data.object.livemode`, which Stripe's
+ *   Account object does not have. Anything other than a boolean writes
+ *   nothing, leaving the field absent, which every money gate reads as
+ *   unverified and refuses.
  * @param collection Firestore collection holding the payout binding —
  *   `profiles` for storefront merchants, `publisherProfiles` for marketplace
  *   publishers. Each plugin syncs its own; a non-matching account updates
@@ -74,6 +79,7 @@ export interface ConnectAccountStatusEvent {
 export async function syncConnectAccountStatus(
   collection: string,
   account: ConnectAccountStatusEvent | null | undefined,
+  eventLivemode?: unknown,
 ): Promise<number> {
   const accountId = typeof account?.id === 'string' ? account.id.trim() : ''
   if (!accountId) return 0
@@ -83,6 +89,16 @@ export async function syncConnectAccountStatus(
   }
   if (typeof account?.payouts_enabled === 'boolean') {
     patch['stripePayoutsEnabled'] = account.payouts_enabled
+  }
+  // WHICH STRIPE WORLD (AGL-2471). The Account object has no `livemode`, but
+  // the EVENT carrying it does, and it is Stripe's own statement about the
+  // account being described — the strongest evidence available, and it
+  // arrives on every change. This is what heals a linkage whose mode was
+  // never recorded, without anyone touching the database by hand.
+  //
+  // Same doctrine as the two flags above: only a literal boolean is written.
+  if (typeof eventLivemode === 'boolean') {
+    patch['stripeAccountLivemode'] = eventLivemode
   }
   // Nothing stated, nothing written — see the doc comment.
   if (!Object.keys(patch).length) return 0

@@ -72,8 +72,21 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
       : profileStatus === 'error'
         ? 'error'
         : 'loaded'
-  const chargesEnabled =
+  /**
+   * WHICH STRIPE WORLD THE STORED ACCOUNT BELONGS TO (AGL-2471).
+   *
+   * `stripeChargesEnabled: true` was the whole readiness claim, and a
+   * production profile carrying it named a TEST-mode account: this card said
+   * "Charges enabled" about three storefronts that could not take a single
+   * payment. Only a literal boolean counts as recorded — the same
+   * three-valued reading `connectLinkageIsReady` uses on the server, so the
+   * chip and the checkout cannot disagree.
+   */
+  const modeVerified = typeof profile?.stripeAccountLivemode === 'boolean'
+  const chargesConnected =
     stripeState === 'loaded' && Boolean(profile?.stripeChargesEnabled)
+  const modeUnverified = chargesConnected && !modeVerified
+  const chargesEnabled = chargesConnected && modeVerified
   const physicalPct = Aglyn.resolveTransactionFeePct(org, 'physical')
   const digitalPct = Aglyn.resolveTransactionFeePct(org, 'digital')
   const commerceEnabled = Aglyn.checkEntitlement(org, 'commerce')
@@ -156,14 +169,18 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
                   ? 'Checking…'
                   : chargesEnabled
                     ? 'Charges enabled'
-                    : 'Not set up'
+                    : modeUnverified
+                      ? 'Not verified'
+                      : 'Not set up'
               }
               color={
                 stripeState === 'pending'
                   ? 'default'
                   : chargesEnabled
                     ? 'success'
-                    : 'warning'
+                    : modeUnverified
+                      ? 'error'
+                      : 'warning'
               }
               variant="outlined"
             />
@@ -288,6 +305,21 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
             ) : null}
           </>
         )}
+        {/*
+          AGL-2471: connected, and refused by every money door because the
+          account was never verified against this deployment's Stripe mode.
+          "Not set up" would be a lie in the other direction — the merchant
+          did set something up — so the card names what is actually wrong and
+          what to do about it.
+        */}
+        {modeUnverified ? (
+          <Alert severity="error">
+            {'Your Stripe account has not been verified for payments on ' +
+              'this site, so sales will be refused. Set up payments again ' +
+              'to verify it — if it was connected against Stripe test mode, ' +
+              'you will need to connect a live account.'}
+          </Alert>
+        ) : null}
         {/*
           The button's own label is a claim — "Set up payments" tells the
           owner they have none. Withheld until the answer is in, for the same

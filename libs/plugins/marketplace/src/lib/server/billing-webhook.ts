@@ -843,14 +843,22 @@ async function recordDisputeOrphanIfMarketplace(
 export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
   type,
   object,
+  event,
 }) => {
   // Connect readiness, kept fresh (AGL-1997) — the publisher twin of the
   // commerce sync. The seller panel reads `stripeChargesEnabled` /
   // `stripePayoutsEnabled` off this document, and before this nothing but the
   // publisher reopening the connect route ever refreshed either. Same early
   // return: `account.updated` shares nothing with the purchase sections below.
+  // `event.livemode`, not `object.livemode` (AGL-2471) — the Account object
+  // has no such field. Two of the three poisoned production linkages were
+  // publisherProfiles, and this is the path that heals them.
   if (type === 'account.updated') {
-    await syncConnectAccountStatus('publisherProfiles', object)
+    await syncConnectAccountStatus(
+      'publisherProfiles',
+      object,
+      event?.livemode,
+    )
     return
   }
 

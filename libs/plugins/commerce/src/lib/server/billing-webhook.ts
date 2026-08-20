@@ -1394,6 +1394,7 @@ async function reverseSellerShare(
 export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
   type,
   object,
+  event,
   requestHost,
 }) => {
   // Connect readiness, kept fresh (AGL-1997). Every commerce money route —
@@ -1407,8 +1408,12 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
   // sections below, and returning here keeps it out of every `metadata.type`
   // test. `syncConnectAccountStatus` mirrors current state, so a redelivery is
   // harmless.
+  // `event.livemode`, not `object.livemode` (AGL-2471): the Stripe Account
+  // object carries no `livemode` field, but the event announcing it does, and
+  // that is what lets a linkage whose mode was never recorded heal itself
+  // instead of staying refused forever.
   if (type === 'account.updated') {
-    await syncConnectAccountStatus('profiles', object)
+    await syncConnectAccountStatus('profiles', object, event?.livemode)
     return
   }
 

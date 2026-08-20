@@ -31,6 +31,17 @@ export interface ResolvedPublisher {
   stripeAccountId?: string
   stripeChargesEnabled?: boolean
   /**
+   * Which Stripe world the payout account belongs to (AGL-2471).
+   *
+   * PROJECTED, and that is the load-bearing part. The sale gate in
+   * `checkout.ts` reads this shape, not the raw document — an API projection
+   * that drops a field its predicate needs turns the predicate into a
+   * constant, and here the constant would be "refuse every marketplace sale".
+   * Left three-valued deliberately: `undefined` means never established and
+   * must stay distinguishable from `false`.
+   */
+  stripeAccountLivemode?: boolean
+  /**
    * Which marketplace publisher agreement this ORG has accepted (AGL-1077).
    * Absent on every profile created before the agreement existed, which is
    * why publishing refuses rather than assuming consent.
@@ -62,6 +73,12 @@ export async function resolvePublisherProfile(
     displayName: snapshot.get('displayName') as string | undefined,
     stripeAccountId: snapshot.get('stripeAccountId') as string | undefined,
     stripeChargesEnabled: snapshot.get('stripeChargesEnabled') === true,
+    // NOT coerced with `=== true` like the flag above: `false` (a test-mode
+    // account) and absent (never checked) are different answers, and
+    // flattening them would hide which of the two a publisher is in.
+    stripeAccountLivemode: snapshot.get('stripeAccountLivemode') as
+      | boolean
+      | undefined,
     agreement: snapshot.get('publisherAgreement') as
       | PublisherAgreementAcceptance
       | undefined,

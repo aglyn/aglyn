@@ -16,6 +16,7 @@
  */
 
 import { firebaseAdmin, getOrgForUser } from '@aglyn/tenant-data-admin'
+import { resolvePlatformStripeMode } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
 import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
 import { canActAsPublisher } from './publisher-profile'
 
@@ -119,6 +120,12 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
 
     const account = await stripe(`accounts/${accountId}`)
     const chargesEnabled = Boolean(account?.charges_enabled)
+    // Which Stripe world this account lives in (AGL-2471) — two of the three
+    // poisoned production linkages were publisherProfiles, written by this
+    // very route from a localhost session holding the test key. See the
+    // commerce twin and `stripe-account-mode.ts` for why the retrieve above
+    // is the proof and the `acct_…` string is not.
+    const platformMode = await resolvePlatformStripeMode()
     // Payout readiness rides along (AGL-1547): the gate stays on
     // charges_enabled, but the profile records whether the money can
     // actually LEAVE Stripe — the live drill (AGL-1548) reads it, and a
@@ -128,6 +135,13 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
       {
         stripeChargesEnabled: chargesEnabled,
         stripePayoutsEnabled: payoutsEnabled,
+        // ALWAYS written, and `null` when Stripe would not say (AGL-2471).
+        // Writing unconditionally is what makes re-onboarding safe: a fresh
+        // `stripeAccountId` on a document that still carried the PREVIOUS
+        // account's verdict would otherwise inherit it. `null` is not a
+        // boolean, so the gate reads it as `mode-unverified` and refuses —
+        // never a fabricated `true`.
+        stripeAccountLivemode: platformMode ? platformMode === 'live' : null,
       },
       { merge: true },
     )

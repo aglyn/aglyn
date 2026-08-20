@@ -219,4 +219,51 @@ describe('syncConnectAccountStatus (AGL-1997)', () => {
       stripePayoutsEnabled: false,
     })
   })
+
+  // -------------------------------------------------------------------------
+  // Which Stripe world the account is in (AGL-2471)
+  // -------------------------------------------------------------------------
+
+  it('records the mode the EVENT states', async () => {
+    // This is the self-healing path for the three production linkages whose
+    // mode was never recorded: one `account.updated` and they are verified,
+    // with nobody editing the database by hand.
+    expect(
+      await syncConnectAccountStatus(
+        'profiles',
+        { id: 'acct_1', charges_enabled: true, payouts_enabled: true },
+        true,
+      ),
+    ).toBe(1)
+    expect(read('profiles', 'merchant-1')).toMatchObject({
+      stripeAccountLivemode: true,
+    })
+  })
+
+  it('records a TEST-mode event as test, not as absent', async () => {
+    await syncConnectAccountStatus(
+      'profiles',
+      { id: 'acct_1', charges_enabled: true, payouts_enabled: true },
+      false,
+    )
+    expect(read('profiles', 'merchant-1')).toMatchObject({
+      stripeAccountLivemode: false,
+    })
+  })
+
+  it('writes nothing for the field when the mode is not a boolean', async () => {
+    // Same doctrine as the two flags above: only what Stripe actually said.
+    // Coercing `undefined` here would mint a `false` and pin a live merchant
+    // as test-mode — a wrong answer invented from no evidence.
+    for (const value of [undefined, 'true', 1, null]) {
+      await syncConnectAccountStatus(
+        'profiles',
+        { id: 'acct_1', charges_enabled: true, payouts_enabled: true },
+        value,
+      )
+      expect(read('profiles', 'merchant-1')).not.toHaveProperty(
+        'stripeAccountLivemode',
+      )
+    }
+  })
 })

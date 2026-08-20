@@ -239,6 +239,41 @@ describe('Storefront Connect onboarding hardening (AGL-1994)', () => {
     })
   })
 
+  // AGL-2471 -----------------------------------------------------------------
+
+  it('records WHICH STRIPE WORLD the account belongs to', async () => {
+    // The field the money doors compare against the platform's own mode. It
+    // did not exist, which is why three production linkages naming TEST
+    // accounts read as payments-ready. `sk_test_spec` is the key this suite
+    // runs under, so `false` is the correct verdict here.
+    state.profile = { stripeAccountId: 'acct_new' }
+    accountState = { charges_enabled: true, payouts_enabled: true }
+    const res = makeRes()
+    await connectHandler(makeReq(), res)
+    expect(res.statusCode).toBe(200)
+    const write = state.profileWrites.find(
+      (candidate) => 'stripeAccountLivemode' in candidate,
+    )
+    expect(write).toBeDefined()
+    expect(write?.['stripeAccountLivemode']).toBe(false)
+  })
+
+  it('re-records the mode on EVERY refresh, so a new account cannot inherit one', async () => {
+    // Re-onboarding rewrites `stripeAccountId` on a document that may still
+    // carry the previous account's verdict. The write is unconditional for
+    // exactly that reason — a stale `true` here is a test account wearing a
+    // live account's clearance.
+    state.profile = {
+      stripeAccountId: 'acct_new',
+      stripeAccountLivemode: true,
+    }
+    accountState = { charges_enabled: true, payouts_enabled: true }
+    const res = makeRes()
+    await connectHandler(makeReq(), res)
+    expect(res.statusCode).toBe(200)
+    expect(state.profile?.['stripeAccountLivemode']).toBe(false)
+  })
+
   // Positive control on the authorization gate: the route must still refuse
   // a non-owner, so the tests above are not passing because everything 200s.
   it('refuses a caller who does not own the site', async () => {

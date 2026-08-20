@@ -67,7 +67,9 @@ describe('marketplace webhook: account.updated (AGL-1997)', () => {
     await marketplaceBillingWebhookHandler({
       type: 'account.updated',
       object: account,
-      event: {},
+      // `livemode` lives on the EVENT, never on the Account object
+      // (AGL-2471) — Stripe's Account payload has no such field.
+      event: { livemode: true },
     })
     expect(syncConnectAccountStatus).toHaveBeenCalledTimes(1)
     // `publisherProfiles`, not `profiles` — the marketplace binds the account
@@ -75,6 +77,10 @@ describe('marketplace webhook: account.updated (AGL-1997)', () => {
     expect(syncConnectAccountStatus).toHaveBeenCalledWith(
       'publisherProfiles',
       account,
+      // The third argument is the whole AGL-2471 fix on this path: without
+      // it the mode is never recorded and a live deployment refuses the
+      // linkage forever.
+      true,
     )
   })
 

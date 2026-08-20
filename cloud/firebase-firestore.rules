@@ -1805,6 +1805,15 @@ service cloud.firestore {
       // (payments-enabled gate) are set ONLY server-side after Connect
       // onboarding/KYC and are trusted by every checkout path — the client
       // must never set or change them (block on create, freeze on update).
+      //
+      // `stripeAccountLivemode` joined them in AGL-2471 and MUST be frozen for
+      // the same reason, only more so: it is a direct INPUT to the sale gate.
+      // A profile owner who could write it could assert their own test-mode
+      // account into live readiness and rebuild the exact defect. Every money
+      // door asks `connectLinkageIsReady`, which trusts this field.
+      // `stripePayoutsEnabled` is frozen alongside it — it was left writable
+      // when AGL-1547 added it, and a seller could forge their own
+      // "payouts are enabled" banner.
       function profileFieldsValid() {
         return request.resource.data.handle is string &&
           request.resource.data.handle.size() >= 3 &&
@@ -1818,10 +1827,12 @@ service cloud.firestore {
       }
       allow create: if profileOwner() && profileFieldsValid() &&
         !request.resource.data.keys()
-          .hasAny(['stripeAccountId', 'stripeChargesEnabled']);
+          .hasAny(['stripeAccountId', 'stripeChargesEnabled',
+                   'stripeAccountLivemode', 'stripePayoutsEnabled']);
       allow update: if profileOwner() && profileFieldsValid() &&
         !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['stripeAccountId', 'stripeChargesEnabled']);
+          .hasAny(['stripeAccountId', 'stripeChargesEnabled',
+                   'stripeAccountLivemode', 'stripePayoutsEnabled']);
     }
 
     // Org publisher identity (AGL-652). Publishing is ORG-ONLY: this is the
@@ -1850,6 +1861,10 @@ service cloud.firestore {
           request.resource.data.displayName.size() <= 80;
       }
       // The payout keys decide who receives money — Connect route only.
+      // `stripeAccountLivemode` (AGL-2471) is one of them: it is the field the
+      // marketplace sale gate compares against the platform's Stripe mode, so
+      // a publisher who could write it could sell from a test-mode account.
+      // `stripePayoutsEnabled` is frozen with it.
       // `handle` is equally server-owned: it must be claimed transactionally
       // in `publisherHandles` (AGL-652), and a client read-then-write lets
       // two orgs racing for one handle both "succeed", silently taking each
@@ -1869,6 +1884,7 @@ service cloud.firestore {
       allow update: if publisherManager() && publisherFieldsValid() &&
         !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['handle', 'stripeAccountId', 'stripeChargesEnabled',
+                   'stripeAccountLivemode', 'stripePayoutsEnabled',
                    'publisherAgreement', 'avatarUrl', 'website',
                    'supportEmail', 'supportUrl', 'githubUrl', 'xUrl',
                    'linkedinUrl']);

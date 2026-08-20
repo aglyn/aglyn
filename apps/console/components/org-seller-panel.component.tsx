@@ -133,10 +133,14 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
     state: payoutsState,
     chargesEnabled: profile?.stripeChargesEnabled,
     payoutsEnabled: profile?.stripePayoutsEnabled,
+    accountLivemode: profile?.stripeAccountLivemode,
   })
-  /** Stripe will let this account take money — three of the six outcomes. */
+  /** Stripe will let this account take money — four of the seven outcomes. */
   const chargesEnabled =
-    readiness === 'ready' || readiness === 'blocked' || readiness === 'unknown'
+    readiness === 'ready' ||
+    readiness === 'blocked' ||
+    readiness === 'unknown' ||
+    readiness === 'unverified'
   // Both held at null while the org is unknown, like the profile above
   // (AGL-1440): AGL-1380 repaired the profile ref and left these two
   // `where`-clause siblings on the sentinel. The purchases query is the one
@@ -964,6 +968,20 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
                     'to release them.'}
                 </Alert>
               ) : null}
+              {/* AGL-2471. The connected account was never verified against
+                  this deployment's Stripe mode, and the sale gate refuses it
+                  — so the card must not imply the account works. Saying it
+                  plainly, with the one action that fixes it, is the whole
+                  difference between this and a storefront that looks ready
+                  and cannot take a payment. */}
+              {readiness === 'unverified' ? (
+                <Alert severity="error">
+                  {'This Stripe account has not been verified for payments ' +
+                    'here, so sales will be refused. Reconnect it to ' +
+                    'confirm — if it was set up against Stripe test mode, ' +
+                    'you will need to connect a live account.'}
+                </Alert>
+              ) : null}
               <Typography variant="body2" color="text.secondary">
                 {readiness === 'ready'
                   ? 'Payouts are enabled — paid listings transfer to your ' +
@@ -976,7 +994,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
                       'whether payouts are released yet — recheck to ' +
                       'confirm. The platform fee is 20% per sale (30% on ' +
                       'the Free plan).'
-                    : readiness === 'blocked'
+                    : readiness === 'blocked' || readiness === 'unverified'
                       ? 'The platform fee is 20% per sale (30% on the Free ' +
                         'plan).'
                       : 'Connect a Stripe account to sell components. The ' +
@@ -994,9 +1012,11 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
                     ? 'Payouts enabled — recheck status'
                     : readiness === 'blocked'
                       ? 'Finish payout setup in Stripe'
-                      : readiness === 'unknown'
-                        ? 'Recheck payout status'
-                        : 'Set up payouts'}
+                      : readiness === 'unverified'
+                        ? 'Reconnect Stripe to verify'
+                        : readiness === 'unknown'
+                          ? 'Recheck payout status'
+                          : 'Set up payouts'}
               </Button>
             </>
           )}
