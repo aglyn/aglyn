@@ -35,6 +35,55 @@ import {
 import { hasLivePurchase } from './purchase-entitlement'
 
 /**
+ * THE TAX CLASSIFICATION OF A MARKETPLACE SALE (AGL-1553).
+ *
+ * "Software as a service (SaaS) — business use". Sent explicitly on the line
+ * item below, because this session builds its product ad hoc from
+ * `price_data` and an ad-hoc product with no `tax_code` is classified by the
+ * ACCOUNT-LEVEL preset instead — a value set by hand in the Stripe Dashboard
+ * for Aglyn's own subscription products (AGL-1537/1877), which happens to be
+ * this same string.
+ *
+ * So this is not a change of tax position, and deliberately not: it is the
+ * position Aglyn already collects on, already verified, and already states in
+ * a signed filing. The pending Texas private letter ruling request proposes at
+ * Part 6.1 that plugin charges are DATA PROCESSING SERVICES under Tax Code
+ * § 151.0035, of which § 151.351 exempts 20%, so tax is due on 80% of the
+ * charge; Part 4.5 ¶ 4 represents to the Comptroller that "the payment
+ * processor's tax classification applied to these charges is the
+ * software-as-a-service category" and that the 80% measure was confirmed by
+ * computation. AGL-1817 ran that computation against the live account: $6.60
+ * of tax on a $100.00 charge at an 8.25% Texas address — 8.25% x $80.
+ *
+ * What was actually broken is that none of that was expressed HERE. The
+ * classification of every marketplace sale hung on a Dashboard field owned by
+ * a different product line. Re-preset the account for storefront goods or
+ * bookings and these sales silently re-classify, moving the Texas base off the
+ * 80% the filing describes — with no diff to review, no failing test, and no
+ * symptom short of reconciling a return. Naming it here is what makes the
+ * filed representation survive a Dashboard edit.
+ *
+ * NOT merged with `PLATFORM_TAX_CODE` in `tools/scripts/lib/stripe-tax-code.mjs`,
+ * which stamps Aglyn's OWN products with the same string today. They answer
+ * different questions — Aglyn's first-party subscription vs. a third party's
+ * sale through Aglyn's marketplace — and the ruling request itself flags at
+ * Part 8 ¶ 8 that the Comptroller could characterize the two differently. One
+ * shared constant would make a divergence the filing anticipates impossible to
+ * express without touching the other business.
+ *
+ * DO NOT change this value to a downloadable-software code (`txcd_10202003`,
+ * `txcd_10203001`) on the reasoning that a plugin is "downloaded". That is the
+ * OPPOSING characterization — tangible personal property under Rule 3.308,
+ * taxable in full — which Part 6.1 argues against and which the filing already
+ * states against itself, in full, at Part 8 ¶¶ 1-2. Adopting
+ * it here would raise the tax charged to every buyer by a quarter of the base
+ * and make Part 4.5 ¶ 4 false. It is the Comptroller's call, and if the ruling
+ * goes that way the change is a one-line edit at this constant plus a
+ * prospective conformance — which is exactly what naming it here buys.
+ */
+export const MARKETPLACE_TAX_CODE = 'txcd_10103001'
+
+/**
  * Checkout for a paid marketplace listing (AGL-46): one-time destination
  * charge to the publisher's Express account. The platform's cut comes from
  * the seller org's ENTITLEMENTS (AGL-1543: 20%, 30% effective-free), sales
@@ -242,6 +291,11 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       'line_items[0][price_data][product_data][name]': String(
         listing.displayName ?? 'Marketplace component',
       ).slice(0, 120),
+      // The classification, stated rather than inherited (AGL-1553). See
+      // MARKETPLACE_TAX_CODE above: same value the account preset carries, so
+      // the tax computed is unchanged, but it no longer depends on a Dashboard
+      // field owned by Aglyn's subscription products.
+      'line_items[0][price_data][product_data][tax_code]': MARKETPLACE_TAX_CODE,
       'automatic_tax[enabled]': 'true',
       billing_address_collection: 'required',
       'payment_intent_data[transfer_data][destination]': String(accountId),
