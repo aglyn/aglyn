@@ -64,7 +64,10 @@ import {
   FIREBASE_DATABASE_EMULATOR_ENABLED,
   FIREBASE_FIRESTORE_EMULATOR_ENABLED,
 } from '@aglyn/shared-data-enums'
-import { RECAPTCHA_API_KEY } from '../../constants/firebase-config'
+import {
+  APP_CHECK_KEY_MISSING_MESSAGE,
+  appCheckSiteKey,
+} from '../../constants/firebase-config'
 import {
   type AuthPersistenceClass,
   createAuthInstance,
@@ -305,13 +308,21 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
       !FIREBASE_AUTH_EMULATOR_ENABLED &&
       !FIREBASE_FIRESTORE_EMULATOR_ENABLED
     ) {
-      try {
-        initializeAppCheck(app, {
-          provider: new ReCaptchaV3Provider(RECAPTCHA_API_KEY),
-          isTokenAutoRefreshEnabled: true,
-        })
-      } catch (error) {
-        console.error(error)
+      // No site key means no provider (AGL-2049). Registering one built on
+      // `undefined` does not throw — it fails asynchronously inside the SDK,
+      // where the catch below cannot see it — so this has to be a pre-check.
+      const siteKey = appCheckSiteKey()
+      if (!siteKey) {
+        console.warn(APP_CHECK_KEY_MISSING_MESSAGE)
+      } else {
+        try {
+          initializeAppCheck(app, {
+            provider: new ReCaptchaV3Provider(siteKey),
+            isTokenAutoRefreshEnabled: true,
+          })
+        } catch (error) {
+          console.error(error)
+        }
       }
     }
     // `initializeAnalytics`, not `getAnalytics`, for exactly one reason: it is

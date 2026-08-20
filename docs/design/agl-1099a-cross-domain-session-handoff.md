@@ -679,13 +679,29 @@ should not be needed at all.
 
 ### The allowlist that *is* the real ceiling: App Check's reCAPTCHA key
 
-`libs/shared/util/fbclient/src/lib/firebase-app.ts` initializes App Check with
-`ReCaptchaV3Provider`. The console reads Firestore **client-side**, and App Check
-gates those reads — and an App Check failure surfaces as a *permission denied*,
-not as anything naming App Check. A measurement on 2026-08-03 recorded "Verify
-the origin of reCAPTCHA solutions" as **checked**, with **9 entries**:
-`aglyn.com`, `localhost`, `vercel.app`, `aglyn.io`, `tenant.aglyn.app`,
-`console.aglyn.io`, `app.aglyn.io`, `admin.aglyn.io`, `auth.aglyn.io`.
+`libs/tenant/feature/instance/src/lib/hooks/firebase/firebase-services.tsx`
+initializes App Check with `ReCaptchaV3Provider` (this document previously cited
+`libs/shared/util/fbclient/src/lib/firebase-app.ts`, which no longer exists —
+corrected while closing AGL-2049). The console reads Firestore **client-side**,
+and App Check gates those reads — and an App Check failure surfaces as a
+*permission denied*, not as anything naming App Check. A measurement on
+2026-08-03 recorded "Verify the origin of reCAPTCHA solutions" as **checked**,
+with **9 entries**: `aglyn.com`, `localhost`, `vercel.app`, `aglyn.io`,
+`tenant.aglyn.app`, `console.aglyn.io`, `app.aglyn.io`, `admin.aglyn.io`,
+`auth.aglyn.io`.
+
+> ⚠️ **That 9-entry snapshot is superseded.** AGL-1404 added `aglyn.app` on
+> 2026-08-12, making it **10**. The entry matters because reCAPTCHA matches a
+> listed name and everything *beneath* it but never its parent, so
+> `tenant.aglyn.app` covered only `*.tenant.aglyn.app` — a pattern we do not
+> serve — and every published `{subdomain}.aglyn.app` site was uncovered. Do not
+> re-derive a current allowlist from the list above; re-probe.
+>
+> Note also what AGL-2049 established about the *tenant* app: it never mounts
+> `FirebaseServicesProvider` and imports no `firebase/*` client module at all,
+> so no published tenant site requests an App Check token today. `aglyn.app`
+> being listed is coverage held in advance of the first tenant client-Firebase
+> feature, not something currently in use.
 
 So **every custom console domain needs an entry on that key**, and this — not
 Firebase authorized domains — is the per-customer provisioning step and the
