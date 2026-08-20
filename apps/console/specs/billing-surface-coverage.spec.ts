@@ -107,7 +107,7 @@ function billingRoutes(): string[] {
  * this check for all of them — cannot be counted.
  */
 function clientCallers(route: string): string[] {
-  let output = ''
+  let output: string
   try {
     // `-n`, not `-l` (AGL-2115). The line is needed to tell a call from a
     // comment ABOUT a call; see `isCommentLine`.

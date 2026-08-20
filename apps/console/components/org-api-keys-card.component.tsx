@@ -149,7 +149,7 @@ export function OrgApiKeysCard() {
   )
 
   const refresh = useCallback(async () => {
-    let payload: Awaited<ReturnType<typeof request>> = null
+    let payload: Awaited<ReturnType<typeof request>>
     try {
       payload = await request('GET')
     } catch {

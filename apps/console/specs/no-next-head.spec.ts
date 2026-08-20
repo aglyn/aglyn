@@ -35,7 +35,7 @@ import { join } from 'node:path'
 describe('next/head is never imported under app/', () => {
   it('has no `from \'next/head\'` import in the App Router tree', () => {
     const appDir = join(__dirname, '..', 'app')
-    let matches = ''
+    let matches: string
     try {
       // grep exits 1 with no matches, which is the passing case.
       matches = execFileSync(

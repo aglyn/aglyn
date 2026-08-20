@@ -107,7 +107,7 @@ export default function EditHintBounce({
     if (window.location.pathname === '/edit-access') return
     if (!editorHintCookieDomain(window.location.hostname)) return
 
-    let lastBounceAt = 0
+    let lastBounceAt: number
     try {
       lastBounceAt =
         Number(window.localStorage.getItem(EDIT_HINT_BOUNCE_STAMP_KEY)) || 0

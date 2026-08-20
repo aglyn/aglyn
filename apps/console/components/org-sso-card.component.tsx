@@ -197,7 +197,7 @@ export function OrgSsoCard() {
   )
 
   const refresh = useCallback(async () => {
-    let payload: Awaited<ReturnType<typeof request>> = null
+    let payload: Awaited<ReturnType<typeof request>>
     try {
       payload = await request({ action: 'status' })
     } catch {
