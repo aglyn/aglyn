@@ -302,10 +302,15 @@ const ALLOWED = new Map<string, string>([
     'CHANGELOG.md',
     'Generated release record (AGL-2102): the word appears inside a quoted commit subject naming this very guard, and the file is regenerated from commit subjects so it cannot be fixed in place.',
   ],
-  [
-    '.claude/commands/release.md',
-    "Verbatim capture of Zach's mandate; \"open source community\" is quoted speech, not product naming (AGL-2066).",
-  ],
+  // `.claude/commands/release.md` was the third entry (AGL-2066) and is GONE.
+  // `6423f5245` rewrote that file, at Zach's request, to carry his directive
+  // verbatim and nothing else — the quoted speech the exemption covered went
+  // with the operational lore around it, and the staleness test below is what
+  // reported the entry the moment it stopped being used. Removed rather than
+  // kept "in case": a stale exemption silently permits the word in a file that
+  // no longer has a reason to use it, which is the failure that test exists
+  // for. Checked before deleting that the mandate itself was not lost — the
+  // rewrite was deliberate and the directive survives it.
 ])
 
 /** Anything whose bytes are not text we can meaningfully read. */
@@ -358,11 +363,12 @@ describe('the marketplace no longer calls itself community (AGL-975)', () => {
     // an exemption that has grown to cover more than it should. This one asks
     // the other question: is the guard still pointed at what it exists for?
 
-    // Exactly one exemption outside the product tree, named to the file.
-    // Widening this to `.claude/` — the tempting shortcut — fails here.
-    expect([...ALLOWED.keys()].filter((rel) => rel.startsWith('.claude/'))).toEqual([
-      '.claude/commands/release.md',
-    ])
+    // NO exemption outside the product tree any more — the one that was here
+    // is gone with the text it covered. Still asserted rather than deleted,
+    // because the question it asks did not go away: widening an exemption to
+    // `.claude/` — the tempting shortcut when a mandate quote trips the guard
+    // again — fails here.
+    expect([...ALLOWED.keys()].filter((rel) => rel.startsWith('.claude/'))).toEqual([])
 
     // Every exemption names a real FILE. A directory or prefix entry would
     // exempt everything beneath it, which `ALLOWED.has(rel)` would never
