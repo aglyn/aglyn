@@ -382,7 +382,7 @@ export default [
     // far. Keeping every import in one module means a breaking upgrade is a
     // one-file change instead of a search-and-replace across the console.
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
-    ignores: ['apps/console/components/layouts/app-bar-menubar.component.tsx'],
+    ignores: ['**/components/layouts/app-bar-menubar.component.tsx'],
     rules: {
       'no-restricted-imports': [
         'error',
