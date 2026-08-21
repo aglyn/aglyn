@@ -24,6 +24,7 @@ import {
   createResourceUid,
   decodeStoredNodes,
   findScreenIdByRoutePath,
+  formatQuotaLimit,
   normalizeScreenSlug,
   reservedScreenRouteMessage,
   reservedScreenRouteSegment,
@@ -248,7 +249,11 @@ function Screens(props) {
       const quota = checkOrgQuota(org, 'screensPerHost', billableScreenCount)
       if (!quota.allowed) {
         return enqueueSnackbar(
-          `Screen limit reached (${quota.limit}) — see Billing to upgrade`,
+          // `formatQuotaLimit`, not the raw number: `UNLIMITED` is
+          // `Number.POSITIVE_INFINITY`, so an uncapped plan that ever reached
+          // this branch would read "Screen limit reached (Infinity)".
+          `Screen limit reached (${formatQuotaLimit(quota.limit)}) — see ` +
+            'Billing to upgrade',
           { variant: 'warning', persist: false },
         )
       }

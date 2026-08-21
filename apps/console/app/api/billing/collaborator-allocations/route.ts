@@ -141,22 +141,44 @@ async function handler(request: Request): Promise<Response> {
         .where('orgId', '==', orgId)
         .limit(200)
         .get()
-      const sites = hosts.docs.map((host) => ({
-        hostId: host.id,
-        displayName: host.get('displayName') ?? null,
-        collaborators: countCollaboratorSeats(entries, host.id),
-        allocatedSeats: pool.byHost[host.id] ?? 0,
-        cap: resolveHostCollaboratorCap(org, host.id),
-      }))
+      const sites = hosts.docs.map((host) => {
+        const cap = resolveHostCollaboratorCap(org, host.id)
+        return {
+          hostId: host.id,
+          displayName: host.get('displayName') ?? null,
+          collaborators: countCollaboratorSeats(entries, host.id),
+          allocatedSeats: pool.byHost[host.id] ?? 0,
+          // See the entitlement notes below — same wire contract, per site.
+          cap: Number.isFinite(cap) ? cap : 0,
+          capUnlimited: !Number.isFinite(cap),
+        }
+      })
       const entitlements = resolveOrgEntitlements(org)
+      const planCapPerSite = entitlements.membersPerHost
+      const maxCapPerSite = entitlements.maxMembersPerHost
       return Response.json(
         {
           pool,
-          planCapPerSite: entitlements.membersPerHost,
+          // Enterprise sets `membersPerHost` and `maxMembersPerHost` to
+          // `UNLIMITED`, which is `Number.POSITIVE_INFINITY`, and
+          // `JSON.stringify(Infinity)` is `null`. Sent raw, the card compared
+          // a live head-count against `null` — and `1 > null` is TRUE, so a
+          // site with one collaborator on an uncapped plan rendered the
+          // grandfather notice ("1 over the limit and kept") directly beneath
+          // a readout of "1/∞ collaborators". Worse, `null >= null` is also
+          // true, so the same row claimed it was "At your plan's maximum of
+          // null per site — upgrade instead" on the top plan.
+          //
+          // Explicit flags rather than magic numbers, for the AGL-2404
+          // reason: `null` on the wire cannot distinguish "unlimited" from
+          // "the field is missing", and the card has to tell those apart.
+          planCapPerSite: Number.isFinite(planCapPerSite) ? planCapPerSite : 0,
+          planCapPerSiteUnlimited: !Number.isFinite(planCapPerSite),
           // The BAND. Assigning past it cannot raise a site's cap — the only
           // path beyond is a plan upgrade — so the console must not present
           // an over-band assignment as capacity.
-          maxCapPerSite: entitlements.maxMembersPerHost,
+          maxCapPerSite: Number.isFinite(maxCapPerSite) ? maxCapPerSite : 0,
+          maxCapPerSiteUnlimited: !Number.isFinite(maxCapPerSite),
           sites,
         },
         { status: 200 },
@@ -243,7 +265,10 @@ async function handler(request: Request): Promise<Response> {
       {
         ok: true,
         pool: updated,
-        hostCap: newCap,
+        // Same wire contract as the `get` above: an UNLIMITED cap would
+        // serialise as `null` here too.
+        hostCap: Number.isFinite(newCap) ? newCap : 0,
+        hostCapUnlimited: !Number.isFinite(newCap),
         strandedCollaborators,
       },
       { status: 200 },
