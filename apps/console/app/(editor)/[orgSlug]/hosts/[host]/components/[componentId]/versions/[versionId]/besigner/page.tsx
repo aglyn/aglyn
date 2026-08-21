@@ -51,9 +51,11 @@ import {
   useComponentVersionRef,
   useHost,
   useHostActivityLogger,
+  useUser,
 } from '@aglyn/tenant-feature-instance'
 import { Stack, Typography } from '@mui/material'
 import ComponentPropsDialog from '../../../../../../../../../../components/component-props-dialog.component'
+import revalidateLivePages from '../../../../../../../../../../utils/revalidate-live-pages'
 import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { observer } from 'mobx-react-lite'
@@ -138,6 +140,7 @@ function ComponentBesignerPage(props) {
   const listUrl = buildRoute(Route.HOST_COMPONENTS, { orgSlug,  host })
   const { doc: hostResult } = useHost({ hostId })
   const { doc: componentResult } = useComponent({ hostId, componentId })
+  const { data: user } = useUser()
   const publishedVersionId = componentResult?.data?.versionId
   // Id-based screen links: a component can contain a link, so the canvas needs the routing map to resolve hrefs and the
   // Attributes panel needs screen names for the screen-select field.
@@ -276,6 +279,16 @@ function ComponentBesignerPage(props) {
       versionId,
     },
     notify: enqueueSnackbar,
+    // Tell the author what happens next when they are editing the LIVE
+    // version. Without it the only feedback is "saved", the live page keeps
+    // serving cached HTML for a moment, and the rational response is to save
+    // again — which is the loop this message and the revalidate call above
+    // exist to end together. A draft save says nothing about the live site,
+    // because it does not touch it.
+    savedMessage:
+      versionId && versionId === publishedVersionId
+        ? 'Component saved — the live pages using it are refreshing now'
+        : undefined,
     queueLoading,
     // A definition's root is the promoted node, not the canvas root, so it
     // has to be wrapped or the canvas has no root and renders nothing
@@ -290,6 +303,21 @@ function ComponentBesignerPage(props) {
       // unsaved work has to go — otherwise the next person to join replays
       // edits that are already in the document (AGL-677).
       clearMirrorRef.current?.()
+      // Editing the PUBLISHED version edits what live screens render, so the
+      // cached HTML of every page using this component is stale the moment
+      // this returns. AGL-1150 wired revalidation to PUBLISH only, which left
+      // the commonest case uncovered: an author editing an already-live
+      // component saves, refreshes, sees the old page, and saves again.
+      // Editing a DRAFT version changes nothing live and drops nothing.
+      //
+      // A component's dependents are a node-tree SCAN rather than a pointer
+      // lookup, so the route reads more and takes longer — which is exactly
+      // why this is not awaited. Best effort: the save has already succeeded,
+      // and a cache hint that fails must never make a successful save look
+      // failed. The revalidate window stays underneath as the backstop.
+      if (versionId && versionId === publishedVersionId) {
+        void revalidateLivePages({ user, hostId, componentId })
+      }
       return logActivity('Saved the component', {
         type: 'component',
         id: componentId,

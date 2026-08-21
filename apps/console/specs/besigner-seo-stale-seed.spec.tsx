@@ -87,6 +87,11 @@ const mockCreateResource = jest.fn(async () => ({ id: 'created-id' }))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
+  // The page reads the signed-in user to authenticate the live-page cache
+  // drop it fires after saving a PUBLISHED version. A double that omits it
+  // does not fail as "missing mock" — it fails as `useUser is not a
+  // function` from inside React's render, which reads like a page bug.
+  useUser: () => ({ data: { getIdToken: async () => 'test-token' } }),
   useHostResourceApi: () => mockCreateResource,
   useHost: () => ({ doc: { data: {}, status: 'success', fromCache: false } }),
   useHostActivityLogger: () => jest.fn(),
