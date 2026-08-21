@@ -95,6 +95,13 @@ export const PLUGIN_REVIEW_CHECKLIST: readonly ReviewChecklistItem[] = [
     required: true,
   },
   {
+    id: 'positioning',
+    label: 'Listing does not misrepresent or disparage Aglyn’s plans or pricing',
+    detail:
+      'Read the listing title, description and README the way a customer would. Describing what the plugin does, and stating which Aglyn plans or features it needs or is compatible with, is fine. Comparing against Aglyn’s prices, asserting what a plan costs or contains, or presenting the plugin as a way to avoid paying for a tier is not — this text renders in the console beside the upgrade the customer is weighing. Publisher Agreement §3(h): reject and say which line, rather than approving with a note.',
+    required: true,
+  },
+  {
     id: 'license',
     label: 'License present and acceptable',
     detail:

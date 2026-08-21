@@ -107,6 +107,13 @@ export const PUBLISHER_ATTESTATION: readonly PublisherAttestationItem[] = [
       'These exact bytes, not an earlier build. Static review cannot tell a reviewer what your plugin does at runtime.',
   },
   {
+    id: 'listing-conduct',
+    label:
+      'The listing does not disparage Aglyn, quote what its plans cost, or sell a way around one',
+    detail:
+      'Saying which Aglyn plans or features your plugin needs, or works with, is fine and useful. Editorialising about Aglyn’s prices or quotas, stating or implying what a plan contains, or pitching this version as a way to avoid a plan or an upgrade is not — the listing renders inside the customer’s own console.',
+  },
+  {
     id: 'changelog',
     label: 'The changelog describes what changed since the last version',
     detail:

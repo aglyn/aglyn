@@ -258,6 +258,48 @@ describe('publish-plugin attestation gate (AGL-969)', () => {
   })
 
   /**
+   * Listing conduct (AGL-2484), the warranty in Publisher Agreement §3(h).
+   *
+   * Named here rather than derived. Every other assertion in this file goes
+   * through `requiredAttestationIds`, so dropping this item from the list —
+   * or marking it `updateOnly`, which would excuse it on a first publish,
+   * the one that decides how a listing is pitched — leaves all of them
+   * green. These two go red.
+   */
+  describe('the listing-conduct statement is required, not decorative', () => {
+    it('is asked of a FIRST publish, not only of an update', () => {
+      expect(requiredAttestationIds(false)).toContain('listing-conduct')
+      expect(requiredAttestationIds(true)).toContain('listing-conduct')
+    })
+
+    it('refuses a publish that states everything EXCEPT listing conduct', async () => {
+      const result = await publish(
+        requiredAttestationIds(false).filter((id) => id !== 'listing-conduct'),
+      )
+      expect(result.status).toBe(428)
+      expect(
+        (result.body as { missingAttestations: string[] }).missingAttestations,
+      ).toEqual(['listing-conduct'])
+      // Refused means refused: no bytes, no version doc.
+      expect(adminMock.__versionWrites).toHaveLength(0)
+    })
+
+    it('records it against these bytes, so a republish re-asks', async () => {
+      const result = await publish(requiredAttestationIds(false))
+      expect(result.status).toBe(200)
+      const written = adminMock.__versionWrites[0] as {
+        sha256: string
+        publisherAttestation: Record<string, { by: string; sha256: string }>
+      }
+      expect(written.publisherAttestation['listing-conduct']).toBeDefined()
+      expect(written.publisherAttestation['listing-conduct'].sha256).toBe(
+        written.sha256,
+      )
+      expect(written.publisherAttestation['listing-conduct'].by).toBe('uid-1')
+    })
+  })
+
+  /**
    * The subject gate (AGL-1076).
    *
    * `repository` shipped as a confirmable claim about a field the form never
