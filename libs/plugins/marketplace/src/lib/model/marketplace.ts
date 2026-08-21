@@ -80,9 +80,11 @@ export interface MarketplaceProfile {
  * the org is who buyers see. Keyed by org id so authorization is a plain org
  * role check with no ownership indirection.
  *
- * `stripeAccountId` / `stripeChargesEnabled` are written only by the Connect
- * route via the Admin SDK and are frozen from client writes by the rules —
- * they decide who receives money.
+ * `stripeAccountId` / `stripeChargesEnabled` / `stripeAccountLivemode` are
+ * written only by the Connect route via the Admin SDK and are frozen from
+ * client writes by the rules — they decide who receives money, and
+ * `stripeAccountLivemode` is a gate INPUT (AGL-2471), so a client that could
+ * write it could re-open the hole by asserting its own readiness.
  */
 export interface MarketplacePublisherProfile {
   /** Unique marketplace handle; reserved in `publisherHandles/{handle}`. */
@@ -95,6 +97,13 @@ export interface MarketplacePublisherProfile {
   stripeAccountId?: string
   /** Server-only; true once Connect onboarding can accept charges. */
   stripeChargesEnabled?: boolean
+  /**
+   * Server-only; which Stripe world the account belongs to (AGL-2471).
+   * `true` = live, `false` = test, ABSENT = never established — and on a live
+   * deployment absent refuses the sale, because a payout destination whose
+   * mode nobody verified is exactly what shipped three unusable storefronts.
+   */
+  stripeAccountLivemode?: boolean
 }
 
 /**

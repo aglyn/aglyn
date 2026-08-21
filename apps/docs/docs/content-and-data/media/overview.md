@@ -153,6 +153,26 @@ same thing. The exact caps are in
 Any file over 3 MB automatically uses **signed-URL uploads**, so big files go straight to
 storage without tying up the console. Folders nest up to **5 levels** deep.
 
+:::note Uploads are checked for what they are — but not scanned for malware
+
+Every upload is checked **structurally** before it is stored:
+
+- the bytes have to match the type the file claims to be, so a program renamed
+  `invoice.pdf` is refused rather than stored and served from your domain;
+- programs and installers are refused under **any** file type or name;
+- a Word, Excel or PowerPoint file carrying **macros** is refused, including one
+  renamed from `.docm` to `.docx`.
+
+A refused upload names the reason in the message that appears in the library, and
+nothing is stored or counted against your storage.
+
+**This is not a virus scan.** These checks establish that a file is the *kind of thing*
+it says it is; they do not examine what is inside it. A harmful document that is a
+genuine document of its type will be accepted. Treat files you upload as content you
+are responsible for, the same as anything else you publish.
+
+:::
+
 :::note SVG uploads are cleaned
 
 An SVG is a document, not just a picture — it can carry scripts, event handlers and

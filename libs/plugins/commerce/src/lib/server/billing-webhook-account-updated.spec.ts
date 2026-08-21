@@ -77,13 +77,25 @@ describe('commerce webhook: account.updated (AGL-1997)', () => {
     await commerceBillingWebhookHandler({
       type: 'account.updated',
       object: account,
-      event: { type: 'account.updated', data: { object: account } },
+      // `livemode` sits on the EVENT, not on the Account object (AGL-2471):
+      // Stripe's Account payload has no `livemode` field at all.
+      event: {
+        type: 'account.updated',
+        livemode: true,
+        data: { object: account },
+      },
     })
     expect(syncConnectAccountStatus).toHaveBeenCalledTimes(1)
     // `profiles` is where the commerce connect route binds the account —
     // pointing this at the publisher collection would sync nothing and fail
     // silently, which is the shape of the bug it fixes.
-    expect(syncConnectAccountStatus).toHaveBeenCalledWith('profiles', account)
+    expect(syncConnectAccountStatus).toHaveBeenCalledWith(
+      'profiles',
+      account,
+      // The mode, carried across. Dropping this argument is how a linkage
+      // stays unverified forever on a live deployment.
+      true,
+    )
   })
 
   // Positive control on the early return: an account event is not an order,

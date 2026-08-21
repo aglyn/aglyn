@@ -640,6 +640,15 @@ export const BesignerVersionsComponent = observer(
           endIcon={<MdiIcon path={ICON_VARIANT_MENU_DOWN.path} />}
           sx={{
             maxWidth: 220,
+            // A version id is a CASE-SENSITIVE Firestore document id whose
+            // alphabet contains both `I` and `l`, and this label falls back
+            // to the raw id whenever a version has no display name. MUI's
+            // button default painted `IpFQ51Z2y3` as `IPFQ51Z2Y3`, so an id
+            // read off this chip and typed into a besigner URL came back as
+            // `lpFQ51Z2y3` — a version that does not exist, which the editor
+            // reports as a bare "Not found" over the canvas of a published
+            // legal screen. Never transform an identifier.
+            textTransform: 'none',
             '& .MuiButton-endIcon': { marginLeft: 0 },
           }}
         >

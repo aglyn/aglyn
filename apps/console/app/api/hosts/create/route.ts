@@ -19,13 +19,7 @@ import {
   pluginRequestFromWeb,
   resolveIdpDisplayName,
 } from '@aglyn/aglyn/server'
-import {
-  checkQuota,
-  createResourceUid,
-  isBlockedSubdomain,
-  SUBDOMAIN_PATTERN,
-  suggestSubdomains,
-} from '@aglyn/aglyn/server'
+import { isBlockedSubdomain, SUBDOMAIN_PATTERN } from '@aglyn/aglyn/server'
 import {
   consumeRateLimit,
   emailUnverifiedResponse,
@@ -35,9 +29,12 @@ import {
   isImpersonationSession,
   lockdownRefusal,
   memberHasOrgPermission,
-  registerOrgHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+import {
+  claimHostForOrg,
+  findSubdomainConflict,
+} from '../../../../utils/server/provision-host'
 
 /**
  * Creates a host (user request 2026-07-07 — the hosts page had no create
@@ -114,23 +111,14 @@ async function handler(request: Request): Promise<Response> {
     }
     const firestore = firebaseAdmin.app().firestore()
 
-    const taken = await firestore
-      .collection('hosts')
-      .where('subdomain', '==', subdomain)
-      .limit(1)
-      .get()
-    if (!taken.empty) {
-      // Offer available alternatives (AGL-147): name-2, name-<year>, …
-      const suggestions: string[] = []
-      for (const candidate of suggestSubdomains(subdomain)) {
-        const candidateTaken = await firestore
-          .collection('hosts')
-          .where('subdomain', '==', candidate)
-          .limit(1)
-          .get()
-        if (candidateTaken.empty) suggestions.push(candidate)
-      }
-      return Response.json({ error: 'That subdomain is taken', suggestions }, { status: 409 })
+    // Shared with `POST /v1/sites` (AGL-2465). Offers available alternatives
+    // (AGL-147): name-2, name-<year>, …
+    const conflict = await findSubdomainConflict(firestore, subdomain)
+    if (conflict) {
+      return Response.json(
+        { error: 'That subdomain is taken', suggestions: conflict.suggestions },
+        { status: 409 },
+      )
     }
 
     // Site quota rides the org doc (AGL-238), counted per org.
@@ -199,72 +187,18 @@ async function handler(request: Request): Promise<Response> {
     }
 
     // Enforced for every org — a plan-less org resolves as `free`
-    // (hostLimit 1), not unmetered.
-    //
-    // COUNTED AND CLAIMED IN ONE TRANSACTION (AGL-2063). This used to be an
-    // aggregation `count()` followed by an unconditional `.set()` on a fresh
-    // random id, which is the create-time-quota shape AGL keeps relearning: N
-    // concurrent POSTs all read `count: 0`, all pass, and all create. A free
-    // org walked away with N sites for a `hostLimit` of 1, and every one of
-    // them costs `INFRA_COGS_PER_SITE_USD` a month with no invoice behind it.
-    //
-    // The transaction reads `orgs/{id}.hosts` — the directory map
-    // `registerOrgHost` maintains and `erase` prunes — and the count is the
-    // LARGER of that map and the pre-read aggregation. Neither alone is
-    // enough, and the reason each is here is different:
-    //
-    // - The aggregation is authoritative for history. An org whose sites
-    //   predate the directory map would otherwise read as zero and be handed
-    //   a free extra site.
-    // - The map is authoritative for CONCURRENCY, because it is written
-    //   inside this same transaction. The loser of a race re-reads it on
-    //   retry, sees the winner's id, and is refused — which the aggregation,
-    //   read before the transaction opened, can never do.
-    const hostId = createResourceUid()
-    const preCount = (
-      await firestore
-        .collection('hosts')
-        .where('orgId', '==', orgMembership.orgId)
-        .count()
-        .get()
-    ).data().count
-    const orgRef = firestore.collection('orgs').doc(orgMembership.orgId)
-    const hostRef = firestore.collection('hosts').doc(hostId)
-    const claim = await firestore.runTransaction(async (tx) => {
-      const fresh = await tx.get(orgRef)
-      const directory = fresh.get('hosts')
-      const mapped =
-        directory && typeof directory === 'object'
-          ? Object.values(directory as Record<string, unknown>).filter(Boolean)
-              .length
-          : 0
-      const quota = checkQuota(
-        (fresh.data() ?? org) as any,
-        'hostLimit',
-        Math.max(preCount, mapped),
-      )
-      if (!quota.allowed) return { allowed: false as const, limit: quota.limit }
-      tx.set(hostRef, {
-        displayName,
-        subdomain,
-        orgId: orgMembership.orgId,
-        screens: {},
-        createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-      })
-      // The claim itself. `set(…, { merge: true })` deep-merges the map, so
-      // this adds one key without disturbing the org's other fields — and it
-      // is what makes a concurrent create see this site on its retry.
-      // `registerOrgHost` below writes the same key again, idempotently.
-      tx.set(
-        orgRef,
-        {
-          hosts: { [hostId]: true },
-          updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true },
-      )
-      return { allowed: true as const, limit: quota.limit }
+    // (hostLimit 1), not unmetered. Counted and claimed in ONE transaction
+    // (AGL-2063), then the org directory, hostIndex mirror and memberRoles
+    // projection. Shared verbatim with `POST /v1/sites` (AGL-2465); the
+    // reasoning for the count being the larger of the directory map and the
+    // pre-read aggregation now lives with the code, in
+    // utils/server/provision-host.ts.
+    const claim = await claimHostForOrg({
+      firestore,
+      orgId: orgMembership.orgId,
+      displayName,
+      subdomain,
+      org,
     })
     if (!claim.allowed) {
       return Response.json({
@@ -273,8 +207,7 @@ async function handler(request: Request): Promise<Response> {
           'sites from Billing',
       }, { status: 403 })
     }
-    // Org directory + hostIndex mirror + memberRoles projection (AGL-233).
-    await registerOrgHost(orgMembership.orgId, hostId, subdomain)
+    const hostId = claim.hostId
     // No starter seeding here (AGL-687). Starters render from the code
     // definitions and are copied in only when a user uses or edits one, so a
     // new site starts with an empty library and still gets every later

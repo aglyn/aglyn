@@ -60,6 +60,7 @@ const SCOPE_OPTIONS: Array<{ scope: string; label: string; description: string }
   { scope: 'contacts:write', label: 'Contacts — write', description: 'Add contacts, edit their name, tags and notes, and delete them. Never changes the email a contact is identified by, or where it came from.' },
   { scope: 'sites:read', label: 'Sites — read', description: 'List sites and their details.' },
   { scope: 'sites:publish', label: 'Sites — publish', description: 'Refresh a site’s live pages so writes made over the API appear immediately instead of waiting for the cache. Changes no content.' },
+  { scope: 'sites:write', label: 'Sites — create', description: 'Create new sites in this organization. Counts against your site allowance. Cannot rename or delete a site.' },
   { scope: 'forms:read', label: 'Form submissions — read', description: 'Read a site’s form submissions.' },
   { scope: 'forms:write', label: 'Form submissions — write', description: 'Mark a site’s form submissions read or unread, and delete them. Never edits what a visitor typed.' },
   { scope: 'orders:read', label: 'Orders — read', description: 'Read a site’s store orders, their line items and totals.' },

@@ -302,6 +302,36 @@ switch; including commerce is your plan's. See
   inclusive pricing supported) or **Stripe Tax** automatic calculation;
   products can be tax-exempt.
 
+### Lodging tax on reservations
+
+A stay is not goods. The sales-tax settings above configure a **goods** rate
+resolved against an address; occupancy (lodging/hotel) tax is a separate
+regime with its own rates, its own registration and its own return, so
+reservations do not use them.
+
+**Commerce → Settings → Taxes → Lodging tax** is where you set your own rate
+for it. It is **off by default** — leave it blank and reservations charge no
+lodging tax, exactly as before.
+
+When you set a rate, Aglyn adds it to the reservation charge as its own
+receipt line using the label you choose, and records the amount and the rate
+on the reservation. It is always **your own rate**: Stripe Tax cannot compute
+occupancy tax from a reservation session, so a store using Stripe Tax for
+goods still sets this one by hand.
+
+:::warning Aglyn does not provide tax advice
+Aglyn applies the rate you enter and records what was charged. It does **not**
+determine whether lodging tax applies to you, at what rate, or where it should
+be paid. Confirm your obligations with a qualified tax professional.
+:::
+
+**Deposits.** A reservation usually charges a deposit rather than the whole
+stay, and the rate is applied to **the amount actually charged** — the
+deposit. Aglyn does not decide whether your jurisdiction wants occupancy tax
+on the full stay at booking, on the deposit, or at check-out. If tax is due on
+more than the deposit, collect the difference the way you collect the rest of
+the balance.
+
 ### Storefront sales tax
 
 **Analytics → Storefront sales tax** shows what your storefront collected in a

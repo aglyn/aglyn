@@ -46,9 +46,14 @@ import {
   UNLIMITED,
   EVENT_CALENDAR_ADDON_MONTHLY_USD,
   POS_REGISTER_ADDON_MONTHLY_USD,
+  POS_REGISTERS_ADDON_MAX,
   ORG_COGS_UNIT_RATES_USD,
   METERED_MARKUP,
 } from '../../libs/aglyn/src/lib/app-utils/plan-entitlements.ts'
+import {
+  onboardingSignupHref,
+  type OnboardingInterval,
+} from '../../libs/aglyn/src/lib/app-utils/onboarding-deep-link.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const OUT = join(HERE, 'pricing-copy')
@@ -495,6 +500,45 @@ const fees = {
     digital: pct(PLAN_ENTITLEMENTS[p].transactionFeeDigitalPct),
     physical: pct(PLAN_ENTITLEMENTS[p].transactionFeePhysicalPct),
   })),
+
+  /*==========================================
+   * THE MARKETPLACE TAKE RATE (AGL-2194 P8).
+   *
+   * `/pricing` carries a section headed "TRANSACTION FEES — What Aglyn takes
+   * on a sale" and answers it with the digital/physical ladder above, which
+   * reaches 0% from Advanced up. The same page ticks "Sell on the
+   * marketplace" from Pro up. It states the take rate on a marketplace sale
+   * NOWHERE: grepping the live page (2026-08-20) for "20%", "take rate" and
+   * "revenue share" returns zero hits, and `/product/plugins` is silent too.
+   *
+   * `marketplaceFeePct` is 20 on every paid plan and 30 on free, charged at
+   * `libs/plugins/marketplace/src/lib/server/checkout.ts` through
+   * `resolveMarketplaceFeePct`. So a publisher on Advanced reads "0%
+   * transaction fees" and "Sell on the marketplace ✓" on one screen and keeps
+   * 80% of their sale. That is the one number on this page where the product
+   * charges MORE than the page discloses, and it is money a seller has not
+   * been told about.
+   *
+   * The rate is LOCKED and is not changed here. What is fixed here is that
+   * the figure now exists in the generated source of truth, so the besigner
+   * edit that discloses it is a transcription of a checked number rather than
+   * someone's recollection — and so a later change to `marketplaceFeePct`
+   * fails `check:pricing-tables` instead of silently making the disclosure
+   * false the way the 10x form-submission rate went unguarded.
+   *=========================================*/
+  marketplace: {
+    heading: 'Marketplace sales — what Aglyn keeps on a listing sale',
+    rows: PLANS.map((p) => ({
+      plan: p,
+      label: PLAN_LABELS[p],
+      takeRate: pct(PLAN_ENTITLEMENTS[p].marketplaceFeePct),
+    })),
+    note:
+      'Separate from the storefront transaction fee above and NOT reduced by ' +
+      'plan: a publisher on a 0% storefront plan still pays the marketplace ' +
+      'take rate on marketplace listing sales. Charged in ' +
+      '`libs/plugins/marketplace/src/lib/server/checkout.ts`.',
+  },
 }
 
 /**
@@ -574,6 +618,53 @@ const TIER_SPEC: Partial<
   },
 }
 
+/**
+ * Where the CTAs point. The published strip says `https://app.aglyn.com/signup`
+ * and so does every plan card above it; this is that same destination, stated
+ * once so the two halves of the page cannot drift apart.
+ */
+const SIGNUP_URL = 'https://app.aglyn.com/signup'
+
+/**
+ * The strip's copy at one billing cadence (AGL-1989).
+ *
+ * The four plan cards above the strip live inside a Monthly/Annual Tabs, so
+ * each cadence has its own authored copy and its own CTA — the annual Starter
+ * card reads "$16 /mo · $192 billed yearly" and links to
+ * `?plan=starter&interval=year`. The strip is authored ONCE, OUTSIDE the tabs,
+ * so it quoted the monthly headline on both tabs and its CHOOSE links carried
+ * no `interval` at all: a visitor who picked Annual and then picked Scale
+ * arrived pre-selected for a MONTHLY plan and lost the discount they were
+ * just shown.
+ *
+ * The page is authored content and this file publishes nothing, so this does
+ * not fix the page. What it fixes is that the string that SHOULD be published
+ * now exists somewhere a check can read it: the `ctaHref` comes from the
+ * deep-link contract's own writer rather than being typed, and
+ * `onboardingSignupHref` is the function whose output
+ * `parseOnboardingPlanIntent` is tested to read back as a STATED interval.
+ *
+ * The sub-line follows the CARDS' convention rather than inventing one: on the
+ * monthly tab it quotes the annual per-month price ("$179/mo billed
+ * annually"), on the annual tab it quotes the yearly total ("$2,148 billed
+ * yearly"), which is what the annual Starter/Pro/Business cards do.
+ */
+const tierAtInterval = (p: Plan, interval: OnboardingInterval) => {
+  const monthly = PLAN_PRICING[p].basePriceMonthlyUsd
+  const annualMonthly = PLAN_PRICING[p].basePriceAnnualMonthlyUsd
+  return interval === 'year'
+    ? {
+        priceLabel: `$${annualMonthly} /mo`,
+        subLabel: `$${(annualMonthly * 12).toLocaleString('en-US')} billed yearly`,
+        ctaHref: onboardingSignupHref(SIGNUP_URL, p, 'year'),
+      }
+    : {
+        priceLabel: `$${monthly} /mo`,
+        subLabel: `$${annualMonthly}/mo billed annually`,
+        ctaHref: onboardingSignupHref(SIGNUP_URL, p, 'month'),
+      }
+}
+
 const tiers = {
   heading: 'Need more scale?',
   lede: 'Higher-volume plans for stores, orgs, and agencies.',
@@ -590,6 +681,10 @@ const tiers = {
         typeof s === 'string' ? SPEC[s](e) : s.lit,
       ),
       cta: 'CHOOSE',
+      byInterval: {
+        month: tierAtInterval(p, 'month'),
+        year: tierAtInterval(p, 'year'),
+      },
     }
   }),
   enterprise: {
@@ -604,10 +699,26 @@ const tiers = {
       `${pct(PLAN_ENTITLEMENTS.enterprise.transactionFeeDigitalPct)} platform fees`,
       'white-label',
       'SSO',
-      'SLA & dedicated support',
+      // Was `'SLA & dedicated support'` (AGL-2194 P4). Dedicated support is
+      // real — a named manager and a 24–48h first response, which the FAQ
+      // states and the support tier implements. A CONTRACTUAL UPTIME SLA is
+      // not: no entitlement key, no credit calculation, no route, nothing.
+      // AGL-2411 took the claim off the live page, and the same page's FAQ now
+      // says out loud "we do not offer a contractual uptime SLA during public
+      // beta" — so this artifact was the last place still selling it, and
+      // selling it in direct contradiction of the FAQ two screens below.
+      // Whoever next pours this card from the generated tables would have put
+      // it back.
+      'dedicated support',
       'custom contracts',
     ],
     cta: 'CONTACT SALES',
+    // Deliberately no signup href and no cadence: Enterprise is quoted, not
+    // bought, and the published CTA goes to the contact screen rather than to
+    // signup. The deep-link parser reports `intervalStated: false` for a
+    // custom-priced plan however the link is written, so an `interval` here
+    // could only mislead.
+    byInterval: null,
   },
 }
 
@@ -630,7 +741,14 @@ const addons = {
       // a multi-location rollout is the SITE, which is why this is not
       // 'organization' the way Event Calendar deliberately is.
       scope: 'per site',
-      maxQuantity: null,
+      // `null` read as "buy as many as you like" (AGL-2194). It is capped:
+      // `POST /api/billing/addons` refuses a quantity above
+      // `POS_REGISTERS_ADDON_MAX` on any plan that carries `features.pos`
+      // (`apps/console/app/api/billing/addons/route.ts:228`). Publishing "no
+      // maximum" beside an $89/mo line item is a claim about what a buyer can
+      // purchase, and it was one the checkout would decline — so it is read
+      // from the constant that declines it, not hand-written beside it.
+      maxQuantity: POS_REGISTERS_ADDON_MAX,
       included: Object.fromEntries(
         PLANS.map((p) => [p, PLAN_ENTITLEMENTS[p].posRegisters]),
       ),
@@ -954,7 +1072,11 @@ console.log(`metered: ${metered.rows.length} pass-through rows`)
 metered.rows.forEach((r) =>
   console.log(`  ${r.label}: cost ${r.ourCost} → you pay ${r.youPay}`),
 )
-console.log(`fees:    ${fees.rows.length} rows`)
+console.log(`fees:    ${fees.rows.length} storefront rows`)
+console.log(
+  `marketplace take rate: ` +
+    fees.marketplace.rows.map((r) => `${r.label} ${r.takeRate}`).join(' · '),
+)
 console.log(`literal (not read from code) rows: ${literals.length}`)
 literals.forEach((l) => console.log(`  ${l.label} — ${l.why}`))
 console.log()

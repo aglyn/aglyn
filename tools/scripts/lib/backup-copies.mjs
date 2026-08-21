@@ -119,22 +119,22 @@ export const PRODUCTION_DATA_STORES = [
     bucket: '{projectId}.appspot.com',
     holds:
       'Live customer media under orgs/{orgId}/ (35.7 MiB), the legacy pre-AGL-237 hosts/{hostId}/media/ path (11.2 MiB, still served), users/{uid}/ avatars, plus the adminAudit-archive/ and erasures/ retention prefixes (both empty on 2026-08-20)',
-    copiedBy: 'none',
-    why: 'AGL-2422. 451 objects / ~47 MiB of primary data with no copy anywhere — no object versioning, no mirror; the only safety net is the bucket default 7-day soft delete, which a lifecycle-rule mistake outlives. The weekly Firestore export does not touch Storage. NOTE the holds line names hosts/ and users/ deliberately: it read as orgs/ only until 2026-08-20, and hosts/ is a QUARTER of the bucket — a mirror scoped from that description would have silently omitted it.',
+    copiedBy: 'storage-mirror',
+    why: 'AGL-2422, closed 2026-08-20. Copied nightly by Storage Transfer job transferJobs/18273792019129328089 into gs://aglyn-dr-backup/media/, in the aglyn-dr project. First run copied 451 objects / 49,135,212 B — byte-for-byte the source total. The mirror bucket has object versioning with a 90-day noncurrent lifecycle, both applied BEFORE the first object landed: the ordering is load-bearing, since a sync into an unversioned bucket has no undo for the very deletes it is meant to survive. The job mirrors deletions on purpose — a GDPR erasure must propagate — and versioning is what turns that from a second way to lose data into a 90-day window. NOTE the holds line names hosts/ and users/ deliberately: it read as orgs/ only until 2026-08-20, and hosts/ is a QUARTER of the bucket — a mirror scoped from that description would have silently omitted it.',
     mirrorPrefix: 'media/',
   },
   {
     bucket: '{projectId}-plugin-artifacts',
     holds: 'Published plugin bundles the marketplace serves (7 objects)',
-    copiedBy: 'none',
-    why: 'AGL-2422. Invisible to the Firebase console (it is a plain GCS bucket, not the Firebase default), so it is absent from every Firebase-shaped review. Small (~28 KiB) but not reconstructible — a publisher-signed artifact cannot be rebuilt from source on our side.',
+    copiedBy: 'storage-mirror',
+    why: 'AGL-2422, closed 2026-08-20. Copied nightly by Storage Transfer job transferJobs/2865144727835075150 into gs://aglyn-dr-backup/plugin-artifacts/. First run copied 7 objects / 28,778 B, matching the source exactly. Invisible to the Firebase console (it is a plain GCS bucket, not the Firebase default), so it is absent from every Firebase-shaped review — which is precisely why it is declared here rather than left to be noticed. Small but not reconstructible: a publisher-signed artifact cannot be rebuilt from source on our side.',
     mirrorPrefix: 'plugin-artifacts/',
   },
   {
     bucket: '{projectId}-firestore-exports',
     holds: 'Weekly Firestore exportDocuments snapshots (90-day lifecycle)',
     copiedBy: 'is-the-copy',
-    why: 'AGL-1843. This IS the independent Firestore copy — and it lives in the production project, which is the whole of AGL-1882.',
+    why: 'AGL-1843. This IS the independent Firestore copy. It still lives in the production project — which was the whole of AGL-1882 — but no longer only there: since 2026-08-20 transferJobs/17979469555460199434 copies it nightly to gs://aglyn-dr-firestore-exports in the aglyn-dr project, which is what OFFSITE_BACKUP_BUCKET now names. Losing aglyn-main no longer takes every copy of the database with it.',
   },
   {
     bucket: 'staging.{projectId}.appspot.com',
@@ -173,19 +173,24 @@ export const PRODUCTION_DATA_STORES = [
  *
  * @type {ReadonlyArray<{ code: string, issue: string, expires: string, why: string }>}
  */
+/**
+ * Injectable so the ACKNOWLEDGED MECHANISM stays tested once the real list is
+ * empty (2026-08-20). The two tests covering it used to read the live array,
+ * which meant closing the last gap — the outcome the whole file is aimed at —
+ * deleted the coverage for the machinery that carries the next one. A guard
+ * that loses its own tests as a reward for succeeding is a guard that quietly
+ * stops working the day it is needed again. Production callers pass nothing
+ * and get the real list.
+ */
 export const ACKNOWLEDGED = [
-  {
-    code: 'no-off-project-copy',
-    issue: 'AGL-1882',
-    expires: '2026-09-01',
-    why: 'Closing this means creating a bucket in a second GCP project — a cloud-resource change only Zach can make (docs/DISASTER_RECOVERY.md, gap 1, has the exact commands). Expires on the public-beta date because launching with paying customers and zero off-project copies is a different decision from carrying the gap pre-revenue.',
-  },
-  {
-    code: 'no-storage-mirror',
-    issue: 'AGL-2422',
-    expires: '2026-09-01',
-    why: 'Same shape and the same sitting as AGL-1882: the mirror bucket is a cloud resource, and docs/DISASTER_RECOVERY.md gap 6 carries the ordered commands. Everything on this side of the line is done — set STORAGE_MIRROR_BUCKET and this check starts proving the mirror is complete instead of reporting its absence. Expires on the public-beta date for the same reason the other one does: media we cannot restore is a promise we cannot make to somebody paying us.',
-  },
+  // Empty on purpose, and that is the point of the list rather than a sign it
+  // is unused. Both entries that lived here — `no-off-project-copy`
+  // (AGL-1882) and `no-storage-mirror` (AGL-2422) — were closed on
+  // 2026-08-20 by creating the `aglyn-dr` project and three nightly Storage
+  // Transfer jobs, so the guard now PROVES what it used to excuse. Leaving
+  // the array in place keeps the mechanism available for the next gap
+  // somebody has actually seen; deleting it would mean the next one gets
+  // silenced some other way.
 ]
 
 /**
@@ -275,6 +280,7 @@ export function assessBackupCopies({
   storageMirror = null,
   now = Date.now(),
   strict = false,
+  acknowledgements = ACKNOWLEDGED,
 }) {
   /** @type {Finding[]} */
   const findings = []
@@ -523,7 +529,7 @@ export function assessBackupCopies({
   const acknowledged = strict
     ? []
     : findings.filter((finding) =>
-        ACKNOWLEDGED.some(
+        acknowledgements.some(
           (entry) =>
             entry.code === finding.code && Date.parse(entry.expires) > now,
         ),

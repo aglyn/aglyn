@@ -29,12 +29,25 @@ import {
   analyticsMayEmit,
 } from '@aglyn/aglyn/app-utils/analytics-environment'
 import {
+  advertisingGrantedByRecord,
   GA_CONSENT_DEFAULT_SNIPPET,
+  GA_CONSENT_DEFAULT_WITH_ADS_SNIPPET,
+  hostAsksAboutAdvertising,
   hostConsentRequired,
   isAnalyticsAllowed,
   resolveGaMeasurementId,
   type VisitorConsentHost,
 } from '@aglyn/aglyn/app-utils/visitor-consent'
+import AdvertisingTags from './advertising-tags'
+// The platform's own GA4 property (AGL-1857). `aglyn.com` is a tenant site
+// pointed at this id, and it is the ONE host whose pageviews should carry
+// `content_group: 'marketing'` — the GA4 axis that separates marketing from
+// `console` and `docs` without reaching for the Hostname dimension. A
+// customer's site configures their own id, which is why the discriminator is
+// the id itself: same-property IS the definition of "this is our surface".
+// Hoisted to `platform-marketing-host.ts` so the advertising gate
+// shares this definition rather than retyping the literal beside it.
+import { PLATFORM_GA_MEASUREMENT_ID } from '@aglyn/aglyn/app-utils/platform-marketing-host'
 import Script from 'next/script'
 import type { ReactElement } from 'react'
 import { primeVisitorConsent, useVisitorConsent } from './use-visitor-consent'
@@ -48,18 +61,6 @@ import { claimDailyVisit } from './visit-claim'
  */
 const beaconed = new Set<string>()
 
-/**
- * The platform's own GA4 property (AGL-1857). `aglyn.com` is a tenant site
- * pointed at this id, and it is the ONE host whose pageviews should carry
- * `content_group: 'marketing'` — the first-class GA4 axis that separates
- * marketing from `console` and `docs` in standard reports without reaching
- * for the Hostname dimension. A customer's site configures their own
- * measurement id, and their property gets no opinion of ours stamped on it,
- * which is why the discriminator is the id itself: same-property IS the
- * definition of "this is our surface". The id is public in every page the
- * platform serves, so holding it in source discloses nothing.
- */
-const PLATFORM_GA_MEASUREMENT_ID = 'G-YW5PG16YTM'
 
 /**
  * Send the pageview beacon (AGL-82), NOT from an effect (AGL-1550).
@@ -285,7 +286,12 @@ export default function SiteAnalytics({
   // `trackEvent` reaches `window.gtag`, and without a granting consent state
   // the scripts above never render, so gtag does not exist and every
   // classified click is dropped. `surface` labels this as a tenant published
-  // site; the docs app (AGL-1579) installs the same listener with its own.
+  // site — and `site` is the ONLY value this param has ever carried. The docs
+  // app does NOT install this listener and is not going to until the
+  // `aglyn-docs` Vercel project can see `libs/` at all
+  // (`sourceFilesOutsideRootDirectory: false` — docs/ANALYTICS.md decision 7),
+  // so do not read a missing `docs` row as docs having no clicks: GA4 enhanced
+  // measurement reports docs outbound clicks unclassified and unsurfaced.
   installLinkClickTracking({ surface: 'site' })
   // Real-user Core Web Vitals (AGL-1642), same shape as the click listener:
   // installed during render, once per page load, delivery through
@@ -301,6 +307,14 @@ export default function SiteAnalytics({
   const analyticsAllowed = consentRequired
     ? consent.ready && isAnalyticsAllowed(host, consent.stored)
     : true
+  // Advertising storage (AGL-1649). Off unless the host turned the question
+  // on AND this visitor explicitly answered yes to that category; every
+  // other path — including a visitor merely defaulted into analytics —
+  // leaves the three advertising signals denied, exactly as AGL-1622 set
+  // them. Resolved client-side like the rest of the gate, so the ISR-cached
+  // HTML carries neither snippet.
+  const advertisingAllowed =
+    consentRequired && advertisingGrantedByRecord(host, consent.stored)
 
   return (
     <>
@@ -391,7 +405,11 @@ export default function SiteAnalytics({
           <Script id="ga-init" strategy="afterInteractive">
             {'window.dataLayer=window.dataLayer||[];' +
               'function gtag(){dataLayer.push(arguments);}' +
-              (consentRequired ? GA_CONSENT_DEFAULT_SNIPPET : '') +
+              (consentRequired
+                ? advertisingAllowed
+                  ? GA_CONSENT_DEFAULT_WITH_ADS_SNIPPET
+                  : GA_CONSENT_DEFAULT_SNIPPET
+                : '') +
               // Internal-traffic stamp (AGL-2064), OUR property only. See the
               // block comment below the JSX for why this is a constant string
               // evaluated in the browser and why its position in the snippet
@@ -416,12 +434,45 @@ export default function SiteAnalytics({
           />
         </>
       ) : null}
+      {/* Consent-gated ADVERTISING tags — Aglyn's own marketing
+          site only, and nowhere else.
+
+          The same structural enforcement as the GA pair above, extended to a
+          channel that is not Google's. Until this existed the `advertising`
+          category could only ever be expressed as four strings handed to
+          `gtag`, so a non-Google tag could not be consent-gated at all.
+
+          Mounted UNCONDITIONALLY and gated inside, which is not the shape of
+          the block above it and is deliberate: the component also owns the
+          withdrawal path, and a visitor who turns advertising off from "Your
+          Privacy Choices" has to stop being tracked in THAT pageview. By then
+          the vendor library has executed, and React dropping a `<Script>` does
+          not unload it (the AGL-1608 lesson) — so the teardown runs from the
+          consent-changed event, which needs a listener that is still mounted
+          when the answer is no.
+
+          On a customer's site this renders nothing AND installs nothing: the
+          host is not ours, so there is no listener and no script. That
+          boundary is the DPA §3.2 promise — Aglyn does not "sell"/"share"
+          Customer Personal Data — expressed in code rather than in a review
+          checklist. The console needs no clause of its own: it does not render
+          this route at all.
+
+          NOTHING IS CONFIGURED TO LOAD TODAY. No host document carries an
+          `analytics.adTags` entry, so every visitor on every site takes the
+          empty branch. Deploying the Meta Pixel means writing a pixel id onto
+          the `aglyn-marketing` host — a data change, reviewed on its own. */}
+      <AdvertisingTags
+        host={host}
+        stored={consent.stored}
+        ready={consent.ready}
+      />
       {/* Visitor consent surfaces (AGL-1498): only when the machinery is
           live — the tool is active AND the site uses a gated feature. A
           site with no analytics has nothing to ask, so its visitors see
           nothing at all. What renders depends on the resolved state: the
           prior-consent banner (opt-in posture, undecided), or the
-          persistent "Privacy choices" pill — which in the implied posture
+          persistent "Your Privacy Choices" pill — which in the implied posture
           is the ONE opt-out surface, on every page, template-independent.
           `consent.ready` keeps all of it out of the server HTML (ISR) and
           the first client render. Published surface only here; the console
@@ -433,6 +484,7 @@ export default function SiteAnalytics({
           stored={consent.stored}
           posture={consent.posture}
           country={consent.country}
+          advertising={hostAsksAboutAdvertising(host)}
         />
       ) : null}
     </>

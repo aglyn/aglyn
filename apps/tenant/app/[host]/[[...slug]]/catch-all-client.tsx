@@ -263,7 +263,15 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
 
   // Id-based screen links resolve against this routing map at render time;
   // ISR keeps it current (slug renames show up on the next revalidate).
-  const screens = props.data?.host?.screens
+  //
+  // `screenRoutes` is the same map corrected to what the router actually
+  // serves (AGL-1998) — see `page.tsx`. The raw `host.screens` stays as the
+  // fallback for props composed before that field existed: HTML already in an
+  // ISR cache, and a `/api/screen/nodes` payload fetched by a client holding
+  // it. Both then behave exactly as they did before, rather than losing every
+  // link at once.
+  const screens = (props.screenRoutes ??
+    props.data?.host?.screens) as Record<string, string> | undefined
   // Locale plumbing (AGL-164): the switcher component reads variants of
   // the CURRENT screen from this context.
   const screenLocale = (props.data?.screen?.data as any)?.locale
@@ -718,17 +726,25 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
           const brandLogo = Aglyn.resolveMediaSrc(brand.logoUrl, {
             hostId: host?.$id,
           })
+          // `homeUrl`, NOT `supportUrl`.
+          //
+          // This badge is the platform's only organic acquisition surface —
+          // one link on every free customer's site — and it pointed at the
+          // brand's SUPPORT url, which on the Aglyn deployment resolves to
+          // `mailto:` + the support address. Clicking "Made with Aglyn"
+          // opened the visitor's mail client with a blank message to our
+          // help desk. A visitor asking "what built this" wants the product's
+          // front door; a help-desk address is an answer to a different
+          // question, and a `mailto:` is not a destination at all.
+          //
           // A LINK ONLY IF THERE IS SOMEWHERE TO SEND THEM (AGL-2428).
           //
-          // `supportUrl` is null for a white-label org that left the field
-          // blank, and the badge must then be a plain label rather than an
-          // anchor: an `<a>` with no href is still announced as a link by a
-          // screen reader and still takes focus, which promises a
-          // destination that does not exist. In practice this branch is the
-          // uncommon one — the badge renders only for an org WITHOUT the
-          // concealment entitlement, and those resolve to the platform
-          // profile — but the type is nullable and the honest markup is
-          // cheaper than reasoning about which orgs can reach it.
+          // `homeUrl` is null for a white-label org that left its URL blank,
+          // and for a renamed self-host deployment that has not published one.
+          // The badge must then be a plain label rather than an anchor: an
+          // `<a>` with no href is still announced as a link by a screen reader
+          // and still takes focus, which promises a destination that does not
+          // exist.
           const badgeStyle = {
                 position: 'fixed',
                 bottom: 12,
@@ -758,9 +774,9 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
               {`Made with ${brand.productName}`}
             </>
           )
-          return brand.supportUrl ? (
+          return brand.homeUrl ? (
             <a
-              href={brand.supportUrl}
+              href={brand.homeUrl}
               target="_blank"
               rel="noreferrer"
               style={badgeStyle}

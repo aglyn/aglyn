@@ -107,12 +107,6 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'Reader of NEXT_PUBLIC_WORKSPACE_DOMAIN with the same default.',
   },
   {
-    file: 'apps/console/app/api/_lib/assist-retrieval.ts',
-    count: 1,
-    reason:
-      'Reader of NEXT_PUBLIC_DOCS_ORIGIN; the literal is its default.',
-  },
-  {
     file: 'apps/console/app/api/_lib/auth-action-url.ts',
     count: 1,
     reason:
@@ -206,13 +200,9 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
     file: 'apps/console/constants/docs-links.ts',
     count: 1,
     reason:
-      'Reader of NEXT_PUBLIC_DOCS_ORIGIN; the literal is its default.',
-  },
-  {
-    file: 'apps/console/constants/shared.ts',
-    count: 1,
-    reason:
-      'LEGAL_ORIGIN — reader of NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN; ENTERPRISE_CONTACT_URL now builds on it.',
+      'DOCS_BASE_URL — the ONE reader of NEXT_PUBLIC_DOCS_ORIGIN (and the ' +
+      'legacy NEXT_PUBLIC_AGLYN_DOCS_URL); the literal is its default. ' +
+      'Assist citations re-export it rather than reading again (AGL-2014).',
   },
   {
     file: 'apps/console/constants/workspace-domain.ts',
@@ -294,15 +284,21 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
   },
   {
     file: 'libs/aglyn/src/lib/app-utils/platform-brand.ts',
-    count: 1,
+    count: 2,
     reason:
-      'PLATFORM_SUPPORT_URL — last fallback after the operator support address.',
+      'PLATFORM_SUPPORT_URL — last fallback after the operator support ' +
+      'address. Plus PLATFORM_HOME_URL, the badge destination, whose literal ' +
+      'is reached ONLY when `isAglynOperatedBrand()` — a renamed self-host ' +
+      'deployment resolves it to null and gets an unlinked badge rather than ' +
+      'a link advertising us on its own customers\' sites.',
   },
   {
     file: 'libs/aglyn/src/lib/app-utils/published-legal-pages.ts',
     count: 1,
     reason:
-      'LEGAL_ORIGIN — the one reader of NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN.',
+      'LEGAL_ORIGIN — the one reader of NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN. ' +
+      "The console's constants/shared.ts imports this rather than reading " +
+      'the variable a second time (AGL-2014).',
   },
   {
     file: 'libs/aglyn/src/lib/foundation/constants/_internal.ts',
@@ -369,6 +365,14 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
     count: 1,
     reason:
       'Reader of AGLYN_TENANT_APEX; the literal is its default.',
+  },
+  {
+    file: 'tools/scripts/check-legal-index-dates.mjs',
+    count: 1,
+    reason:
+      'Reader of NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN; the literal is its ' +
+      'default. Internal tool — a self-hoster runs it against their own ' +
+      'origin.',
   },
   {
     file: 'tools/scripts/check-retired-colours.mjs',

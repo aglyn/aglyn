@@ -58,7 +58,20 @@ jest.mock('./firebase-admin', () => ({
               if (op !== '==') throw new Error(`unmodelled operator ${op}`)
               const docs = [...(store.get(collection)?.entries() ?? [])]
                 .filter(([, data]) => data[field] === value)
-                .map(([id]) => ({ ref: docRef(collection, id) }))
+                .map(([id, data]) => {
+                  // Real semantics: a QueryDocumentSnapshot carries a FROZEN
+                  // copy of the document as it was when the query ran, and
+                  // `get(field)` reads that copy — not the live document. The
+                  // snapshot is what the transition check must read, so a
+                  // double that proxied to the store would hide a bug where
+                  // the code read back its own write and saw no transition.
+                  const snapshot = { ...data }
+                  return {
+                    ref: docRef(collection, id),
+                    get: (path: string) => snapshot[path],
+                    data: () => ({ ...snapshot }),
+                  }
+                })
               return { docs, size: docs.length, empty: docs.length === 0 }
             },
           }),
@@ -68,11 +81,22 @@ jest.mock('./firebase-admin', () => ({
   },
 }))
 
+const sendGa4StripeConnected = jest.fn(async () => ({
+  sent: true,
+  synthesizedClientId: true,
+}))
+
+jest.mock('./ga4-measurement-protocol', () => ({
+  sendGa4StripeConnected: (...args: unknown[]) =>
+    sendGa4StripeConnected(...(args as [])),
+}))
+
 import { syncConnectAccountStatus } from './connect-account-status'
 
 const read = (collection: string, id: string) => store.get(collection)?.get(id)
 
 beforeEach(() => {
+  sendGa4StripeConnected.mockClear()
   store.clear()
   store.set(
     'profiles',
@@ -218,5 +242,160 @@ describe('syncConnectAccountStatus (AGL-1997)', () => {
       stripeChargesEnabled: true,
       stripePayoutsEnabled: false,
     })
+  })
+
+  // -------------------------------------------------------------------------
+  // Which Stripe world the account is in (AGL-2471)
+  // -------------------------------------------------------------------------
+
+  it('records the mode the EVENT states', async () => {
+    // This is the self-healing path for the three production linkages whose
+    // mode was never recorded: one `account.updated` and they are verified,
+    // with nobody editing the database by hand.
+    expect(
+      await syncConnectAccountStatus(
+        'profiles',
+        { id: 'acct_1', charges_enabled: true, payouts_enabled: true },
+        true,
+      ),
+    ).toBe(1)
+    expect(read('profiles', 'merchant-1')).toMatchObject({
+      stripeAccountLivemode: true,
+    })
+  })
+
+  it('records a TEST-mode event as test, not as absent', async () => {
+    await syncConnectAccountStatus(
+      'profiles',
+      { id: 'acct_1', charges_enabled: true, payouts_enabled: true },
+      false,
+    )
+    expect(read('profiles', 'merchant-1')).toMatchObject({
+      stripeAccountLivemode: false,
+    })
+  })
+
+  it('writes nothing for the field when the mode is not a boolean', async () => {
+    // Same doctrine as the two flags above: only what Stripe actually said.
+    // Coercing `undefined` here would mint a `false` and pin a live merchant
+    // as test-mode — a wrong answer invented from no evidence.
+    for (const value of [undefined, 'true', 1, null]) {
+      await syncConnectAccountStatus(
+        'profiles',
+        { id: 'acct_1', charges_enabled: true, payouts_enabled: true },
+        value,
+      )
+      expect(read('profiles', 'merchant-1')).not.toHaveProperty(
+        'stripeAccountLivemode',
+      )
+    }
+  })
+})
+
+/**
+ * AGL-1580: `stripe_connected` is one of the four launch key events, and GA4
+ * refuses to mark an event as a key event until it has been seen once — so an
+ * event that cannot fire is indistinguishable from one nobody has triggered
+ * yet, and blocks the Ads conversion import behind it.
+ *
+ * Both browser emitters gate on the merchant's profile still reading "not
+ * connected" at click time. THIS webhook is what makes that reading false: it
+ * lands while the merchant is still on Stripe's hosted onboarding. The two
+ * guards read the same stored flag from opposite sides, so exactly one of them
+ * can be open for any given account.
+ */
+describe('syncConnectAccountStatus → stripe_connected (AGL-1580)', () => {
+  it('reports the activation when a never-asked profile becomes able to charge', async () => {
+    // `merchant-2` has NO `stripeChargesEnabled` field at all, which is the
+    // commonest first-connect shape: nobody has ever asked Stripe about it.
+    const updated = await syncConnectAccountStatus('profiles', {
+      id: 'acct_2',
+      charges_enabled: true,
+      payouts_enabled: false,
+    })
+    expect(updated).toBe(1)
+    expect(sendGa4StripeConnected).toHaveBeenCalledTimes(1)
+    // Seeded with the ACCOUNT, so one connected account is one synthetic user
+    // however many times it reconnects.
+    expect(sendGa4StripeConnected).toHaveBeenCalledWith({ accountId: 'acct_2' })
+  })
+
+  it('reports the activation on a false → true flip', async () => {
+    store.get('profiles')?.set('merchant-1', {
+      stripeAccountId: 'acct_1',
+      stripeChargesEnabled: false,
+    })
+    await syncConnectAccountStatus('profiles', {
+      id: 'acct_1',
+      charges_enabled: true,
+    })
+    expect(sendGa4StripeConnected).toHaveBeenCalledTimes(1)
+  })
+
+  it('stays silent on a redelivery of an account already connected', async () => {
+    // `merchant-1` is seeded `stripeChargesEnabled: true`. Stripe redelivers
+    // freely and `account.updated` mirrors current state rather than a delta,
+    // so "already true" is the ordinary case — and it is also the case where
+    // the merchant clicked first and the BROWSER already reported it.
+    await syncConnectAccountStatus('profiles', {
+      id: 'acct_1',
+      charges_enabled: true,
+      payouts_enabled: true,
+    })
+    expect(sendGa4StripeConnected).not.toHaveBeenCalled()
+  })
+
+  it('stays silent when the account is restricted rather than enabled', async () => {
+    // `merchant-2` has never been connected, so the PRIOR-state half of the
+    // guard is open and only the `=== true` half can hold this shut. Written
+    // against `acct_1` (already `true`) it would pass with that half deleted —
+    // proved by mutation, not assumed.
+    await syncConnectAccountStatus('profiles', {
+      id: 'acct_2',
+      charges_enabled: false,
+    })
+    expect(sendGa4StripeConnected).not.toHaveBeenCalled()
+  })
+
+  it('stays silent when only payout readiness moved', async () => {
+    // AGL-1997 split the two flags: payouts can be released days later and
+    // that is not a second activation.
+    store.get('profiles')?.set('merchant-1', {
+      stripeAccountId: 'acct_1',
+      stripeChargesEnabled: true,
+      stripePayoutsEnabled: false,
+    })
+    await syncConnectAccountStatus('profiles', {
+      id: 'acct_1',
+      payouts_enabled: true,
+    })
+    expect(sendGa4StripeConnected).not.toHaveBeenCalled()
+  })
+
+  it('does not report an activation for a document erased mid-flight', async () => {
+    // The query saw it, the erasure sweep removed it, `updateExisting`
+    // reports 0 — and a merchant who no longer exists did not activate.
+    const docs = store.get('profiles')
+    const queried = syncConnectAccountStatus('profiles', {
+      id: 'acct_2',
+      charges_enabled: true,
+    })
+    docs?.delete('merchant-2')
+    expect(await queried).toBe(0)
+    expect(sendGa4StripeConnected).not.toHaveBeenCalled()
+  })
+
+  it('reports for a marketplace publisher too', async () => {
+    // Same function, `publisherProfiles` — the seller panel's emitter is
+    // gated identically and loses the same race.
+    store.set(
+      'publisherProfiles',
+      new Map([['seller-org', { stripeAccountId: 'acct_9' }]]),
+    )
+    await syncConnectAccountStatus('publisherProfiles', {
+      id: 'acct_9',
+      charges_enabled: true,
+    })
+    expect(sendGa4StripeConnected).toHaveBeenCalledWith({ accountId: 'acct_9' })
   })
 })

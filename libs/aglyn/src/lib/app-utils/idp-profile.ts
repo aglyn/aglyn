@@ -197,3 +197,141 @@ export function resolveIdpPhone(
       : ''
   return topLevel || readAttribute(signInAttributes(decoded), PHONE_KEYS)
 }
+
+/**
+ * Address attribute names, same generosity as the name keys and for the same
+ * reason: the customer's IdP admin chooses these, not us.
+ *
+ * Google Workspace's SAML attribute mapping offers `Street address`,
+ * `Locality`, `Region` and `Postal code` from the Directory and lets the admin
+ * name each one; Okta and ADFS emit `streetAddress`/`l`/`st`/`postalCode` and
+ * the full `schemas.xmlsoap.org` URIs respectively. LDAP's own short forms
+ * (`l` for locality, `st` for state, `c` for country) are included because
+ * both of those are ultimately reading a directory that spells them that way.
+ */
+const ADDRESS_LINE1_KEYS = [
+  'streetAddress',
+  'street_address',
+  'addressLine1',
+  'address_line1',
+  'line1',
+  'street',
+  'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/streetaddress',
+]
+
+const ADDRESS_LINE2_KEYS = [
+  'addressLine2',
+  'address_line2',
+  'line2',
+  'street_address_2',
+  'streetAddress2',
+]
+
+const ADDRESS_CITY_KEYS = [
+  'locality',
+  'city',
+  'l',
+  'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/locality',
+]
+
+const ADDRESS_STATE_KEYS = [
+  'region',
+  'state',
+  'province',
+  'st',
+  'stateOrProvince',
+  'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/stateorprovince',
+]
+
+const ADDRESS_POSTAL_KEYS = [
+  'postalCode',
+  'postal_code',
+  'postalcode',
+  'zip',
+  'zipCode',
+  'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/postalcode',
+]
+
+const ADDRESS_COUNTRY_KEYS = [
+  'country',
+  'countryCode',
+  'country_code',
+  'c',
+  'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/country',
+]
+
+/**
+ * The postal address an identity provider sent, as loose parts (AGL-1963).
+ *
+ * Deliberately NOT an `AglynPostalAddress`, and this module deliberately does
+ * not import one. `normalizeAddress` is what decides whether these parts add
+ * up to an address at all — it drops blanks, rejects a country that is not
+ * ISO-3166 alpha-2, and returns `null` when nothing survives. Returning a
+ * half-populated object from here would hand the caller something that reads
+ * as truthy to every `if (address)` while holding a city and no street, which
+ * is exactly the shape AGL-1963 says must not exist.
+ */
+export interface IdpAddressParts {
+  line1: string
+  line2: string
+  city: string
+  state: string
+  postalCode: string
+  country: string
+}
+
+/**
+ * OIDC's `address` claim is a JSON OBJECT, not a string (OpenID Connect Core
+ * §5.1.1), with its own field names. SAML has no equivalent — its attributes
+ * arrive flat in `sign_in_attributes` — so this is the OIDC-only half, read
+ * for the same reason `resolveIdpDisplayName` prefers a top-level `name`.
+ */
+function oidcAddressClaim(
+  decoded: IdpNameClaims,
+): Record<string, unknown> | undefined {
+  const address = decoded['address']
+  return address && typeof address === 'object' && !Array.isArray(address)
+    ? (address as Record<string, unknown>)
+    : undefined
+}
+
+/**
+ * Resolve a postal address from a decoded ID token.
+ *
+ * Every field independently optional: a directory that holds a city and no
+ * street is a normal directory, and demanding a complete address would
+ * discard the parts it does have. `normalizeAddress` downstream is what turns
+ * "some parts" into either a stored address or `null`.
+ *
+ * `state`, never `region`, in the RESULT — that is the canonical spelling in
+ * `AglynPostalAddress`, matching Stripe's customer address. `region` appears
+ * only as an INPUT key, because that is what Google Workspace calls it.
+ */
+export function resolveIdpAddress(
+  decoded: IdpNameClaims | null | undefined,
+): IdpAddressParts {
+  const empty: IdpAddressParts = {
+    line1: '',
+    line2: '',
+    city: '',
+    state: '',
+    postalCode: '',
+    country: '',
+  }
+  if (!decoded) return empty
+  const attributes = signInAttributes(decoded)
+  const oidc = oidcAddressClaim(decoded)
+  // SAML attributes win a tie. An org that has mapped its directory into the
+  // assertion has said what it wants us to use, and the OIDC claim is the
+  // fallback for providers that send the standard object instead.
+  const read = (keys: readonly string[], oidcKeys: readonly string[]) =>
+    readAttribute(attributes, keys) || readAttribute(oidc, oidcKeys)
+  return {
+    line1: read(ADDRESS_LINE1_KEYS, ['street_address']),
+    line2: read(ADDRESS_LINE2_KEYS, []),
+    city: read(ADDRESS_CITY_KEYS, ['locality']),
+    state: read(ADDRESS_STATE_KEYS, ['region']),
+    postalCode: read(ADDRESS_POSTAL_KEYS, ['postal_code']),
+    country: read(ADDRESS_COUNTRY_KEYS, ['country']),
+  }
+}

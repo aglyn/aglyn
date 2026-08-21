@@ -43,11 +43,15 @@ import { fileURLToPath } from 'node:url'
 import {
   collectionGroupFromResourceName,
   compareIndexes,
+  compositeCreateBody,
   compositeKey,
   describeOverride,
+  fieldPatchBody,
+  fieldResourceId,
   implicitNameOrder,
   normalizeFileOverride,
   normalizeLiveOverride,
+  planIndexDeploy,
   stripImplicitNameField,
 } from './index-drift.mjs'
 import { FIELD_OVERRIDE_FILTER } from './firestore-indexes-api.mjs'
@@ -798,5 +802,489 @@ describe('the checker is wired (workflow + package.json)', () => {
   it('the field filter still asks for TTL policies — narrowing it blinds the check (AGL-1801)', () => {
     assert.match(FIELD_OVERRIDE_FILTER, /usesAncestorConfig=false/)
     assert.match(FIELD_OVERRIDE_FILTER, /ttlConfig/)
+  })
+})
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * THE DEPLOY SIDE (AGL-2015)
+ *
+ * The self-hosting runbook deployed rules and stopped, sending the operator
+ * to `npx firebase login` for indexes. These cover the script that closes
+ * that gap — and they are written against the two consequences that are NOT
+ * symmetric:
+ *
+ *   a missing COMPOSITE index breaks a READ (FAILED_PRECONDITION)
+ *   a missing `indexes: []` EXEMPTION can break a WRITE (the 40KB
+ *     index-entry limit on the besigner `nodes` blob)
+ *
+ * The write case is the one that reads as "the product is broken", so the
+ * assertion that the exemption is actually transmitted, as an empty array
+ * rather than an omitted key, is the load-bearing one in this block.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+const deployCliPath = join(
+  repoRoot,
+  'tools',
+  'scripts',
+  'deploy-firestore-indexes.mjs',
+)
+
+/** An empty Firebase project: no composites, only the database-default field. */
+const emptyProject = () => ({ indexes: [], fields: [DEFAULT_FIELD] })
+
+/**
+ * A WRITE-aware Admin API double. The read half mirrors `withStub` exactly;
+ * the write half records every request so a test can assert on the URL (the
+ * `updateMask` lives there) as well as on the body.
+ *
+ * `failWrites` / `conflictWrites` are how the failure paths get exercised —
+ * a deploy script that cannot be seen refusing is not known to refuse.
+ */
+async function withWriteStub(
+  { indexes, fields, failWrites = false, conflictWrites = false },
+  run,
+) {
+  const writes = []
+  const server = createServer((req, res) => {
+    const url = new URL(req.url, 'http://localhost')
+    const send = (code, body) => {
+      res.writeHead(code, { 'Content-Type': 'application/json' })
+      res.end(typeof body === 'string' ? body : JSON.stringify(body))
+    }
+    if (req.method === 'GET') {
+      if (url.pathname.endsWith('/indexes')) return send(200, { indexes })
+      if (url.pathname.endsWith('/fields')) {
+        const wantsTtl = (url.searchParams.get('filter') ?? '').includes(
+          'ttlConfig',
+        )
+        return send(200, {
+          fields: fields.filter(
+            (f) => wantsTtl || f.indexConfig?.usesAncestorConfig !== true,
+          ),
+        })
+      }
+      return send(404, `{"error":"unexpected GET ${url.pathname}"}`)
+    }
+    let raw = ''
+    req.setEncoding('utf8')
+    req.on('data', (chunk) => (raw += chunk))
+    req.on('end', () => {
+      let body
+      try {
+        body = JSON.parse(raw || '{}')
+      } catch {
+        body = { unparseable: raw }
+      }
+      writes.push({
+        method: req.method,
+        pathname: url.pathname,
+        search: url.search,
+        body,
+      })
+      if (conflictWrites && req.method === 'POST') {
+        return send(409, {
+          error: { code: 409, status: 'ALREADY_EXISTS', message: 'exists' },
+        })
+      }
+      if (failWrites) {
+        return send(403, {
+          error: {
+            code: 403,
+            status: 'PERMISSION_DENIED',
+            message: 'missing datastore.indexes.create',
+          },
+        })
+      }
+      if (req.method === 'POST') {
+        return send(200, { name: 'projects/x/operations/abc', done: false })
+      }
+      return send(200, body)
+    })
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  try {
+    await run({ port: server.address().port, writes })
+  } finally {
+    await new Promise((resolve) => server.close(resolve))
+  }
+}
+
+/** Run the real deploy CLI against the stub. */
+function runDeploy({ port, args = [], cwd = repoRoot, env = null }) {
+  const child = spawn(process.execPath, [deployCliPath, ...args], {
+    cwd,
+    env: env ?? {
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+      FIREBASE_PROJECT_ID: PROJECT,
+      // NOT the checker's INDEX_CHECK_ACCESS_TOKEN: the deploy refuses that
+      // one on purpose, and this test is also the assertion that the two
+      // credentials really are separate names.
+      FIRESTORE_DEPLOY_ACCESS_TOKEN: 'stub-deploy-token',
+      FIRESTORE_ADMIN_API_BASE: `http://127.0.0.1:${port}`,
+    },
+  })
+  let stdout = ''
+  let stderr = ''
+  child.stdout.setEncoding('utf8').on('data', (c) => (stdout += c))
+  child.stderr.setEncoding('utf8').on('data', (c) => (stderr += c))
+  return new Promise((resolve, reject) => {
+    child.on('error', reject)
+    child.on('close', (status) => resolve({ status, stdout, stderr }))
+  })
+}
+
+describe('deploy request bodies (AGL-2015)', () => {
+  it('an EXEMPTION transmits as an empty array, never as an omitted key', () => {
+    // `versions.nodes` is the entry that keeps the large besigner blob out of
+    // the index. If `indexes: []` were dropped as "empty", the patch would say
+    // nothing about indexing, the field would keep inheriting the database
+    // default, and Firestore would go on REJECTING THE WRITE on the 40KB
+    // index-entry limit — with the deploy reporting success.
+    const body = fieldPatchBody({
+      collectionGroup: 'versions',
+      fieldPath: 'nodes',
+      indexes: [],
+    })
+    assert.deepEqual(body, { indexConfig: { indexes: [] } })
+    assert.ok(
+      Object.prototype.hasOwnProperty.call(body.indexConfig, 'indexes'),
+      'the exemption must be an explicit empty array',
+    )
+  })
+
+  it('a non-exempt override names the field itself, not the `*` wildcard', () => {
+    const body = fieldPatchBody({
+      collectionGroup: 'installs',
+      fieldPath: 'listingId',
+      indexes: [
+        { queryScope: 'COLLECTION', order: 'ASCENDING' },
+        { queryScope: 'COLLECTION_GROUP', order: 'ASCENDING' },
+      ],
+    })
+    assert.deepEqual(body.indexConfig.indexes, [
+      {
+        queryScope: 'COLLECTION',
+        fields: [{ fieldPath: 'listingId', order: 'ASCENDING' }],
+      },
+      {
+        queryScope: 'COLLECTION_GROUP',
+        fields: [{ fieldPath: 'listingId', order: 'ASCENDING' }],
+      },
+    ])
+  })
+
+  it('a create body drops the trailing __name__ the API appends itself', () => {
+    // Sending it back at the implicit direction is rejected, so a create body
+    // built from a live-shaped entry must normalize exactly as the checker does.
+    const body = compositeCreateBody({
+      collectionGroup: 'campaigns',
+      queryScope: 'COLLECTION_GROUP',
+      fields: [
+        { fieldPath: 'status', order: 'ASCENDING' },
+        { fieldPath: 'sendAtMs', order: 'ASCENDING' },
+        { fieldPath: '__name__', order: 'ASCENDING' },
+      ],
+    })
+    assert.deepEqual(body.fields.map((f) => f.fieldPath), [
+      'status',
+      'sendAtMs',
+    ])
+    assert.equal(body.collectionGroup, undefined, 'group belongs in the URL')
+  })
+
+  it('an array field keeps arrayConfig rather than inventing an order', () => {
+    const body = compositeCreateBody({
+      collectionGroup: 'screens',
+      queryScope: 'COLLECTION',
+      fields: [{ fieldPath: 'visibleTo', arrayConfig: 'CONTAINS' }],
+    })
+    assert.deepEqual(body.fields, [
+      { fieldPath: 'visibleTo', arrayConfig: 'CONTAINS' },
+    ])
+  })
+
+  it('a bare field path is not escaped; an exotic one is', () => {
+    assert.equal(fieldResourceId('nodes'), 'nodes')
+    assert.equal(fieldResourceId('a.b'), '`a.b`')
+  })
+})
+
+describe('planIndexDeploy (AGL-2015)', () => {
+  const planFor = (live, file) =>
+    planIndexDeploy({
+      report: compareIndexes({
+        liveIndexes: live.indexes,
+        liveFields: live.fields,
+        fileIndexes: file.indexes,
+        fileOverrides: file.fieldOverrides,
+      }),
+      fileIndexes: file.indexes,
+      fileOverrides: file.fieldOverrides,
+    })
+
+  it('an EMPTY project plans every index and every override in the file', () => {
+    const file = readIndexFile()
+    const plan = planFor(emptyProject(), file)
+    assert.equal(plan.creates.length, file.indexes.length)
+    assert.equal(plan.patches.length, file.fieldOverrides.length)
+    assert.equal(plan.empty, false)
+    // The write-blocking one is in there.
+    assert.ok(
+      plan.patches.some((p) => p.id === 'versions.nodes' && p.exempt),
+      'the versions.nodes exemption must be planned',
+    )
+  })
+
+  it('a project that already matches plans NOTHING — the run is idempotent', () => {
+    const file = readIndexFile()
+    const plan = planFor(liveFromFile(file), file)
+    assert.deepEqual(plan.creates, [])
+    assert.deepEqual(plan.patches, [])
+    assert.equal(plan.empty, true)
+  })
+
+  it('NEVER plans a delete: a live entry absent from the file is reported, not removed', () => {
+    const file = readIndexFile()
+    const live = liveFromFile(file)
+    // Something the operator created by hand that the file has never heard of.
+    live.indexes.push(
+      deployedIndex(
+        {
+          collectionGroup: 'invoices',
+          queryScope: 'COLLECTION',
+          fields: [{ fieldPath: 'handwritten', order: 'ASCENDING' }],
+        },
+        999,
+      ),
+    )
+    const plan = planFor(live, file)
+    assert.equal(plan.empty, true, 'nothing to write')
+    assert.equal(plan.notDeleted.composite.length, 1)
+    assert.match(plan.notDeleted.composite[0], /invoices/)
+  })
+
+  it('a live TTL policy the file does not declare lands in ttlAtRisk — the AGL-1801 shape', () => {
+    const file = readIndexFile()
+    const live = liveFromFile(file)
+    live.fields.push(
+      deployedField({
+        collectionGroup: 'forgottenSweep',
+        fieldPath: 'expiresAt',
+        indexes: [],
+        ttl: true,
+      }),
+    )
+    const plan = planFor(live, file)
+    assert.equal(plan.ttlAtRisk.length, 1)
+    assert.equal(plan.ttlAtRisk[0].id, 'forgottenSweep.expiresAt')
+    // And it is NOT scheduled for any write.
+    assert.equal(plan.empty, true)
+  })
+
+  it('a TTL-only difference is NOT laundered into an indexConfig patch', () => {
+    // The file says `ttl: true`, the project has the same index scopes but no
+    // TTL policy. Patching indexConfig would succeed, change nothing that
+    // matters, and report a green deploy over an unfixed problem.
+    const file = readIndexFile()
+    const ttlEntry = file.fieldOverrides.find((o) => o.ttl === true)
+    assert.ok(ttlEntry, 'fixture needs a ttl override')
+    const live = liveFromFile(file)
+    live.fields = live.fields.map((f) =>
+      f.name.endsWith(
+        `/collectionGroups/${ttlEntry.collectionGroup}/fields/${ttlEntry.fieldPath}`,
+      )
+        ? { ...f, ttlConfig: undefined }
+        : f,
+    )
+    const plan = planFor(live, file)
+    const id = `${ttlEntry.collectionGroup}.${ttlEntry.fieldPath}`
+    assert.ok(
+      !plan.patches.some((p) => p.id === id),
+      'a TTL-only gap must not be patched as an index config',
+    )
+    assert.ok(
+      plan.ttlOwed.some((entry) => entry.id === id),
+      'it must be reported as owed to set-firestore-ttl.mjs instead',
+    )
+  })
+})
+
+describe('deploy-firestore-indexes CLI (empty project, stubbed Admin API)', () => {
+  it('deploys every index and override, and sends the exemption as an empty array', async () => {
+    const file = readIndexFile()
+    await withWriteStub(emptyProject(), async ({ port, writes }) => {
+      const result = await runDeploy({ port })
+      assert.equal(
+        result.status,
+        0,
+        `expected clean deploy:\n${result.stdout}\n${result.stderr}`,
+      )
+      const creates = writes.filter((w) => w.method === 'POST')
+      const patches = writes.filter((w) => w.method === 'PATCH')
+      assert.equal(creates.length, file.indexes.length)
+      assert.equal(patches.length, file.fieldOverrides.length)
+
+      // THE WRITE-UNBLOCKING ASSERTION.
+      const nodes = patches.find((w) =>
+        w.pathname.endsWith('/collectionGroups/versions/fields/nodes'),
+      )
+      assert.ok(nodes, 'versions.nodes must be patched')
+      assert.deepEqual(
+        nodes.body.indexConfig.indexes,
+        [],
+        'the exemption must arrive as an explicit empty array',
+      )
+
+      // `updateMask=indexConfig` is what stops the patch clearing ttlConfig.
+      // Without it this deploy would BE the AGL-1801 bug.
+      for (const patch of patches) {
+        assert.match(
+          patch.search,
+          /updateMask=indexConfig/,
+          `patch to ${patch.pathname} lacks updateMask — it would clear ttlConfig`,
+        )
+      }
+
+      // TTL is never written by this script, in any request.
+      for (const write of writes) {
+        assert.ok(
+          !JSON.stringify(write.body).includes('ttlConfig'),
+          `${write.method} ${write.pathname} tried to write a TTL policy`,
+        )
+      }
+
+      // No __name__ is ever sent back on a create.
+      for (const create of creates) {
+        assert.ok(
+          !(create.body.fields ?? []).some((f) => f.fieldPath === '__name__'),
+          `${create.pathname} sent __name__, which the API rejects`,
+        )
+      }
+
+      assert.match(result.stdout, /Index builds are ASYNCHRONOUS/)
+      assert.match(result.stdout, /check:index-drift/)
+    })
+  })
+
+  it('is IDEMPOTENT: a matching project writes nothing at all and exits 0', async () => {
+    const file = readIndexFile()
+    await withWriteStub(liveFromFile(file), async ({ port, writes }) => {
+      const result = await runDeploy({ port })
+      assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+      assert.deepEqual(
+        writes,
+        [],
+        'a matching project must produce no writes whatsoever',
+      )
+      assert.match(result.stdout, /Nothing to deploy/)
+    })
+  })
+
+  it('--dry-run reports the plan and sends NOTHING', async () => {
+    await withWriteStub(emptyProject(), async ({ port, writes }) => {
+      const result = await runDeploy({ port, args: ['--dry-run'] })
+      assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+      assert.deepEqual(writes, [], '--dry-run must not write')
+      assert.match(result.stdout, /Nothing was sent/)
+      assert.match(result.stdout, /CREATE/)
+      assert.match(result.stdout, /versions\.nodes/)
+    })
+  })
+
+  it('409 ALREADY_EXISTS is not a failure — a half-finished run can be re-run', async () => {
+    await withWriteStub(
+      { ...emptyProject(), conflictWrites: true },
+      async ({ port }) => {
+        const result = await runDeploy({ port })
+        assert.equal(
+          result.status,
+          0,
+          `a re-run must exit 0:\n${result.stdout}\n${result.stderr}`,
+        )
+        assert.match(result.stdout, /already present/)
+      },
+    )
+  })
+
+  it('a REFUSED write exits 1, never 0, and says the project is partial', async () => {
+    await withWriteStub(
+      { ...emptyProject(), failWrites: true },
+      async ({ port }) => {
+        const result = await runDeploy({ port })
+        assert.equal(
+          result.status,
+          1,
+          `a refused deploy must not exit 0:\n${result.stdout}\n${result.stderr}`,
+        )
+        assert.match(result.stderr, /refused/)
+        assert.match(result.stderr, /PARTIALLY configured/)
+        assert.match(result.stderr, /PERMISSION_DENIED/)
+      },
+    )
+  })
+
+  it('warns about live entries it is NOT deleting, before writing anything', async () => {
+    const file = readIndexFile()
+    const live = liveFromFile(file)
+    live.fields.push(
+      deployedField({
+        collectionGroup: 'forgottenSweep',
+        fieldPath: 'expiresAt',
+        indexes: [],
+        ttl: true,
+      }),
+    )
+    await withWriteStub(live, async ({ port, writes }) => {
+      const result = await runDeploy({ port })
+      assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+      assert.match(result.stderr, /LIVE BUT NOT IN THE FILE/)
+      assert.match(result.stderr, /NOT deleted by this script/)
+      assert.match(result.stderr, /AGL-1801/)
+      assert.match(result.stderr, /forgottenSweep\.expiresAt/)
+      assert.deepEqual(writes, [], 'and it really did not touch it')
+    })
+  })
+
+  it('a live API failure exits 2 — could-not-deploy is not a clean deploy', async () => {
+    const server = createServer((req, res) => {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end('{"error":{"message":"stub outage"}}')
+    })
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+    try {
+      const result = await runDeploy({ port: server.address().port })
+      assert.equal(result.status, 2, `${result.stdout}\n${result.stderr}`)
+      assert.match(result.stderr, /Cannot deploy/)
+    } finally {
+      await new Promise((resolve) => server.close(resolve))
+    }
+  })
+
+  it('missing credentials exit 2, and the CHECKER\'S token is not accepted', async () => {
+    const bare = mkdtempSync(join(tmpdir(), 'agl2015-nocreds-'))
+    try {
+      const result = await runDeploy({
+        port: 0,
+        cwd: bare,
+        env: {
+          PATH: process.env.PATH,
+          HOME: bare,
+          FIREBASE_PROJECT_ID: PROJECT,
+          // The drift checker's variable, deliberately the wrong name here.
+          INDEX_CHECK_ACCESS_TOKEN: 'a-read-credential',
+          FIRESTORE_ADMIN_API_BASE: 'http://127.0.0.1:1',
+        },
+      })
+      assert.equal(
+        result.status,
+        2,
+        `a read credential must not authorise a deploy:\n${result.stdout}\n${result.stderr}`,
+      )
+      assert.match(result.stderr, /Cannot deploy/)
+      assert.match(result.stderr, /FIREBASE_CLIENT_EMAIL/)
+    } finally {
+      rmSync(bare, { recursive: true, force: true })
+    }
   })
 })

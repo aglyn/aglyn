@@ -46,9 +46,18 @@
  * that.
  */
 
+// Leaf imports only. `host-naming` imports nothing at all, so the DOMAIN
+// scope's apex check cannot introduce a cycle here.
+import { TENANT_APEX } from './host-naming'
 import { operatorContactLine } from './operator-identity'
 
-export type LockdownScope = 'platform' | 'org' | 'host' | 'user' | 'feature'
+export type LockdownScope =
+  | 'platform'
+  | 'org'
+  | 'host'
+  | 'domain'
+  | 'user'
+  | 'feature'
 
 /**
  * FEATURE scope (AGL-1510): kill one capability platform-wide while
@@ -279,6 +288,61 @@ export const userLockdownDocId = (uid: string): string => `user--${uid}`
 export const featureLockdownDocId = (feature: LockdownFeatureKey): string =>
   `feature--${feature}`
 
+/**
+ * `domain--{hostname}` — the DOMAIN scope's carrier (AGL-1513).
+ *
+ * ## Keyed on the hostname, deliberately not on the host id
+ *
+ * Every other narrow scope keys on the thing it locks: a user by uid, a host
+ * by host id. A domain lock cannot, because the incidents it exists for are
+ * exactly the ones where the domain moves. A hijacked or disputed domain gets
+ * detached and re-attached — to another site, or to another org — and a lock
+ * keyed on `hosts/{id}` would be left guarding whichever site the name has
+ * since left. Keying on the NAME means the lock follows the name, survives
+ * detach/re-attach, and can be placed on a domain that is not currently
+ * attached to anything at all, which is the state a dispute is usually
+ * resolved in.
+ *
+ * The hostname is lowercased and used verbatim; the caller is responsible for
+ * having validated it as a hostname, and the writer does. Firestore document
+ * ids may contain dots, so `example.com` needs no escaping — and the `domain--`
+ * prefix keeps the key space disjoint from `user--`/`feature--` in the shared
+ * collection.
+ */
+export const domainLockdownDocId = (hostname: string): string =>
+  `domain--${hostname.trim().toLowerCase()}`
+
+/** A bare hostname: labels of a-z0-9/dash, at least two of them. */
+const LOCKABLE_DOMAIN_PATTERN =
+  /^(?!-)[a-z0-9-]{1,63}(\.(?!-)[a-z0-9-]{1,63})+$/
+/** The DNS limit; also what keeps the document id bounded. */
+export const LOCKABLE_DOMAIN_MAX = 253
+
+/**
+ * Whether `value` is a name the DOMAIN scope will accept (AGL-1513).
+ *
+ * Shared by the writer and anything that builds the doc id, so "what is a
+ * lockable name" has one definition. Two refusals matter:
+ *
+ *  - **Not hostname-shaped.** The id is derived from this string, and it
+ *    arrives from a staff form; `isDocumentId`-style discipline starts by
+ *    not minting a document for junk in the first place.
+ *  - **Inside the platform apex.** `{sub}.aglyn.app` is OUR name, and the
+ *    tenant resolves that space by `subdomain` and never consults the domain
+ *    scope for it — so a lock placed there would write a document that no
+ *    reader ever looks at. Refusing is the difference between "you cannot do
+ *    that" and a control that silently does nothing, which is the worse of
+ *    the two by a distance. Taking a platform subdomain down is the HOST
+ *    scope's job.
+ */
+export function isLockableDomain(value: unknown): value is string {
+  if (typeof value !== 'string') return false
+  const domain = value.trim().toLowerCase()
+  if (!domain || domain.length > LOCKABLE_DOMAIN_MAX) return false
+  if (!LOCKABLE_DOMAIN_PATTERN.test(domain)) return false
+  return domain !== TENANT_APEX && !domain.endsWith(`.${TENANT_APEX}`)
+}
+
 export interface LockdownDoc {
   scope: LockdownScope
   /** Present on `feature--{key}` docs only. */
@@ -475,7 +539,7 @@ export async function signupsCreationVerdict(
 // #endregion signups-creation-lock
 
 /**
- * Precedence: platform > org > host > user. The widest active scope wins so
+ * Precedence: platform > org > host > domain > user. The widest active scope wins so
  * the notice a visitor sees names the real cause (a platform maintenance
  * window should not read as "this account is suspended").
  *
@@ -492,11 +556,25 @@ export function resolveLockdown(
     platform?: LockdownState | null
     org?: LockdownState | null
     host?: LockdownState | null
+    /**
+     * AGL-1513. Narrower than `host`: it locks ONE attached name while the
+     * same site keeps serving on its other addresses, so it must never
+     * outrank a host takedown. It sits above `user` for the same reason
+     * `host` does — it is a property of the site being addressed, not of
+     * whoever is looking at it.
+     */
+    domain?: LockdownState | null
     user?: LockdownState | null
   },
   nowMs: number,
 ): LockdownState | null {
-  const active = [states.platform, states.org, states.host, states.user].filter(
+  const active = [
+    states.platform,
+    states.org,
+    states.host,
+    states.domain,
+    states.user,
+  ].filter(
     (state): state is LockdownState => Boolean(state) && isLockdownActive(state, nowMs),
   )
   return active.find((state) => lockdownMode(state) === 'full') ?? active[0] ?? null
@@ -674,6 +752,12 @@ export function lockdownNotice(state: LockdownState): LockdownNotice {
   if (isReadOnlyLockdown(state)) {
     return readOnlyLockdownNotice(state, custom)
   }
+  // DOMAIN scope (AGL-1513). The site is fine and is still serving on its
+  // other addresses; this NAME is the thing that is not, and the copy says
+  // that much and no more.
+  if (state.scope === 'domain') {
+    return domainLockdownNotice(state, custom)
+  }
   switch (state.reason) {
     case 'maintenance': {
       const until =
@@ -714,6 +798,70 @@ export function lockdownNotice(state: LockdownState): LockdownNotice {
         title: 'Temporarily unavailable',
         body: custom ?? 'Access to this account is currently disabled.',
         contact: lockdownSupportEmail() ?? undefined,
+      }
+  }
+}
+
+/**
+ * DOMAIN copy (AGL-1513), for a visitor who typed one particular name.
+ *
+ * ## It must never name the address that still works
+ *
+ * Every other scope's copy can afford to be helpful, because the thing being
+ * withheld is the thing the reader is entitled to. This scope exists for
+ * ownership disputes and hijacked or expired domains now pointing at us — so
+ * the person reading this notice may be precisely the party the site is being
+ * withheld from, and "try acme.aglyn.app instead" would lift the lock in one
+ * sentence. None of these bodies names the platform subdomain, and none
+ * should acquire one; the `*.aglyn.app` address is deliberately absent rather
+ * than accidentally missing.
+ *
+ * ## It also does not say whose the name is
+ *
+ * A dispute is exactly the case where we do not know, and a notice is a
+ * publication. "Not currently serving" is the whole of what we can assert
+ * without taking a side in something a registrar or a court settles.
+ */
+function domainLockdownNotice(
+  state: LockdownState,
+  custom: string | undefined,
+): LockdownNotice {
+  const title = 'This address is unavailable'
+  const contact = lockdownSupportEmail() ?? undefined
+  switch (state.reason) {
+    case 'maintenance':
+      return {
+        title,
+        body:
+          custom ??
+          'This web address is temporarily not serving while maintenance ' +
+            'is in progress.',
+        contact,
+      }
+    case 'billing':
+      return {
+        title,
+        body:
+          custom ??
+          'This web address is not currently serving over an unresolved ' +
+            'billing issue.',
+        contact,
+      }
+    case 'security':
+      return {
+        title,
+        body:
+          custom ??
+          'This web address is not currently serving while we investigate ' +
+            'a report about it.',
+        contact,
+      }
+    case 'manual':
+    default:
+      return {
+        title,
+        body: custom ?? 'This web address is not currently serving.',
+        contact,
       }
   }
 }

@@ -42,6 +42,11 @@
  *   `require('@aglyn/aglyn/app-utils/publisher-agreement')` inside a
  *   `jest.mock` factory took `console:lint` from 0 to **441 errors across 364
  *   files** and blocked promotion for hours.
+ * - **AGL-1921** — its `onRequestError` hook reached for
+ *   `await import('@aglyn/tenant-data-admin')` in BOTH apps'
+ *   `instrumentation.ts` and put **222 errors** on the gate: 181 in console,
+ *   41 in tenant. This one was not a spec, which is why the rule as first
+ *   written (AGL-2347) did not see it — see the scope note below.
  *
  * Each was repaired by hand and then explained in a long comment in the file
  * that caused it — which is exactly the readership that no longer needs
@@ -68,20 +73,37 @@
  * Nobody can be asked to hold that distinction in their head, and no reviewer
  * can see it in a diff. The rule refuses the whole shape instead.
  *
- * ## Why TEST files specifically
+ * ## Which files, and why not all of them
  *
  * A deferred import is a legitimate, deliberate tool in product code: the
  * generated plugin loader manifests defer `@aglyn/plugins-*`, and seven
  * console pages `lazy()`-load `@aglyn/besigner-feature-designer` and
  * `@aglyn/shared-ui-json-editor`. Those are real code-split boundaries with a
- * real payoff, and the rule leaves them alone.
+ * real payoff, and the rule leaves them alone. That carve-out is why the rule
+ * cannot simply cover everything.
  *
- * A spec is never a code-split boundary. It is not bundled and not shipped, so
- * deferring an import there buys nothing at runtime — but nx charges the whole
- * workspace for the edge anyway. Every one of the four incidents was a spec,
- * and nx's own file map currently records zero legitimate first-party dynamic
- * edges from any spec in the workspace. So the cost of this rule is zero and
- * the thing it forbids has never once been wanted.
+ * It covers the two places where a deferral can never buy a smaller bundle,
+ * so the nx edge is charged for nothing:
+ *
+ * 1. **Specs.** Not bundled, not shipped. Deferring buys nothing at runtime,
+ *    but nx charges the whole workspace for the edge anyway. Four of the five
+ *    incidents were specs.
+ *
+ * 2. **`instrumentation.ts`.** Next's instrumentation hook is server-side and
+ *    is never sent to a browser, so there is no payload to split. Its
+ *    deferrals ARE load-bearing, but for a different reason — keeping
+ *    firebase-admin out of the EDGE bundle — and that reason is satisfied just
+ *    as well by deferring a RELATIVE module, which crosses no project boundary
+ *    and so registers no lazy edge. `apps/tenant/utils/boot-warmup.ts` has
+ *    been that shape since AGL-1500 and says so in its docblock; AGL-1921 then
+ *    added a second hook to the same file reaching for the lib specifier
+ *    directly, sixty lines under the comment warning against it. A comment in
+ *    one file did not survive the next edit to that same file, which is
+ *    precisely the AGL-1357 argument for making it a rule.
+ *
+ * nx's own file map records zero legitimate first-party dynamic edges from
+ * either kind of file, so the cost of this scope is zero and the thing it
+ * forbids has never once been wanted.
  *
  * ## Honest limits
  *
@@ -110,6 +132,19 @@ function isTestFile(filename) {
   return /\.(spec|test)\.[^.]+$/.test(filename)
 }
 
+/**
+ * True for Next's instrumentation hook — `instrumentation.ts` and the
+ * `instrumentation-client` variant — which is server-side, never shipped to a
+ * browser, and so never a code-split boundary either (AGL-1921).
+ *
+ * Anchored to the basename so `instrumentation-boot-warmup.spec.ts` and any
+ * `utils/instrumentation-helpers.ts` are NOT caught by this arm; a spec is
+ * still caught by `isTestFile` on its own merits.
+ */
+function isInstrumentationFile(filename) {
+  return /(^|[/\\])instrumentation(-client)?\.[cm]?[jt]sx?$/.test(filename)
+}
+
 export default {
   meta: {
     type: 'problem',
@@ -121,6 +156,19 @@ export default {
     },
     schema: [],
     messages: {
+      deferredFirstPartyInstrumentation:
+        'Deferring `{{specifier}}` here registers a DYNAMIC nx graph edge on ' +
+        'this app. nx then treats that library as lazy-loaded and ' +
+        '`@nx/enforce-module-boundaries` forbids every STATIC import of it ' +
+        'across the app — 222 errors on the gate the last time, in files ' +
+        'nobody had touched (AGL-1921). The deferral itself is right: it is ' +
+        'what keeps firebase-admin out of the edge bundle. Only the ' +
+        'SPECIFIER is wrong. Put the static `{{specifier}}` import in a ' +
+        'sibling module under `utils/` and defer THAT by relative path, as ' +
+        '`utils/report-server-error.ts` and `utils/boot-warmup.ts` do — a ' +
+        'relative specifier crosses no project boundary, so nx records no ' +
+        'lazy edge, and the module is still only loaded inside the ' +
+        '`NEXT_RUNTIME === \'nodejs\'` branch.',
       deferredFirstParty:
         'Deferring `{{specifier}}` here can register a DYNAMIC nx graph edge ' +
         'on this whole project. nx then treats that library as lazy-loaded ' +
@@ -143,13 +191,17 @@ export default {
 
   create(context) {
     const filename = context.filename ?? context.getFilename?.()
-    if (!filename || !isTestFile(filename)) return {}
+    if (!filename) return {}
+    const instrumentation = isInstrumentationFile(filename)
+    if (!instrumentation && !isTestFile(filename)) return {}
 
     const report = (node, specifier) => {
       if (typeof specifier !== 'string' || !FIRST_PARTY.test(specifier)) return
       context.report({
         node,
-        messageId: 'deferredFirstParty',
+        messageId: instrumentation
+          ? 'deferredFirstPartyInstrumentation'
+          : 'deferredFirstParty',
         data: { specifier },
       })
     }

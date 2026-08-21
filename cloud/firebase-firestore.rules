@@ -714,6 +714,20 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Cross-domain console session handoff (AGL-1902). Admin SDK only, and
+    // this one is not a judgement call: a document here holds the SHA-256 of
+    // two secrets that together buy a full session on somebody's account, plus
+    // the uid the session would be minted for.
+    //
+    // A client that could READ one could compare a candidate against the
+    // stored digest offline. A client that could WRITE one could set
+    // `uid` to any account and `status` back to `authorized`, which is
+    // account takeover with no password involved. Nothing client-side consults
+    // this collection: the three legs of the flow are all server routes.
+    match /authHandoffs/{requestId} {
+      allow read, write: if false;
+    }
+
     // Host → org resolver mirror, server-written beside host create.
     match /hostIndex/{hostId} {
       allow read: if isSignedIn();
@@ -1291,6 +1305,36 @@ service cloud.firestore {
       // slot the cap has not already granted).
       match /webhooks/{webhookId} {
         allow read: if isStaff() || canReadHostSensitive(hostId);
+        // Update/delete ask the SENSITIVE role, not the write role (AGL-1881).
+        //
+        // `webhooks` sat in the catch-all's CREATE exclusion only, so update
+        // and delete fell through to it — and the catch-all asks
+        // `canWriteHostContent`, which admits `author`. An author could not
+        // READ this document (the rule above refuses, and the suite proves
+        // it) yet could repoint its `url` at an endpoint they control and
+        // overwrite its `secret`. That is the order payload leaving the site
+        // through the one role AGL-2334 added so an agency could hand a
+        // client LESS. The read gate was never the boundary on its own:
+        // writing the destination is reading the data, one delivery later.
+        //
+        // The comment above this block said update/delete "stay client-side"
+        // and the suite asserted it for an EDITOR, which stayed true; the
+        // role that arrived afterwards is what nobody re-asked. The same
+        // omission as `components` in AGL-2334, one collection over.
+        //
+        // The name now sits in the catch-all's update and delete exclusions
+        // too, because a dedicated block cannot narrow a sibling — rules OR
+        // their allows and the LOOSER one wins. This block is the re-grant,
+        // and it keeps every write the console legitimately makes from the
+        // browser: the soft delete that frees a capped slot (AGL-1360) and
+        // the card's enable/disable. `canReadHostSensitive` is admin/editor
+        // — exactly who can already read the secret off that card — so no
+        // existing surface loses a write. `hostWritesFrozen` carries over
+        // from the catch-all: a suspended site must not keep editing its
+        // webhooks, and dropping it here would have been a quiet re-grant of
+        // its own.
+        allow update, delete: if isStaff() ||
+          (canReadHostSensitive(hostId) && !hostWritesFrozen(hostId));
       }
       // Order STATUS is server-owned (AGL-1827). Every transition goes
       // through an Admin-SDK route that re-asks ORDER_TRANSITIONS inside the
@@ -1614,6 +1658,7 @@ service cloud.firestore {
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components', 'installs',
               'templates', 'collections', 'datasets', 'orders', 'registers',
+              'webhooks',
               'counters', 'analytics', 'screenAnalytics', 'members',
               'mediaTombstones', 'inventoryAdjustments', 'carts', 'checkouts',
               'giftCards', 'stripeTaxRates', 'restockAlerts',
@@ -1638,7 +1683,8 @@ service cloud.firestore {
         allow delete: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components',
-              'collections', 'datasets', 'orders', 'registers', 'counters',
+              'collections', 'datasets', 'orders', 'registers', 'webhooks',
+              'counters',
               'analytics', 'screenAnalytics', 'members', 'mediaTombstones',
               'inventoryAdjustments', 'carts', 'checkouts', 'giftCards',
               'stripeTaxRates', 'restockAlerts',
@@ -1805,6 +1851,15 @@ service cloud.firestore {
       // (payments-enabled gate) are set ONLY server-side after Connect
       // onboarding/KYC and are trusted by every checkout path — the client
       // must never set or change them (block on create, freeze on update).
+      //
+      // `stripeAccountLivemode` joined them in AGL-2471 and MUST be frozen for
+      // the same reason, only more so: it is a direct INPUT to the sale gate.
+      // A profile owner who could write it could assert their own test-mode
+      // account into live readiness and rebuild the exact defect. Every money
+      // door asks `connectLinkageIsReady`, which trusts this field.
+      // `stripePayoutsEnabled` is frozen alongside it — it was left writable
+      // when AGL-1547 added it, and a seller could forge their own
+      // "payouts are enabled" banner.
       function profileFieldsValid() {
         return request.resource.data.handle is string &&
           request.resource.data.handle.size() >= 3 &&
@@ -1818,10 +1873,12 @@ service cloud.firestore {
       }
       allow create: if profileOwner() && profileFieldsValid() &&
         !request.resource.data.keys()
-          .hasAny(['stripeAccountId', 'stripeChargesEnabled']);
+          .hasAny(['stripeAccountId', 'stripeChargesEnabled',
+                   'stripeAccountLivemode', 'stripePayoutsEnabled']);
       allow update: if profileOwner() && profileFieldsValid() &&
         !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['stripeAccountId', 'stripeChargesEnabled']);
+          .hasAny(['stripeAccountId', 'stripeChargesEnabled',
+                   'stripeAccountLivemode', 'stripePayoutsEnabled']);
     }
 
     // Org publisher identity (AGL-652). Publishing is ORG-ONLY: this is the
@@ -1850,6 +1907,10 @@ service cloud.firestore {
           request.resource.data.displayName.size() <= 80;
       }
       // The payout keys decide who receives money — Connect route only.
+      // `stripeAccountLivemode` (AGL-2471) is one of them: it is the field the
+      // marketplace sale gate compares against the platform's Stripe mode, so
+      // a publisher who could write it could sell from a test-mode account.
+      // `stripePayoutsEnabled` is frozen with it.
       // `handle` is equally server-owned: it must be claimed transactionally
       // in `publisherHandles` (AGL-652), and a client read-then-write lets
       // two orgs racing for one handle both "succeed", silently taking each
@@ -1869,6 +1930,7 @@ service cloud.firestore {
       allow update: if publisherManager() && publisherFieldsValid() &&
         !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['handle', 'stripeAccountId', 'stripeChargesEnabled',
+                   'stripeAccountLivemode', 'stripePayoutsEnabled',
                    'publisherAgreement', 'avatarUrl', 'website',
                    'supportEmail', 'supportUrl', 'githubUrl', 'xUrl',
                    'linkedinUrl']);

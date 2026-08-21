@@ -161,7 +161,16 @@ async function expandCollectionEntryBlocks(
 export async function composeNodesWithChrome(options: {
   hostId: string
   layoutId?: string | null
-  screenNodes: Record<string, any>
+  /**
+   * The screen's own nodes, or a PROMISE of them (AGL-1428).
+   *
+   * Accepting the unresolved form is what lets `composeScreenNodes` hand the
+   * version read over before it has finished, so the host-scoped reads below
+   * — none of which look at these nodes — overlap it instead of queueing
+   * behind it. Passing a resolved value behaves exactly as before, which is
+   * what every other caller does.
+   */
+  screenNodes: Record<string, any> | Promise<Record<string, any>>
   /** Entry-template tokens (AGL-105) substituted before denormalize. */
   tokens?: Record<string, string>
   /** Routed content collection (AGL-551) for Collection entries blocks. */
@@ -176,7 +185,7 @@ export async function composeNodesWithChrome(options: {
    */
   host?: Aglyn.HostTokenSource | null
 }): Promise<Record<string, any>> {
-  const { hostId, layoutId, screenNodes } = options
+  const { hostId, layoutId } = options
 
   /**
    * The layout chain, innermost first (AGL-703).
@@ -237,18 +246,34 @@ export async function composeNodesWithChrome(options: {
   /**
    * Does the SCREEN itself repeat over a dataset (AGL-1440)?
    *
-   * Asked here, before the fan-out, purely so the overwhelmingly common case
-   * keeps the AGL-1225 one-round-trip shape: a page that repeats almost always
-   * says so on its own document, and this lets its datasets read ride in the
-   * batch below instead of waiting for the layout walk.
+   * Asked as soon as the nodes are in hand — which since AGL-1428 is after
+   * the fan-out has been ISSUED rather than before — so the overwhelmingly
+   * common case still keeps the AGL-1225 shape: a page that repeats almost
+   * always says so on its own document, and its datasets read goes out
+   * alongside the remaining chrome reads instead of after them.
    *
    * It is deliberately NOT the correctness gate — a repeatable can arrive from
    * a layout or a grafted reusable component, neither of which exists yet. The
    * gate is re-asked against the composed tree after grafting, which is the
    * exact input `expandRepeatables` reads.
    */
-  const screenRepeats = Aglyn.hasRepeatableNodes(screenNodes)
-  const [layoutNodesChain, componentsRes, bulk] = await Promise.all([
+  /*
+   * ISSUE THE HOST-SCOPED READS FIRST, THEN AWAIT THE NODES (AGL-1428).
+   *
+   * Every read in this bundle is keyed by `hostId` (and `layoutId`) alone —
+   * none of them reads `screenNodes` — so starting them before the nodes are
+   * in hand lets `composeScreenNodes`' version read overlap them rather than
+   * run ahead of them. `Promise.all` is created BEFORE the `await` below on
+   * purpose: that is the line that makes the two independent, and moving the
+   * await above it silently gives the whole saving back.
+   *
+   * `getDatasets` is the one read that genuinely depends on the nodes, so it
+   * cannot join the bundle. It does not have to wait for the bundle either —
+   * it is issued the moment the nodes resolve and awaited after, so it still
+   * overlaps whatever is left of the chrome reads instead of costing the
+   * extra serial round trip that dropping it from the batch would imply.
+   */
+  const chromeBundle = Promise.all([
     walkLayoutChain(),
     getComponents({ hostId }),
     // Host variable + function bindings (AGL-91/93): {{name}} and
@@ -257,13 +282,17 @@ export async function composeNodesWithChrome(options: {
     Promise.all([
       getVariables({ hostId }),
       getFunctions({ hostId }),
-      screenRepeats ? getDatasets({ hostId }) : undefined,
       getWorkflows({ hostId }),
       getPluginInstalls({ hostId }),
     ]),
   ])
-  const [rawVariables, functions, screenDatasets, workflows, pluginInstalls] =
-    bulk
+  const screenNodes = await options.screenNodes
+  const screenDatasetsPromise = Aglyn.hasRepeatableNodes(screenNodes)
+    ? getDatasets({ hostId })
+    : undefined
+  const [layoutNodesChain, componentsRes, bulk] = await chromeBundle
+  const [rawVariables, functions, workflows, pluginInstalls] = bulk
+  const screenDatasets = await screenDatasetsPromise
 
   const composedNodes = Aglyn.composeLayoutChainAndScreenNodes(
     layoutNodesChain as any,
@@ -376,23 +405,60 @@ export async function composeScreenNodes(options: {
         docId: screenId,
         parent: screen,
       })
-  const versionRes = await getScreenVersion({
-    hostId,
-    screenId,
-    versionId: (options.versionId ??
-      effectiveVersionId ??
-      screen.versionId) as string,
-  })
-  if (versionRes.error || !versionRes.version) return null
+  const versionId = (options.versionId ??
+    effectiveVersionId ??
+    screen.versionId) as string
 
-  return composeNodesWithChrome({
+  /*
+   * OVERLAP THE VERSION READ WITH THE CHROME BUNDLE (AGL-1428).
+   *
+   * `composeNodesWithChrome`'s reads are keyed by `hostId`/`layoutId`, both
+   * of which are in hand here, so the version read no longer has to finish
+   * before they start. Handing the promise over instead of the resolved
+   * value is the whole change: it is `composeNodesWithChrome` that decides
+   * when it actually needs the nodes.
+   *
+   * The `versionId`-less screen still exits BEFORE anything is issued, so a
+   * screen that has never been published costs no reads. What remains is the
+   * narrow case of a `versionId` that points at a missing or unreadable
+   * version document — a data-integrity fault rather than a routing outcome
+   * — and that one now pays for a chrome bundle it discards. That is the
+   * deliberate trade: one wasted bundle on a broken screen, against the
+   * version read hiding under the chrome reads on every render that works.
+   */
+  if (!versionId) return null
+
+  const versionPromise = getScreenVersion({ hostId, screenId, versionId })
+
+  /*
+   * NEITHER DERIVED PROMISE MAY REJECT ON ITS OWN.
+   *
+   * `composed` is discarded on every failure path below, and a rejected
+   * promise nobody awaited is an unhandled rejection — which in Node takes
+   * the whole render process down instead of letting this 404. So the nodes
+   * handed to the compose absorb the failure (an empty tree it will never be
+   * asked for), and `composed` gets a rejection handler attached the moment
+   * it exists rather than at the point we decide to drop it. The real error
+   * still propagates, from the `await versionPromise` below, exactly where it
+   * did when this function awaited the version directly.
+   */
+  const composed = composeNodesWithChrome({
     hostId,
     layoutId: screen.layoutId as string | undefined,
-    screenNodes: versionRes.version.nodes as any,
+    screenNodes: versionPromise.then(
+      (res) => (res.version?.nodes ?? {}) as any,
+      () => ({}) as any,
+    ),
     tokens: options.tokens,
     collection: options.collection,
     host: options.host,
   })
+  void composed.catch(() => undefined)
+
+  const versionRes = await versionPromise
+  if (versionRes.error || !versionRes.version) return null
+
+  return composed
 }
 
 export default composeScreenNodes

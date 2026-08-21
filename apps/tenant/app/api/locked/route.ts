@@ -45,8 +45,11 @@ import {
   resolveLockdown,
   type LockdownState,
 } from '@aglyn/aglyn/server'
-import { getPlatformLockdown } from '@aglyn/tenant-data-admin'
-import { getHost } from '../../../utils/get-host'
+import {
+  getDomainLockdown,
+  getPlatformLockdown,
+} from '@aglyn/tenant-data-admin'
+import { CNAME_HOST_PREFIX, getHost } from '../../../utils/get-host'
 import { getOrgBilling } from '../../../utils/get-org-billing'
 
 export const dynamic = 'force-dynamic'
@@ -134,6 +137,14 @@ export async function GET(request: Request): Promise<Response> {
             platform: await getPlatformLockdown(),
             org: normalizeOrgLockdown(orgRes.org as never),
             host: normalizeHostLockdown(hostRes.host as never),
+            // DOMAIN scope (AGL-1513), re-derived here like everything else
+            // on this path. Without it the notice page would render the
+            // generic body for a domain-locked name — the visitor would be
+            // correctly refused by the middleware and then told the wrong
+            // reason, which is the shape this route exists to avoid.
+            domain: host.startsWith(CNAME_HOST_PREFIX)
+              ? await getDomainLockdown(host.slice(CNAME_HOST_PREFIX.length))
+              : null,
           },
           Date.now(),
         )

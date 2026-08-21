@@ -567,10 +567,113 @@ export async function provisionSsoPool(options: {
 }
 
 /**
+ * Is this claim a STAFF ATTESTATION that the org owns the domain? (AGL-1887)
+ *
+ * The second of exactly two ways a domain can be proven, and the one that
+ * exists for orgs onboarded before self-serve. Their domain was written onto
+ * `sso.domains` by a person who checked, with no claim document behind it — so
+ * `unpublishSsoDomains` deactivated their routing happily and
+ * `publishSsoDomains` then refused to bring it back. Off worked, on did not,
+ * and for `aglyn-org` the owner's only credential lives inside the pool that
+ * stops answering (AGL-1888).
+ *
+ * A POSITIVE MARKER, never an absence. The rejected alternative was to treat
+ * "a routing doc already exists naming this org" as permission to re-publish,
+ * which makes `unpublish` non-final and would let a domain whose claim was
+ * revoked come back. What is trusted here is a field a staff member wrote on
+ * purpose, and it says WHO, so the trust is attributable.
+ *
+ * WHY THIS IS NOT A CLIENT-REACHABLE HOLE, which is the only question that
+ * matters about it:
+ *
+ *  - `orgs/{orgId}/ssoDomains/{domain}` is `allow read, write: if false` in
+ *    `cloud/firebase-firestore.rules` — deny-all for every client, reads
+ *    included. Only the Admin SDK, which bypasses rules, can write here.
+ *  - No customer-reachable route writes this field. `issueDomainClaim` is the
+ *    only claim writer on the org's own path and it writes `domain`, `token`,
+ *    `verified: false` and `createdAt` — never `attestedBy`.
+ *  - {@link attestSsoDomain} is the only writer, and it is staff-only by
+ *    construction: it lives here, server-side, and takes the attesting uid.
+ *
+ * That is why AGL-1887's proposed rules change is NOT part of this: the
+ * subcollection is already deny-all, and adding a rule permitting a narrower
+ * write than "none" would loosen it, not tighten it.
+ *
+ * A non-empty STRING, checked strictly. `true`, `1` or `{}` are not an
+ * attestation by anybody, and a field that can be satisfied by any truthy
+ * value is one a future careless write can satisfy by accident.
+ */
+export function isStaffAttestedClaim(attestedBy: unknown): boolean {
+  return typeof attestedBy === 'string' && attestedBy.trim().length > 0
+}
+
+/**
+ * Record that staff have verified, out of band, that an org owns a domain
+ * (AGL-1887).
+ *
+ * This is the write half of the attestation {@link isStaffAttestedClaim}
+ * reads, and it exists so there is exactly ONE way the marker can be created
+ * and it is a named function with an actor on it — rather than a field somebody
+ * sets by hand in the Firebase console with no record of who or why.
+ *
+ * `verified` is left FALSE and untouched. The two facts are different: DNS
+ * verification is a proof we re-ran ourselves, an attestation is a person
+ * vouching. Collapsing them would make an attested domain indistinguishable
+ * from a DNS-proven one in the data, and the `verified` flag is what
+ * `verifyDomainClaim` owns.
+ *
+ * Not exposed through `/api/orgs/sso`, deliberately. An org admin proving
+ * their own domain has DNS for that; an attestation is us saying we checked,
+ * and a customer-reachable path that wrote it would be a customer-reachable
+ * path to publishing any domain.
+ */
+export async function attestSsoDomain(options: {
+  orgId: string
+  domain: string
+  /** The staff member vouching. Recorded, and required. */
+  attestedByUid: string
+  note?: string | null
+}): Promise<{ domain: string | null; error: string | null }> {
+  const { domain, error } = validateSsoDomain(options.domain)
+  if (!domain) return { domain: null, error: error ?? 'Invalid domain' }
+  if (!isStaffAttestedClaim(options.attestedByUid)) {
+    return { domain: null, error: 'An attestation needs the staff uid making it.' }
+  }
+
+  // Same uniqueness rule `issueDomainClaim` enforces. An attestation must not
+  // be a way around "one domain, one org" — if another org already holds live
+  // routing for this domain, that conflict is resolved by a human before
+  // anything is written, not by whoever attests last.
+  const existing = await firestore().collection('ssoDomains').doc(domain).get()
+  if (existing.exists && existing.get('orgId') !== options.orgId) {
+    return {
+      domain: null,
+      error: 'That domain is already verified by another organization.',
+    }
+  }
+
+  await claimRef(options.orgId, domain).set(
+    {
+      domain,
+      attestedBy: options.attestedByUid.trim(),
+      attestedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+      attestationNote: options.note?.trim() || null,
+    },
+    // MERGE, so an existing claim keeps its token and its `verified` state. A
+    // fresh document is created for the pre-self-serve orgs that have none,
+    // which is the whole point, but an attestation must never reset a claim
+    // the org is midway through proving by DNS.
+    { merge: true },
+  )
+  return { domain, error: null }
+}
+
+/**
  * Publish the public routing docs — the last step, and the one that actually
  * turns SSO on for a domain.
  *
- * Only verified domains are written. This function is the single writer of
+ * Only PROVEN domains are written — DNS-verified, or staff-attested per
+ * {@link isStaffAttestedClaim}. This function is the single writer of
  * `ssoDomains`, so the invariant "a live routing doc implies proven ownership"
  * is enforceable by reading one place.
  */
@@ -591,8 +694,24 @@ export async function publishSsoDomains(options: {
     // Re-read the claim rather than trusting the caller's list: this is the
     // boundary where an unverified domain would become live, so the check
     // belongs here and not only at the call site.
+    //
+    // TWO ways to be proven, and no third (AGL-1887). `verified === true` is
+    // DNS, re-checked by us; `attestedBy` is a named staff member vouching for
+    // an org onboarded before self-serve existed. Both are POSITIVE markers on
+    // the org's own claim document, which no client can write.
+    //
+    // What this must never become is an unconditional accept, or an inference
+    // from the routing doc already existing. That check is what stops an org
+    // publishing routing for a domain it does not own and intercepting another
+    // company's sign-ins — see `sso-publish-gate.emulator.spec.ts`, which
+    // exercises every refusal branch, and `sso-attested-restore.spec.ts`,
+    // which pins the boundary this loosening must not cross.
     const claim = await claimRef(orgId, domain).get()
-    if (!claim.exists || claim.get('verified') !== true) continue
+    if (!claim.exists) continue
+    const proven =
+      claim.get('verified') === true ||
+      isStaffAttestedClaim(claim.get('attestedBy'))
+    if (!proven) continue
     batch.set(
       firestore().collection('ssoDomains').doc(domain),
       {

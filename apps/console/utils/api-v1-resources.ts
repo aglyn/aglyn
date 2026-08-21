@@ -33,11 +33,14 @@ import {
   createResourceUid,
   defaultScopeForNewResource,
   effectiveDatasetModel,
+  inspectUploadBytes,
+  isBlockedSubdomain,
   newResourceScopeFields,
   normalizeContactEmail,
   ORG_SCOPE_TOKEN,
   readImageDimensions,
   screenRoutePathToUrl,
+  SUBDOMAIN_PATTERN,
   validateDocument,
 } from '@aglyn/aglyn/server'
 import {
@@ -67,6 +70,10 @@ import {
 import { isSvgUploadType, sanitizeSvgBuffer } from './sanitize-svg'
 import { resolveOrgMediaBand } from './server/media-storage-band'
 import { folderStoragePath, mediaCdnPathUpdate } from './server/media-scope'
+import {
+  claimHostForOrg,
+  findSubdomainConflict,
+} from './server/provision-host'
 import { postTenantRevalidate } from './server/tenant-revalidate'
 import { mediaStorageGate, scopeBillsStorageOverage } from './storage-overage'
 
@@ -189,7 +196,8 @@ async function claimWrite(
     | 'form-submission-deletes'
     | 'contacts'
     | 'contact-deletes'
-    | 'media',
+    | 'media'
+    | 'sites',
 ): Promise<{ claim: AttemptClaim } | { replay: Response }> {
   const result = await claimAttempt(ctx.firestore, {
     kind,
@@ -869,6 +877,143 @@ function siteView(hostId: string, data: FirebaseFirestore.DocumentData | undefin
   }
 }
 
+/**
+ * The per-ORG hourly ceiling on site creation over /v1 (AGL-2465).
+ *
+ * The console route already limits creates per uid and per IP (AGL-1968),
+ * because `*.aglyn.app` is one global namespace and a subdomain someone squats
+ * is gone for everybody. An API key has neither a uid nor a stable IP, so the
+ * budget is keyed on the ORG — the thing a key actually belongs to, and the
+ * thing the `hostLimit` quota is already counted against. Minting ten keys
+ * therefore does not multiply the name-grab rate.
+ *
+ * Generous against real use and fatal to a sweep: an agency onboarding clients
+ * does this once per client. The `hostLimit` quota below still bounds how many
+ * sites an org may HOLD; this bounds how fast it may try.
+ */
+export const SITE_CREATE_LIMIT_PER_HOUR = 10
+export const SITE_CREATE_WINDOW_MS = 60 * 60 * 1000
+
+/**
+ * `POST /v1/sites` — provision a site (AGL-2465).
+ *
+ * Ordering is scope, then validation, then claim, then budget, then work, and
+ * every step of it is load-bearing:
+ *
+ * - **Scope and ownership first.** A refusal must never consume the budget,
+ *   or an unauthorized caller can spend the org's own create allowance from
+ *   outside it (AGL-2462's argument for `handlePublish`).
+ * - **Deterministic 400s ABOVE the claim**, as `createRecord` and
+ *   `createContact` argue: a broken payload must not take the key at all, so
+ *   an integrator fixes the body and retries with the SAME key.
+ * - **Conditional refusals BELOW it, each releasing the key** (AGL-2296). A
+ *   taken subdomain clears when that site is renamed or deleted, and a quota
+ *   refusal clears on upgrade — the retry that should finally succeed must
+ *   not replay the refusal.
+ *
+ * The replay itself is what this endpoint exists for. `hosts/create` mints its
+ * `hostId` with `createResourceUid()`, so a POST that succeeded server-side
+ * but lost its response created a SECOND site on retry; the only thing
+ * preventing it was accidental — the retry reused the same subdomain and 409'd
+ * on uniqueness — and a client generating a subdomain per attempt lost even
+ * that. Site creation is the most expensive object here to duplicate: a
+ * `hostLimit` slot, a `hostIndex` write, and `syncOrgAuthProjections` across
+ * every member of the org.
+ *
+ * `claim.record(200, view)` stores the response, so a replay returns the
+ * ORIGINAL site — id included — from the stored body rather than a fresh read,
+ * which is what makes it survive the site being renamed or deleted afterwards.
+ * Stored as 200 while the fresh answer is 201, so a client can tell a replay
+ * from a create.
+ */
+async function createSite(request: Request, ctx: ApiV1Context): Promise<Response> {
+  const body = await readJsonBody(request)
+  const displayName = String((body as never)?.['displayName'] ?? '')
+    .trim()
+    .slice(0, 80)
+  const subdomain = String((body as never)?.['subdomain'] ?? '')
+    .trim()
+    .toLowerCase()
+
+  const fields: Record<string, string> = {}
+  if (!displayName) fields['displayName'] = 'Required.'
+  if (!SUBDOMAIN_PATTERN.test(subdomain)) {
+    fields['subdomain'] =
+      'Must be 3-30 characters, lowercase letters, numbers and hyphens, and start with a letter or number.'
+  } else if (isBlockedSubdomain(subdomain)) {
+    fields['subdomain'] = 'That subdomain is reserved.'
+  }
+  if (Object.keys(fields).length > 0) {
+    return ApiErrors.badRequest({
+      message: 'Site failed validation',
+      code: 'validation_failed',
+      fields,
+      headers: ctx.headers,
+    })
+  }
+
+  const claimed = await claimWrite(
+    ctx,
+    '*',
+    request.headers.get('Idempotency-Key'),
+    'sites',
+  )
+  if ('replay' in claimed) return claimed.replay
+  const { claim } = claimed
+
+  try {
+    const budget = await consumeRateLimit(`apiv1-site-create:${ctx.orgId}`, {
+      limit: SITE_CREATE_LIMIT_PER_HOUR,
+      windowMs: SITE_CREATE_WINDOW_MS,
+    })
+    if (!budget.allowed) {
+      // Released: the budget refills, and the retry that should then succeed
+      // must not replay a 429.
+      await claim.release()
+      return ApiErrors.rateLimited(
+        Math.max(1, Math.ceil((budget.resetMs - Date.now()) / 1000)),
+        ctx.headers,
+      )
+    }
+
+    const conflict = await findSubdomainConflict(ctx.firestore, subdomain)
+    if (conflict) {
+      await claim.release()
+      return ApiErrors.conflict({
+        message: `That subdomain is taken. Available alternatives: ${conflict.suggestions.join(', ') || 'none'}`,
+        code: 'subdomain_taken',
+        headers: ctx.headers,
+      })
+    }
+
+    const created = await claimHostForOrg({
+      firestore: ctx.firestore,
+      orgId: ctx.orgId,
+      displayName,
+      subdomain,
+      org: ctx.org as never,
+    })
+    if (!created.allowed) {
+      await claim.release()
+      return ApiErrors.planRequired({
+        message: `Site limit reached (${created.limit}). Upgrade the plan or add extra sites.`,
+        code: 'site_quota',
+        headers: ctx.headers,
+      })
+    }
+
+    const view = siteView(created.hostId, {
+      displayName,
+      subdomain,
+    } as never)
+    await claim.record(200, view)
+    return apiJson(view, { status: 201, headers: ctx.headers })
+  } catch (error) {
+    await claim.release()
+    throw error
+  }
+}
+
 async function handleSites(
   request: Request,
   ctx: ApiV1Context,
@@ -878,6 +1023,14 @@ async function handleSites(
   const [, hostId, sub] = segments
 
   if (!hostId) {
+    // `sites:write` is checked BEFORE `sites:read`, matching
+    // `handleScopedMedia` (AGL-900): a create-only key must not be told it
+    // lacks the read scope it was never meant to hold.
+    if (request.method === 'POST') {
+      const deniedWrite = requireScope(ctx, 'sites:write')
+      if (deniedWrite) return deniedWrite
+      return createSite(request, ctx)
+    }
     const denied = requireScope(ctx, 'sites:read')
     if (denied) return denied
     if (request.method !== 'GET') return ApiErrors.methodNotAllowed({ headers: ctx.headers })
@@ -1714,6 +1867,35 @@ async function createMedia(
     })
   }
 
+  /**
+   * STRUCTURAL inspection (AGL-1475). AGL-2463 shipped this route with the
+   * gap written down — "no magic-byte sniffing anywhere in media ingress, the
+   * declared type is trusted" — and this is that sentence being retired.
+   *
+   * It matters more here than on the console routes, not less. This is the
+   * key-authenticated path: the caller is a migration tool or an agency's
+   * automation, not a person watching a progress bar, and `media:write` was
+   * added precisely so a key could fill a library unattended. A key that
+   * leaks fills it unattended too.
+   *
+   * Structure only — not an antivirus scan. See `upload-inspection.ts` for
+   * the exact boundary, and do not let it drift back into a scanning claim.
+   */
+  {
+    const refusal = inspectUploadBytes({
+      bytes: decoded,
+      contentType,
+      fileName,
+    })
+    if (refusal) {
+      return ApiErrors.unsupportedMediaType({
+        message: refusal.message,
+        code: refusal.code,
+        headers: ctx.headers,
+      })
+    }
+  }
+
   // Sanitize BEFORE hashing and before measuring what we store, so the digest
   // and the counter both describe the bytes that actually landed.
   const svg = isSvgUploadType(contentType) ? sanitizeSvgBuffer(decoded) : null
@@ -1791,7 +1973,7 @@ async function createMedia(
     const bucket = firebaseAdmin
       .app()
       .storage()
-      .bucket(process.env['NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET'])
+      .bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET)
     await bucket.file(objectPath).save(buffer, {
       contentType,
       metadata: {

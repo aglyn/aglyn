@@ -16,6 +16,15 @@
  */
 
 import { sanitizeEventParams } from '@aglyn/aglyn/app-utils/analytics-events'
+// One definition for a pair of strings that has to agree with a setting in the
+// GA UI nothing here can typecheck against (AGL-1582/AGL-2064). Four surfaces
+// stamp them now — the console, the tenant runtime, the docs site, and this
+// one — and a second spelling would read as a different dimension in GA, so
+// the filter would catch three of them and look like it was working.
+import {
+  INTERNAL_TRAFFIC_PARAM,
+  INTERNAL_TRAFFIC_VALUE,
+} from '@aglyn/aglyn/app-utils/internal-traffic'
 
 /**
  * Server-to-server GA4 delivery via the Measurement Protocol (AGL-1561) —
@@ -123,6 +132,16 @@ export interface Ga4PurchaseInput {
   userId?: string | null
   /** Stripe customer id — used ONLY to synthesize a fallback client id. */
   stripeCustomerId?: string | null
+
+  /**
+   * Whether this transaction is OURS — a staff or rehearsal purchase — rather
+   * than a customer's (AGL-1582). Carried from the browser that started
+   * checkout on Stripe metadata, the same way `clientId` is.
+   *
+   * Opt-in only, never inferred: wrongly flagging a real customer erases their
+   * revenue from every report, and a GA4 data filter is not retroactive.
+   */
+  internal?: boolean
 }
 
 export interface Ga4SendResult {
@@ -163,11 +182,25 @@ interface Ga4Credentials {
 
 /**
  * Absent config is the normal state on self-hosted deployments and in
- * development — not an error, and not worth a log line per event. It is also
- * the current state of the TENANT deployment (AGL-1589): neither variable is
- * set on the aglyn-tenant Vercel project (checked 2026-08-14), so
- * `sendGa4SitePublished` no-ops there until they are added, exactly as
- * intended. See docs/ANALYTICS.md.
+ * development — not an error, and not worth a log line per event.
+ *
+ * ⚠️ It is NO LONGER the state of our own production deployments, and this
+ * comment saying otherwise is how that fact got lost twice (AGL-2327).
+ * `GA4_MEASUREMENT_ID` and `GA4_API_SECRET` are present on the production
+ * deployments of `aglyn-console`, `aglyn-tenant` AND `aglyn-docs` since
+ * **2026-08-17 12:15 UTC** — verified against `GET /v13/deployments/{id}`,
+ * which returns the env key list a running lambda actually has, with an older
+ * deployment as a negative control. `vercel env ls` and the project's own env
+ * list cannot answer this question; only the deployment can.
+ *
+ * So a server-side event missing from GA4 today is **not** explained by
+ * credentials, and must not be written off as "the transport is dead". A
+ * 2026-08-19 smoke pass reached exactly that conclusion off the stale version
+ * of this note, four days after the flip landed. Look at dimension
+ * registration (AGL-1637 item 3) and at how the beacon is SCHEDULED
+ * (AGL-2346/AGL-2327 — a bare `void` in a route handler never runs) instead.
+ *
+ * See docs/ANALYTICS.md §"Environment variables".
  */
 function ga4Credentials(): Ga4Credentials | null {
   const measurementId = process.env.GA4_MEASUREMENT_ID || ''
@@ -190,8 +223,24 @@ async function postGa4Event(options: {
   userId?: string | null
   /** Structured-log fields for the two failure lines (tag + subject). */
   log: Record<string, unknown>
+  /**
+   * Whether this hit is OURS rather than a customer's (AGL-1582).
+   *
+   * Applied here, centrally, rather than by each sender: a fifth sender added
+   * later would otherwise be unstamped by default, and "unstamped by default"
+   * is how our own rehearsal revenue ends up in the real reports.
+   */
+  internal?: boolean
 }): Promise<{ sent: boolean; reason?: string }> {
   const { credentials, eventName, params, clientId, userId, log } = options
+  // Only ever ADDED, never set to `false`. GA4's internal-traffic filter
+  // matches on the parameter being present with this value; a `traffic_type:
+  // 'external'` on every real hit would be a second dimension nobody filters
+  // on, and one bad `internal` computation away from erasing paying customers
+  // from every report — which a data filter cannot undo.
+  const stamped = options.internal
+    ? { ...params, [INTERNAL_TRAFFIC_PARAM]: INTERNAL_TRAFFIC_VALUE }
+    : params
   try {
     const response = await fetch(
       `${GA4_ENDPOINT}?measurement_id=${encodeURIComponent(
@@ -210,7 +259,7 @@ async function postGa4Event(options: {
           // same thing per hit so a future dashboard change cannot quietly
           // opt our server-side events into ads personalization.
           non_personalized_ads: true,
-          events: [{ name: eventName, params }],
+          events: [{ name: eventName, params: stamped }],
         }),
         signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
       },
@@ -277,6 +326,7 @@ export async function sendGa4Purchase(
       tag: 'AGL-1561:ga4-purchase',
       transactionId: input.transactionId,
     },
+    internal: input.internal,
   })
   return { ...result, synthesizedClientId }
 }
@@ -341,6 +391,7 @@ export async function sendGa4Refund(
       tag: 'AGL-1850:ga4-refund',
       transactionId: input.transactionId,
     },
+    internal: input.internal,
   })
   return { ...result, synthesizedClientId }
 }
@@ -376,6 +427,8 @@ export async function sendGa4SubscriptionCancelled(input: {
   clientId?: string | null
   userId?: string | null
   stripeCustomerId?: string | null
+  /** Ours rather than a customer's (AGL-1582) — see `Ga4PurchaseInput`. */
+  internal?: boolean
 }): Promise<Ga4SendResult> {
   const credentials = ga4Credentials()
   if (!credentials) {
@@ -404,6 +457,7 @@ export async function sendGa4SubscriptionCancelled(input: {
     clientId,
     userId: input.userId,
     log: { tag: 'AGL-1851:ga4-subscription-cancelled' },
+    internal: input.internal,
   })
   return { ...result, synthesizedClientId }
 }
@@ -449,6 +503,12 @@ export async function sendGa4SitePublished(input: {
    * breakdown value beats an invented one.
    */
   firstPublish?: boolean
+  /**
+   * Ours rather than a customer's (AGL-1582). A scheduled publish of our own
+   * marketing site or a demo host is an activation event for nobody, and
+   * `site_published` is the headline activation metric.
+   */
+  internal?: boolean
 }): Promise<Ga4SendResult> {
   const credentials = ga4Credentials()
   if (!credentials) {
@@ -468,6 +528,95 @@ export async function sendGa4SitePublished(input: {
     params: sanitizeEventParams({ first_publish: input.firstPublish }),
     clientId: synthesizeClientId(input.hostId),
     log: { tag: 'AGL-1589:ga4-site-published' },
+    internal: input.internal,
+  })
+  // Always synthetic here: there is no browser client id to have missed.
+  return { ...result, synthesizedClientId: true }
+}
+
+/**
+ * Send one `stripe_connected` for an account that became able to take
+ * payments with no browser present (AGL-1580). Never throws.
+ *
+ * ## Why this needs a server sender at all
+ *
+ * There are two client-side emitters for this event — the commerce payments
+ * card and the marketplace seller panel — and both are gated the same way:
+ *
+ *     if (!chargesEnabled) trackEvent('stripe_connected')
+ *
+ * where `chargesEnabled` is the state read from the merchant's profile BEFORE
+ * the connect request. The gate is right in intent: the connect handler is a
+ * re-entrant create-or-resume that answers `chargesEnabled: true` on every
+ * later visit, so a bare event there would count one merchant once per click
+ * forever.
+ *
+ * What defeats it is AGL-1997. Stripe emits `account.updated` the moment
+ * hosted onboarding completes — while the merchant is still on Stripe's
+ * domain, before the `return_url` bounces them back — and
+ * {@link syncConnectAccountStatus} mirrors `charges_enabled` onto the profile
+ * from that webhook. So by the time the merchant lands back in the console
+ * the flag they are supposed to transition FROM already reads `true`, the
+ * client guard is false, and the event never fires. It is not a race that
+ * usually goes the wrong way; the webhook wins by an entire page load.
+ *
+ * ## The two senders cannot double-count
+ *
+ * Both key off the SAME stored flag, from opposite sides of it:
+ *
+ * - merchant clicks first → the connect route writes `true` → the later
+ *   `account.updated` sees no transition → only the CLIENT event fires;
+ * - webhook lands first → the transition is here → the merchant's later click
+ *   reads a pre-state of `true` → only the SERVER event fires.
+ *
+ * Exactly one of the two guards can be open for a given account, which is why
+ * this is added alongside the client emitters rather than replacing them —
+ * a deployment with no Connect webhook destination (the self-host default)
+ * still reports through the browser.
+ *
+ * ## One synthetic user per connected account
+ *
+ * The client id is hashed from the Stripe account id for the reason
+ * {@link sendGa4SitePublished} hashes the host: "% who connect Stripe" counts
+ * MERCHANTS, and a random id per hit would let one account that reconnects
+ * look like several activated customers. The account id is the hash seed and
+ * is never transmitted.
+ *
+ * ## No parameters, deliberately
+ *
+ * `stripe_connected` is declared as `Record<string, never>` in the client
+ * event contract, and a server sender that invented a param would create a
+ * dimension only half the hits carry.
+ */
+export async function sendGa4StripeConnected(input: {
+  /** Stripe account id — hashed into a client id, never sent. */
+  accountId: string
+  /**
+   * Ours rather than a customer's (AGL-1582). Omitted by the webhook caller
+   * for the same reason the publish executor omits it: no server-side signal
+   * distinguishes our own connected account from a customer's, and guessing
+   * would stamp real merchants as internal — which a data filter then
+   * permanently discards.
+   */
+  internal?: boolean
+}): Promise<Ga4SendResult> {
+  const credentials = ga4Credentials()
+  if (!credentials) {
+    return { sent: false, synthesizedClientId: false, reason: 'not-configured' }
+  }
+  if (!input.accountId) {
+    return { sent: false, synthesizedClientId: false, reason: 'no-client-id' }
+  }
+  const result = await postGa4Event({
+    credentials,
+    eventName: 'stripe_connected',
+    // Sanitized despite being empty, so the guarantee holds because the
+    // sanitizer ran rather than because this call site happened to pass
+    // nothing.
+    params: sanitizeEventParams({}),
+    clientId: synthesizeClientId(input.accountId),
+    log: { tag: 'AGL-1580:ga4-stripe-connected' },
+    internal: input.internal,
   })
   // Always synthetic here: there is no browser client id to have missed.
   return { ...result, synthesizedClientId: true }

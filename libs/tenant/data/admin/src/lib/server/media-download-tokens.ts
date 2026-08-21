@@ -257,6 +257,84 @@ async function rotateOne(
   }
 }
 
+/** What happened to ONE object's token. See {@link rotateDownloadTokenForObject}. */
+export interface ObjectTokenRotation {
+  /** The token was rewritten, so the published raw URL is now dead. */
+  rotated: boolean
+  /**
+   * Why not, when it was not. `no-token` is the common and CORRECT case —
+   * the object had no raw URL to revoke. `error` and `not-configured` are
+   * infrastructure; `no-path` is a document with no object behind it.
+   */
+  reason: 'rotated' | 'no-token' | 'no-path' | 'not-configured' | 'error'
+}
+
+/**
+ * Revoke ONE object's raw download URL (AGL-1615).
+ *
+ * The per-asset counterpart to the prefix scan above, for asset quarantine
+ * rather than a scope lockdown — and it closes a hole that is not a caching
+ * residual but an un-gated origin.
+ *
+ * `serveMediaCdn` consults the quarantine deny list because that route is
+ * ours. The media document's `url` field is not: it points at
+ * `firebasestorage.googleapis.com`, where no code of ours runs, and the
+ * console DAM and `GET /api/v1/media` both fall back to it whenever an asset
+ * has no `cdnPath` — every free-tier workspace, every private asset, every
+ * upload predating AGL-829. For those, a quarantine was not slow; it was
+ * never consulted, and a DMCA'd file kept serving to anyone holding the link.
+ *
+ * Same three narrowings as the prefix scan, for the same reasons, and one
+ * addition:
+ *
+ *  * **Only an object that ALREADY carries a token is touched.** Writing one
+ *    where none existed would MINT a public raw URL for a file that never
+ *    had one — creating the exposure this exists to remove.
+ *  * **The existing custom-metadata map is read and respread**, because
+ *    `setMetadata` replaces the whole map and a takedown must not also be a
+ *    silent erasure of customer-set metadata.
+ *  * **Fail soft.** A Storage outage must not become a takedown outage: the
+ *    deny-list entry is the primary control and lands regardless. The caller
+ *    reports what actually happened rather than assuming success.
+ *  * **There is no un-rotate, and none is offered.** Releasing a quarantine
+ *    does not mint a fresh token: that would hand back a WORKING raw URL
+ *    under a new value while every embed of the old one stays broken — it
+ *    helps nobody and re-publishes the bytes. The irreversibility is real
+ *    and is stated to the operator before they act, not discovered after.
+ */
+export async function rotateDownloadTokenForObject(options: {
+  storagePath?: string | null
+  /** Injectable for tests; defaults to the configured media bucket. */
+  bucket?: any
+}): Promise<ObjectTokenRotation> {
+  const storagePath = String(options?.storagePath ?? '').trim()
+  if (!storagePath) return { rotated: false, reason: 'no-path' }
+
+  let bucket: any
+  try {
+    bucket = options.bucket ?? storageBucket()
+  } catch (error) {
+    console.error('[quarantine] storage bucket unavailable', storagePath, error)
+    return { rotated: false, reason: 'not-configured' }
+  }
+  if (!bucket) return { rotated: false, reason: 'not-configured' }
+
+  try {
+    const file = bucket.file(storagePath)
+    const existing = (file?.metadata?.metadata ?? {}) as Record<string, unknown>
+    if (!existing[DOWNLOAD_TOKEN_METADATA_KEY]) {
+      return { rotated: false, reason: 'no-token' }
+    }
+    await file.setMetadata({
+      metadata: { ...existing, [DOWNLOAD_TOKEN_METADATA_KEY]: randomUUID() },
+    })
+    return { rotated: true, reason: 'rotated' }
+  } catch (error) {
+    console.error('[quarantine] token revocation failed', storagePath, error)
+    return { rotated: false, reason: 'error' }
+  }
+}
+
 /**
  * Rotate across every prefix a lock scope owns.
  *

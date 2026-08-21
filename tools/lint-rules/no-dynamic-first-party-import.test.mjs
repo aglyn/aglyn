@@ -49,9 +49,15 @@ const ruleTester = new RuleTester({
 
 const SPEC = '/repo/libs/plugins/marketplace/src/lib/server/thing.spec.ts'
 const PRODUCT = '/repo/apps/console/constants/plugins.client.generated.ts'
+const INSTRUMENTATION = '/repo/apps/console/instrumentation.ts'
 
 const deferred = (specifier) => ({
   messageId: 'deferredFirstParty',
+  data: { specifier },
+})
+
+const deferredInstrumentation = (specifier) => ({
+  messageId: 'deferredFirstPartyInstrumentation',
   data: { specifier },
 })
 
@@ -90,6 +96,37 @@ ruleTester.run('no-dynamic-first-party-import', rule, {
     {
       filename: SPEC,
       code: `it('x', async () => { await import('firebase-admin') })`,
+    },
+    // AGL-1921's FIX shape: the deferral stays (it is what keeps
+    // firebase-admin out of the edge bundle) and the specifier is relative,
+    // so nx records no cross-project edge. Both apps ship exactly this.
+    {
+      filename: INSTRUMENTATION,
+      code: `export async function onRequestError() { const { reportServerError } = await import('./utils/report-server-error'); void reportServerError }`,
+    },
+    {
+      filename: '/repo/apps/tenant/instrumentation.ts',
+      code: `export async function register() { const { warmFirestoreAtBoot } = await import('./utils/boot-warmup'); warmFirestoreAtBoot() }`,
+    },
+    // A STATIC lib import in instrumentation.ts is not this rule's business —
+    // it creates no lazy edge. Only the deferred form is reported.
+    {
+      filename: INSTRUMENTATION,
+      code: `import { reportServerError } from '@aglyn/tenant-data-admin'
+export const f = () => reportServerError`,
+    },
+    // Third-party deferrals in instrumentation.ts stay legal: nx has no edge
+    // to record, and `@vercel/otel`-shaped imports belong exactly here.
+    {
+      filename: INSTRUMENTATION,
+      code: `export async function register() { await import('firebase-admin') }`,
+    },
+    // The basename anchor: a helper whose NAME merely starts with
+    // `instrumentation` is ordinary product code, and a deferred lib import
+    // there may well be a real code-split boundary.
+    {
+      filename: '/repo/apps/console/utils/instrumentation-helpers.ts',
+      code: `export const load = () => import('@aglyn/tenant-data-admin')`,
     },
     // PRODUCT code: the generated loader manifests and the `lazy()` pages are
     // real code-split boundaries and must stay deferred.
@@ -140,6 +177,37 @@ ruleTester.run('no-dynamic-first-party-import', rule, {
     {
       filename: '/repo/libs/plugins/marketing/src/lib/server/preview.spec.ts',
       code: `it('x', () => { jest.spyOn(require('@aglyn/tenant-data-admin'), 'f').mockResolvedValue(1) })`,
+      errors: [deferred('@aglyn/tenant-data-admin')],
+    },
+    // AGL-1921 verbatim: 222 errors on the gate (181 console, 41 tenant),
+    // and the reason this rule no longer stops at spec files. The deferral is
+    // legitimate; the LIB SPECIFIER is what costs the workspace the edge.
+    {
+      filename: INSTRUMENTATION,
+      code: `export async function onRequestError() {
+  if (process.env.NEXT_RUNTIME !== 'nodejs') return
+  const { reportServerError } = await import('@aglyn/tenant-data-admin')
+  void reportServerError
+}`,
+      errors: [deferredInstrumentation('@aglyn/tenant-data-admin')],
+    },
+    {
+      filename: '/repo/apps/tenant/instrumentation.ts',
+      code: `export async function register() { const m = await import('@aglyn/tenant-data-admin'); void m }`,
+      errors: [deferredInstrumentation('@aglyn/tenant-data-admin')],
+    },
+    // The `require` form is caught in instrumentation.ts too.
+    {
+      filename: INSTRUMENTATION,
+      code: `export const f = () => { const m = require('@aglyn/aglyn/server'); return m }`,
+      errors: [deferredInstrumentation('@aglyn/aglyn/server')],
+    },
+    // A spec named `instrumentation-*.spec.ts` is still caught by the SPEC
+    // arm, and reports the spec message — the basename anchor must not turn
+    // the instrumentation arm into an escape hatch for specs.
+    {
+      filename: '/repo/apps/tenant/specs/instrumentation-boot-warmup.spec.ts',
+      code: `it('x', async () => { await import('@aglyn/tenant-data-admin') })`,
       errors: [deferred('@aglyn/tenant-data-admin')],
     },
     // Two on one line still report twice — the blast radius is per edge.

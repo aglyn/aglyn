@@ -34,6 +34,103 @@ export interface TaxRate {
   label?: string
 }
 
+/**
+ * A FLAT, merchant-entered rate for a regime the goods sales-tax machinery
+ * above does not describe (AGL-1969 lodging, AGL-2028 services).
+ *
+ * ## Why this is not another `TaxRate`
+ *
+ * `rates[]` is a SALES tax table resolved against an address, most-specific
+ * first. Lodging (occupancy/hotel tax) and service tax are separate regimes
+ * with their own rates, their own registration and their own return, and the
+ * number a merchant typed into the goods table is not the right number for a
+ * night or an appointment. Reading `rates[]` for either would be confidently
+ * wrong rather than merely absent — which is exactly why `reserve.ts` and
+ * `bookings/server.ts` charged nothing at all until the merchant was given a
+ * field of their own to answer in.
+ *
+ * ## Off is the default and the default is load-bearing
+ *
+ * An absent, zero, negative, non-finite or out-of-range `pct` resolves to
+ * ZERO. Nothing an existing merchant is charging today moves because this
+ * shipped; a rate applies only once a merchant has typed one and saved.
+ *
+ * ## It is always MANUAL, in every store mode
+ *
+ * Deliberately independent of `TaxSettings.mode`. Stripe Tax cannot compute
+ * either regime from these sessions — it needs a lodging or service tax code
+ * no handler here sends — so a `mode: 'stripe'` store would otherwise have no
+ * way to collect them at all. Riding as an ordinary line item makes the
+ * derived `taxMode` read `manual`: the merchant's own rate, never computed
+ * against Aglyn's registrations (AGL-1904).
+ *
+ * ## Aglyn takes NO position on what is owed
+ *
+ * This is a calculator the merchant configures, records and can read back. It
+ * states no view on whether a jurisdiction imposes the tax, on who must
+ * register, or on who must remit — those attach by operation of law and
+ * belong to counsel (AGL-1904/AGL-1956), and Terms §10.3 already puts the
+ * question on the merchant. The merchant-facing copy says only that.
+ */
+export interface FlatTaxRate {
+  /** Percent, e.g. 6. Absent or non-positive = off, which is the default. */
+  pct?: number
+  /** Receipt label, e.g. 'Occupancy tax'. */
+  label?: string
+}
+
+/** What a flat rate resolved to for one charge. */
+export interface ResolvedFlatTax {
+  taxCents: number
+  /** The label to put on the receipt line; empty when there is no tax. */
+  label: string
+  /** The percentage actually applied — 0 when the rate is off or invalid. */
+  pct: number
+}
+
+/**
+ * The highest percentage this accepts. A rate above 100% is a decimal-point
+ * typo (`825` for `8.25`), not a jurisdiction, and multiplying a guest's
+ * deposit by nine because of one is a far worse failure than collecting
+ * nothing. Out of range resolves to OFF rather than being clamped to a number
+ * the merchant did not choose — and the editor says so on screen, so the
+ * refusal is never silent.
+ */
+export const FLAT_TAX_MAX_PCT = 100
+
+/** True when a typed percentage is one this will actually apply. */
+export function isUsableFlatTaxPct(pct: unknown): boolean {
+  const value = Number(pct)
+  return Number.isFinite(value) && value > 0 && value <= FLAT_TAX_MAX_PCT
+}
+
+/**
+ * Tax cents for a flat merchant rate on one charged amount, EXCLUSIVE — added
+ * on top of the price, never back-calculated out of it.
+ *
+ * `pricesIncludeTax` is deliberately not consulted: it is a goods-pricing
+ * setting, and honouring it here would mean a merchant types a lodging rate,
+ * saves, and the guest's total does not move — a setting that reads as
+ * configured while collecting nothing is the AGL-1999 failure restated.
+ *
+ * Pure and total. Unusable input answers zero and never throws.
+ */
+export function resolveFlatTaxCents(
+  rate: FlatTaxRate | undefined | null,
+  chargeCents: number,
+  fallbackLabel: string,
+): ResolvedFlatTax {
+  const pct = Number(rate?.pct)
+  if (!isUsableFlatTaxPct(pct)) return { taxCents: 0, label: '', pct: 0 }
+  const taxCents = computeTaxCents(chargeCents, pct, false)
+  if (!(taxCents > 0)) return { taxCents: 0, label: '', pct: 0 }
+  return {
+    taxCents,
+    label: (rate?.label || fallbackLabel).slice(0, 120),
+    pct,
+  }
+}
+
 export interface TaxSettings {
   /**
    * 'manual' rates below, 'stripe' for Stripe Tax automatic, or 'none' —
@@ -52,6 +149,23 @@ export interface TaxSettings {
    */
   origin?: TaxAddress
   rates?: TaxRate[]
+  /**
+   * OCCUPANCY / LODGING tax on a reservation deposit (AGL-1969). Off unless
+   * the merchant sets it — see `FlatTaxRate`. Read by `reserve.ts` only.
+   */
+  lodging?: FlatTaxRate
+  /**
+   * SERVICE tax on a paid booking (AGL-2028). Off unless the merchant sets
+   * it — see `FlatTaxRate`. Read by the bookings plugin only.
+   *
+   * ITS EXISTENCE IS THE OPT-IN. AGL-2000 declined to apply the goods
+   * `rates[]` to an appointment partly because nothing said the merchant
+   * meant those settings to cover bookings — they are another plugin's
+   * surface. A field of its own, labelled for services and blank until
+   * somebody fills it in, is the merchant saying so explicitly. Reading
+   * `rates[]` for a booking is still wrong and still nothing does it.
+   */
+  service?: FlatTaxRate
 }
 
 export interface TaxAddress {

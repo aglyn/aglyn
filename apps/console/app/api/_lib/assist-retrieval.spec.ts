@@ -124,3 +124,107 @@ describe('docsGroundingBlock', () => {
     expect(block).toContain('Add the CNAME record')
   })
 })
+
+/**
+ * The citation origin is CONFIGURATION, not our infrastructure (AGL-2014).
+ *
+ * `DOCS_SITE_ORIGIN` was made configurable by AGL-2016, but it read only the
+ * canonical `NEXT_PUBLIC_DOCS_ORIGIN` while `constants/docs-links.ts` also
+ * honours the older `NEXT_PUBLIC_AGLYN_DOCS_URL`. So AGL-2186's own defect —
+ * one value under two env names, honoured on some surfaces and ignored on
+ * others — survived inverted in the one file it did not touch: a deployment
+ * configured under the older name retargeted every console and besigner help
+ * link and left every ASSIST CITATION deep-linking into `docs.aglyn.com`.
+ *
+ * Nothing covered `DOCS_SITE_ORIGIN` at all before this, which is why the
+ * split could sit there after the issue that named it was closed. The suite
+ * above asserts the default origin and so would have passed either way.
+ *
+ * The constant is read at module scope, so each shape needs a fresh module
+ * registry — asserting against the already-imported binding would only ever
+ * re-test whichever value was set when this file was first loaded.
+ */
+describe('Assist citations point at the operator\'s docs site (AGL-2014)', () => {
+  const ORIGINAL_CANONICAL = process.env.NEXT_PUBLIC_DOCS_ORIGIN
+  const ORIGINAL_LEGACY = process.env.NEXT_PUBLIC_AGLYN_DOCS_URL
+
+  const restore = (name: string, value: string | undefined) => {
+    if (value === undefined) delete process.env[name]
+    else process.env[name] = value
+  }
+
+  afterEach(() => {
+    restore('NEXT_PUBLIC_DOCS_ORIGIN', ORIGINAL_CANONICAL)
+    restore('NEXT_PUBLIC_AGLYN_DOCS_URL', ORIGINAL_LEGACY)
+    jest.resetModules()
+  })
+
+  /** Re-import under the current env and cite one section. */
+  function citationWith(env: Record<string, string | undefined>) {
+    for (const [name, value] of Object.entries(env)) restore(name, value)
+    jest.resetModules()
+    const reloaded =
+      require('./assist-retrieval') as typeof import('./assist-retrieval')
+    return reloaded.docsGroundingBlock([{ section: CORPUS[0], score: 5 }])
+  }
+
+  it('SELF-HOST shape: the canonical name retargets every citation', () => {
+    const block = citationWith({
+      NEXT_PUBLIC_DOCS_ORIGIN: 'https://docs.example.com',
+      NEXT_PUBLIC_AGLYN_DOCS_URL: undefined,
+    })
+    expect(block).toContain('https://docs.example.com/building-sites/')
+    expect(block).not.toContain('aglyn.com')
+  })
+
+  it('honours the LEGACY name too — the half AGL-2186 left behind', () => {
+    // This is the case that was broken: console help links moved, Assist
+    // citations did not.
+    const block = citationWith({
+      NEXT_PUBLIC_DOCS_ORIGIN: undefined,
+      NEXT_PUBLIC_AGLYN_DOCS_URL: 'https://handbook.example.com',
+    })
+    expect(block).toContain('https://handbook.example.com/building-sites/')
+    expect(block).not.toContain('aglyn.com')
+  })
+
+  it('prefers the canonical name when both are set', () => {
+    const block = citationWith({
+      NEXT_PUBLIC_DOCS_ORIGIN: 'https://docs.example.com',
+      NEXT_PUBLIC_AGLYN_DOCS_URL: 'https://old.example.com',
+    })
+    expect(block).toContain('https://docs.example.com/building-sites/')
+    expect(block).not.toContain('old.example.com')
+  })
+
+  it('trims a trailing slash, which a copied URL carries', () => {
+    const block = citationWith({
+      NEXT_PUBLIC_DOCS_ORIGIN: 'https://docs.example.com/',
+      NEXT_PUBLIC_AGLYN_DOCS_URL: undefined,
+    })
+    expect(block).toContain('https://docs.example.com/building-sites/')
+    expect(block).not.toContain('.com//building-sites')
+  })
+
+  it('AGLYN-OPERATED shape: unset is still our docs site', () => {
+    // Without this the guard could pass by breaking the default, which would
+    // point our own Assist at nothing.
+    const block = citationWith({
+      NEXT_PUBLIC_DOCS_ORIGIN: undefined,
+      NEXT_PUBLIC_AGLYN_DOCS_URL: undefined,
+    })
+    expect(block).toContain('https://docs.aglyn.com/building-sites/')
+  })
+
+  it('is the SAME value the console help links use — one reader, not two', () => {
+    // The structural claim behind all of the above: `DOCS_SITE_ORIGIN` is a
+    // re-export of `DOCS_BASE_URL`, so the two cannot drift apart again.
+    process.env.NEXT_PUBLIC_DOCS_ORIGIN = 'https://docs.example.com'
+    jest.resetModules()
+    const retrieval =
+      require('./assist-retrieval') as typeof import('./assist-retrieval')
+    const links =
+      require('../../../constants/docs-links') as typeof import('../../../constants/docs-links')
+    expect(retrieval.DOCS_SITE_ORIGIN).toBe(links.DOCS_BASE_URL)
+  })
+})

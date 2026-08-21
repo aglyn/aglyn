@@ -32,10 +32,8 @@ node tools/scripts/deploy-firestore-rules.mjs
 node tools/scripts/deploy-storage-rules.mjs
 node tools/scripts/deploy-database-rules.mjs
 
-# 2. Firestore indexes — whether the reads work at all.
-npx firebase login
-npx firebase deploy --only firestore:indexes \
-  --project "$FIREBASE_PROJECT_ID" --config cloud/firebase.json
+# 2. Firestore indexes — whether the reads work, and some writes.
+node tools/scripts/deploy-firestore-indexes.mjs
 
 # 3. TTL policies — what stops the write-forever collections growing forever.
 set -a && source .env && set +a
@@ -82,14 +80,23 @@ Measured: 4 GB fails, 12 GB builds both in about six minutes (AGL-2437).
 A stack that boots without the **rules** deployed is a stack whose data is not
 protected the way the application assumes. The rules scripts talk to Firebase's
 API directly with your service-account credentials — no `firebase login`
-needed.
+needed. Neither does the index deploy, since AGL-2015: all four setup commands
+now use the same `.env` and the same service account.
 
-Skipping the **indexes** is the one that bites first: the repo carries 44
-composite indexes and 23 single-field overrides, and without them queries throw
-`FAILED_PRECONDITION` while the overrides that exempt the large Besigner
-`nodes` blobs from indexing are missing — so Firestore tries to index them and
-can reject the write. Saving a screen is among the first things to break.
-Index builds are asynchronous: `deploy` returning is not "ready".
+Skipping the **indexes** is the one that bites first, and it bites in two
+different-looking ways. Without the composite indexes, queries throw
+`FAILED_PRECONDITION` and the product degrades feature by feature. Without the
+field overrides that exempt the large Besigner `nodes` blobs from indexing,
+Firestore tries to index the blob and **rejects the write** on its 40KB
+index-entry limit — so saving a screen, among the first things you will do,
+is among the first things to break.
+
+`deploy-firestore-indexes.mjs` only ever **adds**. Anything live that the file
+does not list is reported and left alone — unlike `firebase deploy --only
+firestore:indexes`, which deletes it. Run it with `--dry-run` first to see the
+plan. Index builds are asynchronous, so a successful run means *accepted*, not
+*ready*; `npm run check:index-drift` tells you when they have finished
+building.
 
 Skipping the **TTL policies** costs you nothing on day one and grows forever
 after it — rate-limit windows, per-day analytics counters and media tombstones

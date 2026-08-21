@@ -29,6 +29,7 @@ import {
 } from 'firebase/analytics'
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check'
 import { analyticsMayEmit } from '@aglyn/aglyn/app-utils/analytics-environment'
+import { pushPlatformConsentDefault } from '@aglyn/aglyn/app-utils/platform-consent-default'
 import {
   type Auth,
   connectAuthEmulator,
@@ -405,6 +406,29 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
     // worse failure. See the module for the escape hatch.
     let analytics: Analytics
     if (analyticsMayEmit()) {
+      // The region-conditional consent default (AGL-1597), declared BEFORE
+      // the SDK boots the tag. Ordering is the whole of it: a `default` read
+      // after `config` is not a default, and the SDK issues `config` inside
+      // `initializeAnalytics` on the next line. Pushing onto `dataLayer` here
+      // works even though gtag.js is not loaded yet — the queue is what makes
+      // the ordering expressible.
+      //
+      // Analytics is GRANTED by default (Zach, 2026-08-20: implied consent
+      // where it is lawful) and DENIED for the prior-consent regions —
+      // EEA/UK/CH — via the payload's `region` array. Ad storage stays denied
+      // everywhere. Until now this surface declared NOTHING, which is not
+      // "default on where lawful" but default on everywhere, ad storage
+      // included.
+      //
+      // SCOPE. This is the console's tag and only the console's:
+      // `CONSOLE_ANALYTICS_OPTIONS`, `content_group: 'console'`, and this
+      // provider's analytics branch has no other consumer (see above — the
+      // tenant runtime builds its tag in `site-analytics.tsx` and never
+      // passes through here). Customer sites keep the AGL-1498 gate and the
+      // host's own `consent.mode`; nothing here reaches them.
+      pushPlatformConsentDefault(
+        typeof window === 'undefined' ? null : (window as never),
+      )
       try {
         analytics = initializeAnalyticsInstance(app, CONSOLE_ANALYTICS_OPTIONS)
       } catch (error) {

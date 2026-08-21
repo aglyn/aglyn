@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { LEGAL_ORIGIN as OPERATOR_LEGAL_ORIGIN } from '@aglyn/aglyn/app-utils/published-legal-pages'
+
 export const CONTENT_MAX_WIDTH = 'xl'
 export const DRAWER_WIDTH = 290
 export const TAB_HEIGHT = 40
@@ -56,9 +58,19 @@ export const TABLE_HEAD_HEIGHT = 48
  * `recordLegalAcceptance` throws on a falsy version and the route returns 500.
  * Any dynamic source must keep a non-empty fallback.
  */
-const LEGAL_ORIGIN = (
-  process.env.NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN || 'https://aglyn.com'
-).replace(/\/+$/, '')
+/**
+ * ⚠️ IMPORTED, NOT READ AGAIN HERE (AGL-2014). This module carried its own
+ * `process.env.NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN || 'https://aglyn.com'` —
+ * byte-for-byte the same expression as `published-legal-pages.ts`, on the same
+ * variable, with the same default. Two readers of one value is the shape
+ * AGL-2195 removed for the tenant apex, and the risk is not that they disagree
+ * today: it is that a later fix to one of them (a trailing-slash rule, a second
+ * accepted name, an empty-string guard) reaches the clickwrap LINKS while
+ * `isPublishedLegalUrl` — the gate that decides whether a publisher agreement
+ * URL counts as published — goes on answering from the other. An operator's
+ * legal origin cannot be honoured by the links and ignored by the gate.
+ */
+const LEGAL_ORIGIN = OPERATOR_LEGAL_ORIGIN
 
 export const LEGAL_URLS = {
   TERMS: `${LEGAL_ORIGIN}/legal/terms`,

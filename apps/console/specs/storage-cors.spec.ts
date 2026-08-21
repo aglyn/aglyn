@@ -43,7 +43,14 @@ import { join } from 'path'
 
 const REPO_ROOT = join(__dirname, '..', '..', '..')
 
-/** The one origin the console is served on today. See the doc for why only one. */
+/**
+ * The canonical console origin. NOT the only one the console is served on —
+ * workspace subdomains serve it too, and each needs its own exact entry
+ * (AGL-1452). Those are reconciled onto the bucket at attach time rather than
+ * committed here, because they are per-customer; `upload-cors.spec.ts` covers
+ * the matching rules. This spec's subject is narrower: that the policy permits
+ * the request the uploader actually issues.
+ */
 const CONSOLE_ORIGIN = 'https://app.aglyn.com'
 
 interface CorsRule {

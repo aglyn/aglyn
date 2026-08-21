@@ -70,7 +70,7 @@ import {
   updatePassword,
   updateProfile,
 } from 'firebase/auth'
-import { doc, setDoc } from 'firebase/firestore'
+import { deleteField, doc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import {
   useAnalytics,
@@ -310,6 +310,24 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
                 // arriving here.
                 phoneNumber: normalizedPhone ?? fields?.phoneNumber ?? null,
                 address,
+                // CLEARING THE ADDRESS IS AN ERASURE REQUEST (AGL-1963).
+                //
+                // `seedUserProfile` prefills an absent address from the IdP on
+                // EVERY sign-in, so without this marker emptying the field
+                // here is undone the next time an SSO user signs in — from
+                // the customer's own directory, with no trace, and the
+                // honoured request looks identical to the resurrected value.
+                // Nobody files a ticket to remove a street address; they
+                // empty the box on this page, which makes this the erasure
+                // surface that actually gets used.
+                //
+                // Symmetric on purpose, so it needs no knowledge of the prior
+                // value: saving an address CLEARS the marker, because someone
+                // typing one back in has changed their mind and is asking for
+                // prefill again. Same reasoning as the phone marker being
+                // owner-writable — the only party who can undo this is the
+                // person it protects.
+                addressErasedAt: address ? deleteField() : serverTimestamp(),
               },
               { merge: true },
             )
@@ -844,6 +862,33 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
       ),
     },
   ]
+
+  /**
+   * Honour `?tab=` on first paint (AGL-1959).
+   *
+   * The new-device security email's button says "Review account security" and
+   * landed on this page's DEFAULT tab, which is Account — so the person who
+   * had just been told a stranger signed in arrived at their email address and
+   * had to find Security themselves. The email now links `?tab=security`.
+   *
+   * Read off `window` in an effect rather than through `useSearchParams`,
+   * which would opt this whole page into a client-side bailout and needs a
+   * Suspense boundary it does not have.
+   *
+   * Declared HERE, below `sections`, so it can check the id against the tabs
+   * this account actually has: Security is absent for an SSO-governed account
+   * with no password, and selecting a panel that is not rendered leaves an
+   * empty page with no tab highlighted. `sections` is rebuilt every render and
+   * is deliberately not a dependency — this applies the link once, and must
+   * not fight the user's own clicks afterwards.
+   */
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get('tab')
+    if (requested && sections.some((section) => section.id === requested)) {
+      setTab(requested)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const onTabChange = useCallback(
     async (_event: unknown, value: string) => {

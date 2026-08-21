@@ -48,7 +48,15 @@ export * from './org-permissions'
 export * from './password-policy'
 export * from './idp-profile'
 export * from './onboarding-deep-link'
+// Where an account came from (AGL-1731). Beside the plan intent because
+// they are the same hop — the marketing CTA's query string — and both are
+// remembered on `users/{uid}` across the verification wall.
+export * from './campaign-attribution'
 export * from './deployment-shape'
+// Which browser origins may complete a signed direct-to-GCS upload (AGL-1452).
+// GCS matches the origin list EXACTLY, so every serving console name needs its
+// own entry — the rule nobody could be expected to remember at attach time.
+export * from './upload-cors'
 // The docs-help subset the first-party plugin consoles read (AGL-2213) — the
 // console's own registry lives in apps/console/constants and a lib cannot
 // import an app.
@@ -71,6 +79,8 @@ export * from './release-flags'
 export * from './operator-identity'
 export * from './lockdown'
 export * from './media-quarantine'
+export * from './media-takedown-reach'
+export * from './upload-inspection'
 export * from './abuse-report'
 // The other three quarters of §512 (AGL-1983): the put-back procedure that
 // answers a notice, and the strike ledger that conditions the safe harbour.

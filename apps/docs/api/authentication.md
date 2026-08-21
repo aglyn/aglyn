@@ -65,6 +65,7 @@ lacks returns `403` `insufficient_scope`. Grant the least a key needs.
 | `contacts:write` | Add contacts, edit their name, tags and notes, and delete them. Never changes the email a contact is identified by, or where it came from. |
 | `sites:read` | List sites and read their details. |
 | `sites:publish` | Refresh a site's live pages so writes made over the API appear immediately. Changes no content. |
+| `sites:write` | Create new sites in the organization. Counts against your site allowance. Cannot rename or delete a site. |
 | `forms:read` | Read a site's form submissions. |
 | `forms:write` | Mark a site's form submissions read or unread, and delete them. Never edits what a visitor typed. |
 | `orders:read` | Read a site's store orders. |
@@ -88,9 +89,9 @@ deliberate in each case rather than an oversight:
 - **Orders** and **products** move money and stock. A write scope for them belongs to
   the change that ships the endpoint, not ahead of it — a scope you can grant that
   grants nothing is a broken permission.
-- **Media** uploads go through the console library, which scans for malware, generates
-  image variants, and accounts for your storage quota. A bare API upload would skip
-  all three.
+- **Renaming and deleting a site.** `sites:write` creates; it deliberately stops
+  there. A delete would erase a whole site — screens, versions, products, uploaded
+  files — immediately, from one field in a request body, with no hold and no undo.
 
 ```json
 {

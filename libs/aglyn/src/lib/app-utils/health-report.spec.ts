@@ -106,6 +106,7 @@ describe('healthBody', () => {
       service: 'console',
       checks: { firestore: OK },
       commit: 'abc1234',
+      version: '1.0.0-beta.6',
       environment: 'production',
       region: 'iad1',
       at: '2026-08-02T00:00:00.000Z',
@@ -115,6 +116,9 @@ describe('healthBody', () => {
       service: 'console',
       checks: { firestore: OK },
       commit: 'abc1234',
+      // The field a self-host operator reads to know what they are running
+      // (AGL-2091). `commit` alone could only ever be answered on Vercel.
+      version: '1.0.0-beta.6',
       environment: 'production',
       region: 'iad1',
       at: '2026-08-02T00:00:00.000Z',
@@ -126,6 +130,7 @@ describe('healthBody', () => {
     // from "unknown value" — the shape is the same every sample.
     const body = healthBody({ service: 'tenant', checks: {}, at: 'now' })
     expect(body['commit']).toBeNull()
+    expect(body['version']).toBeNull()
     expect(body['environment']).toBeNull()
     expect(body['region']).toBeNull()
   })
@@ -599,6 +604,8 @@ describe('billingWebhookHealth (AGL-1924)', () => {
     processed: 12,
     inert: 0,
     unsubscribedEvents: [] as readonly string[],
+    connectEndpoint: 'enabled' as const,
+    unsubscribedConnectEvents: [] as readonly string[],
   }
 
   it('is ok when the destination is enabled and nothing failed to deliver', () => {
@@ -620,6 +627,8 @@ describe('billingWebhookHealth (AGL-1924)', () => {
         processed: 0,
         inert: 0,
         unsubscribedEvents: [],
+        connectEndpoint: 'enabled' as const,
+        unsubscribedConnectEvents: [],
       },
       90,
     )
@@ -648,6 +657,8 @@ describe('billingWebhookHealth (AGL-1924)', () => {
         processed: 0,
         inert: 0,
         unsubscribedEvents: [],
+        connectEndpoint: 'enabled' as const,
+        unsubscribedConnectEvents: [],
       },
       90,
     )
@@ -664,6 +675,8 @@ describe('billingWebhookHealth (AGL-1924)', () => {
         processed: 0,
         inert: 0,
         unsubscribedEvents: [],
+        connectEndpoint: 'enabled' as const,
+        unsubscribedConnectEvents: [],
       },
       90,
     )
@@ -681,6 +694,8 @@ describe('billingWebhookHealth (AGL-1924)', () => {
         processed: 0,
         inert: 0,
         unsubscribedEvents: [],
+        connectEndpoint: 'enabled' as const,
+        unsubscribedConnectEvents: [],
       },
       90,
     )
@@ -830,6 +845,73 @@ describe('billingWebhookHealth (AGL-1924)', () => {
     )
     expect(check.ok).toBe(true)
     expect(check.unsubscribedEvents).toBeNull()
+  })
+
+  /*==========================================
+   * THE CONNECT DESTINATION (AGL-1948).
+   *
+   * A second destination that shares the platform one's URL. Every other case
+   * in this describe can be green while this is broken, which is the whole
+   * reason it needed its own facts.
+   *=========================================*/
+  it('goes red when there is NO Connect destination — the AGL-2122 shape', () => {
+    // Measured on the live account 2026-08-18: one destination, right URL,
+    // all ten events — and nothing that could ever deliver `account.updated`.
+    // Every count in this check reads perfectly healthy in that state.
+    const check = billingWebhookHealth(
+      { ...HEALTHY, connectEndpoint: 'missing', unsubscribedConnectEvents: null },
+      90,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('connect-endpoint-missing')
+    expect(healthHttpStatus(healthStatus({ billingWebhook: check }))).toBe(503)
+  })
+
+  it('goes red when the Connect destination exists but is switched off', () => {
+    const check = billingWebhookHealth(
+      { ...HEALTHY, connectEndpoint: 'disabled', unsubscribedConnectEvents: [] },
+      90,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('connect-endpoint-disabled')
+  })
+
+  it('goes red when the Connect destination lost account.updated', () => {
+    const check = billingWebhookHealth(
+      {
+        ...HEALTHY,
+        connectEndpoint: 'enabled',
+        unsubscribedConnectEvents: ['account.updated'],
+      },
+      90,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('connect-events-unsubscribed')
+  })
+
+  it('reports a PLATFORM problem in preference to a Connect one', () => {
+    // Both broken at once: the platform destination is this hour's revenue,
+    // the Connect one is slower rot. The Connect facts still ride in the
+    // body, so the board shows both — only the headline code is exclusive.
+    const check = billingWebhookHealth(
+      { ...HEALTHY, endpointStatus: 'missing', connectEndpoint: 'missing' },
+      90,
+    )
+    expect(check.code).toBe('endpoint-missing')
+    expect(check.connectEndpoint).toBe('missing')
+  })
+
+  it('stays ok when Connect is enabled and fully subscribed', () => {
+    const check = billingWebhookHealth(HEALTHY, 90)
+    expect(check.ok).toBe(true)
+    expect(check.connectEndpoint).toBe('enabled')
+  })
+
+  it('carries null Connect facts through an unavailable census', () => {
+    const check = billingWebhookHealth(null, 90)
+    expect(check.code).toBe('stripe-unavailable')
+    expect(check.connectEndpoint).toBeNull()
+    expect(check.unsubscribedConnectEvents).toBeNull()
   })
 })
 

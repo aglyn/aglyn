@@ -188,10 +188,11 @@ site id for an hour; naming the plan is the answer they can act on.
 
 ## Idempotency
 
-Nine operations accept an **`Idempotency-Key`** header:
+Ten operations accept an **`Idempotency-Key`** header:
 
 | Operation | Key scoped to |
 | --- | --- |
+| `POST /v1/sites` | the organization |
 | `POST /v1/datasets` | the organization |
 | `DELETE /v1/datasets/{datasetId}` | that dataset |
 | `POST /v1/datasets/{datasetId}/records` | that dataset |
@@ -202,8 +203,9 @@ Nine operations accept an **`Idempotency-Key`** header:
 | `POST /v1/media` | the organization |
 | `POST /v1/sites/{siteId}/media` | that site |
 
-Four rows are organization-scoped. `POST /v1/datasets` is because it is the only
-dataset operation with no object to scope to yet. Both contact operations are because
+Five rows are organization-scoped. `POST /v1/sites` and `POST /v1/datasets` are
+because neither has an object to scope to yet — the site or dataset they create is
+the object. Both contact operations are because
 **contacts are organization-wide**: one list is shared by every site, so there is no
 narrower object to scope a key to. `POST /v1/media` is the same case — it writes the
 organization library, which every site shares; its site-scoped twin

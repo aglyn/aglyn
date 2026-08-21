@@ -47,6 +47,18 @@
  * drain must stay comparable.
  */
 
+/**
+ * Next's real `after` throws outside a request scope, and this spec drives the
+ * handler directly rather than through a route. The double runs the work
+ * immediately, so every assertion here — all of which observe the EFFECT —
+ * reads exactly as it did before the beacons moved onto `after()` (AGL-2327).
+ */
+jest.mock('next/server', () => ({
+  after: (work: () => unknown) => {
+    void work()
+  },
+}))
+
 jest.mock('@aglyn/tenant-data-admin', () => {
   const writes: Array<{ path: string; data: Record<string, unknown> }> = []
   const store: Record<string, Record<string, unknown> | undefined> = {}

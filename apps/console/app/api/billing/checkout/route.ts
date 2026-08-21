@@ -36,6 +36,10 @@ import {
   readOrgBilling,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+import {
+  INTERNAL_TRAFFIC_PARAM,
+  INTERNAL_TRAFFIC_VALUE,
+} from '../../../../utils/internal-traffic'
 import { configuredPriceFault } from '../../../../utils/stripe-price-fault'
 import { checkoutCustomerParams } from '../../../../utils/stripe-customer-identity'
 import { meteredPriceId } from '../../../../utils/server/billing-addons'
@@ -274,6 +278,22 @@ async function handler(request: Request): Promise<Response> {
       // metadata, so it is not accepted on trust.
       ...(/^\d+\.\d+$/.test(String(body?.gaClientId ?? ''))
         ? { 'subscription_data[metadata][ga_client_id]': String(body.gaClientId) }
+        : {}),
+      // A browser we have declared ours (AGL-1582), carried on the
+      // SUBSCRIPTION so the renewal, the refund and the cancellation months
+      // later are stamped too — not just the first invoice.
+      //
+      // Written only for the true case and only ever as the one constant
+      // value: this is client-supplied, so it is not accepted on trust, and
+      // an absent key must stay indistinguishable from a real customer. The
+      // asymmetry is deliberate — the cost of a missed stamp is one polluted
+      // row, the cost of a wrong one is a paying customer erased from every
+      // report by a filter that cannot be un-applied.
+      ...(body?.internalTraffic === true
+        ? {
+            [`subscription_data[metadata][${INTERNAL_TRAFFIC_PARAM}]`]:
+              INTERNAL_TRAFFIC_VALUE,
+          }
         : {}),
       // Self-serve promo codes (AGL-1105): show the "Add promotion code" field
       // so a customer can redeem a staff-created code (Coupons page) at

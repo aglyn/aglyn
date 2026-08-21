@@ -351,9 +351,19 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   // at precisely the instant the consequence arrived, leaving a workspace
   // running on Free with nothing on screen saying why.
   //
-  // Same treatment, different sentence: the `past_due` copy promises "access
-  // continues during the retry window", which is exactly the thing that is no
+  // Same treatment, different sentence: the `past_due` copy promises access
+  // continues while Stripe retries, which is exactly the thing that is no
   // longer true here, and repeating it would be worse than saying nothing.
+  //
+  // That copy used to name "the retry window" as though its length were a
+  // known quantity (AGL-2430). It is not. The retry schedule and the
+  // after-the-final-retry behaviour are Dashboard settings held
+  // independently per mode, with no API surface at all — see
+  // `LIVE_RETRY_WINDOW_IS_KNOWN` in utils/stripe-dunning-schedule.ts for the
+  // read-only probe that establishes it. Every number we have is from a TEST
+  // clock, and this banner renders against the LIVE account. So it now says
+  // only what is true in every possible configuration: access continues
+  // while Stripe retries, and the plan stops if the retries run out.
   const lapsed = billingStatus === 'unpaid'
   if (billingStatus === 'past_due' || lapsed) {
     return (
@@ -382,10 +392,11 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
               'workspace is running on Free until billing is fixed.'
           : scopedViewer
             ? "This workspace's last payment failed. A workspace admin needs " +
-              'to update the payment method — access continues during the ' +
-              'retry window.'
+              'to update the payment method — access continues while Stripe ' +
+              'retries, and the plan stops if the retries run out.'
             : 'Your last payment failed. Update your payment method to keep ' +
-              'your plan — access continues during the retry window.'}
+              'your plan — access continues while Stripe retries, and your ' +
+              'plan stops if the retries run out.'}
       </Alert>
     )
   }

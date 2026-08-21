@@ -122,6 +122,9 @@ jest.mock('./publisher-profile', () => ({
   resolvePublisherProfile: async () => ({
     orgId: 'org-1',
     handle: 'acme',
+    // AGL-2471: the payout precondition needs the destination, not just
+    // the flag.
+    stripeAccountId: 'acct_spec',
     stripeChargesEnabled: true,
     agreement: (
       jest.requireMock('./publisher-profile') as {

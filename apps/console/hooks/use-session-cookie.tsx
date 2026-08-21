@@ -52,8 +52,14 @@ import {
  * On failure the uid is cleared rather than left set, so a later auth emission
  * gets another attempt — the mint is still best-effort and still never signs
  * anyone out, but a refusal is no longer indistinguishable from success.
+ *
+ * Exported for the cross-domain handoff (AGL-1902), which mints outside this
+ * hook: its landing page has to AWAIT the mint before navigating, and D5's
+ * whole lesson from AGL-466 is that a fire-and-forget mint racing a navigation
+ * is the redirect loop. Callers with no ref of their own pass
+ * `{ current: null }`.
  */
-async function mintSession(
+export async function mintSession(
   user: { uid: string; getIdToken: () => Promise<string> },
   mintedForUid: { current: string | null },
 ): Promise<boolean> {

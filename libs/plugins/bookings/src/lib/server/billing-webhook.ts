@@ -15,6 +15,12 @@
  * limitations under the License.
  */
 
+// `after()`, never a bare `void promise` (AGL-2327). This handler runs inside
+// the console's `/api/billing/webhook` invocation, which AGL-1133 measured on
+// production is frozen the moment the response is sent — so fire-and-forget
+// work scheduled any other way simply does not run.
+import { after } from 'next/server'
+
 import type { BillingWebhookHandler } from '@aglyn/aglyn/server'
 import { resolveBrandingProfile } from '@aglyn/aglyn/server'
 import {
@@ -22,9 +28,15 @@ import {
   getOrgForHost,
   meterHostEmail,
   renderHostEmailWithTokens,
+  sendGa4Purchase,
   upsertHostContact,
 } from '@aglyn/tenant-data-admin'
+import {
+  bookingPlatformNetCents,
+  shouldSendBookingPlatformPurchase,
+} from '../model/booking-purchase-analytics'
 import { sendEmail } from '@aglyn/shared-util-email'
+import { storefrontTaxModeOf } from '@aglyn/plugins-commerce/server/storefront-tax'
 
 /**
  * Paid-booking section of the platform Stripe webhook (AGL-170/418):
@@ -49,10 +61,31 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
           .doc(String(hostId))
           .collection('bookings')
           .doc(String(bookingId))
+        // WHAT THE CLIENT HANDED OVER, ALL OF IT. Tax included: this is the
+        // ceiling `refund.ts` reverses against, and the client paid the tax
+        // too — a net figure here would strand part of a refund.
         const paidAmountCents = Math.max(
           0,
           Math.round(Number(object?.amount_total ?? 0)),
         )
+        // THE MERCHANT'S SERVICE TAX, SEPARATED OUT (AGL-2028).
+        //
+        // `server.ts` charges the merchant's own service rate as an ordinary
+        // `line_items[1]` Stripe is never told is tax (the AGL-1711
+        // construction, which is what keeps the figure the MERCHANT's rather
+        // than something computed against Aglyn's registrations). So
+        // `amount_total` is service-plus-tax while Stripe's own tax fields
+        // read zero, and the session's metadata is the only witness — exactly
+        // as it is for a buy-now sale.
+        const taxCents = Math.max(
+          0,
+          Math.round(Number(object?.metadata?.taxCents ?? 0)),
+        )
+        // The merchant's REVENUE, which is the charge less the tax. Used for
+        // the contact's lifetime value below: tax is collected on behalf of
+        // an authority and is not money the business earned, so counting it
+        // would over-state every service client's worth.
+        const serviceCents = Math.max(0, paidAmountCents - taxCents)
         // WHAT A REFUND WILL NEED (AGL-2315). A paid booking is now a
         // destination charge to the merchant's connected account, and
         // reversing one requires the PaymentIntent — which lives only on this
@@ -124,11 +157,43 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
               {
                 status: 'confirmed',
                 paidAmountCents,
+                // WHICH TAX REGIME THIS BOOKING CARRIED (AGL-2028), on the
+                // document the merchant reads — the stamp every other
+                // storefront money door already carries (AGL-2451).
+                //
+                // DERIVED from the one shared derivation, never a constant.
+                // A hand-written "manual when the metadata says so" would be
+                // a second rule that can drift from the `storefrontTaxCollected`
+                // row filed for the same Stripe id, which is the exact
+                // disagreement AGL-2451 exists to prevent.
+                //
+                // TWO-ARGUMENT, because the manual line makes Stripe report
+                // `total_details.amount_tax: 0` on a booking that really did
+                // charge the client tax; the one-argument form would stamp
+                // `none` on precisely those. `absent` remains a fourth state
+                // meaning "recorded before this shipped".
+                taxMode: storefrontTaxModeOf(object, taxCents),
+                // The figure itself. Absent rather than a defaulted `0` — a
+                // zero written through `merge` is the AGL-1758 shape, and
+                // this handler can re-enter (see the widened guard above).
+                ...(taxCents > 0 ? { taxCents } : {}),
                 // The refund handles (AGL-2315). Written inside the same
                 // transaction as the status, so a booking can never read
                 // `confirmed` while the means to refund it are missing.
                 ...(paymentIntentId ? { paymentIntentId } : {}),
                 feeCents: chargedFeeCents,
+                // WHICH CHECKOUT PAID FOR THIS (AGL-2481). The guest's browser
+                // comes back from Stripe holding a session id and nothing
+                // else — a booking id was never in the return URL — so this is
+                // what lets `booking-analytics.ts` answer "what did I just
+                // buy?" for the merchant-side `purchase`, and it is written
+                // here because the session id first exists on this event.
+                //
+                // Inside the transaction with the status on purpose: the
+                // lookup refuses anything that is not `confirmed`, so a
+                // booking can never be findable by session id while reading as
+                // unpaid.
+                ...(object?.id ? { checkoutSessionId: String(object.id) } : {}),
                 // NOTE the absent `refundedCents: 0`. Seeding it here would be
                 // the AGL-1758 shape: a defaulted field written through
                 // `merge` destroying the real one. This handler can re-enter
@@ -146,6 +211,93 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
           },
         )
         if (!confirmedNow) return
+        // AGLYN'S REVENUE ON THIS BOOKING (AGL-2481) — into OUR GA4 property.
+        //
+        // ## Why it is inside the idempotency gate rather than beside it
+        //
+        // This sits AFTER `if (!confirmedNow) return` and that placement is the
+        // whole guard. Stripe redelivers `checkout.session.completed` for up to
+        // three days after any 500, and this endpoint 500s on purpose; a
+        // redelivery re-enters this handler, the transaction above sees a
+        // `confirmed` status (or a refund counter, or a recorded PaymentIntent)
+        // and answers false, and everything below — the contact, the email, and
+        // now this — is skipped. A `purchase` fired before that gate, or beside
+        // it, would inflate our own reported revenue by the redelivery rate.
+        //
+        // `transaction_id` is the checkout session id, which is the same key
+        // the guard turns on, so GA4's own de-duplication is a second
+        // independent line of defence: even if the Firestore guard were ever
+        // bypassed, GA would collapse the repeats.
+        //
+        // ## Platform NET, and the fee is the measured one
+        //
+        // `value` is our fee and not the $95 the guest paid — the AGL-1639
+        // settlement. This is our property, the subscription and marketplace
+        // `purchase` events in it already mean "what Aglyn was paid", and a
+        // gross booking figure sitting beside them would make every combined
+        // total, ARPA and revenue audience wrong. The merchant's own gross goes
+        // to the MERCHANT's property, client-side, and the two never meet.
+        //
+        // The figure comes off the session's `metadata.feeCents` — the fee
+        // Stripe actually charged as `application_fee_amount` — never from the
+        // plan's rate re-applied here. See `bookingPlatformNetCents`.
+        //
+        // ## Scheduling and failure posture
+        //
+        // `after()`, never a bare `void` (AGL-2327/AGL-2346): this runs inside
+        // the console's `/api/billing/webhook` invocation, which is frozen the
+        // moment the response is sent, so fire-and-forget work scheduled any
+        // other way simply does not run — the exact way marketplace revenue
+        // reported to nothing. And `.catch()`, because a throw here would
+        // un-claim the Stripe event and turn a missed analytics hit into a
+        // repeated billing side effect.
+        if (shouldSendBookingPlatformPurchase(object)) {
+          const netCents = bookingPlatformNetCents(object)
+          after(() =>
+            sendGa4Purchase({
+              transactionId: String(object?.id ?? ''),
+              value: netCents / 100,
+              currency: String(object?.currency ?? 'usd'),
+              items: [
+                {
+                  // Ids only, no merchant free text. A service name is
+                  // merchant-authored and one edit away from carrying a
+                  // person's name into a dimension in OUR property; the id
+                  // already identifies it. The merchant's own property gets
+                  // the name, because there it is their own content.
+                  item_id: String(booking['serviceId'] ?? bookingId),
+                  item_name: String(booking['serviceId'] ?? bookingId),
+                  item_category: 'booking',
+                  // GA expects the items to sum to `value`; one item, one
+                  // price, and that price is our fee — not the service's.
+                  price: netCents / 100,
+                  quantity: 1,
+                },
+              ],
+              // Booking sessions carry no `ga_client_id` today — nothing
+              // captures one on a tenant site — so this is read for the day
+              // one is stamped and the seed below is what actually resolves.
+              clientId: object?.metadata?.ga_client_id,
+              // ONE PAYING GUEST, ONE SYNTHETIC USER. Seeded from Stripe's
+              // customer where there is one, and otherwise from the guest's
+              // email, which `server.ts` passes as `customer_email` and Stripe
+              // echoes on `customer_details`. The seed is hashed inside
+              // `synthesizeClientId` and never transmitted.
+              //
+              // The booking id is the LAST resort deliberately: it is unique
+              // per appointment, so seeding from it would turn a regular
+              // client into a crowd of one-purchase strangers and make ARPA
+              // nonsense — precisely what that helper's determinism exists to
+              // prevent. Without any seed at all `sendGa4Purchase` returns
+              // `no-client-id` and the event is silently never sent, which is
+              // the void this whole change exists to close.
+              stripeCustomerId:
+                String(object?.customer ?? '') ||
+                String(object?.customer_details?.email ?? '') ||
+                String(bookingId),
+            }).catch(() => undefined),
+          )
+        }
         // Contacts ingestion (AGL-1755). `server.ts` captures the contact at
         // REQUEST time, which is the right place — the booking is written
         // `pendingPayment` and at that moment no money has moved, so passing an
@@ -171,12 +323,18 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
             email: booking['email'],
             ...(booking['name'] ? { name: String(booking['name']) } : {}),
             source: 'booking',
-            ...(paidAmountCents > 0 ? { purchaseCents: paidAmountCents } : {}),
+            // The SERVICE, not the charge (AGL-2028). `amount_total` now
+            // includes the merchant's service tax where they set one, and
+            // tax is collected for an authority rather than earned — booking
+            // it as lifetime value would over-state what every service
+            // client is worth. Identical to `paidAmountCents` on the default
+            // store, which sets no rate.
+            ...(serviceCents > 0 ? { purchaseCents: serviceCents } : {}),
             interaction: {
               refId: String(bookingId),
               summary: `Paid for "${String(
                 booking['serviceName'] ?? 'a service',
-              ).slice(0, 60)}" ($${(paidAmountCents / 100).toFixed(2)})`,
+              ).slice(0, 60)}" ($${(serviceCents / 100).toFixed(2)})`,
             },
           })
         }

@@ -20,6 +20,7 @@ import { useMemo } from 'react'
 import { useFirestore, useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import {
   collectCollectionTemplateRoutes,
+  collectionListRoutesByScreenId,
   collectionListTemplateScreenIds,
   collectionTemplateScreenIds,
   type CollectionTemplateRoute,
@@ -36,6 +37,11 @@ export interface UseCollectionTemplatesResult {
   listTemplateScreenIds: Set<string>
   /** What each of those screens renders, keyed by screen id. */
   routesByScreenId: Map<string, CollectionTemplateRoute[]>
+  /**
+   * Where each list template is SERVED, keyed by screen id (AGL-1998) — the
+   * routing-map override every screen-link surface resolves through.
+   */
+  listRoutesByScreenId: Record<string, string>
 }
 
 /**
@@ -61,6 +67,7 @@ export function useCollectionTemplates(
       templateScreenIds: collectionTemplateScreenIds(data),
       listTemplateScreenIds: collectionListTemplateScreenIds(data),
       routesByScreenId: collectCollectionTemplateRoutes(data),
+      listRoutesByScreenId: collectionListRoutesByScreenId(data),
     }),
     [data],
   )

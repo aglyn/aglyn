@@ -97,16 +97,33 @@ export interface HostReservation {
    * confirmation from the same `storefrontTaxModeOf` derivation every order
    * door uses (AGL-2451).
    *
-   * `none` today, by the stated decision in `reserve.ts`: a stay is not goods,
-   * the AGL-285 zone editor configures a SALES rate, and this charge is
-   * usually a DEPOSIT rather than the stay. It is DERIVED rather than fixed at
-   * that value, so the day lodging tax is computed here the record follows it
-   * with no second change.
+   * `manual` on a stay whose merchant had set a lodging rate
+   * (`TaxSettings.lodging`), `none` where they had not — which is the default
+   * and every store that has not opted in. Never `stripe-automatic` from this
+   * path: Stripe Tax cannot compute occupancy tax without a lodging tax code
+   * `reserve.ts` does not send, so the rate is always the merchant's own and
+   * is never computed against Aglyn's registrations (AGL-1904).
    *
    * ABSENT is a fourth state and is not `none` — it means the reservation was
    * confirmed before this field existed. See `StorefrontTaxMode`.
    */
   taxMode?: StorefrontTaxMode
+  /**
+   * The lodging tax charged on top of `paidCents` (AGL-1969), from the
+   * merchant's own rate. Absent, never zero, where none was charged.
+   *
+   * SEPARATE FROM `paidCents` on purpose: that field is the money applied to
+   * the STAY and the console divides it by `totalCents` to show what is still
+   * owed. Tax is not part of the stay's price and is not the merchant's
+   * revenue.
+   *
+   * LIMITATION, stated rather than decided: this is the rate applied to what
+   * was CHARGED, which on a deposit-taking resource is the deposit rather than
+   * the stay. Whether a jurisdiction wants occupancy tax on the full stay at
+   * booking, on the deposit, or on redemption is not a question this codebase
+   * answers — see `reserve.ts` and the merchant copy on the Taxes card.
+   */
+  taxCents?: number
 }
 
 /** UTC midnight for an instant. */

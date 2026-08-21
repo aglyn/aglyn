@@ -33,7 +33,12 @@
  */
 
 import { splitDisplayName } from '@aglyn/shared-util-tools'
-import { normalizePhone } from '@aglyn/aglyn/server'
+import {
+  isBlankAddress,
+  normalizeAddress,
+  normalizePhone,
+  type AglynPostalAddress,
+} from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   getContactSuppression,
@@ -53,6 +58,13 @@ export interface SeedUserProfileInput {
    */
   photoUrl?: string | null
   phoneNumber?: string | null
+  /**
+   * Postal address from the same assertion (AGL-1963). Callers pass this
+   * through `resolveIdpAddress`, whose loose `IdpAddressParts` is structurally
+   * an `AglynPostalAddress` — it is `normalizeAddress` below, not the caller,
+   * that decides whether the parts amount to an address at all.
+   */
+  address?: AglynPostalAddress | null
   /** Injectable for tests; defaults to the admin app's Firestore. */
   firestore?: any
 }
@@ -144,6 +156,42 @@ export async function seedUserProfile(
       }
     }
     if (!refused) seed['phoneNumber'] = input.phoneNumber.trim()
+  }
+
+  // The address (AGL-1963), the last of AGL-1133's six and the only one that
+  // did not ship — it was written as blocked on AGL-1131 mapping attributes,
+  // which completed 2026-08-01, and nothing picked it back up.
+  //
+  // NORMALIZE BEFORE DECIDING. `normalizeAddress` returns null for an address
+  // with nothing usable in it, which is what stops a sparse assertion — a
+  // country the IdP spells "United States", and no other field — from storing
+  // an object that every `if (address)` in the codebase reads as an address.
+  // Checking the raw parts first and normalizing after would write exactly
+  // that object.
+  //
+  // Absent-only, like the rest, but `isBlankAddress` rather than `blank()`:
+  // the stored value is a MAP, so the string check the other fields use would
+  // call every populated address blank and overwrite it on every sign-in.
+  //
+  // THE ERASURE GUARD, following the phone's precedent (Privacy Policy v4 §11,
+  // AGL-1592). An address is squarely personal data, and `/api/auth/sso-jit`
+  // and `/api/auth/session` both run this seed on EVERY sign-in — so "absent
+  // field" is the condition that makes it write, and a deletion would undo
+  // itself at the next SSO sign-in from the customer's own IdP, leaving the
+  // honoured request and the resurrected address identical in the data.
+  //
+  // ONE key, where the phone needs two, and the asymmetry is the point rather
+  // than an omission. `phoneNumberErasedAt` is paired with a NUMBER-KEYED
+  // suppression record because a phone number is a routing address: the same
+  // person arriving as a different account must not have it re-stored, and
+  // the number is the only thing that can recognise them. A postal address is
+  // not a channel we contact anyone on and there is no do-not-mail list for it
+  // to join, so the per-account marker is the whole of the mechanism here.
+  // Adding a second, address-keyed store would retain MORE personal data in
+  // the name of erasing it, which is the opposite of what §11 asks for.
+  const address = normalizeAddress(input.address)
+  if (address && isBlankAddress(snapshot.get('address'))) {
+    if (!snapshot.get('addressErasedAt')) seed['address'] = address
   }
 
   // An existing doc with nothing missing needs no write at all — the common
@@ -253,6 +301,53 @@ export async function forgetUserPhoneNumber(input: {
     { merge: true },
   )
   return { cleared: Boolean(onFile), suppressed }
+}
+
+/**
+ * "Delete the address you hold for me" (AGL-1963) — the address half of the
+ * same §11 invariant `forgetUserPhoneNumber` implements for the phone, and
+ * deliberately adjacent to both for the same reason: this sets the marker
+ * that `seedUserProfile` reads, and changing either without the other
+ * silently restores the defect.
+ *
+ * A guard whose marker nothing ever writes is decorative, so this exists
+ * before anything needs it. Two callers do:
+ *
+ *  - Manage Account, when someone clears their own address. That is the
+ *    common case by a wide margin — nobody files a support ticket to remove
+ *    a street address, they empty the field — and without a marker their
+ *    next SSO sign-in puts it straight back.
+ *  - Staff, handling an erasure request against an account the person can no
+ *    longer sign in to.
+ *
+ * `FieldValue.delete()`, not `null`, on the same reasoning as the phone: the
+ * request was to stop holding it, and a nulled field still reads as "we have
+ * an address slot for this person".
+ *
+ * REVERSIBLE BY THE PERSON IT PROTECTS, and only by them. `users/{uid}` is
+ * writable by its owner (and by staff) under the Firestore rules, so this
+ * marker is not tamper-proof and does not need to be — the adversary it
+ * guards against is our own seeding path, which is server-side and honours
+ * it. Someone who types an address back in has a non-blank field, which the
+ * seed skips anyway — and Manage Account drops the marker on that same save,
+ * so opting back into IdP prefill is just filling the field in again.
+ */
+export async function forgetUserAddress(input: {
+  uid: string
+  firestore?: any
+}): Promise<{ cleared: boolean }> {
+  const db = input.firestore ?? firestore()
+  const ref = db.collection('users').doc(input.uid)
+  const snapshot = await ref.get()
+  const onFile = snapshot.exists && !isBlankAddress(snapshot.get('address'))
+  await ref.set(
+    {
+      address: FieldValue.delete(),
+      addressErasedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  )
+  return { cleared: Boolean(onFile) }
 }
 
 export default seedUserProfile

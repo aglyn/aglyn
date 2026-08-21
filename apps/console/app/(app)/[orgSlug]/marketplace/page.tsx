@@ -22,6 +22,7 @@ import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Alert, Button, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import { useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import FeatureGate from '../../../../components/feature-gate.component'
 import HubTabs from '../../../../components/hub-tabs.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import OrgLicencesPanel from '../../../../components/org-licences-panel.component'
@@ -97,6 +98,18 @@ const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
       }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+        {/*
+          The gate the flag always assumed was here (AGL-2019). `release_marketplace`
+          feeds the plugin LOADER as well as nav visibility, so switching it off
+          subtracted the marketplace plugin from the console and both API
+          dispatchers — while this page went on rendering in full, its widgets
+          silently empty, reachable by deep link and by every bookmark. Turning
+          the feature off was therefore its own broken state, which made "just
+          turn the flag off" useless advice for a self-hoster who does not want
+          a marketplace. Now the flag genuinely gates the page, and staff still
+          get the preview banner FeatureGate renders for them.
+        */}
+        <FeatureGate flag="release_marketplace">
         {!loading && !currentOrg ? (
           <Alert severity="info">
             {'Create your first site to start an organization, then browse ' +
@@ -296,6 +309,7 @@ const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
             />
           </Stack>
         )}
+        </FeatureGate>
       </Container>
     </DashboardLayout>
   )

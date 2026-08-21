@@ -578,8 +578,10 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         },
         {
           name: 'accountSecurityUrl',
-          description: 'Manage-account page where the password can be changed',
-          sample: `${SAMPLE_CONSOLE_ORIGIN}/manage/user`,
+          description:
+            'Manage-account Security tab — Recent sign-ins, where the device ' +
+            'can be signed out, plus password and passkeys',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/manage/user?tab=security`,
         },
       ],
       // Mirrors the fallbackText in _lib/security-alerts.ts.
@@ -597,15 +599,23 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         { block: 'text', text: 'IP address: {{device.ip}}', variant: 'body' },
         { block: 'text', text: 'When: {{device.time}}', variant: 'body' },
         {
+          // AGL-1959. The button used to say "Review account security" and
+          // land on the account page's DEFAULT tab, which offered a password
+          // change and nothing about the device the mail is about. AGL-665
+          // asked for this: "'Manage your devices' has to land somewhere that
+          // can list and revoke sessions, or the alert tells you something is
+          // wrong and offers no way to act on it — which is worse than sending
+          // nothing."
           block: 'button',
-          label: 'Review account security',
+          label: 'Manage your devices',
           href: '{{accountSecurityUrl}}',
         },
         {
           block: 'text',
           text:
-            'If this was you, no action is needed. If it was not, change ' +
-            'your password from Manage account right away.',
+            'If this was you, no action is needed. If it was not, sign this ' +
+            'device out from Recent sign-ins and change your password right ' +
+            'away.',
           variant: 'caption',
         },
       ],

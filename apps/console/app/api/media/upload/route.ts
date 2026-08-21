@@ -27,6 +27,7 @@ import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band
 import {
   checkEntitlement,
   createResourceUid,
+  inspectUploadBytes,
   readImageDimensions,
 } from '@aglyn/aglyn/server'
 import {
@@ -171,6 +172,41 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: UPLOAD_TYPES_MESSAGE }, { status: 415 })
     }
     const uploaded = Buffer.from(data, 'base64')
+    /**
+     * STRUCTURAL inspection (AGL-1475) — the check the allowlist above cannot
+     * make.
+     *
+     * `isAllowedUploadType` gates on the content type, and the content type is
+     * a string the caller chooses. Nothing anywhere in media ingress ever
+     * looked at the bytes to see whether they agreed with it, so a Windows
+     * executable named `invoice.pdf` and labelled `application/pdf` passed
+     * every gate on this route, was hashed, given a CDN path, and served from
+     * a customer's own domain to whoever clicked the link. That is the
+     * Sept-1 risk in one sentence, and it is what this refuses.
+     *
+     * **It is a structure check and not an antivirus scan** — see
+     * `upload-inspection.ts` for exactly which questions it can and cannot
+     * answer. Do not let a summary of this comment turn into a claim of
+     * malware scanning; the docs said that once already and it was never true.
+     *
+     * Ordered FIRST, ahead of even the quarantine deny list, because it is
+     * pure: refusing here costs no Firestore read, no Storage call and no
+     * counter lookup. On the RAW bytes rather than the sanitized ones, since
+     * the question is what the caller actually sent.
+     */
+    {
+      const refusal = inspectUploadBytes({
+        bytes: uploaded,
+        contentType,
+        fileName,
+      })
+      if (refusal) {
+        return Response.json(
+          { error: refusal.message, code: refusal.code },
+          { status: 415 },
+        )
+      }
+    }
     // SVG sanitization (AGL-1474). An SVG is a document: `image/*` accepts it,
     // it is stored under the type the client declared, and the CDN serves it
     // inline from this origin — so an embedded `<script>` ran on

@@ -23,6 +23,7 @@ import {
 import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band'
 import {
   checkEntitlement,
+  inspectUploadBytes,
   readImageDimensions,
 } from '@aglyn/aglyn/server'
 import {
@@ -131,6 +132,33 @@ async function handler(request: Request): Promise<Response> {
     }
 
     const uploaded = Buffer.from(data, 'base64')
+    /**
+     * STRUCTURAL inspection (AGL-1475), and this route is the one where
+     * skipping it would hurt most.
+     *
+     * Replace swaps the bytes behind a `cdnPath` that is ALREADY embedded in
+     * published pages and that this route deliberately does not change. So an
+     * asset that was uploaded as a genuine PNG, reviewed, and linked from a
+     * live site can have an executable put behind it afterwards, at a URL
+     * every visitor already trusts. Whatever the upload route refuses, this
+     * one has to refuse too, or the control is a door with a window next to
+     * it.
+     *
+     * Structure only — not an antivirus scan. See `upload-inspection.ts`.
+     */
+    {
+      const refusal = inspectUploadBytes({
+        bytes: uploaded,
+        contentType,
+        fileName: String(mediaSnapshot.get('fileName') ?? '') || null,
+      })
+      if (refusal) {
+        return Response.json(
+          { error: refusal.message, code: refusal.code },
+          { status: 415 },
+        )
+      }
+    }
     // SVG sanitization (AGL-1474). Replace is the same `image/*` gate as
     // upload, which makes it the LATER door onto the same vector: an asset
     // approved as a PNG can have its bytes swapped for a scripted SVG

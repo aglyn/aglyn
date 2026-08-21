@@ -81,6 +81,12 @@ jest.mock('@aglyn/aglyn/server', () => ({
   parseCollectionRoute: jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/collection-entries',
   ).parseCollectionRoute,
+  // The REAL link-route derivation (AGL-1998), for the same reason again: the
+  // designed 404 carries the site's nav, and a stub would let this suite pass
+  // while every link on it resolved somewhere else.
+  linkableScreenRoutes: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/screen-route',
+  ).linkableScreenRoutes,
   SCREEN_ROOT_PATH: '/',
   COLLECTION_LIST_PAGE_SIZE: 10,
   HostScreenVisibility: { AUTHENTICATED: 'authenticated' },
@@ -141,6 +147,14 @@ jest.mock('@aglyn/tenant-runtime/compose-collection-page', () => ({
 jest.mock('@aglyn/tenant-runtime/template-screens', () => ({
   __esModule: true,
   default: jest.fn(async () => new Set<string>()),
+  // Faithful to the real module's OTHER export (AGL-1998): a double that
+  // omits it makes `loadNotFoundScreen`/`page.tsx` throw on an undefined
+  // function, and the surrounding try/catch turns that into a silent null.
+  getTemplateScreenIds: jest.fn(async () => new Set<string>()),
+  getTemplateScreenRouting: jest.fn(async () => ({
+    templateScreenIds: new Set<string>(),
+    listRoutes: {} as Record<string, string>,
+  })),
 }))
 
 import composeScreenNodes from '@aglyn/tenant-runtime/compose-screen-nodes'

@@ -48,6 +48,27 @@
 //                            observed on the wire", which is how an entire
 //                            unproven half reads as a pass.
 //
+// WIRE-PROVEN 2026-08-20 (AGL-2041). AGL-2348 shipped the fix checked by
+// inspection and recorded that a live run still owed the evidence. It has now
+// been run, against the emulators and a real `next start` tenant, pointing
+// WIRE_CONSOLE_BASE_URL at a port with nothing on it:
+//
+//   nothing listening, default            15 PASS, 0 FAIL, 1 SKIP → exit 1
+//   nothing listening, WIRE_ALLOW_SKIPS=1 15 PASS, 0 FAIL, 1 SKIP → exit 0
+//   socket that ACCEPTS and never answers 15 PASS, 0 FAIL, 1 SKIP → exit 1
+//
+// The 0 FAIL is the part that matters: with no failing branch, the non-zero
+// exit is attributable to the SKIP alone and to nothing else, and the only
+// difference between the first two is the opt-out. Before AGL-2348 the first
+// of those exited 0.
+//
+// The third case is the one worth keeping in mind, because it is the one a
+// CI job actually produces: a console that accepts the connection and then
+// says nothing, which spends the full 3 × 60s retry budget before the SKIP.
+// A refused connection and a silent one now reach the same verdict, which is
+// what stops "the console was just slow" from being an excuse the harness
+// makes on its own behalf.
+//
 // NO STRIPE, EVER. The checkout probe is only ever fired while a lock is
 // armed and only ever asserts the 423; localhost carries the LIVE Stripe key,
 // and an unlocked checkout POST is never sent from this file.
@@ -993,6 +1014,19 @@ try {
 const allowSkips = process.env.WIRE_ALLOW_SKIPS === '1'
 if (failures) {
   console.log(`\n${failures} branch(es) FAILED on the wire`)
+} else if (skipped && allowSkips) {
+  // AGL-2041. An opted-out run exits 0, so it must not print the sentence
+  // that tells the operator to set the flag they already set — observed on a
+  // real console-less run, where the summary read "this is not a pass … or
+  // set WIRE_ALLOW_SKIPS=1" and then exited 0. A summary whose words and
+  // whose exit code disagree is how a reader learns to trust neither.
+  console.log(
+    `\nread-only lockdown: PARTIAL RUN, accepted deliberately — no branch ` +
+      `failed, and ${skipped} section(s) were SKIPPED and remain UNPROVEN. ` +
+      `Exiting 0 because WIRE_ALLOW_SKIPS=1 is set. The branches named by ` +
+      `the SKIP lines above were not observed on the wire by this run, so ` +
+      `this run is not evidence about them.`,
+  )
 } else if (skipped) {
   console.log(
     `\nread-only lockdown: NO branch failed, but ${skipped} section(s) were ` +

@@ -54,12 +54,14 @@ import {
   SIGNUP_REFUSAL_DOC_PREFIX,
 } from '@aglyn/tenant-data-admin'
 import {
+  deploymentCommitRef,
   healthBody,
   healthHeaders,
   healthHttpStatus,
   healthStatus,
   memoizeWithTtl,
   ORG_CREATION_WINDOW_MINUTES,
+  platformVersion,
   SIGNUP_REFUSAL_WINDOW_MINUTES,
   signupRefusalsHealth,
   signupsHealth,
@@ -212,7 +214,12 @@ export async function GET(): Promise<Response> {
     healthBody({
       service: 'console-signups',
       checks,
-      commit: process.env['VERCEL_GIT_COMMIT_SHA']?.slice(0, 7) ?? null,
+      commit: deploymentCommitRef(),
+      // Which VERSION of the platform answered. The commit above is only
+      // set off Vercel if the operator stamped it; this one is inlined
+      // from package.json by every build, so a self-hoster always has
+      // something to quote in a bug report (AGL-2091).
+      version: platformVersion(),
       environment: process.env['VERCEL_ENV'] ?? 'development',
       region: process.env['VERCEL_REGION'] ?? null,
     }),

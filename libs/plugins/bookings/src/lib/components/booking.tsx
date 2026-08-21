@@ -29,6 +29,7 @@ import Typography from '@mui/material/Typography'
 import { forwardRef, useCallback, useEffect, useMemo, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
+import { useBookingPurchaseEvent } from '../utils/use-booking-purchase-event'
 
 // Component ids are persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = 'booking'
@@ -64,6 +65,12 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
   const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
   const { hostId } = Aglyn.useSite()
   const siteFetch = Aglyn.useSiteFetch()
+
+  // The merchant's own `purchase` for a paid booking (AGL-2481). This widget
+  // is where Stripe returns the guest, because a tenant site has no booking
+  // confirmation route. No-ops on every ordinary render: the hook returns
+  // immediately unless the URL carries `?booking=paid&session_id=…`.
+  useBookingPurchaseEvent(hostId, siteFetch)
 
   const [services, setServices] = useState<ServiceOption[] | null>(null)
   const [serviceId, setServiceId] = useState('')

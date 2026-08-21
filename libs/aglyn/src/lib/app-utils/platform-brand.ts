@@ -110,3 +110,55 @@ export const PLATFORM_SUPPORT_URL: string = (() => {
 /** True when this deployment still answers to Aglyn's own brand. */
 export const isAglynOperatedBrand = (): boolean =>
   PLATFORM_BRAND_NAME === 'Aglyn'
+
+/**
+ * Where the platform's own front door is — the marketing home, not the help
+ * desk.
+ *
+ * ## Why this is not `PLATFORM_SUPPORT_URL`
+ *
+ * The "Made with …" badge on a published free-tier site used to link to
+ * `supportUrl`, and on this deployment `supportUrl` falls through to
+ * `mailto:` + the operator support address. So the one link the platform gets
+ * on every free customer's site — its only organic acquisition surface —
+ * opened the visitor's mail client addressed to our support desk. A visitor
+ * who liked the site and clicked to find out what built it got a blank email,
+ * and support got the misdirected replies.
+ *
+ * They are genuinely different destinations. `supportUrl` answers "I am a
+ * customer and something is wrong"; this answers "what is this, and can I have
+ * one". Keeping one value for both guarantees one of them is wrong.
+ *
+ * ## Why it is null rather than aglyn.com off-brand
+ *
+ * A self-hosted deployment that renamed the product but set no home URL has
+ * nowhere honest to send that visitor: "Made with Foo" pointing at aglyn.com
+ * advertises the wrong company on Foo's customers' sites. The badge already
+ * renders as a plain label when it has no destination (AGL-2428), which is the
+ * correct outcome — so the Aglyn default applies only while this really is the
+ * Aglyn-operated brand.
+ */
+export const PLATFORM_HOME_URL: string | null =
+  clean(process.env.NEXT_PUBLIC_PLATFORM_HOME_URL) ??
+  (isAglynOperatedBrand() ? 'https://aglyn.com' : null)
+
+/**
+ * The platform's own logo MARK — the compact, square, no-wordmark form — as a
+ * URL an `<img>` on a PUBLISHED SITE can load.
+ *
+ * Site-relative on purpose: every app that renders it serves
+ * `public/_static/…` from its own origin, so one path works on
+ * `{sub}.aglyn.app` and on a customer's custom domain alike without knowing
+ * either. The white variant is the one that survives the badge's dark pill and
+ * an org's `primaryColor` behind it.
+ *
+ * Null unless this is the Aglyn-operated brand, for the same reason as
+ * {@link PLATFORM_HOME_URL}: a renamed deployment must not stamp our mark on
+ * its customers' sites. Such an operator sets `NEXT_PUBLIC_PLATFORM_MARK_URL`
+ * to their own, or gets a text-only badge.
+ */
+export const PLATFORM_MARK_URL: string | null =
+  clean(process.env.NEXT_PUBLIC_PLATFORM_MARK_URL) ??
+  (isAglynOperatedBrand()
+    ? '/_static/images/brand/aglyn-logo-mark-white.svg'
+    : null)

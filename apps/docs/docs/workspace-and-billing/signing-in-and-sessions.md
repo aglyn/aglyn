@@ -116,10 +116,45 @@ in, not a fingerprint of your hardware. Clearing cookies, using a private
 window, or switching browsers therefore shows up as a **new** device, and the
 first device ever recorded on an account never triggers the email.
 
-**If you do not recognise a sign-in**, treat it as an account compromise:
-[reset your password](#resetting-your-password) and add a passkey from the same
-Security section. Signing another device out remotely is not available yet —
-the card says so rather than offering a button that would not work.
+### When we do not email you
+
+We do not send the alert for a device that signs in from the **same IP address
+and the same operating system** as a device already on your list, seen within
+the last 30 days. That is the shape of clearing your cookies, opening a private
+window, making a new browser profile, or using a second browser on the same
+machine — all the same person on the same computer, and an alert people learn
+to ignore is worth less than no alert.
+
+Three things bound it, because "same network" is not "same person" on an office
+or café connection:
+
+- the device is still **recorded and still listed**, marked with the reason no
+  email was sent, so a sign-in is never invisible even when it is silent;
+- a device on a *different* operating system behind the same address always
+  gets an email;
+- at most three alerts a day can be suppressed this way. Past that you are
+  emailed about every one.
+
+### Signing a device out
+
+**Sign out** on a row ends its sessions. Because of how the underlying sign-in
+works, there is no way to end one device's session and leave the others: the
+button signs out **every device on your account, including the one you are
+using**, and you will be asked to sign in again. The confirmation says so
+before you click.
+
+Anything that goes through us — every console page, every action, every API
+call — stops **within a few seconds**. What survives longer is narrower: a tab
+that is *already open* on the signed-out device can keep reading your
+workspace's data directly for **up to an hour**, because it holds a short-lived
+token it cannot renew. It cannot change anything, and it goes dark when that
+token expires. If you believe someone else has access, sign out and then
+[reset your password](#resetting-your-password) as well. The row stays in the
+list, marked with when it was signed out, rather than disappearing.
+
+**If you do not recognise a sign-in**, treat it as an account compromise: sign
+it out, [reset your password](#resetting-your-password), and add a passkey from
+the same Security section.
 
 If the card cannot load your history it says so. That is not the same as an
 empty list — do not read a failed load as "nothing else has signed in".

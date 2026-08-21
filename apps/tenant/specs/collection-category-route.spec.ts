@@ -90,6 +90,14 @@ jest.mock('@aglyn/tenant-runtime/compose-collection-page', () => ({
 jest.mock('@aglyn/tenant-runtime/template-screens', () => ({
   __esModule: true,
   default: jest.fn(async () => new Set<string>()),
+  // Faithful to the real module's OTHER export (AGL-1998): a double that
+  // omits it makes `loadNotFoundScreen`/`page.tsx` throw on an undefined
+  // function, and the surrounding try/catch turns that into a silent null.
+  getTemplateScreenIds: jest.fn(async () => new Set<string>()),
+  getTemplateScreenRouting: jest.fn(async () => ({
+    templateScreenIds: new Set<string>(),
+    listRoutes: {} as Record<string, string>,
+  })),
 }))
 
 import { composeCollectionTemplatePage } from '@aglyn/tenant-runtime/compose-collection-page'

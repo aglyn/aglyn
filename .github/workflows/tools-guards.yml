@@ -104,7 +104,15 @@ name: Tools guards
 on:
   push:
     branches:
-      - main
+      # Sept-1 freeze (Zach, 2026-08-20): the push trigger moved from `main`
+      # to `production`. With many agents landing on `main` continuously this
+      # workflow was running dozens of times an hour and every red notified
+      # him, so CI became noise rather than signal. It is a RELEASE gate until
+      # launch: `main` is verified before promotion by `tools/gate.sh`
+      # (AGL-2090), and the promotion PR still runs `pull_request` below.
+      # RESTORE `main` AFTER LAUNCH — until then a break can sit on `main`
+      # unnoticed until someone runs the gate.
+      - production
     paths:
       - 'tools/**'
       # AGL-2025: `check:hardcoded-colours` sweeps apps/ libs/ cloud/, so its
@@ -265,6 +273,18 @@ jobs:
       - run: npm run test:standalone-installs
 
       - run: npm run check:standalone-installs
+
+      # AGL-2090. `tools/gate.sh` provisions the pinned gate worktree, and the
+      # checks it makes before running anything are the difference between a
+      # verdict and an infrastructure crash wearing a verdict's exit code: a
+      # symlinked node_modules (Turbopack refuses it, so the production build
+      # cannot run), a nested node_modules/node_modules from a hard-link copy
+      # (two Reacts, 1000+ null-useState failures), and the two standalone
+      # trees whose absence fails docs:build and cloud-functions:lint. This
+      # builds each broken shape on purpose and asserts the refusal — the
+      # guard has to be seen failing to be worth anything. Pure bash + mktemp,
+      # no install, well under a second.
+      - run: npm run test:gate-script
 
       # AGL-1882. The comparator behind `check:backup-copies`, which asks the
       # one question `/api/health/backups` structurally cannot: does ANY copy
@@ -477,6 +497,21 @@ jobs:
       # self-test needs nothing, and a comparator that has stopped comparing
       # reports "no drift", which is indistinguishable from convergence.
       - run: npm run test:legal-drift
+
+      # AGL-1986. The comparator behind `check:legal-index-dates`, which
+      # re-derives every /legal index card's date from the document that card
+      # links to. The nine cards are hand-typed besigner nodes restating a
+      # date the document below them also states, and ToS §5.3 / Privacy §12
+      # make that date the mechanism by which amended terms take effect — so a
+      # forgotten card is a second, contradictory claim about when the current
+      # terms began to bind, on the page a user lands on first.
+      #
+      # Only the SELF-TEST runs here; the check needs the live pages and runs
+      # in legal-drift.yml. It pins the four traps, and the reason it has to:
+      # a comparator that stops comparing reports "no drift", and two
+      # SPELLINGS of one day ("August 5, 2026" vs "5 August 2026") must not
+      # read as drift while two different days must.
+      - run: npm run test:legal-index-dates
 
       # AGL-2036. The reconciler behind `check:shipped-not-closed`, which lists
       # open Linear issues whose implementing commits are already live.

@@ -217,17 +217,57 @@ describe('custom console domain gate', () => {
     // on an origin whose DNS the customer can re-point at themselves. The
     // client half is enforced by the sealed auth instance (AGL-1379); this is
     // the route half, and without it the property is only claimed.
-    for (const path of [
-      '/signin',
-      '/signup',
-      '/verify-email',
-      '/account-recovery',
-    ]) {
+    //
+    // What changed with the handoff (AGL-1902) is the DESTINATION for
+    // `/signin`, not the property: it now starts the handoff here, because the
+    // verifier cookie is host-only and can only be set on this origin. The
+    // start route bounces on to the auth host itself, so the credential prompt
+    // is still never rendered on a customer-controlled origin.
+    const signin = await middleware(
+      request('console.acme-agency.com', '/signin'),
+    )
+    expect(signin.status).toBe(307)
+    const started = new URL(signin.headers.get('location') ?? '')
+    expect(started.hostname).toBe('console.acme-agency.com')
+    expect(started.pathname).toBe('/auth/handoff/start')
+    // And it is a REDIRECT, not a rewrite: nothing renders a sign-in form here.
+    expect(signin.headers.get('x-middleware-rewrite')).toBeNull()
+
+    // The rest of the family still leaves the domain entirely. `signup` must
+    // not create accounts from a white-label address, and the other two redeem
+    // one-shot codes from emailed links whose origin is ours.
+    for (const path of ['/signup', '/verify-email', '/account-recovery']) {
       const response = await middleware(request('console.acme-agency.com', path))
       expect(response.status).toBe(307)
       const location = new URL(response.headers.get('location') ?? '')
       expect(location.hostname).toBe('app.aglyn.com')
       expect(location.pathname).toBe(path)
+    }
+  })
+
+  it('carries the requested continue path into the handoff start', async () => {
+    const response = await middleware(
+      request('console.acme-agency.com', '/signin?continue=/acme/sites'),
+    )
+
+    const location = new URL(response.headers.get('location') ?? '')
+    expect(location.pathname).toBe('/auth/handoff/start')
+    expect(location.searchParams.get('continue')).toBe('/acme/sites')
+  })
+
+  it('serves the handoff legs unrewritten, never scoped under the org', async () => {
+    // `/auth/handoff` is a platform route. Rewritten to `/acme/auth/handoff` it
+    // would 404 — and the thing that 404s is the only flow that can put a
+    // session on this domain at all, which would read as "the feature does not
+    // work" rather than as a routing bug.
+    for (const path of [
+      '/auth/handoff',
+      '/auth/handoff/start',
+      '/auth/handoff/continue',
+    ]) {
+      const response = await middleware(request('console.acme-agency.com', path))
+      expect(response.headers.get('x-middleware-rewrite')).toBeNull()
+      expect(response.headers.get('location')).toBeNull()
     }
   })
 

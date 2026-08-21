@@ -18,7 +18,14 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { applyRemoteNode, flushRemoteReconcile } from './use-coediting'
+import {
+  COEDIT_MIRROR_MAX_AGE_MS,
+  applyRemoteNode,
+  flushRemoteReconcile,
+  isMirrorEntryLive,
+  mirrorFloorMillis,
+  reapableMirrorEntryIds,
+} from './use-coediting'
 
 /**
  * The AGL-677 application rules, asserted against the REAL canvas singleton
@@ -369,5 +376,403 @@ describe('remote batch reconciliation (AGL-1363)', () => {
     // A complete, self-consistent batch needs no repair at all.
     expect(flushRemoteReconcile()).toEqual([])
     expect(unreachable()).toEqual([])
+  })
+})
+
+/**
+ * AGL-1958 — the second half of AGL-677 constraint 3.
+ *
+ * The first half (asserted at the top of this file) keeps a colleague's edit
+ * OUT of your undo stack. That is necessary and it is not sufficient, and the
+ * gap was live in production: every snapshot already on the stack was taken
+ * before one of your edits, therefore before their edit arrived, so restoring
+ * one wholesale reverted their node too. Worse, the restored map is diffed
+ * against the co-editing shadow like any other local change, so the revert
+ * was published back to its author under YOUR session id — their work gone on
+ * their own screen, with no signal and nothing to restore it from.
+ *
+ * The fix is an epoch stamp per snapshot plus a per-node mark of when a peer
+ * last touched it, so a restore keeps anything the snapshot predates. These
+ * tests are written against the REAL canvas: the rule is about what the
+ * canvas ends up holding, not about which method was called.
+ */
+describe('undo against a co-editor (AGL-1958)', () => {
+  const ROOT = Aglyn.CANVAS_ROOT_ELEMENT_ID
+
+  const TREE = {
+    [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['mine', 'theirs'] },
+    mine: {
+      $id: 'mine',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'mine v0' },
+    },
+    theirs: {
+      $id: 'theirs',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'theirs v0' },
+    },
+  }
+
+  const children = (nodeId: string): string | undefined =>
+    (Aglyn.canvas.nodes.get(nodeId) as { props?: { children?: string } })?.props
+      ?.children
+
+  /** A peer's change to one node, through the real apply path. */
+  const remote = (nodeId: string, node: Record<string, unknown>) =>
+    applyRemoteNode(nodeId, {
+      by: 'peer-tab',
+      at: Date.now(),
+      json: JSON.stringify(node),
+    })
+
+  /** A local edit that records exactly one undo step. */
+  const localEdit = (nodeId: string, text: string) =>
+    Aglyn.canvas.transact(() => {
+      const node = Aglyn.canvas.nodes.get(nodeId) as {
+        props: { children?: string }
+      }
+      node.props.children = text
+    })
+
+  beforeEach(() => {
+    flushRemoteReconcile()
+    Aglyn.canvas.reset()
+    Aglyn.canvas.setNodes(TREE as never)
+    Aglyn.canvas.updateInitialNodes()
+  })
+
+  afterAll(() => {
+    Aglyn.canvas.reset()
+  })
+
+  it('rewinds my node and keeps the edit a peer made after my snapshot', () => {
+    localEdit('mine', 'mine v1')
+    expect(Aglyn.canvas.canUndo).toBe(true)
+
+    remote('theirs', {
+      $id: 'theirs',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'theirs v1' },
+    })
+    flushRemoteReconcile()
+    expect(children('theirs')).toBe('theirs v1')
+
+    Aglyn.canvas.undo()
+
+    // Mine rewinds — undo still does its job.
+    expect(children('mine')).toBe('mine v0')
+    // Theirs survives. Before AGL-1958 this read 'theirs v0', and the diff
+    // against the co-editing shadow then published that revert back to them.
+    expect(children('theirs')).toBe('theirs v1')
+  })
+
+  it('keeps a node the peer CREATED after my snapshot', () => {
+    localEdit('mine', 'mine v1')
+
+    remote('fresh', {
+      $id: 'fresh',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'brand new' },
+    })
+    // The peer republishes the parent's child list in the same update.
+    remote(ROOT, {
+      $id: ROOT,
+      componentId: 'div',
+      nodes: ['mine', 'theirs', 'fresh'],
+    })
+    flushRemoteReconcile()
+
+    Aglyn.canvas.undo()
+
+    // Before AGL-1958 the snapshot had no 'fresh' key, so the wholesale
+    // replace deleted it outright.
+    expect(Aglyn.canvas.nodes.has('fresh')).toBe(true)
+    expect(children('fresh')).toBe('brand new')
+    // And it is still reachable: the parent's list came in the same batch,
+    // so the parent is marked too and its list survives with the child.
+    expect(Aglyn.canvas.nodes.get(ROOT)?.nodes).toContain('fresh')
+  })
+
+  it('keeps a node the peer DELETED after my snapshot deleted', () => {
+    localEdit('mine', 'mine v1')
+
+    applyRemoteNode('theirs', { by: 'peer-tab', at: Date.now(), deleted: true })
+    flushRemoteReconcile()
+    expect(Aglyn.canvas.nodes.has('theirs')).toBe(false)
+
+    Aglyn.canvas.undo()
+
+    // An absence is a remote state as much as a value is: restoring the
+    // snapshot must not resurrect what they removed.
+    expect(Aglyn.canvas.nodes.has('theirs')).toBe(false)
+    expect(children('mine')).toBe('mine v0')
+  })
+
+  it('still rewinds a node the peer touched BEFORE my snapshot', () => {
+    // The ordering that must NOT be preserved: their change is already in
+    // the snapshot, so undo has to restore it like any other node — or undo
+    // would quietly stop working on every node anyone has ever co-edited.
+    remote('theirs', {
+      $id: 'theirs',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'theirs v1' },
+    })
+    flushRemoteReconcile()
+
+    // My snapshot is taken AFTER their edit, so it contains 'theirs v1'.
+    localEdit('theirs', 'i changed it too')
+    expect(children('theirs')).toBe('i changed it too')
+
+    Aglyn.canvas.undo()
+
+    expect(children('theirs')).toBe('theirs v1')
+  })
+
+  it('resolves a node we both changed to the peer, per-node last-writer-wins', () => {
+    localEdit('theirs', 'my take')
+
+    remote('theirs', {
+      $id: 'theirs',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'their take' },
+    })
+    flushRemoteReconcile()
+
+    Aglyn.canvas.undo()
+
+    // Same rule the per-node mirror applies everywhere else (AGL-677), not
+    // a new one: the later writer holds the node.
+    expect(children('theirs')).toBe('their take')
+  })
+
+  it('redo replays my edit and still leaves the peer alone', () => {
+    localEdit('mine', 'mine v1')
+
+    remote('theirs', {
+      $id: 'theirs',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'theirs v1' },
+    })
+    flushRemoteReconcile()
+
+    Aglyn.canvas.undo()
+    expect(Aglyn.canvas.canRedo).toBe(true)
+    Aglyn.canvas.redo()
+
+    expect(children('mine')).toBe('mine v1')
+    expect(children('theirs')).toBe('theirs v1')
+  })
+
+  // Negative control: the preservation is scoped to co-editing, not a blanket
+  // "undo never removes nodes". A node the LOCAL user added is still undone.
+  it('undo still removes a node I added myself', () => {
+    Aglyn.canvas.transact(() => {
+      Aglyn.canvas.setNode(
+        {
+          $id: 'localKid',
+          componentId: 'muiTypography',
+          props: { children: 'local' },
+        } as never,
+        ROOT,
+      )
+    })
+    expect(Aglyn.canvas.nodes.has('localKid')).toBe(true)
+
+    Aglyn.canvas.undo()
+
+    expect(Aglyn.canvas.nodes.has('localKid')).toBe(false)
+  })
+
+  // Negative control: a fresh document must not inherit the previous one's
+  // marks, or an undo there would preserve node ids that mean something else.
+  it('reset drops the marks, so undo is wholesale again', () => {
+    localEdit('mine', 'mine v1')
+    remote('theirs', {
+      $id: 'theirs',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'theirs v1' },
+    })
+    flushRemoteReconcile()
+
+    Aglyn.canvas.reset()
+    Aglyn.canvas.setNodes(TREE as never)
+    Aglyn.canvas.updateInitialNodes()
+    expect(Aglyn.canvas.canUndo).toBe(false)
+
+    // Edit the very node the PREVIOUS document had marked, then rewind it.
+    // Asserting on an untouched node would pass either way — the re-seeded
+    // value and the snapshot value are the same string, so preserving and
+    // restoring are indistinguishable. Only a local edit separates them.
+    localEdit('theirs', 'edited after the reset')
+    Aglyn.canvas.undo()
+
+    // No marks carried over, so 'theirs' rewinds like any other local node.
+    // With a stale mark it would have been preserved at the edited value.
+    expect(children('theirs')).toBe('theirs v0')
+  })
+})
+
+/**
+ * The join-time admission rule and the join-time reap (AGL-1870 R4).
+ *
+ * These cases are the PRODUCTION rooms, measured 2026-08-20, not invented
+ * fixtures: every number below came off `coedit/` on `aglyn-main`. `NOW` is
+ * the moment of that measurement, so the ages here are the real ones and the
+ * suite does not drift as the calendar moves.
+ *
+ * Zach's call, 2026-08-20: option C, reap on join by age. Option A
+ * (`onDisconnect().remove()`) was rejected because a network blip would
+ * silently and permanently destroy unsaved work.
+ */
+describe('the co-edit mirror cutoff (AGL-1870 R4: reap on join by age)', () => {
+  const at = (iso: string) => new Date(iso).getTime()
+  /** What a live client-SDK `Timestamp` looks like to `versionStamp`. */
+  const stamp = (iso: string) => ({ toMillis: () => at(iso) })
+  /** When production was measured. Every age below is relative to this. */
+  const NOW = at('2026-08-20T16:04:00Z')
+
+  describe('what a joiner replays', () => {
+    it('refuses an entry older than the last save', () => {
+      // Production: 2 rooms, 353 of the 383 entries, 136 KiB — published a
+      // minute BEFORE the save that folded them in. Downloaded on every join
+      // and then discarded.
+      const floor = mirrorFloorMillis(stamp('2026-08-05T05:43:00Z'))
+      expect(
+        isMirrorEntryLive({ at: at('2026-08-05T05:42:00Z') }, floor, NOW),
+      ).toBe(false)
+    })
+
+    it('still replays unsaved work from a tab that closed days ago', () => {
+      // Production: saved 2026-08-13, one entry from 2026-08-18 (+4.7 days),
+      // 2.5 days old at measurement. THIS is the room the cutoff is chosen to
+      // keep — a tab closed on Friday still replays on Monday. Reaping it is
+      // what option A would have done, and is a different product.
+      const floor = mirrorFloorMillis(stamp('2026-08-13T09:00:00Z'))
+      expect(
+        isMirrorEntryLive({ at: at('2026-08-18T00:00:00Z') }, floor, NOW),
+      ).toBe(true)
+    })
+
+    it('no longer replays work abandoned three weeks ago', () => {
+      // Production: saved 2026-07-13, two entries from 2026-08-05 (+22.8 days
+      // after the save, 15.4 days old at measurement). Before R4 the next
+      // person to open that version had this applied to their canvas. It is
+      // now refused on the way in, and reaped.
+      const floor = mirrorFloorMillis(stamp('2026-07-13T06:09:00Z'))
+      expect(
+        isMirrorEntryLive({ at: at('2026-08-05T01:57:04Z') }, floor, NOW),
+      ).toBe(false)
+    })
+
+    it('admits the leftover every save leaves behind, at the floor exactly', () => {
+      // Production: 12 rooms holding exactly one entry stamped at or just
+      // after the save meant to clear them. The lower boundary is inclusive —
+      // an entry written in the same millisecond as the save is live.
+      const floor = mirrorFloorMillis(stamp('2026-08-20T12:00:00Z'))
+      expect(isMirrorEntryLive({ at: floor }, floor, NOW)).toBe(true)
+      expect(isMirrorEntryLive({ at: floor - 1 }, floor, NOW)).toBe(false)
+    })
+
+    it('holds the upper boundary to the millisecond', () => {
+      // Both sides of seven days, with no floor in the way, so this asserts
+      // the age bound alone. Exactly the cutoff is refused; one millisecond
+      // inside it is admitted.
+      const old = NOW - COEDIT_MIRROR_MAX_AGE_MS
+      expect(isMirrorEntryLive({ at: old }, 0, NOW)).toBe(false)
+      expect(isMirrorEntryLive({ at: old + 1 }, 0, NOW)).toBe(true)
+    })
+
+    it('bounds a never-saved document by age even with no floor', () => {
+      // No stamp means no floor, so the lower bound admits everything. Before
+      // R4 that meant a never-saved document replayed its whole room however
+      // old; the age bound is now the only thing standing there.
+      expect(mirrorFloorMillis(undefined)).toBe(0)
+      expect(isMirrorEntryLive({ at: NOW - 1000 }, 0, NOW)).toBe(true)
+      expect(isMirrorEntryLive({ at: at('2020-01-01T00:00:00Z') }, 0, NOW)).toBe(
+        false,
+      )
+    })
+
+    it('treats a missing `at` as the oldest possible entry', () => {
+      const floor = mirrorFloorMillis(stamp('2026-08-12T22:57:17Z'))
+      expect(isMirrorEntryLive({}, floor, NOW)).toBe(false)
+      // And with no floor either, the age bound still refuses it.
+      expect(isMirrorEntryLive({}, 0, NOW)).toBe(false)
+    })
+
+    /**
+     * The lower bound is disabled — silently — by any stamp shape that is not
+     * `ms:`. A `{seconds, nanoseconds}` object is what a Firestore timestamp
+     * becomes once it crosses an RSC boundary, and it yields floor 0, which
+     * admits the whole room including the 353 entries the `ms:` form refuses.
+     * All five call sites pass a live `Timestamp` today; this is the guard on
+     * that staying true. R4 does not fix it — but note that the reaper reads
+     * age only, so it keeps working on a room whose floor has collapsed.
+     */
+    it('yields NO floor for the serialized timestamp shape', () => {
+      expect(mirrorFloorMillis({ seconds: 1_754_365_380, nanoseconds: 0 })).toBe(
+        0,
+      )
+      expect(mirrorFloorMillis('2026-08-05T05:43:00Z')).toBe(0)
+      // The live shape, by contrast, does produce one.
+      expect(mirrorFloorMillis(stamp('2026-08-05T05:43:00Z'))).toBeGreaterThan(0)
+    })
+  })
+
+  describe('what a joiner reaps', () => {
+    it('reaps the pre-AGL-1262 residue and leaves the recent room alone', () => {
+      // The whole production corpus in miniature, by entry age at measurement:
+      // the 353-entry residue and the two multi-week abandoned rooms are 15.3
+      // to 15.4 days old; the one recent abandoned edit is 2.5 days; the
+      // save-time leftovers are minutes.
+      const room = {
+        residue: { at: at('2026-08-05T05:42:00Z') },
+        abandonedJuly: { at: at('2026-08-05T01:57:04Z') },
+        abandonedAugust: { at: at('2026-08-18T00:00:00Z') },
+        saveLeftover: { at: at('2026-08-20T12:00:00Z') },
+      }
+      expect(reapableMirrorEntryIds(room, NOW).sort()).toEqual([
+        'abandonedJuly',
+        'residue',
+      ])
+    })
+
+    it('holds the same boundary the admission rule does, to the millisecond', () => {
+      const old = NOW - COEDIT_MIRROR_MAX_AGE_MS
+      expect(
+        reapableMirrorEntryIds({ a: { at: old }, b: { at: old + 1 } }, NOW),
+      ).toEqual(['a'])
+    })
+
+    it('reaps exactly what the admission rule refuses on age, never more', () => {
+      // The safety property: nothing a joiner would still apply is deleted.
+      // If these two ever disagree, a joiner applies an entry and then deletes
+      // it, laundering abandoned work into the next save.
+      const room: Record<string, { at?: number }> = {}
+      for (let days = 0; days <= 20; days += 1) {
+        room[`d${days}`] = { at: NOW - days * 24 * 60 * 60 * 1000 }
+      }
+      room.noStamp = {}
+      const reaped = new Set(reapableMirrorEntryIds(room, NOW))
+      for (const [id, entry] of Object.entries(room)) {
+        // Floor 0, so admission turns on age alone.
+        expect(reaped.has(id)).toBe(!isMirrorEntryLive(entry, 0, NOW))
+      }
+      expect(reaped.size).toBe(15)
+    })
+
+    it('reaps nothing from an empty or absent room', () => {
+      expect(reapableMirrorEntryIds({}, NOW)).toEqual([])
+      expect(reapableMirrorEntryIds(null, NOW)).toEqual([])
+      expect(reapableMirrorEntryIds(undefined, NOW)).toEqual([])
+    })
   })
 })

@@ -23,6 +23,7 @@ import {
   getPluginConfig,
   upsertHostContact,
 } from '@aglyn/tenant-data-admin'
+import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
 import {
   buildRoute,
   claimAttempt,
@@ -548,7 +549,16 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         .doc(String(ownerOrg?.org?.ownerUid ?? ''))
         .get()
       const accountId = ownerProfile.get('stripeAccountId')
-      if (!accountId || !ownerProfile.get('stripeChargesEnabled')) {
+      if (
+        !connectLinkageIsReady(
+          {
+            accountId,
+            chargesEnabled: ownerProfile.get('stripeChargesEnabled'),
+            accountLivemode: ownerProfile.get('stripeAccountLivemode'),
+          },
+          { subject: `POS payment link host ${hostId}` },
+        )
+      ) {
         return res.status(409).json({ error: 'Card payments not set up' })
       }
       const orderRef = hostRef.collection('orders').doc()

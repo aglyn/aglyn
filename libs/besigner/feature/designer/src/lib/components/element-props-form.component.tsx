@@ -183,8 +183,19 @@ export const ElementPropsFormTemplate = forwardRef<
 ElementPropsFormTemplate.displayName = 'ElementPropsFormTemplate'
 ElementPropsFormTemplate.aglyn = true
 
-export interface ElementPropsFormProps extends FormRendererProps {
+export interface ElementPropsFormProps
+  extends Omit<FormRendererProps, 'schema' | 'componentMapper'> {
   node?: Aglyn.NodeSchema<any>
+  /**
+   * Supplied by the component, not the caller: `ElementPropsFormRaw` reads
+   * `node.componentSchema` and ignores anything passed in, and the production
+   * mount (`withLastSelectedNode(withTabPanelInner(...))`) passes neither. They
+   * stayed required only because the interface extended `FormRendererProps`
+   * wholesale, so any direct render was a type error for props the component
+   * discards.
+   */
+  schema?: FormRendererProps['schema']
+  componentMapper?: FormRendererProps['componentMapper']
 }
 
 // Attribute editors available to canvas component schemas: the simple set
@@ -518,20 +529,32 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
 
       return (rawAttributes ?? []).map(withAttributeHelp).map((field) => {
         if (field.component === Aglyn.FieldComponentType.SCREEN_SELECT) {
+          const options = [
+            { value: '', label: 'None (use external URL)' },
+            ...Object.entries(screens ?? {})
+              .sort(([, a], [, b]) => a.localeCompare(b))
+              .map(([screenId, path]) => ({
+                value: screenId,
+                label: `${labels?.[screenId] ?? screenId} (${
+                  path === '/' ? '/' : `/${path}`
+                })`,
+              })),
+          ]
+          // A stored target the host no longer has renders as a BLANK
+          // picker, which reads as "no link set" while the element still
+          // behaves as linked (AGL-1893). Naming it is the only way the
+          // author finds out before publishing rather than after.
+          const stranded = Aglyn.unresolvedScreenOption(
+            nodeProps?.[field.name],
+            screens,
+          )
+          if (stranded && !options.some((o) => o.value === stranded.value)) {
+            options.push(stranded)
+          }
           return {
             ...field,
             component: Aglyn.FieldComponentType.SELECT,
-            options: [
-              { value: '', label: 'None (use external URL)' },
-              ...Object.entries(screens ?? {})
-                .sort(([, a], [, b]) => a.localeCompare(b))
-                .map(([screenId, path]) => ({
-                  value: screenId,
-                  label: `${labels?.[screenId] ?? screenId} (${
-                    path === '/' ? '/' : `/${path}`
-                  })`,
-                })),
-            ],
+            options,
           }
         }
         if (field.component === Aglyn.FieldComponentType.PLUGIN_SETTINGS) {
@@ -656,6 +679,11 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       rawAttributes,
       screens,
       labels,
+      // Read by the Screen pickers to name a target the map has lost
+      // (AGL-1893). Safe as a dependency: the form owns the values the
+      // author is typing, so this object's identity moves when a different
+      // node is selected or a save commits — not on every keystroke.
+      nodeProps,
       entityOptions,
       nodeOptions,
       // The installed-plugin set arrives from a live subscription and can land
@@ -876,6 +904,49 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       [onPickMedia, node],
     )
 
+    /**
+     * Hang the media browser off the FIELDS it fills (AGL-2236).
+     *
+     * The picker has existed since AGL-341, but as full-width buttons after
+     * the form — below `Save Element`, past every attribute the element
+     * declares. The `src` field's own helper text says to "Pick from your
+     * media library with 'Browse media'", so an author who read it looked
+     * beside the field, found nothing, and concluded the only way to change
+     * an image was to hand-type a `media:org:…/…` reference. Attaching the
+     * control to the field makes the instruction true.
+     *
+     * Only fields the token editor renders get one: a read-only attribute
+     * keeps no picker, because a control that writes an unwritable field is
+     * the same class of lie this issue is about.
+     */
+    const fieldsWithMediaPickers = useMemo(() => {
+      if (!onPickMedia) return formFieldSchema
+      const browse = new Map<string, () => void>()
+      for (const field of mediaAttributes) {
+        browse.set(field.name, handleBrowseMedia(field.name))
+      }
+      for (const field of instanceMediaProps) {
+        browse.set(
+          `${Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY}.${field.name}`,
+          handleBrowseInstanceMedia(field.name),
+        )
+      }
+      if (!browse.size) return formFieldSchema
+      return formFieldSchema.map((field: any) =>
+        browse.has(field.name) &&
+        field.component === TOKEN_TEXT_FIELD_COMPONENT
+          ? { ...field, onBrowseMedia: browse.get(field.name) }
+          : field,
+      )
+    }, [
+      formFieldSchema,
+      mediaAttributes,
+      instanceMediaProps,
+      onPickMedia,
+      handleBrowseMedia,
+      handleBrowseInstanceMedia,
+    ])
+
     const handleFormCancel = useCallback((e: SyntheticEvent, reason?: string) => {}, [])
     const handleElementSave = useCallback(
       (values: Record<string, unknown>) => {
@@ -934,7 +1005,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
             onCancel={handleFormCancel}
             onSubmit={handleElementSave}
             initialValues={nodeProps}
-            schema={{ fields: formFieldSchema }}
+            schema={{ fields: fieldsWithMediaPickers }}
             {...rest}
           >
             {({ formFields, schema, ...rest }) => (
@@ -1041,38 +1112,10 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                     />
                   </FormControl>
                 ) : null}
-                {onPickMedia && mediaAttributes.length
-                  ? mediaAttributes.map((field: any) => (
-                      <FormControl key={field.name} margin="none" fullWidth>
-                        <Button
-                          color="primary"
-                          onClick={handleBrowseMedia(field.name)}
-                          sx={{ mt: 2 }}
-                          fullWidth
-                        >
-                          {mediaAttributes.length > 1
-                            ? `Browse media — ${field.label ?? field.name}`
-                            : 'Browse media'}
-                        </Button>
-                      </FormControl>
-                    ))
-                  : null}
-                {onPickMedia && instanceMediaProps.length
-                  ? instanceMediaProps.map((field) => (
-                      <FormControl key={field.name} margin="none" fullWidth>
-                        <Button
-                          color="primary"
-                          onClick={handleBrowseInstanceMedia(field.name)}
-                          sx={{ mt: 2 }}
-                          fullWidth
-                        >
-                          {instanceMediaProps.length > 1
-                            ? `Browse media — ${field.label}`
-                            : 'Browse media'}
-                        </Button>
-                      </FormControl>
-                    ))
-                  : null}
+                {/* The "Browse media" buttons that used to sit here — after
+                    the form, below Save Element — now ride on the fields
+                    themselves as end adornments (AGL-2236). See
+                    `fieldsWithMediaPickers`. */}
                 {interactions.onCreateInteraction && node?.$id ? (
                   <FormControl margin="none" fullWidth>
                     {/* Interactions (AGL-258): automations bound to this

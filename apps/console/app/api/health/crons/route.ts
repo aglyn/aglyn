@@ -56,11 +56,13 @@ import {
   CRON_BEAT_COLLECTION,
   CRON_BEAT_WATCH_DOC,
   cronJobsHealth,
+  deploymentCommitRef,
   healthBody,
   healthHeaders,
   healthHttpStatus,
   healthStatus,
   memoizeWithTtl,
+  platformVersion,
   type CronBeat,
   type CronJobCheck,
 } from '@aglyn/aglyn/server'
@@ -138,7 +140,12 @@ export async function GET(): Promise<Response> {
     healthBody({
       service: 'console-crons',
       checks,
-      commit: process.env['VERCEL_GIT_COMMIT_SHA']?.slice(0, 7) ?? null,
+      commit: deploymentCommitRef(),
+      // Which VERSION of the platform answered. The commit above is only
+      // set off Vercel if the operator stamped it; this one is inlined
+      // from package.json by every build, so a self-hoster always has
+      // something to quote in a bug report (AGL-2091).
+      version: platformVersion(),
       environment: process.env['VERCEL_ENV'] ?? 'development',
       region: process.env['VERCEL_REGION'] ?? null,
     }),

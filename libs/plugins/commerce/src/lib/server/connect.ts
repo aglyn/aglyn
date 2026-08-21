@@ -16,6 +16,7 @@
  */
 
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import { resolvePlatformStripeMode } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
 import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
 
 async function stripe(path: string, params?: URLSearchParams) {
@@ -110,6 +111,20 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
 
     const account = await stripe(`accounts/${accountId}`)
     const chargesEnabled = Boolean(account?.charges_enabled)
+    // WHICH STRIPE WORLD THIS ACCOUNT LIVES IN (AGL-2471).
+    //
+    // Three production linkages named TEST-mode accounts, one of them with
+    // `stripeChargesEnabled: true`, so its storefronts read as payments-ready
+    // and could not take a payment. Nothing recorded the mode, and nothing
+    // could recover it later: the Account object carries no `livemode` field
+    // and an `acct_…` id is the same shape in both worlds.
+    //
+    // The retrieve above IS the proof. Stripe refuses cross-mode account
+    // access outright — "was a test account created with a testmode key" —
+    // so an account this key just fetched is in this key's mode, and
+    // `resolvePlatformStripeMode` asks Stripe (`/v1/balance.livemode`) what
+    // that mode is rather than reading the key string.
+    const platformMode = await resolvePlatformStripeMode()
     // Payout readiness rides along (AGL-1994): the sale gate stays on
     // charges_enabled — that is what Stripe checks at charge time — but
     // charges-yes/payouts-no was invisible to the storefront, because
@@ -122,6 +137,13 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
       {
         stripeChargesEnabled: chargesEnabled,
         stripePayoutsEnabled: payoutsEnabled,
+        // ALWAYS written, and `null` when Stripe would not say (AGL-2471).
+        // Writing unconditionally is what makes re-onboarding safe: a fresh
+        // `stripeAccountId` on a document that still carried the PREVIOUS
+        // account's verdict would otherwise inherit it. `null` is not a
+        // boolean, so the gate reads it as `mode-unverified` and refuses —
+        // never a fabricated `true`.
+        stripeAccountLivemode: platformMode ? platformMode === 'live' : null,
       },
       { merge: true },
     )

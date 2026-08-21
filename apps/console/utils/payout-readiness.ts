@@ -48,6 +48,15 @@ export type PayoutReadiness =
   | 'unknown'
   /** Charges on, payouts explicitly NOT enabled — the stranded-funds state. */
   | 'blocked'
+  /**
+   * Charges on, but which Stripe world the account belongs to was never
+   * recorded (AGL-2471) — so no money door will actually charge against it.
+   * Ranked ABOVE the payout question because it is the more fundamental
+   * failure: an unverified linkage cannot take a payment at all, and saying
+   * "payouts are enabled" about it is the sentence that shipped three
+   * storefronts presenting as ready and unable to sell.
+   */
+  | 'unverified'
   /** Charges on and payouts on. The only state that may claim success. */
   | 'ready'
 
@@ -58,6 +67,11 @@ export interface PayoutReadinessInput {
   chargesEnabled?: unknown
   /** `profile.stripePayoutsEnabled` — absent on pre-AGL-1547 profiles. */
   payoutsEnabled?: unknown
+  /**
+   * `profile.stripeAccountLivemode` (AGL-2471) — absent on every linkage
+   * written before it, including all three that existed in production.
+   */
+  accountLivemode?: unknown
 }
 
 /**
@@ -70,6 +84,11 @@ export interface PayoutReadinessInput {
 export function payoutReadiness(input: PayoutReadinessInput): PayoutReadiness {
   if (input.state !== 'loaded') return input.state
   if (input.chargesEnabled !== true) return 'disconnected'
+  // AGL-2471, asked before the payout question: `stripeChargesEnabled` alone
+  // is what made a test-mode account read as a working merchant. Only a
+  // literal boolean counts as recorded — the same three-valued reading the
+  // server gate uses, so the card and the checkout agree.
+  if (typeof input.accountLivemode !== 'boolean') return 'unverified'
   if (input.payoutsEnabled === true) return 'ready'
   if (input.payoutsEnabled === false) return 'blocked'
   return 'unknown'

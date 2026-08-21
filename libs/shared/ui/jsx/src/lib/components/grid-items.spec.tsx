@@ -16,7 +16,7 @@
  */
 
 import React from 'react'
-import {render} from '@testing-library/react'
+import {render, screen} from '@testing-library/react'
 
 import GridItems from './grid-items'
 
@@ -25,5 +25,134 @@ describe('GridItems', () => {
   it('should render successfully', () => {
     const {baseElement} = render(<GridItems />)
     expect(baseElement).toBeTruthy()
+  })
+})
+
+/**
+ * Masonry mode is a LAYOUT, and jsdom computes none of it — so these assert the
+ * one thing that is real in jsdom and that the layout entirely follows from:
+ * which cards were bucketed into which column. Every reported symptom (the dead
+ * space under `Current plan`, the sidebar stranded below the fold) is a
+ * consequence of that grouping, and the geometry itself was verified in a
+ * browser against the two live pages.
+ */
+describe('GridItems masonry', () => {
+  const card = (name: string) => <div data-card={name} />
+
+  /** [column index] → the cards in it, in order. */
+  const columns = () =>
+    [...screen.getByTestId('grid').children].map((column) =>
+      [...column.querySelectorAll('[data-card]')].map((el) =>
+        el.getAttribute('data-card'),
+      ),
+    )
+
+  /** The billing page's real shape: 4, 8, 4, then a full-width card. */
+  const billingItems = [
+    {size: {xs: 12, md: 4}, children: card('current-plan')},
+    {size: {xs: 12, md: 8}, children: card('usage')},
+    {size: {xs: 12, md: 4}, children: card('metered-estimate')},
+    {size: {xs: 12}, children: card('storage-cap')},
+  ]
+
+  it('leaves the plain row layout alone when `masonry` is not set', () => {
+    const {baseElement} = render(<GridItems items={billingItems} spacing={3} />)
+    // The untouched path is still MUI's flex Grid container, and every item is
+    // a direct child of it rather than being wrapped in a column.
+    const container = baseElement.querySelector('.MuiGrid-container')
+    expect(container).toBeTruthy()
+    expect(container?.querySelectorAll('[data-card]')).toHaveLength(4)
+    expect(container?.children).toHaveLength(4)
+  })
+
+  it('buckets same-width cards into one column so the short one stops leaving a hole', () => {
+    render(<GridItems data-testid="grid" masonry items={billingItems} spacing={3} />)
+    expect(columns()).toEqual([
+      // `Metered usage estimate` now sits UNDER `Current plan` instead of on a
+      // row of its own — this grouping is the fix for the dead space.
+      ['current-plan', 'metered-estimate'],
+      ['usage'],
+      ['storage-cap'],
+    ])
+  })
+
+  /**
+   * THE RED THAT ALREADY HAPPENED.
+   *
+   * Bucketing keys off the width at the WIDEST declared breakpoint. The first
+   * implementation used `Math.max` over the breakpoint object instead — and
+   * since every item in this codebase is written `{ xs: 12, md: 4 }`, the
+   * maximum is 12 for all of them, every card read as full width, and masonry
+   * silently degraded to the exact stack it was meant to replace. It still
+   * rendered, still looked plausible, and fixed nothing.
+   */
+  it('does NOT read `{ xs: 12, md: 4 }` as a full-width card', () => {
+    render(
+      <GridItems
+        data-testid="grid"
+        masonry
+        spacing={3}
+        items={[
+          {size: {xs: 12, md: 4}, children: card('a')},
+          {size: {xs: 12, md: 4}, children: card('b')},
+        ]}
+      />,
+    )
+    // One shared column. Under the `Math.max` bug this was two, because both
+    // cards looked full width and each took a band of its own.
+    expect(columns()).toEqual([['a', 'b']])
+  })
+
+  it('THE CONTROL: a genuinely full-width card DOES get its own column', () => {
+    // Without this the case above is satisfied by a build that never treats
+    // anything as full width, which would break billing's five wide cards.
+    render(
+      <GridItems
+        data-testid="grid"
+        masonry
+        spacing={3}
+        items={[
+          {size: {xs: 12}, children: card('a')},
+          {size: {xs: 12}, children: card('b')},
+        ]}
+      />,
+    )
+    expect(columns()).toEqual([['a'], ['b']])
+  })
+
+  it('keeps the marketplace sidebar beside the body instead of behind it', () => {
+    // body(8), changelog(8), sidebar(4) — the shape that made `Install` open
+    // below the fold, because the sidebar followed the wrapped changelog.
+    render(
+      <GridItems
+        data-testid="grid"
+        masonry
+        spacing={3}
+        items={[
+          {size: {xs: 12, md: 8}, children: card('body')},
+          {size: {xs: 12, md: 8}, children: card('changelog')},
+          {size: {xs: 12, md: 4}, children: card('sidebar')},
+        ]}
+      />,
+    )
+    expect(columns()).toEqual([['body', 'changelog'], ['sidebar']])
+  })
+
+  it('does not let a full-width card reorder the page around it', () => {
+    // A full-width item ends the band, so the cards after it cannot be pulled
+    // up into a column beside cards from before it.
+    render(
+      <GridItems
+        data-testid="grid"
+        masonry
+        spacing={3}
+        items={[
+          {size: {xs: 12, md: 4}, children: card('before')},
+          {size: {xs: 12}, children: card('divider')},
+          {size: {xs: 12, md: 4}, children: card('after')},
+        ]}
+      />,
+    )
+    expect(columns()).toEqual([['before'], ['divider'], ['after']])
   })
 })

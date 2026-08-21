@@ -16,11 +16,31 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
+import { isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
+import {
+  authorizeMaintenanceActor,
+  recordStaffMaintenanceRun,
+} from '../../../../utils/server/maintenance-actor'
+import {
+  findMaintenanceJob,
+  refuseStaffRun,
+  type StaffRunRequest,
+} from '../../../../utils/maintenance-jobs'
 import { sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 import { firebaseAdmin, meterPlatformEmail } from '@aglyn/tenant-data-admin'
+
+/**
+ * This job's console descriptor (AGL-1949) — the confirmation phrase and the
+ * audit action, shared with the Staff → Maintenance page rather than
+ * transcribed into it. Two copies of a safety rule is how `audit-archive`
+ * shipped without the dry-run guard its two siblings each wrote by hand.
+ */
+const JOB = findMaintenanceJob('audit-archive') as ReturnType<
+  typeof findMaintenanceJob
+> &
+  object
 
 const RETENTION_DAYS = 90
 const BATCH_SIZE = 500
@@ -52,14 +72,21 @@ async function handler(request: Request): Promise<Response> {
   if (!cronSecret) {
     return Response.json({ error: 'Audit archival is not configured (CRON_SECRET).' }, { status: 501 })
   }
-  if (!isCronAuthorized(headers)) {
+  // Staff, or the scheduler (AGL-1949). This route was cron-secret-only, so
+  // the console could not reach it at all and the only way to run or preview
+  // an archival was a shell holding the production secret.
+  const actor = await authorizeMaintenanceActor(headers)
+  if (!actor) {
     return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   }
   // AGL-1955 — the mark `/api/health/crons` reads to notice this job going
   // AWAY. Stamped on the invocation, not on the work, so a run that finds
-  // nothing to do still proves the schedule is alive; POST only, because a
-  // human's GET is not the scheduler and must not stand in for it.
-  if (method === 'POST') await recordCronBeat('audit-archive')
+  // nothing to do still proves the schedule is alive; the SCHEDULER's POST
+  // only, because a human pressing the button in the console is not the cron
+  // and must not make a job that stopped being scheduled read as alive.
+  if (method === 'POST' && actor.kind === 'cron') {
+    await recordCronBeat('audit-archive')
+  }
 
   // A GET REPORTS; it never archives and never deletes (AGL-2084). This route
   // was one of the two irreversible scheduled routes that lacked the guard its
@@ -74,9 +101,38 @@ async function handler(request: Request): Promise<Response> {
   // the body being absent.
   const dryRun = isCronDryRun({ method, query, body })
 
+  /*==========================================
+   * A CONSOLE BUTTON IS WORSE THAN CURL UNLESS IT IS HARDER TO FIRE (AGL-1949).
+   *
+   * A real run here writes audit rows to Storage and then DELETES them from
+   * Firestore. Putting that one click away would be strictly worse than the
+   * curl it replaces, which at least required assembling an invocation. So a
+   * staff-triggered real run needs a reason AND the exact typed phrase, both
+   * enforced HERE rather than only in the page — a control that lives only in
+   * the UI is not a control.
+   *
+   * The scheduler is untouched: it has no user, no reason and no phrase, and
+   * gating it on any of those would silently stop nightly archival.
+   *=========================================*/
+  if (actor.kind === 'staff' && !dryRun) {
+    const refusal = refuseStaffRun(JOB, (body ?? {}) as StaffRunRequest)
+    if (refusal) return Response.json({ error: refusal }, { status: 400 })
+  }
+
   try {
     const app = firebaseAdmin.app()
     const firestore = app.firestore()
+    // Recorded BEFORE any row moves: this job audits nothing about itself,
+    // and a run that dies halfway is exactly when "who asked for this" is
+    // the question.
+    if (actor.kind === 'staff' && !dryRun) {
+      await recordStaffMaintenanceRun(
+        firestore,
+        JOB,
+        actor,
+        String((body as { reason?: unknown } | undefined)?.reason ?? ''),
+      )
+    }
     const bucket = app
       .storage()
       .bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET)

@@ -14,17 +14,18 @@ action — lock and unlock — writes an audit row.
 
 Lockdown is the control you reach for when something has gone wrong: a compromised
 site, an account being abused, a billing suspension that has run its course, or a
-maintenance window that needs the doors closed. One mechanism, four scopes:
+maintenance window that needs the doors closed. One mechanism, five scopes:
 
 | Scope | What it covers | Where the state lives |
 |---|---|---|
 | **Platform** | Everyone except staff | `lockdowns/platform` |
 | **Workspace (org)** | The org's console access (writes), all of its sites | `orgs/{id}.suspendedAt` family |
 | **Site (host)** | One published site | `hosts/{id}.suspendedAt` family |
+| **Custom domain** | One attached domain name; the site keeps serving elsewhere | `lockdowns/domain--{hostname}` |
 | **Account (user)** | One person | `lockdowns/user--{uid}` + Firebase Auth `disabled` |
 
-Precedence is **platform → org → host → user**: the widest active scope decides the
-notice a person sees.
+Precedence is **platform → org → host → domain → user**: the widest active scope
+decides the notice a person sees.
 
 ## What a lockdown does
 
@@ -373,6 +374,49 @@ end time is restated in the reader's own local time; without one, no return
 time is promised. Genuine failures are untouched — a real error still shows a
 real error.
 
+## Custom-domain scope — one name, not the site {#domain-scope}
+
+When the problem is **the domain rather than the content** — an ownership
+dispute, a hijacked or lapsed registration now pointing at us, or a trademark
+complaint about the name itself — a host takedown is disproportionate. The
+customer's site is fine; the *name* is the problem. This scope locks one
+attached domain while the same site keeps serving on its `*.aglyn.app`
+subdomain.
+
+```bash
+curl -X POST https://console.aglyn.com/api/admin/lockdown \
+  -H "Authorization: Bearer $ID_TOKEN" \
+  -d '{"action":"lock","scope":"domain","targetId":"acme.com",
+       "reason":"security","message":"Pending registrar review."}'
+```
+
+Three things about it are worth knowing before you use it:
+
+**It is keyed on the NAME, not on the site.** Every other narrow scope keys on
+the thing it locks. This one cannot, because the incidents it exists for are
+exactly the ones where the domain moves — a disputed name gets detached and
+re-attached, sometimes to a different workspace. Keying on the hostname means
+the lock follows the name, survives a detach and re-attach, and **can be placed
+on a domain that is currently attached to nothing at all**, which is the state
+a dispute is usually resolved in.
+
+**The notice never names the address that still works.** The site is still up
+on its platform subdomain, and every other scope's copy would happily be
+helpful about that. Here it must not be: the person reading the notice may be
+precisely the party the site is being withheld from, and *"try acme.aglyn.app
+instead"* would lift the lock in one sentence. The copy also does not say whose
+the name is — a dispute is exactly the case where we do not know, and a notice
+is a publication.
+
+**A platform subdomain cannot be domain-locked.** `{sub}.aglyn.app` is our own
+name, and the tenant resolves that space by subdomain without ever consulting
+this scope — so a lock placed there would write a document no reader looks at.
+The route refuses it rather than accepting a control that silently does
+nothing. To take a platform subdomain down, use the **Site (host)** scope.
+
+**Expiry and modes** work as everywhere else. Read-only is accepted but rarely
+what you want here: a name dispute is a full refusal or nothing.
+
 ## Asset quarantine — one file, not the site that serves it
 
 When the problem is **one uploaded file** — malware in a PDF, an abusive image,
@@ -408,8 +452,20 @@ interchangeable. Send the strong one.
 | `contentHash` | A **16-hex (64-bit) truncation** of *one of two* algorithms — sha256 on the direct upload/replace routes, GCS's md5 on the signed-upload route | Only as a fallback, when there is no `contentSha256` |
 
 Documents with no `contentSha256` are every asset uploaded before the field
-existed, plus everything except SVG that came in through the signed-upload
-route (that route never holds the bytes, so it cannot hash them).
+existed, plus **video larger than 50 MB** that came in through the
+signed-upload route. The first of those two groups is finite and
+shrinking: `tools/scripts/backfill-media-content-sha256.mjs` fills it in, one
+media tree per run, and its header carries the measured cost of doing so.
+
+That second class used to be *everything except SVG* on the signed route,
+because the browser PUTs straight to storage and the server never held the
+bytes. Since AGL-1629 that route streams the object back through sha256 at
+finalize, up to a 50 MiB ceiling — which is exactly the largest non-video cap
+it accepts, so an image, a PDF, an archive or a deck can never be too big for a
+strong digest. Only video can exceed it, and only past 50 MB. The bound is
+deliberate: a 200 MB video is the one shape where a full read costs more than
+the strengthening is worth, and it is also the shape least likely to be a
+chosen-prefix collision target.
 
 The **request** field is called `contentHash` for both — the route accepts any
 8–64 character hex digest and does not care which document field you copied it
@@ -437,7 +493,7 @@ entry written under either field keeps biting.
 | Key | Set it with | Reach |
 |---|---|---|
 | `hash--{sha256}` | `contentHash: "<the contentSha256 value>"` | Every document sharing those bytes, in every workspace — at delivery **and** at ingestion wherever the server hashed the bytes itself |
-| `hash--{legacy}` | `contentHash: "<the contentHash value>"` | The same reach with the weaker key. For a non-SVG signed upload it is the only digest that exists |
+| `hash--{legacy}` | `contentHash: "<the contentHash value>"` | The same reach with the weaker key. For signed-upload video over 50 MB, and for anything uploaded before the strong digest existed, it is the only one there is |
 | `asset--{scopeSegment}--{mediaId}` | `by: "asset"` plus `scopeSegment` and `mediaId` | Exactly one document in one workspace, matched on identity, so it needs no digest at all |
 
 Three limits, each a real hole rather than a caveat:
@@ -447,11 +503,14 @@ Three limits, each a real hole rather than a caveat:
   look up. The refusal lands at the finalize step instead, which deletes the
   orphaned object — nothing is registered, counted or billed — but the bytes do
   briefly reach the bucket.
-- **A takedown bites *within* an ingestion path, not across them.** The
-  signed-upload route's digest is a truncation of GCS's md5; the direct upload
-  and replace routes' is a truncation of sha256. The same file pushed through
-  the other route presents a different digest and therefore a different key.
-  Where a file must be un-re-uploadable through *every* path, lock the scope.
+- **For video over 50 MB, a takedown bites *within* an ingestion path, not
+  across them.** That video is the one class the signed route still keys on a
+  truncation of GCS's md5, while the direct upload and replace routes key on
+  sha256 — so the same clip pushed through the other route presents a different
+  digest and therefore a different key. Everything under the 50 MiB digest
+  ceiling now shares one sha256 across every route, so the cross-path promise
+  holds for it. Where a large video must be un-re-uploadable through *every*
+  path, lock the scope.
 - **A composite object carries no digest at all.** GCS reports no `md5Hash` for
   one, so a very large signed upload can reach the DAM with neither field set.
   Quarantine it `by: "asset"`, and know that it is then covered **at delivery
@@ -493,14 +552,49 @@ not erased — so the customer's storage usage and invoice are unchanged. The
 customer notice says so explicitly, because someone whose file stops loading
 will otherwise assume their data was deleted.
 
-**How fast it bites, and what it cannot reach.** A warm server refuses within
-about 15 seconds of the write, and restores just as fast on a lift — the
-refusal is never cached, precisely so a lift takes effect immediately. What
-quarantine cannot recall is bytes *already* in a cache: a browser may hold an
-image up to 60 seconds, and the CDN edge may hold an image up to an hour. For
-an urgent takedown, quarantine stops the bleeding at the origin immediately but
-is not a purge; if the file must be unreachable everywhere *now*, quarantine it
-and then lock the scope as well.
+**How fast it bites, and what it cannot reach (AGL-1615).** The console now
+states this to the operator on the Disabled files page itself, from one shared
+model (`mediaTakedownReachLines()`), so this section and that page cannot drift
+apart. In full:
+
+| Surface | Stopped? | Worst case |
+|---|---|---|
+| Our origin | yes | ~15 s — and a lift is just as fast, because the refusal is never cached |
+| The raw Storage download link | yes, **immediately** | the object's token is rotated; **permanent**, see below |
+| A browser holding the ordinary URL | yes | 60 s (`max-age=60`) |
+| The CDN edge, for an **image** | yes | ~1 h (`s-maxage=3600`) plus one stale serve. Video, PDFs and other types are `private` since AGL-1515 and are never edge-held |
+| A browser holding the content-hashed permanent URL | **no** | that form promises never to change, so nothing can expire it early, and there is no per-file purge |
+| Anything already downloaded | **no** | a browser cache, a corporate proxy, a downstream CDN, a scraper, an archive snapshot |
+
+**A takedown stops new delivery. It is not a recall.** Say that to a
+complainant in those words. "Stopped within 15 seconds at origin, up to an
+hour at the edge for an already-cached image" is what safe-harbour
+"expeditious" contemplates, and it is *not* the same promise as "the file is
+gone". Treat any public asset with real traffic as already distributed.
+
+**The raw download link, and why it is the one irreversible part.** A media
+document also carries a `url` pointing at
+`firebasestorage.googleapis.com?alt=media&token=…`, served by Google, where
+none of our code runs — so the deny list is not slow there, it is never
+consulted. That is the delivery path for every free-tier workspace, every
+private asset and every embed predating AGL-829. Quarantine therefore rotates
+that object's token, which kills the published link at once. It cannot be
+undone: releasing the quarantine restores CDN delivery but does **not**
+resurrect that particular URL, so any page still embedding it stays broken.
+The switch is on by default (a legal or malware takedown with a live public
+URL is a takedown that failed) and can be turned off for a precautionary one
+you expect to lift. Rotation reaches the **one object** whose document the
+operator looked up — a digest key covers copies in other workspaces, and those
+keep their own links until they are taken down individually.
+
+**What was considered and rejected.** A Vercel edge purge would close the
+image window, but it puts a credentialled third-party call on the takedown
+path: fail hard and a Vercel outage becomes a takedown outage; fail soft and
+you have a purge you cannot rely on, which is worse than none because you
+believe in it. Shortening the image `s-maxage` trades a measured hit rate on
+the DAM grid's hot path (AGL-1515) for a faster worst case in a rare event.
+Neither reaches bytes already delivered, which is the part that actually
+matters.
 
 **Where it shows up.** A quarantined asset carries a red **Disabled** badge in
 the DAM grid, for staff and for the workspace that owns it, and the badge
@@ -770,9 +864,9 @@ Billing locks for lapsed subscriptions are **manual by default**. The automated
 deliberate operator decision, never a default.
 
 **What the sweep counts as delinquent, and why it is not just `past_due`
-(AGL-1877).** A Stripe test-clock drill of a failed renewal measured the real
-timeline: the subscription retries five times, stays `past_due` throughout, and
-Stripe **cancels it at 21.08 days** with
+(AGL-1877).** A Stripe **test-mode** test-clock drill of a failed renewal
+measured the timeline: the subscription retries five times, stays `past_due`
+throughout, and Stripe **cancels it at 21.08 days** with
 `cancellation_details.reason: 'payment_failed'`. It never becomes `unpaid`. So the
 30-day grace clock outlives the `past_due`/`unpaid` statuses by nine days, and the
 predicate had no reachable true branch at all until it also accepted a
@@ -780,3 +874,64 @@ predicate had no reachable true branch at all until it also accepted a
 `orgs/{id}/billing/stripe` as `subscription.canceledReason`, and the sweep locks
 only on the literal `'payment_failed'` — a workspace that cancelled on purpose, and
 every cancellation recorded before this shipped, fail closed and are never locked.
+
+### The LIVE dunning schedule has not been read (AGL-2430)
+
+Every number in the paragraph above is a **test-mode** measurement. Stripe's
+retry schedule, the Smart Retries flag, the after-the-final-retry behaviour and
+the subscription-email toggles are **Dashboard settings held independently per
+mode** (Settings → Subscriptions and emails). Test and live do not share them,
+and this account has already been shown to diverge between modes on a
+neighbouring setting — product tax codes were live-only until AGL-1877
+reconciled them.
+
+**What was measured in LIVE, read-only, on 2026-08-20** (account
+`acct_1IzHQTDYHP4psn7h`, `GET` requests only — no Dashboard setting was
+changed):
+
+| Question | Live answer |
+| -- | -- |
+| Retry count / interval / terminal behaviour | **Not readable.** No API surface exposes it |
+| `GET /v1/account` | No field matching `dunning｜retry｜smart_retr` anywhere in the payload |
+| `/v1/billing/settings`, `/v1/subscription_settings`, `/v1/billing/dunning`, `/v1/billing/retry_settings`, `/v1/account/settings` | All `404 Unrecognized request URL` |
+| `/v1/billing_portal/configurations` | `200` — but it is the customer portal, not dunning |
+| Live invoices | 3, all `paid` |
+| Live `subscription_cycle` invoices | 1 — `in_1U5qemDYHP4psn7hLzqzXuYc`, **amount 0, `attempt_count: 0`** |
+| Live charges / failed | 1 / **0** |
+| Live subscriptions | 2, both `canceled`, both `cancellation_details.reason: 'cancellation_requested'` |
+
+So it is unreadable **twice over**: no endpoint returns the setting, and no live
+renewal has ever attempted a real charge from which it could be inferred. The
+one `subscription_cycle` invoice on the account is a zero-amount renewal that
+never touched a card, and no live subscription has ever ended for non-payment.
+AGL-1877's audit note said the account had produced *zero* `subscription_cycle`
+invoices; that is now stale in letter — there is one — but correct in
+substance, because a zero-amount renewal produces no dunning evidence.
+
+**Reading it requires a human** opening the **live** Dashboard at Settings →
+Subscriptions and emails and recording: the number of retries, the interval
+schedule, what happens after the final retry, and whether the failed-payment,
+card-expiring and receipt emails are ON. Until then:
+
+- **Nothing in the product may state a live retry count, window length or
+  terminal state as fact.** The console banner and the customer-facing billing
+  docs have both been changed to describe only the shape — access continues
+  while Stripe retries, and the plan stops if the retries run out. A spec in
+  `apps/console/specs/billing-dunning-banner.spec.tsx` fails if a count, a
+  duration or the phrase "retry window" returns to that copy.
+- **`BILLING_LOCK_GRACE_DAYS = 30` stands** and is not blocked on the read. It
+  is reachable under all three possible terminal settings — *cancel* (fires on
+  the `canceled` + `payment_failed` branch at ~21 days, with nine days' slack),
+  *mark unpaid* and *leave past_due* (both fire at day 30 on their own
+  branches). No live value can make it unsafe, only more or less generous.
+- **Whether Stripe emails the customer on a failed payment is also unread.**
+  `system-email-catalog.ts` catalogues `stripe-payment-failed` as
+  `deliveredBy: 'stripe'` precisely because the code cannot see the toggle.
+  Aglyn composes no failed-payment email of its own, and the in-app
+  notification it does send is suppressed entirely by a muted `billing`
+  category — so if that toggle is off in live, a failed renewal has **no
+  customer-reachable signal beyond the console banner**. That is the item on
+  this list with a real customer consequence, and it is worth reading first.
+
+The mode-tagged constants, and the probe evidence above, live in one place:
+`apps/console/utils/stripe-dunning-schedule.ts`.

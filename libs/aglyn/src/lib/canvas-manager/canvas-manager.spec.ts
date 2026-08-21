@@ -1109,6 +1109,86 @@ describe('Aglyn: Screen Manager', () => {
   })
 
   /**
+   * The same three-touch-point proof for attribute overrides (AGL-1899).
+   *
+   * Cloned deliberately rather than parametrized with the block above: the
+   * failure this guards against is a field declared and assigned but left
+   * out of `toJSON`'s allowlist, which is invisible in memory and only
+   * shows up as work lost on reload. A shared harness that looped over
+   * field names would pass the moment someone added the name to the loop.
+   */
+  describe('instance attrOverrides round-trip (AGL-1899)', () => {
+    const instanceMap = {
+      [NODE_ROOT_ID]: {
+        $id: NODE_ROOT_ID,
+        type: NodeType.NODE,
+        componentId: 'div',
+        nodes: ['inst'],
+      },
+      inst: {
+        $id: 'inst',
+        type: NodeType.NODE,
+        parentId: NODE_ROOT_ID,
+        componentId: 'reusableInstance',
+        props: { refId: 'cta' },
+        attrOverrides: {
+          root: { spacing: 4 },
+          cta: { variant: 'outlined', size: 'large' },
+        },
+        nodes: [],
+      },
+    } as unknown as Record<NodeId, NodeSchema>
+
+    it('survives setNodes → toJSON unchanged, and a reload of that', () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(instanceMap as any)
+      const serialized = canvas.toJSON().nodes as Record<string, any>
+      expect(serialized['inst'].attrOverrides).toEqual(
+        (instanceMap['inst'] as any).attrOverrides,
+      )
+      const reloaded = new CanvasManager(undefined as any)
+      reloaded.setNodes(serialized as any)
+      expect(
+        (reloaded.toJSON().nodes as Record<string, any>)['inst'].attrOverrides,
+      ).toEqual((instanceMap['inst'] as any).attrOverrides)
+    })
+
+    it('survives the msgpack storage form (compress → decompress)', () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(instanceMap as any)
+      const serialized = canvas.toJSON().nodes as Record<string, any>
+      const decoded = decompress<Record<string, any>>(compress(serialized))
+      expect(decoded['inst'].attrOverrides).toEqual(
+        (instanceMap['inst'] as any).attrOverrides,
+      )
+    })
+
+    it('omits the field when absent or empty, like sx', () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes({
+        plain: {
+          $id: 'plain',
+          type: NodeType.NODE,
+          componentId: 'div',
+          props: {},
+          nodes: [],
+        },
+        empty: {
+          $id: 'empty',
+          type: NodeType.NODE,
+          componentId: 'div',
+          props: {},
+          attrOverrides: {},
+          nodes: [],
+        },
+      } as any)
+      const serialized = canvas.toJSON().nodes as Record<string, any>
+      expect('attrOverrides' in serialized['plain']).toBe(false)
+      expect('attrOverrides' in serialized['empty']).toBe(false)
+    })
+  })
+
+  /**
    * A cleared optional prop is an ABSENT key, in both write paths (AGL-1334).
    *
    * The Button repro: `Start icon = (NONE)`, so the props form writes an own

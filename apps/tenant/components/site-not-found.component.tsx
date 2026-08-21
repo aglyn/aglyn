@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { resolveSeoTitle } from '@aglyn/aglyn'
 import ErrorBoundaryComponent from '@aglyn/shared-ui-jsx/components/error-boundary.component'
 import { Suspense, useEffect, useState } from 'react'
 import CatchAllClient from '../app/[host]/[[...slug]]/catch-all-client'
@@ -76,7 +77,7 @@ export interface SiteNotFoundProps {
 }
 
 export function SiteNotFound({ code, title, message }: SiteNotFoundProps) {
-  const { hostKey } = useHostBrand()
+  const { hostKey, brandName } = useHostBrand()
   // `undefined` is PENDING and `null` is "no designed screen" — two different
   // states that must not collapse, or the fallback renders for a moment on
   // every site that has a 404 screen.
@@ -100,6 +101,39 @@ export function SiteNotFound({ code, title, message }: SiteNotFoundProps) {
       live = false
     }
   }, [hostKey])
+
+  /**
+   * The tab says what the page is (AGL-2291).
+   *
+   * A 404 shipped with NO `<title>` at all — measured across the live
+   * marketing routes — and the reason is fact (1) in the docblock above: the
+   * served document is Next's empty `__next_error__` shell, so there is no
+   * head for `generateMetadata` to fill and no server-rendered `<title>` to
+   * inherit. Every other page's title is composed in `buildMetadata`; this is
+   * the one surface that has to write its own, and it can only do so here,
+   * after mount, for exactly the same reason the body is fetched here.
+   *
+   * Composed through the SAME resolver as every other page (AGL-1341): the
+   * designed screen's authored SEO title wins verbatim, otherwise the visible
+   * heading joins the site's name. `brandName` is the SITE's name, never the
+   * platform's — a white-label 404 must not read "Aglyn" any more than a
+   * white-label homepage may.
+   *
+   * Waits for the fetch to settle so the tab is not written twice; `null` (no
+   * designed screen) is a settled answer, `undefined` is still pending.
+   */
+  useEffect(() => {
+    if (screen === undefined) return
+    const designed = screen?.data?.screen?.data as
+      | { seo?: { title?: string } }
+      | undefined
+    document.title = resolveSeoTitle({
+      title: designed?.seo?.title,
+      name: title,
+      siteTitle: brandName,
+      fallback: title,
+    })
+  }, [screen, title, brandName])
 
   const fallback = (
     <SiteStatusScreen

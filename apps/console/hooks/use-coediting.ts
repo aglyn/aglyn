@@ -24,6 +24,7 @@ import {
   onValue,
   ref,
   update,
+  type DatabaseReference,
 } from 'firebase/database'
 import { autorun, runInAction } from 'mobx'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -59,17 +60,75 @@ import { TAB_SESSION_ID, type PresenceSession } from './use-presence'
  * single most common edit. A mobx `autorun` over the serialized map sees
  * every change however it was made.
  *
- * **Remote changes never touch local undo.** `HistoryManager` snapshots the
- * whole document, so pushing a remote edit onto `past` would let a local
- * undo erase a colleague's work (constraint 3). Applying goes through
- * `setNodes(partial, merge)`, which does not call `saveHistory`. Undo
- * therefore stays local-only and honest: it rewinds *your* edits and leaves
- * theirs alone. Operation-based collaborative undo is still future work,
- * but nothing here makes it worse.
+ * **Remote changes never touch local undo, and local undo never touches
+ * them.** These are two rules, and the first alone is not enough.
+ *
+ * Applying a remote change goes through `setNodes(partial, merge)`, which
+ * does not call `saveHistory` — so a colleague's edit never lands on your
+ * `past` and cannot be rewound by an undo it was never part of
+ * (constraint 3).
+ *
+ * That says nothing about the snapshots already on the stack. `HistoryManager`
+ * records the WHOLE document, and every entry was taken before one of your
+ * edits — i.e. before their edit arrived. Restoring one wholesale therefore
+ * reverted their node as well, and since the restored map is diffed against
+ * `shadowRef` like any other local change, the revert was published straight
+ * back to them under *this* tab's session id: their work destroyed on their
+ * own screen, silently, with nothing left to restore it. Measured, not
+ * theorised — see the AGL-1958 specs.
+ *
+ * So `applyRemoteNode` also calls `canvas.markRemoteNode`, and undo/redo
+ * restore through `CanvasManager.restoreSnapshot`, which keeps any node a
+ * peer touched after the snapshot was taken. Undo stays local-only and
+ * honest in both directions: it rewinds *your* edits and leaves theirs
+ * alone.
+ *
+ * Operation-based collaborative undo is still future work (AGL-1958): undo
+ * remains whole-document snapshots plus this overlay, so there is still no
+ * per-user redo across a session. What is closed is the data loss.
  */
 
 /** How long to coalesce local edits before publishing them. */
 export const COEDIT_PUBLISH_MS = 120
+
+/**
+ * How long an unsaved mirror entry survives before a joiner reaps it
+ * (AGL-1870 R4).
+ *
+ * Zach's call, 2026-08-20: reap on join by age. Not `onDisconnect().remove()`
+ * — that fires on any loss of connection, and because `shadowRef` still holds
+ * the JSON the tab published, `publish()` diffs clean on reconnect and never
+ * re-sends. A thirty-second blip would destroy unsaved work permanently and
+ * silently.
+ *
+ * ## Why seven days, against the measured distribution
+ *
+ * `coedit/` on production, 2026-08-20: 17 rooms, 383 entries, 159.9 KiB,
+ * oldest entry 15.6 days, growing monotonically because nothing has ever
+ * removed an entry. By ENTRY AGE — which is what this cutoff reads, not the
+ * save-to-publish gap — those entries are strikingly bimodal:
+ *
+ *   the 353-entry pre-AGL-1262 residue     15.3 days
+ *   unsaved work, room saved 2026-07-26    15.4 days  (published +9.5d)
+ *   unsaved work, room saved 2026-07-13    15.4 days  (published +22.8d)
+ *   ----------------------------- seven days ------------------------------
+ *   unsaved work, room saved 2026-08-13     2.5 days  (published +4.7d)
+ *   the one leftover each save leaves       minutes to days
+ *
+ * Nothing measured sits anywhere near seven days: the gap between 2.5 and
+ * 15.3 is empty. So the cutoff is robust — 4 days or 10 days would reap
+ * exactly the same entries — and the choice is really "which side of that gap
+ * do we land on", not "which number".
+ *
+ * Landing above it keeps the one genuinely recent abandoned edit, which is the
+ * whole reason A was rejected: a tab closed on Friday still replays on Monday,
+ * and over a week's holiday. Landing below it (24h, say) would drop that room
+ * too, which is a different product — it would say the mirror is a
+ * same-session convenience rather than a place unsaved work is safe. Seven
+ * days is the longest window that still refuses to hand someone a stranger's
+ * three-week-old edit on a document they have just opened.
+ */
+export const COEDIT_MIRROR_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
 /** One node's entry in the live mirror. */
 export interface MirrorEntry {
@@ -309,6 +368,9 @@ export function applyRemoteNode(nodeId: string, entry: MirrorEntry): boolean {
       if (!Aglyn.canvas.nodes.has(nodeId)) return false
       recordPrior(nodeId)
       Aglyn.canvas.nodes.delete(nodeId)
+      // A remote DELETE is a remote state too: without the mark, an undo
+      // restoring an older snapshot would put the node back (AGL-1958).
+      Aglyn.canvas.markRemoteNode(nodeId)
       scheduleRemoteReconcile()
       return true
     })
@@ -318,6 +380,12 @@ export function applyRemoteNode(nodeId: string, entry: MirrorEntry): boolean {
     const node = JSON.parse(entry.json)
     recordPrior(nodeId)
     Aglyn.canvas.setNodes({ [nodeId]: node } as never, true)
+    // Keeping this out of local undo (above) stops a remote edit being
+    // rewound by an undo it is not part of. The mark is the other half:
+    // it stops the snapshots ALREADY on the stack — every one of which
+    // predates this change — from rolling it back and republishing the
+    // rollback to its author (AGL-1958).
+    Aglyn.canvas.markRemoteNode(nodeId)
     scheduleRemoteReconcile()
     return true
   } catch {
@@ -331,6 +399,126 @@ function scheduleRemoteReconcile(): void {
   // A microtask, so it runs after the synchronous burst of child events one
   // peer `update()` raises — see {@link flushRemoteReconcile}.
   queueMicrotask(() => flushRemoteReconcile())
+}
+
+/**
+ * The millisecond floor a mirror entry must reach to still count as unsaved
+ * work — the stored document's `updatedAt`, or 0 when there is no usable
+ * stamp.
+ *
+ * Only the `ms:` form yields a floor. `versionStamp` also returns `ts:` for a
+ * `{seconds, nanoseconds}` object and `s:` for a string, and both of those
+ * fall through to 0, which admits EVERY entry in the room however old. All
+ * five `useCoEditing` call sites pass a live client-SDK `Timestamp` (which
+ * has `toMillis`), so today they all get `ms:` — checked, because a stamp
+ * that crossed an RSC boundary would arrive as the plain `{seconds}` shape
+ * and silently disable the filter rather than fail.
+ */
+export function mirrorFloorMillis(storedStamp: unknown): number {
+  const stamp = Aglyn.versionStamp(storedStamp)
+  return stamp?.startsWith('ms:') ? Number(stamp.slice(3)) : 0
+}
+
+/**
+ * Whether a mirror entry is work this tab should apply on join.
+ *
+ * Two bounds, and the R4 decision (AGL-1870) is the second one:
+ *
+ * **Below** — an entry older than the last save was folded into the document
+ * the canvas has just loaded, so replaying it is noise. On production this
+ * refused 353 of 383 entries, the pre-AGL-1262 residue in two rooms, 136 KiB
+ * downloaded on every join and then discarded.
+ *
+ * **Above** — an entry older than {@link COEDIT_MIRROR_MAX_AGE_MS} is not
+ * replayed either, and {@link reapableMirrorEntryIds} deletes exactly the
+ * entries this bound refuses. Before R4 there was no upper bound at all: the
+ * room is cleared only by a successful save from a `canEdit` peer, so an
+ * abandoned tab left its entries behind for ever and the next person to open
+ * that version had them applied to their canvas. Production held three such
+ * rooms, 18 entries published 4.7, 9.5 and 22.8 days after the last save.
+ *
+ * The two bounds must agree, which is why the reaper reads this same cutoff
+ * rather than one of its own. A joiner that applied an entry and then deleted
+ * it would launder abandoned work into the next save — the reap would look
+ * like it worked while the content lived on in Firestore.
+ *
+ * `nowMillis` is a parameter, not a `Date.now()` inside, so the boundary can
+ * be asserted at real production timestamps instead of relative to whenever
+ * the suite happens to run.
+ *
+ * ## Why `onDisconnect().remove()` is not the answer (option A, rejected)
+ *
+ * `onDisconnect` fires on ANY loss of connection — a closed tab, a slept
+ * laptop, a thirty-second network blip — and the author's tab cannot undo it
+ * on reconnect: `shadowRef` still holds the JSON it published, so `publish()`
+ * diffs clean and never re-sends. The peers who already applied the edit keep
+ * it, a joiner after the wipe does not, and whichever of them saves decides.
+ * It also cannot touch a room nobody is connected to, which is where all 136
+ * KiB of the residue lives. Reaping by age answers both.
+ *
+ * By contrast `presence/` held ZERO orgs at the same moment — its
+ * `onDisconnect().remove()` leaves nothing behind. Presence is the control
+ * that proves the mechanism works; co-editing is where the mechanism has a
+ * cost, because a presence entry is disposable and an unsaved edit is not.
+ */
+export function isMirrorEntryLive(
+  entry: MirrorEntry,
+  floorMillis: number,
+  nowMillis: number = Date.now(),
+): boolean {
+  const at = entry.at ?? 0
+  return at >= floorMillis && nowMillis - at < COEDIT_MIRROR_MAX_AGE_MS
+}
+
+/**
+ * The ids in a mirror room that a joiner should delete: everything at least
+ * {@link COEDIT_MIRROR_MAX_AGE_MS} old (AGL-1870 R4, option C).
+ *
+ * The bound is the exact complement of the upper bound in
+ * {@link isMirrorEntryLive} — `now - at >= cutoff` here, `now - at < cutoff`
+ * there — so this only ever removes entries a joiner has already refused to
+ * apply. Nothing that would still replay is deleted; that is the property
+ * that makes reaping safe to run alongside the subscription.
+ *
+ * An entry with no `at` is reaped: it is stamped older than any floor, so it
+ * can never be applied to anything, and RTDB rules require `at` on a write —
+ * it can only be residue.
+ *
+ * Age, deliberately, and not "everything the floor refuses". Age is the one
+ * rule that is the same for a joiner who can only read as for one who is
+ * about to edit, and it is the one rule that does not depend on getting a
+ * usable `ms:` stamp — a document whose stamp crossed an RSC boundary yields
+ * floor 0 and would otherwise reap nothing at all.
+ */
+export function reapableMirrorEntryIds(
+  room: Record<string, MirrorEntry> | null | undefined,
+  nowMillis: number,
+): string[] {
+  if (!room) return []
+  return Object.entries(room)
+    .filter(
+      ([, entry]) => nowMillis - (entry?.at ?? 0) >= COEDIT_MIRROR_MAX_AGE_MS,
+    )
+    .map(([nodeId]) => nodeId)
+}
+
+/**
+ * Deletes named entries from a mirror room.
+ *
+ * Per NODE, not the room. The database rules grant `.write` at
+ * `…/nodes/$nodeId` and nothing above it, so `remove()` on the room was
+ * refused every time — measured on production 2026-08-05, where every room on
+ * the marketing host still held entries from saves hours earlier (AGL-1262).
+ * A multi-path update of nulls deletes the same children through the path the
+ * rules actually allow, so neither the save-time clear nor the join-time reap
+ * needs a rules change.
+ */
+function removeMirrorEntries(
+  roomRef: DatabaseReference,
+  ids: string[],
+): Promise<void> | undefined {
+  if (!ids.length) return undefined
+  return update(roomRef, Object.fromEntries(ids.map((id) => [id, null])))
 }
 
 export function useCoEditing(options: {
@@ -430,17 +618,18 @@ export function useCoEditing(options: {
   useEffect(() => {
     if (!roomPath || !session || !loaded || !enabled) return undefined
     const roomRef = ref(session.database, roomPath)
-    const floor = Aglyn.versionStamp(storedStamp)
-    const floorMillis = floor?.startsWith('ms:')
-      ? Number(floor.slice(3))
-      : 0
+    const floorMillis = mirrorFloorMillis(storedStamp)
 
     const handle = (nodeId: string | null, value: MirrorEntry | null) => {
       if (!nodeId || !value) return
       // Our own echo.
       if (value.by === TAB_SESSION_ID) return
-      // Already folded into the document we loaded.
-      if ((value.at ?? 0) < floorMillis) return
+      // Already folded into the document we loaded, or older than the reap
+      // cutoff — see {@link isMirrorEntryLive} for both bounds and the R4
+      // decision that rests on them (AGL-1870). `Date.now()` per entry, not
+      // captured at join: a session left open past the cutoff must still
+      // apply what a peer publishes into it now.
+      if (!isMirrorEntryLive(value, floorMillis, Date.now())) return
       applyingRef.current = true
       try {
         if (applyRemoteNode(nodeId, value)) {
@@ -501,25 +690,48 @@ export function useCoEditing(options: {
   // the next person who joins.
   const clearMirror = useCallback(() => {
     if (!roomPath || !session || !canWrite) return
-    // Per NODE, not the room. The database rules grant `.write` at
-    // `…/nodes/$nodeId` and nothing above it, so `remove()` on the room was
-    // refused every time — measured on production 2026-08-05, every room on
-    // the marketing host still held entries from saves hours earlier
-    // (AGL-1262). A multi-path update of nulls deletes the same children
-    // through the path the rules actually allow.
     const roomRef = ref(session.database, roomPath)
     void get(roomRef)
       .then((snapshot) => {
         const value = snapshot.val() as Record<string, unknown> | null
-        const ids = value ? Object.keys(value) : []
-        if (!ids.length) return undefined
-        return update(
-          roomRef,
-          Object.fromEntries(ids.map((id) => [id, null])),
-        )
+        return removeMirrorEntries(roomRef, value ? Object.keys(value) : [])
       })
       .catch((error) => console.warn('[coedit] could not clear', error))
   }, [roomPath, session, canWrite])
+
+  // Reap on join (AGL-1870 R4). The joiner is already downloading the whole
+  // room, so the only added cost is one `get` and, when there is anything to
+  // drop, one multi-path update — no scheduled job, no new infrastructure and
+  // no rules change, because the nulls go through the same per-node path
+  // `clearMirror` has used since AGL-1262.
+  //
+  // Deliberately once per room per mount, keyed on `roomPath`: this is a
+  // join-time sweep, not a timer. A tab left open past the cutoff keeps
+  // publishing and keeps applying, and reaps again the next time it joins.
+  //
+  // Only a `canWrite` peer reaps — a viewer holds `presenceOrg` but not
+  // `coeditHost`, so the rules refuse its nulls. That is the right shape
+  // anyway: a viewer never clears the mirror either. It does mean a room only
+  // reachable by viewers keeps its entries, which costs storage and nothing
+  // else, since they are refused on the way in regardless.
+  const reapedRoomRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!roomPath || !session || !loaded || !enabled || !canWrite) return
+    if (reapedRoomRef.current === roomPath) return
+    reapedRoomRef.current = roomPath
+    const roomRef = ref(session.database, roomPath)
+    void get(roomRef)
+      .then((snapshot) =>
+        removeMirrorEntries(
+          roomRef,
+          reapableMirrorEntryIds(
+            snapshot.val() as Record<string, MirrorEntry> | null,
+            Date.now(),
+          ),
+        ),
+      )
+      .catch((error) => console.warn('[coedit] could not reap', error))
+  }, [roomPath, session, loaded, enabled, canWrite])
 
   useEffect(() => {
     return () => {

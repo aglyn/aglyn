@@ -17,10 +17,12 @@
 
 import { checkEntitlement, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  SSO_LOCKOUT_REFUSAL,
   emailUnverifiedResponse,
   enforceSsoSignInMethods,
   firebaseAdmin,
   isImpersonationSession,
+  isStaffAttestedClaim,
   issueDomainClaim,
   lockdownRefusal,
   logOrgActivity,
@@ -132,7 +134,14 @@ async function handler(request: Request): Promise<Response> {
         return {
           domain: doc.id,
           verified: data['verified'] === true,
-          attested: false,
+          // The REAL marker now (AGL-1887), not a hard-coded false. Before
+          // part 2 an attestation had no representation, so "has a claim
+          // document" and "was never attested" were the same thing and this
+          // could only ever be false here. `attestSsoDomain` writes
+          // `attestedBy` onto the claim, so an attested domain HAS a claim
+          // document — and would otherwise have read back as neither verified
+          // nor attested, which is the one combination that is not true of it.
+          attested: isStaffAttestedClaim(data['attestedBy']),
           recordHost: `_aglyn-challenge.${doc.id}`,
           recordValue: `aglyn-domain-verification=${data['token']}`,
           lastRecords: data['lastRecords'] ?? null,
@@ -149,6 +158,11 @@ async function handler(request: Request): Promise<Response> {
       // working deployment — and NOT counted as verified, because a human
       // saying so is precisely the assurance this feature replaces. The org
       // can add the claim and prove them properly.
+      //
+      // Still needed after AGL-1887: an attestation is not retroactive. Until
+      // somebody runs `tools/scripts/attest-sso-domain.mjs` against an org
+      // onboarded by hand, it has no claim document at all and this is the
+      // only branch that sees its domains.
       const claimed = new Set(claims.map((claim) => claim.domain))
       const governed = Array.isArray(sso['domains'])
         ? (sso['domains'] as string[])
@@ -374,10 +388,67 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ ok: true, preview: result }, { status: 200 })
     }
 
+    /**
+     * Designate the accounts that keep a non-IdP way in (AGL-1888).
+     *
+     * The org's own call, not ours — they choose who holds the spare key, the
+     * same way they choose who is an admin. What we refuse to do is let them
+     * enforce without one, because that decision is irreversible by anybody
+     * including us.
+     *
+     * Replaces the list rather than appending: removing a departed admin from
+     * it has to be possible, and an append-only break-glass roster grows into
+     * a list of standing password bypasses nobody prunes.
+     */
+    if (action === 'set-break-glass') {
+      const uids = Array.isArray(body?.uids)
+        ? [...new Set((body.uids as unknown[]).map(String).map((uid) => uid.trim()))]
+            .filter(Boolean)
+            .slice(0, 20)
+        : []
+      await orgRef.set({ sso: { breakGlassUids: uids } }, { merge: true })
+      void logOrgActivity(
+        orgId,
+        actor,
+        uids.length
+          ? `Set ${uids.length} SSO break-glass account(s)`
+          : 'Cleared the SSO break-glass accounts',
+        { type: 'org', id: orgId },
+      )
+      return Response.json({ ok: true, breakGlassUids: uids }, { status: 200 })
+    }
+
     if (action === 'enforce-apply') {
       if (body?.confirm !== true) {
         return Response.json(
           { error: 'Enforcement must be confirmed' },
+          { status: 400 },
+        )
+      }
+      // THE PRE-FLIGHT RUNS BEFORE THE FLAG FLIPS (AGL-1888).
+      //
+      // `enforceSsoSignInMethods` refuses a lockout by itself, so this is not
+      // the control — the control is one layer down where it cannot be
+      // skipped. What this ordering buys is that a refused enforcement leaves
+      // NOTHING behind: setting `enforced: true` first and letting the sweep
+      // throw would leave the org marked as enforcing with no sweep having
+      // run, which reads as done and is not.
+      //
+      // It also lets the refusal name the accounts. A designation that
+      // protects nobody — an account absent from the pool, or one holding
+      // nothing but the SAML link — is the most natural way to get this
+      // wrong, because it looks exactly like protection.
+      const rehearsal = await enforceSsoSignInMethods(orgId, {
+        actorUid: decoded.uid,
+        dryRun: true,
+        force: true,
+      })
+      if (!rehearsal.lockout.safe) {
+        return Response.json(
+          {
+            error: SSO_LOCKOUT_REFUSAL,
+            lockout: rehearsal.lockout,
+          },
           { status: 400 },
         )
       }

@@ -17,6 +17,12 @@ services:
     build:
       context: .
       dockerfile: docker/console.Dockerfile
+      args:
+        # Stamps the build so /api/health can say which one it is (AGL-2091).
+        # Optional — empty means the health body reports `commit: null` rather
+        # than a made-up id, and `version` answers regardless.
+        #   COMMIT_REF=$(git rev-parse HEAD) docker compose up --build
+        COMMIT_REF: ${COMMIT_REF:-}
       secrets:
         - selfhost_env
     env_file: .env.selfhost
@@ -28,6 +34,8 @@ services:
     build:
       context: .
       dockerfile: docker/tenant.Dockerfile
+      args:
+        COMMIT_REF: ${COMMIT_REF:-}
       secrets:
         - selfhost_env
     env_file: .env.selfhost

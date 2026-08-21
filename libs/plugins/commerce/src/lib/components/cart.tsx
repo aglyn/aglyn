@@ -20,6 +20,10 @@ import {
   buildBeginCheckoutParams,
   trackEvent,
 } from '@aglyn/aglyn/app-utils/analytics-events'
+import {
+  isPaymentsNotConfigured,
+  storefrontPaymentsNotConfiguredText,
+} from '@aglyn/aglyn/app-utils/payments-configured'
 import * as CommerceModel from '../model'
 import { mdiCartOutline } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
@@ -121,8 +125,13 @@ function CartLines(props: {
   // the two need different severities, and a shopper told in red that
   // checkout failed does not read the sentence explaining it did not. `ask` is
   // the same argument again: being asked for a destination is not a failure.
+  // `unconfigured` is the third instance (AGL-2019): a store with no Stripe key
+  // answers 501, and before this that fell through to the error tail below and
+  // rendered RED. It is also the only one of the five that is TERMINAL — the
+  // others can succeed on a retry, this one cannot until the operator acts, so
+  // it latches the buy control off instead of inviting another click.
   const [status, setStatus] = useState<
-    'idle' | 'sending' | 'error' | 'paused' | 'ask'
+    'idle' | 'sending' | 'error' | 'paused' | 'ask' | 'unconfigured'
   >('idle')
   const [message, setMessage] = useState('')
   /**
@@ -314,6 +323,16 @@ function CartLines(props: {
         setStatus('paused')
         return
       }
+      // A store that never had payments configured (AGL-2019). The server's
+      // own words are NOT rendered here even though they are safe today:
+      // this is a visitor-facing surface, the 501 bodies differ between the
+      // cart and buy-now doors, and one of them could grow a variable name
+      // without anyone thinking about who reads it.
+      if (isPaymentsNotConfigured(response.status)) {
+        setMessage(storefrontPaymentsNotConfiguredText())
+        setStatus('unconfigured')
+        return
+      }
       // The merchant's rates differ by destination, so the server will not
       // price this cart until it knows one (AGL-1721). Reveal the field and
       // let the shopper answer; a store that never sends this never shows it.
@@ -482,7 +501,7 @@ function CartLines(props: {
           ))}
         </TextField>
       ) : null}
-      {status === 'paused' || status === 'ask' ? (
+      {status === 'paused' || status === 'ask' || status === 'unconfigured' ? (
         <Alert severity="info">{message}</Alert>
       ) : null}
       {status === 'error' ? (
@@ -496,6 +515,10 @@ function CartLines(props: {
         disabled={
           status === 'sending' ||
           cart.lines.every((line) => line.unavailable) ||
+          // No payments on this deployment: every further click gets the same
+          // 501, so the control latches off rather than inviting a retry that
+          // cannot succeed (AGL-2019).
+          status === 'unconfigured' ||
           // Asked but unanswered: the server would only refuse again.
           (shipCountries !== null && !shipTo)
         }

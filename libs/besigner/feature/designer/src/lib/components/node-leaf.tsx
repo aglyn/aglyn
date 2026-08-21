@@ -221,6 +221,14 @@ export const NodeLeaf = observer(
             ...(node.styleOverrides && {
               styleOverrides: JSON.parse(JSON.stringify(node.styleOverrides)),
             }),
+            // Attribute overrides ride the same snapshot for the same
+            // reason (AGL-1899). Leaving them out is invisible rather than
+            // broken: Preview and tenant SSR compose from the stored node
+            // and WOULD apply them, so the canvas alone would draw the
+            // component's own attributes and disagree with both.
+            ...(node.attrOverrides && {
+              attrOverrides: JSON.parse(JSON.stringify(node.attrOverrides)),
+            }),
             nodes: [],
           } as any,
         },
@@ -234,6 +242,7 @@ export const NodeLeaf = observer(
       node,
       JSON.stringify(node?.props ?? {}),
       JSON.stringify(node?.styleOverrides ?? {}),
+      JSON.stringify(node?.attrOverrides ?? {}),
       definitions,
     ])
 

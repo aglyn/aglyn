@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import {
   filterEnabledPluginsByReleaseFlags,
   firebaseAdmin,
+  getDomainLockdown,
   getPlatformLockdown,
   getRealmPluginInstalls,
 } from '@aglyn/tenant-data-admin'
@@ -28,7 +29,9 @@ import {
   composeCollectionTemplatePage,
 } from '@aglyn/tenant-runtime/compose-collection-page'
 import getCollectionContent from '@aglyn/tenant-runtime/get-collection-content'
-import getTemplateScreenIds from '@aglyn/tenant-runtime/template-screens'
+import getTemplateScreenIds, {
+  getTemplateScreenRouting,
+} from '@aglyn/tenant-runtime/template-screens'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
 import getVariables from '@aglyn/tenant-runtime/get-variables'
 import { requiredSitePlugins } from '@aglyn/tenant-runtime/required-site-plugins'
@@ -263,6 +266,13 @@ const loadPageDataCached = cache(
         platform: await getPlatformLockdown(),
         org: Aglyn.normalizeOrgLockdown(orgRes.org as any),
         host: Aglyn.normalizeHostLockdown(hostRes.host as any),
+        // DOMAIN scope (AGL-1513). Mirrored here for the same reason every
+        // other scope is: this branch is what keeps a freshly REGENERATED
+        // page honest, and a lock the loader cannot see is one an ISR
+        // revalidation quietly serves straight past.
+        domain: host.startsWith(CNAME_HOST_PREFIX)
+          ? await getDomainLockdown(host.slice(CNAME_HOST_PREFIX.length))
+          : null,
       },
       Date.now(),
     )
@@ -1066,11 +1076,23 @@ export async function loadNotFoundScreen(
       screen: screenRes.screen,
     })
     if (!nodes) return null
+    // The designed 404 carries the site's own header and footer, so its links
+    // resolve through the same corrected map every other page uses (AGL-1998)
+    // — a nav pointing at the blog must not send a visitor who already hit one
+    // 404 to a second one. Paid for only on a 404, like the rest of this.
+    const routing = await getTemplateScreenRouting({ hostId })
     return JSON.parse(
       JSON.stringify({
         data: { host: hostRes.host, screen: { data: screenRes.screen } },
         nodes,
         notFoundFallback: true,
+        screenRoutes: Aglyn.linkableScreenRoutes(
+          (hostRes.host as { screens?: Record<string, string> }).screens,
+          {
+            routedElsewhere: routing.listRoutes,
+            unrouted: routing.templateScreenIds,
+          },
+        ),
       }),
     ) as Props
   } catch (error) {

@@ -100,6 +100,17 @@ export interface CollectionEntriesProps extends StackProps {
    * says so rather than pretending global search (AGL-1516).
    */
   search?: boolean
+  /**
+   * What the search box DOES with a query (AGL-1525, Figma 496:1218).
+   *
+   * - `filter` (default, and the reading of an absent value) — hides the
+   *   non-matching cards in place. What AGL-1516 shipped.
+   * - `suggest` — the card grid stays exactly as it was and a floating panel
+   *   of matching entries opens under the field, ending in a link to the
+   *   site-wide results page. The frame's toolbar behaviour: a reader
+   *   skimming the list is not made to lose it to a typo.
+   */
+  searchMode?: CollectionSearchMode
   /** Hint text inside the search box (blank = "Search posts…"). */
   searchPlaceholder?: string
   /**
@@ -117,8 +128,41 @@ export interface CollectionEntriesProps extends StackProps {
   searchTotal?: number
 }
 
+/** The two things the toolbar search box can do (AGL-1516/AGL-1525). */
+export type CollectionSearchMode = 'filter' | 'suggest'
+
+/**
+ * Author-facing choices for {@link CollectionEntriesProps.searchMode}.
+ *
+ * Both values are truthy on purpose (AGL-1453): `''` cannot survive a save,
+ * so an author who tried the other mode would have no route back. "Filter"
+ * carries the absent-value reading, which is what every block published
+ * before AGL-1525 has.
+ */
+export const COLLECTION_SEARCH_MODE_OPTIONS: ReadonlyArray<{
+  value: CollectionSearchMode
+  label: string
+}> = [
+  { value: 'filter', label: 'Filter the entries in place' },
+  { value: 'suggest', label: 'Show a suggestions dropdown' },
+]
+
 /** The toolbar search field, from the frame (Figma 494:1220). */
 const SEARCH_FIELD_WIDTH = 240
+
+/** Suggestion panel (Figma 496:1218). */
+const SUGGESTION_PANEL_WIDTH = 420
+
+/**
+ * Rows in the panel before it stops. The frame shows five; the sixth row is
+ * always the "View all results" link, which is the honest overflow answer —
+ * a scrolling suggestion panel is a worse results page.
+ */
+const SUGGESTION_LIMIT = 5
+
+/** Where "View all results" goes — the reserved site-search route (AGL-88). */
+const searchResultsHref = (query: string) =>
+  `/search?q=${encodeURIComponent(query)}`
 
 /**
  * The frame's compact filled field: magnify glyph + hint on the quiet
@@ -137,6 +181,62 @@ const searchFieldSx = {
   color: 'text.secondary',
   width: SEARCH_FIELD_WIDTH,
   maxWidth: '100%',
+}
+
+/**
+ * The positioned parent of the suggestion panel (AGL-1525). It takes over
+ * `alignSelf` from the field so the toolbar row is unchanged — the panel
+ * hangs off the field, it does not move it.
+ */
+const suggestionAnchorSx = {
+  alignSelf: 'flex-end',
+  position: 'relative',
+  width: SEARCH_FIELD_WIDTH,
+  maxWidth: '100%',
+}
+
+/**
+ * The floating panel itself. Right-aligned to the field it drops from, and
+ * wider than it, as the frame draws it — a suggestion row carries a title, a
+ * chip, a date and a line of excerpt, none of which fit in 240px.
+ *
+ * Palette and shadow tokens only, so it follows the site theme in both
+ * modes rather than pinning a light-mode card onto a dark page.
+ */
+const suggestionPanelSx = {
+  position: 'absolute',
+  top: 'calc(100% + 8px)',
+  right: 0,
+  zIndex: 10,
+  width: SUGGESTION_PANEL_WIDTH,
+  // Never wider than the viewport on a phone, where the anchor is narrow
+  // and `right: 0` would otherwise hang the panel off the left edge.
+  maxWidth: 'calc(100vw - 32px)',
+  bgcolor: 'background.paper',
+  color: 'text.primary',
+  border: 1,
+  borderColor: 'divider',
+  borderRadius: 2,
+  boxShadow: 6,
+  overflow: 'hidden',
+  textAlign: 'left',
+}
+
+const suggestionRowLinkSx = {
+  display: 'block',
+  color: 'inherit',
+  '&:hover': { bgcolor: 'action.hover' },
+}
+
+const suggestionFooterSx = {
+  display: 'block',
+  px: 2,
+  py: 1.25,
+  borderTop: 1,
+  borderColor: 'divider',
+  bgcolor: 'action.hover',
+  fontSize: 14,
+  fontWeight: 500,
 }
 
 /**
@@ -168,6 +268,7 @@ const CollectionEntries = forwardRef<HTMLDivElement, CollectionEntriesProps>(
       perPage,
       page,
       search,
+      searchMode,
       searchPlaceholder,
       searchIndex,
       searchTotal,
@@ -178,30 +279,16 @@ const CollectionEntries = forwardRef<HTMLDivElement, CollectionEntriesProps>(
   ) => {
     const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
     const [query, setQuery] = useState('')
+    /** Escape dismissed THIS answer (AGL-1525); typing brings it back. */
+    const [closed, setClosed] = useState(false)
     const items = search ? searchIndex : undefined
     const fuzzy = useMemo(
       () =>
         items?.length
-          ? new Fuse(items, {
-              // The icon picker's weighted-keys shape (use-mdi-icons-fuzzy):
-              // the title names the post, the excerpt merely describes it.
-              keys: [
-                { name: 'title', weight: 0.7 },
-                { name: 'excerpt', weight: 0.3 },
-              ],
-              includeScore: true,
-              shouldSort: true,
-              // Tuned for prose, MEASURED before shipping: the icon picker
-              // fuzzes 2-word icon names, where Fuse's defaults are fine. On
-              // sentence-long excerpts the default location scoring buries a
-              // legitimate mid-sentence hit ("…and workflows into one…"),
-              // and the default 0.6 threshold matches "media" against every
-              // post on letter soup. Ignoring location and tightening to 0.3
-              // keeps typo tolerance ("platfrom" still finds the post) while
-              // a filtered-out card actually means something.
-              ignoreLocation: true,
-              threshold: 0.3,
-            })
+          ? // The ONE matcher config (AGL-1525), shared with the site-wide
+            // results page this block's panel links to — a query the panel
+            // forgave must not come back empty from "View all results".
+            new Fuse(items, { ...Aglyn.COLLECTION_SEARCH_FUSE_OPTIONS })
           : null,
       [items],
     )
@@ -221,11 +308,25 @@ const CollectionEntries = forwardRef<HTMLDivElement, CollectionEntriesProps>(
       items?.length && childArray.length % items.length === 0
         ? childArray.length / items.length
         : 0
-    const live = !suppressNavigation && Boolean(fuzzy) && groupSize > 0
+    // `suggest` draws its rows from the INDEX and never touches the clones,
+    // so the clone-alignment precondition is a `filter` precondition only.
+    // A block whose children do not divide evenly still suggests correctly;
+    // requiring `groupSize` here would silently kill the panel on exactly
+    // the templates that made the fail-open necessary.
+    const mode: CollectionSearchMode =
+      searchMode === 'suggest' ? 'suggest' : 'filter'
+    const live =
+      !suppressNavigation &&
+      Boolean(fuzzy) &&
+      (mode === 'suggest' || groupSize > 0)
     const trimmed = query.trim()
     let visible: ReactNode[] | ReactNode = children
     let emptyState: ReactNode = null
-    if (live && trimmed && fuzzy) {
+    if (mode === 'suggest') {
+      // The grid is deliberately untouched (Figma 496:1218): the panel is an
+      // overlay on a page the reader is still reading, not a filter.
+      visible = children
+    } else if (live && trimmed && fuzzy) {
       const matched = new Set(
         fuzzy.search(trimmed).map((result) => result.refIndex),
       )
@@ -268,16 +369,126 @@ const CollectionEntries = forwardRef<HTMLDivElement, CollectionEntriesProps>(
         )
       }
     }
+    /**
+     * The suggestion panel (AGL-1525, Figma 496:1218) — rows straight off
+     * the index, in Fuse's SCORE order rather than the list's own order.
+     *
+     * The opposite of what `filter` does, and deliberately: filtering
+     * narrows a chronological feed, so reshuffling it would be a second,
+     * unasked-for change to what the reader is looking at. A suggestion list
+     * is not a feed — it is an answer to a question, and the best answer
+     * belongs first.
+     */
+    const suggestions =
+      mode === 'suggest' && live && trimmed && fuzzy && items
+        ? fuzzy
+            .search(trimmed)
+            .slice(0, SUGGESTION_LIMIT)
+            .map((result) => items[result.refIndex])
+            .filter(Boolean)
+        : []
+    const panelOpen = mode === 'suggest' && live && Boolean(trimmed) && !closed
+    const panel = panelOpen ? (
+      <Box sx={suggestionPanelSx}>
+        {suggestions.length ? (
+          suggestions.map((item, index) => {
+            const row = (
+              <MuiStack spacing={0.5} sx={{ px: 2, py: 1.25 }}>
+                <MuiStack
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: 'center' }}
+                >
+                  <Typography
+                    variant="subtitle2"
+                    sx={{ color: 'text.primary' }}
+                  >
+                    {item.title}
+                  </Typography>
+                  {item.category ? (
+                    <Chip label={item.category} size="small" />
+                  ) : null}
+                  {item.date ? (
+                    <Typography
+                      variant="caption"
+                      sx={{ color: 'text.secondary' }}
+                    >
+                      {item.date}
+                    </Typography>
+                  ) : null}
+                </MuiStack>
+                {item.excerpt ? (
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: 'text.secondary',
+                      // One line of excerpt, as the frame draws it. A row
+                      // that grows with the prose turns the panel into a
+                      // page.
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {item.excerpt}
+                  </Typography>
+                ) : null}
+              </MuiStack>
+            )
+            // A row without a `url` is a page cached before AGL-1525 stamped
+            // one, or a slugless entry. It renders as TEXT rather than as a
+            // link to nowhere: a suggestion that navigates to the wrong page
+            // is worse than one the reader has to read.
+            return item.url ? (
+              <AppLink
+                key={index}
+                href={item.url}
+                sx={suggestionRowLinkSx}
+                underline="none"
+              >
+                {row}
+              </AppLink>
+            ) : (
+              <Box key={index}>{row}</Box>
+            )
+          })
+        ) : (
+          <Typography
+            variant="body2"
+            sx={{ color: 'text.secondary', px: 2, py: 1.25 }}
+          >
+            {`No matches for “${trimmed}” on this page.`}
+          </Typography>
+        )}
+        {/*
+          Always present, hits or no hits (Figma 496:1218). This block
+          searches the entries it rendered and nothing else — the site-wide
+          results page is the ONLY honest answer to "then where is it?", and
+          it matters most in exactly the case where the panel is empty.
+        */}
+        <AppLink
+          href={searchResultsHref(trimmed)}
+          sx={suggestionFooterSx}
+          underline="none"
+        >
+          {`View all results for “${trimmed}” →`}
+        </AppLink>
+      </Box>
+    ) : null
     // The field renders when there is something to search, and as an inert
     // affordance on editing surfaces so the author sees what they enabled.
     // A live surface with nothing stamped (unknown collection, zero entries)
     // renders no field at all — a search box over nothing is a lie.
-    const field =
+    // `role="search"` moves to the FORM in suggest mode — one search
+    // landmark per box, or a screen reader reads the same field twice.
+    const suggestForm = mode === 'suggest' && !suppressNavigation
+    const input =
       suppressNavigation || live ? (
-        <Box role="search" sx={searchFieldSx}>
+        <Box {...(suggestForm ? {} : { role: 'search' })} sx={searchFieldSx}>
           <MdiIcon path={mdiMagnify.path} />
           <InputBase
             value={query}
+            name="q"
             placeholder={
               (searchPlaceholder ?? '').trim() || 'Search posts…'
             }
@@ -288,11 +499,38 @@ const CollectionEntries = forwardRef<HTMLDivElement, CollectionEntriesProps>(
             {...(suppressNavigation
               ? { readOnly: true }
               : {
-                  onChange: (event) => setQuery(event.target.value),
+                  onChange: (event) => {
+                    setQuery(event.target.value)
+                    // A new query reopens a panel the reader dismissed —
+                    // Escape closes THIS answer, it does not turn the
+                    // feature off for the rest of the visit.
+                    setClosed(false)
+                  },
+                  onKeyDown: (event) => {
+                    if (event.key === 'Escape') setClosed(true)
+                  },
                 })}
           />
         </Box>
       ) : null
+    const field =
+      input && suggestForm ? (
+        // A REAL form, so Enter reaches the results page and so the field
+        // still works with the panel's JS doing nothing at all — the panel
+        // is an enhancement over a working search box, not the search box.
+        <Box
+          component="form"
+          role="search"
+          action="/search"
+          method="get"
+          sx={suggestionAnchorSx}
+        >
+          {input}
+          {panel}
+        </Box>
+      ) : (
+        input
+      )
     return (
       <MuiStack ref={ref} spacing={4} {...props}>
         {field}
@@ -369,6 +607,20 @@ export const collectionEntriesSchema: Aglyn.ComponentSchema<CollectionEntriesPro
           'block rendered — whatever paging, an entry limit or the ' +
           '100-entry cap left it holding, and it says so on a miss.',
         component: Aglyn.FieldComponentType.SWITCH,
+      },
+      {
+        name: 'searchMode',
+        label: 'When the reader types',
+        description:
+          'Filter the entries in place, or leave the list alone and open a ' +
+          'dropdown of matching entries under the box — each one a link, ' +
+          'ending in "View all results" for a search across the whole site.',
+        component: Aglyn.FieldComponentType.SELECT,
+        options: COLLECTION_SEARCH_MODE_OPTIONS.map((option) => ({
+          ...option,
+        })),
+        // Meaningless while there is no search box to type in.
+        condition: { when: 'search', is: true },
       },
       {
         name: 'searchPlaceholder',

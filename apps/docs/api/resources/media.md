@@ -211,14 +211,24 @@ platform vetted it":
 
 - **We check the declared content type against an allowlist** and refuse the rest.
 - **We measure the real decoded size** against the per-type ceiling.
+- **We check that the bytes match the type you declared.** A file labelled
+  `application/pdf` has to start with a PDF header, a `.docx` has to be a ZIP, a
+  `image/png` has to carry a PNG signature. A mismatch is refused with `415`
+  (`type_mismatch`). Text types — `text/plain`, `text/csv`, `text/markdown`,
+  `application/json`, `image/svg+xml` — have no header to check and are exempt.
+- **We refuse executables outright**, whatever they claim to be: Windows `.exe`,
+  Linux ELF, macOS Mach-O, installer packages and Windows shortcuts are rejected
+  under every content type (`415`, `executable_bytes`).
+- **We refuse Office documents that carry macros.** A `.docx`, `.xlsx` or `.pptx`
+  containing a `vbaProject.bin` entry is rejected (`415`, `macro_payload`) — including
+  a macro-enabled file simply renamed to a non-macro extension.
 - **We sanitize SVGs**, stripping script and other active content before storing.
 - **We hash the file** (SHA-256) and refuse anything matching a taken-down asset.
-- **We do not scan for malware.** No upload path on the platform does — neither this
-  one nor the console's. An accepted file has not been checked for anything harmful
+- **We do not scan for malware.** No upload path on the platform does. The checks
+  above are *structural* — they establish that a file is the kind of thing it says it
+  is, not that its contents are safe. A malicious PDF that is a genuine PDF passes
+  all of them, and an accepted file has not been examined for anything harmful
   inside it.
-- **We do not verify that a file is what it claims to be.** The content type you send
-  is trusted (corrected only by file extension), so the allowlist bounds what a file
-  *says* it is, not what it contains.
 
 Treat files uploaded through your own integration as you would any other content you
 are responsible for.

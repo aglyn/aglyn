@@ -53,10 +53,10 @@ import { DEVICES_COLLECTION } from '../../_lib/security-alerts'
  * behind the caller's own token has neither problem and changes no posture:
  * the answer is scoped to `decoded.uid`, never to a uid from the request.
  *
- * REVOCATION IS NOT HERE. It needs session invalidation, which is a larger
- * piece; the review surface alone closes the loop the email opens, and
- * shipping the list first is what lets someone recognise a sign-in they did
- * not make.
+ * Revocation lives in the sibling `revoke/` route (AGL-1959) rather than as a
+ * method here, so that this one stays a pure read: it is the endpoint a
+ * security email sends someone to, and a route that both reads and revokes is
+ * a route where a bug in the read path can end sessions.
  */
 
 /**
@@ -123,6 +123,18 @@ async function handler(request: Request): Promise<Response> {
           ip: typeof data['ip'] === 'string' ? data['ip'] : null,
           firstSeenMs: Number(data['createdAt'] ?? 0) || null,
           lastSeenMs: Number(data['lastSeenAt'] ?? 0) || null,
+          // AGL-1959. A revoked device keeps its row rather than disappearing:
+          // deleting it would hide the device and revoke nothing, and the same
+          // browser would then read as BRAND NEW on its next sign-in — mailing
+          // the owner a fresh "new device" alert about the stranger they just
+          // evicted.
+          revokedAtMs: Number(data['revokedAt'] ?? 0) || null,
+          // AGL-1959. Recorded without an email because it shared an IP and an
+          // operating system with a device already known. Surfaced, because
+          // suppression must silence the alert and never the evidence — a
+          // sign-in nobody can see is the one outcome that would make this a
+          // detection hole instead of a noise fix.
+          alertSuppressedAtMs: Number(data['alertSuppressedAt'] ?? 0) || null,
         }
       })
       .sort((a, b) => (b.lastSeenMs ?? 0) - (a.lastSeenMs ?? 0))

@@ -37,6 +37,7 @@ import {
 } from '@mui/material'
 import { Fragment } from 'react'
 import AppBarMenubarComponent from './app-bar-menubar.component'
+import GlobalSearchTriggerComponent from '../global-search/global-search-trigger.component'
 import { buildRoute, Route } from '../../constants/route-links'
 import useBranding from '../../hooks/use-branding'
 import { useOrgSlug } from '../../hooks/use-org-scope'
@@ -349,6 +350,25 @@ const TopAppBar = (props: TopAppBarProps) => {
                   )}
                 </Stack>
               )}
+            </Stack>
+            {/*
+              Console-wide search (AGL-2179). Deliberately an icon in this
+              `flexShrink: 0` cluster rather than a field in the centre slot:
+              that slot carries the besigner menubar and the `min-width: 0`
+              chain AGL-1414 established, and a text field spliced into it is
+              the one change no unit test can verify. The button takes a fixed
+              ~40px from the `flexGrow: 1` column instead, and renders nothing
+              at all where there is nothing to search.
+            */}
+            <Stack
+              direction="row"
+              sx={{
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                flexShrink: 0,
+              }}
+            >
+              <GlobalSearchTriggerComponent />
             </Stack>
             {actionsPrefix ? (
               <Stack

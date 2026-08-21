@@ -250,7 +250,14 @@ export async function resolveOrgPermissions(
     // Fail CLOSED when a specific org/host was targeted (AGL-506): a lookup
     // error must never grant full permissions for a real org. Only the
     // context-free fresh-account case keeps the owner default.
-    if (context.orgId || context.hostId) {
+    // PRESENCE, not truthiness (AGL-1881). `publish-plugin` passes
+    // `{ orgId: String(body?.orgId ?? '').trim() || undefined }`, so an
+    // attacker-controlled body that simply omits `orgId` made this test false
+    // and a transient Firestore error resolved through the OPEN branch below
+    // with `publishToMarketplace: true`. The key is present on every targeted
+    // call; only the genuinely context-free `resolveOrgPermissions(uid)` — the
+    // fresh-account case the open branch exists for — omits both.
+    if ('orgId' in context || 'hostId' in context) {
       console.error('org-permissions resolve failed (failing closed)', error)
       return { ...denied(), orgId: context.orgId ?? null }
     }

@@ -186,6 +186,59 @@ not a property of the claim.
 
 Listing is capped, and the card says so when it hits the cap. Treat the count as a floor.
 
+## Resolved server config {#resolved-server-config}
+
+Every card above asks whether the platform is working. This one asks a different
+question: **is production running the configuration we think it is?**
+
+An environment variable can be set on the Vercel *project* and still not be attached to
+the *deployment* serving traffic. From outside, those two look identical — the value
+reads back correctly from the project API either way, and the only way to tell them
+apart is diffing deployment environment key lists by hand. This card is the deployment
+answering for itself, read from inside the running function.
+
+The table has three columns, and the third is the one that matters.
+
+- **Resolved** — what the running code actually decided. Not what is configured: what
+  the resolver returned when asked.
+- **Source** — `set` means somebody configured it. `code default` means nothing is
+  configured and the built-in default is in force. A resolved value alone cannot tell
+  these apart, and reading a default as a deliberate choice is a mistake that has been
+  made here before.
+- **Setting** — the variable's name, with a tooltip describing what it decides.
+
+The chips above the table name the deployment id, the commit and the environment the
+reading came from. A reading with no deployment attached to it cannot be acted on.
+
+### When the configured text does not mean what it says
+
+A red banner above the table means a variable is set to something that does not resolve
+the way it reads. The common cause is **surrounding whitespace**: several resolvers
+lowercase their input without trimming it, so `immediate ` with a trailing space matches
+nothing and falls back to the default. This is invisible to every check performed from
+outside — the value reads back correctly, the key is attached to the deployment, and
+production quietly does the opposite of what was intended.
+
+When the banner appears, re-set the variable with no leading or trailing spaces and
+redeploy. Editing the project variable alone does not change a running deployment.
+
+### Values are never shown
+
+This is a configuration *report*, not an environment dump. A staff-gated environment
+dump is still a credential surface, so no variable's value is ever displayed here — not
+masked, not truncated, not "just the prefix".
+
+What is shown instead:
+
+- **Enum settings** report the resolved word (`immediate`, `boundary`, `off`).
+- **Credentials** report a class only — `live`, `test`, `restricted-live`,
+  `restricted-test`, `absent`, or `unrecognized` for a shape we do not know. An
+  unrecognized credential is not described further.
+- **Everything else** reports `set` or `not set`.
+
+Adding a new setting to this card means giving it one of those reporters. There is
+deliberately no path that renders a raw value.
+
 ## Re-checking
 
 **Re-check now** re-runs every probe. The probes memoise their expensive work for five

@@ -185,9 +185,12 @@ const orgAdminDenied = memoize(() => {
  * halves matter, and each one is a bug this repo has already shipped:
  *
  *  - Appearing in one list is not denial. `variables` is create-excluded and
- *    freely updatable; `webhooks` is create-excluded and freely updatable
- *    (deliberately — the soft delete). A guard that read one list would call
- *    those closed.
+ *    freely updatable. A guard that read one list would call it closed.
+ *    `webhooks` was the same shape and was NOT deliberate: AGL-1881 found an
+ *    `author` repointing a webhook it was refused a read on, and moved the
+ *    name into all three lists with a dedicated block re-granting
+ *    update/delete to admin/editor — the second bullet's pattern, used on
+ *    purpose.
  *  - A dedicated block RE-GRANTS. Rules OR their allows and the LOOSER one
  *    wins, so `screens`, `layouts` and `collections` sit in all three lists
  *    and are still editor-writable through the blocks above the catch-all.
@@ -3211,6 +3214,21 @@ describe('pre-release hardening guards', () => {
         handle: 'owner-pub', displayName: 'Owner', stripeAccountId: 'acct_x',
       }),
     )
+    // AGL-2471. `stripeAccountLivemode` is an INPUT to the sale gate: an owner
+    // who could write it could assert their own test-mode account into live
+    // readiness and rebuild the exact defect that shipped three unusable
+    // storefronts. `stripePayoutsEnabled` was left writable when AGL-1547
+    // added it — a seller could forge their own "payouts are enabled" banner.
+    await assertFails(
+      setDoc(doc(authed(OWNER), 'profiles', OWNER), {
+        handle: 'owner-pub', displayName: 'Owner', stripeAccountLivemode: true,
+      }),
+    )
+    await assertFails(
+      setDoc(doc(authed(OWNER), 'profiles', OWNER), {
+        handle: 'owner-pub', displayName: 'Owner', stripePayoutsEnabled: true,
+      }),
+    )
     // A brand-new profile likewise can't smuggle the payout fields in on create.
     await assertFails(
       setDoc(doc(authed(EDITOR), 'profiles', EDITOR), {
@@ -3366,6 +3384,19 @@ describe('pre-release hardening guards', () => {
     await assertFails(
       updateDoc(doc(authed(OWNER), 'publisherProfiles', ORG), {
         stripeChargesEnabled: true,
+      }),
+    )
+    // AGL-2471: the field the marketplace sale gate compares against the
+    // platform's Stripe mode. Writable by a publisher, it would let a
+    // test-mode account sell.
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'publisherProfiles', ORG), {
+        stripeAccountLivemode: true,
+      }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'publisherProfiles', ORG), {
+        stripePayoutsEnabled: true,
       }),
     )
     // ...but a manager may still edit the cosmetic fields on an existing
@@ -6115,6 +6146,46 @@ describe('the author host role edits content and cannot publish (AGL-2334)', () 
     await mustDeny(
       'the author reading a webhook signing secret',
       getDoc(doc(authed(AUTHOR), 'hosts', HOST, 'webhooks', 'wh1')),
+    )
+  })
+
+  it('HALF TWO — nor does it mean "redirect the order book" (AGL-1881)', async () => {
+    // The read gate above is only half a boundary. `webhooks` was in the
+    // catch-all's CREATE exclusion alone, so update and delete fell through
+    // to `canWriteHostContent` — which admits `author`. The author could not
+    // read this document and could still repoint it, which is the same data
+    // one delivery later, and could overwrite the secret so their own
+    // endpoint verified the signature. The test above passed throughout.
+    await mustDeny(
+      'the author repointing a webhook at their own endpoint',
+      updateDoc(doc(authed(AUTHOR), 'hosts', HOST, 'webhooks', 'wh1'), {
+        url: 'https://attacker.example/collect',
+      }),
+    )
+    await mustDeny(
+      'the author overwriting a webhook signing secret',
+      updateDoc(doc(authed(AUTHOR), 'hosts', HOST, 'webhooks', 'wh1'), {
+        secret: 'attacker-chosen',
+      }),
+    )
+    await mustDeny(
+      'the author soft-deleting a webhook',
+      updateDoc(doc(authed(AUTHOR), 'hosts', HOST, 'webhooks', 'wh1'), {
+        deletedAt: new Date(),
+      }),
+    )
+    await mustDeny(
+      'the author hard-deleting a webhook',
+      deleteDoc(doc(authed(AUTHOR), 'hosts', HOST, 'webhooks', 'wh1')),
+    )
+    // The positive control, and the reason this is a re-grant rather than a
+    // blanket exclusion: the EDITOR's soft delete is how a capped site frees
+    // a webhook slot (AGL-1360), and it must still work.
+    await mustAllow(
+      'the editor soft-deleting a webhook',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'webhooks', 'wh1'), {
+        deletedAt: new Date(),
+      }),
     )
   })
 

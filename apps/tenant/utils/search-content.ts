@@ -16,27 +16,87 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn/server'
+import { Fuse } from '@aglyn/shared-util-vendor'
 import {
   orgDataQueryForHost, firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  tenantDataTag,
+  withRenderCache,
+} from '@aglyn/tenant-data-admin/render-cache'
 import getTemplateScreenIds from '@aglyn/tenant-runtime/template-screens'
 
-export interface SearchResult {
-  title: string
-  url: string
-  snippet: string
-  kind: 'page' | 'entry' | 'data'
-}
+// The result shape and the tab arithmetic live in `search-facets.ts`, which
+// imports nothing that reaches Firestore — the `'use client'` results page
+// needs `SEARCH_FACET_ALL` as a VALUE, and a value import from THIS module
+// drags the Admin SDK into the browser bundle (AGL-1525). Re-exported here
+// so every existing importer keeps working.
+export type {
+  SearchFacet,
+  SearchResult,
+} from './search-facets'
+export {
+  filterSearchResults,
+  SEARCH_FACET_ALL,
+  SEARCH_FACET_PAGES,
+  searchResultFacets,
+} from './search-facets'
+
+import type { SearchResult } from './search-facets'
 
 const matches = (haystack: string | undefined, needle: string) =>
   Boolean(haystack && haystack.toLowerCase().includes(needle))
 
+/** How long one query's answer stays warm (AGL-1525). */
+const SEARCH_TTL_SECONDS = 60
+
 /**
- * Site search v1 (AGL-88): case-insensitive substring match over the host's
- * published screens (name/description/SEO via the routing map) and
- * published collection entries (title/excerpt/body). Deliberately no
- * external search infrastructure; result set is small and cache-friendly.
+ * Site search (AGL-88), cached per query (AGL-1525).
+ *
+ * The uncached read below costs on the order of forty Firestore round trips
+ * — a screen doc per published route, then entries per collection, then
+ * dataset records. That was tolerable when nothing linked here; the
+ * Collection Entries suggestion panel now does, from every collection
+ * listing on the site, so the same handful of queries arrive over and over.
+ *
+ * Cached on the QUERY, not merely on the host: the read is a function of
+ * both, and a host-keyed cache would answer every search with the first
+ * one's results. Tagged with the host's data tag, so publishing an entry
+ * busts the answers that entry belongs in rather than leaving them stale
+ * for the TTL.
+ *
+ * This is the ISR side of the constraint on AGL-1525. The keystroke side is
+ * the panel itself, which searches a server-stamped index already sitting in
+ * the ISR page and never issues a query at all.
  */
 export async function searchContent(options: {
+  host: Aglyn.AglynHost
+  query: string
+}): Promise<SearchResult[]> {
+  const needle = options.query.trim().toLowerCase()
+  if (!needle || needle.length > 100) return []
+  try {
+    return await withRenderCache({
+      key: ['tenant-site-search', options.host.$id, needle],
+      revalidate: SEARCH_TTL_SECONDS,
+      tags: [tenantDataTag(options.host.$id)],
+      read: () => readSearchContent(options),
+    })
+  } catch (error) {
+    // Fail OPEN, the same shape `getPublishedCollectionSource` uses: a cache
+    // fault must degrade search to "slower", never to "broken".
+    console.error(error)
+    return readSearchContent(options)
+  }
+}
+
+/**
+ * Site search v1 (AGL-88): the host's published screens (name/description/
+ * SEO via the routing map) and published collection entries — the latter
+ * through the product's shared fuzzy matcher on title/excerpt (AGL-1525)
+ * and a substring test on the body. Deliberately no external search
+ * infrastructure; result set is small and cache-friendly.
+ */
+async function readSearchContent(options: {
   host: Aglyn.AglynHost
   query: string
 }): Promise<SearchResult[]> {
@@ -100,25 +160,53 @@ export async function searchContent(options: {
     // entries, so reading them here is a wasted round trip per collection.
     if (Aglyn.hostCollectionKind(collectionDoc.data()) !== 'content') continue
     const slug = collectionDoc.get('slug')
+    // The tab label on the results page (AGL-1525) — the collection's own
+    // name, so the frame's "Press" is whatever the author actually called
+    // the newsroom, not a slug this file guessed at.
+    const collectionTitle =
+      String(
+        collectionDoc.get('displayName') ??
+          collectionDoc.get('name') ??
+          collectionDoc.get('title') ??
+          '',
+      ).trim() || String(slug ?? '')
     const entries = await collectionDoc.ref
       .collection('entries')
       .where('status', '==', 'published')
       .limit(100)
       .get()
-    for (const entryDoc of entries.docs) {
+    // Title and excerpt go through the SAME fuzzy matcher the Collection
+    // Entries block uses (AGL-1525), because the block's suggestion panel
+    // links HERE. Matched by substring alone, a typo the panel forgave
+    // ("platfrom") answered "View all results" with an empty page — the one
+    // query most likely to make that trip, failing at the end of it.
+    //
+    // `body` stays a substring test: it is the whole post, and fuzzing
+    // kilobytes of prose is both slow and indiscriminate. The block never
+    // indexed it either, so this is strictly the wider net of the two.
+    const fuzzy = new Fuse(
+      entries.docs.map((entryDoc) => ({
+        title: String(entryDoc.get('title') ?? ''),
+        excerpt: String(entryDoc.get('excerpt') ?? ''),
+      })),
+      { ...Aglyn.COLLECTION_SEARCH_FUSE_OPTIONS },
+    )
+    const fuzzyHits = new Set(
+      fuzzy.search(needle).map((result) => result.refIndex),
+    )
+    for (const [position, entryDoc] of entries.docs.entries()) {
       const entry = entryDoc.data() as any
-      if (
-        [entry.title, entry.excerpt, entry.body].some((value) =>
-          matches(value, needle),
-        )
-      ) {
-        results.push({
-          title: entry.title ?? entryDoc.id,
-          url: `/${slug}/${entry.slug ?? entryDoc.id}`,
-          snippet: entry.excerpt || String(entry.body ?? '').slice(0, 160),
-          kind: 'entry',
-        })
-      }
+      if (!fuzzyHits.has(position) && !matches(entry.body, needle)) continue
+      results.push({
+        title: entry.title ?? entryDoc.id,
+        url: `/${slug}/${entry.slug ?? entryDoc.id}`,
+        snippet: entry.excerpt || String(entry.body ?? '').slice(0, 160),
+        kind: 'entry',
+        collection: { slug: String(slug ?? ''), title: collectionTitle },
+        ...(entry.publishedAt?.seconds
+          ? { date: Aglyn.formatCollectionEntryDate(entry.publishedAt) }
+          : {}),
+      })
     }
   }
 

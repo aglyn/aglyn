@@ -47,6 +47,21 @@ export function useGoogleRedirectResult(
   // Loosely `Promise<unknown>`: the sign-in page's handler reports whether it
   // bounced the account, which this hook has no use for but must not reject.
   onCredential?: (credential: UserCredential) => void | Promise<unknown>,
+  // The campaign that produced the signup (AGL-1731), already reduced to GA4
+  // params by `campaignEventParams`. Handed in rather than read here because
+  // this hook is the ONLY place a mobile OAuth signup is counted — the page
+  // that carried the marketing URL is gone by the time the redirect lands, so
+  // a lookup here would find nothing and every phone signup, which is most of
+  // them, would report as unattributed.
+  //
+  // Ignored for `login`: a returning user's session was not produced by
+  // today's campaign, and stamping one on it would credit the ad for revenue
+  // it did not cause.
+  signUpCampaignParams?: {
+    campaign_source?: string
+    campaign_medium?: string
+    campaign_name?: string
+  },
 ): void {
   const auth = useAuth()
   const resolved = useRef(false)
@@ -83,7 +98,10 @@ export function useGoogleRedirectResult(
         //   not happen — and this is the only place a mobile OAuth signup is
         //   counted at all.
         if (eventName === 'sign_up') {
-          trackEvent('sign_up', { method: 'google_redirect' })
+          trackEvent('sign_up', {
+            method: 'google_redirect',
+            ...signUpCampaignParams,
+          })
           await onCredential?.(credential)
           return
         }

@@ -19,15 +19,22 @@
  * AGL-1589 — the server-side `site_published` sender.
  *
  * Two properties are worth pinning. The first is that ABSENT CONFIG IS NOT AN
- * ERROR: `GA4_MEASUREMENT_ID` / `GA4_API_SECRET` exist only in the console's
- * environment today, and this code runs in the tenant app — so the normal
- * state, right now and on every self-hosted deployment, is a clean no-op. The
+ * ERROR — the normal state on every self-hosted deployment and in development
+ * is a clean no-op. (This note used to add "and on the tenant app, where the
+ * variables are not set". That stopped being true on 2026-08-17 12:15 UTC,
+ * when both keys landed on all three production projects, and leaving it
+ * standing manufactured a false "every server-side event is dead" finding two
+ * days later — AGL-2327.) The
  * second is that one host is one synthetic GA user, however many of its
  * screens go live on a timer; a random client id per publish would inflate
  * the activation metric, which is the exact failure the event is meant to
  * measure away from.
  */
 
+import {
+  INTERNAL_TRAFFIC_PARAM,
+  INTERNAL_TRAFFIC_VALUE,
+} from '@aglyn/aglyn/app-utils/internal-traffic'
 import {
   sendGa4Purchase,
   sendGa4Refund,
@@ -185,17 +192,20 @@ describe('purchase carries billing_interval only when it is known (AGL-1640)', (
   })
 
   it('sends annual when the invoice said year', async () => {
-    await sendGa4Purchase({ ...purchase, billingInterval: 'annual' })
+    await sendGa4Purchase({
+        items: [], ...purchase, billingInterval: 'annual' })
     expect(sentParams().billing_interval).toBe('annual')
   })
 
   it('sends monthly when the invoice said month', async () => {
-    await sendGa4Purchase({ ...purchase, billingInterval: 'monthly' })
+    await sendGa4Purchase({
+        items: [], ...purchase, billingInterval: 'monthly' })
     expect(sentParams().billing_interval).toBe('monthly')
   })
 
   it('omits the key entirely when the invoice did not say', async () => {
-    await sendGa4Purchase({ ...purchase, billingInterval: undefined })
+    await sendGa4Purchase({
+        items: [], ...purchase, billingInterval: undefined })
     const params = sentParams()
     expect(params.billing_interval).toBeUndefined()
     // Absent, not present-and-empty: GA counts a key it receives.
@@ -275,11 +285,99 @@ describe('purchase carries billing_interval only when it is known (AGL-1640)', (
     expect(result.synthesizedClientId).toBe(true)
   })
 
+  describe('our own traffic is stamped on the SERVER hits too (AGL-1582)', () => {
+    // The AGL-1582 stamp rides `setDefaultEventParameters` and a `gtag('set')`
+    // snippet — both of which are BROWSER mechanisms. The Measurement Protocol
+    // never touches a browser, so the four server events were the one surface
+    // GA4's internal-traffic filter could not reach: a staff rehearsal
+    // purchase landed as real revenue, in the real property, permanently,
+    // because a data filter is not retroactive. The last week before launch is
+    // a scheduled run of real paid transactions, so this is not hypothetical.
+    beforeEach(() => {
+      process.env.GA4_MEASUREMENT_ID = 'G-TEST'
+      process.env.GA4_API_SECRET = 'secret'
+    })
+
+    /** The params of the single event in the nth fetch body. */
+    const paramsOf = (index: number) =>
+      JSON.parse(
+        (fetchMock.mock.calls[index] as unknown as [string, { body: string }])[1]
+          .body,
+      ).events[0].params
+
+    it('stamps traffic_type on a purchase the buyer declared internal', async () => {
+      await sendGa4Purchase({
+        items: [],
+        transactionId: 'in_1',
+        value: 10,
+        currency: 'usd',
+        stripeCustomerId: 'cus_1',
+        internal: true,
+      })
+
+      // Asserted off the WIRE, not off the input: the whole point of the
+      // event is what leaves the process, and an input the sender drops on
+      // the floor is exactly the failure this file exists to catch.
+      expect(paramsOf(0).traffic_type).toBe('internal')
+    })
+
+    it('stamps a refund and a cancellation the same way', async () => {
+      await sendGa4Refund({
+        items: [],
+        transactionId: 'in_1',
+        value: 10,
+        currency: 'usd',
+        stripeCustomerId: 'cus_1',
+        internal: true,
+      })
+      await sendGa4SubscriptionCancelled({
+        plan: 'pro',
+        stripeCustomerId: 'cus_1',
+        internal: true,
+      })
+
+      // A refund or a cancellation left unstamped while its purchase is
+      // stamped is worse than neither: the filter would net a rehearsal's
+      // revenue in and never take it back out.
+      expect(paramsOf(0).traffic_type).toBe('internal')
+      expect(paramsOf(1).traffic_type).toBe('internal')
+    })
+
+    it('leaves a REAL customer hit completely alone', async () => {
+      await sendGa4Purchase({
+        items: [],
+        transactionId: 'in_2',
+        value: 10,
+        currency: 'usd',
+        stripeCustomerId: 'cus_2',
+      })
+
+      // The expensive direction. Wrongly stamping a paying customer erases
+      // their revenue from every report the moment the filter goes Active,
+      // and a data filter cannot be un-applied — so absence, not `false`, and
+      // never inferred from anything.
+      expect(Object.hasOwn(paramsOf(0), 'traffic_type')).toBe(false)
+    })
+
+    it('spells the param and the value through the shared constants', async () => {
+      // Three surfaces already stamp this pair and a fourth is joining them.
+      // A second spelling reads as a different dimension in GA and the filter
+      // catches one of them — which is indistinguishable, from the report end,
+      // from the filter working.
+      await sendGa4SitePublished({ hostId: 'host-1', internal: true })
+
+      expect(paramsOf(0)[INTERNAL_TRAFFIC_PARAM]).toBe(INTERNAL_TRAFFIC_VALUE)
+      expect(INTERNAL_TRAFFIC_PARAM).toBe('traffic_type')
+      expect(INTERNAL_TRAFFIC_VALUE).toBe('internal')
+    })
+  })
+
   it('joins the browser session when a real client id was captured', async () => {
     // The AGL-1638 half, from the sender's side: a captured client id is used
     // verbatim and reported as NOT synthesized, which is what distinguishes an
     // attributable sale from one that merely has the money right.
     const result = await sendGa4Purchase({
+        items: [],
       ...purchase,
       clientId: '555444333.1755100000',
     })

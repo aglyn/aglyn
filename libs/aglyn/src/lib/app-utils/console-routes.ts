@@ -52,6 +52,12 @@ export enum Route {
   // signups} and /api/admin/email-health each answered a bad-day question to
   // a curl and to nothing else; this is where an operator reads them.
   ADMIN_HEALTH = '/admin/health',
+  // The maintenance jobs, on a screen (AGL-1949). audit-archive,
+  // reap-plugin-artifacts and reverify-plugin-versions accepted the shared
+  // cron secret and nothing else, so the only way to preview or run one was a
+  // shell holding the production secret. Separate from Health because Health
+  // reads and this acts.
+  ADMIN_MAINTENANCE = '/admin/maintenance',
   // The Texas sales tax return (AGL-1900). The figures AGL-1811 computes had
   // only a curl to reach them; filing happens on a fixed quarterly calendar
   // from 2026-09-01, so the return needs a URL a person can bookmark.
@@ -232,6 +238,7 @@ export interface RoutePayload {
   [Route.ADMIN_ABUSE_REPORTS]: undefined
   [Route.ADMIN_MARKETPLACE_REPORTS]: undefined
   [Route.ADMIN_HEALTH]: undefined
+  [Route.ADMIN_MAINTENANCE]: undefined
   [Route.ADMIN_ASSIST_SIGNALS]: undefined
   [Route.ADMIN_TAX_RETURN]: undefined
   [Route.ADMIN_AUDIT]: undefined

@@ -300,6 +300,15 @@ test('a declared store that no longer exists goes red the other way', () => {
   assert.equal(verdict.inventory.missing.length, 1)
 })
 
+const FIXTURE_ACK = [
+  {
+    code: 'no-off-project-copy',
+    issue: 'AGL-1882',
+    expires: '2026-09-01',
+    why: 'Fixture. The real ACKNOWLEDGED list is empty since 2026-08-20; these two cases test the MECHANISM, which must keep working for the next gap.',
+  },
+]
+
 test('an unexpired acknowledgement reports the gap but does not fail', () => {
   const copies = [
     {
@@ -311,14 +320,21 @@ test('an unexpired acknowledgement reports the gap but does not fail', () => {
       newestCompletedAt: '2026-08-17T23:43:04Z',
     },
   ]
-  const lenient = assess({ copies, now: Date.parse('2026-08-19T12:00:00Z') })
+  const lenient = assess({
+    copies,
+    now: Date.parse('2026-08-19T12:00:00Z'),
+    acknowledgements: FIXTURE_ACK,
+  })
   assert.equal(lenient.ok, true)
   // Reported in full — acknowledged is NOT the same as absent.
   assert.deepEqual(codes(lenient.findings), ['no-off-project-copy'])
   assert.deepEqual(codes(lenient.acknowledged), ['no-off-project-copy'])
 
   // --strict is the acceptance test: it ignores the acknowledgement.
-  assert.equal(assess({ copies, strict: true }).ok, false)
+  assert.equal(
+    assess({ copies, strict: true, acknowledgements: FIXTURE_ACK }).ok,
+    false,
+  )
 })
 
 test('the acknowledgement expires without anyone editing this file', () => {
@@ -332,9 +348,14 @@ test('the acknowledgement expires without anyone editing this file', () => {
       newestCompletedAt: '2026-08-17T23:43:04Z',
     },
   ]
+  // With the fixture, not the live list — otherwise this now passes
+  // vacuously: an empty ACKNOWLEDGED acknowledges nothing at any date, so
+  // "expired" and "never listed" become indistinguishable and the test stops
+  // testing expiry at all.
   const afterExpiry = assess({
     copies,
     now: Date.parse('2026-09-01T00:00:01Z'),
+    acknowledgements: FIXTURE_ACK,
   })
   assert.equal(afterExpiry.ok, false)
   assert.deepEqual(codes(afterExpiry.failing), ['no-off-project-copy'])

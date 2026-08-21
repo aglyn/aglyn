@@ -119,6 +119,15 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     service: serviceDoc,
     bookings,
     ownerProfile,
+    /**
+     * The COMMERCE plugin's `hosts/{hostId}/settings/store` document, which
+     * is where the merchant's service tax rate lives (AGL-2028). Modelled
+     * because the double must model real semantics: the handler reads a
+     * `settings` collection by name, and a fake that answered the service
+     * document for every collection would let a test "configure a rate" that
+     * the handler could never actually have read.
+     */
+    store: {} as Record<string, unknown>,
     /** The org doc `getOrgForHost` answers with — the fee's own input. */
     org: { id: 'org-1', ownerUid: 'owner-1', plan: 'pro' } as Record<
       string,
@@ -157,12 +166,19 @@ jest.mock('@aglyn/tenant-data-admin', () => {
               return { id: `${name}-${++autoId}` }
             },
             doc: () => ({
-              get: async () => ({
-                exists: true,
-                data: () => state.service,
-                get: (field: string) =>
-                  (state.service as Record<string, unknown>)[field],
-              }),
+              get: async () =>
+                name === 'settings'
+                  ? {
+                      exists: Object.keys(state.store).length > 0,
+                      data: () => state.store,
+                      get: (field: string) => state.store[field],
+                    }
+                  : {
+                      exists: true,
+                      data: () => state.service,
+                      get: (field: string) =>
+                        (state.service as Record<string, unknown>)[field],
+                    },
             }),
           },
   }
@@ -209,6 +225,10 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
 })
 
+import {
+  resolveTransactionFeeCents,
+  storefrontProcessingCostCents,
+} from '@aglyn/aglyn'
 import { bookHandler } from './server'
 
 /**
@@ -216,7 +236,10 @@ import { bookHandler } from './server'
  * merely not throwing (AGL-2303).
  */
 const mockAdmin = jest.requireMock('@aglyn/tenant-data-admin') as {
-  __state: { written: Record<string, Array<Record<string, unknown>>> }
+  __state: {
+    written: Record<string, Array<Record<string, unknown>>>
+    store: Record<string, unknown>
+  }
 }
 import { computeOpenSlots } from './model'
 
@@ -309,6 +332,12 @@ afterAll(() => {
 
 beforeEach(() => {
   stripePosts.length = 0
+  // Per test. A merchant's tax settings leaking from one test into the next
+  // is exactly how a "charges no tax by default" assertion goes green for the
+  // wrong reason.
+  for (const key of Object.keys(mockAdmin.__state.store)) {
+    delete mockAdmin.__state.store[key]
+  }
   // Per test, or an assertion about "the lead this booking wrote" would be an
   // assertion about every lead the suite has written so far.
   for (const key of Object.keys(mockAdmin.__state.written)) {
@@ -316,7 +345,7 @@ beforeEach(() => {
   }
 })
 
-describe('a paid booking states its tax decision (AGL-2000)', () => {
+describe('a paid booking with no service rate set charges no tax (AGL-2028)', () => {
   it('creates the session — the positive control for everything below', async () => {
     // If the handler stopped charging at all, every "no tax" assertion here
     // would pass vacuously. This is the assertion that stops that.
@@ -387,6 +416,229 @@ describe('a paid booking states its tax decision (AGL-2000)', () => {
     const params = stripePosts[0].params
     expect(params.get('metadata[type]')).toBe('booking-payment')
     expect(params.get('metadata[hostId]')).toBe('host-1')
+  })
+
+  it('is unmoved by the GOODS sales rate the merchant configured', async () => {
+    // The reason a service field had to exist rather than a reuse of
+    // `rates[]`. A store with a complete manual sales-tax setup — mode,
+    // origin, a matching 8.25% zone rate — still charges nothing on an
+    // appointment, because whether a service is taxable is a different
+    // question with frequently the opposite answer.
+    //
+    // Without this, every "charges no tax" assertion above could hold merely
+    // because the fixture store had no tax settings at all.
+    mockAdmin.__state.store['tax'] = {
+      mode: 'manual',
+      origin: { country: 'US', state: 'TX' },
+      rates: [{ country: 'US', state: 'TX', pct: 8.25, label: 'TX sales tax' }],
+    }
+    const res = makeRes()
+    // Its own booker: `makeReq` pins one IP and the handler rate-limits on
+    // it, so an extra test on the shared fixture pushes a LATER test past the
+    // limit and turns it 429 for a reason that has nothing to do with tax.
+    await bookHandler(
+      {
+        method: 'POST',
+        body: {
+          hostId: 'host-1',
+          serviceId: 'service-1',
+          startsAtMs: nextBookableStart(),
+          name: 'Dana',
+          email: 'dana-goods@example.com',
+        },
+        headers: {
+          host: 'shop.example.com',
+          'x-forwarded-for': '198.51.100.77',
+        },
+        socket: { remoteAddress: '198.51.100.77' },
+        query: {},
+        cookies: {},
+      } as any,
+      res,
+    )
+    expect(res.statusCode).toBe(200)
+    const params = stripePosts[0].params
+    expect([...params.keys()].filter((key) => /tax/i.test(key))).toEqual([])
+    expect(params.get('line_items[0][price_data][unit_amount]')).toBe('7500')
+  })
+})
+
+/**
+ * THE MERCHANT'S OWN SERVICE RATE, CHARGED AND RECORDED (AGL-2028).
+ *
+ * AGL-2000 recorded "do not compute" as an explicit decision. It was honest
+ * and it was a holding position, for one reason: the merchant had nowhere to
+ * say what they owed. A service business is one of the three named ICPs and
+ * in many states their services ARE taxable, so "Aglyn does not compute it"
+ * could not stay the permanent answer.
+ *
+ * What has NOT changed is the reasoning underneath it. The goods `rates[]`
+ * table is still not read here — the AGL-2000 block above pins that — and
+ * Stripe Tax is still never asked, because it has no service tax code from
+ * this handler and would compute against AGLYN's registrations (AGL-1904).
+ * What changed is that `tax.service` exists: a flat rate, in the same Taxes
+ * card, default off, that the merchant fills in for themselves.
+ *
+ * These tests assert the MECHANISM — the merchant's number is the one
+ * charged, recorded and stamped — and state nothing about who must remit it.
+ */
+describe('a merchant-set service rate is charged and recorded (AGL-2028)', () => {
+  const withService = (rate: Record<string, unknown>) => {
+    mockAdmin.__state.store['tax'] = { service: rate }
+  }
+
+  /**
+   * A BOOKER OF ITS OWN PER TEST, and the reason is not tidiness.
+   *
+   * `bookHandler` rate-limits per IP over a window. The shared `makeReq`
+   * fixture pins one IP, so tests added to this file eventually push the
+   * count past the limit and the handler answers 429 — at which point every
+   * assertion about a session body is reading an empty `stripePosts` and the
+   * failure names the wrong thing entirely. It bit this file once already.
+   */
+  let booker = 0
+  const taxReq = () => {
+    booker++
+    return {
+      method: 'POST',
+      body: {
+        hostId: 'host-1',
+        serviceId: 'service-1',
+        startsAtMs: nextBookableStart() + booker * 6 * 60 * 60_000,
+        name: 'Dana',
+        email: `dana-tax-${booker}@example.com`,
+      },
+      headers: {
+        host: 'shop.example.com',
+        'x-forwarded-for': `192.0.2.${booker}`,
+      },
+      socket: { remoteAddress: `192.0.2.${booker}` },
+      query: {},
+      cookies: {},
+    } as any
+  }
+
+  it('adds the merchant’s rate as its own line on the session', async () => {
+    withService({ pct: 6, label: 'State service tax' })
+    const res = makeRes()
+    await bookHandler(taxReq(), res)
+    expect(res.statusCode).toBe(200)
+    const params = stripePosts[0].params
+    // $75 service, 6% = $4.50 on top.
+    expect(params.get('line_items[0][price_data][unit_amount]')).toBe('7500')
+    expect(params.get('line_items[1][price_data][unit_amount]')).toBe('450')
+    // The merchant's OWN label reaches the client's receipt.
+    expect(params.get('line_items[1][price_data][product_data][name]')).toBe(
+      'State service tax',
+    )
+  })
+
+  it('never asks Stripe Tax to compute it', async () => {
+    // The line-item construction is the whole point (AGL-1711/AGL-1904): a
+    // manual line keeps the tax the MERCHANT's. `automatic_tax` would compute
+    // a GOODS rate on an appointment, against Aglyn's registrations.
+    withService({ pct: 6 })
+    const res = makeRes()
+    await bookHandler(taxReq(), res)
+    const params = stripePosts[0].params
+    expect(params.get('automatic_tax[enabled]')).toBeNull()
+    expect(params.get('line_items[0][tax_rates][0]')).toBeNull()
+    expect(params.get('line_items[0][price_data][tax_behavior]')).toBeNull()
+  })
+
+  it('stamps the figure the tax ledger needs to record it', async () => {
+    withService({ pct: 6 })
+    const res = makeRes()
+    await bookHandler(taxReq(), res)
+    const params = stripePosts[0].params
+    // Stripe is never told the second line is tax, so the session's own
+    // metadata is the only witness — the same reason `checkout.ts` stamps it.
+    expect(params.get('metadata[taxCents]')).toBe('450')
+    expect(params.get('metadata[taxPct]')).toBe('6')
+  })
+
+  it('falls back to a plain label, never to a blank receipt line', async () => {
+    withService({ pct: 6 })
+    const res = makeRes()
+    await bookHandler(taxReq(), res)
+    expect(
+      stripePosts[0].params.get(
+        'line_items[1][price_data][product_data][name]',
+      ),
+    ).toBe('Service tax')
+  })
+
+  it('OFF stays off for a rate that is not a rate', async () => {
+    // Zero, negative, non-numeric and a decimal-point typo (`825` for `8.25`)
+    // all resolve to no tax rather than to a number the merchant did not
+    // choose. Driven through the HANDLER, so this proves the handler emits no
+    // line for them rather than only that the resolver returns zero.
+    //
+    // One booking per iteration with its own booker and IP: `bookHandler`
+    // rate-limits per IP and holds the slot it books, so a shared fixture
+    // would 429 or 409 and every assertion after the first would be reading
+    // an empty `stripePosts`.
+    for (const pct of [0, -6, Number.NaN, 825]) {
+      stripePosts.length = 0
+      withService({ pct })
+      const res = makeRes()
+      await bookHandler(taxReq(), res)
+      expect(res.statusCode).toBe(200)
+      expect([...stripePosts[0].params.keys()].filter((key) => /tax/i.test(key)))
+        .toEqual([])
+    }
+  })
+
+  it('keeps the platform take off the tax, and passes the card cost on all of it', async () => {
+    // AGL-2317's rule, restated for a path that now carries tax: the take is
+    // computed on the SERVICE, never on the state's money, while Stripe's
+    // card cost is debited from the platform balance on the WHOLE charge and
+    // so must be passed through on the whole charge (AGL-2152).
+    withService({ pct: 6 })
+    const taxed = makeRes()
+    await bookHandler(taxReq(), taxed)
+    const feeWithTax = Number(
+      stripePosts[0].params.get(
+        'payment_intent_data[application_fee_amount]',
+      ),
+    )
+
+    stripePosts.length = 0
+    delete mockAdmin.__state.store['tax']
+    const plain = makeRes()
+    await bookHandler(taxReq(), plain)
+    expect(plain.statusCode).toBe(200)
+    const feeWithoutTax = Number(
+      stripePosts[0].params.get(
+        'payment_intent_data[application_fee_amount]',
+      ),
+    )
+
+    // Exactly Stripe's own cost on the extra $4.50 and nothing more — no
+    // platform take on the state's money. Derived from the real pricing
+    // function, so a rate change moves the expectation with it.
+    expect(feeWithTax - feeWithoutTax).toBe(
+      storefrontProcessingCostCents(7950) - storefrontProcessingCostCents(7500),
+    )
+    // NEGATIVE CONTROL: the pro plan takes a non-zero cut on a service, so a
+    // fee computed on the TAX-INCLUSIVE base is a larger number. Were these
+    // equal, the assertion above would be proving nothing.
+    expect(feeWithTax).toBe(
+      resolveTransactionFeeCents(
+        { id: 'org-1', ownerUid: 'owner-1', plan: 'pro' } as never,
+        'service',
+        7500,
+        7950,
+      ),
+    )
+    expect(feeWithTax).toBeLessThan(
+      resolveTransactionFeeCents(
+        { id: 'org-1', ownerUid: 'owner-1', plan: 'pro' } as never,
+        'service',
+        7950,
+        7950,
+      ),
+    )
   })
 })
 

@@ -184,15 +184,53 @@ const MEDIA_COLLECTION_MJS = "collection('media')"
 const MEDIA_WRITER_MODULE = ['tools', 'scripts', 'lib', 'media-counter'].join('/')
 
 /**
- * Read-only is derived, never asserted by a name list: a script whose every
- * media reference is immediately `.get()` is reading a library, not minting
- * into one. `backfill-media-refs.mjs` is the live example — it reads media to
- * repair `nodes` on screens and forms, and must not be held to a counter it
- * never moves.
+ * Tokens that can bring a media document into EXISTENCE.
+ *
+ * This is the whole of what AGL-1488 is about. The shortfall it measured came
+ * from documents being MINTED past the counter: bytes arrive, a document
+ * appears, `counters/media` never moves, and the scope is under-reported for
+ * good. `.set()` mints — including `set(…, { merge: true })`, which creates
+ * the document when it is absent — and `.add()` mints.
+ *
+ * `.update()` does NOT, and that is a Firestore guarantee rather than a
+ * convention: it throws on a missing document. A script that only ever
+ * `update`s an existing media document cannot land bytes and cannot move the
+ * counter's true value, so holding it to `putMediaDocument()` would mean
+ * routing a one-field patch through a creator.
  */
-function onlyReadsMedia(source: string): boolean {
+const MEDIA_MINTING_TOKENS = ['.set(', '.add(']
+
+/**
+ * Can this script bring a media document into existence?
+ *
+ * Derived, never asserted by a name list — the thing that failed in AGL-1485
+ * was an inventory, so a fifth seed has to be caught by arriving.
+ *
+ * A media reference is harmless when the chain hanging off it neither mints
+ * nor is left open-ended. Two shapes qualify, and both are live in the tree:
+ *
+ *  * **Read.** `collection('media').get()`, or a query in between —
+ *    `.orderBy(…).get()`, `.where(…).get()`. `backfill-media-refs.mjs` reads
+ *    media to repair `nodes` on screens and forms and must not be held to a
+ *    counter it never moves.
+ *  * **Patch.** `collection('media')` … `.update(` with no mint token in the
+ *    chain, which is `backfill-media-content-sha256.mjs` (AGL-1630) adding
+ *    `contentSha256` to documents that already exist.
+ *
+ * The window examined is bounded rather than "the rest of the file" so a mint
+ * three hundred lines later, in an unrelated function, does not condemn a
+ * read — and is short enough that a mint on the SAME chain is always inside
+ * it.
+ */
+const MEDIA_CHAIN_WINDOW = 160
+
+function cannotMintMedia(source: string): boolean {
   const occurrences = source.split(MEDIA_COLLECTION_MJS).slice(1)
-  return occurrences.every((rest) => rest.startsWith('.get('))
+  return occurrences.every((rest) => {
+    const chain = rest.slice(0, MEDIA_CHAIN_WINDOW)
+    if (MEDIA_MINTING_TOKENS.some((token) => chain.includes(token))) return false
+    return chain.includes('.get(') || chain.includes('.update(')
+  })
 }
 
 /**
@@ -217,7 +255,7 @@ const SCRIPT_MEDIA_WRITERS = walk(
     if (file.includes(MEDIA_WRITER_MODULE)) return false
     const source = read(file)
     const reachesByHand =
-      source.includes(MEDIA_COLLECTION_MJS) && !onlyReadsMedia(source)
+      source.includes(MEDIA_COLLECTION_MJS) && !cannotMintMedia(source)
     return reachesByHand || source.includes(SHARED_MEDIA_WRITER)
   })
   .map(repoPath)
@@ -241,6 +279,39 @@ describe('AGL-1488 · every script that writes media moves `counters/media`', ()
     // statement about nothing.
     expect(SCRIPT_MEDIA_WRITERS).not.toContain(
       'tools/scripts/backfill-media-refs.mjs',
+    )
+  })
+
+  it('a script that only PATCHES an existing document is not either', () => {
+    // AGL-1630's `contentSha256` backfill reaches media by hand and writes to
+    // it — with `.update()`, which throws on a missing document and therefore
+    // cannot mint one. It lands no bytes, so there is no counter to move, and
+    // routing a one-field patch through `putMediaDocument()` would mean
+    // calling a creator to avoid creating.
+    expect(SCRIPT_MEDIA_WRITERS).not.toContain(
+      'tools/scripts/backfill-media-content-sha256.mjs',
+    )
+  })
+
+  it('the widened rule still catches every minting shape', () => {
+    // The rule above got looser to admit a patcher, so this proves it did not
+    // get loose. Each of these is a real way a media document arrives, and a
+    // predicate that let any of them through would re-open AGL-1488.
+    expect(cannotMintMedia("collection('media').doc(id).set({})")).toBe(false)
+    expect(
+      cannotMintMedia("collection('media').doc(id).set({}, { merge: true })"),
+    ).toBe(false)
+    expect(cannotMintMedia("collection('media').add({})")).toBe(false)
+    // A chain that does nothing recognisable is treated as a mint, not waved
+    // through: an unknown shape is exactly when this guard should speak up.
+    expect(cannotMintMedia("collection('media').doc(id)")).toBe(false)
+    // …and the two harmless shapes still read as harmless.
+    expect(cannotMintMedia("collection('media').get()")).toBe(true)
+    expect(
+      cannotMintMedia("collection('media').orderBy('__name__').get()"),
+    ).toBe(true)
+    expect(cannotMintMedia("collection('media').doc(id).update({ a: 1 })")).toBe(
+      true,
     )
   })
 

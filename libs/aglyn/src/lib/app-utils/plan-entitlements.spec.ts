@@ -1666,6 +1666,75 @@ describe('plan entitlements', () => {
      * platform default remains correct for every org WITHOUT the
      * entitlement, which is the distinction these cases pin.
      */
+    /**
+     * The badge's link and mark (the "Made with Aglyn" defect).
+     *
+     * The published-site badge read `supportUrl` for its href and `logoUrl`
+     * for its mark. On this deployment `PLATFORM_SUPPORT_URL` falls through to
+     * `mailto:` + the operator support address and the platform `logoUrl` was
+     * null — so the one link the platform gets on every free customer's site
+     * opened a blank email, with no mark beside it.
+     */
+    describe('the platform badge has a web home and a mark', () => {
+      it('links a WEB home, never the support mailto', () => {
+        expect(PLATFORM_BRANDING_PROFILE.homeUrl).toBe('https://aglyn.com')
+        expect(PLATFORM_BRANDING_PROFILE.homeUrl).not.toMatch(/^mailto:/i)
+      })
+
+      it('THE CONTROL: the support URL is still allowed to be a mailto', () => {
+        // The two fields are separate BECAUSE they differ. If this ever
+        // reads like the home URL, the split has been undone and the test
+        // above is passing for the wrong reason.
+        expect(PLATFORM_BRANDING_PROFILE.supportUrl).not.toBe(
+          PLATFORM_BRANDING_PROFILE.homeUrl,
+        )
+      })
+
+      it('carries the platform mark, so the badge is not text-only', () => {
+        expect(PLATFORM_BRANDING_PROFILE.logoUrl).toBe(
+          '/_static/images/brand/aglyn-logo-mark-white.svg',
+        )
+      })
+
+      /**
+       * The mark must not leak into a white-label org.
+       *
+       * This became load-bearing the moment the platform `logoUrl` stopped
+       * being null: the resolver used to fill an unset white-label logo from
+       * the platform profile, which would now stamp OUR mark on the published
+       * sites of an org that pays to conceal that we exist.
+       */
+      it('never lends that mark to a white-label org with no logo', () => {
+        const brand = resolveBrandingProfile({
+          plan: 'agency',
+          brandingProfile: { productName: 'Acme Sites' },
+        } as any)
+        expect(brand.logoUrl).toBeNull()
+        expect(brand.logoUrl).not.toBe(PLATFORM_BRANDING_PROFILE.logoUrl)
+      })
+
+      it('never lends that HOME to a white-label org either', () => {
+        const brand = resolveBrandingProfile({
+          plan: 'agency',
+          brandingProfile: { productName: 'Acme Sites' },
+        } as any)
+        expect(brand.homeUrl).toBeNull()
+      })
+
+      it('gives a white-label org its OWN URL, so its badge still links', () => {
+        // Unchanged behaviour for white-label: the badge went to the org's
+        // support URL before the split and still does.
+        const brand = resolveBrandingProfile({
+          plan: 'agency',
+          brandingProfile: {
+            productName: 'Acme Sites',
+            supportUrl: 'https://acme.test/help',
+          },
+        } as any)
+        expect(brand.homeUrl).toBe('https://acme.test/help')
+      })
+    })
+
     describe('the support URL falls back to nothing, never to Aglyn', () => {
       const whiteLabelWithout = (profile: Record<string, unknown>) =>
         resolveBrandingProfile({ plan: 'agency', brandingProfile: profile } as any)

@@ -1,0 +1,1275 @@
+{
+  "...": {
+    "decision": "template-fragment",
+    "class": "vendor-host",
+    "packages": [
+      "is-unsafe"
+    ],
+    "note": "Not a real host: the partial left of a template literal that builds its host at runtime (`https://${region}.googleapis.com`). Recorded rather than filtered so the STATED coverage limit — a host assembled from fragments is invisible to this method — has something a reader can see."
+  },
+  "127.0.0.1:$": {
+    "decision": "template-fragment",
+    "class": "vendor-host",
+    "packages": [
+      "next"
+    ],
+    "note": "Not a real host: the partial left of a template literal that builds its host at runtime (`https://${region}.googleapis.com`). Recorded rather than filtered so the STATED coverage limit — a host assembled from fragments is invisible to this method — has something a reader can see."
+  },
+  "169.254.169.254": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "gcp-metadata"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "@firebase/auth-compat": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "@firebase/auth-compat"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "@firebase/functions": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "@firebase/functions"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "@firebase/remote-config-compat": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "@firebase/remote-config-compat"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "@firebase/webchannel-wrapper": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "@firebase/webchannel-wrapper"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "@grpc/grpc-js": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "@grpc/grpc-js"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "@protobufjs/fetch": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "@protobufjs/fetch"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "accounts.google.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "google-auth-library",
+      "gtoken"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "agent-base": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "agent-base"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "aka.ms": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "@typescript/old"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "apis.google.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "@firebase/auth"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "atomiks.github.io": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "tippy.js"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "babel.dev": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "next"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "babeljs.io": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "next"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "base-ui.com": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "@base-ui/react",
+      "@base-ui/utils"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "boosty.to": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "core-js"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "bugs.webkit.org": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "next"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "caniuse-lite": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "caniuse-lite"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "cdn.jsdelivr.net": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "@monaco-editor/loader",
+      "next"
+    ],
+    "note": "jsDelivr (Prolexic/Fastly/Cloudflare) — the besigner Raw JSON editor pulls Monaco from it at runtime. AGL-1779. NOT covered by this method beyond the first request: the loader then fetches chunks from URLs in no package on disk."
+  },
+  "cloud.google.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "firebase-admin",
+      "google-auth-library"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "cloudresourcemanager.$": {
+    "decision": "template-fragment",
+    "class": "vendor-host",
+    "packages": [
+      "google-auth-library"
+    ],
+    "note": "Not a real host: the partial left of a template literal that builds its host at runtime (`https://${region}.googleapis.com`). Recorded rather than filtered so the STATED coverage limit — a host assembled from fragments is invisible to this method — has something a reader can see."
+  },
+  "cloudresourcemanager.googleapis.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "google-auth-library"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "cloudtasks.googleapis.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "firebase-admin"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "code.google.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "monaco-editor"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "code.visualstudio.com": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "monaco-editor"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "console.firebase.google.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "@firebase/ai",
+      "@firebase/database",
+      "@firebase/database-compat",
+      "firebase",
+      "firebase-admin"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "content-firebaseappcheck.googleapis.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "@firebase/app-check",
+      "firebase"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "css-infos.net": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "css-tree"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "css-tricks.com": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "@mui/x-data-grid"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "cssdot.ru": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "css-tree"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "daringfireball.net": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "monaco-editor"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "day.js.org": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "dayjs"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "developers.google.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "monaco-editor"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "docs.stripe.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "@stripe/stripe-js"
+    ],
+    "note": "Stripe, Inc. — an Annex III subprocessor already. js.stripe.com is Stripe.js on checkout surfaces."
+  },
+  "drafts.csswg.org": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "css-tree",
+      "monaco-editor",
+      "next"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "drafts.fxtf.org": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "css-tree"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "duplexify": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "duplexify"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "eventarcpublishing.googleapis.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "firebase-admin"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "evilmartians.com": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "postcss"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "faye-websocket": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "faye-websocket"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "fb.me": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "@base-ui/utils",
+      "@mui/utils",
+      "@mui/x-date-pickers",
+      "@mui/x-internals",
+      "@stripe/react-stripe-js",
+      "prop-types"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "fcmregistrations.googleapis.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "@firebase/messaging",
+      "firebase"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "firebase.google.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "@firebase/storage",
+      "firebase",
+      "firebase-admin"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "firebase.googleapis.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "@firebase/analytics",
+      "@firebase/util",
+      "firebase"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "firebaseappcheck.googleapis.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "firebase-admin"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "firebasedataconnect.googleapis.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "firebase-admin"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "firebaseextensions.googleapis.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "firebase-admin"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "firebaseinstallations.googleapis.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "@firebase/installations",
+      "firebase"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "firebaselogging.googleapis.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "@firebase/performance",
+      "firebase"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "firebaseml.googleapis.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "firebase-admin"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "firebaseremoteconfig.googleapis.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "@firebase/performance",
+      "@firebase/remote-config",
+      "firebase",
+      "firebase-admin"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "firebaseremoteconfigrealtime.googleapis.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "@firebase/remote-config",
+      "firebase"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "firebaserules.googleapis.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "firebase-admin"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "firebasestorage.googleapis.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "firebase-admin"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "fonts.googleapis.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "nano-css",
+      "next"
+    ],
+    "note": "Google Fonts, reached by a hand-written <link> on our own surfaces (AGL-1673). The next/font and nano-css paths that also carry this host are unreachable — neither addon is imported."
+  },
+  "foo.com": {
+    "decision": "placeholder",
+    "class": "vendor-host",
+    "packages": [
+      "@jridgewell/resolve-uri"
+    ],
+    "note": "A placeholder or documentation stand-in host in vendor source. Contacts nothing."
+  },
+  "form-data": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "form-data"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "fpnv.googleapis.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "firebase-admin"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "gaxios": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "gaxios"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "getbootstrap.com": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "next"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "goober": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "goober"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "googlechrome.github.io": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "monaco-editor"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "help.dottoro.com": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "css-tree"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "help.yahoo.com": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "monaco-editor"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "http-proxy-agent": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "http-proxy-agent"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "https-proxy-agent": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "https-proxy-agent"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "iamcredentials.$": {
+    "decision": "template-fragment",
+    "class": "vendor-host",
+    "packages": [
+      "google-auth-library"
+    ],
+    "note": "Not a real host: the partial left of a template literal that builds its host at runtime (`https://${region}.googleapis.com`). Recorded rather than filtered so the STATED coverage limit — a host assembled from fragments is invisible to this method — has something a reader can see."
+  },
+  "iamcredentials.googleapis.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "firebase-admin"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "identitytoolkit.googleapis.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "firebase-admin"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "jose": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "jose"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "js.stripe.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "@stripe/stripe-js"
+    ],
+    "note": "Stripe, Inc. — an Annex III subprocessor already. js.stripe.com is Stripe.js on checkout surfaces."
+  },
+  "jss": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "jss"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "jss-plugin-camel-case": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "jss-plugin-camel-case"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "jss-plugin-default-unit": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "jss-plugin-default-unit"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "jss-plugin-global": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "jss-plugin-global"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "jss-plugin-props-sort": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "jss-plugin-props-sort"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "jss-plugin-rule-value-function": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "jss-plugin-rule-value-function"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "jss-plugin-vendor-prefixer": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "jss-plugin-vendor-prefixer"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "juliangruber.com": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "isarray"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "learn.microsoft.com": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "next"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "lru-cache": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "lru-cache"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "mdn-data": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "mdn-data"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "mds.fidoalliance.org": {
+    "decision": "unreachable",
+    "class": "vendor-host",
+    "packages": [
+      "@simplewebauthn/server"
+    ],
+    "note": "FIDO Metadata Service. Verified negative 2026-08-14 and re-verified here: MetadataService / verifyMDSBlob are never called — zero hits across apps/ and libs/."
+  },
+  "metadata.google.internal.": {
+    "decision": "template-fragment",
+    "class": "vendor-host",
+    "packages": [
+      "gcp-metadata"
+    ],
+    "note": "Not a real host: the partial left of a template literal that builds its host at runtime (`https://${region}.googleapis.com`). Recorded rather than filtered so the STATED coverage limit — a host assembled from fragments is invisible to this method — has something a reader can see."
+  },
+  "microsoft.com": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "monaco-editor"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "mobx-utils": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "mobx-utils"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "motion.dev": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "framer-motion",
+      "motion-utils"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "msdn.microsoft.com": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "css-tree"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "mui.com": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "@mui/base",
+      "@mui/lab",
+      "@mui/material",
+      "@mui/styles",
+      "@mui/system",
+      "@mui/utils"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "nextjs.org": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "next"
+    ],
+    "note": "Vercel Inc. — an Annex III subprocessor already. telemetry.nextjs.org and trace.nextjs.org are BUILD-TIME only and carry no customer data; NEXT_TELEMETRY_DISABLED is unset, so they are live on every build."
+  },
+  "node-fetch": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "node-fetch"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "npms.io": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "lodash",
+      "lodash-es",
+      "next"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "oauth2.googleapis.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "google-auth-library",
+      "gtoken"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "openjsf.org": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "node-addon-api"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "phrogz.net": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "css-tree"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "play.google.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "@firebase/messaging",
+      "firebase"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "popper.js.org": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "@mui/base",
+      "@mui/material"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "preview.nextjs.org": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "next"
+    ],
+    "note": "Vercel Inc. — an Annex III subprocessor already. telemetry.nextjs.org and trace.nextjs.org are BUILD-TIME only and carry no customer data; NEXT_TELEMETRY_DISABLED is unset, so they are live on every build."
+  },
+  "protobufjs": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "protobufjs"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "r12a.github.io": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "monaco-editor"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "radix-ui.com": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "next"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "react-dnd-html5-backend": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "react-dnd-html5-backend"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "react-dnd.github.io": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "react-dnd"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "react-spectrum.adobe.com": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "react-aria"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "react-use": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "react-use"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "react.dev": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "next",
+      "react",
+      "react-dom"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "reactjs.org": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "next",
+      "react-dnd",
+      "react-dom"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "redux.js.org": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "redux"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "rxjs": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "rxjs"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "sass-lang.com": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "monaco-editor"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "securetoken.google.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "@firebase/util",
+      "firebase",
+      "firebase-admin"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "session.firebase.google.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "firebase-admin"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "sharp.pixelplumbing.com": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "sharp"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "simplewebauthn.dev": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "@simplewebauthn/browser",
+      "@simplewebauthn/server"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "some.url": {
+    "decision": "placeholder",
+    "class": "vendor-host",
+    "packages": [
+      "reactcss"
+    ],
+    "note": "A placeholder or documentation stand-in host in vendor source. Contacts nothing."
+  },
+  "stacktrace-gps": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "stacktrace-gps"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "stacktrace-js": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "stacktrace-js"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "storage.$": {
+    "decision": "template-fragment",
+    "class": "vendor-host",
+    "packages": [
+      "@google-cloud/storage"
+    ],
+    "note": "Not a real host: the partial left of a template literal that builds its host at runtime (`https://${region}.googleapis.com`). Recorded rather than filtered so the STATED coverage limit — a host assembled from fragments is invisible to this method — has something a reader can see."
+  },
+  "storage.googleapis.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "@google-cloud/storage"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "stripe.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "@stripe/react-stripe-js"
+    ],
+    "note": "Stripe, Inc. — an Annex III subprocessor already. js.stripe.com is Stripe.js on checkout surfaces."
+  },
+  "sts.": {
+    "decision": "template-fragment",
+    "class": "vendor-host",
+    "packages": [
+      "google-auth-library"
+    ],
+    "note": "Not a real host: the partial left of a template literal that builds its host at runtime (`https://${region}.googleapis.com`). Recorded rather than filtered so the STATED coverage limit — a host assembled from fragments is invisible to this method — has something a reader can see."
+  },
+  "sts.$": {
+    "decision": "template-fragment",
+    "class": "vendor-host",
+    "packages": [
+      "google-auth-library"
+    ],
+    "note": "Not a real host: the partial left of a template literal that builds its host at runtime (`https://${region}.googleapis.com`). Recorded rather than filtered so the STATED coverage limit — a host assembled from fragments is invisible to this method — has something a reader can see."
+  },
+  "styled-jsx": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "styled-jsx"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "stylis": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "stylis"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "support.google.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "monaco-editor"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "tabatkins.github.io": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "next"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "tailwindcss.com": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "next"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "teeny-request": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "teeny-request"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "telemetry.nextjs.org": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "next"
+    ],
+    "note": "Vercel Inc. — an Annex III subprocessor already. telemetry.nextjs.org and trace.nextjs.org are BUILD-TIME only and carry no customer data; NEXT_TELEMETRY_DISABLED is unset, so they are live on every build."
+  },
+  "trace.nextjs.org": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "next"
+    ],
+    "note": "Vercel Inc. — an Annex III subprocessor already. telemetry.nextjs.org and trace.nextjs.org are BUILD-TIME only and carry no customer data; NEXT_TELEMETRY_DISABLED is unset, so they are live on every build."
+  },
+  "undici": {
+    "decision": "transport",
+    "class": "caller-host",
+    "packages": [
+      "undici"
+    ],
+    "note": "A CALLER-CHOSEN egress path: the package supplies a network or DOM-injection primitive and no host of its own, so it is NOT an Annex III recipient. Recorded because this is where a future recipient arrives without anyone editing the register — undici is the live case (AGL-2480)."
+  },
+  "unpkg.com": {
+    "decision": "unreachable",
+    "class": "vendor-host",
+    "packages": [
+      "@icons/material",
+      "yargs"
+    ],
+    "note": "unpkg.com appears in @icons/material/transform.js (a codegen helper, not shipped) and in yargs browser shim documentation. Neither is on a runtime path."
+  },
+  "unstats.un.org": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "monaco-editor"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "vercel.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "next"
+    ],
+    "note": "Vercel Inc. — an Annex III subprocessor already. telemetry.nextjs.org and trace.nextjs.org are BUILD-TIME only and carry no customer data; NEXT_TELEMETRY_DISABLED is unset, so they are live on every build."
+  },
+  "w3c.github.io": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "next"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "webkit.org": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "css-tree"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "webpack.js.org": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "next"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "www.bing.com": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "monaco-editor"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "www.currency-iso.org": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "monaco-editor"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "www.dmoz.org": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "monaco-editor"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "www.framer.com": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "framer-motion"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "www.google.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "@firebase/app-check",
+      "@firebase/auth",
+      "firebase",
+      "next"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "www.googleapis.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "@firebase/firestore",
+      "@google-cloud/firestore",
+      "@google-cloud/storage",
+      "firebase-admin",
+      "google-auth-library",
+      "google-gax"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "www.googletagmanager.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "@firebase/analytics",
+      "firebase"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "www.gstatic.com": {
+    "decision": "disclosed",
+    "class": "vendor-host",
+    "packages": [
+      "firebase",
+      "google-auth-library"
+    ],
+    "note": "Google LLC (Firebase / Google Cloud) — an Annex III subprocessor already. Firebase client and admin SDK control-plane endpoints. AGL-1780 enumerated four of these; this is the full set the closure carries."
+  },
+  "www.justmoon.net": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "extend"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "www.sitemaps.org": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "next"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "www.sitepoint.com": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "css-tree"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "www.w3ctech.com": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "postcss"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  },
+  "yargs.js.org": {
+    "decision": "documentation",
+    "class": "vendor-host",
+    "packages": [
+      "yargs"
+    ],
+    "note": "A vendor documentation, specification or author-attribution URL carried in shipped code — typically inside a thrown error message or a prop description. Not a destination. Reviewed as a class 2026-08-20, not one host at a time; a host that moves out of this class must be re-decided individually."
+  }
+}

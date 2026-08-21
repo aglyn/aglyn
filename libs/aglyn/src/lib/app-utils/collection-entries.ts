@@ -932,12 +932,33 @@ export function expandCollectionEntries<
           ...container,
           props: {
             ...(container.props as any),
-            searchIndex: windowed.map(
-              (entry): CollectionEntrySearchItem => ({
+            searchIndex: windowed.map((entry): CollectionEntrySearchItem => {
+              // The suggestion panel (AGL-1525) draws ROWS from the index
+              // rather than filtering clones, so the row's link, date and
+              // category chip have to be here — the component only holds
+              // rendered markup by then. Through the same three resolvers
+              // Related posts uses (AGL-1926 for the date especially): a
+              // suggestion for a post is the same post as the card below it
+              // and must not be able to disagree with it about its date.
+              const categoryName = resolveEntryCategoryName(
+                entry,
+                source.categories,
+              )
+              return {
                 title: entry.title ?? '',
                 excerpt: entry.excerpt ?? '',
-              }),
-            ),
+                // Absent keys rather than empty strings, so the row asks one
+                // question per field instead of two — the shape Related
+                // posts settled on (AGL-1457).
+                ...(entry.slug
+                  ? { url: `/${source.slug}/${entry.slug}` }
+                  : {}),
+                ...(entry.publishedAt?.seconds
+                  ? { date: formatCollectionEntryDate(entry.publishedAt) }
+                  : {}),
+                ...(categoryName ? { category: categoryName } : {}),
+              }
+            }),
             // How many entries the window above was drawn FROM (AGL-1516).
             //
             // The component has to tell the reader whether a miss means "not
@@ -1119,6 +1140,38 @@ function reformattableEntryDate(
 }
 
 /**
+ * The ONE matcher configuration behind every entry search in the product
+ * (AGL-1516/AGL-1525) — the block's toolbar box, its suggestion panel, and
+ * the site-wide results page the panel links to.
+ *
+ * Shared rather than copied because the two halves are joined by a link the
+ * reader clicks: the panel's "View all results" hands its query to /search,
+ * and if the results page matched more strictly it would answer a visible
+ * suggestion with "no results". A typo the panel forgave — "platfrom" — is
+ * exactly the query most likely to make that trip.
+ *
+ * The shape is the icon picker's (use-mdi-icons-fuzzy), tuned once for prose
+ * and MEASURED before shipping: the title names the post and the excerpt
+ * merely describes it, so they are weighted 0.7/0.3; the default location
+ * scoring buries a legitimate mid-sentence hit in a sentence-long excerpt,
+ * and the default 0.6 threshold matches "media" against every post on letter
+ * soup, so location is ignored and the threshold tightened to 0.3.
+ *
+ * A plain object, not a Fuse instance: `libs/aglyn` is dependency-light by
+ * design, and each consumer already imports Fuse from the vendor bundle.
+ */
+export const COLLECTION_SEARCH_FUSE_OPTIONS = {
+  keys: [
+    { name: 'title', weight: 0.7 },
+    { name: 'excerpt', weight: 0.3 },
+  ],
+  includeScore: true,
+  shouldSort: true,
+  ignoreLocation: true,
+  threshold: 0.3,
+}
+
+/**
  * One entry of a Collection Entries search index (AGL-1516): the fields the
  * block's client-side search box matches against, index-aligned with the
  * entry clones the block rendered. Stamped by {@link expandCollectionEntries}
@@ -1127,6 +1180,18 @@ function reformattableEntryDate(
 export interface CollectionEntrySearchItem {
   title: string
   excerpt: string
+  /**
+   * Entry permalink (AGL-1525). The `filter` mode never needs it — it hides
+   * and shows clones that already carry their own links — but a suggestion
+   * row IS the link, and the panel is drawn from the index, not from the
+   * clones. Optional because a page cached before this shipped has an index
+   * without it; the panel degrades to plain text rather than to a dead link.
+   */
+  url?: string
+  /** Published date, through {@link formatCollectionEntryDate} (AGL-1525). */
+  date?: string
+  /** Category display name for the suggestion row's chip (AGL-1525). */
+  category?: string
 }
 
 /** One related post as stamped onto a Related posts block (AGL-582). */

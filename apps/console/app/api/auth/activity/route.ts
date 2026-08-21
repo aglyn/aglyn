@@ -24,7 +24,7 @@ import {
 // Shared, not a local copy: an empty duplicate cookie at another scope used to
 // shadow the real heartbeat here, which reads as `at: 0` and quietly disables
 // the AGL-697 idle-logout control (AGL-1259 fixed the session route only).
-import { readCookie } from '../read-cookie'
+import { readCookie, requestIsHttps } from '../read-cookie'
 
 // lockdown-423: exempt — account-scoped read of the caller's own auth activity; no org
 // context. The session mint/exchange carry the lockdown gate for auth.
@@ -43,8 +43,22 @@ const WORKSPACE_DOMAIN = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.com'
  * subdomain — the global sign-out AGL-697 is about.
  *
  * The cookie is HttpOnly (a foreign origin can neither read nor forge it)
- * and mirrors the session cookie's scope: `Domain=.aglyn.com` + `Secure`
- * only on the real deployment, so localhost dev still works.
+ * and mirrors the session cookie's scope: `Domain=.aglyn.com` only on a
+ * workspace host, so localhost dev still works.
+ *
+ * `Secure` is a SEPARATE question from `Domain`, and answering both with one
+ * ternary was a bug (AGL-1881). A white-label console on
+ * `console.acme-agency.com` (AGL-1099) is not a workspace host, so it took
+ * neither branch and this cookie went out over HTTPS unmarked. It carries no
+ * credential — it is a timestamp — but it is the ONLY input to the AGL-697
+ * idle-logout control, and `POST` here is deliberately authless, so a
+ * non-`Secure` cookie is one a network attacker can plant over plaintext to
+ * hold a victim's idle window open indefinitely, or slam it shut.
+ *
+ * This is the same defect the session route fixed for `__session` (AGL-1353
+ * D6) and the second time this file has trailed it, which is why
+ * `requestIsHttps` is now imported rather than re-derived — see the note on
+ * it in `../read-cookie`.
  */
 function activityCookie(request: Request, valueMs: number): string {
   const host = String(request.headers.get('host') ?? '').split(':')[0]
@@ -56,7 +70,8 @@ function activityCookie(request: Request, valueMs: number): string {
     `Max-Age=${ACTIVITY_COOKIE_MAX_AGE_S}`,
     'HttpOnly',
     'SameSite=Lax',
-    ...(onWorkspaceDomain ? [`Domain=.${WORKSPACE_DOMAIN}`, 'Secure'] : []),
+    ...(onWorkspaceDomain ? [`Domain=.${WORKSPACE_DOMAIN}`] : []),
+    ...(requestIsHttps(request) ? ['Secure'] : []),
   ].join('; ')
 }
 

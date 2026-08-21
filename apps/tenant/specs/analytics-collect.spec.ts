@@ -57,6 +57,20 @@ let mockEmitted: Array<{ hostId: string; event: string }> = []
 let mockHostReads = 0
 /** The owning org the ceiling resolves the plan from (AGL-2155). */
 let mockOrgForHost: Record<string, any> | undefined
+/**
+ * The AGL-1627 lockdown verdict `getSiteLockdown` answers. `null` is "no
+ * active lock", which is every pre-existing case in this file.
+ */
+let mockLockdown: Record<string, any> | null = null
+/**
+ * Verdict reads, counted inside the mock factory rather than by reassigning
+ * the export: `loadRoute` uses `jest.isolateModules`, so the route binds a
+ * module instance the test's own `require` does not necessarily hand back,
+ * and a monkey-patch applied afterwards silently counts nothing.
+ */
+let mockLockdownReads = 0
+/** Makes the verdict reader itself throw, to prove the gate fails open. */
+let mockLockdownThrows = false
 let mockStaffNotices: Array<Record<string, unknown>> = []
 let mockManagerNotices: Array<Record<string, unknown>> = []
 
@@ -217,6 +231,15 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     ) => {
       mockManagerNotices.push({ hostId, ...payload })
     },
+    // AGL-1627. Same closed-world hazard the comment above records: without
+    // this export the route's `telemetryFrozen` throws a TypeError inside its
+    // own try/catch, the beacon 204s having written nothing, and a test
+    // asserting "frozen" would pass for entirely the wrong reason.
+    getSiteLockdown: async () => {
+      mockLockdownReads += 1
+      if (mockLockdownThrows) throw new Error('firestore unreachable')
+      return mockLockdown
+    },
   }
 })
 
@@ -261,6 +284,9 @@ beforeEach(() => {
   mockEmitted = []
   mockHostReads = 0
   mockOrgForHost = { $id: 'org-1', plan: 'free' }
+  mockLockdown = null
+  mockLockdownReads = 0
+  mockLockdownThrows = false
   mockStaffNotices = []
   mockManagerNotices = []
 })
@@ -948,5 +974,80 @@ describe('the free-plan bandwidth cap engages at the beacon (AGL-2413)', () => {
       )
     }
     expect(marker()).toMatchObject({ month: MONTH })
+  })
+})
+
+describe('lockdown freezes the beacon (AGL-1627)', () => {
+  it('CONTROL — with no lockdown the pageview still counts', async () => {
+    const route = loadRoute()
+    const response = await route.POST(beacon({ hostId: HOST_ID, path: '/' }))
+    expect(response.status).toBe(204)
+    expect(dayDoc().total).toBe(1)
+    expect(mockEmitted).toEqual([{ hostId: HOST_ID, event: 'pageView' }])
+  })
+
+  it('a FULL lockdown writes nothing, fires no host event, and still 204s', async () => {
+    mockLockdown = { scope: 'host', reason: 'security' } // no mode = full
+    const route = loadRoute()
+    const response = await route.POST(beacon({ hostId: HOST_ID, path: '/' }))
+    // Silent: nothing renders this response, so a 423 would buy the visitor's
+    // browser a retry and tell nobody anything.
+    expect(response.status).toBe(204)
+    expect(dayDoc()).toBeUndefined()
+    expect(mockEmitted).toEqual([])
+  })
+
+  it('a full lockdown freezes the OVERLAY branch too, not just pageviews', async () => {
+    mockLockdown = { scope: 'org', reason: 'security' }
+    const route = loadRoute()
+    await route.POST(
+      beacon({ hostId: HOST_ID, path: '/', overlay: 'popupImpression' }),
+    )
+    expect(dayDoc()).toBeUndefined()
+  })
+
+  it('an explicit `full` mode freezes, exactly like the absent-mode default', async () => {
+    mockLockdown = { scope: 'platform', mode: 'full', reason: 'maintenance' }
+    const route = loadRoute()
+    await route.POST(beacon({ hostId: HOST_ID, path: '/' }))
+    expect(dayDoc()).toBeUndefined()
+  })
+
+  it('a READ-ONLY lockdown keeps counting — the open half, pinned to today’s answer', async () => {
+    // This is the decision AGL-1627 leaves to a product call, held by
+    // `FREEZE_TELEMETRY_DURING_READ_ONLY`. The assertion exists so that
+    // flipping the constant is a deliberate act with a red test attached,
+    // rather than a behaviour change nobody notices.
+    mockLockdown = { scope: 'org', mode: 'read-only', reason: 'maintenance' }
+    const route = loadRoute()
+    await route.POST(beacon({ hostId: HOST_ID, path: '/' }))
+    expect(dayDoc().total).toBe(1)
+    expect(mockEmitted).toEqual([{ hostId: HOST_ID, event: 'pageView' }])
+  })
+
+  it('memoizes the verdict per host rather than reading it per beacon', async () => {
+    const route = loadRoute()
+    for (let i = 0; i < 25; i++) {
+      await route.POST(
+        beacon({ hostId: HOST_ID, path: '/' }, { ip: `198.51.100.${i + 1}` }),
+      )
+    }
+    expect(dayDoc().total).toBe(25)
+    // One verdict for the whole burst — the memo, not 25 verdict reads on the
+    // platform's highest-volume endpoint. This is the assertion that keeps
+    // the gate from costing three Firestore reads per page view.
+    expect(mockLockdownReads).toBe(1)
+  })
+
+  it('fails OPEN: a throwing verdict read does not silence the beacon', async () => {
+    mockLockdownThrows = true
+    const route = loadRoute()
+    await route.POST(beacon({ hostId: HOST_ID, path: '/' }))
+    // An outage is not a lockdown. The real `getSiteLockdown` swallows its
+    // own errors and answers null; this pins that the gate survives even a
+    // reader that does not, rather than silently dropping every beacon on
+    // the platform because one read timed out.
+    expect(mockLockdownReads).toBe(1)
+    expect(dayDoc()?.total).toBe(1)
   })
 })

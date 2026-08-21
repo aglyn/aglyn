@@ -374,6 +374,12 @@ const TabsElement = forwardRef<HTMLDivElement, TabsElementProps>(
           const href = suppressNavigation
             ? undefined
             : Aglyn.resolveScreenHref(screens, linkIds[index])
+          // An authored target that the routing map does not have: the
+          // screen was unpublished or deleted out from under this row
+          // (AGL-1893). Computed from the MAP, never from `href`, so a
+          // canvas or preview render — where nothing has an href on purpose
+          // — does not paint every working link as dead.
+          const broken = Aglyn.isScreenLinkBroken(screens, linkIds[index])
           return (
             <MuiTab
               key={key}
@@ -384,6 +390,54 @@ const TabsElement = forwardRef<HTMLDivElement, TabsElementProps>(
               {...(href
                 ? { component: AppLink, componentVariant: 'naked', href }
                 : null)}
+              /**
+               * A tab whose screen is gone stops being a control (AGL-1893).
+               *
+               * It used to render as a bare `<button>` indistinguishable
+               * from its working neighbours: no href, no `aria-controls`,
+               * and `onChange` returns early on it because the AUTHORED id
+               * is still there — so it looked live, announced live, and did
+               * nothing at all. Live on `/changelog` and `/newsroom` for two
+               * days without anything anywhere saying so.
+               *
+               * Disabled rather than hidden, on purpose:
+               *
+               * - the routing map differs between the render that produced
+               *   an ISR page and the render that hydrates it, and AGL-1268
+               *   settled that a node's ELEMENT must not depend on it —
+               *   removing the tab would make the strip's DOM shape depend
+               *   on it, which is strictly worse than an attribute;
+               * - `MuiTabs` addresses its children by index, so dropping one
+               *   silently repoints `value` at the wrong tab;
+               * - the failure directions are not symmetric. A wrongly
+               *   disabled tab is a dimmed label; a wrongly hidden one is
+               *   navigation that vanished from a customer's site with no
+               *   trace of why.
+               *
+               * Falling through to panel behaviour instead — the other
+               * option AGL-1893 weighed — is not available to this element:
+               * the node renderer hands it ONE `Branch` fragment rather than
+               * per-panel children, so a Tabs container cannot know whether
+               * a panel with this label exists, and on the real `/changelog`
+               * shape it does not.
+               *
+               * `landing`, `activeIndex`, `aria-controls` and the `onChange`
+               * guard all still read the AUTHORED id, unchanged. They must:
+               * `deferLazyPanelNodes` computes the landing label server-side
+               * from the raw `tabLink{n}` props and has no routing map to
+               * resolve ids with, so a client that resolved differently
+               * would keep a panel the server withheld.
+               */
+              disabled={broken && !editorInert ? true : undefined}
+              // On the canvas the tab stays live: the author has to be able
+              // to select the node to repair it. It carries the ring and the
+              // explanation instead.
+              {...Aglyn.brokenScreenLinkProps(broken, !!editorInert)}
+              sx={
+                broken && editorInert
+                  ? Aglyn.BROKEN_SCREEN_LINK_SX
+                  : undefined
+              }
               // MUI writes these before spreading the rest, so passing them
               // undefined is what removes them (see the a11y note above).
               role={undefined}

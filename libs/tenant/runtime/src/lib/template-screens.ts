@@ -125,6 +125,58 @@ export function collectTemplateScreenIds(sources: {
 }
 
 /**
+ * Where a collection's LIST template is actually served, keyed by screen id
+ * (AGL-1998): `blogListTmpl` → `blog`, in the routing map's own path format.
+ *
+ * A list template is the one template kind that IS a page (AGL-1387) — and it
+ * is a page at somebody ELSE's address. `/{collectionSlug}` renders it through
+ * `composeCollectionTemplatePage`, while the slug it was published under is
+ * dropped from the route table by {@link getTemplateScreenIds} and 404s. So
+ * the routing map says one thing and the router does another, and everything
+ * that RESOLVES a screen link believed the map: on aglyn.com no screen link
+ * could point at `/blog` at all, because the only entry for the screen that
+ * serves it read `blog-list-template`.
+ *
+ * Two conditions, matching `collectionListTemplateScreenIds` in the console
+ * (which answers the same question for the Screens list's Path column):
+ *
+ *  - **A slug**, since `/{slug}` is the whole address; and
+ *  - **content kind**, because only a content collection answers `/{slug}` —
+ *    a catalog collection's listing is `/collections/{slug}`, composed by
+ *    commerce, and pointing a link there through this map would send visitors
+ *    to a path that does not exist.
+ *
+ * Publishing is deliberately NOT a condition: the collection branch resolves
+ * the screen through `listScreenId` and never through the routing map, so an
+ * unpublished list template serves `/{slug}` exactly like a published one.
+ * That is the live blog's state today.
+ */
+export function collectCollectionListRoutes(sources: {
+  collections?: QuerySnapshotLike | null
+}): Record<string, string> {
+  const routes: Record<string, string> = {}
+  for (const contentCollection of sources.collections?.docs ?? []) {
+    // Mirrors `hostCollectionKind`: only `kind: 'catalog'` is catalog, and a
+    // document that does not say what it is reads as content.
+    if (contentCollection.get('kind') === 'catalog') continue
+    const slug = contentCollection.get('slug')
+    if (typeof slug !== 'string' || !slug) continue
+    const listScreenId = contentCollection.get('listScreenId')
+    if (typeof listScreenId !== 'string' || !listScreenId) continue
+    routes[listScreenId] = slug
+  }
+  return routes
+}
+
+/** What the tenant router has to correct the published route table by. */
+export interface TemplateScreenRouting {
+  /** Screens the router drops before matching — see {@link getTemplateScreenIds}. */
+  templateScreenIds: Set<string>
+  /** Where a list template is really served — see {@link collectCollectionListRoutes}. */
+  listRoutes: Record<string, string>
+}
+
+/**
  * Screens that must NOT resolve as pages of the site (AGL-1267, AGL-1270).
  *
  * A template screen is a composition input, not a page. It only has meaning
@@ -161,29 +213,68 @@ export function collectTemplateScreenIds(sources: {
  * to "the template is briefly reachable again", never to a site-wide 404. Per
  * source because a store-settings failure has no business re-exposing the blog's
  * entry template, or vice versa.
+ *
+ * The reads themselves are {@link getTemplateScreenRouting}'s, which answers
+ * the other half of the same question in the same trip (AGL-1998). This is the
+ * narrow view of it, and stays a named export because the four callers that
+ * only route requests have no use for the other half.
  */
 export async function getTemplateScreenIds(options: {
   hostId: string
 }): Promise<Set<string>> {
+  return (await getTemplateScreenRouting(options)).templateScreenIds
+}
+
+/**
+ * Both halves of what the route table has to be corrected by, from ONE read
+ * (AGL-1998): the screens to drop, and where a list template really lives.
+ *
+ * They come out of the same collections query — the ids need `listScreenId`,
+ * the routes need the `slug` beside it — so asking separately would be a
+ * second identical round trip on the render path this arc keeps trimming
+ * (AGL-1152). {@link getTemplateScreenIds} is the narrow view of it, kept as
+ * its own export because four callers want only the set.
+ *
+ * Never rejects, and fails open to "no templates, no overrides" — the routing
+ * map as published — for the reason on {@link getTemplateScreenIds}.
+ */
+export async function getTemplateScreenRouting(options: {
+  hostId: string
+}): Promise<TemplateScreenRouting> {
   try {
-    const ids = await withRenderCache({
-      key: ['tenant-template-screens', options.hostId],
+    // A NEW key rather than the old `tenant-template-screens`: the cached
+    // value's shape changed from an array to an object, and a deploy that
+    // read the previous shape back under the previous key would hand every
+    // in-flight render an `ids` of `undefined`.
+    const cached = await withRenderCache({
+      key: ['tenant-template-routing', options.hostId],
       revalidate: TEMPLATE_SCREEN_IDS_TTL_SECONDS,
       tags: [tenantDataTag(options.hostId)],
-      read: async () => [...(await readTemplateScreenIds(options))],
+      read: async () => {
+        const routing = await readTemplateScreenRouting(options)
+        return {
+          ids: [...routing.templateScreenIds],
+          listRoutes: routing.listRoutes,
+        }
+      },
     })
-    return new Set(ids)
+    return {
+      // `Set`s and `Map`s do not survive the cache's JSON round trip, so the
+      // stored shape is an array and it is rehydrated here.
+      templateScreenIds: new Set(cached?.ids ?? []),
+      listRoutes: cached?.listRoutes ?? {},
+    }
   } catch (error) {
     // The contract is "never rejects" — a cache failure degrades to the
     // uncached read, which itself fails open to an empty set.
     console.error('template screen lookup failed:', error)
-    return readTemplateScreenIds(options)
+    return readTemplateScreenRouting(options)
   }
 }
 
-async function readTemplateScreenIds(options: {
+async function readTemplateScreenRouting(options: {
   hostId: string
-}): Promise<Set<string>> {
+}): Promise<TemplateScreenRouting> {
   try {
     const hostRef = firebaseAdmin
       .app()
@@ -208,7 +299,10 @@ async function readTemplateScreenIds(options: {
         }),
       hostRef
         .collection('collections')
-        .select(...COLLECTION_TEMPLATE_SCREEN_FIELDS)
+        // `slug` and `kind` ride along for AGL-1998: which route a LIST
+        // template is really served at is decided by the same document, and
+        // widening a field mask costs nothing next to a second query.
+        .select(...COLLECTION_TEMPLATE_SCREEN_FIELDS, 'slug', 'kind')
         .limit(100)
         .get()
         .catch((error: unknown) => {
@@ -229,11 +323,18 @@ async function readTemplateScreenIds(options: {
         }),
     ])
 
-    return collectTemplateScreenIds({ templateScreens, collections, storeSettings })
+    return {
+      templateScreenIds: collectTemplateScreenIds({
+        templateScreens,
+        collections,
+        storeSettings,
+      }),
+      listRoutes: collectCollectionListRoutes({ collections }),
+    }
   } catch (error) {
     // The ref construction itself threw (no initialised admin app, say).
     console.error('template screen lookup failed:', error)
-    return new Set<string>()
+    return { templateScreenIds: new Set<string>(), listRoutes: {} }
   }
 }
 

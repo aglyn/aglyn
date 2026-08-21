@@ -15,6 +15,16 @@
  * limitations under the License.
  */
 
+// `after()`, never a bare `void promise` (AGL-2327). This handler runs inside
+// the console's `/api/billing/webhook` invocation, which AGL-1133 measured on
+// production is frozen the moment the response is sent — so fire-and-forget
+// work scheduled here simply does not run. The console's own route was
+// migrated for that reason (AGL-2346) and this one, in the same invocation,
+// was not: marketplace revenue and refunds were reporting to nothing, which is
+// the surviving half of "four server events ship to nothing" now that the
+// Measurement Protocol credentials have landed (2026-08-17).
+import { after } from 'next/server'
+
 import type { BillingWebhookHandler } from '@aglyn/aglyn/server'
 import {
   firebaseAdmin,
@@ -633,14 +643,14 @@ async function applyMarketplaceRefundOutcome(
     const sellerCents = Number(snapshot.get('transferCents') ?? 0)
     const netCents = grossCents - taxCents - sellerCents
     if (netCents > 0) {
-      void sendGa4Refund({
+      after(() => sendGa4Refund({
         transactionId: String(purchaseRef.id),
         value: netCents / 100,
         currency: cause.currency,
         items: [],
         stripeCustomerId:
           cause.stripeCustomerId || String(snapshot.get('buyerUid') ?? ''),
-      }).catch(() => undefined)
+      }).catch(() => undefined))
     }
   }
   // AFTER the revocation, so the entitlement never stays live because a
@@ -843,14 +853,22 @@ async function recordDisputeOrphanIfMarketplace(
 export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
   type,
   object,
+  event,
 }) => {
   // Connect readiness, kept fresh (AGL-1997) — the publisher twin of the
   // commerce sync. The seller panel reads `stripeChargesEnabled` /
   // `stripePayoutsEnabled` off this document, and before this nothing but the
   // publisher reopening the connect route ever refreshed either. Same early
   // return: `account.updated` shares nothing with the purchase sections below.
+  // `event.livemode`, not `object.livemode` (AGL-2471) — the Account object
+  // has no such field. Two of the three poisoned production linkages were
+  // publisherProfiles, and this is the path that heals them.
   if (type === 'account.updated') {
-    await syncConnectAccountStatus('publisherProfiles', object)
+    await syncConnectAccountStatus(
+      'publisherProfiles',
+      object,
+      event?.livemode,
+    )
     return
   }
 
@@ -992,7 +1010,7 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
       // took this tax is exactly the question the publisher agreement's
       // seller-of-record clause has open. The ledger doc above keeps the
       // full split for anyone who needs it.
-      void sendGa4Purchase({
+      after(() => sendGa4Purchase({
         transactionId: String(object.id),
         value: netCents / 100,
         currency: String(object?.currency ?? 'usd'),
@@ -1011,7 +1029,7 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
         ],
         clientId: object?.metadata?.ga_client_id,
         stripeCustomerId: String(object?.customer ?? '') || String(buyerUid),
-      }).catch(() => undefined)
+      }).catch(() => undefined))
       // A refund or a lost dispute that arrived before this document existed
       // is applied NOW (AGL-2148) — revocation, GA and the transfer reversal,
       // by the same function the refund door uses. Last on this path, and

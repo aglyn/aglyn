@@ -104,6 +104,29 @@
  *   and read the PAIRED differences. That turned the same change into a
  *   462 ms median saving that won 15 of 15 pairs.
  *
+ * What the FOURTH read settled (2026-08-20, AGL-1428, same paired method):
+ *
+ * - **A jest harness cannot do this, and the note above should have said so.**
+ *   Real credentials die under jest in `JWT.requestAsync` — gRPC AND REST
+ *   alike, so `preferRest` is not a way round it. That is the same failure
+ *   `libs/tenant/data/admin/jest.integration.setup.ts` documents as its reason
+ *   for pointing the Admin SDK at the emulator. An emulator has no round-trip
+ *   latency to hide, so it cannot answer an overlap question at all. Use a
+ *   standalone node script; the AGL-1225 numbers above must have come from one.
+ * - **There are no "publish-schedule reads" to overlap.**
+ *   `applyDuePublishSchedule` returns the stored `versionId` without touching
+ *   Firestore unless a schedule is both `pending` and due — 0 ms on every
+ *   iteration. Inside `composeScreenNodes` the serialised cost was
+ *   `getScreenVersion` alone, ~95 ms, and that is the ceiling.
+ * - Overlapping it with the chrome bundle is worth **~60 ms**: a screen with a
+ *   two-deep layout chain went 324 → 261 ms (median paired diff +62 ms, won
+ *   35 of 41 pairs), a screen with no layout +51 ms (won 21 of 25). Balanced
+ *   across which arm led; at 15 pairs the lead order still skewed it, so 40+
+ *   pairs is the sample size this effect needs.
+ * - `composeScreenNodes` is ~320 ms of a multi-second render, so this is a
+ *   1-2 % end-to-end win, not a headline one. It is recorded here because the
+ *   NEXT such lead will look identical and is worth measuring before building.
+ *
  * Timings go through `console.log` as one line of JSON so a Vercel runtime-log
  * query can pull them without a log drain. Overhead is a `Date.now()` per
  * phase, so this can stay on in production — the shape it measures only ever

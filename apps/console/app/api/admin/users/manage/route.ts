@@ -27,6 +27,7 @@ import {
   eraseUser,
   findUserByUidAcrossPools,
   firebaseAdmin,
+  invalidateTokenRevocationCache,
   isImpersonationSession,
   passwordResetThrottleMessage,
   setClaimsInOwningPool,
@@ -304,6 +305,7 @@ async function handler(request: Request): Promise<Response> {
       // AGL-1962 audit found a `tokensValidAfterTime` of 2026-08-14 sitting on
       // the forged project-pool twin while the real account's never moved.
       await targetAuth.revokeRefreshTokens(uid)
+      invalidateTokenRevocationCache(uid, found.tenantId ?? null)
       const notified = await sendPasswordChangedNotice({
         email: target.email,
         origin,
@@ -349,6 +351,30 @@ async function handler(request: Request): Promise<Response> {
       })
     } else {
       await targetAuth.updateUser(uid, { disabled: action === 'disable' })
+    }
+
+    // DE-STAFFING HAS TO REACH THE TOKEN (AGL-1881).
+    //
+    // Custom claims live in the ID token, and the ID token is not reissued
+    // until the SDK next refreshes it — up to an hour. So `revokeStaff` and a
+    // `setRole` demotion wrote the new claim to the account and left the OLD
+    // one, `staff: true` and all, opening the staff console for the rest of
+    // that hour. The audit row said the access was gone; the access was not.
+    // Same for `disable`: the account could not sign in AGAIN, which is a
+    // different sentence from "is signed out".
+    //
+    // Revoking forces the refresh that reissues the claims, and — with the
+    // check this ticket wired into `firebaseAdmin.app().auth()` — makes the
+    // token already in flight stop being accepted. Only on the actions that
+    // REDUCE or suspend privilege: a grant that signed the new staffer out
+    // would be re-authentication as a reward, and the stale claim there is
+    // the harmless direction.
+    const reducesPrivilege =
+      action === 'revokeStaff' || action === 'setRole' || action === 'disable'
+    if (reducesPrivilege) {
+      const claimPool = claimWrite ? claimWrite.tenantId : (found.tenantId ?? null)
+      await authForPool(claimPool).revokeRefreshTokens(uid)
+      invalidateTokenRevocationCache(uid, claimPool)
     }
 
     await firebaseAdmin

@@ -141,6 +141,83 @@ function instanceSxPatch(
   return { sx }
 }
 
+/**
+ * Props on a grafted definition node that an instance override must never
+ * address (AGL-1899).
+ *
+ * `sx` has its own override layer one field up, and honouring it here would
+ * leave two writers racing for one rendered value with no rule to say which
+ * wins — the Styles panel would show an instance as clean while the
+ * Attributes panel silently repainted it.
+ */
+const ATTR_OVERRIDE_REFUSED_PROPS = new Set(['sx'])
+
+/**
+ * Every per-instance ATTRIBUTE override an instance node carries, keyed the
+ * way {@link getInstanceStyleOverrides} keys styles — `root` for the
+ * definition root, a definition-internal node id for anything else
+ * (AGL-1899).
+ *
+ * Refused props are dropped HERE rather than at the write site, so a slice
+ * that reached storage before a refusal existed (or by any path that did not
+ * go through the panel) still cannot take effect.
+ */
+export function getInstanceAttrOverrides(
+  node: { componentId?: string; attrOverrides?: unknown } | undefined | null,
+): Record<string, Record<string, unknown>> {
+  if (node?.componentId !== REUSABLE_INSTANCE_COMPONENT_ID) return {}
+  const overrides = node?.attrOverrides as Record<string, unknown> | undefined
+  if (!isStyleRecord(overrides)) return {}
+  const clean: Record<string, Record<string, unknown>> = {}
+  for (const [key, value] of Object.entries(overrides)) {
+    if (!key || !isStyleRecord(value)) continue
+    const slice: Record<string, unknown> = {}
+    for (const [prop, propValue] of Object.entries(value)) {
+      if (ATTR_OVERRIDE_REFUSED_PROPS.has(prop)) continue
+      slice[prop] = propValue
+    }
+    if (Object.keys(slice).length > 0) clean[key] = slice
+  }
+  return clean
+}
+
+/**
+ * The `{ props }` patch one definition node takes from an instance's
+ * attribute overrides, or `undefined` when none applies (AGL-1899).
+ *
+ * Layered coarse-first exactly like {@link instanceSxPatch} — the root slice
+ * when this node IS the definition root, then the node's own id slice — so
+ * the two override kinds stay one authoring model rather than two.
+ *
+ * The merge is one level deep, replacing only the props each slice NAMES.
+ * That keeps a component free to add a prop later and still have every
+ * existing instance pick up the new default, and it is deliberately not the
+ * cascade `mergeNodeSx` performs: an sx object's nested records are
+ * selectors (`@scheme dark`, breakpoints) that genuinely compose, while a
+ * prop value is one value. Deep-merging two prop objects that merely look
+ * alike would hand the renderer a third thing neither the component nor the
+ * page asked for.
+ */
+function instancePropsPatch(
+  baseProps: unknown,
+  overrides: Record<string, Record<string, unknown>>,
+  defId: NodeId,
+  rootId: NodeId | undefined,
+): { props: Record<string, unknown> } | undefined {
+  const rootSlice =
+    defId === rootId ? overrides[STYLE_OVERRIDES_ROOT_KEY] : undefined
+  const leafSlice =
+    defId === STYLE_OVERRIDES_ROOT_KEY ? undefined : overrides[defId]
+  if (!rootSlice && !leafSlice) return undefined
+  return {
+    props: {
+      ...((baseProps as Record<string, unknown> | undefined) ?? {}),
+      ...(rootSlice ?? {}),
+      ...(leafSlice ?? {}),
+    },
+  }
+}
+
 /** One styleable target inside an instance — see {@link listInstanceStyleTargets}. */
 export interface InstanceStyleTarget {
   /** The `styleOverrides` key this target reads and writes. */
@@ -625,6 +702,18 @@ export function composeReusableComponentNodes<
       const styleOverrides = getInstanceStyleOverrides(
         instanceNode as { componentId?: string; styleOverrides?: unknown },
       )
+      // Attribute overrides (AGL-1899) ride the same graft for the same
+      // reason: this is the one point where per-instance scope exists, so
+      // merging here is what makes canvas, Preview and tenant SSR agree
+      // without any of them knowing an override happened.
+      //
+      // Applied to the props BEFORE `resolveNamedTokens` below, which is
+      // what lets an override be written in `{{prop.*}}`/`{{var:id}}` and
+      // still resolve, and what makes an override on a bound prop beat the
+      // component's own binding — the more specific placement wins.
+      const attrOverrides = getInstanceAttrOverrides(
+        instanceNode as { componentId?: string; attrOverrides?: unknown },
+      )
 
       const grafted: NormalizedNodes<N> = {}
       for (const [defId, defNode] of Object.entries(definition.nodes)) {
@@ -646,6 +735,12 @@ export function composeReusableComponentNodes<
           ...((instanceSxPatch(
             defNode.sx,
             styleOverrides,
+            defId,
+            definition.rootId,
+          ) ?? {}) as any),
+          ...((instancePropsPatch(
+            defNode.props,
+            attrOverrides,
             defId,
             definition.rootId,
           ) ?? {}) as any),
@@ -785,6 +880,9 @@ export function detachInstanceSubtree<
   const styleOverrides = getInstanceStyleOverrides(
     instanceNode as { componentId?: string; styleOverrides?: unknown },
   )
+  const attrOverrides = getInstanceAttrOverrides(
+    instanceNode as { componentId?: string; attrOverrides?: unknown },
+  )
   const copied: NormalizedNodes<N> = {}
   for (const [defId, defNode] of Object.entries(definition.nodes)) {
     if (!defNode) continue
@@ -808,6 +906,11 @@ export function detachInstanceSubtree<
       // and a per-leaf override baked only at the root would repaint every
       // headline the moment an author detached.
       ...((instanceSxPatch(defNode.sx, styleOverrides, defId, rootId) ??
+        {}) as any),
+      // Attribute overrides bake in for the same reason (AGL-1899): a
+      // detached copy that reverted to the component's own `variant` would
+      // change under the author at the moment they asked for a fork.
+      ...((instancePropsPatch(defNode.props, attrOverrides, defId, rootId) ??
         {}) as any),
     }
   }

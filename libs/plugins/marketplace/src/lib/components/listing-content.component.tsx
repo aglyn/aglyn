@@ -1182,6 +1182,14 @@ export function MarketplaceListingContent({
           ) : (
             <GridItems
               spacing={3}
+              // Masonry. Source order here is body (8),
+              // changelog (8), sidebar (4) — and two eights cannot share a
+              // twelve-column row, so the changelog wrapped and dragged the
+              // sidebar down with it. `Install`, the point of the page, opened
+              // below the fold under a screen of blank space. Masonry places
+              // the sidebar in the columns beside the body card where it
+              // belongs, and no card can be pushed past the container's edge.
+              masonry
               items={[
                 {
                   size: { xs: 12, md: 8 },

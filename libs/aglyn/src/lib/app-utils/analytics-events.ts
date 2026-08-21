@@ -93,11 +93,11 @@
  * union instead, because a developer wrote their names and their keys, so they
  * can have compile-time checking — and because the hatch guarantees the
  * opposite of what they need. {@link resolveAuthoredEventName} refuses any name
- * in the union precisely so that "not in {@link ANALYTICS_EVENT_NAMES}" means
- * "authored"; put our own events through the hatch and that stops being true,
- * authored hits stop being separable from ours in reports, and an authored
- * `aglyn_experiment` step starts voting in the experiment that decides which
- * variant ships.
+ * we send — the union AND the server-only names beside it — precisely so that
+ * "not one of ours" means "authored"; put our own events through the hatch and
+ * that stops being true, authored hits stop being separable from ours in
+ * reports, and an authored `aglyn_experiment` step starts voting in the
+ * experiment that decides which variant ships.
  */
 
 /**
@@ -181,8 +181,24 @@ export interface AnalyticsItem {
  */
 export interface AnalyticsEventParams {
   // --- Acquisition (GTM §6: signups, cost/lead by channel) -----------------
-  /** GA4 recommended. Real account creation only, never a sign-in. */
-  sign_up: { method: SignUpMethod }
+  /**
+   * GA4 recommended. Real account creation only, never a sign-in.
+   *
+   * The three campaign params are optional and come from
+   * `campaignEventParams` (AGL-1731) — present when the signup URL named a
+   * campaign, absent entirely otherwise. They are what lets a September ad
+   * spend be evaluated: without them a paid click, an organic visit and a
+   * partner link arrive indistinguishable and the money cannot be traced to
+   * an account. Named `campaign_*` rather than `utm_*` because these are our
+   * own registered dimensions and the `utm_` spellings belong to GA's
+   * automatic campaign collection.
+   */
+  sign_up: {
+    method: SignUpMethod
+    campaign_source?: string
+    campaign_medium?: string
+    campaign_name?: string
+  }
   /** GA4 recommended. Returning user only. */
   login: { method: LoginMethod }
   /**
@@ -301,11 +317,18 @@ export interface AnalyticsEventParams {
     link_domain: string
     link_id?: string
     /**
-     * Which product surface produced the click — `site` for a tenant
-     * published site, `docs` for the documentation app (AGL-1579). GA's
-     * built-in Hostname dimension already separates the DOMAINS; this
-     * separates surfaces that could share one, and keeps the shared click
-     * listener from having to know anything about either.
+     * Which product surface produced the click. GA's built-in Hostname
+     * dimension already separates the DOMAINS; this separates surfaces that
+     * could share one, and keeps the shared click listener from having to
+     * know anything about either.
+     *
+     * `site` — a tenant published site — is the only value ever SENT. `docs`
+     * was designed for (AGL-1579) and is not emitted: `apps/docs` cannot
+     * import `libs/`, so this listener is not installed there
+     * (docs/ANALYTICS.md decision 7 has the Vercel setting that would change
+     * that). Registering `surface` as a dimension and reading a one-value
+     * breakdown is the trap — the absent `docs` row means "no listener", not
+     * "no clicks".
      */
     surface?: string
   }
@@ -755,6 +778,47 @@ export const ANALYTICS_EVENT_NAMES = Object.keys(
 ) as AnalyticsEventName[]
 
 /**
+ * Event names WE send that this module's union cannot hold, because nothing
+ * client-side ever fires them: they are emitted only by the Measurement
+ * Protocol sender (`ga4-measurement-protocol.ts`), from a Stripe webhook.
+ *
+ * They still have to be RESERVED against authored names, and the reason is
+ * the same one that puts `purchase` in the union — only less obvious, which
+ * is why it was missed. `aglyn.com` is itself a tenant site, pointed at the
+ * platform measurement id (`site-analytics.tsx`), so an authored
+ * `trackGaEvent` step on our own marketing site lands in the SAME property as
+ * these server hits. An authored `refund` does not merely add noise: GA4
+ * treats `refund` as ecommerce and SUBTRACTS its `value` from reported
+ * revenue, so a mistyped step could walk real money out of the report — the
+ * `purchase` hazard, running in the direction nobody audits.
+ *
+ * Kept as a separate list rather than folded into {@link AnalyticsEventParams}
+ * on purpose: adding them to the union would give {@link trackEvent} a
+ * client-side door to events that must only ever come from the server, where
+ * the authoritative money is. A name here is ours, is never sent from a
+ * browser, and is never available to an author.
+ *
+ * This list is the reason "not in {@link ANALYTICS_EVENT_NAMES}" is NOT on its
+ * own a sound test for "authored" — use {@link isReservedAnalyticsEventName}.
+ */
+const SERVER_ONLY_EVENT_NAMES: ReadonlySet<string> = new Set([
+  'refund',
+  'subscription_cancelled',
+])
+
+/**
+ * Every event name Aglyn itself sends, from any surface — the union plus the
+ * server-only names above. Exported so a caller can ask the question the two
+ * separate lists no longer answer alone.
+ */
+export function isReservedAnalyticsEventName(name: string): boolean {
+  return (
+    TAXONOMY_EVENT_NAMES[name as AnalyticsEventName] === true ||
+    SERVER_ONLY_EVENT_NAMES.has(name)
+  )
+}
+
+/**
  * GA4's own reserved event names — GA drops a hit that uses one, so sending it
  * is not pollution but silence, which is the worse failure of the two because
  * nothing anywhere says so.
@@ -853,7 +917,7 @@ export function resolveAuthoredEventName(
     .replace(/_+$/, '')
   if (!normalized) return { name: null, reason: 'unusable' }
   if (
-    TAXONOMY_EVENT_NAMES[normalized as AnalyticsEventName] ||
+    isReservedAnalyticsEventName(normalized) ||
     GA4_RESERVED_EVENT_NAMES.has(normalized) ||
     GA4_RESERVED_PREFIXES.some((prefix) => normalized.startsWith(prefix))
   ) {

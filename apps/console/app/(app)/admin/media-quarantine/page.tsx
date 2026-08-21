@@ -67,6 +67,8 @@ import {
   MEDIA_QUARANTINE_NOTE_MAX,
   MEDIA_QUARANTINE_REASON_LABELS,
   MEDIA_QUARANTINE_REASONS,
+  mediaTakedownReachLines,
+  mediaTakedownUnreachableLine,
   normalizeMediaQuarantine,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
@@ -75,9 +77,11 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
+  AlertTitle,
   Button,
   Chip,
   FormControlLabel,
+  FormHelperText,
   LinearProgress,
   MenuItem,
   Stack,
@@ -228,6 +232,17 @@ function AdminMediaQuarantine() {
   const [note, setNote] = useState('')
   const [until, setUntil] = useState('')
   const [narrow, setNarrow] = useState(false)
+  /**
+   * Whether to revoke the raw Storage download link too (AGL-1615).
+   *
+   * Default ON: for a legal or malware takedown a publicly fetchable URL
+   * that outlives the takedown is not a residual, it is the takedown
+   * failing. It is a switch rather than a constant because rotation is the
+   * one IRREVERSIBLE half of an otherwise reversible lever, and a
+   * precautionary takedown an operator expects to lift should be able to
+   * leave embeds intact.
+   */
+  const [revokeRawUrl, setRevokeRawUrl] = useState(true)
   const [busy, setBusy] = useState(false)
   const [lookup, setLookup] = useState<AssetLookup | null>(null)
   const [listing, setListing] = useState<DenyListing | null>(null)
@@ -391,6 +406,7 @@ function AdminMediaQuarantine() {
             [scopeKind === 'org' ? 'orgId' : 'hostId']: scopeId.trim(),
             mediaId: mediaId.trim(),
             prefer: narrow ? 'asset' : 'hash',
+            revokeRawUrl,
             ...(action === 'quarantine'
               ? {
                   reason,
@@ -416,9 +432,23 @@ function AdminMediaQuarantine() {
         setLog((entries) =>
           [{ atMs: Date.now(), text: what, confirmed }, ...entries].slice(0, 25),
         )
+        // Report what the takedown REACHED, not just that it was written
+        // (AGL-1615). `rawUrlRevoked: false` is usually correct and benign —
+        // most often the object never had a raw link — so the reason travels
+        // with it rather than reading as a failure.
+        const reach =
+          action === 'quarantine'
+            ? payload.rawUrlRevoked
+              ? ' · raw download link killed (permanent)'
+              : payload.rawUrlRevocation === 'no-token'
+                ? ' · no raw download link existed'
+                : payload.rawUrlRevocation === 'skipped'
+                  ? ' · raw download link left alive'
+                  : ' · raw download link NOT killed — storage did not answer, retry'
+            : ''
         enqueueSnackbar(
           confirmed
-            ? `${what} — verified on the server (audited)`
+            ? `${what} — verified on the server (audited)${reach}`
             : `${what} was accepted, but re-reading the deny list shows the OPPOSITE state. Do not walk away.`,
           { variant: confirmed ? 'success' : 'error', allowDuplicate: true },
         )
@@ -443,6 +473,7 @@ function AdminMediaQuarantine() {
       scopeId,
       mediaId,
       narrow,
+      revokeRawUrl,
       reason,
       message,
       note,
@@ -504,7 +535,7 @@ function AdminMediaQuarantine() {
           <Stack spacing={2}>
             <Alert severity="info">
               {
-                'Quarantine takes ONE uploaded file off the CDN worldwide while the workspace keeps serving. It is reversible and it does not delete anything — the file still exists and still counts toward the customer’s storage. Setting and lifting requires the super staff role; every action is audited.'
+                'Quarantine stops ONE uploaded file being served while the workspace keeps running. It does not delete anything — the file still exists and still counts toward the customer’s storage. It is NOT a recall: see exactly what it reaches, and what it cannot, below. Setting and lifting requires the super staff role; every action is audited.'
               }
             </Alert>
 
@@ -599,10 +630,62 @@ function AdminMediaQuarantine() {
                     </Alert>
                   ) : null}
 
+                  <Alert severity="info" icon={false}>
+                    <AlertTitle>What disabling this file will and will not do</AlertTitle>
+                    {/*
+                      AGL-1615. This page used to say a takedown puts a file
+                      "off the CDN worldwide", full stop. A rights-holder or a
+                      merchant handed that sentence concludes the file is
+                      gone; it is not, and someone makes a legal or safety
+                      call on the difference. The lines come from
+                      `mediaTakedownReachLines()` so the windows quoted here
+                      are the `max-age` values the CDN actually sends — copy
+                      that hard-codes a cache number is copy that is specific
+                      and wrong the first time someone tunes a header.
+                    */}
+                    <Stack component="ul" spacing={0.5} sx={{ pl: 2, m: 0 }}>
+                      {mediaTakedownReachLines().map((line) => (
+                        <Typography component="li" key={line} variant="body2">
+                          {line}
+                        </Typography>
+                      ))}
+                    </Stack>
+                    <Typography variant="body2" sx={{ mt: 1, fontWeight: 600 }}>
+                      {mediaTakedownUnreachableLine()}
+                    </Typography>
+                  </Alert>
+
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={revokeRawUrl}
+                        onChange={(event) => setRevokeRawUrl(event.target.checked)}
+                      />
+                    }
+                    label="Also kill the raw download link (permanent)"
+                  />
+                  <FormHelperText>
+                    {/*
+                      The one irreversible half of an otherwise reversible
+                      lever, so the operator is told BEFORE they act rather
+                      than discovering it on the lift. Default ON: for a legal
+                      or malware takedown, a publicly fetchable URL that
+                      outlives the takedown is not a residual, it is the
+                      takedown failing.
+                    */}
+                    On by default. The raw storage link is how free-tier
+                    workspaces, private files and older embeds are delivered,
+                    and nothing else can stop it — it is served by Google,
+                    not by us. Rotating it is PERMANENT: releasing the
+                    quarantine will not bring that particular link back, so
+                    any page still embedding it stays broken. Turn this off
+                    for a precautionary takedown you expect to lift.
+                  </FormHelperText>
+
                   {!lookup.asset.hasStrongDigest ? (
                     <Alert severity="warning">
                       {lookup.asset.hasLegacyDigest
-                        ? 'This file carries only the legacy 64-bit digest — it predates the strong one, or it came in through the signed-upload route. A takedown on it still bites, but it is the weaker key and it does not match the same bytes re-uploaded through a different route.'
+                        ? 'This file carries only the legacy 64-bit digest — it predates the strong one, or it is video over 50 MB, which is the one class the signed-upload route still cannot afford to hash. A takedown on it still bites, but it is the weaker key and it does not match the same bytes re-uploaded through a different route.'
                         : 'This file carries NO digest at all (a composite object, or a pre-digest upload). Only the per-asset key can cover it, and only at delivery: with nothing to compare, the upload gate cannot refuse a fresh copy of these bytes.'}
                     </Alert>
                   ) : null}

@@ -5,10 +5,10 @@
 
     "presence": {
       "$orgId": {
-        ".read": "auth != null && auth.token.presenceOrg === $orgId",
-
         "$docType": {
           "$docId": {
+            ".read": "auth != null && auth.token.presenceOrg === $orgId",
+
             "$uid": {
               ".write": "auth != null && auth.uid === $uid && auth.token.presenceOrg === $orgId",
 
@@ -52,12 +52,12 @@
     "coedit": {
       "$orgId": {
         "$hostId": {
-          ".read": "auth != null && auth.token.presenceOrg === $orgId",
-
           "$docType": {
             "$docId": {
               "$versionId": {
                 "nodes": {
+                  ".read": "auth != null && auth.token.presenceOrg === $orgId",
+
                   "$nodeId": {
                     ".write": "auth != null && auth.token.presenceOrg === $orgId && auth.token.coeditHost === $hostId",
 

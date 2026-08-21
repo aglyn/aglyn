@@ -37,7 +37,15 @@ on:
   # 07:00 UTC (the census job below sits push runs out — see its `if`).
   push:
     branches:
-      - main
+      # Sept-1 freeze (Zach, 2026-08-20): the push trigger moved from `main`
+      # to `production`. With many agents landing on `main` continuously this
+      # workflow was running dozens of times an hour and every red notified
+      # him, so CI became noise rather than signal. It is a RELEASE gate until
+      # launch: `main` is verified before promotion by `tools/gate.sh`
+      # (AGL-2090), and the promotion PR still runs `pull_request` below.
+      # RESTORE `main` AFTER LAUNCH — until then a break can sit on `main`
+      # unnoticed until someone runs the gate.
+      - production
     paths:
       - tools/scripts/check-retired-colours.mjs
       - tools/scripts/lib/retired-colours.mjs

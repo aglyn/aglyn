@@ -121,11 +121,29 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   upsertHostContact: async (options: any) => {
     contactUpserts.push(options)
   },
+  // The GA4 `purchase` this handler now sends (AGL-2481). Stubbed rather than
+  // omitted: an absent export is a TypeError at the call site, which would
+  // redden these refund tests for a reason that has nothing to do with them.
+  // What the event CONTAINS is asserted in `billing-webhook-ga-purchase.spec.ts`.
+  sendGa4Purchase: async () => ({ sent: true, synthesizedClientId: true }),
 }))
 
 jest.mock('@aglyn/shared-util-email', () => ({
   sendEmail: async (message: any) => {
     sentEmails.push(message)
+  },
+}))
+
+/**
+ * The handler schedules its GA4 `purchase` through `after()` (AGL-2481), and
+ * importing `next/server` in a node test environment throws before any test
+ * runs. Mocked to run the callback inline, matching every marketplace webhook
+ * spec. The purchase itself is asserted in `billing-webhook-ga-purchase.spec.ts`;
+ * here this only keeps the module loadable.
+ */
+jest.mock('next/server', () => ({
+  after: (work: () => unknown) => {
+    void work()
   },
 }))
 
@@ -428,5 +446,96 @@ describe('the refund handles (AGL-2315)', () => {
     expect(storedBooking().refundedCents).toBe(3000)
     expect(sentEmails).toHaveLength(0)
     expect(contactUpserts).toHaveLength(0)
+  })
+})
+
+/**
+ * THE REGIME THE BOOKING CARRIED, ON THE RECORD (AGL-2028).
+ *
+ * `server.ts` now charges the merchant's own service rate when they have set
+ * one, as an ordinary line item Stripe is never told is tax (AGL-1711). That
+ * construction is what keeps the tax the MERCHANT's rather than something
+ * computed against Aglyn's registrations — and it is also what makes the
+ * session report `total_details.amount_tax: 0`, so the session's own
+ * `metadata.taxCents` is the ONLY witness to the figure.
+ *
+ * The booking document is what the merchant reads, and every other storefront
+ * money door stamps `taxMode` on exactly that (AGL-2451). Three things follow
+ * and all three were absent before:
+ *
+ *  1. **`taxMode`**, from the shared `storefrontTaxModeOf` derivation in its
+ *     two-argument form — never a constant, so the day a rate is set the
+ *     record follows it rather than needing a second change here.
+ *  2. **`taxCents`** beside it, absent rather than a defaulted zero: "no tax
+ *     was charged" and "this booking predates the field" are different facts,
+ *     and a zero written through `merge` is the AGL-1758 shape.
+ *  3. **The contact's lifetime value must EXCLUDE it.** Tax is not the
+ *     merchant's revenue. `paidAmountCents` stays the full charge, because it
+ *     is the ceiling a refund reverses and the guest paid all of it.
+ */
+describe('a booking records its tax regime (AGL-2028)', () => {
+  /** $95 service + $5.70 service tax at 6% = $100.70 charged. */
+  const TAXED_SESSION = {
+    ...BOOKING_SESSION,
+    amount_total: 10070,
+    metadata: { ...BOOKING_SESSION.metadata, taxCents: '570', taxPct: '6' },
+  }
+
+  it('stamps the regime on the booking the merchant reads', async () => {
+    await deliver(BOOKING_SESSION)
+    const booking = storedBooking()
+    expect(booking.status).toBe('confirmed')
+    // The default store sets no service rate, so the honest answer is `none`
+    // — recorded, which is what separates it from a booking taken before the
+    // field existed.
+    expect(booking.taxMode).toBe('none')
+    expect(booking.taxCents).toBeUndefined()
+  })
+
+  it('records a merchant-rated booking as `manual`, not `none`', async () => {
+    // THE DEFECT A ONE-ARGUMENT DERIVATION WOULD LEAVE. Stripe reports no tax
+    // on this session by our own construction, so anything reading only
+    // Stripe's fields says `none` here — for a booking that really did charge
+    // the client tax.
+    await deliver(TAXED_SESSION)
+    const booking = storedBooking()
+    expect(booking.taxMode).toBe('manual')
+    expect(booking.taxCents).toBe(570)
+  })
+
+  it('follows the session rather than restating a constant', async () => {
+    // Stripe Tax is never asked from this path, but the derivation must still
+    // be the shared one rather than a hand-written "manual if metadata".
+    await deliver({
+      ...BOOKING_SESSION,
+      automatic_tax: { enabled: true },
+      total_details: { amount_tax: 570 },
+    })
+    expect(storedBooking().taxMode).toBe('stripe-automatic')
+  })
+
+  it('keeps the full charge as the refundable amount', async () => {
+    // `paidAmountCents` is the ceiling `refund.ts` reverses against, and the
+    // client handed over all of it — tax included.
+    await deliver(TAXED_SESSION)
+    expect(storedBooking().paidAmountCents).toBe(10070)
+  })
+
+  it('counts only the service toward the client’s lifetime value', async () => {
+    // Tax is not the merchant's revenue and must not inflate a contact's LTV
+    // — the AGL-1755 figure, kept honest.
+    await deliver(TAXED_SESSION)
+    expect(contactUpserts).toHaveLength(1)
+    expect(contactUpserts[0].purchaseCents).toBe(9500)
+    expect(contactUpserts[0].purchaseCents).not.toBe(10070)
+    expect(contactUpserts[0].interaction.summary).toContain('($95.00)')
+  })
+
+  it('survives a redelivered event', async () => {
+    await deliver(TAXED_SESSION)
+    await deliver(TAXED_SESSION)
+    const booking = storedBooking()
+    expect(booking.taxMode).toBe('manual')
+    expect(booking.taxCents).toBe(570)
   })
 })

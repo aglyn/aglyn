@@ -335,18 +335,23 @@ monthly invoice as a usage line. See
   only when the card happened to require one, and the phone and tax ID never were.
 - **Manage payment methods** opens the Stripe **Billing Portal** — update cards, view
   receipts, and set tax details there. It works even after a subscription lapses.
-- If a payment fails, the console shows a **past-due banner** during Stripe's retry
-  window; access continues while you fix the card, and entitlements only downgrade if
-  the subscription dies.
-- **What "the retry window" actually is.** Stripe retries a failed renewal **five
-  times over about three weeks** — the first retry roughly five days after the
-  failure, then weekly — and if none succeeds it **cancels the subscription** and the
-  workspace moves to **Free**. Measured end to end with a Stripe test clock on
-  2026-08-19: the subscription sat `past_due` through every retry and was cancelled
-  at **21.08 days**. The workspace is emailed by Stripe on each failed attempt, and
-  the console notifies the workspace's owners and admins once the subscription is
-  cancelled for non-payment. Paying the outstanding invoice at any point during the
-  window restores the plan with no further action.
+- If a payment fails, the console shows a **past-due banner** while Stripe retries;
+  access continues while you fix the card, and entitlements only downgrade if the
+  subscription dies.
+- **What happens after a failed payment.** Stripe retries the charge automatically,
+  several times over a period of weeks. Your plan keeps working throughout — a
+  past-due banner appears in the console, and nothing is switched off while the
+  retries are still running. If every retry fails, the subscription ends and the
+  workspace moves to **Free**; the console notifies the workspace's owners and admins
+  when that happens. **Paying the outstanding invoice at any point beforehand
+  restores the plan with no further action**, and you can update your card at any
+  time from **Manage payment methods**, which keeps working even after a
+  subscription lapses.
+- **We don't quote you an exact number of retries or days**, and that is deliberate.
+  The retry schedule is a Stripe-side setting rather than something Aglyn controls or
+  can read back, so any specific figure we printed here would be one we could not
+  guarantee. If you need the exact schedule for your account, the invoice in your
+  Stripe billing portal shows the next scheduled attempt.
 
 ## Related
 

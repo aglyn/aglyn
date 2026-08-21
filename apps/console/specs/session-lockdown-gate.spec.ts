@@ -49,6 +49,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // AGL-1993. Matches the real function under this env: the SSO domain
   // policy is unconfigured in tests, so it governs nothing and returns null.
   ssoDomainRefusal: () => null,
+  // AGL-1902. These scenarios all run on the workspace domain, where the
+  // console-domain epoch is never consulted — but a closed-world mock that
+  // omits it throws rather than skipping, which is a suite failure wearing a
+  // behaviour-change costume. `false` is what the real function answers for a
+  // host with no claim.
+  consoleSessionEpochRefuses: async () => false,
   __esModule: true,
   firebaseAdmin: {
     app: () => ({
@@ -131,6 +137,18 @@ jest.mock('@aglyn/aglyn/server', () => ({
   resolveIdpDisplayName: () => null,
   resolveIdpPhotoUrl: () => null,
   resolveIdpPhone: () => null,
+  // Every key present and blank, exactly as the real `resolveIdpAddress`
+  // returns when the assertion carries no address (AGL-1963). A mock that
+  // returned null or undefined would be easier to satisfy than the real
+  // function, which is how a double starts fabricating results.
+  resolveIdpAddress: () => ({
+    line1: '',
+    line2: '',
+    city: '',
+    state: '',
+    postalCode: '',
+    country: '',
+  }),
   // The REAL activity/expiry and time readers (AGL-1510) — a stubbed
   // `isLockdownActive` would make "an expired signups lock restores with no
   // write" unfalsifiable.

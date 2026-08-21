@@ -32,6 +32,10 @@ describe('payoutReadiness (AGL-1997)', () => {
         state: 'loaded',
         chargesEnabled: true,
         payoutsEnabled: false,
+        // AGL-2471: the payout question is only reached once the linkage's
+        // Stripe world is established. Recorded here so this case still
+        // asserts what it was written to assert.
+        accountLivemode: true,
       }),
     ).toBe('blocked')
   })
@@ -44,6 +48,7 @@ describe('payoutReadiness (AGL-1997)', () => {
         state: 'loaded',
         chargesEnabled: true,
         payoutsEnabled: true,
+        accountLivemode: true,
       }),
     ).toBe('ready')
   })
@@ -51,14 +56,19 @@ describe('payoutReadiness (AGL-1997)', () => {
   it('reports unknown — not blocked — when the field was never written', () => {
     // Every profile connected before AGL-1547 is this shape. Reading the
     // absent field as `false` would tell them their payouts are broken.
-    expect(payoutReadiness({ state: 'loaded', chargesEnabled: true })).toBe(
-      'unknown',
-    )
+    expect(
+      payoutReadiness({
+        state: 'loaded',
+        chargesEnabled: true,
+        accountLivemode: true,
+      }),
+    ).toBe('unknown')
     expect(
       payoutReadiness({
         state: 'loaded',
         chargesEnabled: true,
         payoutsEnabled: null,
+        accountLivemode: true,
       }),
     ).toBe('unknown')
   })
@@ -88,5 +98,51 @@ describe('payoutReadiness (AGL-1997)', () => {
         payoutsEnabled: true,
       }),
     ).toBe('error')
+  })
+
+  // AGL-2471 -----------------------------------------------------------------
+
+  it('will not speak about payouts for a linkage whose mode was never recorded', () => {
+    // The production shape. `stripeChargesEnabled: true` on a TEST-mode
+    // account made this card say "Payouts are enabled" about a storefront no
+    // money door would charge against — the panel and the checkout have to
+    // agree, and the panel was the more confident of the two.
+    expect(
+      payoutReadiness({ state: 'loaded', chargesEnabled: true }),
+    ).toBe('unverified')
+    // It outranks the payout question: an unverified linkage cannot take a
+    // payment at all, so "payouts are enabled" is the wrong thing to argue
+    // about.
+    expect(
+      payoutReadiness({
+        state: 'loaded',
+        chargesEnabled: true,
+        payoutsEnabled: true,
+      }),
+    ).toBe('unverified')
+  })
+
+  it('reads the recorded mode three-valued, like every other flag here', () => {
+    for (const value of ['true', 1, null, {}]) {
+      expect(
+        payoutReadiness({
+          state: 'loaded',
+          chargesEnabled: true,
+          payoutsEnabled: true,
+          accountLivemode: value,
+        }),
+      ).toBe('unverified')
+    }
+    // A recorded TEST mode is still RECORDED — the panel is not the place
+    // that compares it against the platform's key, so it says what it knows
+    // and lets the server gate make the comparison.
+    expect(
+      payoutReadiness({
+        state: 'loaded',
+        chargesEnabled: true,
+        payoutsEnabled: true,
+        accountLivemode: false,
+      }),
+    ).toBe('ready')
   })
 })

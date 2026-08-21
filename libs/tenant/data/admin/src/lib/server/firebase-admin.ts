@@ -24,7 +24,12 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import { firestoreDatabaseId } from '@aglyn/shared-util-fbserver'
 import { decode, encode } from '@msgpack/msgpack'
 import { type App, getApp } from 'firebase-admin/app'
-import { type DecodedIdToken, getAuth } from 'firebase-admin/auth'
+import {
+  type BaseAuth,
+  type DecodedIdToken,
+  getAuth,
+} from 'firebase-admin/auth'
+import { assertIdTokenNotRevoked } from './token-revocation'
 import { getDatabase } from 'firebase-admin/database'
 import { getRemoteConfig } from 'firebase-admin/remote-config'
 import {
@@ -135,10 +140,91 @@ export const layoutVersionConverter =
  * `firebaseAdmin.database()`) keep working unchanged, backed internally by
  * the modular SDK.
  */
+/**
+ * Auth wrapped so `verifyIdToken` also asks whether the account was revoked
+ * (AGL-1881).
+ *
+ * WHY HERE, and not at the call sites: the audit found `checkRevoked` set on
+ * 3 of 175 verifications, which is what a per-call-site opt-in converges to.
+ * Every server door in this repo reaches auth through `firebaseAdmin.app()` —
+ * all 117 console API routes, the marketplace/commerce/bookings plugin
+ * servers, `authForPool`, `release-flags` — so this ONE function is where the
+ * question can be asked once and be true everywhere, including on routes
+ * written next year by someone who has never read AGL-1881.
+ * `token-revocation.spec.ts` pins that the wrapping is real; the guard in
+ * `token-revocation-coverage.spec.ts` pins that no future door bypasses it.
+ *
+ * A Proxy rather than a hand-written facade because `BaseAuth` has ~40
+ * methods and a facade that listed 39 of them would silently drop the
+ * fortieth. Only `verifyIdToken` and `tenantManager` are intercepted;
+ * everything else is the SDK's own method, bound to the SDK's own instance.
+ *
+ * `tenantManager` is wrapped recursively because a GCIP tenant's
+ * `TenantAwareAuth` is a DIFFERENT auth object with its own `verifyIdToken`,
+ * and five console routes verify SSO tokens through it. Unwrapped, those five
+ * would be exactly the holes this exists to close.
+ *
+ * An explicit `checkRevoked: true` is left alone: firebase-admin then runs the
+ * same three checks itself, and doing both would buy one answer with two
+ * round trips.
+ */
+function revocationCheckedAuth<T extends object>(target: T): T {
+  return new Proxy(target, {
+    get(auth, prop, receiver) {
+      if (prop === 'verifyIdToken') {
+        return async (...args: unknown[]) => {
+          const verify = Reflect.get(auth, prop, auth) as (
+            ...a: unknown[]
+          ) => Promise<DecodedIdToken>
+          // Spread, never `(token, checkRevoked)`: passing an explicit
+          // `undefined` where the caller passed nothing changes what the SDK
+          // sees, and a wrapper that alters the call it forwards is not a
+          // wrapper.
+          const decoded = await verify.apply(auth, args)
+          if (args[1] === true) return decoded
+          // `auth`, not `receiver`: the lookup must land on the pool that
+          // verified the token (AGL-2005), and it must not re-enter this
+          // proxy.
+          await assertIdTokenNotRevoked(
+            auth as unknown as Pick<BaseAuth, 'getUser'>,
+            decoded,
+          )
+          return decoded
+        }
+      }
+      if (prop === 'tenantManager') {
+        return (...args: unknown[]) => {
+          const manager = (
+            Reflect.get(auth, prop, auth) as (...a: unknown[]) => object
+          ).apply(auth, args)
+          return new Proxy(manager, {
+            get(mgr, key, mgrReceiver) {
+              if (key === 'authForTenant') {
+                return (...tenantArgs: unknown[]) =>
+                  revocationCheckedAuth(
+                    (
+                      Reflect.get(mgr, key, mgr) as (...a: unknown[]) => object
+                    ).apply(mgr, tenantArgs),
+                  )
+              }
+              const value = Reflect.get(mgr, key, mgrReceiver)
+              return typeof value === 'function' ? value.bind(mgr) : value
+            },
+          })
+        }
+      }
+      const value = Reflect.get(auth, prop, receiver)
+      // Bound to the SDK instance: firebase-admin's Auth keeps private state
+      // on `this`, and an unbound method handed out through a Proxy loses it.
+      return typeof value === 'function' ? value.bind(auth) : value
+    },
+  })
+}
+
 function wrapApp(app: App) {
   return {
     firestore: () => getFirestore(app, firestoreDatabaseId()),
-    auth: () => getAuth(app),
+    auth: () => revocationCheckedAuth(getAuth(app)),
     storage: () => getStorage(app),
     // Release-flag management (AGL-230): the staff admin flags API reads
     // and publishes the Remote Config template server-side.
@@ -199,7 +285,15 @@ export async function verifyConsoleIdToken(
   idToken: string,
   checkRevoked?: boolean,
 ): Promise<DecodedIdToken> {
-  const decoded = await getAuth(getApp()).verifyIdToken(idToken, checkRevoked)
+  // `firebaseAdmin.app().auth()`, not a bare `getAuth` (AGL-1881): the raw
+  // SDK handle skips the revocation check, and this helper's whole promise is
+  // that it verifies "exactly like `auth().verifyIdToken`" plus the email
+  // gate. A door that reads as the STRICTER one while being the looser one is
+  // the worst shape available.
+  const decoded = await firebaseAdmin
+    .app()
+    .auth()
+    .verifyIdToken(idToken, checkRevoked)
   if (!isEmailVerified(decoded) && !isImpersonationSession(decoded)) {
     throw new EmailNotVerifiedError()
   }

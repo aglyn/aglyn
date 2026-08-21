@@ -23,8 +23,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
   COLLECTION_TEMPLATE_SCREEN_FIELDS,
+  collectCollectionListRoutes,
   collectTemplateScreenIds,
   getTemplateScreenIds,
+  getTemplateScreenRouting,
 } from './template-screens'
 
 const snapshotOf = (docs: Array<Record<string, unknown>>) => ({
@@ -152,7 +154,7 @@ describe('getTemplateScreenIds (AGL-1267, AGL-1270, AGL-1400)', () => {
     expect(screensQuery.select).toHaveBeenCalledWith()
   })
 
-  it('projects the collections read onto exactly the three template fields', async () => {
+  it('projects the collections read onto the template fields plus the route', async () => {
     collectionsQuery.get.mockResolvedValue(
       snapshotOf([{ entryScreenId: 'entry-1' }]),
     )
@@ -160,9 +162,38 @@ describe('getTemplateScreenIds (AGL-1267, AGL-1270, AGL-1400)', () => {
     const ids = await getTemplateScreenIds({ hostId: 'host-1' })
 
     expect(ids.has('entry-1')).toBe(true)
+    // AGL-1998 widened the mask by `slug`/`kind` — WITHOUT them
+    // `collectCollectionListRoutes` reads undefined off every document and
+    // silently answers "no list template is routed anywhere".
     expect(collectionsQuery.select).toHaveBeenCalledWith(
       ...COLLECTION_TEMPLATE_SCREEN_FIELDS,
+      'slug',
+      'kind',
     )
+  })
+
+  it('answers where a list template is served, from the same read', async () => {
+    // The live aglyn.com shape: the blog's list template is published under
+    // `blog-list-template` (a path this same function makes 404) and serves
+    // `/blog`. Both halves come out of ONE collections query.
+    collectionsQuery.get.mockResolvedValue(
+      snapshotOf([
+        {
+          slug: 'blog',
+          listScreenId: 'blogListTmpl',
+          entryScreenId: 'blogEntryTmpl',
+        },
+      ]),
+    )
+
+    const routing = await getTemplateScreenRouting({ hostId: 'host-1' })
+
+    expect(routing.listRoutes).toEqual({ blogListTmpl: 'blog' })
+    expect([...routing.templateScreenIds].sort()).toEqual([
+      'blogEntryTmpl',
+      'blogListTmpl',
+    ])
+    expect(collectionsQuery.get).toHaveBeenCalledTimes(1)
   })
 
   it('unions the store templates into the same set', async () => {
@@ -264,5 +295,48 @@ describe('getTemplateScreenIds (AGL-1267, AGL-1270, AGL-1400)', () => {
     )
 
     consoleError.mockRestore()
+  })
+})
+
+describe('collectCollectionListRoutes (AGL-1998)', () => {
+  it('maps a list template to the collection route it serves', () => {
+    expect(
+      collectCollectionListRoutes({
+        collections: snapshotOf([
+          { slug: 'blog', listScreenId: 'blogListTmpl' },
+          { slug: 'press', listScreenId: 'pressListTmpl', kind: 'content' },
+        ]),
+      }),
+    ).toEqual({ blogListTmpl: 'blog', pressListTmpl: 'press' })
+  })
+
+  it('ignores a CATALOG collection, whose listing is not /{slug}', () => {
+    // `/collections/{slug}` is commerce's, composed out of settings/store —
+    // routing a link to `/{slug}` would point it at a path that does not exist.
+    expect(
+      collectCollectionListRoutes({
+        collections: snapshotOf([
+          { slug: 'shoes', listScreenId: 'catalogTmpl', kind: 'catalog' },
+        ]),
+      }),
+    ).toEqual({})
+  })
+
+  it('ignores a collection with no slug and one with no list template', () => {
+    expect(
+      collectCollectionListRoutes({
+        collections: snapshotOf([
+          { listScreenId: 'orphan' },
+          { slug: '', listScreenId: 'blank' },
+          { slug: 'notes' },
+          { slug: 'more', listScreenId: 42 },
+        ]),
+      }),
+    ).toEqual({})
+  })
+
+  it('tolerates an absent collections read', () => {
+    expect(collectCollectionListRoutes({})).toEqual({})
+    expect(collectCollectionListRoutes({ collections: null })).toEqual({})
   })
 })

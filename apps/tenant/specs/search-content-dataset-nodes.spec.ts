@@ -55,6 +55,14 @@ jest.mock('@aglyn/tenant-runtime/template-screens', () => ({
   __esModule: true,
   __esModuleDefault: true,
   default: jest.fn(async () => new Set<string>()),
+  // Faithful to the real module's OTHER export (AGL-1998): a double that
+  // omits it makes `loadNotFoundScreen`/`page.tsx` throw on an undefined
+  // function, and the surrounding try/catch turns that into a silent null.
+  getTemplateScreenIds: jest.fn(async () => new Set<string>()),
+  getTemplateScreenRouting: jest.fn(async () => ({
+    templateScreenIds: new Set<string>(),
+    listRoutes: {} as Record<string, string>,
+  })),
 }))
 // The REAL helpers, reached by file path so the stub stays light. `decodeStoredNodes`
 // especially: it is the subject, and a faked one would assert nothing.
@@ -69,6 +77,16 @@ jest.mock('@aglyn/aglyn/server', () => ({
   decodeStoredNodes: jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/stored-nodes',
   ).decodeStoredNodes,
+  // The entry branch reaches for both of these (AGL-1525). This suite seeds
+  // no content collections, so it never calls them — but an unfaithful
+  // double is how a suite starts passing for the wrong reason, and
+  // `{...undefined}` is a Fuse that matches EVERYTHING rather than a crash.
+  COLLECTION_SEARCH_FUSE_OPTIONS: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/collection-entries',
+  ).COLLECTION_SEARCH_FUSE_OPTIONS,
+  formatCollectionEntryDate: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/collection-entries',
+  ).formatCollectionEntryDate,
 }))
 
 import { firebaseAdmin, orgDataQueryForHost } from '@aglyn/tenant-data-admin'

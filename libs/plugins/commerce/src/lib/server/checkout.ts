@@ -20,6 +20,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { claimAttempt, deriveStripeObjectKey } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
 import { readActiveMemberSession } from './membership'
 import { resolveManualTaxRateId } from './manual-tax-rate'
 import {
@@ -255,7 +256,16 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         .json({ error: 'Gift cards require a Business plan' })
     }
     const accountId = ownerProfile.get('stripeAccountId')
-    if (!accountId || !ownerProfile.get('stripeChargesEnabled')) {
+    if (
+      !connectLinkageIsReady(
+        {
+          accountId,
+          chargesEnabled: ownerProfile.get('stripeChargesEnabled'),
+          accountLivemode: ownerProfile.get('stripeAccountLivemode'),
+        },
+        { subject: `checkout host ${hostId}` },
+      )
+    ) {
       return res
         .status(409)
         .json({ error: 'This site has not enabled payments yet' })

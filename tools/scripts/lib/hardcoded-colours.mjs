@@ -50,12 +50,16 @@
  *
  * ## What counts
  *
- * A hex literal that is the VALUE of a colour-valued CSS/`sx` property:
+ * A hex literal — or a fully-literal `rgb()`/`hsl()` call — that is the VALUE
+ * of a colour-valued CSS/`sx` property:
  *
  *     sx: { color: '#2196f3' }          ← counts
  *     backgroundColor: '#111827'         ← counts
  *     border: '1px solid #d1d5db'        ← counts (shorthand)
+ *     boxShadow: '0 8px 24px rgba(0,0,0,0.18)'   ← counts (literal rgba)
  *     sx: { color: 'primary.main' }      ← does NOT count, and must not
+ *     backgroundColor: `rgba(${tv.palette.surface.mainChannel} / 0.96)`
+ *                                        ← does NOT count: a channel TOKEN
  *     "#1042"                            ← does NOT count (not a style slot)
  *     // the brand blue is #00b0ff       ← does NOT count (comment)
  *
@@ -183,6 +187,39 @@ const COLOUR_KEY = new RegExp(
 
 /** Every hex inside an already-extracted region. */
 const BARE_HEX = new RegExp(HEX, 'g')
+
+/**
+ * A colour written as a FUNCTION with entirely literal arguments —
+ * `rgb()`, `rgba()`, `hsl()`, `hsla()`.
+ *
+ * Hex is not the only way to pin a colour, and until now it was the only one
+ * this detector could see: 28 literal `rgba(...)` values across 10 files sat
+ * in colour slots completely invisible to it, which is the same "precise
+ * about one form, blind to the category" shape the census had.
+ *
+ * ## Why the arguments must be literal — this is the whole subtlety
+ *
+ * MUI's channel tokens are WRITTEN AS `rgba()`, and they are the CORRECT
+ * pattern:
+ *
+ *     backgroundColor: `rgba(${tv.palette.surface.mainChannel} / 0.96)`  ← themed
+ *     borderRightColor: `rgba(${tv.palette.warning.darkChannel} / 0.36)` ← themed
+ *     boxShadow: '0px 8px 24px rgba(0,0,0,0.18)'                        ← pinned
+ *
+ * Measured on the tree: 72 `rgb`/`hsl` calls sit in colour slots and 44 of
+ * them are that channel idiom. A detector matching `rgba(` would fire on all
+ * 72 — flagging correctly-themed code, and specifically pushing authors AWAY
+ * from the token form this issue exists to push them toward. That is the
+ * false-positive direction that gets a guard deleted.
+ *
+ * So every argument must be a bare number (optionally `%` or `deg`). An
+ * interpolation, a `var(--…)`, or any identifier means the value is derived
+ * from something, and derived is the thing we are asking for. Both the legacy
+ * comma form and the modern space/slash form are matched, because
+ * `rgb(255 255 255 / 0.5)` pins exactly as hard as `rgba(255,255,255,0.5)`.
+ */
+const COLOUR_FUNCTION =
+  /\b(?:rgba?|hsla?)\(\s*[0-9.]+(?:%|deg)?(?:\s*[,/ ]\s*[0-9.]+(?:%|deg)?){2,3}\s*\)/g
 
 /**
  * The extent of the value that starts at `from`.
@@ -330,6 +367,9 @@ export function blankNonCode(source, path = 'source.tsx') {
  *   the path are tests passing a fragment. The gate passes the real path,
  *   because `.ts` parsed as `.tsx` is a silent misread (see `scriptKindFor`).
  * @returns {Array<{ line: number, property: string, hex: string, text: string }>}
+ *   `hex` carries the literal AS WRITTEN, lowercased — a hex, or a fully
+ *   literal `rgb()`/`hsl()` call. The name predates the function form and is
+ *   kept because the CLI and the whole test file read it.
  */
 export function findHardcodedColours(source, path = 'source.tsx') {
   const text = String(source ?? '')
@@ -364,6 +404,8 @@ export function findHardcodedColours(source, path = 'source.tsx') {
     const region = scanned.slice(valueStart, valueRegion(scanned, valueStart))
     for (const hex of region.matchAll(BARE_HEX))
       record(valueStart + hex.index, match[1], hex[0])
+    for (const fn of region.matchAll(COLOUR_FUNCTION))
+      record(valueStart + fn.index, match[1], fn[0])
   }
 
   return found.sort((a, b) => a.line - b.line)

@@ -227,3 +227,208 @@ describe('writeBeaconHeartbeat (AGL-1923)', () => {
     })
   })
 })
+
+/**
+ * The server half of the beacon (AGL-1921).
+ *
+ * The gap this closes is not subtle: the alerting stack had eleven policies
+ * and not one could see a server error rate, so a route could 500 for every
+ * paying customer behind a green `/api/health`. These drive the real function
+ * against a mocked credential and a mocked `fetch` — like the heartbeat
+ * above, every branch that matters is a branch of the transport.
+ */
+describe('reportServerError (AGL-1921)', () => {
+  const realFetch = globalThis.fetch
+  let getAccessToken: jest.Mock
+
+  beforeEach(() => {
+    jest.resetModules()
+    getAccessToken = jest.fn().mockResolvedValue({ access_token: 'tok' })
+  })
+
+  afterEach(() => {
+    globalThis.fetch = realFetch
+    jest.restoreAllMocks()
+  })
+
+  async function load(app: unknown) {
+    jest.doMock('firebase-admin/app', () => ({
+      getApp: () => {
+        if (app instanceof Error) throw app
+        return app
+      },
+    }))
+    jest.doMock('@aglyn/shared-util-fbserver', () => ({}))
+    return await import('./client-error-report')
+  }
+
+  const HEALTHY_APP = {
+    options: {
+      projectId: 'aglyn-main',
+      credential: { getAccessToken: () => getAccessToken() },
+    },
+  }
+
+  const okFetch = () => {
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 200 })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+    return fetchMock
+  }
+
+  it('writes to the SERVER log, not the client one — they alert separately', async () => {
+    const fetchMock = okFetch()
+    const mod = await load(HEALTHY_APP)
+    const outcome = await mod.reportServerError(
+      { message: 'boom', route: '/[host]/[[...slug]]', method: 'GET' },
+      { service: 'tenant-web' },
+    )
+
+    expect(outcome).toBe('written')
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.logName).toBe(`projects/aglyn-main/logs/${mod.SERVER_ERROR_LOG_ID}`)
+    expect(mod.SERVER_ERROR_LOG_ID).toBe('server-errors')
+    // Sharing the client log would make the existing `Client error beacon`
+    // policy fire for server 5xx too, and force triage to start by asking
+    // which kind it was.
+    expect(body.logName).not.toContain(mod.CLIENT_ERROR_LOG_ID)
+    expect(body.entries).toHaveLength(1)
+    expect(body.entries[0].severity).toBe('ERROR')
+  })
+
+  it('carries the ReportedErrorEvent @type, or Error Reporting never groups it', async () => {
+    const fetchMock = okFetch()
+    const mod = await load(HEALTHY_APP)
+    await mod.reportServerError({ message: 'boom' }, { service: 'console-web' })
+
+    const payload = JSON.parse(fetchMock.mock.calls[0][1].body).entries[0].jsonPayload
+    expect(payload['@type']).toBe(
+      'type.googleapis.com/google.devtools.clouderrorreporting.v1beta1.ReportedErrorEvent',
+    )
+    expect(payload.serviceContext.service).toBe('console-web')
+  })
+
+  it('sends the route PATTERN and never a resolved path — the PII boundary', async () => {
+    const fetchMock = okFetch()
+    const mod = await load(HEALTHY_APP)
+    await mod.reportServerError(
+      {
+        message: 'boom',
+        route: '/[orgSlug]/hosts/[host]/settings',
+        method: 'POST',
+      },
+      { service: 'console-web' },
+    )
+
+    const payload = JSON.parse(fetchMock.mock.calls[0][1].body).entries[0].jsonPayload
+    expect(payload.route).toBe('/[orgSlug]/hosts/[host]/settings')
+    // A resolved console path carries the org slug and document ids, and this
+    // body leaves our origin for a Google log.
+    const serialized = fetchMock.mock.calls[0][1].body as string
+    expect(serialized).not.toContain('acme-industries')
+  })
+
+  it('uses the stack as the message when there is one', async () => {
+    const fetchMock = okFetch()
+    const mod = await load(HEALTHY_APP)
+    await mod.reportServerError(
+      { message: 'boom', stack: 'Error: boom\n  at handler (/app/route.js:1:2)' },
+      { service: 'tenant-web' },
+    )
+
+    const payload = JSON.parse(fetchMock.mock.calls[0][1].body).entries[0].jsonPayload
+    expect(payload.message).toContain('at handler')
+    // With a parseable stack, reportLocation must be absent — the stack IS
+    // the grouping key.
+    expect(payload.context.reportLocation).toBeUndefined()
+  })
+
+  it('falls back to reportLocation without a stack, or ingestion DROPS it', async () => {
+    const fetchMock = okFetch()
+    const mod = await load(HEALTHY_APP)
+    await mod.reportServerError(
+      { message: 'boom', route: '/api/billing/checkout', routeType: 'route' },
+      { service: 'console-web' },
+    )
+
+    const payload = JSON.parse(fetchMock.mock.calls[0][1].body).entries[0].jsonPayload
+    expect(payload.message).toBe('boom')
+    expect(payload.context.reportLocation.filePath).toBe('/api/billing/checkout')
+    expect(payload.context.reportLocation.functionName).toBe('route')
+  })
+
+  it('bounds the spike it exists to observe, and REPORTS what it suppressed', async () => {
+    // The failure being watched for is a spike, and a spike is exactly when
+    // an unbounded reporter turns one incident into a billing incident.
+    const fetchMock = okFetch()
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const mod = await load(HEALTHY_APP)
+
+    const outcomes: string[] = []
+    for (let i = 0; i < 65; i += 1) {
+      outcomes.push(
+        await mod.reportServerError({ message: `boom ${i}` }, { service: 'tenant-web' }),
+      )
+    }
+
+    expect(outcomes.filter((o) => o === 'written')).toHaveLength(60)
+    expect(outcomes.filter((o) => o === 'suppressed')).toHaveLength(5)
+    expect(fetchMock).toHaveBeenCalledTimes(60)
+
+    // Suppression must never be silent: a monitoring path that hides its own
+    // lossiness is the exact shape this repo keeps finding.
+    jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 61_000)
+    await mod.reportServerError({ message: 'next window' }, { service: 'tenant-web' })
+    const summary = warn.mock.calls
+      .map((call) => String(call[0]))
+      .find((line) => line.includes('AGL-1921') && line.includes('suppressed'))
+    expect(summary).toBeDefined()
+    expect(JSON.parse(summary as string).suppressed).toBe(5)
+  })
+
+  it('drops rather than throws when the credential cannot be minted', async () => {
+    okFetch()
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    getAccessToken = jest.fn().mockResolvedValue({})
+    const mod = await load(HEALTHY_APP)
+
+    await expect(
+      mod.reportServerError({ message: 'boom' }, { service: 'tenant-web' }),
+    ).resolves.toBe('dropped')
+  })
+
+  it('never throws on a transport failure — it runs inside a failing request', async () => {
+    globalThis.fetch = jest
+      .fn()
+      .mockRejectedValue(new Error('socket hang up')) as unknown as typeof fetch
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const mod = await load(HEALTHY_APP)
+
+    await expect(
+      mod.reportServerError({ message: 'boom' }, { service: 'tenant-web' }),
+    ).resolves.toBe('dropped')
+    expect(warn).toHaveBeenCalled()
+  })
+
+  it('reports the STATUS on a rejected write, never the body', async () => {
+    globalThis.fetch = jest
+      .fn()
+      .mockResolvedValue({ ok: false, status: 403 }) as unknown as typeof fetch
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const mod = await load(HEALTHY_APP)
+
+    await expect(
+      mod.reportServerError({ message: 'boom' }, { service: 'tenant-web' }),
+    ).resolves.toBe('dropped')
+    expect(String(warn.mock.calls[0][0])).toContain('403')
+  })
+
+  it('drops an empty message instead of writing a blank error group', async () => {
+    const fetchMock = okFetch()
+    const mod = await load(HEALTHY_APP)
+
+    await expect(
+      mod.reportServerError({ message: '' }, { service: 'tenant-web' }),
+    ).resolves.toBe('dropped')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})

@@ -135,3 +135,101 @@ export function isDevelopmentRuntime(
 ): boolean {
   return env['NODE_ENV'] !== 'production'
 }
+
+/**
+ * Build metadata that is unset, in every spelling this repo produces.
+ *
+ * `libs/shared/data/enums/src/lib/global.ts` renders unset build metadata as
+ * the literal string `'NULL'`, and a Docker `ARG` referenced with no value
+ * hands the same text through the build. Treating those as a real answer is
+ * how a health endpoint ends up reporting that it is running commit "NULL".
+ */
+const UNSTAMPED = new Set(['', 'NULL', 'null', 'undefined'])
+
+/**
+ * Build metadata, read as LITERALS at module scope — and that is load-bearing.
+ *
+ * `PACKAGE_VERSION`, `BUILD_ID` and `COMMIT_REF` are not runtime environment
+ * variables. They are build-time defines: `with-aglyn.nextjs.config.js` lists
+ * them in `env`, and the bundler replaces the literal text
+ * `process.env.PACKAGE_VERSION` with the value. Nothing sets them in the
+ * process — the Dockerfiles set `COMMIT_REF` in the BUILD stage, not the
+ * runner — so a read that the bundler cannot see statically resolves to
+ * `undefined` at runtime.
+ *
+ * A parameterised read is exactly such a read: with `env = process.env`,
+ * `env['PACKAGE_VERSION']` is a property access on an alias and no bundler
+ * replaces it. The functions below therefore default to this snapshot rather
+ * than to `process.env`, which is the difference between a health body that
+ * reports a version and one that reports null while every unit test passes.
+ * `deploymentEnvironmentLabel()` above can default to `process.env` because
+ * `VERCEL_ENV`, `NODE_ENV` and `AGLYN_STANDALONE` are genuine runtime
+ * variables — the distinction is the variable, not the style.
+ *
+ * `VERCEL_GIT_COMMIT_SHA` is both, and is read here for uniformity; it is set
+ * in the Vercel runtime as well as inlined, and `/api/health` has been
+ * answering `"commit"` from it in production all along.
+ */
+const BUILD_METADATA: Record<string, string | undefined> = {
+  BUILD_ID: process.env.BUILD_ID,
+  COMMIT_REF: process.env.COMMIT_REF,
+  PACKAGE_VERSION: process.env.PACKAGE_VERSION,
+  VERCEL_GIT_COMMIT_SHA: process.env.VERCEL_GIT_COMMIT_SHA,
+}
+
+function stamped(value: string | undefined): string | null {
+  const trimmed = String(value ?? '').trim()
+  return UNSTAMPED.has(trimmed) ? null : trimmed
+}
+
+/**
+ * Which BUILD answered, on any deployment shape (AGL-2091).
+ *
+ * Every `/api/health*` route read `VERCEL_GIT_COMMIT_SHA` directly, which is
+ * unset everywhere except Aglyn's cloud — so a self-hosted install's health
+ * body said `"commit": null`, and the operator's only way to say what they
+ * were running was to guess. The endpoint whose entire job is to describe the
+ * running build described nobody else's.
+ *
+ * The precedence deliberately matches the console footer's (AGL-2181), so the
+ * two surfaces cannot disagree about the same build:
+ *
+ *  1. `BUILD_ID` — an explicit stamp, which is what a self-host operator sets
+ *     when they cut their own build and want their own identifier back.
+ *  2. `COMMIT_REF` — already resolved from four candidates by
+ *     `with-aglyn.nextjs.config.js` and already exported from `global.ts`; it
+ *     had no consumers at all until this one.
+ *  3. `VERCEL_GIT_COMMIT_SHA` — Aglyn's cloud, unchanged.
+ *
+ * Shortened to seven characters, the form `/api/health` has always reported,
+ * so an existing uptime series stays comparable across the change.
+ */
+export function deploymentCommitRef(
+  env: Record<string, string | undefined> = BUILD_METADATA,
+): string | null {
+  const ref =
+    stamped(env['BUILD_ID']) ??
+    stamped(env['COMMIT_REF']) ??
+    stamped(env['VERCEL_GIT_COMMIT_SHA'])
+  return ref === null ? null : ref.slice(0, 7)
+}
+
+/**
+ * Which VERSION of the platform this is (AGL-2091).
+ *
+ * The number a self-hoster quotes in a bug report, and the one that answers
+ * "has the fix reached me yet". It needs no operator configuration:
+ * `with-aglyn.nextjs.config.js` reads it out of the root `package.json` and
+ * inlines it as `PACKAGE_VERSION`, so a container built from a release tag
+ * reports that release the first time it starts — unlike the commit, which an
+ * operator has to stamp if they want it.
+ *
+ * Null rather than `'NULL'` when a build missed the define: a health body that
+ * admits it does not know is honest, and one that reports a version of "NULL"
+ * teaches whoever reads it to ignore the field.
+ */
+export function platformVersion(
+  env: Record<string, string | undefined> = BUILD_METADATA,
+): string | null {
+  return stamped(env['PACKAGE_VERSION'])
+}

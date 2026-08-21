@@ -45,7 +45,10 @@ function fakeFirestore(seed: Record<string, Record<string, number>>) {
     },
   }
   const firestore = {
-    async runTransaction(work: (tx: unknown) => Promise<void>) {
+    // Returns the updateFunction's resolved value, exactly as the real
+    // `runTransaction` does. A fake that swallowed it would report every
+    // `recordVersionMove` departure as failed and fabricate a red (AGL-1420).
+    async runTransaction<T>(work: (tx: unknown) => Promise<T>): Promise<T> {
       const tx = {
         async get(ref: { id: string }) {
           const data = docs.get(ref.id)
@@ -58,7 +61,7 @@ function fakeFirestore(seed: Record<string, Record<string, number>>) {
           docs.set(ref.id, { ...(docs.get(ref.id) ?? {}), ...patch })
         },
       }
-      await work(tx)
+      return await work(tx)
     },
   }
   return { firestore, listingRef, docs, collections }
@@ -128,12 +131,110 @@ describe('recordVersionMove (AGL-1036)', () => {
   it('skips a version whose document is gone rather than creating one', async () => {
     const fake = await move({ '2': {} }, '1', '2')
     expect(fake.docs.has('1')).toBe(false)
-    expect(fake.docs.get('2')).toEqual({ activeInstalls: 1, installCount: 1 })
   })
 
   it('reads plugin counters from pluginVersions', async () => {
     const fake = await move({ '1.0.0': {} }, null, '1.0.0', 'plugin')
     expect(fake.collections).toContain('pluginVersions')
+  })
+})
+
+/**
+ * A move conserves: no departure, no arrival (AGL-1420).
+ *
+ * The bug these cover is not arithmetic for its own sake. `IMPORTABLE_FIELDS`
+ * carries `marketplace` / `installedFrom` / `source` through
+ * `POST /api/hosts/import` on purpose — dropping it would break
+ * update-available detection on a legitimate same-host backup restore, which
+ * is the restore that matters. So a restored component or dataset arrives
+ * fully stamped with provenance having never run an install route: nothing
+ * incremented, no pin written. Later the publisher ships an update, a human
+ * presses Update, and `update-artifact` calls `recordVersionMove` with a
+ * `from` that nothing ever credited.
+ *
+ * Both no-op paths were on the `from` half, so the error was one-directional
+ * — net +1 per press, repeatable once per version. And it did not stay local:
+ * `reconcileCounter` takes `max(versionSum, stored)`, so an inflated
+ * per-version tally raises the listing total shown to buyers, and only a pin
+ * count can pull it back — which `verifiedLivePins` refuses for everything
+ * that is not a plugin, i.e. exactly the set an import can restore.
+ */
+describe('a version move conserves (AGL-1420)', () => {
+  it('does not credit the arrival when the from-version document is gone', async () => {
+    // The restored copy claims version 1; version 1 has since been deleted.
+    const fake = await move({ '2': {} }, '1', '2')
+
+    // THE ASSERTION THAT MATTERS: version 2 gained nothing. Before this, the
+    // decrement evaporated on the missing doc and the increment landed anyway.
+    expect(fake.docs.get('2')).toEqual({})
+    // And the deleted version is still not resurrected as a stub.
+    expect(fake.docs.has('1')).toBe(false)
+  })
+
+  it('does not credit the arrival when the from-version has nothing to give', async () => {
+    // Version 1 exists but holds zero active installs — so this copy is not
+    // one of them. The clamp used to swallow the decrement and let the
+    // increment through regardless.
+    const fake = await move(
+      { '1': { activeInstalls: 0, installCount: 4 }, '2': {} },
+      '1',
+      '2',
+    )
+
+    expect(fake.docs.get('2')).toEqual({})
+    expect(fake.docs.get('1')).toEqual({ activeInstalls: 0, installCount: 4 })
+  })
+
+  it('repeated presses on a restored copy cannot accumulate', async () => {
+    // The issue's actual shape: a human can press Update once per published
+    // version. Each press must stay worth nothing.
+    let seed: Record<string, Record<string, number>> = { '2': {} }
+    for (const [from, to] of [
+      ['1', '2'],
+      ['2', '3'],
+      ['3', '4'],
+    ]) {
+      const fake = await move({ ...seed, [to]: seed[to] ?? {} }, from, to)
+      seed = Object.fromEntries(fake.docs) as typeof seed
+    }
+    const total = Object.values(seed).reduce(
+      (running, fields) => running + Number(fields.installCount ?? 0),
+      0,
+    )
+    expect(total).toBe(0)
+  })
+
+  /**
+   * THE CONTROL, and the one that stops "conserves" from meaning "never
+   * counts". A genuine move — the from-version exists and really does hold
+   * this install — still moves, and a genuine first install still lands.
+   */
+  it('THE CONTROL: a real move and a real first install still count', async () => {
+    const moved = await move(
+      {
+        '1': { activeInstalls: 3, installCount: 9 },
+        '2': { activeInstalls: 1, installCount: 1 },
+      },
+      '1',
+      '2',
+    )
+    expect(moved.docs.get('1')).toMatchObject({ activeInstalls: 2 })
+    expect(moved.docs.get('2')).toMatchObject({
+      activeInstalls: 2,
+      installCount: 2,
+    })
+
+    const first = await move({ '1': {} }, null, '1')
+    expect(first.docs.get('1')).toEqual({ activeInstalls: 1, installCount: 1 })
+  })
+
+  /**
+   * An uninstall is a departure with no arrival, and must still be recorded.
+   * `install-plugin.ts` calls this as `{ from: pinnedVersion, to: null }`.
+   */
+  it('still records an uninstall, which is a departure with no arrival', async () => {
+    const fake = await move({ '1': { activeInstalls: 2, installCount: 7 } }, '1', null)
+    expect(fake.docs.get('1')).toEqual({ activeInstalls: 1, installCount: 7 })
   })
 })
 

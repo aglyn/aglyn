@@ -20,6 +20,7 @@ import {
   collectScreenDescendantIds,
   composeScreenRoutePath,
   findScreenIdByRoutePath,
+  linkableScreenRoutes,
   normalizeScreenSlug,
   SCREEN_ROOT_PATH,
   screenClaimsToBeAPage,
@@ -211,5 +212,79 @@ describe('screenClaimsToBeAPage', () => {
   it('treats a missing document as not a page', () => {
     expect(screenClaimsToBeAPage(null)).toBe(false)
     expect(screenClaimsToBeAPage(undefined)).toBe(false)
+  })
+})
+
+describe('linkableScreenRoutes', () => {
+  // The live aglyn.com shape (AGL-1998): the blog's list template is published
+  // under its own slug, which 404s, and serves `/blog`; the entry template is
+  // published under a slug that 404s and serves nothing at all.
+  const raw = {
+    home: '/',
+    blogListTmpl: 'blog-list-template',
+    blogEntryTmpl: 'blog-entry-template',
+    changelog: 'changelog',
+  }
+
+  it('leaves the map alone when nothing is routed differently', () => {
+    expect(linkableScreenRoutes(raw)).toEqual(raw)
+  })
+
+  it('offers a list template at the collection route it actually serves', () => {
+    const routes = linkableScreenRoutes(raw, {
+      routedElsewhere: { blogListTmpl: 'blog' },
+      unrouted: ['blogListTmpl', 'blogEntryTmpl'],
+    })
+    // The whole issue: a screen link CAN now point at the site's blog index…
+    expect(routes?.blogListTmpl).toBe('blog')
+    // …and the two paths that 404 are gone, so the picker cannot offer either.
+    expect(routes).not.toHaveProperty('blogEntryTmpl')
+    expect(Object.values(routes ?? {})).not.toContain('blog-list-template')
+    expect(Object.values(routes ?? {})).not.toContain('blog-entry-template')
+    // Untouched screens keep their entries, root included.
+    expect(routes?.home).toBe('/')
+    expect(routes?.changelog).toBe('changelog')
+  })
+
+  it('routes a list template that was never published at all', () => {
+    const routes = linkableScreenRoutes(
+      { home: '/' },
+      { routedElsewhere: { blogListTmpl: 'blog' } },
+    )
+    expect(routes?.blogListTmpl).toBe('blog')
+  })
+
+  it('normalizes an override spelled as a URL', () => {
+    // `//blog` would be an absolute URL to the HOST named `blog`, so a leading
+    // slash here takes the link off the site.
+    const routes = linkableScreenRoutes(raw, {
+      routedElsewhere: { blogListTmpl: '/blog/' },
+    })
+    expect(routes?.blogListTmpl).toBe('blog')
+  })
+
+  it('ignores an empty override rather than routing a screen to nowhere', () => {
+    const routes = linkableScreenRoutes(raw, {
+      routedElsewhere: { blogListTmpl: '', changelog: null as never },
+    })
+    expect(routes?.blogListTmpl).toBe('blog-list-template')
+    expect(routes?.changelog).toBe('changelog')
+  })
+
+  it('keeps "no map yet" distinct from "an empty map"', () => {
+    // `ScreenLinkContext` reads undefined as "nothing resolves yet"; `{}` says
+    // every link is dead, which is what a mid-load canvas must not render.
+    expect(linkableScreenRoutes(undefined)).toBeUndefined()
+    expect(linkableScreenRoutes(null, { unrouted: ['x'] })).toBeUndefined()
+    expect(linkableScreenRoutes({})).toEqual({})
+  })
+
+  it('does not mutate the map it was given', () => {
+    const source = { ...raw }
+    linkableScreenRoutes(source, {
+      routedElsewhere: { blogListTmpl: 'blog' },
+      unrouted: ['blogEntryTmpl'],
+    })
+    expect(source).toEqual(raw)
   })
 })

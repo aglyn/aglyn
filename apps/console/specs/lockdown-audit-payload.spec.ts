@@ -97,6 +97,10 @@ const mockFirestore = {
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  // AGL-1881: the user-lock path drops this uid's cached revocation verdict
+  // right after the revoke. Absent from a wholesale module mock it is
+  // `undefined`, and the route 500s before it ever writes the audit row.
+  invalidateTokenRevocationCache: () => undefined,
   firebaseAdmin: {
     app: () => ({
       auth: () => ({ verifyIdToken: async () => mockDecodedToken }),

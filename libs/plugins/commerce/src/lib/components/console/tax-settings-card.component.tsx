@@ -18,11 +18,13 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
   Button,
+  Divider,
   FormControlLabel,
   MenuItem,
   Stack,
@@ -93,6 +95,36 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
     if (patch === null) rates.splice(index, 1)
     else rates[index] = { country: '', pct: 0, ...rates[index], ...patch }
     update({ rates })
+  }
+  /**
+   * One of the flat, per-regime rates (AGL-1969 lodging, AGL-2028 services).
+   *
+   * A blank field clears the rate rather than storing `NaN`: clearing is how a
+   * merchant turns the regime back off, and `Number('')` is 0 while
+   * `Number(' ')` is also 0 — neither of which should ever reach the document
+   * as a "rate".
+   */
+  const updateFlat = (
+    key: 'lodging' | 'service',
+    patch: Partial<CommerceModel.FlatTaxRate>,
+  ) => update({ [key]: { ...current[key], ...patch } })
+  const flatPctText = (key: 'lodging' | 'service') => {
+    const pct = current[key]?.pct
+    return pct === undefined || pct === null ? '' : String(pct)
+  }
+  /**
+   * Shown under a typed rate this will NOT apply. Silence here would be the
+   * failure: `resolveFlatTaxCents` treats an out-of-range percentage as off,
+   * so a decimal-point typo would otherwise save cleanly and collect nothing.
+   */
+  const flatPctProblem = (key: 'lodging' | 'service'): string | null => {
+    const raw = current[key]?.pct
+    if (raw === undefined || raw === null || String(raw) === '') return null
+    if (Number(raw) === 0) return null
+    return CommerceModel.isUsableFlatTaxPct(raw)
+      ? null
+      : `Enter a percentage between 0 and ${CommerceModel.FLAT_TAX_MAX_PCT}. ` +
+          'This rate is not being applied.'
   }
 
   const handleSave = useCallback(async () => {
@@ -288,6 +320,148 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
             </Button>
           </>
         )}
+        {/*
+          LODGING TAX (AGL-1969) — deliberately OUTSIDE the calculation branch
+          above, and deliberately not a `rates[]` row.
+
+          The setting above is a goods SALES rate resolved against an address.
+          Occupancy tax is a different regime with its own rates, registration
+          and return, and it applies to reservations, which sell nights rather
+          than goods. Nesting it under "Manual rates" would have said the two
+          are the same machinery; putting it here says a store on Stripe Tax —
+          which cannot compute occupancy tax from these sessions at all — can
+          still set one.
+
+          It is off until the merchant fills it in, so nothing an existing
+          store charges moves.
+        */}
+        <Divider sx={{ my: 0.5 }} />
+        <Stack spacing={1}>
+          <Typography variant="subtitle2">{'Lodging tax'}</Typography>
+          <Typography variant="body2" color="text.secondary">
+            {'Charged on reservations, on top of the price, using the rate ' +
+              'you enter here. It is separate from the sales tax above ' +
+              'because occupancy tax is its own regime with its own rates ' +
+              'and its own return. Leave it blank to charge none — that is ' +
+              'the default.'}
+          </Typography>
+          <Stack direction="row" spacing={1}>
+            <TextField
+              label="Rate %"
+              value={flatPctText('lodging')}
+              onChange={(event) =>
+                updateFlat('lodging', {
+                  pct:
+                    event.target.value === ''
+                      ? undefined
+                      : Number(event.target.value),
+                })
+              }
+              size="small"
+              sx={{ width: 110 }}
+              placeholder="0"
+              error={Boolean(flatPctProblem('lodging'))}
+              helperText={flatPctProblem('lodging') ?? ' '}
+              slotProps={{ htmlInput: { inputMode: 'decimal' } }}
+            />
+            <TextField
+              label="Label"
+              value={current.lodging?.label ?? ''}
+              onChange={(event) =>
+                updateFlat('lodging', { label: event.target.value })
+              }
+              size="small"
+              sx={{ flex: 1 }}
+              placeholder="Occupancy tax"
+              helperText="Shown to the guest on the receipt"
+            />
+          </Stack>
+          {/*
+            MECHANISM ONLY, AND NO REMITTANCE DETERMINATION.
+
+            Whether a jurisdiction imposes occupancy tax, who must register for
+            it and who must remit it are legal conclusions that attach by
+            operation of law (AGL-1904/AGL-1956) and are the merchant's under
+            the Terms. This copy says what the software DOES and what it does
+            not do, and stops there — including the deposit basis, which is a
+            real limitation rather than an answer this product has taken.
+          */}
+          <Alert severity="info">
+            {`${PLATFORM_BRAND_NAME} applies the rate you enter and records ` +
+              'what was charged. It does not determine whether this tax ' +
+              'applies to you, at what rate, or where it should be paid — ' +
+              'that is yours to decide.'}
+          </Alert>
+          <Typography variant="body2" color="text.secondary">
+            {'On a reservation that takes a deposit, the rate is applied to ' +
+              'the deposit — the amount actually charged here — not to the ' +
+              'whole stay. If tax is due on the full stay, collect the ' +
+              'difference the same way you collect the rest of the balance.'}
+          </Typography>
+        </Stack>
+        {/*
+          SERVICE TAX (AGL-2028) — the bookings sibling of the block above,
+          and here for the same reason it is not in the bookings plugin's own
+          settings: this is the one card a merchant comes to with a tax
+          question, and a second tax surface elsewhere is how one of them ends
+          up unanswered.
+
+          Its EXISTENCE is also the opt-in AGL-2000 wanted. That issue
+          declined to apply the goods rate to an appointment partly because
+          nothing said the merchant meant these settings to cover bookings; a
+          field labelled for services, blank until they fill it in, is them
+          saying so.
+        */}
+        <Divider sx={{ my: 0.5 }} />
+        <Stack spacing={1}>
+          <Typography variant="subtitle2">{'Service tax'}</Typography>
+          <Typography variant="body2" color="text.secondary">
+            {'Charged on paid bookings, on top of the price, using the rate ' +
+              'you enter here. It is separate from the sales tax above ' +
+              'because whether a service is taxable is often a different ' +
+              'question from whether goods are. Leave it blank to charge ' +
+              'none — that is the default.'}
+          </Typography>
+          <Stack direction="row" spacing={1}>
+            <TextField
+              label="Rate %"
+              value={flatPctText('service')}
+              onChange={(event) =>
+                updateFlat('service', {
+                  pct:
+                    event.target.value === ''
+                      ? undefined
+                      : Number(event.target.value),
+                })
+              }
+              size="small"
+              sx={{ width: 110 }}
+              placeholder="0"
+              error={Boolean(flatPctProblem('service'))}
+              helperText={flatPctProblem('service') ?? ' '}
+              slotProps={{ htmlInput: { inputMode: 'decimal' } }}
+            />
+            <TextField
+              label="Label"
+              value={current.service?.label ?? ''}
+              onChange={(event) =>
+                updateFlat('service', { label: event.target.value })
+              }
+              size="small"
+              sx={{ flex: 1 }}
+              placeholder="Service tax"
+              helperText="Shown to the client on the receipt"
+            />
+          </Stack>
+          {/* MECHANISM ONLY, AND NO REMITTANCE DETERMINATION — see the
+              lodging block above. */}
+          <Alert severity="info">
+            {`${PLATFORM_BRAND_NAME} applies the rate you enter and records ` +
+              'what was charged. It does not determine whether this tax ' +
+              'applies to you, at what rate, or where it should be paid — ' +
+              'that is yours to decide.'}
+          </Alert>
+        </Stack>
         <Button
           variant="contained"
           color="primary"

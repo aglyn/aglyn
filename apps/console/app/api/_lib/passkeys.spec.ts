@@ -43,6 +43,27 @@ jest.mock('@simplewebauthn/server', () => ({
     mockVerifyAuthenticationResponse(...(args as [])),
 }))
 
+/**
+ * The barrel, narrowed to the one export this module now uses (AGL-1902).
+ *
+ * `passkeys.ts` reaches `consumeOnce` through `@aglyn/tenant-data-admin`, and
+ * importing that barrel here drags `next/cache` into this environment, where
+ * it fails to load and takes the whole suite with it — a suite that fails to
+ * LOAD reports nothing about the code it was written for.
+ *
+ * `requireActual` on the module itself, never a hand-written stand-in: single
+ * use is the property under test, and a fake `consumeOnce` would assert it
+ * into existence. The relative path is deliberate — a literal
+ * `@aglyn/...` specifier inside a mock factory registers a DYNAMIC nx graph
+ * edge and reddens `console:lint` across every static importer (AGL-949).
+ */
+jest.mock('@aglyn/tenant-data-admin', () => ({
+  __esModule: true,
+  consumeOnce: jest.requireActual(
+    '../../../../../libs/tenant/data/admin/src/lib/server/consume-once',
+  ).consumeOnce,
+}))
+
 import {
   CHALLENGE_TTL_MS,
   createAuthenticationOptions,

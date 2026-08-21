@@ -31,6 +31,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: { app: jest.fn() },
   getPlatformLockdown: (...args: unknown[]) =>
     mockGetPlatformLockdown(...(args as [])),
+  // AGL-1513. Present even though every case here uses a bare subdomain (so
+  // the loader's `cname--` ternary short-circuits and never calls it): a
+  // wholesale mock is a closed world, and the first `cname--` case added
+  // below would otherwise fail as an inscrutable TypeError rather than as
+  // whatever it was actually asserting.
+  getDomainLockdown: jest.fn(async () => null),
   filterEnabledPluginsByReleaseFlags: jest.fn(async () => []),
   getRealmPluginInstalls: jest.fn(async () => []),
 }))
@@ -79,6 +85,14 @@ jest.mock('@aglyn/tenant-runtime/compose-collection-page', () => ({
 jest.mock('@aglyn/tenant-runtime/template-screens', () => ({
   __esModule: true,
   default: jest.fn(async () => new Set<string>()),
+  // Faithful to the real module's OTHER export (AGL-1998): a double that
+  // omits it makes `loadNotFoundScreen`/`page.tsx` throw on an undefined
+  // function, and the surrounding try/catch turns that into a silent null.
+  getTemplateScreenIds: jest.fn(async () => new Set<string>()),
+  getTemplateScreenRouting: jest.fn(async () => ({
+    templateScreenIds: new Set<string>(),
+    listRoutes: {} as Record<string, string>,
+  })),
 }))
 
 import { loadPageData } from '../app/[host]/[[...slug]]/load-page-data'

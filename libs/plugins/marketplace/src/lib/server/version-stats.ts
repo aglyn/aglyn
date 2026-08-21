@@ -293,9 +293,55 @@ const asId = (value: string | number | null | undefined): string | null =>
  *   `newestApprovedVersion` as a version with no publish date and no review.
  * * `from === to` is a no-op. Re-installing the same version is not a new
  *   install of it, and counting it would inflate every re-install.
+ * * **A move CONSERVES (AGL-1420).** When a `from` version is named, the
+ *   arrival on `to` is recorded only if the departure from `from` actually
+ *   landed. See below — this is the rule that stops a restored install
+ *   minting a real one.
  *
  * Never on the critical path: a counter that cannot be written must not fail
  * an install the user asked for.
+ *
+ * ## Why a move has to conserve
+ *
+ * The two halves used to be independent writes, either of which could
+ * silently no-op while the other landed — and both no-op paths are on the
+ * `from` half, so the error was one-directional: **net +1, every time.**
+ *
+ * * `if (!snapshot.exists) return` skipped a `from` version whose document
+ *   had been deleted, and the `to` increment still landed.
+ * * `Math.max(0, active - 1)` swallowed a decrement against a version whose
+ *   tally was already zero, and the `to` increment still landed.
+ *
+ * A `from` that cannot be decremented is not a bookkeeping inconvenience; it
+ * is evidence that **this copy was never in the tracked population**. The
+ * case that produces it in the wild is a site restore: `IMPORTABLE_FIELDS`
+ * deliberately carries `marketplace` / `installedFrom` / `source` through
+ * `POST /api/hosts/import` (site-export-round-trip.spec.ts asserts it, and it
+ * is what keeps update-available detection working on a legitimate backup),
+ * so a restored component or dataset arrives fully stamped with provenance
+ * having never run an install route. No `installCount` increment, no pin,
+ * nothing counted. The first time the publisher ships an update and someone
+ * presses Update, `update-artifact` reads that stamp and calls this function
+ * with a `from` nothing ever credited.
+ *
+ * That phantom then propagates rather than staying local: `reconcileCounter`
+ * takes `max(versionSum, stored)` — because every accumulator in this system
+ * fails DOWNWARD and the larger is therefore the better estimate — so an
+ * inflated per-version tally raises the listing total the page prints to
+ * buyers. Nothing can pull it back down again except a pin count, and
+ * `verifiedLivePins` returns `null` for everything that is not a plugin,
+ * which is exactly the set the import can restore. Over-counts are permanent;
+ * under-counts are representable (`untracked`) and recoverable.
+ *
+ * So the bias goes the way the rest of the arithmetic already goes. The cost
+ * is a real install whose `from` version document the publisher has since
+ * deleted: its arrival is not credited to `to`. That install is still counted
+ * at listing level, so `max(versionSum, stored)` keeps the total right and
+ * the per-version breakdown reports it as `untracked` — the shape this module
+ * already has for "we know it happened, we cannot say where".
+ *
+ * A first install (`from` null) is unaffected: there is nothing to conserve,
+ * and `to` is credited exactly as before.
  */
 export async function recordVersionMove(input: VersionMoveInput): Promise<void> {
   const from = asId(input.from)
@@ -304,22 +350,37 @@ export async function recordVersionMove(input: VersionMoveInput): Promise<void> 
   const collection = input.listingRef.collection(
     versionCollectionFor(input.artifactType),
   )
-  const bump = async (versionId: string, activeDelta: 1 | -1) => {
+  /** Resolves true only if the counter was actually moved. */
+  const bump = async (
+    versionId: string,
+    activeDelta: 1 | -1,
+  ): Promise<boolean> => {
     const ref = collection.doc(versionId)
-    await input.firestore
+    return await input.firestore
       .runTransaction(async (tx) => {
         const snapshot = await tx.get(ref)
-        if (!snapshot.exists) return
+        // A version whose document is gone is skipped rather than created:
+        // writing blind would resurrect it as a counters-only stub.
+        if (!snapshot.exists) return false
         const active = Number(snapshot.get('activeInstalls') ?? 0)
+        // Nothing to take off this version. Clamping and reporting success
+        // is what let a phantom departure fund a real arrival.
+        if (activeDelta < 0 && active <= 0) return false
         tx.update(ref, {
           activeInstalls: Math.max(0, active + activeDelta),
           ...(activeDelta > 0
             ? { installCount: Number(snapshot.get('installCount') ?? 0) + 1 }
             : {}),
         })
+        return true
       })
-      .catch(() => undefined)
+      .catch(() => false)
   }
-  if (from) await bump(from, -1)
+  if (from) {
+    const departed = await bump(from, -1)
+    // The move did not come from where it claims to have come from, so there
+    // is no install here to move. Crediting `to` would invent one.
+    if (!departed) return
+  }
   if (to) await bump(to, 1)
 }

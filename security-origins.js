@@ -527,6 +527,45 @@ const TENANT_IMAGE_ORIGINS = ['https://firebasestorage.googleapis.com']
  * than the console's (AGL-1702) for exactly that reason; AGL-1725 is the
  * inventory of arbitrary-host sinks that blocks it.
  *
+ * ## The first reading, and why it does NOT license the flip (AGL-1726)
+ *
+ * Read on 2026-08-20 from `cspViolationDaily`, the durable counters AGL-1799
+ * added after establishing that the runtime log forgets in an hour. The whole
+ * collection held ten documents, all of them `app: 'console'`. **Tenant rows:
+ * zero**, across the four days the aggregation had been live.
+ *
+ * That zero is real, not a broken pipe — which had to be established before it
+ * could be read at all, because a collector that never writes and a policy
+ * that is never violated produce byte-identical evidence (the AGL-518 shape,
+ * and the reason AGL-1799 exists). Verified end to end against production: the
+ * report-only header is served on live sites, and a synthetic report POSTed to
+ * a real site's `/api/csp-report` minted its counter with the right site,
+ * path and origin. The pipeline works.
+ *
+ * **A real zero here is still not evidence of safety, because the population
+ * is empty.** Production carries six hosts, every one of them ours — a demo, a
+ * marketing site, and four test sites — with no custom domain attached to any
+ * of them and no paying customer behind them. AGL-1726 condition 3 asks for a
+ * business week of real visitor traffic across five site shapes (free-tier,
+ * paid `mediaCdn`, a commerce storefront, a collection/blog, and a site using
+ * Custom HTML or Styles-panel `backgroundImage`). Those sites do not exist
+ * yet. Zero violations from nobody visiting is zero information, and enforcing
+ * on it would be reading an empty room as a quiet one.
+ *
+ * The condition that actually decides it is condition 2, and it is already
+ * answered in the other direction: AGL-1725 settled the hotlink question as
+ * **scheme, never host** — an author's `https` hotlink to any host is accepted
+ * and disclosed, because the site owner is the controller for their own
+ * visitors and hotlinking is an advertised feature. AGL-1726's own text draws
+ * the consequence: if the answer is accept-and-document, then `img-src` cannot
+ * be the enforcement point at all. A first-party-only enforced `img-src`
+ * would silently revoke a documented capability from every published site.
+ *
+ * So this stays report-only, and the next person does not need to re-run the
+ * probe: the blocker is a product decision that has already been made, not a
+ * measurement still pending. What the counters are good for now is condition 4
+ * — whether gtag's pixels appear at all — and that needs real traffic first.
+ *
  * ## Why this one is compatible with ISR and `script-src` was not
  *
  * AGL-1228 removed a report-only `script-src` because a per-request nonce

@@ -93,9 +93,9 @@ full backup from its **Settings → Backup**.
 - When the period ends, your organization resolves to the **Free** plan. This is
   the same as a downgrade: nothing is deleted, over-limit resources persist, and
   paid features turn off.
-- A **failed payment** doesn't cancel you immediately — during Stripe's retry
-  window your access continues (a past-due banner shows), and entitlements only
-  drop to Free if the subscription actually lapses.
+- A **failed payment** doesn't cancel you immediately — your access continues
+  while Stripe retries the charge (a past-due banner shows), and entitlements
+  only drop to Free if the subscription actually lapses.
 
 ### What the Cancel button actually opens {#the-cancel-dialog}
 

@@ -338,3 +338,76 @@ describe('ScreenLink appearance is not semantics (AGL-1347)', () => {
     }
   })
 })
+
+/**
+ * A Screen Link whose screen is gone (AGL-1893, part 3).
+ *
+ * `resolveScreenHref` is shared, so the dead-target problem Tabs had is not
+ * a Tabs problem: unpublish a screen and every one of the 326 Screen Links
+ * in the corpus that pointed at it quietly stops navigating.
+ *
+ * Here the LIVE rendering is deliberately left alone — this element already
+ * degrades to inert content rather than to a fake control, and restyling it
+ * would repaint published CTAs on sites whose owners never asked. What
+ * changes is that the besigner now says which ones are dead.
+ *
+ * Red conditions, verified by mutation: drop `flagged` from the inert
+ * branch and the marker/tooltip cases go red; key the ring off `!href`
+ * instead of `broken` and the healthy-link-on-the-canvas case goes red.
+ */
+describe('a Screen Link whose screen is unpublished (AGL-1893)', () => {
+  const SCREENS = { pricing: 'pricing' }
+
+  const renderOn = (value: any, ui: React.ReactElement) =>
+    render(
+      <Aglyn.ScreenLinkContext.Provider value={value}>
+        {ui}
+      </Aglyn.ScreenLinkContext.Provider>,
+    )
+
+  it('explains itself on the canvas, where it can be fixed', () => {
+    renderOn(
+      { screens: SCREENS, suppressNavigation: true, editorInert: true },
+      <ScreenLink screenId="retired-screen">{'Blog'}</ScreenLink>,
+    )
+    const el = screen.getByText('Blog').closest('button, a, span') as HTMLElement
+    expect(el.getAttribute('title')).toBe(Aglyn.BROKEN_SCREEN_LINK_MESSAGE)
+    expect(el.hasAttribute(Aglyn.BROKEN_SCREEN_LINK_ATTR)).toBe(true)
+  })
+
+  it('says nothing about a link whose screen is fine', () => {
+    // The canvas withholds the href from THIS one too, so a check keyed off
+    // "no href" would flag a perfectly healthy link.
+    renderOn(
+      { screens: SCREENS, suppressNavigation: true, editorInert: true },
+      <ScreenLink screenId="pricing">{'Pricing'}</ScreenLink>,
+    )
+    const el = screen.getByText('Pricing').closest('button, a, span') as HTMLElement
+    expect(el.getAttribute('title')).toBeNull()
+    expect(el.hasAttribute(Aglyn.BROKEN_SCREEN_LINK_ATTR)).toBe(false)
+  })
+
+  it('marks the live element without lecturing the visitor', () => {
+    renderOn(
+      { screens: SCREENS },
+      <ScreenLink screenId="retired-screen">{'Blog'}</ScreenLink>,
+    )
+    const el = screen.getByText('Blog').closest('button, a, span') as HTMLElement
+    expect(el.hasAttribute(Aglyn.BROKEN_SCREEN_LINK_ATTR)).toBe(true)
+    expect(el.getAttribute('title')).toBeNull()
+  })
+
+  it('keeps the author styles it used to spread, ring or no ring', () => {
+    // The inert branch now lifts `sx` out of the spread to merge the ring
+    // into it. Getting that wrong would drop every authored style the day a
+    // screen was unpublished — a far worse bug than the one being fixed.
+    renderOn(
+      { screens: SCREENS, suppressNavigation: true, editorInert: true },
+      <ScreenLink screenId="retired-screen" sx={{ opacity: 0.5 }}>
+        {'Blog'}
+      </ScreenLink>,
+    )
+    const el = screen.getByText('Blog').closest('button, a, span') as HTMLElement
+    expect(getComputedStyle(el).opacity).toBe('0.5')
+  })
+})

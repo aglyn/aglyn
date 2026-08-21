@@ -21,6 +21,7 @@ import {
   readGaClientId,
   trackEvent,
 } from '@aglyn/aglyn/app-utils/analytics-events'
+import { readInternalTrafficOverride } from '@aglyn/aglyn/app-utils/internal-traffic'
 import {
   ENTERPRISE_PLAN_LABEL,
   isEnterpriseOrg,
@@ -79,6 +80,7 @@ import BillingCollaboratorAllocationsCardComponent from '../../../../components/
 import BillingStorageOverageCardComponent from '../../../../components/billing/billing-storage-overage-card.component'
 import BillingUsageBudgetCardComponent from '../../../../components/billing/billing-usage-budget-card.component'
 import BillingMeteredEstimateComponent from '../../../../components/billing/billing-metered-estimate.component'
+import BillingUsageHistoryComponent from '../../../../components/billing/billing-usage-history.component'
 import { RetentionFunnelDialog } from '../../../../components/billing/retention-funnel.dialog'
 import BillingUsageComponent from '../../../../components/billing/billing-usage.component'
 import EmbeddedCheckoutDialogComponent from '../../../../components/embedded-checkout-dialog.component'
@@ -598,6 +600,18 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             gaClientId: await readGaClientId(
               process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
             ),
+            // And whether this browser is one of OURS (AGL-1582). The stamp
+            // that keeps our own sessions out of the reports rides
+            // `setDefaultEventParameters` and a `gtag('set')` snippet — both
+            // browser mechanisms — so the server-side `purchase` the webhook
+            // sends from a Stripe event, hours later and in another process,
+            // was the one hit the internal-traffic filter could never reach.
+            // The last week before launch is a scheduled run of REAL paid
+            // transactions, and a data filter is not retroactive.
+            //
+            // Read synchronously from localStorage, so unlike `gaClientId` it
+            // cannot be lost to a slow tag.
+            internalTraffic: readInternalTrafficOverride(),
           }),
         })
         const payload = await response.json()
@@ -793,6 +807,13 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
         ) : (
         <GridItems
           spacing={3}
+          // Masonry. These cards have wildly different
+          // heights — `Usage` runs three times `Current plan` — and in a rigid
+          // twelve-column row that meant a screen of dead space under
+          // `Current plan` while `Metered usage estimate`, the card sized to
+          // fill it, sat on its own row far below. Masonry lets each card
+          // occupy only the height it needs and the next one back-fill.
+          masonry
           items={[
             {
               size: { xs: 12, md: 4 },
@@ -1021,6 +1042,30 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                     org={org}
                     hosts={hosts ?? []}
                   />
+                </CardDisplay>
+              ),
+            },
+            {
+              size: { xs: 12 },
+              children: (
+                // The trend beside the at-a-glance number (AGL-1530). The
+                // card above answers "what is this period costing"; this one
+                // answers "is that unusual", off the same monthly rollups
+                // `report-usage` already writes — one bounded read, no new
+                // aggregation and no second estimator to disagree with the
+                // invoice.
+                <CardDisplay
+                  header={'Usage history'}
+                  help={docsHelp('billing', {
+                    anchor: '#usage-meters',
+                    excerpt:
+                      'How your metered usage has moved over the last ' +
+                      'twelve months, from your monthly billing rollups.',
+                  })}
+                  contentGutterX
+                  contentGutterY
+                >
+                  <BillingUsageHistoryComponent org={org} />
                 </CardDisplay>
               ),
             },

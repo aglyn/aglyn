@@ -23,6 +23,12 @@
  * these helpers so they can't disagree.
  */
 
+import {
+  compileLinearPattern,
+  explainLinearPattern,
+  type LinearPattern,
+} from './linear-regex'
+
 export interface HostRedirect {
   /**
    * Match input: a normalized path for exact/prefix rules, a regular
@@ -47,84 +53,45 @@ export const REDIRECT_STATUS_CODES = [301, 302, 307, 308] as const
 export const REDIRECT_KINDS = ['exact', 'prefix', 'regex'] as const
 export const REDIRECT_DEFAULT_PRIORITY = 100
 
-/** Max regex source length — long patterns are a ReDoS smell. */
+/** Max regex source length — a rule source has no business being longer. */
 const REGEX_SOURCE_MAX = 200
 
 /**
- * Heuristic ReDoS guard (AGL-505): reject a quantifier applied to a group
- * that itself contains a quantifier (star height > 1) — `(a+)+`, `([a-z]*)*`,
- * `((\d+))+` — the classic exponential-backtracking patterns. Host redirect
- * regexes run at request time on the shared tenant server, so one malicious
- * pattern + a crafted path could stall the event loop for every tenant. Not
- * exhaustive (overlapping alternations slip through), but it blocks the
- * exponential cases; normal patterns like `^/blog/([0-9]+)$` are unaffected.
+ * Anchors a rule source to the whole path unless the author anchored it
+ * themselves. Kept in one place so validation and matching cannot disagree
+ * about what is actually compiled.
  */
-function hasNestedQuantifier(pattern: string): boolean {
-  const isQuantifier = (ch: string | undefined) =>
-    ch === '*' || ch === '+' || ch === '{'
-  // Per-depth flag: did the group opened at this depth contain a quantifier?
-  const groupHadQuantifier: boolean[] = []
-  let escaped = false
-  let inClass = false
-  for (let i = 0; i < pattern.length; i++) {
-    const ch = pattern[i]
-    if (escaped) {
-      escaped = false
-      continue
-    }
-    if (ch === '\\') {
-      escaped = true
-      continue
-    }
-    if (inClass) {
-      if (ch === ']') inClass = false
-      continue
-    }
-    if (ch === '[') {
-      inClass = true
-      continue
-    }
-    if (ch === '(') {
-      groupHadQuantifier.push(false)
-      continue
-    }
-    if (ch === ')') {
-      const inner = groupHadQuantifier.pop() ?? false
-      const nextIsQuant = isQuantifier(pattern[i + 1])
-      if (inner && nextIsQuant) return true
-      // A group that contained a quantifier makes its parent count as
-      // containing one too, so `((a+))+` is still caught.
-      if ((inner || nextIsQuant) && groupHadQuantifier.length > 0) {
-        groupHadQuantifier[groupHadQuantifier.length - 1] = true
-      }
-      continue
-    }
-    if (isQuantifier(ch) && groupHadQuantifier.length > 0) {
-      groupHadQuantifier[groupHadQuantifier.length - 1] = true
-    }
-  }
-  return false
+function anchorSource(pattern: string): string {
+  return (
+    (pattern.startsWith('^') ? '' : '^') +
+    pattern +
+    (pattern.endsWith('$') ? '' : '$')
+  )
 }
 
 /**
- * Compiles a regex rule's source, anchored to the whole path unless the
- * author anchored it themselves. Returns null for invalid OR ReDoS-unsafe
- * patterns — callers reject at save and skip at match, so a bad pattern can
+ * Compiles a regex rule's source for LINEAR-TIME matching (SEC-M8).
+ *
+ * Redirect sources are attacker-controlled: any host member with the
+ * `author` role can write `source` and `kind` straight to Firestore with the
+ * client SDK, so the console's validation is a convenience, not a control —
+ * this function, on the request path, is the only thing standing between a
+ * customer-authored string and the tenant event loop.
+ *
+ * It therefore does not use `RegExp`. `compileLinearPattern` runs the
+ * pattern on a Thompson NFA simulation whose cost is bounded by
+ * `path length × program length` for every possible input, replacing the
+ * AGL-505 star-height heuristic that `(a|a|aa)+` walked straight through
+ * (9 characters, 59 s measured on a 27-character path).
+ *
+ * Returns null for malformed patterns and for syntax outside the supported
+ * subset — callers reject at save and skip at match, so a bad pattern can
  * never take a site down.
  */
-export function compileRedirectRegex(source: string): RegExp | null {
+export function compileRedirectRegex(source: string): LinearPattern | null {
   const pattern = String(source ?? '').trim()
   if (!pattern || pattern.length > REGEX_SOURCE_MAX) return null
-  if (hasNestedQuantifier(pattern)) return null
-  try {
-    const anchored =
-      (pattern.startsWith('^') ? '' : '^') +
-      pattern +
-      (pattern.endsWith('$') ? '' : '$')
-    return new RegExp(anchored)
-  } catch {
-    return null
-  }
+  return compileLinearPattern(anchorSource(pattern))
 }
 
 /** Validation for a v2 rule; returns a problem string or null when ok. */
@@ -138,8 +105,19 @@ export function validateRedirectRule(rule: {
     return 'Unknown match mode'
   }
   if (kind === 'regex') {
-    if (!compileRedirectRegex(rule.source)) {
-      return 'The pattern is not a valid regular expression'
+    if (compileRedirectRegex(rule.source) === null) {
+      // Say *why* — the supported subset excludes lookaround and
+      // backreferences, and "not a valid regular expression" would send an
+      // author hunting for a typo that isn't there.
+      const pattern = String(rule.source ?? '').trim()
+      if (!pattern) return 'Enter a pattern'
+      if (pattern.length > REGEX_SOURCE_MAX) {
+        return `Patterns are limited to ${REGEX_SOURCE_MAX} characters`
+      }
+      const reason = explainLinearPattern(anchorSource(pattern))
+      return reason
+        ? `That pattern can't be used: ${reason}`
+        : 'The pattern is not a valid regular expression'
     }
   } else if (!normalizeRedirectSource(rule.source)) {
     return 'Enter a site path like /old-page'

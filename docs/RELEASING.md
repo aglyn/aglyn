@@ -98,9 +98,9 @@ its own beyond AGL-2089.
 
 ### 2 — Promote, as usual
 
-Gate the batch in the pinned worktree, open the `main` → `production` PR, real
-merge commit, never squash, no intermediate branches. Then verify the deploy is
-live and serving that commit:
+Gate the batch with [`tools/gate.sh`](#the-gate) (below), open the `main` →
+`production` PR, real merge commit, never squash, no intermediate branches.
+Then verify the deploy is live and serving that commit:
 
 ```bash
 node tools/deploy/verify-production-aliases.mjs
@@ -126,6 +126,81 @@ That is what makes "what shipped in v1.0.0-beta.3?" answerable a year later.
 of the newest existing tag, and `CHANGELOG.md` there documents it. The second
 guard catches the commonest real mistake — promoting a batch that did not
 include the `chore(release)` commit.
+
+## The gate
+
+```bash
+tools/gate.sh                      # gate origin/main, all phases
+tools/gate.sh --ref <sha>          # gate a specific commit
+tools/gate.sh --phases build       # one phase, same isolation
+tools/gate.sh --keep               # keep the worktree for triage
+```
+
+It provisions a detached worktree at `/private/tmp/aglyn-gate/<stamp>/wt`, runs
+**typecheck → lint → guards → test → production build**, and prints one exit
+code per phase:
+
+```
+=== PHASE EXIT CODES ===
+provision:root                     0
+…
+build:tenant                       0
+=== 0 failing phase(s); gated <sha> ===
+```
+
+Four things about it are load-bearing, and each one is there because its
+absence produced a gate result that read like a verdict and was not one.
+
+**It isolates the nx cache.** A `git worktree` isolates the source tree and
+`node_modules` and nothing else — nx keeps writing task results and terminal
+outputs into the **original** checkout's `.nx/cache` (AGL-2090). When another
+agent's process cleared that directory mid-run, nx died reaching for a file it
+had just written, the test phase aborted after 18 of 40 projects, and
+`console:test` never ran at all. `NX_CACHE_DIRECTORY` is the only thing that
+moves it; the script sets it alongside `NX_DAEMON=false` and a private
+`NPM_CONFIG_CACHE`, and compares the shared checkout's cache file count before
+and after so a leak is reported rather than assumed away.
+
+**It provisions all three module trees, by copy.** `apps/docs` and
+`cloud/functions` are standalone npm packages on purpose — docs pins React 18
+against the root's React 19, and `firebase deploy` packs `cloud/functions` as a
+self-contained directory. A root-only worktree fails `docs:build` with
+`docusaurus: command not found` and `cloud-functions:lint` with its own
+not-installed guard. The two obvious shortcuts are both wrong: a **symlinked**
+`node_modules` makes Turbopack refuse the tree outright (`Symlink
+[project]/node_modules is invalid, it points out of the filesystem root`), so
+the production build cannot run at all; and `cp -al` **hard links** both nest a
+stray `node_modules/node_modules` when the destination already exists — two
+Reacts, and 1000+ `Cannot read properties of null (reading 'useState')` — and
+share inodes, so anything the gate writes goes straight back into the shared
+checkout. The script uses `cp -Rc` (APFS copy-on-write): as fast as hard
+linking, with none of that. `verify_modules` refuses each broken shape, and
+`npm run test:gate-script` builds all of them on purpose to prove it still can.
+
+**It never passes a passthrough flag to a shell-command target.** nx appends
+unknown flags onto the command **string** of an `nx:run-commands` target, so
+`nx run-many -t lint --maxWorkers=2` turns `cloud-functions:lint` into
+
+```
+/bin/sh: -c: line 0: syntax error near unexpected token `--maxWorkers=2'
+```
+
+`cloud-functions:lint`, `docs:build` and `docs:typecheck` are all run-commands
+targets. `--maxWorkers` therefore goes **only** on the test phase, where every
+target is `@nx/jest:jest`; lint and build get nx's own `--parallel`, which nx
+consumes rather than forwards.
+
+**It reads every exit code bare.** The command writes to a log file and its
+status is read on the very next line — no trailing `| tee`, `| grep`, `| tail`.
+A trailing filter returns _its own_ status, which is how a red production build
+once got reported as green. For the same reason the build phase names
+`console:build:production` and `tenant:build:production` explicitly: a bare
+`nx run-many -t build` has gone green while both Next production builds errored.
+
+The guard phase is **derived from the CI workflows** (`nx-ci.yml` and
+`tools-guards.yml`) rather than listed here, so a guard added to CI is gated
+automatically and this file cannot quietly fall behind. If the derivation ever
+yields zero, the phase fails rather than passing empty.
 
 ## The changelog range
 
@@ -165,10 +240,18 @@ A bump feeds:
 - The `PACKAGE_VERSION` build-time env, re-exported as
   `PACKAGE_VERSION` from `@aglyn/shared-data-enums`.
 - The console footer: `Version 1.0.0-beta.1 (<build-id>)`.
+- Every `/api/health*` body on both apps, as `version` — nine routes, all
+  through `platformVersion()` (AGL-2091). This is the surface a self-host
+  operator reads, and it needs no configuration from them.
 
-The `/api/health` bodies report `commit` (from `VERCEL_GIT_COMMIT_SHA`) but no
-version, and that env is empty off Vercel — so a self-host operator's only
-version signal today is the console footer. See AGL-2091.
+Those bodies also report `commit`, now resolved by `deploymentCommitRef()`
+from `BUILD_ID`, then `COMMIT_REF`, then `VERCEL_GIT_COMMIT_SHA` — the same
+precedence the footer's build id uses (AGL-2181), so the two surfaces cannot
+disagree about the build that answered. Off Vercel it is `null` until an
+operator stamps it; `docs/SELF_HOSTING.md` says how.
+
+`libs/aglyn/src/lib/app-utils/health-version-coverage.spec.ts` fails the build
+if a tenth health route forgets either field.
 
 ## Self-hosting
 

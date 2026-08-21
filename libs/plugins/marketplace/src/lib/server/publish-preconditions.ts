@@ -20,6 +20,7 @@ import {
   publisherAgreementRefusal,
   publisherAgreementState,
 } from '@aglyn/aglyn/app-utils/publisher-agreement'
+import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
 import { marketplacePriceRefusal } from '../model/marketplace'
 import type { ResolvedPublisher } from './publisher-profile'
 
@@ -120,7 +121,23 @@ export function publishPreconditionRefusal(
   }
   // Paid listings require completed Stripe Connect onboarding (AGL-46) —
   // there is nowhere to send the seller's share otherwise.
-  if (options.priceUsd > 0 && !publisher.stripeChargesEnabled) {
+  //
+  // AGL-2471 folded the MODE question in here too, and not only at checkout.
+  // Publishing is where a seller is told they are set up to sell; letting a
+  // paid listing go live behind a linkage no sale will ever be allowed to use
+  // just moves the same lie one step earlier, to the point where the seller
+  // stops checking.
+  if (
+    options.priceUsd > 0 &&
+    !connectLinkageIsReady(
+      {
+        accountId: publisher.stripeAccountId,
+        chargesEnabled: publisher.stripeChargesEnabled,
+        accountLivemode: publisher.stripeAccountLivemode,
+      },
+      { subject: `publish for org ${publisher.orgId}` },
+    )
+  ) {
     return {
       status: 412,
       body: {

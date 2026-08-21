@@ -494,6 +494,103 @@ describe('component instance preview (AGL-1251)', () => {
     expect(css).toContain('padding-top:64px')
     expect(css).not.toContain('background-color:#101828')
   })
+
+  it("renders an inner node with this instance's attribute overrides (AGL-1899)", () => {
+    // Canvas parity for the attribute override layer. The snapshot this
+    // memo builds is hand-assembled field by field, so a field left out is
+    // invisible rather than broken: Preview and tenant SSR compose from the
+    // STORED node and would apply the override, while the canvas alone drew
+    // the component's own attributes.
+    const definition = {
+      rootId: 'root',
+      nodes: {
+        root: { $id: 'root', componentId: 'div', nodes: ['label'] },
+        label: {
+          $id: 'label',
+          componentId: 'div',
+          parentId: 'root',
+          props: { children: 'Component copy' },
+          nodes: [],
+        },
+      },
+    } as any
+    const node = {
+      $id: 'inst1',
+      type: 'node',
+      componentId: Aglyn.REUSABLE_INSTANCE_COMPONENT_ID,
+      props: { refId: 'hero' },
+      attrOverrides: { label: { children: 'This placement only' } },
+      sx: {},
+      nodes: [],
+    } as any
+    const { baseElement } = renderInstance(node, { hero: definition })
+    // Text lives in an `aglyn-text` shadow root, so `textContent` is empty
+    // by design — read it the way every other case here does.
+    expect(shadowText(baseElement)).toContain('This placement only')
+    expect(shadowText(baseElement)).not.toContain('Component copy')
+  })
+
+  /**
+   * Live propagation into an already-open canvas (AGL-1898 phase 2).
+   *
+   * This is the mechanism, and it is easy to delete by accident. The
+   * console feeds `definitions` from a live `onSnapshot` over the host's
+   * `components` collection, so publishing a component in one tab hands
+   * every open canvas a NEW definitions object; the preview memo keys on
+   * it and re-grafts. Nothing announces this — swapping that listener for
+   * a one-shot read would not fail any test, it would just leave canvases
+   * drawing a stale component until reloaded.
+   *
+   * Asserted at the seam the designer actually owns: given new
+   * definitions, the preview re-renders. Which write produces them is the
+   * console's business (and today it is Publish, not Save).
+   */
+  it('re-renders an instance when the definition changes underneath it', () => {
+    // ONE node object, reused across the rerender on purpose. Building a
+    // second one would change the memo's `node` dependency and recompute
+    // the graft for that reason instead, so the test would pass with the
+    // `definitions` dependency removed — proving nothing about the thing
+    // it is named for.
+    const stable = instanceNode({ headline: 'Ship faster' })
+    const { baseElement, rerender } = renderInstance(stable)
+    expect(shadowText(baseElement)).toContain('Ship faster')
+    expect(shadowText(baseElement)).not.toContain('Now with a kicker')
+
+    // The same component, republished with an extra node — a NEW object,
+    // exactly as a fresh snapshot delivers it.
+    const republished = {
+      rootId: 'root',
+      nodes: {
+        root: { $id: 'root', componentId: 'div', nodes: ['h', 'kicker'] },
+        h: {
+          $id: 'h',
+          componentId: 'div',
+          parentId: 'root',
+          props: { children: '{{prop.headline}}' },
+        },
+        kicker: {
+          $id: 'kicker',
+          componentId: 'div',
+          parentId: 'root',
+          props: { children: 'Now with a kicker' },
+        },
+      },
+      props: [{ name: 'headline', type: 'text', defaultValue: 'Default copy' }],
+    } as any
+
+    rerender(
+      <ComponentPromotionContext.Provider
+        value={{ definitions: { hero: republished } }}
+      >
+        <ElementLeafComponent node={stable} />
+      </ComponentPromotionContext.Provider>,
+    )
+
+    // The component's new content appears without the instance changing,
+    // and this placement's own prop value survives the update.
+    expect(shadowText(baseElement)).toContain('Now with a kicker')
+    expect(shadowText(baseElement)).toContain('Ship faster')
+  })
 })
 
 describe('denormalizeTree', () => {

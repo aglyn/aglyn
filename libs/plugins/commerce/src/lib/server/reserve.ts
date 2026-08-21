@@ -20,6 +20,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { claimAttempt } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
 
 /**
  * Reserve a stay (AGL-310): server-side quote + availability check,
@@ -75,7 +76,16 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
       ? await firestore.collection('profiles').doc(String(ownerId)).get()
       : null
     const accountId = ownerProfile?.get('stripeAccountId')
-    if (!accountId || !ownerProfile?.get('stripeChargesEnabled')) {
+    if (
+      !connectLinkageIsReady(
+        {
+          accountId,
+          chargesEnabled: ownerProfile?.get('stripeChargesEnabled'),
+          accountLivemode: ownerProfile?.get('stripeAccountLivemode'),
+        },
+        { subject: `reserve host ${hostId}` },
+      )
+    ) {
       return res.status(409).json({ error: 'Payments are not set up yet' })
     }
 
@@ -133,10 +143,16 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
       .where('checkOutDayMs', '>', checkInDayMs)
       .orderBy('checkOutDayMs')
       .limit(500)
-    const [resourceSnapshot, reservationsSnapshot] = await Promise.all([
-      hostRef.collection('resources').doc(resourceId).get(),
-      availabilityQuery.get(),
-    ])
+    const [resourceSnapshot, reservationsSnapshot, storeSnapshot] =
+      await Promise.all([
+        hostRef.collection('resources').doc(resourceId).get(),
+        availabilityQuery.get(),
+        // The merchant's own lodging rate (AGL-1969). Read in the SAME round
+        // trip as the availability query rather than as a fourth sequential
+        // await — this path already runs three reads before it can answer, and
+        // a tax lookup is not a reason to make a guest wait for a fourth.
+        hostRef.collection('settings').doc('store').get(),
+      ])
     const resource = resourceSnapshot.data() as CommerceModel.HostResource | undefined
     if (!resource) {
       await claim.release()
@@ -190,17 +206,69 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
     }
 
     const chargeCents = quote.depositCents || quote.totalCents
+
+    // LODGING TAX: the MERCHANT'S OWN RATE, off unless they set one
+    // (AGL-1969, answering the decision AGL-1953 recorded here).
+    //
+    // What this path used to do, and why it was only ever a holding position:
+    // it computed no tax in either store mode, on two stated grounds. The
+    // first is still true and is the reason for the shape below — a stay is
+    // not goods. The AGL-285 zone editor configures a SALES rate, lodging is
+    // an occupancy/hotel regime with its own rates, its own registration and
+    // its own return, and reading `rates[]` for a night would be confidently
+    // wrong rather than merely absent. Stripe Tax has the mirror problem: it
+    // needs a lodging tax code this handler does not send, so
+    // `automatic_tax` here would compute a goods rate on a room. Neither of
+    // those changes, and neither is used.
+    //
+    // What DID change is that the merchant now has a field of their own to
+    // answer in (`tax.lodging`), so "Aglyn does not know the right number"
+    // stops being a reason to collect nothing. They type the rate, we compute
+    // it, charge it, record it and stamp the regime; the settings card states
+    // plainly that determining what is owed and to whom is theirs. Aglyn
+    // takes no tax position here — Terms §10.3 and AGL-1904/AGL-1956 are
+    // untouched by this.
+    //
+    // DEFAULT OFF, and that is load-bearing: `resolveFlatTaxCents` answers
+    // zero for an absent, zero, negative or out-of-range rate, so no existing
+    // reservation's charge moves because this shipped.
+    //
+    // THE BASIS IS WHAT IS CHARGED, AND THAT IS A STATED LIMITATION RATHER
+    // THAN AN ANSWER. `chargeCents` is `depositCents || totalCents`, so on a
+    // deposit-taking resource the tax collected here is the rate on the
+    // DEPOSIT, not on the stay. Whether a given jurisdiction wants occupancy
+    // tax on the full stay at booking, on the deposit only, or on redemption
+    // at check-out is a tax question, it differs by jurisdiction, and this
+    // code deliberately does NOT decide it — the amount the platform actually
+    // moves is the only basis available to it, the settings card says so in
+    // the merchant's own view, and the residual is on AGL-1969.
+    const taxSettings = ((storeSnapshot.data() as any)?.tax ??
+      {}) as CommerceModel.TaxSettings
+    const lodgingTax = CommerceModel.resolveFlatTaxCents(
+      taxSettings.lodging,
+      chargeCents,
+      'Lodging tax',
+    )
+
     // Platform take PLUS Stripe's card cost at cost (AGL-2152). This is a
-    // destination charge, so Stripe debits 2.9% + 30¢ from the PLATFORM's
-    // balance; with the old take-only figure every tier carrying a 0% service
-    // rate paid Aglyn nothing and cost it that fee on each reservation. The
-    // charge base and the fee base are the same number here — a reservation
-    // charges exactly `chargeCents`, with no separate tax or shipping line.
+    // destination charge, so Stripe debits its percentage plus 30¢ from the
+    // PLATFORM's balance; with the old take-only figure every tier carrying a
+    // 0% service rate paid Aglyn nothing and cost it that fee on each
+    // reservation.
+    //
+    // THE TWO BASES ARE NOW DIFFERENT NUMBERS (AGL-1969), and the split is
+    // AGL-2317's rule: the platform take is computed on the ITEMS — the stay
+    // — while Stripe's cost is passed through on the WHOLE charge, because
+    // that is what Stripe actually debits. Taking a percentage of the lodging
+    // tax would be taking a cut of the state's money, which no storefront
+    // path does. The previous single-argument form is what made this a real
+    // risk: it read as "the fee base is the charge" and would have silently
+    // started taxing the tax the moment a tax line appeared.
     const feeCents = Aglyn.resolveTransactionFeeCents(
       ownerOrg?.org as any,
       'service',
       chargeCents,
-      chargeCents,
+      chargeCents + lodgingTax.taxCents,
     )
 
     // THE HOLD IS TAKEN IN A TRANSACTION (AGL-2450).
@@ -265,30 +333,6 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
       return res.status(409).json({ error: 'Those dates just sold out' })
     }
 
-    // TAX: a reservation deliberately computes NONE, in either mode
-    // (AGL-1953). This is a stated decision, not the omission it looks like.
-    //
-    // Two reasons, and either alone would be enough:
-    //
-    //  1. **A stay is not goods.** The AGL-285 zone editor configures a SALES
-    //     tax rate, and lodging is a different regime — occupancy/hotel tax,
-    //     with its own rates, its own registration and its own return. Nothing
-    //     the merchant typed into that editor is the right number for a night,
-    //     and applying it would be confidently wrong rather than merely
-    //     absent. Stripe Tax has the same problem from the other side: it
-    //     needs a lodging tax code this handler does not send, so
-    //     `automatic_tax` here would compute a goods rate on a room.
-    //  2. **This charge is usually a DEPOSIT.** `chargeCents` is
-    //     `quote.depositCents || quote.totalCents`, so taxing it would apply a
-    //     whole stay's tax to a fraction of it, with the balance collected off
-    //     the platform entirely.
-    //
-    // So the merchant collects lodging tax at the property, which is where
-    // that regime is administered anyway. `commerce-reservation` is already in
-    // `storefront-tax-record.ts`'s SESSION_TYPES, so the day this path does
-    // compute tax it is recorded without further wiring — the absence here is
-    // the decision, not a missing hookup. Proper lodging-tax support is filed
-    // separately rather than guessed at here.
     const referer = String(req.headers.referer ?? '')
     const origin = `https://${req.headers.host}`
     const backUrl = referer.startsWith('http') ? referer : origin
@@ -305,6 +349,23 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
           ? ' (deposit)'
           : ''
       }`.slice(0, 120),
+      // The merchant's lodging tax as an ORDINARY product line Stripe is
+      // never told is tax — the AGL-1711 construction every other manual rate
+      // rides. That is what makes the derived `taxMode` read `manual`: the
+      // figure is the merchant's own, computed from their own rate, and never
+      // against Aglyn's registrations the way `automatic_tax` would be
+      // (AGL-1904). Absent entirely when no rate is set, so a default store's
+      // session carries no tax parameter of any kind.
+      ...(lodgingTax.taxCents > 0
+        ? {
+            'line_items[1][quantity]': '1',
+            'line_items[1][price_data][currency]': 'usd',
+            'line_items[1][price_data][unit_amount]': String(
+              lodgingTax.taxCents,
+            ),
+            'line_items[1][price_data][product_data][name]': lodgingTax.label,
+          }
+        : {}),
       ...(feeCents > 0
         ? { 'payment_intent_data[application_fee_amount]': String(feeCents) }
         : {}),
@@ -316,6 +377,19 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
       'metadata[hostId]': hostId,
       'metadata[reservationId]': reservationRef.id,
       'metadata[feeCents]': String(feeCents),
+      // The only witness to the tax (AGL-1969). By the construction above
+      // Stripe does not know the second line is tax, so it reports
+      // `total_details.amount_tax: 0` — the session's own metadata is what
+      // `storefront-tax-record.ts` and the confirmation branch read to record
+      // the figure and derive the regime, exactly as `checkout.ts` stamps it
+      // for a buy-now sale. Absent when there is no tax, never a reassuring
+      // `'0'`: absent and zero are different facts on a back-book question.
+      ...(lodgingTax.taxCents > 0
+        ? {
+            'metadata[taxCents]': String(lodgingTax.taxCents),
+            'metadata[taxPct]': String(lodgingTax.pct),
+          }
+        : {}),
     })
     const response = await fetch(
       'https://api.stripe.com/v1/checkout/sessions',

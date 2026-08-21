@@ -26,6 +26,7 @@ import {
   emailUnverifiedResponse,
   findUserByUidAcrossPools,
   firebaseAdmin,
+  invalidateTokenRevocationCache,
   isImpersonationSession,
   lockdownRefusal,
   logOrgActivity,
@@ -269,6 +270,11 @@ async function handler(request: Request): Promise<Response> {
     // credential, which makes "set their password" a much weaker statement
     // than it looks (see the staff route, AGL-912).
     await auth.revokeRefreshTokens(targetUid)
+    // The old ID token stops opening doors on this process immediately
+    // (AGL-1881), and on every other one within the 15s TTL.
+    // `null`: this route resolves and mutates the target in the PROJECT
+    // pool only, so the project-pool key is the only one it can have warmed.
+    invalidateTokenRevocationCache(targetUid, null)
     const notified = await sendPasswordChangedNotice({
       email: target.email,
       origin,

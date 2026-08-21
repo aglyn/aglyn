@@ -81,6 +81,17 @@ export interface UseSwitcherCollectionResult<T> {
   loading: boolean
   /** The (debounced) query is non-empty — results are name-search matches. */
   hasQuery: boolean
+  /**
+   * The most recent fetch FAILED (AGL-1066).
+   *
+   * Keeping the prior rows on a failure is right and stays (see the catch
+   * below), but the failure was previously erased along with `loading` — so
+   * the first fetch of a scope, which has no prior rows, settled on
+   * `{ items: [], loading: false }` and every switcher read that as "this
+   * person holds no sites". Consumers must render "couldn't load", never a
+   * zero-state, when this is true.
+   */
+  error: boolean
 }
 
 function useDebouncedValue<V>(value: V, ms: number): V {
@@ -135,6 +146,7 @@ export function useSwitcherCollection<T = DocumentData>(
 
   const [items, setItems] = useState<T[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const requestRef = useRef(0)
 
   // Clear on a genuine scope change (host A → host B) so the previous scope's
@@ -144,6 +156,7 @@ export function useSwitcherCollection<T = DocumentData>(
   useEffect(() => {
     setItems([])
     setLoading(true)
+    setError(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
 
@@ -156,6 +169,7 @@ export function useSwitcherCollection<T = DocumentData>(
     if (skip || path.some((segment) => !segment)) {
       setItems([])
       setLoading(true)
+      setError(false)
       return
     }
     setLoading(true)
@@ -177,13 +191,22 @@ export function useSwitcherCollection<T = DocumentData>(
           return value as T
         })
         setItems(filter ? rows.filter(filter) : rows)
+        setError(false)
         setLoading(false)
       })
       .catch(() => {
         // A missing composite index or transient error leaves the prior rows
         // in place rather than blanking the menu; the caller's "view all"
         // escape hatch still reaches everything.
-        if (requestRef.current === requestId) setLoading(false)
+        //
+        // But SAY SO (AGL-1066). Swallowing the failure into `loading: false`
+        // meant the no-prior-rows case — a cold load, or the first fetch
+        // after a scope change — was indistinguishable from a genuinely
+        // empty collection, and the site switcher printed "No sites yet."
+        // at people who hold sites.
+        if (requestRef.current !== requestId) return
+        setError(true)
+        setLoading(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // `skip` is listed even though it is derived from a value already in
@@ -191,7 +214,7 @@ export function useSwitcherCollection<T = DocumentData>(
     // independent of its scope would otherwise stay held after unblocking.
   }, [...deps, key, hasQuery, idleLimit, searchLimit, skip])
 
-  return { items, loading, hasQuery }
+  return { items, loading, hasQuery, error }
 }
 
 export default useSwitcherCollection

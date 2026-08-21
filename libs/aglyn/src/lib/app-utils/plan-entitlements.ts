@@ -24,7 +24,12 @@ import type {
   OrgPlan,
   OrgSeatAddons,
 } from '../foundation'
-import { PLATFORM_BRAND_NAME, PLATFORM_SUPPORT_URL } from './platform-brand'
+import {
+  PLATFORM_BRAND_NAME,
+  PLATFORM_HOME_URL,
+  PLATFORM_MARK_URL,
+  PLATFORM_SUPPORT_URL,
+} from './platform-brand'
 
 /** Sentinel for quotas a plan does not cap; `checkQuota` always allows. */
 export const UNLIMITED = Number.POSITIVE_INFINITY
@@ -2549,6 +2554,19 @@ export interface ResolvedBrandingProfile {
   faviconUrl: string | null
   primaryColor: string | null
   supportUrl: string | null
+  /**
+   * The brand's own FRONT DOOR — where "Made with <product>" sends a visitor
+   * who wants to know what built the site they are looking at.
+   *
+   * Deliberately separate from {@link ResolvedBrandingProfile.supportUrl},
+   * which the badge used to borrow: a help-desk address is the wrong answer to
+   * "what is this", and on this deployment it resolves to a `mailto:`, so the
+   * badge opened a blank email instead of a web page.
+   *
+   * Nullable for the same reason `supportUrl` is — a brand with nowhere to
+   * send that visitor gets a plain label, never a substitute destination.
+   */
+  homeUrl: string | null
   fromName: string
   emailLogoUrl: string | null
   customConsoleDomain: string | null
@@ -2575,10 +2593,15 @@ export interface ResolvedBrandingProfile {
  */
 export const PLATFORM_BRANDING_PROFILE: ResolvedBrandingProfile = {
   productName: PLATFORM_BRAND_NAME,
-  logoUrl: null,
+  // The platform's own surfaces still bake their logo in — this is here for
+  // the surfaces that CANNOT, which is every surface rendered on somebody
+  // else's site. The free-tier attribution badge is the one that exists
+  // today, and it carried no mark at all while this was null.
+  logoUrl: PLATFORM_MARK_URL,
   faviconUrl: null,
   primaryColor: null,
   supportUrl: PLATFORM_SUPPORT_URL,
+  homeUrl: PLATFORM_HOME_URL,
   fromName: PLATFORM_BRAND_NAME,
   emailLogoUrl: null,
   customConsoleDomain: null,
@@ -2613,7 +2636,12 @@ export function resolveBrandingProfile(
     productName:
       cleanBrandString(profile.productName) ??
       PLATFORM_BRANDING_PROFILE.productName,
-    logoUrl: cleanBrandString(profile.logoUrl) ?? PLATFORM_BRANDING_PROFILE.logoUrl,
+    // NO FALLBACK — and this became load-bearing the moment
+    // `PLATFORM_BRANDING_PROFILE.logoUrl` stopped being null. Inheriting it
+    // would stamp the PLATFORM's mark on a white-label org's published sites,
+    // which is precisely the disclosure white-label is sold to prevent. A
+    // white-label org that set no logo shows none.
+    logoUrl: cleanBrandString(profile.logoUrl) ?? null,
     faviconUrl:
       cleanBrandString(profile.faviconUrl) ?? PLATFORM_BRANDING_PROFILE.faviconUrl,
     primaryColor:
@@ -2635,6 +2663,15 @@ export function resolveBrandingProfile(
     // reads as broken; an email with no support line reads as plain, which
     // is the right appearance for an organization that has not set one.
     supportUrl: cleanBrandString(profile.supportUrl) ?? null,
+    // A white-label org has no separate "home" field to store, and the same
+    // no-fallback rule applies for the same reason: `PLATFORM_HOME_URL` here
+    // would put a link to the platform's marketing site on the badge of an
+    // org that pays to conceal the platform exists. Their support URL is the
+    // only destination they have told us about, which is exactly what this
+    // badge already linked to before the split — so white-label badges are
+    // unchanged, and only the platform's own badge stops opening a mail
+    // client.
+    homeUrl: cleanBrandString(profile.supportUrl) ?? null,
     fromName:
       cleanBrandString(profile.fromName) ?? PLATFORM_BRANDING_PROFILE.fromName,
     emailLogoUrl:

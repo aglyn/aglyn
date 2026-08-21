@@ -65,3 +65,62 @@ export function readCookie(
   }
   return empty
 }
+
+/**
+ * EVERY value the jar holds for one cookie name (AGL-1902).
+ *
+ * `readCookie` above answers "what is this cookie's value", which is the right
+ * question when a duplicate is an accident to be tolerated. The handoff
+ * verifier asks a different one: a duplicate there may be an ATTACK — a
+ * compromised sibling host under the customer's own apex setting
+ * `Domain=.acme-agency.com` on a cookie we set host-only, which shadows ours
+ * in the `Cookie` header with no way to tell them apart.
+ *
+ * Picking one value would let the attacker's choice decide whether a
+ * legitimate redemption succeeds, which is a denial of service handed to
+ * anyone who can write a cookie on a sibling name. Returning all of them lets
+ * the caller hash each and accept if ANY matches, which is safe by
+ * construction — only the real verifier hashes to the stored digest — and
+ * turns the hijack attempt into a no-op.
+ *
+ * Empty values are dropped: they cannot match a digest and would only make the
+ * caller hash the empty string.
+ */
+export function readCookieValues(request: Request, name: string): string[] {
+  const raw = request.headers.get('cookie')
+  if (!raw) return []
+  const values: string[] = []
+  for (const pair of raw.split(';')) {
+    const index = pair.indexOf('=')
+    if (index < 0) continue
+    if (pair.slice(0, index).trim() !== name) continue
+    const value = decodeURIComponent(pair.slice(index + 1).trim())
+    if (value) values.push(value)
+  }
+  return values
+}
+
+/**
+ * Is this request actually on HTTPS?
+ *
+ * Behind Vercel's proxy the runtime sees the forwarded header; the URL is the
+ * fallback for a direct connection and for local dev. A comma-joined list is
+ * possible through more than one proxy — the first entry is the client's leg,
+ * which is the one `Secure` is about.
+ *
+ * Shared for the same reason `readCookie` above is (AGL-1881). It lived as a
+ * private function in the session route, and the activity route answered the
+ * question a different way — by folding `Secure` into the same ternary as
+ * `Domain`, so a custom console domain got the cookie over HTTPS with no
+ * `Secure` at all. That is the second time this pair has drifted: the note on
+ * `readCookie` records the first. Two callers, one definition.
+ */
+export function requestIsHttps(request: Request): boolean {
+  const forwarded = request.headers.get('x-forwarded-proto')
+  if (forwarded) return forwarded.split(',')[0].trim().toLowerCase() === 'https'
+  try {
+    return new URL(request.url).protocol === 'https:'
+  } catch {
+    return false
+  }
+}

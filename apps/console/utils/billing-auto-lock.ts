@@ -39,6 +39,27 @@
  * apps/console/app/api/billing/usage-alerts/route.ts.
  */
 
+/**
+ * Reconciled against the live dunning schedule, or rather against the fact
+ * that there isn't one to reconcile against yet (AGL-2430).
+ *
+ * 30 stands, and the reason is that it is safe under **every** configuration
+ * Stripe's Dashboard can hold, not that it matches a number someone read:
+ *
+ * - If live cancels at ~21 days as test mode does, 30 sits nine days past the
+ *   terminal state — the sweep fires on `canceled` + `payment_failed`, which
+ *   is reachable, and the extra nine days is slack in the customer's favour.
+ * - If live is instead set to *mark unpaid*, the org sits `unpaid`
+ *   indefinitely and the sweep fires at day 30 on the `unpaid` branch.
+ * - If live is set to *leave past_due*, same, on the `past_due` branch.
+ *
+ * All three land somewhere reachable, so no live reading can make this
+ * constant unsafe — only more or less generous. That is why this is not a
+ * blocker on the live Dashboard read, and why the read is still owed: the
+ * banner copy and the customer docs are what actually depend on the number,
+ * and both have been made to stop quoting it. See
+ * `LIVE_MODE_DUNNING_SCHEDULE` in ./stripe-dunning-schedule.ts.
+ */
 export const BILLING_LOCK_GRACE_DAYS = 30
 
 /**

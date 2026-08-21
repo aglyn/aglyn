@@ -46,6 +46,10 @@ import {
   updateExisting,
   writeOrgBilling,
 } from '@aglyn/tenant-data-admin'
+import {
+  INTERNAL_TRAFFIC_PARAM,
+  INTERNAL_TRAFFIC_VALUE,
+} from '../../../../utils/internal-traffic'
 import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
 import { stripeCustomerIdentityParams } from '../../../../utils/stripe-customer-identity'
 import {
@@ -683,6 +687,10 @@ async function handler(request: Request): Promise<Response> {
             // as a renewal's `purchase` does.
             clientId: object?.metadata?.ga_client_id,
             stripeCustomerId,
+            // The subscription's own metadata, stamped at checkout (AGL-1582).
+            internal:
+              object?.metadata?.[INTERNAL_TRAFFIC_PARAM] ===
+              INTERNAL_TRAFFIC_VALUE,
           }).catch(() => undefined))
 
           // TELL THEM (AGL-1877). A dunning-exhaustion cancellation was the
@@ -881,6 +889,14 @@ async function handler(request: Request): Promise<Response> {
           // never drift apart (AGL-1872).
           const revenue =
             type === 'invoice.paid' ? platformInvoiceRevenue(object) : null
+          // Is this OUR transaction rather than a customer's (AGL-1582)?
+          // Checkout stamps it on the SUBSCRIPTION's metadata from a browser
+          // we declared ours, so it is present on the renewal too, and it is
+          // compared against the one shared constant rather than a truthiness
+          // test — an arbitrary metadata value must not read as internal.
+          const internalTraffic =
+            object?.subscription_details?.metadata?.[INTERNAL_TRAFFIC_PARAM] ===
+            INTERNAL_TRAFFIC_VALUE
           if (type === 'invoice.paid') {
             if (revenue) {
               const { invoiceId, ...recorded } = revenue
@@ -890,6 +906,15 @@ async function handler(request: Request): Promise<Response> {
                 .set({
                   ...recorded,
                   orgId,
+                  // Kept on the ledger row so the REFUND can find it. A
+                  // refund arrives on a charge, which carries no subscription
+                  // metadata, and an internal purchase whose refund shipped
+                  // unstamped would be discarded by the filter on the way in
+                  // and kept on the way out — netting the reports NEGATIVE by
+                  // the rehearsal's value, which is worse than not filtering
+                  // at all. Written only when true, so the field's absence
+                  // stays the ordinary case.
+                  ...(internalTraffic ? { internalTraffic: true } : {}),
                   recordedAt:
                     firebaseAdmin.firestore.FieldValue.serverTimestamp(),
                 })
@@ -942,6 +967,7 @@ async function handler(request: Request): Promise<Response> {
               // recorded without campaign attribution.
               clientId: object?.subscription_details?.metadata?.ga_client_id,
               stripeCustomerId: customerId,
+              internal: internalTraffic,
             }).catch(() => undefined))
           }
           // Billing is org-scoped now (AGL-621/644). Links are frozen at write
@@ -1108,6 +1134,10 @@ async function handler(request: Request): Promise<Response> {
               // reversal on the same synthetic user a renewal's purchase
               // falls back to.
               stripeCustomerId: customerId,
+              // Read off the ledger row the purchase wrote (AGL-1582) — the
+              // charge itself cannot say, and a reversal must be filtered
+              // exactly as its purchase was or the netting goes negative.
+              internal: revenueSnapshot.get('internalTraffic') === true,
             }).catch(() => undefined))
           } else if (!revenueSnapshot.exists && object?.refunded === true) {
             // A pre-AGL-1811 invoice has no row to stamp; the GA reversal IS
@@ -1259,6 +1289,8 @@ async function handler(request: Request): Promise<Response> {
               stripeCustomerId: String(
                 revenueDoc.get('stripeCustomerId') ?? '',
               ),
+              // Same row, same reason as the refund branch (AGL-1582).
+              internal: revenueDoc.get('internalTraffic') === true,
             }).catch(() => undefined))
           }
         }

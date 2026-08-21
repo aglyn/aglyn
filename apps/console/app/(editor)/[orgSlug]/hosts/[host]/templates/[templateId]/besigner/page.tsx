@@ -73,7 +73,9 @@ import AuthenticatedLayout from '../../../../../../../../components/layouts/auth
 import MainLayout from '../../../../../../../../components/layouts/main.layout'
 import '../../../../../../../../constants/app-setup'
 import { buildRoute, Route } from '../../../../../../../../constants/route-links'
+import useCollectionTemplates from '../../../../../../../../hooks/use-collection-templates'
 import useOpenPreview from '../../../../../../../../hooks/use-open-preview'
+import useScreenLinkRoutes from '../../../../../../../../hooks/use-screen-link-routes'
 import { useHostId, useHostSubdomain } from '../../../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../../hooks/use-firestore-collection'
@@ -131,9 +133,20 @@ function TemplateBesignerPage(props) {
     [firestore, hostId],
     { idField: '$id' },
   )
+  // What the SITE serves, not what publishing wrote (AGL-1998): a picker that
+  // offers a path the tenant router 404s hands the author a dead anchor, and
+  // it offered nothing at all for a collection's list template.
+  const collectionTemplates = useCollectionTemplates(hostId)
+  const linkableRoutes = useScreenLinkRoutes({
+    templates: collectionTemplates,
+    routingMap: hostResult?.data?.screens as
+      | Record<string, string>
+      | undefined,
+    screens: screenDocs,
+  })
   const screenLinks = useMemo(
     () => ({
-      screens: hostResult?.data?.screens as Record<string, string> | undefined,
+      screens: linkableRoutes,
       labels: Object.fromEntries(
         (screenDocs ?? []).map((screen: any) => [
           screen.$id,
@@ -144,7 +157,7 @@ function TemplateBesignerPage(props) {
       // Static canvas: interactions inert, menus/drawers show editor affordance (AGL-830).
       editorInert: true,
     }),
-    [hostResult?.data?.screens, screenDocs],
+    [linkableRoutes, screenDocs],
   )
   const { doc: result } = useHostTemplate({
     hostId,

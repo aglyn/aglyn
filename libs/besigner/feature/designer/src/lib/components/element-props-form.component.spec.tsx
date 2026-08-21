@@ -20,6 +20,8 @@ import { MARKDOWN_ATTRIBUTE_FIELD_COMPONENT } from './markdown-attribute-field.c
 import { TOKEN_TEXT_FIELD_COMPONENT } from './token-text-field.component'
 import { SCREEN_LINK_FIELD_COMPONENT } from './screen-link-field.component'
 import { act, renderHook } from '@testing-library/react'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 import * as Aglyn from '@aglyn/aglyn'
 import {
@@ -420,5 +422,64 @@ describe('inheritedAltPatch (AGL-1896)', () => {
     }
     expect(Object.keys(next).sort()).toEqual(['alt', 'src'])
     expect(next.alt).toBe('Written by hand')
+  })
+})
+
+/**
+ * The plain Screen picker names a target the host has lost (AGL-1893).
+ *
+ * The `Link`-typed prop picker (`ScreenLinkValuePicker`) has kept and shown
+ * an unresolvable value since AGL-1335. The `SCREEN_SELECT` attribute path —
+ * which is what `Screen Link`'s "Screen" field and every `tabLink{n}` use —
+ * did not: its options are built from the routing map, so a stored id the
+ * map has lost matched nothing and the field rendered EMPTY. Which reads as
+ * "no link set", while the element goes on behaving as linked.
+ *
+ * The decision itself is `unresolvedScreenOption`, pinned in
+ * `screen-link-context.spec.ts` against every input that matters. What this
+ * can only check is that the branch CALLS it — the "written but never read"
+ * failure, where a helper is perfect and nothing consults it. The option
+ * list is built inside a `useMemo` in an unexported component behind the
+ * besigner's context stack, so it is read from the source rather than
+ * rendered; that limit is the reason the logic lives in a pure function
+ * somewhere it can be exercised for real.
+ */
+describe('the Screen picker and a target the host has lost (AGL-1893)', () => {
+  const source = readFileSync(
+    join(__dirname, 'element-props-form.component.tsx'),
+    'utf8',
+  )
+  const screenSelectBranch = source.slice(
+    source.indexOf('FieldComponentType.SCREEN_SELECT'),
+    source.indexOf('FieldComponentType.PLUGIN_SETTINGS'),
+  )
+
+  it('is looking at the right branch', () => {
+    // Guard on the guard: if this slice ever comes back empty the checks
+    // below would pass on nothing at all.
+    expect(screenSelectBranch).toContain("label: 'None (use external URL)'")
+    expect(screenSelectBranch.length).toBeGreaterThan(200)
+  })
+
+  it('consults the shared rule instead of dropping the value', () => {
+    expect(screenSelectBranch).toContain('Aglyn.unresolvedScreenOption')
+    // Fed the field's own stored value — a call passing anything else could
+    // not tell a dead reference from a healthy one.
+    expect(screenSelectBranch).toMatch(/nodeProps\?\.\[field\.name\]/)
+  })
+
+  it('re-runs when the node whose value it reads changes', () => {
+    // Without `nodeProps` in the memo's dependencies the option would be
+    // computed once and then describe whichever node happened to be
+    // selected first.
+    const deps = source.slice(
+      source.indexOf('knownPluginInstallsVersion,', source.indexOf('}, [')),
+    )
+    const depsList = source.slice(
+      source.lastIndexOf('}, [', source.indexOf('knownPluginInstallsVersion,')),
+      source.indexOf('])', source.indexOf('knownPluginInstallsVersion,')),
+    )
+    expect(deps.length).toBeGreaterThan(0)
+    expect(depsList).toContain('nodeProps,')
   })
 })

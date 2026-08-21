@@ -68,6 +68,25 @@ When you exceed the limit, the request returns `429` with a `Retry-After` header
 - Prefer a larger `?limit=` over more requests when reading collections: one call for
   100 records costs one request, a hundred calls cost a hundred.
 
+### Creating a site has its own budget too {#site-create-budget}
+
+[`POST /v1/sites`](resources/sites.md#create) is limited to **10 per hour**, and that
+budget belongs to the **organization** rather than to the key.
+
+Subdomains are one global namespace shared by every customer, so a name someone takes
+is gone for everyone — which makes an unbounded create endpoint a name-grab, not just
+a cost problem. Keying the budget to the organization means minting extra keys does
+not multiply the rate.
+
+Two things follow:
+
+- **It is separate from your request budget.** A create spends one of these ten and
+  one request; exhausting it doesn't touch anything else, and a `429` here carries
+  `Retry-After`.
+- **Your plan's site limit is a different thing.** This bounds how fast you may try;
+  the site allowance bounds how many you may hold, and that refusal is a `403`
+  (`site_quota`), not a `429`.
+
 ### Publishing has its own, separate budget {#publish-budget}
 
 [`POST /v1/sites/{siteId}/publish`](resources/sites.md#publish) is limited to **10 per

@@ -25,16 +25,22 @@
  * nothing verified. Off works, on does not, and for `aglyn-org` the owner's
  * only credential lives inside the pool that stops answering.
  *
- * The round trip below is the whole issue in one test. It is RED on purpose:
- * part 1 (the card's gate) stops anyone walking through the door, and only
- * part 2 — a representation for a staff attestation that the publish path can
- * recognise — can make it green. `it.failing` keeps that honest in both
- * directions: the suite stays green while the gap is open, and the moment
- * part 2 lands this case fails until the `.failing` is removed.
+ * PART 2 HAS LANDED (AGL-1887), and the `it.failing` marker this file was
+ * built around is gone. The representation is a claim document carrying
+ * `attestedBy` — a named staff member vouching — written by `attestSsoDomain`
+ * and read by `publishSsoDomains` alongside `verified === true`.
  *
- * ⚠️ The way NOT to make it pass is to let `publishSsoDomains` accept a domain
- * without `verified === true`. That check is what stops an org routing another
- * company's sign-ins to its own IdP. The last case here pins it.
+ * ⚠️ The way NOT to have made it pass was to let `publishSsoDomains` accept a
+ * domain with neither marker, or to infer permission from a routing doc that
+ * already names the org. Either would stop `unpublish` being final and let a
+ * domain whose claim was revoked come back. The cases at the bottom pin that
+ * boundary: an unverified claim is still refused, and an `attestedBy` that is
+ * blank, or truthy-but-not-a-string, is not an attestation by anybody.
+ *
+ * The attestation is trustworthy only because nothing a customer can reach
+ * writes it: `orgs/{orgId}/ssoDomains/{domain}` is deny-all for clients in the
+ * Firestore rules, and `issueDomainClaim` — the one claim writer on the org's
+ * own path — never sets the field. The last case here holds that.
  */
 
 /** Every document, keyed by its full path. */
@@ -114,7 +120,13 @@ jest.mock('./firebase-admin', () => ({
   },
 }))
 
-import { publishSsoDomains, unpublishSsoDomains } from './sso-provisioning'
+import {
+  attestSsoDomain,
+  isStaffAttestedClaim,
+  issueDomainClaim,
+  publishSsoDomains,
+  unpublishSsoDomains,
+} from './sso-provisioning'
 
 const ORG = 'aglyn-org'
 const DOMAIN = 'aglyn.com'
@@ -165,20 +177,67 @@ describe('SSO off-and-on round trip', () => {
     expect(mockDocs.get(`ssoDomains/${DOMAIN}`)?.['active']).toBe(true)
   })
 
-  // RED UNTIL PART 2 (see the header). `it.failing` passes while the body
-  // throws; when a staff attestation finally has a representation the publish
-  // path recognises, this case starts passing and jest will report it as a
-  // failure until the `.failing` comes off.
-  it.failing('restores an attested org too', async () => {
+  it('restores an attested org too, once the attestation exists', async () => {
+    // PART 2, and the `.failing` marker this case carried is gone.
+    //
+    // The representation is a claim document holding `attestedBy` — a named
+    // staff member vouching — written by `attestSsoDomain`. Note it does NOT
+    // set `verified`: DNS proof and a person vouching are different facts and
+    // the data keeps them apart.
     seedAttestedOrg()
+    const attested = await attestSsoDomain({
+      orgId: ORG,
+      domain: DOMAIN,
+      attestedByUid: 'staff-uid-1',
+      note: 'Onboarded by hand before self-serve; ownership checked 2026-07.',
+    })
+    expect(attested).toEqual({ domain: DOMAIN, error: null })
+    expect(mockDocs.get(`orgs/${ORG}/ssoDomains/${DOMAIN}`)).toMatchObject({
+      attestedBy: 'staff-uid-1',
+    })
+    expect(
+      mockDocs.get(`orgs/${ORG}/ssoDomains/${DOMAIN}`)?.['verified'],
+    ).toBeUndefined()
 
     await unpublishSsoDomains(ORG)
     expect(mockDocs.get(`ssoDomains/${DOMAIN}`)?.['active']).toBe(false)
 
-    // Today: `published` is [], and the route turns that into
-    // 400 "No verified domains to publish". SSO is now off with no way back.
+    // The door opens both ways now.
     expect(await publish()).toEqual([DOMAIN])
     expect(mockDocs.get(`ssoDomains/${DOMAIN}`)?.['active']).toBe(true)
+  })
+
+  it('an attestation SURVIVES the round trip, so it is not single-use', async () => {
+    // Off, on, off, on. A fix that consumed the attestation — or that leaned
+    // on the routing doc still being there — would pass the case above and
+    // strand the org on the second cycle, which is the harder failure to see.
+    seedAttestedOrg()
+    await attestSsoDomain({
+      orgId: ORG,
+      domain: DOMAIN,
+      attestedByUid: 'staff-uid-1',
+    })
+    for (const _ of [1, 2]) {
+      await unpublishSsoDomains(ORG)
+      expect(mockDocs.get(`ssoDomains/${DOMAIN}`)?.['active']).toBe(false)
+      expect(await publish()).toEqual([DOMAIN])
+      expect(mockDocs.get(`ssoDomains/${DOMAIN}`)?.['active']).toBe(true)
+    }
+  })
+
+  it('is still stranded when NOTHING was attested — the backfill is real work', async () => {
+    // The honest statement of what part 2 does and does not do. Accepting
+    // `attestedBy` fixes the MECHANISM; an org that has no claim document at
+    // all still cannot publish, because there is nothing saying anyone ever
+    // checked. The rejected alternative — inferring permission from a routing
+    // doc that already names this org — is what would have made this case
+    // pass, and it makes `unpublish` non-final for everybody.
+    //
+    // So a real org is unstranded by RUNNING `attestSsoDomain` against it, not
+    // by deploying this commit. `aglyn-org` is the one that needs it.
+    seedAttestedOrg()
+    await unpublishSsoDomains(ORG)
+    expect(await publish()).toEqual([])
   })
 
   it('never publishes a domain whose claim is unverified', async () => {
@@ -195,5 +254,90 @@ describe('SSO off-and-on round trip', () => {
 
     expect(await publish()).toEqual([])
     expect(mockDocs.has(`ssoDomains/${DOMAIN}`)).toBe(false)
+  })
+})
+
+describe('what an attestation is, and is not', () => {
+  beforeEach(() => {
+    mockDocs.clear()
+  })
+
+  it('refuses an attestedBy that is blank or not a string', () => {
+    // A field satisfiable by any truthy value is one a careless future write
+    // satisfies by accident. `true` is not a person.
+    for (const value of [true, 1, {}, [], null, undefined, '', '   ']) {
+      expect([value, isStaffAttestedClaim(value)]).toEqual([value, false])
+    }
+    expect(isStaffAttestedClaim('staff-uid-1')).toBe(true)
+  })
+
+  it('does not publish on a truthy-but-not-string attestedBy', () => {
+    // The same rule, reached through the real publish path rather than the
+    // predicate — a refactor could keep the predicate and stop calling it.
+    mockDocs.set(`orgs/${ORG}`, { sso: { domains: [DOMAIN] } })
+    mockDocs.set(`orgs/${ORG}/ssoDomains/${DOMAIN}`, {
+      domain: DOMAIN,
+      verified: false,
+      attestedBy: true,
+    })
+    return publish().then((published) => {
+      expect(published).toEqual([])
+      expect(mockDocs.has(`ssoDomains/${DOMAIN}`)).toBe(false)
+    })
+  })
+
+  it('requires the attesting staff uid', async () => {
+    expect(
+      await attestSsoDomain({ orgId: ORG, domain: DOMAIN, attestedByUid: '  ' }),
+    ).toMatchObject({ domain: null })
+    expect(mockDocs.has(`orgs/${ORG}/ssoDomains/${DOMAIN}`)).toBe(false)
+  })
+
+  it('cannot attest a domain another org already routes', async () => {
+    // An attestation must not be a way around "one domain, one org". The
+    // conflict is for a human to resolve before anything is written, not for
+    // whoever attests last to win.
+    mockDocs.set(`ssoDomains/${DOMAIN}`, { orgId: 'someone-else', active: true })
+    const result = await attestSsoDomain({
+      orgId: ORG,
+      domain: DOMAIN,
+      attestedByUid: 'staff-uid-1',
+    })
+    expect(result.domain).toBeNull()
+    expect(result.error).toMatch(/another organization/i)
+    expect(mockDocs.has(`orgs/${ORG}/ssoDomains/${DOMAIN}`)).toBe(false)
+  })
+
+  it('keeps a token and a verified state it did not create', async () => {
+    // Merge, not overwrite. An org midway through proving a domain by DNS
+    // must not have its claim reset by an attestation landing on top.
+    mockDocs.set(`orgs/${ORG}/ssoDomains/${DOMAIN}`, {
+      domain: DOMAIN,
+      token: 'tok',
+      verified: true,
+    })
+    await attestSsoDomain({
+      orgId: ORG,
+      domain: DOMAIN,
+      attestedByUid: 'staff-uid-1',
+    })
+    expect(mockDocs.get(`orgs/${ORG}/ssoDomains/${DOMAIN}`)).toMatchObject({
+      token: 'tok',
+      verified: true,
+      attestedBy: 'staff-uid-1',
+    })
+  })
+
+  it('THE HOLE THIS MUST NOT BE: the customer claim path cannot self-attest', async () => {
+    // `issueDomainClaim` is what an org admin reaches through
+    // `/api/orgs/sso` → `add-domain`. If it ever wrote `attestedBy`, any org
+    // could publish routing for any domain by asking for it — which is the
+    // whole account-takeover vector, handed over through the front door.
+    const { claim } = await issueDomainClaim(ORG, DOMAIN)
+    expect(claim?.domain).toBe(DOMAIN)
+    const stored = mockDocs.get(`orgs/${ORG}/ssoDomains/${DOMAIN}`) ?? {}
+    expect(stored['attestedBy']).toBeUndefined()
+    expect(stored['verified']).toBe(false)
+    expect(await publish()).toEqual([])
   })
 })

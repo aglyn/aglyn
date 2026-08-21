@@ -17,12 +17,14 @@
 
 import {
   isLockdownActive,
+  resolveIdpAddress,
   resolveIdpDisplayName,
   resolveIdpPhone,
   resolveIdpPhotoUrl,
   toEpochMs,
 } from '@aglyn/aglyn/server'
 import {
+  consoleSessionEpochRefuses,
   emailUnverifiedResponse,
   firebaseAdmin,
   getFeatureLockdown,
@@ -40,7 +42,7 @@ import {
   tombstoneIsExpired,
   SESSION_TOMBSTONE_TTL_MS,
 } from './session-tombstone'
-import { readCookie } from '../read-cookie'
+import { readCookie, requestIsHttps } from '../read-cookie'
 import {
   hostnameOf,
   isWorkspaceDomainHost,
@@ -50,9 +52,14 @@ import {
 import {
   DEVICE_COOKIE,
   DEVICE_COOKIE_MAX_AGE_S,
+  DEVICES_COLLECTION,
   describeSignInClient,
   recordDeviceAndMaybeAlert,
 } from '../../_lib/security-alerts'
+import {
+  claimSecondsToMs,
+  deviceRevocationRefuses,
+} from '../../_lib/device-revocation'
 import { enforceSanctionsGeo } from '../../../../constants/sanctions-geo'
 
 export const dynamic = 'force-dynamic'
@@ -74,23 +81,6 @@ const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000
  * Revocation-aware: the exchange rejects cookies minted before the
  * user's tokens were revoked.
  */
-/**
- * Is this request actually on HTTPS?
- *
- * Behind Vercel's proxy the runtime sees the forwarded header; the URL is the
- * fallback for a direct connection and for local dev. A comma-joined list is
- * possible through more than one proxy — the first entry is the client's leg,
- * which is the one `Secure` is about.
- */
-function requestIsHttps(request: Request): boolean {
-  const forwarded = request.headers.get('x-forwarded-proto')
-  if (forwarded) return forwarded.split(',')[0].trim().toLowerCase() === 'https'
-  try {
-    return new URL(request.url).protocol === 'https:'
-  } catch {
-    return false
-  }
-}
 
 function cookieAttributes(request: Request, maxAgeSeconds: number) {
   const onWorkspaceDomain = isWorkspaceDomainHost(request.headers.get('host'))
@@ -212,6 +202,47 @@ async function rejectUnknownConsoleHost(
   }
 }
 
+/**
+ * Is the device this request comes from one the owner has signed out?
+ * (AGL-1959)
+ *
+ * Reads the `aglyn_device` cookie — the same id the device registry is keyed
+ * on — and compares the device's `revokedAt` against when the credential being
+ * presented was ISSUED. On the mint that is the ID token's `auth_time`; on the
+ * exchange it is the session cookie's `iat`. Comparing against issue time, and
+ * not simply banning the device id, is what lets the person who revoked the
+ * browser they are sitting at sign in again and be admitted — the likeliest
+ * mistake, since that row sits at the top of the list, and AGL-1888 is a
+ * standing reminder that a lockout with no way out is its own incident.
+ *
+ * Costs one document read, and only when a device cookie is present. **Fails
+ * OPEN on a Firestore error**, matching the two host guards above and for the
+ * same reason: this is the second gate. The first is `checkRevoked`, which is
+ * Firebase's own bookkeeping and needs nothing from us.
+ */
+async function deviceRevoked(
+  request: Request,
+  uid: string,
+  credentialIssuedAtMs: number | null,
+): Promise<boolean> {
+  const deviceId = readCookie(request, DEVICE_COOKIE)
+  if (!deviceId || deviceId.includes('/')) return false
+  try {
+    const snapshot = await firebaseAdmin
+      .firestore()
+      .doc(`users/${uid}/${DEVICES_COLLECTION}/${deviceId}`)
+      .get()
+    if (!snapshot.exists) return false
+    const revokedAt = Number(
+      (snapshot.data() as Record<string, unknown> | undefined)?.['revokedAt'] ??
+        0,
+    )
+    return deviceRevocationRefuses(revokedAt, credentialIssuedAtMs)
+  } catch {
+    return false
+  }
+}
+
 async function handler(request: Request): Promise<Response> {
   try {
     const auth = firebaseAdmin.app().auth()
@@ -283,7 +314,18 @@ async function handler(request: Request): Promise<Response> {
       // impersonation must never mail the customer "new device sign-in".
       let signInIdentity: { uid: string; email: string | null } | null = null
       try {
-        const decoded = await auth.verifyIdToken(idToken)
+        // `checkRevoked` (AGL-1959). This was a bare `verifyIdToken`, and the
+        // gap it left is the whole of what makes a revocation real: after
+        // `revokeRefreshTokens(uid)` the browser cannot obtain a NEW ID token,
+        // but the one it already holds stays cryptographically valid for up to
+        // an hour — and this route would have exchanged it for a fresh
+        // FOURTEEN-DAY session cookie, handing back more than was revoked.
+        // Every admin path that revokes (lockdown, staff password reset,
+        // org member removal) was leaking through the same hole.
+        //
+        // One `getUser` per mint. Mints happen on interactive sign-in, not per
+        // request, and the exchange half has paid the same cost since AGL-236.
+        const decoded = await auth.verifyIdToken(idToken, true)
         if (!decoded.email_verified && !isImpersonationSession(decoded)) {
           const unverified = emailUnverifiedResponse()
           for (const value of clearTombstone ?? []) {
@@ -384,6 +426,27 @@ async function handler(request: Request): Promise<Response> {
             return locked
           }
         }
+        // Device revocation, the mint half (AGL-1959). `auth_time` is when
+        // the person actually authenticated — the one claim a holder of
+        // stolen cookies and a refresh token cannot move — so a genuinely
+        // fresh sign-in on a revoked browser passes and a resurrected session
+        // does not.
+        if (
+          await deviceRevoked(
+            request,
+            decoded.uid,
+            claimSecondsToMs(decoded['auth_time'] as number | undefined),
+          )
+        ) {
+          return jsonWithCookie(
+            { error: 'Signed out', reason: 'device-revoked' },
+            401,
+            [
+              `${SESSION_COOKIE}=; ${cookieAttributes(request, 0)}`,
+              `${SESSION_TENANT_COOKIE}=; ${cookieAttributes(request, 0)}`,
+            ],
+          )
+        }
         if (!isImpersonationSession(decoded)) {
           signInIdentity = {
             uid: decoded.uid,
@@ -425,6 +488,8 @@ async function handler(request: Request): Promise<Response> {
           displayName: resolveIdpDisplayName(decoded) || null,
           photoUrl: resolveIdpPhotoUrl(decoded) || null,
           phoneNumber: resolveIdpPhone(decoded) || null,
+          // AGL-1963 — see the sso-jit seed for the reasoning.
+          address: resolveIdpAddress(decoded),
         }
         after(async () => {
           try {
@@ -572,6 +637,59 @@ async function handler(request: Request): Promise<Response> {
             `${SESSION_TENANT_COOKIE}=; ${cookieAttributes(request, 0)}`,
           )
           return locked
+        }
+        // Console-domain session epoch (AGL-1353 D6, wired by AGL-1902).
+        //
+        // `consoleDomains/{host}.sessionEpoch` is bumped by
+        // `suspendOnDowngrade` and by `releaseConsoleDomain`, and it was
+        // written correctly since AGL-1099c with nothing to check: no cookie
+        // could reach a custom domain before the handoff existed. Now one can.
+        //
+        // This is the only lever that reaches an already-minted cookie, and it
+        // works because our boundary is the ONLY place a Firebase session
+        // cookie has any value — it is opaque and can be cashed only by
+        // `verifySessionCookie` under our Admin credentials. It also closes
+        // the re-registration case: a domain claimed by a new owner bumps the
+        // epoch, so no cookie minted under the previous one can be exchanged.
+        //
+        // Skipped on the workspace domain, where there is no claim to read.
+        if (
+          !isWorkspaceDomainHost(request.headers.get('host')) &&
+          (await consoleSessionEpochRefuses({
+            host: hostnameOf(request.headers.get('host')),
+            cookieIssuedAtMs: claimSecondsToMs(decoded.iat),
+          }))
+        ) {
+          return jsonWithCookie(
+            { error: 'Signed out', reason: 'domain-revoked' },
+            401,
+            [
+              `${SESSION_COOKIE}=; ${cookieAttributes(request, 0)}`,
+              `${SESSION_TENANT_COOKIE}=; ${cookieAttributes(request, 0)}`,
+            ],
+          )
+        }
+        // Device revocation, the exchange half (AGL-1959). The session cookie
+        // is what a revoked browser still holds, and this route is what turns
+        // it back into a working sign-in on every other subdomain — so
+        // refusing here is what stops "signed out" meaning "until you open a
+        // different workspace". `iat` is when this cookie was minted; one
+        // minted after the revocation belongs to a later, real sign-in.
+        if (
+          await deviceRevoked(
+            request,
+            decoded.uid,
+            claimSecondsToMs(decoded.iat),
+          )
+        ) {
+          return jsonWithCookie(
+            { error: 'Signed out', reason: 'device-revoked' },
+            401,
+            [
+              `${SESSION_COOKIE}=; ${cookieAttributes(request, 0)}`,
+              `${SESSION_TENANT_COOKIE}=; ${cookieAttributes(request, 0)}`,
+            ],
+          )
         }
         // Carry the impersonation claim through the cross-subdomain exchange
         // (AGL-480). The session cookie preserves it, but the re-minted custom

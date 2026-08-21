@@ -83,9 +83,30 @@ Stripe Connect application fee — the same way a storefront sale works.
 - Your current rate is shown on the **Payments** card of the Products hub, and
   the full ladder is on the [plans page](../../workspace-and-billing/billing-and-plans/overview.md#platform-fees).
 
-Paid bookings do not collect sales tax. A service is not goods, and the tax rate
-configured for your store is a goods rate — so any service tax you owe is
-collected outside Aglyn.
+### Service tax
+
+Paid bookings charge **no tax by default**, and that stays true for every site
+that does not change it.
+
+A service is not goods: the sales-tax rate configured for your store is a goods
+rate, and whether a service is taxable is a different question with frequently
+the opposite answer. So Aglyn does not apply your store's sales rate to an
+appointment. Instead, **Commerce → Settings → Taxes → Service tax** is where
+you set your own rate for it.
+
+When you set one, Aglyn adds it to the booking charge as its own receipt line
+using the label you choose, and records the amount and the regime on the
+booking. It is always your own rate — Stripe Tax is never asked to compute it,
+because it has no service tax code for this and would apply a goods rate to an
+appointment.
+
+The platform fee is charged on the **service price**, never on the tax.
+
+:::warning Aglyn does not provide tax advice
+Aglyn applies the rate you enter and records what was charged. It does **not**
+determine whether service tax applies to you, at what rate, or where it should
+be paid. Confirm your obligations with a qualified tax professional.
+:::
 
 ## Manage
 

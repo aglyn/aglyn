@@ -77,9 +77,9 @@ export const HEALTH_PROBES: readonly HealthProbeDescriptor[] = [
     path: '/api/health/billing',
     auth: 'public',
     meaning:
-      'Stripe still has an enabled destination for us, subscribed to every event we need, whose deliveries land AND actually move something. Degraded means Stripe is trying to tell us about money and it is not getting through — subscriptions, refunds and entitlements stop moving while checkout keeps taking payments.',
+      'Stripe still has an enabled destination for us, subscribed to every event we need, whose deliveries land AND actually move something — plus the separate Connect destination that carries connected-account events. Degraded means Stripe is trying to tell us about money and it is not getting through — subscriptions, refunds and entitlements stop moving while checkout keeps taking payments, or connected merchants keep selling on a charge-eligibility flag that stopped being refreshed.',
     remedy:
-      'Read the code. endpoint-missing / endpoint-disabled is a Stripe dashboard fix. events-unsubscribed names the exact event that fell off the destination — `npm run setup:stripe` re-adds it (this is the AGL-1798 shape: no failed delivery, no error, just silence). deliveries-failing is ours (signature, a rolled secret). handlers-inert is the worst one and the least obvious: deliveries ARE landing and answering 200, and the handler is doing nothing with them — check what stopped being registered, then read the `inert: true` events in stripeEvents for the ids and types. Run `npm run audit:stripe-webhook` for the full join. A quiet window with no events is healthy, not blind — this never keys on the absence of deliveries.',
+      'Read the code. endpoint-missing / endpoint-disabled is a Stripe dashboard fix. events-unsubscribed names the exact event that fell off the destination — `npm run setup:stripe` re-adds it (this is the AGL-1798 shape: no failed delivery, no error, just silence). deliveries-failing is ours (signature, a rolled secret). handlers-inert is the worst one and the least obvious: deliveries ARE landing and answering 200, and the handler is doing nothing with them — check what stopped being registered, then read the `inert: true` events in stripeEvents for the ids and types. connect-endpoint-missing / connect-endpoint-disabled / connect-events-unsubscribed are the SECOND destination, not the one above: connected-account events are delivered only to a destination created with `connect: true`, so without it `syncConnectAccountStatus` never runs and a merchant whose Stripe account got restricted keeps selling until a shopper meets the failure at payment. `npm run setup:stripe` creates it — note `connect: true` is settable only at creation, so a wrong one must be deleted, not edited. Run `npm run audit:stripe-webhook` for the full join. A quiet window with no events is healthy, not blind — this never keys on the absence of deliveries.',
   },
   {
     id: 'errorBeacon',
@@ -254,6 +254,28 @@ function checkFacts(name: string, check: Record<string, unknown>): string[] {
     )
   } else if ('unsubscribedEvents' in check) {
     facts.push('the destination did not state its subscriptions')
+  }
+  /*==========================================
+   * THE SECOND DESTINATION, WORDED (AGL-1948).
+   *
+   * Every other billing fact on this tile is about the platform destination.
+   * This one is about a different endpoint that shares its URL, so the words
+   * have to say "Connect" or a reader will fold it into the line above and
+   * conclude the platform destination is broken.
+   *=========================================*/
+  const connectEndpoint = check['connectEndpoint']
+  if (typeof connectEndpoint === 'string') {
+    facts.push(
+      connectEndpoint === 'enabled'
+        ? 'Connect destination enabled'
+        : connectEndpoint === 'disabled'
+          ? 'Connect destination DISABLED — connected-account events are not being delivered'
+          : 'NO Connect destination — every merchant’s charge-eligibility flag is going stale',
+    )
+  }
+  const unsubscribedConnect = check['unsubscribedConnectEvents']
+  if (Array.isArray(unsubscribedConnect) && unsubscribedConnect.length > 0) {
+    facts.push(`Connect NOT subscribed: ${unsubscribedConnect.join(', ')}`)
   }
   /*==========================================
    * A JOB THAT STOPPED BEING SCHEDULED, WORDED (AGL-1955).

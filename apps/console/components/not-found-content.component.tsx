@@ -33,6 +33,10 @@ export function NotFoundContent() {
   return (
     <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
       <EmptyState
+        // Not a list at all: the caller has already decided this route is
+        // not-found, so there is no read behind this whose success is in
+        // question (AGL-1066).
+        read="loaded"
         iconPath={ICON_VARIANT_SEARCH.path}
         title={'This page isn’t here'}
         description={

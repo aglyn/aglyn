@@ -30,6 +30,18 @@
 const syncConnectAccountStatus = jest.fn(async () => 1)
 const purchaseSet = jest.fn(async () => undefined)
 
+/**
+ * Next's real `after` throws outside a request scope, and this spec drives the
+ * handler directly rather than through a route. The double runs the work
+ * immediately, so every assertion here — all of which observe the EFFECT —
+ * reads exactly as it did before the beacons moved onto `after()` (AGL-2327).
+ */
+jest.mock('next/server', () => ({
+  after: (work: () => unknown) => {
+    void work()
+  },
+}))
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   syncConnectAccountStatus: (...args: unknown[]) =>
     syncConnectAccountStatus(...(args as [])),
@@ -67,7 +79,9 @@ describe('marketplace webhook: account.updated (AGL-1997)', () => {
     await marketplaceBillingWebhookHandler({
       type: 'account.updated',
       object: account,
-      event: {},
+      // `livemode` lives on the EVENT, never on the Account object
+      // (AGL-2471) — Stripe's Account payload has no such field.
+      event: { livemode: true },
     })
     expect(syncConnectAccountStatus).toHaveBeenCalledTimes(1)
     // `publisherProfiles`, not `profiles` — the marketplace binds the account
@@ -75,6 +89,10 @@ describe('marketplace webhook: account.updated (AGL-1997)', () => {
     expect(syncConnectAccountStatus).toHaveBeenCalledWith(
       'publisherProfiles',
       account,
+      // The third argument is the whole AGL-2471 fix on this path: without
+      // it the mode is never recorded and a live deployment refuses the
+      // linkage forever.
+      true,
     )
   })
 

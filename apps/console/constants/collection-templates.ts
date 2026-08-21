@@ -207,6 +207,36 @@ export function collectCollectionTemplateRoutes(
   return routes
 }
 
+/**
+ * Where each LIST template is actually served, keyed by screen id (AGL-1998):
+ * `blogListTmpl` → `blog`, in the host routing map's path format.
+ *
+ * The same answer {@link collectionListTemplateScreenIds} gives, carrying the
+ * slug as well as the id, because the surfaces that RESOLVE a screen link need
+ * the path and not just the fact. It is the console twin of the tenant
+ * runtime's `collectCollectionListRoutes`, and the two conditions are the same
+ * ones for the same reasons: a slug to be served at, and content kind, since
+ * a catalog collection's listing lives at `/collections/{slug}`.
+ */
+export function collectionListRoutesByScreenId(
+  collections:
+    | ReadonlyArray<CollectionTemplateSource | null | undefined>
+    | null
+    | undefined,
+): Record<string, string> {
+  const routes: Record<string, string> = {}
+  for (const contentCollection of collections ?? []) {
+    if (!contentCollection) continue
+    if (!servesAContentRoute(contentCollection)) continue
+    const slug =
+      typeof contentCollection.slug === 'string' ? contentCollection.slug : ''
+    if (!slug) continue
+    const listScreenId = screenIdOf(contentCollection.listScreenId)
+    if (listScreenId) routes[listScreenId] = slug
+  }
+  return routes
+}
+
 /** The path a template route is served at: `/blog`, `/blog/{entry}`. */
 export function collectionTemplateRoutePath(
   route: CollectionTemplateRoute,

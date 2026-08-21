@@ -1394,6 +1394,7 @@ async function reverseSellerShare(
 export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
   type,
   object,
+  event,
   requestHost,
 }) => {
   // Connect readiness, kept fresh (AGL-1997). Every commerce money route —
@@ -1407,8 +1408,12 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
   // sections below, and returning here keeps it out of every `metadata.type`
   // test. `syncConnectAccountStatus` mirrors current state, so a redelivery is
   // harmless.
+  // `event.livemode`, not `object.livemode` (AGL-2471): the Stripe Account
+  // object carries no `livemode` field, but the event announcing it does, and
+  // that is what lets a linkage whose mode was never recorded heal itself
+  // instead of staying refused forever.
   if (type === 'account.updated') {
-    await syncConnectAccountStatus('profiles', object)
+    await syncConnectAccountStatus('profiles', object, event?.livemode)
     return
   }
 
@@ -2315,12 +2320,35 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           .doc(String(hostId))
           .collection('reservations')
           .doc(String(reservationId))
-        // What the guest actually handed over. This is the DEPOSIT when the
-        // resource has one (`reserve.ts` charges `depositCents || totalCents`),
-        // never the stay's `totalCents` — see the contact call below.
+        // THE MERCHANT'S LODGING TAX, SEPARATED FROM THE STAY (AGL-1969).
+        //
+        // `reserve.ts` charges the merchant's own lodging rate as an ordinary
+        // `line_items[1]` Stripe is never told is tax (the AGL-1711
+        // construction, which is what keeps the figure the MERCHANT's rather
+        // than something computed against Aglyn's registrations). So
+        // `amount_total` is stay-plus-tax and Stripe's own tax fields read
+        // zero; the session's metadata is the only witness, exactly as it is
+        // for a buy-now sale.
+        const taxCents = Math.max(
+          0,
+          Math.round(Number(object?.metadata?.taxCents ?? 0)),
+        )
+        // What the guest actually handed over, MINUS that tax. This is the
+        // DEPOSIT when the resource has one (`reserve.ts` charges
+        // `depositCents || totalCents`), never the stay's `totalCents` — see
+        // the contact call below.
+        //
+        // Subtracting the tax is not cosmetic. `paidCents` is the money
+        // applied to the STAY: `reservations-card` renders
+        // `paidCents / totalCents` and computes the balance to collect at
+        // check-out from the difference, so a tax-inclusive figure would
+        // report a guest as further through paying for their stay than they
+        // are and under-state what the merchant collects at the register. The
+        // same figure feeds the guest's lifetime value, which tax is no part
+        // of either (AGL-1755).
         const paidCents = Math.max(
           0,
-          Math.round(Number(object?.amount_total ?? 0)),
+          Math.round(Number(object?.amount_total ?? 0)) - taxCents,
         )
         // Redelivery guard (AGL-1755), the AGL-1748 shape. The `pending` ->
         // `confirmed` transition was always the guard, but it was a
@@ -2373,7 +2401,21 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 // none. `absent` remains a fourth state meaning "recorded
                 // before this shipped", which a back-book question needs to
                 // separate from a deliberate zero.
-                taxMode: storefrontTaxModeOf(object),
+                //
+                // TWO-ARGUMENT, now that AGL-1969 is answered and the merchant
+                // can set a lodging rate. That rate rides an ordinary line
+                // item, so Stripe's own `total_details.amount_tax` reads 0 on
+                // a stay that really did charge the guest occupancy tax — the
+                // one-argument form stamped `none` on exactly those. This is
+                // the same form the cart, draft and buy-now order doors
+                // already use (AGL-2451): still the one shared derivation,
+                // handed the witness it needs.
+                taxMode: storefrontTaxModeOf(object, taxCents),
+                // The figure itself, alongside the regime. Absent rather than
+                // a defaulted `0` — a zero written through `merge` is the
+                // AGL-1758 shape, and "no tax was charged" must stay
+                // distinguishable from "this stay predates the field".
+                ...(taxCents > 0 ? { taxCents } : {}),
               },
               { merge: true },
             )

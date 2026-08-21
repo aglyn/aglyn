@@ -159,11 +159,38 @@ describe('PaymentsSettingsCard Stripe claims (AGL-1380)', () => {
 
   it('says "Charges enabled" for a connected merchant', () => {
     profile.status = 'success'
-    profile.data = { stripeChargesEnabled: true }
+    // `stripeAccountLivemode` since AGL-2471: the chip's success claim now
+    // needs a linkage whose Stripe world was actually established, because
+    // `stripeChargesEnabled` alone was true of a TEST account in production.
+    profile.data = { stripeChargesEnabled: true, stripeAccountLivemode: true }
 
     render(<PaymentsSettingsCard hostId="host-1" />)
 
     expect(screen.getByText('Charges enabled')).toBeTruthy()
     expect(screen.queryByText('Not set up')).toBeNull()
+  })
+
+  it('refuses to say "Charges enabled" when the mode was never verified (AGL-2471)', () => {
+    // THE PRODUCTION SHAPE, verbatim: `profiles/7AVEMtDa…` carried exactly
+    // this and its three storefronts read as ready while no money door would
+    // charge against them. The card has to stop agreeing with a claim the
+    // checkout refuses.
+    profile.status = 'success'
+    profile.data = {
+      stripeAccountId: 'acct_1TulDeRbL3B9Ioqz',
+      stripeChargesEnabled: true,
+    }
+
+    render(<PaymentsSettingsCard hostId="host-1" />)
+
+    expect(screen.queryByText('Charges enabled')).toBeNull()
+    expect(screen.getByText('Not verified')).toBeTruthy()
+    // …and NOT "Not set up", which would be false in the other direction:
+    // the merchant did connect something, and telling them otherwise hides
+    // the one thing they need to fix.
+    expect(screen.queryByText('Not set up')).toBeNull()
+    expect(
+      screen.getByText(/has not been verified for payments on this site/),
+    ).toBeTruthy()
   })
 })

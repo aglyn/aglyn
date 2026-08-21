@@ -21,7 +21,7 @@ Related: `docs/FIRESTORE_MANUAL_CONFIG.md` (how the protections were set up),
 | Delete protection | ENABLED on `(default)` | Blocks accidental/hostile database deletion |
 | Independent GCS export | Weekly (Mondays 05:00 UTC), `gs://aglyn-main-firestore-exports`, 90-day lifecycle | A portable snapshot **not** subject to the managed-backup `NOT_AVAILABLE` flip; restorable by import into any database (Procedure D). Added 2026-08-17 (AGL-1843) |
 | Off-project copy | **NONE** (re-verified live 2026-08-19, AGL-1882) | Nothing survives loss of the `aglyn-main` project itself — the export bucket lives IN `aglyn-main` (see gaps) |
-| Cloud Storage copy | **NONE** (re-measured live 2026-08-20, AGL-2422) | Customer media (451 objects, 46.9 MiB, under `orgs/` AND the legacy `hosts/`), `adminAudit-archive/` and 7 plugin bundles are copied by nothing, in-project or out — versioning off on every bucket, Storage Transfer API not even enabled. The weekly export is **Firestore only**. None of it is reconstructible; gap 6 has the design, the cost and the runbook |
+| Cloud Storage copy | **Nightly, off-project** (built and verified live 2026-08-20, AGL-2422) | Three Storage Transfer jobs copy `gs://aglyn-main.appspot.com` (451 objects, 46.9 MiB — `orgs/`, the legacy `hosts/`, `adminAudit-archive/`, `erasures/`), `gs://aglyn-main-plugin-artifacts` (7 bundles) and the weekly Firestore export into the **`aglyn-dr`** project. First run of each matched its source byte for byte. Both destination buckets have object versioning with a 90-day noncurrent lifecycle, applied BEFORE the first object landed. `npm run check:backup-copies` proves completeness on every run; see "Who restores what, from where" |
 
 Run `npm run check:backup-copies` for the current answer to "where does every
 copy live" rather than trusting this table — it reads the live bucket
@@ -358,8 +358,8 @@ dated so this never matters.
    | --- | --- | --- | --- |
    | Firestore managed backups (weekly, SUNDAY, 98-day retention) | `aglyn-main` | `nam5` | 3 backups: `2026-08-16` **READY**, `2026-08-09` and `2026-08-02` **NOT_AVAILABLE** — the ~day-7 flip continues |
    | `gs://aglyn-main-firestore-exports` | `aglyn-main` (543499566626) | US multi-region | 1 completed export (`2026-08-17T23-43-04Z`, 4.3 MiB), 90-day lifecycle |
-   | `gs://aglyn-main.appspot.com` | `aglyn-main` | US multi-region | ~47 MiB of **primary** data, no copy anywhere (gap 6) |
-   | `gs://aglyn-main-plugin-artifacts` | `aglyn-main` | US multi-region | ~28 KiB of **primary** data, no copy anywhere (gap 6) |
+   | `gs://aglyn-main.appspot.com` | `aglyn-main` | US multi-region | ~47 MiB of **primary** data, mirrored nightly to `gs://aglyn-dr-backup/media/` (gap 6, closed 2026-08-20) |
+   | `gs://aglyn-main-plugin-artifacts` | `aglyn-main` | US multi-region | ~28 KiB of **primary** data, mirrored nightly to `gs://aglyn-dr-backup/plugin-artifacts/` (gap 6, closed 2026-08-20) |
 
    The sibling projects were checked too, in case a copy had quietly landed in
    one: `aglyn-app` and `aglyn-org` hold only their own default
@@ -695,7 +695,7 @@ which of five artifacts is the right one.
 | Firestore documents, damage older than 7 days | Newest **READY** managed backup — check state first, they flip | A, then C | Zach |
 | Firestore documents, backup flipped `NOT_AVAILABLE` | `gs://aglyn-main-firestore-exports/<prefix>` (weekly Monday) | D | Zach |
 | Firestore, whole `aglyn-main` project lost | **Nothing today.** Total loss | — | — (gap 1) |
-| Customer media, audit archive, plugin bundles | **Nothing today**, beyond 7-day soft delete. Unrecoverable after that — customers hold no second copy and a signed plugin bundle can only be re-uploaded by its publisher | — | — (gap 6) |
+| Customer media, audit archive, plugin bundles | `gs://aglyn-dr-backup` in the **`aglyn-dr`** project — nightly Storage Transfer, versioned, 90-day noncurrent lifecycle | `gcloud storage rsync -r gs://aglyn-dr-backup/media/ gs://aglyn-main.appspot.com/` (and `plugin-artifacts/` likewise). A deletion is recoverable for 90 days from the surviving noncurrent generation, not 7 | Not yet rehearsed end to end — the copy is verified complete, the RESTORE direction is not |
 | Erasures resurrected by any import | `adminAudit` rows at/after the snapshot | `replay-erasures.mjs`, C step 4 / D step 4 | Any staff actor with a uid; **required**, not optional |
 
 Every row above that says "Zach" says so because the restore commands need

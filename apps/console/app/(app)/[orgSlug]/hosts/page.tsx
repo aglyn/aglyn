@@ -62,6 +62,7 @@ import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import useBranding from '../../../../hooks/use-branding'
 import useCurrentOrg from '../../../../hooks/use-current-org'
 import { useOrgHosts } from '../../../../hooks/use-org-hosts'
+import { readOutcome } from '../../../../utils/read-outcome'
 import {
   describeHostStatus,
   describeSiteAllowance,
@@ -116,11 +117,33 @@ function HostsContent() {
   const { currentOrg, loading: orgsLoading } = useOrgScope()
   // Workspace-scoped (AGL-236): the list shows the selected org's sites
   // only — a member of several orgs switches workspaces to see the rest.
-  const { hosts: data } = useOrgHosts(
+  /**
+   * `ready` and `error`, not `hosts` alone (AGL-1066).
+   *
+   * The hook has always offered all three; this page took the array and
+   * dropped the two values that say whether the array means anything. On a
+   * stale session that turned "we were refused every read" into
+   * `No sites yet — Create a site to start building`, under a header that
+   * counted the sites it had failed to load. The list even PAINTED first,
+   * because `persistentLocalCache` answers each listen before the server
+   * refuses it — so the customer watched their sites vanish and was then
+   * invited to make a new one.
+   */
+  const {
+    hosts: data,
+    ready: hostsReady,
+    error: hostsError,
+    retry: retryHosts,
+  } = useOrgHosts(
     firestore,
     user?.uid,
     orgsLoading ? undefined : (currentOrg?.$id ?? null),
   )
+  // The workspace has to resolve before the site read can even start, so an
+  // unresolved workspace is this list still loading.
+  const hostsRead = orgsLoading
+    ? 'loading'
+    : readOutcome({ ready: hostsReady, error: hostsError })
   const [creating, setCreating] = useState(false)
   const { permissions } = useOrgPermissions()
   /**
@@ -137,7 +160,11 @@ function HostsContent() {
     planLabel: isEnterpriseOrg(org as never)
       ? ENTERPRISE_PLAN_LABEL
       : PLAN_LABELS[((org as any)?.plan ?? 'free') as keyof typeof PLAN_LABELS],
-    ready: orgReady,
+    // Both reads, not just the org's (AGL-1066). `used` comes from the SITE
+    // list, so gating this on the ORG being ready published a count taken
+    // from a list that had not loaded — `0 of Unlimited sites · Enterprise
+    // plan` reads as a measurement, and it was a placeholder.
+    ready: orgReady && hostsRead === 'loaded',
   })
   // When the user has a pending invite, the banner's "accept" is the primary
   // path to their first org — so the zero-state steps aside to avoid two
@@ -179,8 +206,15 @@ function HostsContent() {
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         {/* Pending org invites (AGL-234). */}
         <OrgInvitesBanner />
-        {!orgsLoading && (data?.length ?? 0) === 0 && invites.length === 0 ? (
+        {/* The `invites.length === 0` deferral is about which CALL TO ACTION
+            leads (AGL-234) and only applies to a genuine zero-state; a read we
+            could not finish still has to say so. */}
+        {(data?.length ?? 0) === 0 &&
+        (hostsRead !== 'loaded' || invites.length === 0) ? (
           <EmptyState
+            read={hostsRead}
+            subject="your sites"
+            onRetry={retryHosts}
             iconPath={ICON_VARIANT_HOST_GROUP.path}
             title={
               currentOrg ? 'No sites yet' : 'Create your first site'
@@ -224,6 +258,25 @@ function HostsContent() {
                     // host docs; the switcher reads the hostMemberships
                     // projection, which had to learn the field separately
                     // before the two actually matched (AGL-1071).
+                    // The Live/Draft pill sits in the header's ACTION slot
+                    // (top-right) rather than above the domain rows: inline in
+                    // the content it shared a line with the first
+                    // `HostInfoItem` label and read as part of it.
+                    action: (() => {
+                      const status = describeHostStatus(host as never)
+                      return (
+                        <Tooltip title={status.detail}>
+                          <Chip
+                            size="small"
+                            label={status.label}
+                            color={status.color}
+                            variant={
+                              status.color === 'default' ? 'outlined' : 'filled'
+                            }
+                          />
+                        </Tooltip>
+                      )
+                    })(),
                     avatar: (
                       <HostIcon
                         host={host}
@@ -301,30 +354,6 @@ function HostsContent() {
                   }
                 >
                   <Typography color="textSecondary" component="div">
-                    {/*
-                      The Live/Draft pill the mockup puts on every card
-                      (AGL-2166), derived from `host.screens` — the routing
-                      map publishing writes — so it costs no extra read on
-                      a page that can list a hundred sites.
-                     */}
-                    {(() => {
-                      const status = describeHostStatus(host as never)
-                      return (
-                        <Tooltip title={status.detail}>
-                          <Chip
-                            size="small"
-                            label={status.label}
-                            color={status.color}
-                            variant={
-                              status.color === 'default'
-                                ? 'outlined'
-                                : 'filled'
-                            }
-                            sx={{ mb: 1 }}
-                          />
-                        </Tooltip>
-                      )
-                    })()}
                     <HostInfoItem
                       label={`${branding.productName} Domain`}
                       value={hostPlatformDomain(hostAddress(host))}

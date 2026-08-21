@@ -18,6 +18,11 @@
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
 import { sendEmail, type SendEmailResult } from '@aglyn/shared-util-email'
 import { meterPlatformEmail } from '@aglyn/tenant-data-admin'
+import {
+  newDeviceAlertSuppression,
+  type KnownDevice,
+  type SuppressionVerdict,
+} from './device-alert-suppression'
 import { renderSystemEmail } from './render-system-email'
 
 /**
@@ -69,13 +74,30 @@ export const DEVICE_COOKIE_MAX_AGE_S = 365 * 24 * 60 * 60
 export const DEVICES_COLLECTION = 'devices'
 
 /**
- * Where the alert's button lands. `/manage/user` is the account page with
- * the Security section (change password). There is no device-management
- * surface yet — when one exists (AGL-664's cluster) point this at it.
+ * How many existing devices the alert decision reads (AGL-1959).
+ *
+ * It used to read ONE — `devices.limit(1)` — because the only question was
+ * "does any device exist". IP-overlap suppression needs to compare against the
+ * set, and the set has to be bounded or one person's account turns every
+ * sign-in into an unbounded read. Matches `DEVICE_LIMIT` in
+ * `/api/account/devices`, so what suppression reasons over is what the owner
+ * can actually see listed.
+ */
+export const DEVICE_SCAN_LIMIT = 50
+
+/**
+ * Where the alert's button lands (AGL-1959).
+ *
+ * This was a bare `/manage/user`, which opens on the ACCOUNT tab — so the
+ * person who had just been told a stranger signed in landed on their email
+ * address and had to go looking. The surface the mail is about now exists
+ * (Recent sign-ins, AGL-2318, plus revoke) and lives on the Security tab, so
+ * the link names it. The page ignores an unknown or hidden `tab`, so the link
+ * degrades to today's behaviour rather than to a blank panel.
  */
 function accountSecurityUrl(): string {
   const origin = process.env.NEXT_PUBLIC_CONSOLE_URL ?? 'https://app.aglyn.com'
-  return `${origin}/manage/user`
+  return `${origin}/manage/user?tab=security`
 }
 
 /**
@@ -191,8 +213,8 @@ export async function sendNewDeviceAlert(
     `IP address: ${details.ip}\n` +
     `When: ${details.time}\n\n` +
     `Review account security: ${securityUrl}\n\n` +
-    'If this was you, no action is needed. If it was not, change your ' +
-    'password from Manage account right away.'
+    'If this was you, no action is needed. If it was not, sign this device ' +
+    'out from Recent sign-ins and change your password right away.'
   const designed = await renderSystemEmail('security-new-device', merge)
   // Cost meter (AGL-1438). Platform-scoped: an account alert, sent before any
   // org context is in hand and never subject to a quota.
@@ -270,6 +292,14 @@ export interface RecordDeviceParams {
 export interface RecordDeviceOutcome {
   newDevice: boolean
   alerted: boolean
+  /**
+   * Why no email was sent for a new device, when the reason was IP-overlap
+   * suppression rather than "there was nothing to alert about". Returned so
+   * the caller — and the tests — can tell a suppressed alert from a first
+   * device and from a send that failed; `alerted: false` alone collapses
+   * three different outcomes into one.
+   */
+  suppression?: SuppressionVerdict
 }
 
 /**
@@ -306,10 +336,44 @@ export async function recordDeviceAndMaybeAlert(
       return { newDevice: false, alerted: false }
     }
 
-    // First device ever? (Account creation or rollout backfill — no alert.)
-    const existing = await devices.limit(1).get()
+    // One bounded read answers both questions: is there a prior device at all
+    // (account creation or the rollout backfill — never alert on the first),
+    // and does any known device share this sign-in's IP and OS (AGL-1959).
+    //
+    // Deliberately UNORDERED. `orderBy('lastSeenAt')` would silently omit
+    // every device recorded before that field existed — Firestore drops
+    // documents missing the ordered field rather than erroring — and a device
+    // this cannot see is a device it would alert about forever and never
+    // count against the suppression cap.
+    const existing = await devices.limit(DEVICE_SCAN_LIMIT).get()
     const hasPriorDevice = !existing.empty
+    const known: KnownDevice[] = existing.docs.map((doc) => {
+      const data = doc.data() as Record<string, unknown>
+      return {
+        id: doc.id,
+        ip: typeof data['ip'] === 'string' ? data['ip'] : null,
+        deviceName:
+          typeof data['deviceName'] === 'string' ? data['deviceName'] : null,
+        lastSeenAt: Number(data['lastSeenAt'] ?? 0) || null,
+        alertSuppressedAt: Number(data['alertSuppressedAt'] ?? 0) || null,
+      }
+    })
+    const suppression = hasPriorDevice
+      ? newDeviceAlertSuppression({
+          ip: params.client.ip,
+          deviceName: params.client.deviceName,
+          known,
+          nowMs: params.nowMs,
+        })
+      : null
 
+    // The record is written whatever the verdict, and the suppression is
+    // written ONTO it. Suppression silences the email; it never hides the
+    // device. A stranger behind the same NAT gets a quiet mailbox and a
+    // visible row, which is the whole difference between less noise and less
+    // evidence — and `alertSuppressedAt` is also what the cap counts, so a
+    // suppression that was not recorded would be a suppression that never
+    // ran out.
     await ref.set({
       userAgent: params.client.userAgent,
       deviceName: params.client.deviceName,
@@ -317,10 +381,19 @@ export async function recordDeviceAndMaybeAlert(
       location: params.client.location,
       createdAt: params.nowMs,
       lastSeenAt: params.nowMs,
+      ...(suppression?.suppress
+        ? {
+            alertSuppressedAt: params.nowMs,
+            alertSuppressedBy: suppression.matchedDeviceId,
+          }
+        : {}),
     })
 
     if (!hasPriorDevice || !params.email) {
       return { newDevice: true, alerted: false }
+    }
+    if (suppression?.suppress) {
+      return { newDevice: true, alerted: false, suppression }
     }
 
     const result = await sendNewDeviceAlert({
@@ -339,7 +412,11 @@ export async function recordDeviceAndMaybeAlert(
         JSON.stringify({ reason: failure.reason, status: failure.status }),
       )
     }
-    return { newDevice: true, alerted: result.sent }
+    return {
+      newDevice: true,
+      alerted: result.sent,
+      ...(suppression ? { suppression } : {}),
+    }
   } catch (error) {
     console.error('[security-alerts] device record failed', error)
     return { newDevice: false, alerted: false }

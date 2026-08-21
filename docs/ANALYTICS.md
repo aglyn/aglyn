@@ -106,7 +106,7 @@ built-in reports and funnel explorations work. `Custom` = no GA4 equivalent.
 | **`site_published`**           | Custom          | Console + **Server** (tenant)                          | `first_publish?`                                                                          | **Activation — "% who publish a site"**                                                              |
 | `stripe_connected`             | Custom          | Console                                                | —                                                                                         | **Activation — "% who connect Stripe"**                                                              |
 | `begin_checkout`               | Reserved        | Console + Tenant                                       | `currency`, `value`, `items`, `billing_interval?`                                         | Revenue — checkout funnel                                                                            |
-| `purchase`                     | Reserved        | **Server** (ours) + Tenant storefront (the merchant's) | `transaction_id`, `currency`, `value`, `items`, `billing_interval?`                       | Revenue — paid conversions, ARPA, annual mix; and the merchant's own ecommerce revenue               |
+| `purchase`                     | Reserved        | **Server** (ours) + Tenant storefront **and bookings** (the merchant's) | `transaction_id`, `currency`, `value`, `items`, `billing_interval?`, `shipping?`          | Revenue — paid conversions, ARPA, annual mix; and the merchant's own ecommerce **and service** revenue |
 | `view_item`                    | Reserved        | Tenant (storefront)                                    | `items`                                                                                   | Merchant's own product funnel                                                                        |
 | `add_to_cart`                  | Reserved        | Tenant (storefront)                                    | `items`                                                                                   | Merchant's own product funnel                                                                        |
 | `aglyn_overlay`                | Custom          | Tenant (marketing)                                     | `overlay_action`, `overlay_id?`                                                           | Engagement — announcement bars and popups                                                            |
@@ -119,16 +119,23 @@ built-in reports and funnel explorations work. `Custom` = no GA4 equivalent.
 | `cancellation_completed`       | Custom          | Console (AGL-1865)                                     | `surface`, `funnel_completed`, `plan?`                                                    | Retention — the funnel's denominator                                                                 |
 | `plan_downgrade_scheduled`     | Custom          | Console (AGL-2235)                                     | `from_plan`, `to_plan`, `interval`, `effective_at?`                                       | Retention — downgrades taken from the plan grid, and the gap between decision and effect             |
 | `plan_upgraded`                | Custom          | Console (AGL-2235)                                     | `from_plan`, `to_plan`, `interval`                                                        | Revenue — expansion from EXISTING subscribers, which `purchase` never saw                            |
+| `assistant_message_sent`       | Custom          | Console (AGL-1860)                                     | `tier`, `grounded`                                                                        | Assist usage, and the docs-gap signal ungrounded questions carry                                     |
+| `assistant_feedback`           | Custom          | Console (AGL-1860)                                     | `feedback`                                                                                | Assist answer quality, explicitly rated                                                              |
+| `assistant_proposal_shown`     | Custom          | Console (AGL-1988)                                     | `action`                                                                                  | Is the confirm gate a real choice, or a speed bump? — the denominator                                |
+| `assistant_proposal_confirmed` | Custom          | Console (AGL-1988)                                     | `action`                                                                                  | ...and the numerator; a ratio near 1 means the card is not being read                                |
 | `LCP` / `CLS` / `INP` / `TTFB` | web.dev pattern | Console + Tenant (AGL-1642)                            | `value` (=delta), `metric_id`, `metric_value`, `metric_delta`, `metric_rating`, `surface` | Real-user performance; the hydration-stall attribution question                                      |
 
 `method` values: `password`, `google_popup`, `google_redirect`, `google_signin`
 (the AGL-1497 door where "Sign in with Google" created the account and bounced
 the person to `/signup`), plus `passkey` and `sso` for `login`.
 
-`item_category` separates the two revenue lines: `subscription` and
-`marketplace`. Storefront items carry none — in a MERCHANT's property a
-constant category is a column with one value in it, and their real product
-categories are not on the payloads the storefront builds.
+`item_category` separates the THREE revenue lines in OUR property:
+`subscription`, `marketplace` and `booking` (AGL-2481). Storefront and booking
+items in a MERCHANT's property carry none — there a constant category is a
+column with one value in it, and their real product/service categories are not
+on the payloads the tenant builds. A merchant running both plugins would
+otherwise get a half-populated dimension: products with no category, bookings
+with one, which GA cannot distinguish from missing data.
 
 `experiment_action` is `exposure` | `conversion`; `overlay_action` is the
 overlay kind the beacon already reports.
@@ -181,13 +188,13 @@ a tenant site pointed at our own property.
 | `org_created`      | `apps/console/components/create-org-dialog.component.tsx`; `provisionSignUpOrg` in the signup page                                                                                                                                                                                                                                                                                  |
 | `host_created`     | `apps/console/components/create-host-dialog.component.tsx`                                                                                                                                                                                                                                                                                                                          |
 | `site_published`   | `apps/console/constants/screen-publishing.ts` (`publishScreenRoute` — the routing-map primitive every publish surface passes through) and the besigner's two publish handlers; **server-side** from `libs/tenant/runtime/…/apply-publish-schedule.ts` when a due schedule registers a NEW routing entry (AGL-1589)                                                                  |
-| `stripe_connected` | `libs/plugins/commerce/.../payments-settings-card.component.tsx`; `apps/console/components/org-seller-panel.component.tsx`                                                                                                                                                                                                                                                          |
+| `stripe_connected` | `libs/plugins/commerce/.../payments-settings-card.component.tsx`; `apps/console/components/org-seller-panel.component.tsx`; **server-side** from `libs/tenant/data/admin/…/connect-account-status.ts` when `account.updated` is what first flips `stripeChargesEnabled` on (AGL-1580). Both browser emitters gate on the profile still reading "not connected" at click time, and the AGL-1997 webhook lands while the merchant is still on Stripe's hosted onboarding — so on a deployment that HAS a Connect webhook destination the browser guard is already shut by the time they return, and this was the reason the event had never been seen. The two guards read the same stored flag from opposite sides, so exactly one of them can be open per account                                                                                                                                                                                                                                                          |
 | `begin_checkout`   | `apps/console/app/(app)/[orgSlug]/billing/page.tsx` (plan checkout); `libs/plugins/commerce/src/lib/components/cart.tsx` (storefront cart checkout — AGL-1591)                                                                                                                                                                                                                      |
 | `view_item`        | `libs/plugins/commerce/src/lib/components/product-detail.tsx`, when the product payload resolves                                                                                                                                                                                                                                                                                    |
 | `add_to_cart`      | the same file, on a successful add                                                                                                                                                                                                                                                                                                                                                  |
 | `aglyn_overlay`    | `libs/plugins/marketing/src/lib/components/site-runtime.tsx` (`sendOverlayBeacon`)                                                                                                                                                                                                                                                                                                  |
 | `aglyn_experiment` | the same file, from the experiments runner's exposure/conversion beacon                                                                                                                                                                                                                                                                                                             |
-| `purchase`         | **Ours:** `libs/tenant/data/admin/src/lib/server/ga4-measurement-protocol.ts`, called from the platform webhook's `invoice.paid` branch and from the marketplace webhook handler. **The merchant's:** `libs/plugins/commerce/src/lib/utils/use-storefront-purchase-event.ts`, mounted by `cart.tsx` and `product-detail.tsx` — the two pages Stripe returns a shopper to (AGL-1641) |
+| `purchase`         | **Ours:** `libs/tenant/data/admin/src/lib/server/ga4-measurement-protocol.ts`, called from the platform webhook's `invoice.paid` branch, from the marketplace webhook handler, and from the bookings webhook handler (AGL-2481). **The merchant's:** `libs/plugins/commerce/src/lib/utils/use-storefront-purchase-event.ts`, mounted by `cart.tsx` and `product-detail.tsx`; and `libs/plugins/bookings/src/lib/utils/use-booking-purchase-event.ts`, mounted by `booking.tsx` — the pages Stripe returns a buyer to (AGL-1641/AGL-2481) |
 
 ### `first_publish`, and what all four senders mean by it (AGL-1588)
 
@@ -355,13 +362,23 @@ deterministically from the Stripe customer. **The money is then right and the
 channel is unknown**, and the fallback is reported in the return value so it can
 be alarmed on if it becomes common.
 
-> 🚨 **`purchase` reaches nothing today, and the reason changed.** AGL-1551 —
-> the platform webhook rejecting every Stripe delivery with `400 Invalid
-signature` — is **fixed and closed** (2026-08-14), so deliveries now arrive
-> and the `invoice.paid` branch does call the sender. The remaining blocker is
-> entirely the environment: see _The env-var verdict_ below. The sender returns
-> `{ sent: false, reason: 'not-configured' }` without logging, so this failure
-> is completely silent from the application side.
+> ✅ **`purchase` reaches GA4. The blocker moved twice and is now gone**
+> (AGL-2327). AGL-1551 — the platform webhook rejecting every Stripe delivery
+> with `400 Invalid signature` — was fixed and closed 2026-08-14. The env-var
+> blocker that replaced it was fixed **2026-08-17 12:15 UTC**, when
+> `GA4_MEASUREMENT_ID` and `GA4_API_SECRET` landed on all three production
+> projects (see _Environment variables_).
+>
+> ⚠️ **Do not quote the paragraph this replaced.** It said "`purchase` reaches
+> nothing today", and it stayed on the page after it stopped being true — a
+> 2026-08-19 smoke pass read it and concluded every server-side event was dead
+> in production, which was wrong and would have been acted on.
+>
+> The silence property still holds and is still the real hazard: the sender
+> returns `{ sent: false, reason: 'not-configured' }` **without logging**, so a
+> configuration regression is invisible from the application side. That is why
+> the verdict has to be re-derived from a deployment's own env key list rather
+> than remembered from this document.
 
 #### What `purchase` will report once it is on, and where it disagrees with Stripe
 
@@ -374,7 +391,7 @@ none of them yet observable since nothing has sent:
 | 1   | Subscription `value` is `amount_paid / 100` off `invoice.paid`, keyed on the **invoice id**        | Correct, and includes **renewals** — GA "revenue" is billings, not new-business MRR. Do not read it as either without splitting on `billing_interval` and first-vs-repeat      |
 | 2   | Marketplace `value` is `amount_total / 100` — the **tax-inclusive gross**                          | Overstates our revenue: the ledger doc written two lines above splits `taxCents` and `transferCents`, and the seller's share is not ours. GA will not match the Stripe balance |
 | 3   | `billing_interval` falls back to `'monthly'` whenever the price interval is absent or unrecognised | An annual plan whose line item does not expose `recurring.interval` reports as monthly, quietly biasing the §6 annual-mix metric toward monthly                                |
-| 4   | Marketplace `clientId` reads `metadata.ga_client_id`, which **nothing ever writes**                | Dead read. Marketplace purchases always fall back to a synthesized client id, so marketplace revenue is permanently unattributable to a session or channel                     |
+| 4   | ~~Marketplace `clientId` reads `metadata.ga_client_id`, which nothing ever writes~~ — **FIXED**    | The marketplace checkout now captures the id with `readGaClientId` and writes `metadata[ga_client_id]` (`libs/plugins/marketplace/src/lib/server/checkout.ts`), so a marketplace sale joins the session that produced it. Kept here struck through, not deleted, because the un-fixed version was quoted as current state after the fix landed |
 
 (1) is a reporting instruction, not a defect. (2), (3) and (4) are defects and
 are filed separately — see AGL-1637's child issues. (4) in particular is the
@@ -577,6 +594,72 @@ id and not the session id, a renewal invoice is never what answers, the two
 webhook races stay retryable, and the projection still withholds the
 subscriber's email, name and our fee.
 
+#### A paid BOOKING reports twice, to two properties, at two different figures (AGL-2481)
+
+The bookings plugin sent **zero** analytics events of any kind while its
+billing webhook computed real money and spent it on a contact record and a
+confirmation email. So booking revenue was invisible in both properties at
+once, and the two absences failed differently: ours simply had no service
+revenue line, while a merchant selling appointments saw traffic on the page and
+then nothing — which does not read as "bookings are not measured", it reads as
+a **100% abandonment rate** on every service they sell, because GA4's ecommerce
+reports and shopping funnel are all terminated by `purchase`.
+
+It is closed by mirroring what commerce and marketplace already settled, and
+the two hits carry deliberately different numbers:
+
+| | Aglyn's property | the merchant's property |
+| --- | --- | --- |
+| sender | `ga4-measurement-protocol.ts`, from the webhook | the merchant's `gtag`, in the guest's browser |
+| `value` | platform **net** — the fee we charged | **gross ex-tax** — what they sold |
+| Aglyn's fee | IS the value | **not** subtracted; their cost of sale |
+| tax | excluded, no `tax` param | excluded, no `tax` param |
+| `item_category` | `booking` | none — see the event map |
+| `transaction_id` | the Checkout Session id | the same id |
+
+Reporting one figure into both is the expensive mistake in either direction: a
+gross booking figure in **our** property would put a $95 massage beside a $95
+subscription as though Aglyn earned both and make every combined total, ARPA
+and revenue audience wrong (the AGL-1639 rule); platform net in the
+**merchant's** would show them a few percent of their real revenue (AGL-1641).
+Nothing is double-counted across them — they are two properties measuring two
+businesses, and within each GA4 de-duplicates on `transaction_id`.
+
+**The fee is the measured one.** `value` on our side comes off the session's
+`metadata.feeCents`, the `application_fee_amount` Stripe was actually told to
+charge — never the plan's rate re-applied at report time. The rate follows the
+plan and the plan moves, so a later re-derivation reports a share that was
+never taken; this is the "records a constant instead of the measured value"
+trap in its exact local form, and it would look right in any test written
+against a single-tier fixture. `billing-webhook-ga-purchase.spec.ts` pins it
+with a fee that is not a round percentage of the charge.
+
+**Idempotency is placement, not a new mechanism.** The send sits *after*
+`if (!confirmedNow) return`, inside the existing AGL-1755/AGL-2315 redelivery
+guard, so a Stripe replay — which this endpoint invites, since it 500s on
+purpose — is dropped before it can inflate our own reported revenue. The
+transaction id is the same key the guard turns on, so GA's de-duplication is a
+second, independent line of defence.
+
+**Scheduling.** `after()`, never a bare `void promise` — this handler runs
+inside the console's `/api/billing/webhook` invocation, which is frozen the
+moment the response is sent (AGL-2327/AGL-2346, the bug that had marketplace
+revenue reporting to nothing).
+
+**A booking sends no `shipping` param at all**, where a storefront order always
+sends one even as 0. That is not an inconsistency: on a storefront 0 is a true
+statement about an order that carried no shipping, whereas an appointment has
+no shipping concept to be zero, and sending one would put every service
+business into a shipping report they are not in.
+
+**The guest's return URL now carries the session id.** `success_url` was
+`/?booking=paid` — the word "paid" and nothing else — so the merchant-side hit
+had nothing to look itself up by. It is now
+`/?booking=paid&session_id={CHECKOUT_SESSION_ID}`, resolved by
+`bookings/booking-analytics`, which is authorised by that unguessable id, is
+scoped to the host, refuses anything not `confirmed`, and answers with a
+projection carrying no guest email, name, appointment time or our fee.
+
 ### 2. Consent-blocked means the event is gone, not queued
 
 On tenant sites — including `aglyn.com` — the gtag script is **never loaded**
@@ -626,22 +709,46 @@ the tag never loads without an explicit accept, because loading an analytics
 tag before consent is the specific act prior-consent law prohibits.
 Load-then-restrict is additive to the gate, never a replacement for it.
 
-**The signal set.** `analytics_storage` follows the visitor's grant;
-`ad_storage`, `ad_user_data` and `ad_personalization` are **denied
-unconditionally, in both directions, from the first hit** — the tool asks a
-visitor about analytics and nothing else, so there is no advertising basis on
-file to grant, and the type declares those three as the literal `'denied'` so
-widening them is a change the type has to be edited to allow. This is a change
-from the pre-AGL-1622 state, where a freshly loaded tag ran with `ad_storage`
+**The signal set.** `analytics_storage` follows the visitor's grant.
+`ad_storage`, `ad_user_data` and `ad_personalization` are **denied from the
+first hit**, and on the great majority of sites they are denied
+unconditionally and in both directions: a site that has not turned the
+advertising question on asks its visitors about analytics and nothing else,
+so there is no advertising basis on file to grant. This is a change from the
+pre-AGL-1622 state, where a freshly loaded tag ran with `ad_storage`
 unrestricted: anyone reading GA4 Ads-linked reporting for a tenant site needs
-to know why the numbers moved on 2026-08-14. Whether a host should be able to
-grant the advertising signals themselves is AGL-1649, open.
+to know why the numbers moved on 2026-08-14.
 
-`analyticsConsentSignals()` in
-`libs/aglyn/src/lib/app-utils/visitor-consent.ts` is the **single source** for
-both declarations — the load-time `default` (`GA_CONSENT_DEFAULT_SNIPPET` is
-built from it) and the withdrawal `update` — so the two cannot drift. Read the
-payload there rather than trusting any restatement here.
+**A host CAN now ask for an advertising basis** — AGL-1649 shipped in
+`7901f7332`, and the "open question" this section used to end on is settled.
+The category is off for every site that exists and is gated on the host
+turning it on **and** an analytics id being configured
+(`hostAsksAboutAdvertising()`); turning it on grants nothing by itself, it
+adds a second, separate question to the banner and to the preferences panel
+so a visitor has somewhere to say yes. Default-deny survives it: `implied`
+never grants advertising, a record written before the category existed reads
+as never-asked rather than as a yes, the grant is re-derived on every read and
+write (so a hand-edited `localStorage` entry, or one left behind after a host
+switched the category back off, decays to denied), and advertising is clamped
+to analytics — `ad_storage: 'granted'` alongside `analytics_storage: 'denied'`
+is not a state this tool can reach.
+
+**Two payload builders, and the split is deliberate.** Both live in
+`libs/aglyn/src/lib/app-utils/visitor-consent.ts`, and between them they are
+the **single source** for every declaration — the load-time `default` and the
+withdrawal `update` alike — so the two directions cannot drift:
+
+- `analyticsConsentSignals(granted)` — the analytics-only path, feeding
+  `GA_CONSENT_DEFAULT_SNIPPET`. Its return type still declares the three ad
+  signals as the literal `'denied'`, so a caller that only knows about
+  analytics **cannot** express an advertising grant it has no answer for.
+- `consentModeSignals({ analytics, advertising })` — the advertising path,
+  feeding `GA_CONSENT_DEFAULT_WITH_ADS_SNIPPET`. A separate function rather
+  than a widening of the first, precisely so that reaching an advertising
+  grant is a different call with a different argument: a thing a reviewer can
+  see in a diff.
+
+Read the payloads there rather than trusting any restatement here.
 
 The three mechanisms, in the order a visitor meets them:
 
@@ -777,9 +884,13 @@ The pinned case in `apply-publish-schedule.spec.ts` did what it was written to
 do: it went red the moment the executor learned to register a route, and now
 asserts the other half of the argument — that a republish reports nothing.
 
-> **Deployment gap:** `GA4_MEASUREMENT_ID` / `GA4_API_SECRET` are not set on
-> the **aglyn-tenant** Vercel project, which is where this code runs, so the
-> event is a clean no-op there today. See the table below.
+> **Deployment gap — CLOSED 2026-08-17** (AGL-1846/AGL-2327). This said
+> `GA4_MEASUREMENT_ID` / `GA4_API_SECRET` were not set on the **aglyn-tenant**
+> project, which is where this code runs, so the event was a clean no-op
+> there. Both keys landed on the tenant project's production deployment at
+> 12:15 UTC that day and the scheduled-publish sender is live. See the
+> _Environment variables_ table, and re-derive the verdict from a deployment's
+> own env key list rather than from this line.
 
 ### 6. Authored events go through the same door, under a different name (AGL-1587)
 
@@ -1001,6 +1112,54 @@ property while we click through their published site.
 resolved id is `G-YW5PG16YTM`. A customer's property gets no opinion of ours:
 wrongly flagging a real visitor erases them from every report, and that is the
 expensive direction.
+
+### 8d-pre. The SERVER hits were the surface no browser stamp could reach (AGL-1582)
+
+Everything above is a browser mechanism — `setDefaultEventParameters` on the
+console, a `gtag('set', …)` snippet on the tenant runtime and on docs. The four
+Measurement Protocol events never touch a browser, so `purchase`, `refund`,
+`subscription_cancelled` and `site_published` were the one surface the
+internal-traffic filter could not reach.
+
+That is not academic in the launch window: the final week before September 1
+is a scheduled rehearsal of **real paid transactions**, and a data filter is
+not retroactive. An unstamped rehearsal purchase is real revenue in the real
+property, permanently.
+
+**The carrier is the opt-in that already exists**, not a new notion of "an
+internal org" — there is no such concept in this repo and inventing one would
+flag by identity, which is the expensive direction. The browser that starts
+checkout reports `readInternalTrafficOverride()` in the checkout body; the
+route writes `subscription_data[metadata][traffic_type] = internal`; the
+webhook compares it against the shared constant and hands `internal: true` to
+the sender, which adds the parameter centrally in `postGa4Event` — centrally,
+so a fifth sender added later is not unstamped by default.
+
+**On the SUBSCRIPTION's metadata, not the session's**, so a renewal months
+later is stamped too, exactly as `ga_client_id` is.
+
+**The refund had to be solved with it, or the fix would have been worse than
+nothing.** A refund arrives on a charge, which carries no subscription
+metadata. An internal `purchase` discarded by the filter with its `refund`
+kept would net the reports **negative** by the rehearsal's value. So the flag
+is also written onto the `platformRevenue` ledger row the purchase records,
+which both refund branches already read. (The pre-AGL-1811 branch, which has
+no row, can only fire for invoices that predate this feature — so no internal
+purchase can exist there.)
+
+**Only ever added, never `false`.** GA4's filter matches on the parameter
+being present with this value. A `traffic_type: 'external'` on every real hit
+would be a second dimension nobody filters on, and one bad predicate away from
+erasing paying customers from reports that cannot be recovered. The metadata
+is client-supplied, so it is compared against `INTERNAL_TRAFFIC_VALUE` rather
+than tested for truthiness — "any value present means ours" is how a stray
+metadata edit deletes a customer.
+
+**Still uncovered, deliberately:** the marketplace `purchase`/`refund` pair
+(a plugin checkout does not carry the flag yet) and `site_published` from a
+scheduled publish of one of our own hosts — the sender accepts `internal` but
+no caller sets it, because a publish has no browser to ask. Both are smaller
+than the rehearsal hole and neither is on the revenue path.
 
 ### 8c. Non-production builds do not report at all (AGL-2067)
 
@@ -1298,6 +1457,124 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
   Leave all of it that way — the live privacy policy's flat "we do not sell or
   share" denial rests on it.
 
+**Bookings (AGL-2481) needs NO new custom dimension.** Stated positively so
+nobody goes looking: the booking `purchase` carries only `transaction_id`,
+`currency`, `value` and `items` — all GA4 built-ins — and the one field that
+separates it from the other revenue lines, `item_category: 'booking'`, is a
+built-in **item-scoped** dimension, not an event-scoped custom one. Booking
+revenue is therefore readable the day the first payment lands, by filtering
+Item category in the standard ecommerce reports, with nothing to click first.
+
+The one thing worth doing by hand is optional and is reporting, not
+collection: if booking revenue should stand on its own in a dashboard rather
+than inside the combined `purchase` total, build a comparison or an exploration
+segmented on Item category = `booking` / `marketplace` / `subscription`.
+Registering `item_category` as a custom dimension would be the wrong fix — it
+is already there, and a duplicate registration reads as a second, half-empty
+dimension.
+
+### 12. Where an account came from is captured at signup (AGL-1731)
+
+Until this landed, `sign_up` carried `method` and nothing else, so a paid
+click, an organic visit and a partner link arrived indistinguishable. That is
+free while nothing is being spent and expensive the day advertising starts,
+because **attribution is not retroactive either**: a signup that lands
+unattributed is unattributed forever, and a September ad spend with no
+attribution cannot be evaluated at all.
+
+`libs/aglyn/src/lib/app-utils/campaign-attribution.ts` owns the contract.
+Three parameters, allowlisted:
+
+| URL parameter  | `sign_up` param   | Stored as         |
+| -------------- | ----------------- | ----------------- |
+| `utm_source`   | `campaign_source` | `source`          |
+| `utm_medium`   | `campaign_medium` | `medium`          |
+| `utm_campaign` | `campaign_name`   | `campaign`        |
+
+**Renamed off the `utm_` spellings on purpose.** These are our own registered
+dimensions; the `utm_` names belong to GA's automatic campaign collection, and
+a custom parameter wearing a name the platform also owns is how one dimension
+quietly comes to mean two things.
+
+**`utm_term` and `utm_content` are deliberately out**, matching the refusal the
+tenant's own first-party collector already made (`apps/tenant/app/api/analytics/collect/route.ts`):
+keyword- and variant-level labels multiply cardinality without answering a
+question anyone asks of a signup, and a keyword string is the likeliest of the
+five to carry something a person typed. `gclid` is out too — it is an
+ads-click identifier and this property runs with ads personalization off in all
+307 regions.
+
+**The allowlist is the privacy mechanism, not a convenience.** A parser that
+copied "the campaign-ish parameters" would be one marketing link away from
+putting `?email=` on `users/{uid}`. On top of the allowlist each value is
+trimmed, refused if email-shaped, and capped at 100 characters — and that
+scrub lives in the parser rather than in `sanitizeEventParams`, because a
+campaign leaves the process **twice** and only one exit is sanitized:
+
+- onto the GA4 `sign_up` hit, which does pass `sanitizeEventParams`;
+- into **`users/{uid}.signupCampaign`**, which does not.
+
+#### Why it is stored on the account, and why that is the erasure-safe shape
+
+The hit answers "how many signups did the campaign produce". It cannot answer
+the question the spend is judged on — "how much **revenue**" — because that
+arrives weeks later from a Stripe webhook with no browser session and no
+memory of a URL. So the campaign is remembered on the account, the same
+document and the same wire-form-plus-re-parse contract as the AGL-1535 plan
+intent it sits beside (`apps/console/utils/signup-campaign.ts`).
+
+A **field on `users/{uid}`** rather than a `signupCampaigns` collection,
+deliberately. `eraseUser` does a `recursiveDelete(users/{uid})` and the
+personal-data export reads the document whole, so a field there is erased and
+disclosed automatically. AGL-1448 had to go and find three org-keyed
+collections the cascade could not see; the invisible shape is always a new
+top-level collection or a doc keyed outside those trees, and a field on a
+document already swept is the one shape that cannot become a fourth.
+
+Unlike the plan intent it is **never consumed and never expires** — it is a
+fact about how the account began, and a campaign that stopped being true after
+seven days could not be joined to a purchase that closed in week three, which
+is the join it exists for.
+
+Wired on all four doors: the password and Google-popup doors in
+`apps/console/app/(auth)/signup/page.tsx`, and the mobile **redirect** door —
+the majority door — inside `apps/console/hooks/use-google-redirect-result.tsx`,
+which has to be handed the params because the page carrying the marketing URL
+is gone by the time the redirect lands. `login` never carries them: a
+returning user's session was not produced by today's campaign, and stamping
+one on it would credit the ad for revenue it did not cause.
+
+### 13. Why a server event can still report nothing with the credentials in place (AGL-2327)
+
+Three distinct causes have been mistaken for each other, twice. Check them in
+this order, because each one makes the next invisible:
+
+1. **Credentials.** ✅ Resolved 2026-08-17 12:15 UTC. Re-derive it from
+   `GET /v13/deployments/{id}` — a deployment's own env key list — never from
+   `vercel env ls`, never from the project's env list, and never from this
+   document. Always diff an older deployment as a negative control.
+2. **Scheduling.** A bare `void somePromise()` in a route handler **does not
+   run**: AGL-1133 measured on production that the serverless function is
+   frozen the moment the response is sent. The console's `/api/billing/webhook`
+   was migrated to `after()` for exactly this (AGL-2346) — and the marketplace
+   handler, which runs **inside that same invocation**, was not. So marketplace
+   `purchase` and `refund` were genuinely reporting to nothing, with the
+   credentials present and the sender returning `{ sent: true }` to a caller
+   that never got resumed. Fixed in `libs/plugins/marketplace/src/lib/server/billing-webhook.ts`;
+   pinned by `billing-webhook.spec.ts`'s "the beacon is SCHEDULED through
+   `after()`" case, which records **where** the beacon was fired from rather
+   than counting `after()` calls — a count was measured failing to fail,
+   because these handlers schedule other work through `after()` too.
+3. **Dimension registration.** An unregistered param is collected and never
+   reportable, which from the report end is indistinguishable from the event
+   not carrying it. This is where a still-missing breakdown most likely lives
+   now. See "Still outstanding" below.
+
+The sender is silent by design on cause 1 — `{ sent: false, reason:
+'not-configured' }`, no log — and cause 2 is silent by construction, because
+the process is gone. Neither shows up as an error anywhere, which is why the
+order above matters more than usual.
+
 ### Still outstanding
 
 0. **Register five more custom dimensions** (AGL-1562), all **event-scoped**,
@@ -1313,6 +1590,51 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
    | Link domain    | `link_domain`   | Outbound destination — the GitHub/docs leading indicator                                             |
    | Link id        | `link_id`       | Which outbound link, by label                                                                        |
    | Surface        | `surface`       | `site` vs `docs` (AGL-1579); Hostname covers the domains, this covers surfaces sharing one           |
+
+0d. **Register `plan` as a dimension and `tenure_days` as a METRIC**
+   (AGL-2327). Both are sent by `sendGa4SubscriptionCancelled` and appear on
+   **neither** the registered list above **nor** either outstanding list — so
+   the churn event arrives as one undifferentiated count and plan-tier churn
+   mix and tenure-at-cancellation, the two numbers it exists for, are
+   unreachable. `plan` is event-scoped custom **dimension**.
+
+   ⚠️ `tenure_days` is NOT a dimension, and registering it as one is the
+   plausible mistake that would leave the number still unreachable after the
+   work looked done. It is a NUMBER, and GA4 splits the two registries: a
+   custom **dimension** buckets by string, so a day count becomes one report
+   ROW per distinct tenure — hundreds of one-org rows, against the 50-dimension
+   quota — and cannot be averaged. "Tenure at cancellation" is an AVERAGE, and
+   only a custom **metric** (Admin → Custom definitions → **Custom metrics**,
+   event-scoped, unit **Standard**) can produce one. Same registry, different
+   tab; the parameter name is unchanged.
+
+0e. **Register the Core Web Vitals custom METRICS** (AGL-1642). `metric_value`
+   and `metric_delta` are numeric and are on no list anywhere — the repo has
+   never had a custom-metric registry at all, which is why they were never
+   noticed missing: every audit read the DIMENSIONS list, and a metric is
+   invisible from there. Without them the CWV events arrive as a count of
+   measurements with no measurement in it, and "what is real-user LCP" stays
+   the unanswerable question AGL-1642 existed to answer.
+
+   | Metric name  | Event parameter | Unit     | Why                                                               |
+   | ------------ | --------------- | -------- | ----------------------------------------------------------------- |
+   | Metric value | `metric_value`  | Standard | The metric's current value — the number the report is OF          |
+   | Metric delta | `metric_delta`  | Standard | Its change since the last report, for the multi-report metrics    |
+
+   `value` needs nothing — it is GA4's built-in event value. `metric_id`,
+   `metric_rating` and `surface` are strings and belong on the DIMENSION list
+   above.
+
+0c. **Register the three campaign dimensions** (AGL-1731), all
+   **event-scoped**, and do it BEFORE the first ad runs — an unregistered
+   param is collected but not reportable, so the campaign would be on every
+   hit and in no report:
+
+   | Dimension name  | Event parameter   | Why                                                          |
+   | --------------- | ----------------- | ------------------------------------------------------------ |
+   | Campaign source | `campaign_source` | Which channel bought the signup — the axis spend is judged on |
+   | Campaign medium | `campaign_medium` | `cpc` vs `email` vs `referral`                                |
+   | Campaign name   | `campaign_name`   | Which push, so two campaigns can be compared                  |
 
    **AGL-1579 adds nothing to this list.** Docs pageviews use only built-in
    dimensions, and the `click` events it produces come from GA4's enhanced
@@ -1346,6 +1668,60 @@ without registration, which is a large part of why these use GA's reserved
 names and its exact `items` spelling. They also land in the merchant's
 property rather than ours (see the event map), so the registration decision
 there is the merchant's to make, not one we can make for them.
+
+0f. **Three money paths send nothing at all**, found in the 2026-08-20 audit.
+   Ranked, because they are not the same kind of gap:
+
+   - **A paid BOOKING is invisible in both properties.** `libs/plugins/bookings`
+     contains **zero** analytics calls of any kind — no `trackEvent`, no
+     `sendGa4*`, no `readGaClientId`. Its webhook computes the real money
+     (`amount_total` → `paidAmountCents`, `server/billing-webhook.ts`) and
+     spends it on a contact record and a confirmation email. This is the one
+     that is a genuine hole rather than a limit: bookings is a September
+     revenue line, and the storefront pattern next door
+     (`use-storefront-purchase-event.ts` + `/api/commerce/order-analytics`)
+     already shows how a merchant-property `purchase` gets sent from the
+     confirmation screen. **Needs a decision before it can be built**: whose
+     property, and whether the platform fee is reported the marketplace way
+     (net, to ours) or the storefront way (gross, to the merchant's).
+   - **A storefront REFUND is not sent.** `commerce/src/lib/server/refund.ts`
+     has no GA call, so a merchant's GA revenue only ever goes up — the
+     one-directional problem AGL-1850 fixed for subscriptions and marketplace.
+     **This one is blocked, not forgotten**: the storefront `purchase` is
+     client-side because the hit belongs in the MERCHANT's property, and a
+     refund has no browser to send from. It needs a per-host Measurement
+     Protocol secret, the same missing thing that keeps storefront RENEWALS
+     dark. Do not "fix" it by sending the refund to our property; that would
+     subtract a merchant's refund from Aglyn's revenue.
+   - **The console's `begin_checkout` `value` is a source-code constant.** It
+     is derived from `PLAN_PRICING` in `plan-entitlements.ts`, not from a
+     Stripe Price lookup, so if the two ever diverge the event lies with no
+     symptom. Acceptable while pricing is frozen for Sept 1 and the table IS
+     the source of truth; revisit the moment a price is changed in Stripe
+     first. `purchase` is unaffected — it reads `amount_paid` off the invoice.
+
+0g. **Two whole event families carry params on no registration list**, so
+   they currently arrive as undifferentiated counts — the same failure mode
+   item 0 describes, one level larger. Found 2026-08-20 by diffing the fired
+   params against every list above:
+
+   | Event family                          | Params fired but unregistered                                      |
+   | ------------------------------------- | ------------------------------------------------------------------ |
+   | Retention funnel (AGL-1865)           | `reason`, `surface`, `from_plan`, `to_plan`, `funnel_completed`     |
+   | Plan changes from the grid (AGL-2235) | `from_plan`, `to_plan`, `interval`, `effective_at`                  |
+   | Aglyn Assist (AGL-1860/AGL-1988)      | `tier`, `grounded`, `feedback`, `action`                            |
+   | Core Web Vitals (AGL-1642)            | `metric_id`, `metric_rating` (dimensions; the numbers are in 0e)    |
+
+   `percent_off` and `duration_months` on `winback_discount_accepted` are
+   NUMBERS — custom **metrics**, like `tenure_days`, not dimensions; a save
+   recorded without an averageable price reads as free, which is the exact
+   thing AGL-1620 reported them to prevent.
+
+   The dimension quota is **50 event-scoped**, and the lists above now total
+   well under it, so this is a clicking job rather than a prioritization one.
+   Register nothing speculatively: an unregistered param is still COLLECTED,
+   so registration can wait for the question, but the answer is unavailable for
+   the period before it — GA does not backfill a dimension.
 
 1. **Mark the remaining key events.** Admin → Events → _Mark as key event_.
    `sign_up` is marked; `purchase` is a key event by GA default. GA will not let

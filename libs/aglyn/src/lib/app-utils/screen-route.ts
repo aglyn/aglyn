@@ -269,6 +269,74 @@ export function screenRoutePathToUrl(path: string): string {
   return path === SCREEN_ROOT_PATH ? SCREEN_ROOT_PATH : `/${path}`
 }
 
+/** What a screen is ACTUALLY served at, where that is not its own slug. */
+export interface LinkableScreenRouteSources {
+  /**
+   * screen id → the routing-map path the screen really answers on, for
+   * screens routed by something other than their own slug. Today that is a
+   * content collection's LIST template: `/{collectionSlug}` renders it
+   * (`composeCollectionTemplatePage`), whatever slug it was published under.
+   * Applied LAST, so it also un-drops a screen named in `unrouted`.
+   */
+  routedElsewhere?: Record<string, string> | null | undefined
+  /**
+   * Screen ids that serve NO address of their own — a collection ENTRY
+   * template (AGL-1267), commerce's PDP/catalog templates (AGL-1270), a
+   * screen that says `kind: 'template'` (AGL-1400). The tenant router drops
+   * these before matching, so their routing-map path is a 404.
+   */
+  unrouted?: Iterable<string> | null | undefined
+}
+
+/**
+ * The routing map as a LINK TARGET table (AGL-1998).
+ *
+ * The host's `screens` map is written by publishing, one entry per screen
+ * under its own composed slug, and the tenant router then edits it at serve
+ * time: template screens are dropped (see {@link LinkableScreenRouteSources})
+ * and a collection's list template is reached at `/{collectionSlug}` instead.
+ * Everything that RESOLVES a screen link — `resolveScreenHref` on the live
+ * site, the besigner's screen picker, every `Link`-typed component prop — was
+ * reading the raw map, so the two surfaces disagreed with the router in both
+ * directions at once:
+ *
+ *  - `/blog` was UNOFFERABLE. The blog's list template is published under
+ *    `blog-list-template` and serves `/blog`, so no screen link on aglyn.com
+ *    could point at the site's own blog index.
+ *  - Every template screen was offered at a path that 404s, and an author who
+ *    picked one got a dead anchor that looks exactly like a live one.
+ *
+ * So the map every linking surface reads is derived here, from the same two
+ * facts the router uses, and the picker can no longer offer a path the router
+ * would refuse. A raw map with neither source given comes back unchanged; an
+ * absent map with no overrides stays absent, because `undefined` means
+ * "nothing resolves yet" to {@link ScreenLinkContext} and `{}` would mean
+ * "resolved: nowhere".
+ */
+export function linkableScreenRoutes(
+  screens: Record<ScreenUid, string> | null | undefined,
+  sources: LinkableScreenRouteSources = {},
+): Record<ScreenUid, string> | undefined {
+  const { routedElsewhere, unrouted } = sources
+  const overrides = Object.entries(routedElsewhere ?? {})
+  if (!screens && !overrides.length) return undefined
+  const next: Record<ScreenUid, string> = { ...(screens ?? {}) }
+  for (const id of unrouted ?? []) delete next[id]
+  for (const [id, path] of overrides) {
+    // A collection slug (`blog`) arrives in the map's own format already, but
+    // the same fact is spelled `/blog` in half the places it is read from, and
+    // a stored `/blog` would resolve to `//blog` — an absolute URL to the host
+    // `blog`, i.e. off the site entirely.
+    const normalized =
+      typeof path === 'string' && path !== SCREEN_ROOT_PATH
+        ? path.replace(/^\/+|\/+$/g, '')
+        : path
+    if (!normalized) continue
+    next[id] = normalized
+  }
+  return next
+}
+
 /**
  * `kind` of a besigner email document (AGL-395): a screen authored on the
  * Emails page and sent by a campaign, never served at a URL.
