@@ -140,7 +140,7 @@ async function handler(request: Request): Promise<Response> {
           // plan" — and, because `1 > null` is TRUE, flagged a site running
           // one register as "1 over the limit" on a plan that has no limit.
           //
-          // An explicit flag rather than a magic number, for the AGL-2404
+          // An explicit flag rather than a magic number, for the AGL-2482
           // reason: `null` on the wire cannot distinguish "unlimited" from
           // "the field is missing", and the card has to tell those apart —
           // one is the most expensive plan on the price list, the other is a

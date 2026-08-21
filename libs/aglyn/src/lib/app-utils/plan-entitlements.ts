@@ -35,7 +35,7 @@ import {
 export const UNLIMITED = Number.POSITIVE_INFINITY
 
 /**
- * Is this quota value "no cap"? (AGL-2404 and the class it belongs to.)
+ * Is this quota value "no cap"? (AGL-2482; AGL-2223 is the same class.)
  *
  * WHY A PREDICATE AND NOT `x === UNLIMITED`. `UNLIMITED` is
  * `Number.POSITIVE_INFINITY`, and `JSON.stringify(Infinity)` is **`null`** —

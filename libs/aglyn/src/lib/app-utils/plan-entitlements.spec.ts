@@ -2032,7 +2032,7 @@ describe('marketplace price floor (AGL-2343)', () => {
  * that has lost the fact that a plan is uncapped passes every "is this
  * usable" guard, and the console renders a cap of zero — or compares against
  * `null`, where `1 > null` is TRUE and an uncapped site is reported "over the
- * limit" (AGL-2404 and the class it belongs to).
+ * limit" (AGL-2482; AGL-2223 is the same class).
  */
 describe('quota caps over a JSON boundary', () => {
   /** Exactly what `Response.json` does to a value on the way out. */

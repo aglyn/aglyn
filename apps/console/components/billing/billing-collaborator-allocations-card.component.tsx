@@ -87,7 +87,7 @@ interface AllocationState {
  * upgrade instead" on the top plan.
  *
  * Rehydrating HERE, once, means every comparison below is ordinary arithmetic
- * that is simply correct (AGL-2404 is the precedent).
+ * that is simply correct (AGL-2482; AGL-2223 is the same class).
  */
 function hydrate(payload: AllocationState): AllocationState {
   return {

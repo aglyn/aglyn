@@ -169,7 +169,7 @@ async function handler(request: Request): Promise<Response> {
           // true, so the same row claimed it was "At your plan's maximum of
           // null per site — upgrade instead" on the top plan.
           //
-          // Explicit flags rather than magic numbers, for the AGL-2404
+          // Explicit flags rather than magic numbers, for the AGL-2482
           // reason: `null` on the wire cannot distinguish "unlimited" from
           // "the field is missing", and the card has to tell those apart.
           planCapPerSite: Number.isFinite(planCapPerSite) ? planCapPerSite : 0,

@@ -77,7 +77,7 @@ interface AllocationState {
  * plan" — but the comparisons were the damaging half: `1 > null` is TRUE, so
  * a site running one register on an uncapped plan was flagged "1 over the
  * limit". Rehydrating HERE, once, means every comparison below is ordinary
- * arithmetic that is simply correct (AGL-2404 is the precedent).
+ * arithmetic that is simply correct (AGL-2482; AGL-2223 is the same class).
  */
 function hydrate(payload: AllocationState): AllocationState {
   return {

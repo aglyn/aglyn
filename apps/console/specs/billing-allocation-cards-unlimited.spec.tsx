@@ -17,7 +17,7 @@
 
 /**
  * An UNLIMITED plan cap crossing a JSON boundary, on the two seat-allocation
- * cards — the same defect as AGL-2404 and the same chain:
+ * cards — AGL-2482, the same class as AGL-2223 and the same chain:
  *
  *  1. Enterprise sets `posRegisters` / `membersPerHost` / `maxMembersPerHost`
  *     to `UNLIMITED`, which is `Number.POSITIVE_INFINITY`.
@@ -41,7 +41,7 @@
  * A false limit warning on a plan with no limit, addressed to the customers
  * paying the most for not having one.
  *
- * The fix is the AGL-2404 wire contract: each route sends a FINITE number
+ * The fix is the AGL-2482 wire contract: each route sends a FINITE number
  * plus an explicit `*Unlimited` boolean, because `null` alone cannot
  * distinguish "unlimited" from "the field is missing" — and the cards rebuild
  * the `UNLIMITED` sentinel from the flag before any arithmetic runs.
