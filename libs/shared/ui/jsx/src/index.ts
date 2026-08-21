@@ -73,6 +73,7 @@ export * from './lib/components/grid-items'
 // render a list those pages never contain. Exactly what `DataTable` did with
 // MUI X DataGrid in 828c43939. Import it from
 // `@aglyn/shared-ui-jsx/components/grid-list` instead.
+export * from './lib/components/aglyn-text'
 export * from './lib/components/help-tip.component'
 export * from './lib/components/menu'
 export * from './lib/components/mui-shadow-dom'

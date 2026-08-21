@@ -399,12 +399,14 @@ describe('component instance preview (AGL-1251)', () => {
       nodes,
     }) as any
 
-  // Leaf renders text into an `<aglyn-text>` shadow root, so `textContent`
-  // on the host element is always empty (that is not a bug — see the note
-  // on AglynText). Read through the shadow root instead.
-  const shadowText = (root: HTMLElement) =>
+  // Leaf renders authored text into a plain `<aglyn-text>` element. This used
+  // to read through a shadow root, because the host's own `textContent` was
+  // always empty; the shadow root is gone (AGL-2011), so the text is simply
+  // there. Kept as a helper because these cases assert across SEVERAL leaves
+  // at once and want them joined.
+  const leafText = (root: HTMLElement) =>
     Array.from(root.querySelectorAll('aglyn-text'))
-      .map((element) => (element as any).shadowRoot?.textContent ?? '')
+      .map((element) => element.textContent ?? '')
       .join(' ')
 
   const renderInstance = (node: any, definitions: any = { hero: definition }) =>
@@ -418,9 +420,9 @@ describe('component instance preview (AGL-1251)', () => {
     const { baseElement } = renderInstance(
       instanceNode({ headline: 'Ship faster' }),
     )
-    expect(shadowText(baseElement)).toContain('Ship faster')
+    expect(leafText(baseElement)).toContain('Ship faster')
     // The raw token must never reach the canvas.
-    expect(shadowText(baseElement)).not.toContain('{{prop.headline}}')
+    expect(leafText(baseElement)).not.toContain('{{prop.headline}}')
     // Grafted ids are namespaced per instance, so two placements of one
     // definition can never collide in the DOM either.
     expect(baseElement.querySelector('[data-aglyn="leaf:cmp__inst1__h"]')).toBeTruthy()
@@ -428,7 +430,7 @@ describe('component instance preview (AGL-1251)', () => {
 
   it('falls back to the declared default, which is what the page renders', () => {
     const { baseElement } = renderInstance(instanceNode())
-    expect(shadowText(baseElement)).toContain('Default copy')
+    expect(leafText(baseElement)).toContain('Default copy')
   })
 
   it('marks the preview non-interactive so clicks select the instance', () => {
@@ -450,7 +452,7 @@ describe('component instance preview (AGL-1251)', () => {
     expect(baseElement.querySelector('[data-aglyn-component-preview]')).toBeNull()
     // Unresolvable also means unchanged — the instance keeps its own
     // placeholder rather than rendering empty.
-    expect(shadowText(baseElement)).not.toContain('Default copy')
+    expect(leafText(baseElement)).not.toContain('Default copy')
   })
 
   it('never puts the definition into the canvas store', () => {
@@ -524,10 +526,10 @@ describe('component instance preview (AGL-1251)', () => {
       nodes: [],
     } as any
     const { baseElement } = renderInstance(node, { hero: definition })
-    // Text lives in an `aglyn-text` shadow root, so `textContent` is empty
-    // by design — read it the way every other case here does.
-    expect(shadowText(baseElement)).toContain('This placement only')
-    expect(shadowText(baseElement)).not.toContain('Component copy')
+    // Read it the way every other case here does — one helper, so a change
+    // to how a leaf carries text lands in one place.
+    expect(leafText(baseElement)).toContain('This placement only')
+    expect(leafText(baseElement)).not.toContain('Component copy')
   })
 
   /**
@@ -553,8 +555,8 @@ describe('component instance preview (AGL-1251)', () => {
     // it is named for.
     const stable = instanceNode({ headline: 'Ship faster' })
     const { baseElement, rerender } = renderInstance(stable)
-    expect(shadowText(baseElement)).toContain('Ship faster')
-    expect(shadowText(baseElement)).not.toContain('Now with a kicker')
+    expect(leafText(baseElement)).toContain('Ship faster')
+    expect(leafText(baseElement)).not.toContain('Now with a kicker')
 
     // The same component, republished with an extra node — a NEW object,
     // exactly as a fresh snapshot delivers it.
@@ -588,8 +590,8 @@ describe('component instance preview (AGL-1251)', () => {
 
     // The component's new content appears without the instance changing,
     // and this placement's own prop value survives the update.
-    expect(shadowText(baseElement)).toContain('Now with a kicker')
-    expect(shadowText(baseElement)).toContain('Ship faster')
+    expect(leafText(baseElement)).toContain('Now with a kicker')
+    expect(leafText(baseElement)).toContain('Ship faster')
   })
 })
 
