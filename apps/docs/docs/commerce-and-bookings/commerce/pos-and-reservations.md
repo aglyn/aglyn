@@ -8,7 +8,7 @@ description: Sell in person from the console register and take date-range reserv
 
 :::info Plan availability
 POS requires **Pro** or above. The number of **registers** a site can run at
-once follows your plan — Pro 1, Business 2, Advanced 5 — plus any $89/mo
+once follows your plan — Pro 1, Business 2, Advanced 5 — plus any additional
 register seats you've assigned to **that site**. A seat is bought once for the
 workspace and then placed on one site, so buying one does not raise the limit
 everywhere; see [Assigning register seats](../../workspace-and-billing/billing-and-plans/add-ons.md#assigning-register-seats).

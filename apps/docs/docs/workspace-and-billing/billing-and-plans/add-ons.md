@@ -16,14 +16,21 @@ pick a plan first).
 
 ## What you can add
 
-| Add-on | What it does | Starter | Pro | Business | Scale | Advanced | Agency |
-|---|---|---|---|---|---|---|---|
-| Manager seats | Workspace manager seats beyond the included count | $5/mo | $4/mo | $3/mo | $2/mo | $2/mo | $2/mo |
-| Collaborator seats | Per-site collaborator (teammate) seats beyond the included count | $3/mo | $2/mo | $1/mo | $1/mo | $1/mo | $1/mo |
-| Extra datasets | Additional shared datasets across the workspace | $2/mo | $2/mo | $1/mo | $1/mo | $1/mo | $1/mo |
-| Extra sites | Publish more sites than your plan includes | $10/mo | $8/mo | $5/mo | $5/mo | $4/mo | $3/mo |
-| POS registers | One extra point-of-sale register, assigned to one site | $89/mo | $89/mo | $89/mo | $89/mo | $89/mo | $89/mo |
-| Event Calendar | The event manager + calendar elements, workspace-wide | $9/mo | $9/mo | $9/mo | $9/mo | $9/mo | $9/mo |
+:::tip Prices live on one page
+Per-unit add-on prices are on **[aglyn.com/pricing](https://aglyn.com/pricing)**, and
+what YOUR workspace would pay is shown in **Billing** before you confirm. This page
+covers what each add-on does and how it is billed; restating the numbers here would
+just be a second copy to keep in step.
+:::
+
+| Add-on | What it does | How it is priced |
+|---|---|---|
+| Manager seats | Workspace manager seats beyond the included count | Per seat, per month — cheaper on higher plans |
+| Collaborator seats | Per-site collaborator (teammate) seats beyond the included count | Per seat, per month — cheaper on higher plans |
+| Extra datasets | Additional shared datasets across the workspace | Per dataset, per month — cheaper on higher plans |
+| Extra sites | Publish more sites than your plan includes | Per site, per month — cheaper on higher plans |
+| POS registers | One extra point-of-sale register, assigned to one site | Flat per register, per month — the same on every plan |
+| Event Calendar | The event manager + calendar elements, workspace-wide | Flat per month — the same on every plan |
 
 - **Prices are per unit per month.** On annual billing, add-ons bill yearly alongside
   your plan (12× the monthly price) — a subscription has one billing interval.

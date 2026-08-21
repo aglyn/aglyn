@@ -41,7 +41,8 @@
 // Tier VISIBILITY may change freely; the CHARGED price may not. That is the
 // boundary this guard polices.
 
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
+import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import {
   parsePlanRecord,
@@ -90,6 +91,54 @@ const LOCKED = {
 const SOURCE_OF_TRUTH_MD =
   `${process.env.HOME}/Library/CloudStorage/GoogleDrive-zach@aglyn.com/Shared drives/` +
   `Platform Docs/Pricing & Packaging/00-Pricing-Source-of-Truth/Pricing-Source-of-Truth.md`
+
+
+/**
+ * DOCS MUST NOT RESTATE A PRICE (AGL-1885).
+ *
+ * The docs carried the full plan table, the add-on table and the metered
+ * rates, and one of them had already drifted: storage read "about $0.034 per
+ * GB per month" where the rate is $0.0338. Nothing was wrong with the words —
+ * the problem is that a second copy of a number is a copy that goes stale, and
+ * the docs are the copy nobody re-reads when a price changes.
+ *
+ * They now describe SHAPE ("cheaper on higher plans", "flat per register") and
+ * link to `/pricing` for figures. This keeps it that way.
+ *
+ * Scoped to Aglyn's OWN prices, deliberately. An example order total of $100
+ * or a sample plugin at $29 is legitimate documentation and must stay legal;
+ * only the locked plan, annual and add-on figures are refused.
+ *
+ * `whats-new.md` is exempt for the reason CHANGELOG.md is exempt from the
+ * naming sweep: it is an append-only record of what shipped, and editing it to
+ * remove a price falsifies the record of the release that set it.
+ */
+function docsRestatingPrices() {
+  const root = 'apps/docs/docs'
+  if (!existsSync(root)) return []
+  const locked = new Set([
+    ...Object.values(LOCKED.monthly), ...Object.values(LOCKED.annualPerMonth),
+    // Add-on figures, from the same Stripe-verified set.
+    10, 8, 5, 4, 3, 2, 1, 89, 9,
+  ].filter((n) => n > 0).map(String))
+  // Only the DISTINCTIVE ones: single digits appear in prose constantly and a
+  // guard that flags "$2" in an example is a guard people switch off.
+  const distinctive = [...locked].filter((n) => Number(n) >= 16)
+  const re = new RegExp(`\\$(${distinctive.join('|')})\\b`, 'g')
+  const hits = []
+  const walk = (dir) => {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name)
+      if (statSync(full).isDirectory()) { walk(full); continue }
+      if (!/\.mdx?$/.test(name)) continue
+      if (name === 'whats-new.md') continue
+      const text = readFileSync(full, 'utf8')
+      for (const m of text.matchAll(re)) hits.push({ file: full, price: m[0] })
+    }
+  }
+  walk(root)
+  return hits
+}
 
 function parseArgs(argv) {
   const args = { summary: false, stripe: true }
@@ -223,8 +272,18 @@ if (args.stripe) {
 }
 
 // ---- 6. the source-of-truth doc, when Drive is mounted -------------------
-if (existsSync(SOURCE_OF_TRUTH_MD)) {
-  const md = readFileSync(SOURCE_OF_TRUTH_MD, 'utf8')
+// `existsSync` is TRUE for a Google Drive placeholder whose contents have not
+// been materialised locally, and the read then throws ENOENT — so presence is
+// not readability here, and the optimistic version crashed the whole check on
+// a machine where Drive had simply evicted the file.
+let sourceOfTruthMd = null
+try {
+  if (existsSync(SOURCE_OF_TRUTH_MD)) sourceOfTruthMd = readFileSync(SOURCE_OF_TRUTH_MD, 'utf8')
+} catch {
+  sourceOfTruthMd = null
+}
+if (sourceOfTruthMd) {
+  const md = sourceOfTruthMd
   for (const [plan, want] of Object.entries(LOCKED.monthly)) {
     if (plan === 'free') continue
     // The doc's plan table writes `| Pro | $56 / $39 | …`.
@@ -237,6 +296,13 @@ if (existsSync(SOURCE_OF_TRUTH_MD)) {
 } else {
   console.log('note: the source-of-truth doc is not mounted; skipping that leg (it is not a gate).')
 }
+
+// ---- 7. the docs must not restate a price -------------------------------
+for (const hit of docsRestatingPrices()) {
+  note('differs', `docs:${hit.file.replace('apps/docs/docs/', '')}`,
+    `restates ${hit.price} — link to /pricing instead; a second copy of a price is one that goes stale`)
+}
+if (!docsRestatingPrices().length) note('in-sync', 'docs:prices', 'no Aglyn price is restated in the docs')
 
 // ---- report --------------------------------------------------------------
 const differs = verdicts.filter((v) => v.status === 'differs')
