@@ -89,25 +89,62 @@ export {
 /**
  * Registers a plugin API handler at a host-relative path (e.g.
  * 'events/list'), served by the app dispatcher at `/api/events/list`.
- * Idempotent by path — re-registration replaces the previous handler.
+ *
+ * Idempotent by path FOR ITS OWNER — re-registration by the plugin that
+ * holds the path replaces the previous handler, which is what a hot reload,
+ * a second surface, and a repeated init all depend on.
+ *
+ * A different plugin is REFUSED (AGL-2484). This map is process-global and
+ * was last-writer-wins on the path alone, while Aglyn's own commission-taking
+ * handlers sit at `marketplace/checkout` and `commerce/checkout` — and the
+ * tenant dispatcher calls `ensureRemoteServerBundles()` after the first-party
+ * loader has run, so a remote bundle registering either path was simply the
+ * later writer. Getting there needs `PLUGIN_REMOTE_SERVER=enabled` (off by
+ * default), realm trust and a valid signature, so this is the last of several
+ * doors rather than the only one; it is also the one the registry could close
+ * by itself, because it already recorded who registered what.
+ *
+ * Anonymous registration — no loader marker — is an IDENTITY here, not a
+ * wildcard: it may replace itself and nothing else may take it.
  */
 export function registerPluginApiRoute(
   path: string,
   handler: PluginApiHandler,
 ): void {
   const key = normalizeApiPath(path)
+  const owner = getRegisteringPluginId() ?? ANONYMOUS_OWNER
+  const incumbent = apiRouteOwners.get(key)
+  if (incumbent !== undefined && incumbent !== owner) {
+    // Loud, because the silent version of this is a payment route quietly
+    // answering from someone else's code. Refusing is the safe direction:
+    // the incumbent keeps serving.
+    console.error(
+      `[plugins] refused API route "${key}" to "${owner}": already ` +
+        `registered by "${incumbent}"`,
+    )
+    return
+  }
   apiRoutes.set(key, handler)
-  const owner = getRegisteringPluginId()
-  if (owner) apiRouteOwners.set(key, owner)
+  apiRouteOwners.set(key, owner)
 }
+
+/** The marker for a registration made outside any loader context. */
+const ANONYMOUS_OWNER = ''
 
 /** The plugin that registered a path, for per-org enablement gating. */
 export function pluginIdForRegisteredApiPath(path: string): string | undefined {
-  return apiRouteOwners.get(normalizeApiPath(path))
+  const owner = apiRouteOwners.get(normalizeApiPath(path))
+  // An anonymous registration has no plugin to gate on, and this has always
+  // answered `undefined` for one — the sentinel must not leak out as an id.
+  return owner === undefined || owner === ANONYMOUS_OWNER ? undefined : owner
 }
 
 export function unregisterPluginApiRoute(path: string): void {
-  apiRoutes.delete(normalizeApiPath(path))
+  const key = normalizeApiPath(path)
+  apiRoutes.delete(key)
+  // Release the CLAIM too, or the refusal above outlives the route and the
+  // path can never be re-registered for the life of the process.
+  apiRouteOwners.delete(key)
 }
 
 /** The handler for a request path, or undefined when nothing is registered. */

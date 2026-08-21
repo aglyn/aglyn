@@ -37,11 +37,36 @@ export interface PluginPermission {
 
 const pluginPermissions = new Map<string, PluginPermission>()
 
-/** Idempotent per key — re-registration replaces the entry. */
+/**
+ * Idempotent per key FOR ITS OWNER — the declaring plugin may re-register
+ * (hot reload, a second surface, a repeated init) and its entry is replaced.
+ *
+ * A key already declared by a DIFFERENT plugin is refused (AGL-2484). This
+ * map keyed on `permission.key` alone, so a later registration could redeclare
+ * someone else's key with its own tier defaults — and these defaults are not
+ * cosmetic: `managePos` is enforced server-side in
+ * `libs/plugins/commerce/src/lib/server/pos-order.ts`, so moving
+ * `defaults.viewer` to `true` hands a viewer the register. Reaching this
+ * needs `PLUGIN_REMOTE_SERVER=enabled` (off by default), realm trust and a
+ * signature; the registry closing its own door is the cheap part of that
+ * stack.
+ *
+ * Per KEY, not per batch: a bundle that collides on one key still gets the
+ * keys that are genuinely its own.
+ */
 export function registerPluginPermissions(
   permissions: readonly PluginPermission[],
 ): void {
   for (const permission of permissions) {
+    const incumbent = pluginPermissions.get(permission.key)
+    if (incumbent !== undefined && incumbent.pluginId !== permission.pluginId) {
+      console.error(
+        `[plugins] refused permission key "${permission.key}" to ` +
+          `"${permission.pluginId}": already declared by ` +
+          `"${incumbent.pluginId}"`,
+      )
+      continue
+    }
     pluginPermissions.set(permission.key, permission)
   }
 }
