@@ -1,0 +1,436 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+// Guard the guard. check-firewall-posture.mjs is trusted to notice when bot
+// protection stops protecting, and a checker that reports "posture fine"
+// because it asserted nothing is indistinguishable from a healthy firewall —
+// which is exactly how a PUT that returns 200 while deleting managed rules got
+// through in the first place.
+//
+// Every case below starts from a config that is KNOWN GOOD (it mirrors the
+// live aglyn-tenant document, minus the secret) and damages exactly one thing,
+// then asserts the SPECIFIC finding rather than merely `ok === false`. A test
+// that only checks `ok` passes just as happily when the detector has collapsed
+// into "return false".
+//
+// Nothing here touches the network or the real Vercel config.
+//
+//   npm run test:firewall-posture
+
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import test from 'node:test'
+import { fileURLToPath } from 'node:url'
+
+import {
+  EXPECTED_POSTURE,
+  evaluatePosture,
+  evaluateProject,
+  evaluateRule,
+  fetchFirewallConfig,
+  formatReport,
+  validatePostureTable,
+} from './firewall-posture.mjs'
+
+const here = dirname(fileURLToPath(import.meta.url))
+
+const tenantExpected = EXPECTED_POSTURE.find((e) => e.project === 'aglyn-tenant')
+const consoleExpected = EXPECTED_POSTURE.find((e) => e.project === 'aglyn-console')
+
+const bypass = (action = 'bypass') => ({
+  mitigate: { redirect: null, action, rateLimit: null, actionDuration: null },
+})
+
+/** The live-good aglyn-tenant config, with the probe secret stubbed. */
+function healthyTenantConfig() {
+  return {
+    firewallEnabled: true,
+    version: 4,
+    managedRules: { bot_protection: { active: true, action: 'challenge' } },
+    ips: [],
+    rules: [
+      {
+        name: 'CI and uptime probe bypass',
+        id: 'rule_ci_and_uptime_probe_bypass_9U7qre',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [
+          { conditions: [{ op: 'eq', type: 'header', key: 'x-aglyn-probe', value: 'not-the-real-token' }] },
+        ],
+      },
+      {
+        name: 'Plugin job runner bypass',
+        id: 'rule_plugin_job_runner_bypass_LnyY2A',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [
+          {
+            conditions: [
+              { type: 'path', op: 'eq', value: '/api/plugins/run-jobs' },
+              { op: 'ex', type: 'header', key: 'x-plugin-jobs-secret', value: '' },
+            ],
+          },
+        ],
+      },
+    ],
+  }
+}
+
+const evalTenant = (config) => evaluateProject({ expected: tenantExpected, config })
+const findingsFor = (config) => evalTenant(config).findings.join('\n')
+const ruleNamed = (config, name) => config.rules.find((r) => r.name === name)
+
+// ── The control: the known-good document must pass ─────────────────────────
+// Without this, every red below could be produced by a checker that fails on
+// everything.
+
+test('the live-good tenant config passes', () => {
+  const result = evalTenant(healthyTenantConfig())
+  assert.deepEqual(result.findings, [])
+  assert.equal(result.ok, true)
+})
+
+// ── The PUT fingerprint ────────────────────────────────────────────────────
+
+test('bot_protection deleted entirely (the PUT-returns-200 fingerprint) fails', () => {
+  const config = healthyTenantConfig()
+  delete config.managedRules.bot_protection
+  const findings = findingsFor(config)
+  assert.match(findings, /bot_protection is ABSENT/)
+  // The finding must name the cause, because the operator's next move is a
+  // repair, and repairing this with another PUT re-breaks it.
+  assert.match(findings, /PATCH managedRules\.update/)
+  assert.equal(evalTenant(config).ok, false)
+})
+
+test('a whole managedRules object wiped by a PUT fails', () => {
+  const config = healthyTenantConfig()
+  config.managedRules = {}
+  assert.match(findingsFor(config), /bot_protection is ABSENT/)
+})
+
+test('bot_protection present but inactive fails', () => {
+  const config = healthyTenantConfig()
+  config.managedRules.bot_protection.active = false
+  assert.match(findingsFor(config), /bot_protection\.active is false, expected true/)
+})
+
+test('bot_protection downgraded from challenge to log fails', () => {
+  const config = healthyTenantConfig()
+  config.managedRules.bot_protection.action = 'log'
+  assert.match(findingsFor(config), /bot_protection\.action is "log", expected "challenge"/)
+})
+
+test('firewallEnabled false fails even with every rule intact', () => {
+  const config = healthyTenantConfig()
+  config.firewallEnabled = false
+  assert.match(findingsFor(config), /firewallEnabled is false.*every rule below is inert/s)
+})
+
+// ── Bypass-rule scope decay: the quiet one ─────────────────────────────────
+
+test('the plugin runner rule decayed to PATH-ONLY fails', () => {
+  const config = healthyTenantConfig()
+  const rule = ruleNamed(config, 'Plugin job runner bypass')
+  // Drop the header condition — the rule still exists, still bypasses, still
+  // has the right name, and now lets anything reach the job runner.
+  rule.conditionGroup[0].conditions = [{ type: 'path', op: 'eq', value: '/api/plugins/run-jobs' }]
+  const findings = findingsFor(config)
+  assert.match(findings, /NO LONGER REQUIRES header x-plugin-jobs-secret exists/)
+  assert.equal(evalTenant(config).ok, false)
+})
+
+test('the plugin runner rule decayed to HEADER-ONLY fails', () => {
+  const config = healthyTenantConfig()
+  const rule = ruleNamed(config, 'Plugin job runner bypass')
+  rule.conditionGroup[0].conditions = [{ op: 'ex', type: 'header', key: 'x-plugin-jobs-secret', value: '' }]
+  assert.match(findingsFor(config), /NO LONGER REQUIRES path eq "\/api\/plugins\/run-jobs"/)
+})
+
+test('a SECOND, wider condition group re-opens the rule and fails', () => {
+  // The subtle decay: the original group is untouched and still fully scoped,
+  // so any check that looks for "a group that matches" reports clean. Groups
+  // are OR'd, so this config bypasses on path alone.
+  const config = healthyTenantConfig()
+  const rule = ruleNamed(config, 'Plugin job runner bypass')
+  rule.conditionGroup.push({
+    conditions: [{ type: 'path', op: 'eq', value: '/api/plugins/run-jobs' }],
+  })
+  const findings = findingsFor(config)
+  assert.match(findings, /condition group 2 of 2/)
+  assert.match(findings, /NO LONGER REQUIRES header x-plugin-jobs-secret exists/)
+})
+
+test('a rule stripped of all condition groups fails', () => {
+  const config = healthyTenantConfig()
+  ruleNamed(config, 'Plugin job runner bypass').conditionGroup = []
+  assert.match(findingsFor(config), /NO condition groups — it would match every request/)
+})
+
+test('an empty condition group fails', () => {
+  const config = healthyTenantConfig()
+  ruleNamed(config, 'Plugin job runner bypass').conditionGroup = [{ conditions: [] }]
+  assert.match(findingsFor(config), /has no conditions — that group matches every request/)
+})
+
+// ── Bypass-rule presence, state and secrets ────────────────────────────────
+
+test('a missing probe bypass rule fails', () => {
+  const config = healthyTenantConfig()
+  config.rules = config.rules.filter((r) => r.name !== 'CI and uptime probe bypass')
+  assert.match(findingsFor(config), /"CI and uptime probe bypass" is MISSING/)
+})
+
+test('a deactivated bypass rule fails', () => {
+  const config = healthyTenantConfig()
+  ruleNamed(config, 'CI and uptime probe bypass').active = false
+  assert.match(findingsFor(config), /is present but INACTIVE/)
+})
+
+test('a bypass rule whose mitigation changed away from bypass fails', () => {
+  const config = healthyTenantConfig()
+  ruleNamed(config, 'CI and uptime probe bypass').action = bypass('deny')
+  assert.match(findingsFor(config), /no longer mitigates with "bypass" \(found "deny"\)/)
+})
+
+test('a probe rule whose secret value was blanked fails', () => {
+  const config = healthyTenantConfig()
+  ruleNamed(config, 'CI and uptime probe bypass').conditionGroup[0].conditions[0].value = ''
+  assert.match(findingsFor(config), /NO LONGER REQUIRES header x-aglyn-probe eq <non-empty, redacted>/)
+})
+
+test('a probe rule matching a DIFFERENT header key fails', () => {
+  const config = healthyTenantConfig()
+  ruleNamed(config, 'CI and uptime probe bypass').conditionGroup[0].conditions[0].key = 'x-something-else'
+  assert.match(findingsFor(config), /NO LONGER REQUIRES header x-aglyn-probe/)
+})
+
+test('an undeclared active bypass rule fails', () => {
+  const config = healthyTenantConfig()
+  config.rules.push({
+    name: 'Temporary debugging bypass',
+    id: 'rule_oops',
+    active: true,
+    valid: true,
+    action: bypass(),
+    conditionGroup: [{ conditions: [{ type: 'path', op: 'pre', value: '/' }] }],
+  })
+  assert.match(findingsFor(config), /UNDECLARED active bypass rule "Temporary debugging bypass"/)
+})
+
+test('a non-bypass custom rule is not reported as an undeclared hole', () => {
+  const config = healthyTenantConfig()
+  config.rules.push({
+    name: 'Block a bad crawler',
+    active: true,
+    valid: true,
+    action: bypass('deny'),
+    conditionGroup: [{ conditions: [{ type: 'user_agent', op: 'sub', value: 'BadBot' }] }],
+  })
+  assert.deepEqual(evalTenant(config).findings, [])
+})
+
+test('a config with no rules at all fails for both declared rules', () => {
+  const config = healthyTenantConfig()
+  config.rules = []
+  const findings = evalTenant(config).findings
+  assert.equal(findings.length, 2)
+  assert.ok(findings.every((f) => /is MISSING/.test(f)))
+})
+
+// ── Absent configs, and the known-gap mode ─────────────────────────────────
+
+test('a protected project with NO config at all fails', () => {
+  const result = evaluateProject({ expected: tenantExpected, config: null })
+  assert.match(result.findings.join('\n'), /NO firewall configuration exists at all/)
+  assert.equal(result.ok, false)
+})
+
+test('a known-gap project with no config passes but WARNS', () => {
+  const result = evaluateProject({ expected: consoleExpected, config: null })
+  assert.equal(result.ok, true)
+  assert.equal(result.findings.length, 0)
+  assert.match(result.warnings.join('\n'), /UNPROTECTED \(known gap\)/)
+  assert.match(result.warnings.join('\n'), /sign-in, billing/)
+})
+
+test('a known-gap project that silently GAINS a config fails, so the table cannot lie', () => {
+  const result = evaluateProject({ expected: consoleExpected, config: healthyTenantConfig() })
+  assert.equal(result.ok, false)
+  assert.match(result.findings.join('\n'), /declares "aglyn-console" an UNPROTECTED known gap, but a live/)
+  assert.match(result.findings.join('\n'), /move this entry to expect: 'protected'/)
+})
+
+// ── Aggregate + strict mode ────────────────────────────────────────────────
+
+function configsMatchingLiveToday() {
+  return new Map([
+    ['aglyn-tenant', healthyTenantConfig()],
+    ['aglyn-docs', docsConfig()],
+    ['aglyn-console', null],
+    ['aglyn-plugins', null],
+  ])
+}
+
+function docsConfig() {
+  const config = healthyTenantConfig()
+  config.rules = config.rules.filter((r) => r.name === 'CI and uptime probe bypass')
+  return config
+}
+
+test('the posture measured live on 2026-08-21 evaluates as pass-with-gaps', () => {
+  const result = evaluatePosture({ configs: configsMatchingLiveToday() })
+  assert.equal(result.ok, true)
+  assert.equal(result.failedCount, 0)
+  assert.equal(result.gapCount, 2, 'console and plugins are the two known gaps')
+})
+
+test('--strict turns the known gaps into a failure', () => {
+  const result = evaluatePosture({ configs: configsMatchingLiveToday(), strict: true })
+  assert.equal(result.ok, false)
+})
+
+test('one damaged project fails the whole run', () => {
+  const configs = configsMatchingLiveToday()
+  const damaged = healthyTenantConfig()
+  delete damaged.managedRules.bot_protection
+  configs.set('aglyn-tenant', damaged)
+  const result = evaluatePosture({ configs })
+  assert.equal(result.ok, false)
+  assert.equal(result.failedCount, 1)
+})
+
+test('a project missing from the fetched map is treated as having no config', () => {
+  // Never as "nothing to say". A lookup miss must not read as clean.
+  const result = evaluatePosture({ configs: new Map() })
+  assert.equal(result.ok, false)
+  assert.equal(result.failedCount, 2, 'the two protected projects fail; the two gaps warn')
+})
+
+test('the report names the safe PATCH repair when something failed', () => {
+  const configs = configsMatchingLiveToday()
+  const damaged = healthyTenantConfig()
+  damaged.managedRules = {}
+  configs.set('aglyn-tenant', damaged)
+  const report = formatReport(evaluatePosture({ configs }))
+  assert.match(report, /do NOT repair it with PUT/)
+  assert.match(report, /managedRules\.update/)
+  assert.match(report, /^FAIL aglyn-tenant/m)
+})
+
+// ── The table itself ───────────────────────────────────────────────────────
+
+test('the shipped posture table is well-formed', () => {
+  assert.deepEqual(validatePostureTable(EXPECTED_POSTURE), [])
+})
+
+test('the table covers all four Vercel projects', () => {
+  assert.deepEqual(
+    EXPECTED_POSTURE.map((e) => e.project).sort(),
+    ['aglyn-console', 'aglyn-docs', 'aglyn-plugins', 'aglyn-tenant'],
+  )
+})
+
+test('the mode guard rejects an entry with no expect mode', () => {
+  const problems = validatePostureTable([{ project: 'aglyn-x', serves: 'something' }])
+  assert.match(problems.join('\n'), /`expect` must be 'protected' or 'unprotected'/)
+})
+
+test('the mode guard rejects an unprotected entry with no rationale', () => {
+  const problems = validatePostureTable([{ project: 'aglyn-x', expect: 'unprotected' }])
+  assert.match(problems.join('\n'), /must carry a `gap` rationale/)
+})
+
+test('the mode guard rejects a bypass rule with no declared conditions', () => {
+  // An unscoped declaration would make the scope assertion vacuous — the rule
+  // would "pass" no matter how wide it got.
+  const problems = validatePostureTable([
+    { project: 'aglyn-x', expect: 'protected', bypassRules: [{ name: 'wide open', conditions: [] }] },
+  ])
+  assert.match(problems.join('\n'), /declares no conditions/)
+})
+
+test('the mode guard rejects duplicate project entries', () => {
+  const problems = validatePostureTable([
+    { project: 'aglyn-x', expect: 'protected', bypassRules: [] },
+    { project: 'aglyn-x', expect: 'protected', bypassRules: [] },
+  ])
+  assert.match(problems.join('\n'), /duplicate entry/)
+})
+
+// ── evaluateRule directly ──────────────────────────────────────────────────
+
+test('evaluateRule reports a missing rule with its rationale', () => {
+  const expected = tenantExpected.bypassRules.find((r) => r.name === 'Plugin job runner bypass')
+  assert.match(evaluateRule(expected, null).join('\n'), /is MISSING — the every-minute pluginJobsBeat/)
+})
+
+// ── Transport ──────────────────────────────────────────────────────────────
+
+test('a 404 means "no config has ever existed", not an error', () => {
+  return fetchFirewallConfig({
+    token: 't',
+    projectId: 'aglyn-console',
+    fetchImpl: async () => ({ status: 404, ok: false }),
+  }).then((result) => {
+    assert.equal(result.ok, true)
+    assert.equal(result.config, null)
+    assert.equal(result.status, 404)
+  })
+})
+
+test('a 403 is an operational failure, never a clean read', () => {
+  return fetchFirewallConfig({
+    token: 't',
+    projectId: 'aglyn-tenant',
+    fetchImpl: async () => ({ status: 403, ok: false, json: async () => ({ error: { code: 'forbidden' } }) }),
+  }).then((result) => {
+    assert.equal(result.ok, false)
+    assert.match(result.error, /HTTP 403/)
+  })
+})
+
+test('a network failure is an operational failure', () => {
+  return fetchFirewallConfig({
+    token: 't',
+    projectId: 'aglyn-tenant',
+    fetchImpl: async () => {
+      throw new Error('ECONNRESET')
+    },
+  }).then((result) => {
+    assert.equal(result.ok, false)
+    assert.match(result.error, /ECONNRESET/)
+  })
+})
+
+// ── This repository is PUBLIC ──────────────────────────────────────────────
+
+test('no shared-secret value is hard-coded in the checker or its library', () => {
+  // The probe rule matches on a 64-hex-character shared secret that the API
+  // returns in the config body. Asserting it literally would publish it.
+  for (const file of ['firewall-posture.mjs', join('..', 'check-firewall-posture.mjs')]) {
+    const source = readFileSync(join(here, file), 'utf8')
+    assert.equal(
+      /\b[0-9a-f]{64}\b/.test(source),
+      false,
+      `${file} contains something shaped like a 64-hex secret`,
+    )
+  }
+})

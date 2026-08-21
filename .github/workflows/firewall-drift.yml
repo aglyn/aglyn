@@ -1,0 +1,134 @@
+name: Firewall posture drift
+
+# Asserts the LIVE Vercel WAF posture of every project against the table in
+# tools/scripts/lib/firewall-posture.mjs (AGL-2483).
+#
+# ## Why this exists
+#
+# On 2026-08-21, adding one custom rule to `aglyn-tenant` with
+# `PUT /v1/security/firewall/config` returned HTTP 200, inserted the rule
+# exactly as asked, and SILENTLY DISABLED managed bot protection for the whole
+# project. The API rejects `managedRules` as an input key, so you are forced to
+# omit it — and it reads that omission as a delete. Every tenant site would
+# have been left unchallenged, and every human signal said "rule added ✓".
+#
+# Only a read-back catches it. That is all this workflow is: the read-back,
+# on a schedule, with the expected posture written down.
+#
+# ⛔ NEVER repair a firewall config with PUT. The safe write is:
+#      PATCH /v1/security/firewall/config?projectId=<p>&teamId=<t>
+#      { "action": "managedRules.update", "id": "bot_protection",
+#        "value": { "active": true, "action": "challenge" } }
+#    `id` is REQUIRED; omitting it gives a misleading error about `action`.
+#    The full account is in the header of tools/scripts/lib/firewall-posture.mjs.
+#
+# ## What it asserts, per project
+#
+#   * `firewallEnabled`
+#   * `managedRules.bot_protection` == { active: true, action: "challenge" }
+#   * every declared bypass rule is present AND STILL SCOPED — the plugin job
+#     runner rule must still require BOTH the `/api/plugins/run-jobs` path and
+#     the `x-plugin-jobs-secret` header. A rule that decayed to path-only would
+#     leave an unauthenticated endpoint open while still passing any check that
+#     merely counts rules by name.
+#   * no UNDECLARED bypass rule exists.
+#
+# ## Why there is no push / pull_request trigger
+#
+# Same reasoning as legal-drift.yml. This job cannot run without a
+# `VERCEL_TOKEN` repo secret, and that secret DOES NOT EXIST YET — creating it
+# is Zach's action, not a code change. Wiring this to `push` today would turn
+# every merge in the repo red for something no engineer can fix, and the
+# remedy for that is always "add continue-on-error", which would leave a guard
+# that cannot fail. So it gates nothing and blocks nobody; it is loud instead.
+#
+# Once the secret exists, ADD a push trigger scoped to these paths so a change
+# to the checker is exercised by the change itself:
+#   push: { branches: [main], paths: [ tools/scripts/check-firewall-posture.mjs,
+#           tools/scripts/lib/firewall-posture.mjs,
+#           tools/scripts/lib/firewall-posture.test.mjs,
+#           .github/workflows/firewall-drift.yml ] }
+#
+# ## Configuration this workflow needs
+#
+# - secret VERCEL_TOKEN — a Vercel access token scoped to the `aglyn` team.
+#   The same variable name tools/deploy/verify-production-aliases.mjs and
+#   verify-env-isolation.mjs already read, so this introduces no new
+#   convention. Set it once:
+#       gh secret set VERCEL_TOKEN --body '<token>'
+#   A token WITHOUT team scope reports HTTP 403 here and exits 2, not 0 —
+#   "cannot check" never masquerades as clean.
+#
+# The checker is READ-ONLY and has no --fix. A firewall is not something a
+# scheduled job should reach in and edit.
+#
+# Exit codes: 0 posture matches; 1 drift; 2 could not check.
+
+on:
+  schedule:
+    # Daily, 08:29 UTC — after legal-drift (08:11), so the drift workflows do
+    # not contend for the npm cache. (GitHub schedules are best-effort and
+    # pause on 60-day-quiet repos; a green history is not proof of continuous
+    # coverage.)
+    - cron: '29 8 * * *'
+  workflow_dispatch:
+
+concurrency:
+  # Only the newest verdict about the live firewall matters, and a delayed
+  # scheduled run must not pile up behind one already reading the same config.
+  group: firewall-drift
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  posture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      # Guard the guard, BEFORE the live read, and BEFORE the credential gate.
+      # A checker that has stopped checking reports "posture fine", which is
+      # indistinguishable from a healthy firewall — the whole failure this
+      # workflow exists to stop. These cases are pure node with no network and
+      # no credentials, so they must still run on a day the token is missing;
+      # gating them behind a secret they do not use would recreate exactly the
+      # "a guard that never runs" problem.
+      #
+      # No `npm ci` on purpose: the library uses only built-in fetch and
+      # node:test, so this job cannot be broken by a dependency, a lockfile or
+      # a registry outage.
+      - run: npm run test:firewall-posture
+
+      - name: Refuse to no-op without credentials
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "The VERCEL_TOKEN repo secret is not set." >&2
+            echo "" >&2
+            echo "This job reads the LIVE Vercel firewall config for all four" >&2
+            echo "projects. Without a token it cannot see live, and passing anyway" >&2
+            echo "would be the silent-drift failure it exists to prevent: a PUT to" >&2
+            echo "the firewall config returns 200 while deleting managed bot" >&2
+            echo "protection, and only a read-back reveals it (AGL-2483)." >&2
+            echo "" >&2
+            echo "Create the secret once, from a Vercel access token scoped to the" >&2
+            echo "aglyn team:" >&2
+            echo "  gh secret set VERCEL_TOKEN --body '<token>'" >&2
+            exit 2
+          fi
+
+      # CI is set by Actions, which disables the checker's local Vercel-CLI
+      # auth-file fallback — a CI run can only ever authenticate with the repo
+      # secret above.
+      - name: Assert the live firewall posture
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npm run check:firewall-posture
