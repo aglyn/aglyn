@@ -45,10 +45,17 @@ jest.mock('@aglyn/aglyn/server', () => ({
 
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
   resolveOrgPermissions: async () => ({
-    orgId: 'buyer-org',
+    // The org the install LANDS in. The publisher waiver requires this to be
+    // the listing's own org (AGL-2484), so the cases below that exercise the
+    // waiver move it to `seller-org` — leaving it here would let them pass
+    // with the waiver switched off, testing nothing they claim to test.
+    orgId: __actingOrgId.value,
     permissions: { installPlugins: true },
   }),
 }))
+
+/** The install target's org; `seller-org` is the publisher's own workspace. */
+const __actingOrgId = { value: 'buyer-org' }
 
 jest.mock('./publisher-profile', () => ({
   canActAsPublisher: async () => __ownsListing.value,
@@ -237,6 +244,7 @@ beforeEach(() => {
   state.revocation = null
   state.pins.length = 0
   __ownsListing.value = false
+  __actingOrgId.value = 'buyer-org'
   // Two approved versions. v2.0.0 is the newer one and the one the mirror
   // names; v1.0.0 is what a working kill switch has to fall back to.
   state.versions['1.0.0'] = version('approved')
@@ -320,6 +328,9 @@ describe('an EXPLICIT version pin still meets the kill switch (AGL-1085)', () =>
 describe("the publisher's own-unreviewed-bytes fallback (AGL-1083)", () => {
   beforeEach(() => {
     __ownsListing.value = true
+    // Installing into the PUBLISHING org, which is the only place the
+    // waiver applies (AGL-2484).
+    __actingOrgId.value = 'seller-org'
   })
 
   it('CONTROL: the owner gets the approved version while one exists', async () => {
