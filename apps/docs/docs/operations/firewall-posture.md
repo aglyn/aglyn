@@ -119,41 +119,60 @@ repo are world-readable.
 
 ## Current posture
 
-Measured 2026-08-21.
+Measured 2026-08-21, after the console was closed (see below).
 
 | Project | Serves | Posture |
 | --- | --- | --- |
 | `aglyn-tenant` | every customer site on `*.aglyn.app` + custom domains | ✅ protected — challenge, 2 scoped bypass rules |
 | `aglyn-docs` | `docs.aglyn.com` | ✅ protected — challenge, 1 scoped bypass rule |
-| `aglyn-console` | `app.aglyn.com` — sign-in, billing, staff surfaces | ⚠️ **no WAF config, and never has had one** |
+| `aglyn-console` | `app.aglyn.com` — sign-in, billing, staff surfaces | ✅ protected — challenge, 2 scoped bypass rules |
 | `aglyn-plugins` | `plugins.aglyn.com` — plugin loader origin | ⚠️ **no WAF config, and never has had one** |
 
-### The console and plugins gap
+### How the console was closed, and why the order mattered
 
-`GET /v1/security/firewall/config/active` answers **404** for both. That 404
-means *no config has ever been created* — **not** "a default posture applies".
-Confirmed two independent ways:
+The console had **no WAF config and never had one**: a scripted `User-Agent`
+reached sign-in and billing with a plain **200 and no `x-vercel-mitigated`
+header**, while the *marketing* site answered the identical request with **429 +
+`x-vercel-mitigated: challenge`**. The protection was on backwards.
 
-- `GET /v1/security/firewall/config` returns
-  `{"active":null,"draft":null,"versions":[]}` — zero versions, ever. This is
-  not a config that got switched off.
-- `app.aglyn.com/api/health` answers a scripted-bot `User-Agent` with a plain
-  **200 and no `x-vercel-mitigated` header**, while `demo.aglyn.com` answers
-  the identical request with **429 + `x-vercel-mitigated: challenge`**.
-  `plugins.aglyn.com` likewise returns an origin 404 rather than a challenge.
+It was closed on 2026-08-21 in two steps, and the order is the whole lesson:
 
-Both are declared in the posture table as `expect: 'unprotected'` with a
-written rationale, so they are reported as a loud `GAP` on every run and fail
-under `--strict`. They are still asserted: if either quietly *gains* a config,
-the run **fails**, so the table can never silently describe a fiction.
+1. **The bypass rules went in FIRST**, while nothing was being challenged yet —
+   the probe header, plus one `Machine traffic bypass` covering Stripe's
+   webhook, the ten `CRON_SECRET` jobs and the `/api/health` prefix.
+2. **Bot protection was enabled second**, via `PATCH managedRules.update`.
 
-Turning bot protection on for the console is a judgement call, not a script's —
-it sits in front of the OAuth handshake and the Stripe webhook paths, and both
-need a deliberate look first.
+Enabling first would have challenged Stripe's webhook and every scheduled job —
+silently breaking billing and re-firing every uptime alert. Because the config
+PUT wipes managed rules (see above), doing rules-then-protection is also the
+only ordering that does not need a repair step.
+
+Verified in **both** directions rather than one: a request carrying the
+machine-traffic path with a deliberately wrong secret reached the app and was
+refused **401** (the challenge was bypassed, authentication was not), and an
+ordinary console route answered the same client **429**. A single request that
+merely succeeds proves only half of that.
+
+### The remaining gap: `aglyn-plugins`
+
+`GET /v1/security/firewall/config/active` still answers **404** for it, and a
+404 means *no config has ever been created* — **not** "a default posture
+applies". `GET /v1/security/firewall/config` returns
+`{"active":null,"draft":null,"versions":[]}`: zero versions, ever.
+
+It is deliberately still open. `plugins.aglyn.com` is the plugin loader origin,
+fetched by **customer sites and by the plugin iframe itself** — traffic Aglyn
+does not control and cannot hand a bypass header to. A challenge there has to
+be reconciled with that first.
+
+It is declared in the posture table as `expect: 'unprotected'` with a written
+rationale, so it is reported as a loud `GAP` on every run and fails under
+`--strict`. It is still asserted: if it quietly *gains* a config, the run
+**fails**, so the table can never silently describe a fiction.
 
 ## Guarding the guard
 
-`npm run test:firewall-posture` runs 38 cases, each damaging exactly one thing
+`npm run test:firewall-posture` runs 42 cases, each damaging exactly one thing
 in a known-good config and asserting the **specific** finding — not merely that
 the result is false. A test that only checks `ok === false` passes just as
 happily when the detector has collapsed into `return false`.

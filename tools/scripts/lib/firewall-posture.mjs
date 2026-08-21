@@ -158,22 +158,63 @@ export const EXPECTED_POSTURE = Object.freeze([
   Object.freeze({
     project: 'aglyn-console',
     label: 'console',
-    expect: 'unprotected',
+    expect: 'protected',
     serves: 'app.aglyn.com — sign-in, billing, and the staff surfaces',
-    // Measured 2026-08-21, two independent ways: the API reports
-    // `{"active":null,"draft":null,"versions":[]}` (no config has EVER
-    // existed, so this is not a config that got switched off), and
-    // app.aglyn.com/api/health answers a scripted-bot User-Agent with a plain
-    // 200 and no `x-vercel-mitigated` header while demo.aglyn.com answers the
-    // identical request with 429 + `x-vercel-mitigated: challenge`.
-    gap: 'No WAF config has ever been created for the console. Turning it on is Zach\'s call, not a script\'s: bot protection in front of the sign-in flow needs a deliberate look at the OAuth handshake and the Stripe webhook paths first. AGL-2483.',
+    // Enabled 2026-08-21 (AGL-2483), after this checker found that no config
+    // had EVER existed here: a scripted User-Agent reached sign-in and billing
+    // with a plain 200 while the marketing site answered the identical request
+    // with a challenge — the protection was on backwards.
+    //
+    // Order mattered more than the decision. The rules below went in FIRST,
+    // while nothing was being challenged, and bot protection was turned on
+    // second; enabling it first would have challenged Stripe's webhook and all
+    // ten scheduled jobs. Note that the managed rule MUST be set through
+    // PATCH `managedRules.update`, never a config PUT — see the header above.
+    bypassRules: Object.freeze([
+      PROBE_BYPASS_RULE,
+      Object.freeze({
+        name: 'Machine traffic bypass',
+        why: "Stripe's webhook and the ten CRON_SECRET jobs would be challenged, silently breaking billing and every scheduled job",
+        // Each of these enforces its OWN auth — a Stripe signature or a bearer
+        // secret — so this bypasses the bot challenge and nothing else.
+        // Verified in both directions on the day it went in: a wrong-secret
+        // request reached the app and was refused 401, and an ordinary console
+        // route answered the same client 429.
+        conditions: Object.freeze([
+          Object.freeze({
+            type: 'path',
+            op: 'eq',
+            valueAnyOf: Object.freeze([
+              '/api/billing/webhook',
+              '/api/billing/report-usage',
+              '/api/billing/usage-alerts',
+              '/api/billing/usage-email',
+              '/api/admin/audit-archive',
+              '/api/admin/backfill-scope',
+              '/api/admin/finish-domain-attachments',
+              '/api/admin/firestore-export',
+              '/api/admin/reap-plugin-artifacts',
+              '/api/admin/reverify-plugin-versions',
+              '/api/admin/run-erasures',
+            ]),
+          }),
+        ]),
+        // The health routes ride the same rule as a `pre` group, which the
+        // per-group loop below tolerates: a group carrying `path pre
+        // /api/health` fails the `eq` expectation above. Declared separately
+        // so that stays honest rather than silently excused.
+        alsoAllowsGroups: Object.freeze([
+          Object.freeze({ type: 'path', op: 'pre', value: '/api/health' }),
+        ]),
+      }),
+    ]),
   }),
   Object.freeze({
     project: 'aglyn-plugins',
     label: 'plugins',
     expect: 'unprotected',
     serves: 'plugins.aglyn.com — the plugin loader origin',
-    gap: 'Same measurement and the same standing as the console: no config has ever existed, and plugins.aglyn.com answers a bot User-Agent with an origin 404 rather than a challenge. Bot protection here would have to be reconciled with the loader being fetched by customer sites. AGL-2483.',
+    gap: 'No config has ever existed, and plugins.aglyn.com answers a bot User-Agent with an origin 404 rather than a challenge. The console was the other half of this finding and was closed on 2026-08-21; this one was NOT, because the loader is fetched by customer sites and by the plugin iframe itself, so a challenge here would have to be reconciled with traffic we do not control and cannot give a bypass header to. Deliberately still open. AGL-2483.',
   }),
 ])
 
@@ -232,6 +273,9 @@ export function describeCondition(condition) {
   const key = typeof condition?.key === 'string' && condition.key.length > 0 ? ` ${condition.key}` : ''
   if (condition?.valueNonEmpty === true) return `${condition.type}${key} ${condition.op} <non-empty, redacted>`
   if (condition?.op === 'ex') return `${condition.type}${key} exists`
+  if (Array.isArray(condition?.valueAnyOf)) {
+    return `${condition.type}${key} ${condition.op} one of ${condition.valueAnyOf.length} declared paths`
+  }
   const value = condition?.value === undefined ? '' : ` "${condition.value}"`
   return `${condition?.type}${key} ${condition?.op}${value}`
 }
@@ -247,6 +291,15 @@ function conditionSatisfies(required, actual) {
   if (required.key !== undefined && String(actual.key ?? '') !== required.key) return false
   if (required.value !== undefined && String(actual.value ?? '') !== required.value) return false
   if (required.valueNonEmpty === true && String(actual.value ?? '').length === 0) return false
+  // `valueAnyOf` is for a rule that is ONE hole with several mouths: the
+  // console's machine-traffic bypass lists a dozen paths, one per OR'd group,
+  // so the groups do NOT all carry the same value. Declaring the allowlist
+  // keeps the scope assertion intact in both directions — a group whose path
+  // is not on the list fails, so the rule cannot be widened by appending a
+  // thirteenth group for a route nobody declared.
+  if (Array.isArray(required.valueAnyOf) && !required.valueAnyOf.includes(String(actual.value ?? ''))) {
+    return false
+  }
   return true
 }
 
@@ -295,6 +348,19 @@ export function evaluateRule(expectedRule, liveRule) {
       findings.push(`${label}${where} has no conditions — that group matches every request`)
       return
     }
+    // A rule may declare ALTERNATE group shapes. The console's machine-traffic
+    // bypass is one hole with two mouths: eleven groups pin an exact path, and
+    // one matches the `/api/health` prefix. Without this a legitimate shape
+    // would read as decay; with it, a group still has to match SOME declared
+    // shape, so an undeclared group is still caught.
+    const alternates = Array.isArray(expectedRule.alsoAllowsGroups)
+      ? expectedRule.alsoAllowsGroups
+      : []
+    const matchesAlternate = alternates.some((alt) =>
+      conditions.some((actual) => conditionSatisfies(alt, actual)),
+    )
+    if (matchesAlternate) return
+
     for (const required of expectedRule.conditions) {
       const satisfied = conditions.some((actual) => conditionSatisfies(required, actual))
       if (!satisfied) {

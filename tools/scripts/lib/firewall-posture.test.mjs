@@ -51,6 +51,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 
 const tenantExpected = EXPECTED_POSTURE.find((e) => e.project === 'aglyn-tenant')
 const consoleExpected = EXPECTED_POSTURE.find((e) => e.project === 'aglyn-console')
+const pluginsExpected = EXPECTED_POSTURE.find((e) => e.project === 'aglyn-plugins')
 
 const bypass = (action = 'bypass') => ({
   mitigate: { redirect: null, action, rateLimit: null, actionDuration: null },
@@ -92,6 +93,58 @@ function healthyTenantConfig() {
     ],
   }
 }
+
+/**
+ * The console as it was actually deployed on 2026-08-21: the probe rule, plus
+ * ONE machine-traffic rule that is a single hole with twelve mouths — eleven
+ * exact paths and one `/api/health` prefix.
+ */
+function healthyConsoleConfig() {
+  const paths = [
+    '/api/billing/webhook',
+    '/api/billing/report-usage',
+    '/api/billing/usage-alerts',
+    '/api/billing/usage-email',
+    '/api/admin/audit-archive',
+    '/api/admin/backfill-scope',
+    '/api/admin/finish-domain-attachments',
+    '/api/admin/firestore-export',
+    '/api/admin/reap-plugin-artifacts',
+    '/api/admin/reverify-plugin-versions',
+    '/api/admin/run-erasures',
+  ]
+  return {
+    firewallEnabled: true,
+    version: 2,
+    managedRules: { bot_protection: { active: true, action: 'challenge' } },
+    ips: [],
+    rules: [
+      {
+        name: 'CI and uptime probe bypass',
+        id: 'rule_probe_console',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [
+          { conditions: [{ op: 'eq', type: 'header', key: 'x-aglyn-probe', value: 'not-the-real-token' }] },
+        ],
+      },
+      {
+        name: 'Machine traffic bypass',
+        id: 'rule_machine_console',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [
+          { conditions: [{ op: 'pre', type: 'path', value: '/api/health' }] },
+          ...paths.map((value) => ({ conditions: [{ op: 'eq', type: 'path', value }] })),
+        ],
+      },
+    ],
+  }
+}
+
+const evalConsole = (config) => evaluateProject({ expected: consoleExpected, config })
 
 const evalTenant = (config) => evaluateProject({ expected: tenantExpected, config })
 const findingsFor = (config) => evalTenant(config).findings.join('\n')
@@ -264,18 +317,55 @@ test('a protected project with NO config at all fails', () => {
 })
 
 test('a known-gap project with no config passes but WARNS', () => {
-  const result = evaluateProject({ expected: consoleExpected, config: null })
+  const result = evaluateProject({ expected: pluginsExpected, config: null })
   assert.equal(result.ok, true)
   assert.equal(result.findings.length, 0)
   assert.match(result.warnings.join('\n'), /UNPROTECTED \(known gap\)/)
-  assert.match(result.warnings.join('\n'), /sign-in, billing/)
+  assert.match(result.warnings.join('\n'), /plugin loader origin/)
 })
 
 test('a known-gap project that silently GAINS a config fails, so the table cannot lie', () => {
-  const result = evaluateProject({ expected: consoleExpected, config: healthyTenantConfig() })
+  const result = evaluateProject({ expected: pluginsExpected, config: healthyTenantConfig() })
   assert.equal(result.ok, false)
-  assert.match(result.findings.join('\n'), /declares "aglyn-console" an UNPROTECTED known gap, but a live/)
+  assert.match(result.findings.join('\n'), /declares "aglyn-plugins" an UNPROTECTED known gap, but a live/)
   assert.match(result.findings.join('\n'), /move this entry to expect: 'protected'/)
+})
+
+// ── The console's machine-traffic bypass, which is one hole with many mouths ─
+
+test('the console posture as deployed passes', () => {
+  const result = evalConsole(healthyConsoleConfig())
+  assert.deepEqual(result.findings, [])
+  assert.equal(result.ok, true)
+})
+
+test('a THIRTEENTH group for an undeclared path fails', () => {
+  // The whole point of declaring the allowlist. Appending a group is how a
+  // scoped bypass quietly becomes a wide one, and groups are OR'd so the
+  // original eleven still look right.
+  const config = healthyConsoleConfig()
+  ruleNamed(config, 'Machine traffic bypass').conditionGroup.push({
+    conditions: [{ op: 'eq', type: 'path', value: '/api/orgs' }],
+  })
+  const result = evalConsole(config)
+  assert.equal(result.ok, false)
+  assert.match(result.findings.join('\n'), /NO LONGER REQUIRES path eq one of 11 declared paths/)
+})
+
+test('a group that drops its path condition entirely fails', () => {
+  const config = healthyConsoleConfig()
+  ruleNamed(config, 'Machine traffic bypass').conditionGroup.push({ conditions: [] })
+  const result = evalConsole(config)
+  assert.equal(result.ok, false)
+  assert.match(result.findings.join('\n'), /has no conditions/)
+})
+
+test('losing the machine-traffic rule fails — billing and every cron would be challenged', () => {
+  const config = healthyConsoleConfig()
+  config.rules = config.rules.filter((r) => r.name !== 'Machine traffic bypass')
+  const result = evalConsole(config)
+  assert.equal(result.ok, false)
+  assert.match(result.findings.join('\n'), /"Machine traffic bypass" is MISSING/)
 })
 
 // ── Aggregate + strict mode ────────────────────────────────────────────────
@@ -284,7 +374,7 @@ function configsMatchingLiveToday() {
   return new Map([
     ['aglyn-tenant', healthyTenantConfig()],
     ['aglyn-docs', docsConfig()],
-    ['aglyn-console', null],
+    ['aglyn-console', healthyConsoleConfig()],
     ['aglyn-plugins', null],
   ])
 }
@@ -295,11 +385,11 @@ function docsConfig() {
   return config
 }
 
-test('the posture measured live on 2026-08-21 evaluates as pass-with-gaps', () => {
+test('the posture measured live on 2026-08-21, after the console was protected, passes', () => {
   const result = evaluatePosture({ configs: configsMatchingLiveToday() })
   assert.equal(result.ok, true)
   assert.equal(result.failedCount, 0)
-  assert.equal(result.gapCount, 2, 'console and plugins are the two known gaps')
+  assert.equal(result.gapCount, 1, 'plugins is the only remaining known gap')
 })
 
 test('--strict turns the known gaps into a failure', () => {
@@ -321,7 +411,7 @@ test('a project missing from the fetched map is treated as having no config', ()
   // Never as "nothing to say". A lookup miss must not read as clean.
   const result = evaluatePosture({ configs: new Map() })
   assert.equal(result.ok, false)
-  assert.equal(result.failedCount, 2, 'the two protected projects fail; the two gaps warn')
+  assert.equal(result.failedCount, 3, 'the three protected projects fail; the one gap warns')
 })
 
 test('the report names the safe PATCH repair when something failed', () => {
