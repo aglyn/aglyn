@@ -186,7 +186,7 @@ describe('AGL-2316 · the accepted version and timestamp reach the staff view', 
 
   it('answers the §18.5 window from the FIRST acceptance', async () => {
     mockAcceptances = [
-      stored('v1', '2026-08-01T00:00:00.000Z'),
+      stored('v0', '2026-08-01T00:00:00.000Z'),
       stored(LEGAL_DOCUMENT_VERSION, '2026-08-18T12:00:00.000Z'),
     ]
     const payload = await detail()
@@ -195,11 +195,14 @@ describe('AGL-2316 · the accepted version and timestamp reach the staff view', 
     )
     expect(payload.legal.arbitration.deadline).toBe('2026-08-31T00:00:00.000Z')
     // Still additive: the older version is evidence of what was agreed then.
-    expect(payload.legal.acceptedVersions).toEqual(['v1', LEGAL_DOCUMENT_VERSION])
+    // `v0` rather than `v1`: the snapshot set was collapsed back to v1 on
+    // 2026-08-20, so `v1` IS the current version and a fixture using it no
+    // longer models a SUPERSEDED acceptance — which is the whole case.
+    expect(payload.legal.acceptedVersions).toEqual(['v0', LEGAL_DOCUMENT_VERSION])
   })
 
   it('flags an account whose accepted version has been superseded', async () => {
-    mockAcceptances = [stored('v1', '2026-08-01T00:00:00.000Z')]
+    mockAcceptances = [stored('v0', '2026-08-01T00:00:00.000Z')]
     const payload = await detail()
     expect(payload.legal.accepted).toBe(false)
     expect(payload.legal.reacceptanceRequired).toBe(true)

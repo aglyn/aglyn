@@ -33,8 +33,7 @@
  * be bumped anyway.
  */
 
-import { createHash } from 'crypto'
-import { readdirSync, readFileSync } from 'fs'
+import { readFileSync } from 'fs'
 import { join } from 'path'
 import {
   LEGAL_DOCUMENT_VERSION,
@@ -42,36 +41,53 @@ import {
 } from '../constants/legal-documents'
 import { LEGAL_URLS } from '../constants/shared'
 
-const snapshotDir = join(__dirname, '..', 'constants', 'legal', LEGAL_DOCUMENT_VERSION)
-
-const snapshot = (key: string) =>
-  readFileSync(join(snapshotDir, `${key}.txt`), 'utf-8')
-
+/**
+ * The snapshot TEXT is no longer in this repo (AGL-1497, moved 2026-08-20).
+ * It lives in the shared drive at
+ * `Platform Docs/Legal/Acceptance-Snapshots/<version>/`, and
+ * `npm run check:legal-snapshots` fetches it in CI, hashes it, and fails if it
+ * disagrees with the `sha256` below.
+ *
+ * Why it moved: one folder per version accumulated seven versions in eight
+ * days, all of them pinning text nobody had ever accepted. Git already retains
+ * every superseded snapshot, so keeping them checked out as well was pure
+ * redundancy — `git show <sha>:apps/console/constants/legal/v1/privacy.txt`
+ * still produces any of them.
+ *
+ * What stays HERE is the part a reviewer must see in a diff: the version, the
+ * hash, and the rule that every linked document has one. Content verification
+ * needs Drive credentials and belongs in CI; asserting shape needs neither and
+ * belongs in a unit test. Splitting them that way is what keeps this file
+ * runnable by anyone, offline.
+ */
 describe('legal document version', () => {
-  it.each(LEGAL_DOCUMENTS.map((doc) => [doc.key, doc] as const))(
-    'pins %s to the exact text that version was published with',
-    (_key, doc) => {
-      const text = snapshot(doc.key)
-      expect(createHash('sha256').update(text, 'utf-8').digest('hex')).toBe(
-        doc.sha256,
-      )
-      expect(Buffer.byteLength(text, 'utf-8')).toBe(doc.bytes)
-    },
-  )
+  it('gives every document a hash and a length', () => {
+    expect(LEGAL_DOCUMENTS.length).toBeGreaterThan(0)
+    for (const doc of LEGAL_DOCUMENTS) {
+      // A 64-hex sha256 and a positive length. `check:legal-snapshots` is what
+      // proves they describe the archived bytes; this only proves the manifest
+      // is not carrying a placeholder.
+      expect(doc.sha256).toMatch(/^[0-9a-f]{64}$/)
+      expect(doc.bytes).toBeGreaterThan(0)
+    }
+  })
+
+  it('names a version the archive can be looked up by', () => {
+    expect(LEGAL_DOCUMENT_VERSION).toMatch(/^v\d+$/)
+  })
 
   it('archives every document the consent control links to', () => {
     // A link with no snapshot behind it is the original problem wearing a
-    // manifest: the record would name a document it cannot reproduce.
-    const archived = readdirSync(snapshotDir)
-      .filter((name) => name.endsWith('.txt'))
-      .map((name) => name.replace(/\.txt$/, ''))
-      .sort()
-    expect(archived).toEqual(LEGAL_DOCUMENTS.map((doc) => doc.key).sort())
-    expect(archived).toEqual(
+    // manifest: the record would name a document it cannot reproduce. The
+    // manifest keys are the contract — `check:legal-snapshots` resolves each
+    // one to `<key>.txt` in the archive and fails when one is missing.
+    const keys = LEGAL_DOCUMENTS.map((doc) => doc.key).sort()
+    expect(keys).toEqual(
       Object.keys(LEGAL_URLS)
         .map((key) => key.toLowerCase())
         .sort(),
     )
+    expect(new Set(keys).size).toBe(keys.length)
   })
 
   it('keeps the manifest pointing at the canonical published URLs', () => {
@@ -80,13 +96,11 @@ describe('legal document version', () => {
     )
   })
 
-  it('archives a document that actually reads like the document', () => {
-    // Cheap sanity that the snapshot is the legal text and not, say, a 404
-    // page or the site chrome that surrounds it.
-    expect(snapshot('terms')).toContain('These Terms of Service')
-    expect(snapshot('terms')).toContain('Aglyn LLC')
-    expect(snapshot('privacy')).toContain('Last updated:')
-  })
+  // The "does this read like the document, or like a 404 page" sanity check
+  // MOVED to `check:legal-snapshots`, which fetches the archived text from
+  // Drive and can therefore actually look at it. Asserting it here would mean
+  // shipping the text back into the repo to test it, which is the thing this
+  // change removed.
 })
 
 /**

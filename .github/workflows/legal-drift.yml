@@ -171,6 +171,20 @@ jobs:
 
       # --summary: verdicts only. See the note at the top — the diff body is
       # unpublished legal text and this log is world-readable.
+      # The acceptance snapshots left the repo (AGL-1497): the text lives in
+      # `Legal/Acceptance-Snapshots/<version>/` and the repo keeps only the
+      # sha256. That trade is ONLY safe if something reads the archive — a
+      # hash pointing at a file nobody fetches is the "written but never read"
+      # failure, and the acceptance record would name text it cannot produce.
+      # This is that reader. Same Drive credentials as the diff below.
+      - name: Verify the acceptance snapshots against their hashes
+        env:
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
+          LEGAL_DRIVE_FOLDER_ID: ${{ vars.LEGAL_DRIVE_FOLDER_ID }}
+        run: npm run check:legal-snapshots
+
       - name: Diff the live legal pages against their Google Doc masters
         env:
           FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
