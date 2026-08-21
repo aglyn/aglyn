@@ -114,7 +114,28 @@ function parseArgs(argv) {
  * that writes.
  */
 function fetchStripePrices() {
-  const key = process.env['STRIPE_SECRET_KEY'] || process.env['STRIPE_LIVE_SECRET_KEY']
+  const key =
+    process.env['STRIPE_RESTRICTED_KEY'] ||
+    process.env['STRIPE_SECRET_KEY'] ||
+    process.env['STRIPE_LIVE_SECRET_KEY']
+
+  // Refuse an UNRESTRICTED key outright. `sk_live_…` can create and delete
+  // prices, issue refunds and move money; this guard needs `prices.list` and
+  // nothing else, and a guard must not hold permission to change the thing it
+  // guards. Naming the variable `STRIPE_SECRET_KEY` invited exactly this
+  // mistake — Zach asked "rk or sk?" the first time he met the form, which is
+  // the tell that the NAME was the defect. Renamed, and now enforced rather
+  // than merely documented, because a convention nobody can violate beats a
+  // sentence in a comment.
+  if (key && key.startsWith('sk_')) {
+    return {
+      ok: false,
+      detail:
+        'an UNRESTRICTED sk_ key was supplied. Use a RESTRICTED rk_ key with ' +
+        'read access to Prices and nothing else — this check only ever calls ' +
+        'prices.list, and it must not be able to change what it checks.',
+    }
+  }
   if (key) {
     const res = execFileSync('curl', [
       '-s', '-G', 'https://api.stripe.com/v1/prices',
@@ -134,8 +155,9 @@ function fetchStripePrices() {
     return {
       ok: false,
       detail:
-        'no STRIPE_SECRET_KEY and the `stripe` CLI is unavailable or not logged in. ' +
-        'In CI set STRIPE_SECRET_KEY to a RESTRICTED key with read access to Prices.',
+        'no STRIPE_RESTRICTED_KEY and the `stripe` CLI is unavailable or not ' +
+        'logged in. In CI set STRIPE_RESTRICTED_KEY to a RESTRICTED rk_ key with ' +
+        'read access to Prices and nothing else.',
     }
   }
 }

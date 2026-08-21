@@ -69,20 +69,39 @@ jobs:
       # a pricing guard that silently stops checking Stripe is worse than no
       # guard, because the green check is what someone will rely on before
       # taking real money.
+      # BOTH names are accepted, preferring the self-describing one. The
+      # secret was first created as STRIPE_SECRET_KEY, and a GitHub secret
+      # cannot be renamed — only deleted and re-pasted — so forcing the new
+      # name would cost a re-paste of a live credential to buy nothing. The
+      # protection that matters is on the VALUE, not the variable name: an
+      # `sk_` is refused below and again in the script, whichever name holds
+      # it. STRIPE_RESTRICTED_KEY is the name to use going forward.
       - name: Refuse to no-op without a Stripe key
         env:
+          STRIPE_RESTRICTED_KEY: ${{ secrets.STRIPE_RESTRICTED_KEY }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
         run: |
-          if [ -z "$STRIPE_SECRET_KEY" ]; then
-            echo "STRIPE_SECRET_KEY is not set, so the Stripe leg cannot run." >&2
-            echo "Create it from a RESTRICTED key with READ access to Prices" >&2
-            echo "and nothing else — this guard only ever calls prices.list," >&2
-            echo "and a guard must not hold permission to change what it guards:" >&2
-            echo "  gh secret set STRIPE_SECRET_KEY" >&2
+          STRIPE_RESTRICTED_KEY="${STRIPE_RESTRICTED_KEY:-$STRIPE_SECRET_KEY}"
+          if [ -z "$STRIPE_RESTRICTED_KEY" ]; then
+            echo "STRIPE_RESTRICTED_KEY is not set, so the Stripe leg cannot run." >&2
+            echo "Create a RESTRICTED key with READ access to Prices and nothing" >&2
+            echo "else — this guard only ever calls prices.list, and a guard must" >&2
+            echo "not hold permission to change what it guards:" >&2
+            echo "  gh secret set STRIPE_RESTRICTED_KEY" >&2
             exit 2
           fi
+          # The variable is named for what it must HOLD, not for what Stripe
+          # calls the family. An `sk_` here is a misconfiguration, not a
+          # stricter-than-needed credential, and the script refuses it too.
+          case "$STRIPE_RESTRICTED_KEY" in
+            sk_*)
+              echo "STRIPE_RESTRICTED_KEY holds an UNRESTRICTED sk_ key." >&2
+              echo "Replace it with a RESTRICTED rk_ key (Prices: Read)." >&2
+              exit 2 ;;
+          esac
 
       - name: Reconcile code, the locked pin and Stripe live
         env:
+          STRIPE_RESTRICTED_KEY: ${{ secrets.STRIPE_RESTRICTED_KEY }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
         run: npm run check:pricing-drift -- --summary
