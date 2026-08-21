@@ -20,7 +20,7 @@ import { checkEntitlement, RELEASE_FLAGS, type ReleaseFlagKey } from '@aglyn/agl
 import { resolveConsolePluginPage } from '@aglyn/aglyn'
 import { useEnabledPluginIds } from '../../../../../../components/console-plugins-gate.component'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
-import { Container } from '@aglyn/shared-ui-jsx'
+import { AppLink, Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Alert, Box, CircularProgress } from '@mui/material'
 import { useParams } from 'next/navigation'
@@ -36,6 +36,7 @@ import { resolveDocsHelpTopic } from '../../../../../../constants/docs-links'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
+import { resolveExtensionEntitlement } from '../../../../../../utils/extension-entitlement'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import useOrgPermissions from '../../../../../../hooks/use-org-permissions'
 import { useReleaseFlags } from '../../../../../../hooks/use-release-flags'
@@ -106,6 +107,23 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     ? checkEntitlement(org, resolved.extension.featureFlag)
     : true
 
+  // The gate the shell PROMISES to apply (AGL-2484). `entitled` above is
+  // handed to the extension as a prop, and a prop is advice: an extension
+  // that never reads it renders its paid surface in full for an org that
+  // has not bought the feature, which is exactly what
+  // `workflows-console-page.tsx` did. `ConsoleExtension` is documented as
+  // "the shell owns rendering and applies the feature-flag gate, so
+  // extensions cannot bypass entitlements" — this line is that sentence.
+  //
+  // The prop stays. Extensions use it for finer-grained refusals (a save
+  // path, one card of several), and the two agree by construction because
+  // both resolve from the same flag and the same org doc.
+  const extensionEntitlement = resolveExtensionEntitlement(
+    resolved?.extension.featureFlag,
+    org,
+    orgReady,
+  )
+
   const header = resolved?.navItem.header
   const title = header?.title ?? resolved?.navItem.label ?? 'Not found'
   const PluginComponent = resolved?.navItem.Component
@@ -126,6 +144,30 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     <Box sx={{ p: 2 }}>
       <CircularProgress size={24} />
     </Box>
+  ) : extensionEntitlement === 'blocked' ? (
+    // Refused by the shell, not by the plugin — and refused with the upgrade
+    // path attached, because the surface behind this notice is the only
+    // place most workspaces ever go looking for the feature. The nav entry
+    // is deliberately left in place for the same reason: hiding the tab
+    // would hide the way to buy it.
+    <Alert
+      severity="info"
+      action={
+        orgSlug ? (
+          <AppLink
+            componentVariant="button"
+            size="small"
+            color="inherit"
+            href={buildRoute(Route.MANAGE_BILLING, { orgSlug })}
+          >
+            {'View plans'}
+          </AppLink>
+        ) : undefined
+      }
+    >
+      {`${title} is not included in your current plan. Manage your plan and ` +
+        'add-ons from Billing.'}
+    </Alert>
   ) : (
     <Suspense
       fallback={
