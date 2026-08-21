@@ -172,23 +172,35 @@ export function analyticsGrantedByStatus(
 }
 
 /**
- * Whether a status can carry an advertising grant at all (AGL-1649).
+ * Whether a status can carry an advertising grant at all (AGL-1649, widened
+ * AGL-2402).
  *
- * NARROWER than {@link analyticsGrantedByStatus} by one status, and that one
- * is the whole point: `implied` grants analytics (the opt-out posture
- * defaults a visitor in) and must never grant advertising. Advertising
- * carries obligations analytics does not, particularly in prior-consent
- * regions, and "implied consent to advertising" would be a declaration to
- * Google with nothing on file behind it — the same defect shape as
- * pre-consent loading, which AGL-1622 exists to have closed.
+ * `implied` now qualifies, and the reason it is SAFE is geographic rather
+ * than a judgement call: an `implied` record can only ever be written in the
+ * OPT-OUT posture. `decideVisitorConsent` returns `stored: null` for opt-in
+ * regions and never records a default there, and
+ * {@link resolveConsentPosture} puts every prior-consent country — the EU 27,
+ * the EEA/EFTA three, the UK and Gibraltar, the EU outermost regions, and any
+ * visitor whose region cannot be determined — into opt-in. So an EU visitor
+ * cannot reach this function with `implied`; there is no such record to reach
+ * it with.
  *
- * A `true` here is necessary, never sufficient: the visitor must ALSO have
- * answered yes to this specific category.
+ * That leaves exactly the regions whose law regulates advertising on an
+ * OPT-OUT basis (CCPA/CPRA "sharing", LGPD, PIPEDA), where a default-in plus a
+ * always-present opt-out plus an honored GPC signal is what the law asks for.
+ * The previous rule applied the prior-consent standard worldwide, which cost
+ * the audience everywhere without protecting anyone the posture was not
+ * already protecting.
+ *
+ * What has NOT changed: `declined`, `opted-out` and `gpc-opt-out` still
+ * return false, so every refusal path still refuses. And a `true` here is
+ * necessary, never sufficient — the host must also have opted into asking
+ * (see {@link hostAsksAboutAdvertising}), or nothing is stored as granted.
  */
 export function advertisingGrantedByStatus(
   status: VisitorConsentStatus,
 ): boolean {
-  return status === 'accepted'
+  return status === 'accepted' || status === 'implied'
 }
 
 /**

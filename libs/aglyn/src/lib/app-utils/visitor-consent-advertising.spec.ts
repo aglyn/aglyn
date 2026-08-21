@@ -43,6 +43,7 @@ import {
   readStoredVisitorConsent,
   storeVisitorConsent,
   visitorConsentStorageKey,
+  resolveConsentPosture,
 } from './visitor-consent'
 
 const GA = { analytics: { gaMeasurementId: 'G-ABCD1234' } }
@@ -103,18 +104,45 @@ describe('only an explicit yes to THIS category grants it', () => {
     expect(record.advertising).toBe(false)
   })
 
-  it('NEVER grants advertising from an implied default', () => {
-    // The load-bearing one. In the opt-out posture a US visitor is defaulted
-    // INTO analytics; advertising carries obligations analytics does not, so
-    // being defaulted in must not produce an advertising basis. "Implied
-    // consent to advertising" is a declaration to Google we could not
-    // support with anything on file — the AGL-1622 defect shape exactly.
+  it('GRANTS advertising from an implied default when the host asks (AGL-2402)', () => {
+    // Widened deliberately. This used to assert `false`, on the reasoning
+    // that advertising carries obligations analytics does not — true in
+    // PRIOR-CONSENT regions, and applied worldwide it cost the audience
+    // everywhere without protecting anyone the posture was not already
+    // protecting. What makes the wider rule safe is geographic and is pinned
+    // by the two cases below, not by this one.
     const record = storeVisitorConsent('h1', {
       status: 'implied',
       advertising: true,
     })
     expect(record.analytics).toBe(true)
+    expect(record.advertising).toBe(true)
+  })
+
+  it('still refuses advertising on an implied record the host never asked for', () => {
+    // The host opt-in is what makes an implied grant honest: a site that
+    // never shows the advertising question must not carry a record claiming
+    // the visitor allowed it. `advertising` omitted means NO.
+    const record = storeVisitorConsent('h1', { status: 'implied' })
+    expect(record.analytics).toBe(true)
     expect(record.advertising).toBe(false)
+  })
+
+  it('PRIOR-CONSENT regions can never reach an implied record at all', () => {
+    // The guarantee the widened rule rests on. If this ever goes red, an EU
+    // visitor could be defaulted into advertising and the change above stops
+    // being safe — so it is asserted here rather than left as a comment on
+    // `advertisingGrantedByStatus`.
+    for (const country of ['DE', 'FR', 'GB', 'GI', 'IE', 'NO', 'IS', 'RE']) {
+      expect(resolveConsentPosture(null, country)).toBe('opt-in')
+    }
+    // …and an unknown region falls the same way, so a missing geo header
+    // cannot become an advertising grant either.
+    expect(resolveConsentPosture(null, null)).toBe('opt-in')
+    // Everywhere else is opt-out, which is where implied records come from.
+    for (const country of ['US', 'CA', 'BR', 'AU', 'JP', 'IN']) {
+      expect(resolveConsentPosture(null, country)).toBe('opt-out')
+    }
   })
 
   it('withdraws advertising with every non-granting status', () => {
