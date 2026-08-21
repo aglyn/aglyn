@@ -158,4 +158,7 @@ jobs:
         env:
           FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
           FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          # Bot Protection challenges the live fetch without this; every
+          # document would report UNREADABLE and read as drift.
+          AGLYN_PROBE_TOKEN: ${{ secrets.AGLYN_PROBE_TOKEN }}
         run: npm run check:legal-drift -- --summary --folder="${{ vars.LEGAL_DRIVE_FOLDER_ID }}"

@@ -70,3 +70,7 @@ jobs:
         env:
           CONSOLE_BASE_URL: ${{ vars.CONSOLE_BASE_URL }}
           TENANT_BASE_URL: ${{ vars.TENANT_BASE_URL }}
+          # Matches the "CI and uptime probe bypass" Vercel firewall rule on
+          # aglyn-tenant and aglyn-docs. Without it Bot Protection challenges
+          # the probe and every run reports a false outage.
+          AGLYN_PROBE_TOKEN: ${{ secrets.AGLYN_PROBE_TOKEN }}

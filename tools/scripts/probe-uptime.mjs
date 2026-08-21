@@ -79,7 +79,19 @@ async function probe(name, base) {
   try {
     const response = await fetch(url, {
       redirect: 'manual',
-      headers: { 'user-agent': 'aglyn-uptime-probe' },
+      // Our own bot protection challenges automated clients, so without this
+      // header the probe gets a 429 Vercel Security Checkpoint and reports the
+      // site as DOWN when it is perfectly healthy — the exact "fails for
+      // reasons unrelated to what it monitors" failure this workflow's own
+      // comment warns about. The token matches a Bypass rule on the tenant and
+      // docs projects. Absent (local runs, forks), the header is simply not
+      // sent and the probe behaves as before.
+      headers: {
+        'user-agent': 'aglyn-uptime-probe',
+        ...(process.env['AGLYN_PROBE_TOKEN']
+          ? { 'x-aglyn-probe': process.env['AGLYN_PROBE_TOKEN'] }
+          : {}),
+      },
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
     const ms = Date.now() - startedAt

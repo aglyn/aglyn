@@ -277,7 +277,17 @@ async function exportDocAsText(docId, token, mimeType = 'text/plain') {
 /** @returns {{ ok: true, html: string } | { ok: false, status: number }} */
 async function fetchLivePage(slug) {
   const res = await fetch(`${LEGAL_ORIGIN}/legal/${slug}`, {
-    headers: { 'User-Agent': 'aglyn-legal-doc-diff (AGL-1611)' },
+    // Our own Vercel Bot Protection challenges automated clients: without the
+    // bypass header every live fetch returns 429 (Vercel Security Checkpoint)
+    // and each document reports UNREADABLE. That reads as drift when it is
+    // only a firewall — a checker that fails for network reasons teaches
+    // people to ignore it. Matches the "CI and uptime probe bypass" rule.
+    headers: {
+      'User-Agent': 'aglyn-legal-doc-diff (AGL-1611)',
+      ...(process.env['AGLYN_PROBE_TOKEN']
+        ? { 'x-aglyn-probe': process.env['AGLYN_PROBE_TOKEN'] }
+        : {}),
+    },
   })
   if (!res.ok) return { ok: false, status: res.status }
   return { ok: true, html: await res.text() }
