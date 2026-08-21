@@ -979,7 +979,13 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDatasetMonthlyUsd: 1,
     extraDataGbMonthlyUsd: 0.25,
     extraApiRequestsUsdPer1k: 0.15,
-    extraContactsUsdPer1k: 0.2,
+    // NULL, not 0.2, because Agency's `contactsPerHost` is UNLIMITED and an
+    // uncapped band has no "over" (2026-08-21, Zach). The rate was unreachable
+    // — `checkContactQuota` computes `Math.max(0, used - Infinity)`, which is
+    // 0 at every usage level — so no charge changes; what changes is that we
+    // stop advertising a fee we could never collect. The plan card and
+    // `/pricing` both already suppress the suffix when this is null.
+    extraContactsUsdPer1k: null,
     meteredInfraPassThrough: true,
   },
   // Enterprise (AGL-1118) has NO list price — every figure here is the

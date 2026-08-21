@@ -312,7 +312,7 @@ describe('plan entitlements', () => {
         extraDatasetMonthlyUsd: 1,
         extraDataGbMonthlyUsd: 0.25,
         extraApiRequestsUsdPer1k: 0.15,
-        extraContactsUsdPer1k: 0.2,
+        extraContactsUsdPer1k: null,
         meteredInfraPassThrough: true,
       },
       // Enterprise (AGL-1118) is quoted per deal — these zeros/nulls are the
@@ -2120,5 +2120,71 @@ describe('quota caps over a JSON boundary', () => {
     expect(received.capUnlimited).toBe(false)
     expect(restoreQuotaLimit(received.cap, received.capUnlimited)).toBe(cap)
     expect(formatQuotaLimit(cap)).toBe(String(cap))
+  })
+})
+
+describe('an uncapped band never carries an overage rate (AGL-2482)', () => {
+  /**
+   * The rule the Agency contacts defect broke, made mechanical.
+   *
+   * Agency shipped `contactsPerHost: UNLIMITED` alongside
+   * `extraContactsUsdPer1k: 0.2`, and both claims were published — the console
+   * plan card and `aglyn.com/pricing` each said "Unlimited contacts" and
+   * "$0.20 per 1,000 over the included band" at the same time. Nobody was
+   * overcharged (`Math.max(0, used - Infinity)` is 0), but we advertised a fee
+   * that could not exist, and the 2026-08-18 lock verification could not catch
+   * it: it matched rates against rates, and the band lived somewhere else.
+   *
+   * Pairing them here is the whole point. Neither figure is wrong on its own.
+   */
+  const METERED_PAIRS = [
+    { band: 'contactsPerHost', rate: 'extraContactsUsdPer1k', unit: 'contacts' },
+    { band: 'apiRequestsPerMonth', rate: 'extraApiRequestsUsdPer1k', unit: 'API requests' },
+    { band: 'dataStorageMbPerOrg', rate: 'extraDataGbMonthlyUsd', unit: 'dataset storage' },
+  ] as const
+
+  it.each(METERED_PAIRS)(
+    'no plan has an UNLIMITED $unit band and a non-null $rate',
+    ({ band, rate, unit }) => {
+      const offenders = (Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]).filter((plan) => {
+        const limit = PLAN_ENTITLEMENTS[plan][band]
+        const price = PLAN_PRICING[plan]?.[rate]
+        return limit === UNLIMITED && price !== null && price !== undefined
+      })
+      expect(offenders).toEqual([])
+      if (offenders.length > 0) {
+        throw new Error(
+          `${offenders.join(', ')} advertise a ${unit} overage rate on an uncapped band`,
+        )
+      }
+    },
+  )
+
+  it('the premise holds — some plan really is uncapped for each meter', () => {
+    // Without this the three cases above would pass on a table where every
+    // band happened to be finite, which is the shape of a guard that has
+    // quietly stopped testing anything.
+    for (const { band, unit } of METERED_PAIRS) {
+      const uncapped = (Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]).filter(
+        (plan) => PLAN_ENTITLEMENTS[plan][band] === UNLIMITED,
+      )
+      expect(uncapped.length).toBeGreaterThan(0)
+      expect(unit).toBeTruthy()
+    }
+  })
+
+  it('a FINITE band still requires a rate, or usage past it is silently free', () => {
+    // The counter-case. Dropping every rate would satisfy the rule above and
+    // be the same defect pointed the other way.
+    const paidWithFiniteContacts = (Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]).filter(
+      (plan) =>
+        plan !== 'free' &&
+        !isCustomPricedPlan(plan) &&
+        Number.isFinite(PLAN_ENTITLEMENTS[plan].contactsPerHost),
+    )
+    expect(paidWithFiniteContacts.length).toBeGreaterThan(0)
+    for (const plan of paidWithFiniteContacts) {
+      expect(PLAN_PRICING[plan].extraContactsUsdPer1k).not.toBeNull()
+    }
   })
 })
