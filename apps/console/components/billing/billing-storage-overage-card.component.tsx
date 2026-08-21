@@ -41,6 +41,8 @@ interface StorageOverageState {
   defaultCapUsd: number
   maxCapUsd: number
   includedStoragePerSiteMb: number
+  /** True when the plan's storage is UNLIMITED (Enterprise). */
+  includedStorageUnlimited?: boolean
   /** One metered GB-month, markup included — the rate the invoice uses. */
   pricePerGbUsd: number
 }
@@ -293,6 +295,7 @@ export default function BillingStorageOverageCardComponent({
     monthlyCapUsd,
     maxCapUsd,
     includedStoragePerSiteMb,
+    includedStorageUnlimited,
     pricePerGbUsd,
   } = state
 
@@ -306,7 +309,15 @@ export default function BillingStorageOverageCardComponent({
     <Stack spacing={2}>
       <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
         <Chip
-          label={capSet ? 'Monthly cap set' : 'No cap — extra storage bills'}
+          label={
+            capSet
+              ? 'Monthly cap set'
+              : nothingToCap
+                ? includedStorageUnlimited
+                  ? 'Unlimited storage'
+                  : 'Included storage only'
+                : 'No cap — extra storage bills'
+          }
           size="small"
           color={capSet ? 'primary' : 'default'}
         />
@@ -315,7 +326,16 @@ export default function BillingStorageOverageCardComponent({
         ) : null}
       </Stack>
 
-      {nothingToCap ? (
+      {nothingToCap && includedStorageUnlimited ? (
+        // Enterprise. Same `metered: false` as Free, and the opposite reason:
+        // storage is unlimited under a custom contract rather than walled at a
+        // small allowance. Sharing Free's copy told these customers their
+        // uploads stop at 0 MB (AGL-2404).
+        <Alert severity="info">
+          Your plan includes <strong>unlimited</strong> storage, so there is no
+          overage for a cap to bound and nothing to configure here.
+        </Alert>
+      ) : nothingToCap ? (
         <Alert severity="info">
           Your plan gives each site a fixed{' '}
           {Math.round(includedStoragePerSiteMb)} MB of storage. Uploads stop at

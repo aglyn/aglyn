@@ -124,6 +124,13 @@ jobs:
       # say is recomputed from the documents on every run, so a card that
       # drifts fails a check instead of waiting to be noticed.
       - name: Re-derive the /legal index card dates from the documents
+        env:
+          # Reads two PUBLIC pages, but they sit behind our own Bot Protection,
+          # which challenges automated clients with a 429. Without this the
+          # step reports "Nothing was compared" and exits 2 — a firewall
+          # wearing the costume of drift. Deliberately NOT a credential gate:
+          # an absent token still runs the check, it just gets challenged.
+          AGLYN_PROBE_TOKEN: ${{ secrets.AGLYN_PROBE_TOKEN }}
         run: npm run check:legal-index-dates -- --summary
 
       # Refuse to no-op. A missing credential must FAIL the job, never skip
@@ -133,9 +140,19 @@ jobs:
         env:
           CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
           PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          # `readServiceAccount` needs THREE values and this guard checked two,
+          # so the guard passed and the step below then exited 2 on
+          # "FIREBASE_PROJECT_ID ... missing". A precondition check that
+          # validates a subset of the preconditions is the same defect as no
+          # check at all, just harder to see.
+          PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
           FOLDER: ${{ vars.LEGAL_DRIVE_FOLDER_ID }}
         run: |
           missing=0
+          if [ -z "$PROJECT_ID" ]; then
+            echo "FIREBASE_PROJECT_ID resolved empty (repo var, default aglyn-main)." >&2
+            missing=1
+          fi
           if [ -z "$CLIENT_EMAIL" ] || [ -z "$PRIVATE_KEY" ]; then
             echo "FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY repo secrets are not set." >&2
             echo "Create them once, from the service-account JSON:" >&2
@@ -154,8 +171,30 @@ jobs:
 
       # --summary: verdicts only. See the note at the top — the diff body is
       # unpublished legal text and this log is world-readable.
+      # The acceptance snapshots left the repo (AGL-1497): the text lives in
+      # `Legal/Acceptance-Snapshots/<version>/` and the repo keeps only the
+      # sha256. That trade is ONLY safe if something reads the archive — a
+      # hash pointing at a file nobody fetches is the "written but never read"
+      # failure, and the acceptance record would name text it cannot produce.
+      # This is that reader. Same Drive credentials as the diff below.
+      - name: Verify the acceptance snapshots against their hashes
+        env:
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
+          LEGAL_DRIVE_FOLDER_ID: ${{ vars.LEGAL_DRIVE_FOLDER_ID }}
+        run: npm run check:legal-snapshots
+
       - name: Diff the live legal pages against their Google Doc masters
         env:
           FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
           FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          # Same idiom as rules-drift / index-drift / backup-copies /
+          # auth-domains-drift. Its absence here is why this step has never
+          # completed a run: it exited 2 on a missing credential every time,
+          # which reads as "cannot check" and never as "nobody wired it".
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
+          # Bot Protection challenges the live fetch without this; every
+          # document would report UNREADABLE and read as drift.
+          AGLYN_PROBE_TOKEN: ${{ secrets.AGLYN_PROBE_TOKEN }}
         run: npm run check:legal-drift -- --summary --folder="${{ vars.LEGAL_DRIVE_FOLDER_ID }}"

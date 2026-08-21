@@ -16,7 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { ShadowDom } from '@aglyn/shared-ui-jsx'
+import { AglynText } from '@aglyn/shared-ui-jsx'
 import { styled, useTheme } from '@aglyn/shared-ui-theme'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { observer } from 'mobx-react-lite'
@@ -159,7 +159,7 @@ export const Leaf = observer(
               <StemComponent key={child?.$id ?? key} node={child} />
             ))}
             {textContent != null && (
-              <ShadowDom.AglynText>{textContent as any}</ShadowDom.AglynText>
+              <AglynText>{textContent as any}</AglynText>
             )}
           </Component>
         )}
@@ -169,7 +169,7 @@ export const Leaf = observer(
         {children}
 
         {textContent != null && (
-          <ShadowDom.AglynText>{textContent as any}</ShadowDom.AglynText>
+          <AglynText>{textContent as any}</AglynText>
         )}
       </Component>
     )

@@ -63,6 +63,7 @@ import {
   useScreenVersion,
   useScreenVersionRef,
   writeGuardedBySeed,
+  useUser,
 } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
@@ -94,6 +95,7 @@ import BesignerVersionsComponent, {
   type BesignerVersionsActions,
 } from '../../../../../../../../../../components/besigner-versions.component'
 import EntityPickerProvider from '../../../../../../../../../../components/entity-picker-provider.component'
+import revalidateLivePages from '../../../../../../../../../../utils/revalidate-live-pages'
 import ReusableComponentsProvider from '../../../../../../../../../../components/reusable-components-provider.component'
 import AuthenticatedLayout from '../../../../../../../../../../components/layouts/authenticated.layout'
 import MainLayout from '../../../../../../../../../../components/layouts/main.layout'
@@ -216,6 +218,7 @@ function BesignerPage(props) {
     screenId: screenId as string,
     versionId: versionId as string,
   })
+  const { data: user } = useUser()
   const {doc: hostResult} = useHost({ hostId: hostId as string })
   const {doc: screenResult, setDoc: updateScreenDoc} = useScreen({
     hostId,
@@ -316,6 +319,16 @@ function BesignerPage(props) {
       versionId,
     },
     notify: enqueueSnackbar,
+    // Tell the author what happens next when they are editing the LIVE
+    // version. Without it the only feedback is "saved", the live page keeps
+    // serving cached HTML for a moment, and the rational response is to save
+    // again — which is the loop this message and the revalidate call above
+    // exist to end together. A draft save says nothing about the live site,
+    // because it does not touch it.
+    savedMessage:
+      versionId && versionId === screenResult?.data?.versionId
+        ? 'Screen saved — your live page is refreshing now'
+        : undefined,
     queueLoading,
     onSaved: () => {
       // A save makes Firestore authoritative again, so the live mirror of
@@ -324,6 +337,18 @@ function BesignerPage(props) {
       // co-editing engine is created below this hook: it needs the stamp
       // this hook resolves.
       clearMirrorRef.current?.()
+      // Editing the PUBLISHED version edits the live site, so the live page's
+      // cached HTML is stale the moment this returns (AGL-1150 wired this to
+      // publish only). Without it the author saves, refreshes, sees the old
+      // page, and saves again — which is the loop this exists to end, and the
+      // reason "did my change go out?" was never answerable from the editor.
+      // Editing a DRAFT version changes nothing live, so it drops nothing.
+      if (versionId && versionId === screenResult?.data?.versionId) {
+        // Best effort and deliberately not awaited: the save has already
+        // succeeded, and a cache hint that fails must never make a successful
+        // save look failed. The revalidate window remains the backstop.
+        void revalidateLivePages({ user, hostId, screenId })
+      }
       return logActivity('Saved the screen', {
         type: 'screen',
         id: screenId,

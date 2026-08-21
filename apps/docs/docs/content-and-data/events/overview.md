@@ -24,7 +24,7 @@ sequenceDiagram
 ```
 
 :::info Plan availability
-**Add-on**. The Event Calendar is a $9/mo add-on that covers the whole workspace on
+**Add-on**. The Event Calendar is a flat monthly add-on that covers the whole workspace on
 any paid plan — buy it on **Billing → Add-ons** (see [Add-ons](../../workspace-and-billing/billing-and-plans/add-ons.md)).
 Until it's enabled the Events page explains the add-on, and the Event List element
 renders nothing on your site.

@@ -66,8 +66,11 @@ const registerSchemas = (positional: boolean) => {
   } as any)
 }
 
-// Marker attributes, not text: a node's `children` string renders inside an
-// <aglyn-text> shadow root, which `textContent` cannot see.
+// Marker attributes rather than text. This dates from when a node's
+// `children` string rendered into an `<aglyn-text>` SHADOW ROOT, which
+// `textContent` could not see; the shadow root is gone (AGL-2011) and the
+// attributes are kept only because these cases assert PLACEMENT, not content.
+// The readability that replaced it is pinned below.
 const tree = () =>
   node('root', 'splitter', [
     node('head', 'plain', [], { 'data-testid': 'head' }),
@@ -142,5 +145,43 @@ describe('Leaf visibility directives (AGL-1314)', () => {
     // Nothing else named like them either — a renamed spelling would be the
     // same leak wearing a different attribute.
     expect(el.outerHTML.toLowerCase()).not.toContain('hide')
+  })
+})
+
+describe('authored text is readable from the DOM (AGL-2011)', () => {
+  it('renders the authored string where textContent can read it', () => {
+    registerSchemas(false)
+    render(
+      <TreeRoot
+        node={
+          node('root', 'plain', [], {
+            'data-testid': 'host',
+            children: 'Terms of Service',
+          }) as any
+        }
+      />,
+    )
+    // The whole point of dropping the shadow root. Before AGL-2011 this read
+    // back as an empty string, which is what shipped the AGL-2349 accordion
+    // bug and what forced every external checker to write a shadow-piercing
+    // DOM walk.
+    expect(screen.getByTestId('host').textContent).toBe('Terms of Service')
+  })
+
+  it('attaches NO shadow root to the text element', () => {
+    registerSchemas(false)
+    const { container } = render(
+      <TreeRoot
+        node={
+          node('root', 'plain', [], { children: 'Privacy Policy' }) as any
+        }
+      />,
+    )
+    const el = container.querySelector('aglyn-text')
+    // The tag is deliberately UNCHANGED, so every querySelectorAll and every
+    // editor ref target still resolves. Only the boundary is gone.
+    expect(el).not.toBeNull()
+    expect(el!.shadowRoot).toBeNull()
+    expect(el!.textContent).toBe('Privacy Policy')
   })
 })

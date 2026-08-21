@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { ShadowDom } from '@aglyn/shared-ui-jsx'
+import { AglynText } from '@aglyn/shared-ui-jsx'
 import * as Aglyn from '@aglyn/aglyn'
 import { fireEvent, render, screen } from '@testing-library/react'
 import AccordionElement, {
@@ -148,19 +148,22 @@ describe('Accordion summary with a linked header (AGL-1232)', () => {
     // The fixture above hands the component `{'Product'}` — a raw string, which
     // is not what production produces. `Leaf` lifts an authored
     // FIELD_TEXT_CONTENT value out as `textContent` and renders
-    // `<Component>{children}<ShadowDom.AglynText>{textContent}</…></Component>`,
-    // so `children` is an ARRAY holding an element and `typeof children ===
+    // `<Component>{children}<AglynText>{textContent}</…></Component>`, so
+    // `children` is an ARRAY holding an element and `typeof children ===
     // 'string'` is false on every published page.
     //
     // So this builds the fixture the way the renderer does, with the real
-    // `ShadowDom.AglynText`. Against the old `typeof` test the chevron came out
-    // named "Toggle section" and this fails; the four assertions that use the
+    // `AglynText`. Against the old `typeof` test the chevron came out named
+    // "Toggle section" and this fails; the four assertions that use the
     // bare-string fixture passed either way.
+    //
+    // NOTE the element must stay whatever `Leaf` actually renders — an
+    // unfaithful double here is what let AGL-2349 ship in the first place.
     renderSite(
       <AccordionElement>
         <AccordionSummaryElement screenId="scr_product">
           {undefined}
-          <ShadowDom.AglynText>{'Product'}</ShadowDom.AglynText>
+          <AglynText>{'Product'}</AglynText>
         </AccordionSummaryElement>
         <AccordionDetailsElement>{'Hidden details'}</AccordionDetailsElement>
       </AccordionElement>,

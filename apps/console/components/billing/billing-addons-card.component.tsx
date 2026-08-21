@@ -376,24 +376,44 @@ export default function BillingAddonsCardComponent({
     )
   }
 
-  if (!state.hasSubscription) {
-    return (
-      <Alert severity="info">
-        {'Plan add-ons bill on your plan subscription — pick a plan below ' +
-          'first, then add seats, sites, datasets and more here.'}
-      </Alert>
-    )
-  }
+  // NO SUBSCRIPTION: show the add-ons DISABLED with the reason, rather than
+  // replacing them with a sentence (AGL-2405).
+  //
+  // Hiding them made the console contradict itself. The plan cards below
+  // advertise "+$4/extra" team seats, and the collaborator toast says "buy
+  // another in Billing → Add-ons to assign more" — and Add-ons then said
+  // "pick a plan below first" to an org whose plan card reads "Current plan".
+  // An admin cannot tell from that whether the feature is missing, broken, or
+  // just unavailable to them.
+  //
+  // It is also not a rare state: an org whose plan came from a staff override
+  // or a comped Enterprise contract has a plan and no self-serve subscription,
+  // and that is supported rather than accidental. The catalogue is what the
+  // plan grants; whether it can be BOUGHT here is a separate question, and the
+  // card should answer both.
+  const noSubscription = !state.hasSubscription
 
   return (
     <Stack spacing={2}>
+      {noSubscription ? (
+        <Alert severity="info">
+          {'Add-ons bill onto an active plan subscription. This workspace does ' +
+            'not have one — either its plan is managed by Aglyn, or checkout ' +
+            'has not been completed — so these are shown for reference and ' +
+            'cannot be changed here. Contact support to adjust them.'}
+        </Alert>
+      ) : null}
       {addonRows(branding.productName).map((row) => {
         const entry = state.catalog[row.kind]
         const current = state.quantities[row.kind] ?? 0
         const draft = drafts[row.kind] ?? current
         const purchasable = Boolean(entry) &&
           !entry.upgradeRequired &&
-          entry.configured
+          entry.configured &&
+          // Belt as well as braces: the write route refuses without a
+          // subscription anyway, so an enabled control here could only ever
+          // produce a failed request.
+          !noSubscription
         const changed = draft !== current
         return (
           <Stack
@@ -417,7 +437,9 @@ export default function BillingAddonsCardComponent({
               <Typography variant="caption" color="text.secondary">
                 {entry?.upgradeRequired
                   ? 'Upgrade your plan to add these'
-                  : 'Not configured'}
+                  : noSubscription
+                    ? 'Needs an active subscription'
+                    : 'Not configured'}
               </Typography>
             ) : row.toggle ? (
               <Switch

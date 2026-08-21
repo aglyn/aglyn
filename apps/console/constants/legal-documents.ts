@@ -55,7 +55,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v6'
+export const LEGAL_DOCUMENT_VERSION = 'v1'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -325,10 +325,41 @@ export interface LegalDocumentManifestEntry {
  * and are deliberately NOT here: neither page is acceptance-pinned, so they
  * cost no bump and have no hash.
  *
- * Publication-first as always. The capture method was re-proven byte-for-byte
- * against the v5 terms + privacy pins AND the `2026-08-18.1`
- * publisher-agreement pin before this set was taken. The publisher agreement is
- * UNCHANGED by this pass and must not be bumped for consistency.
+ * Publication-first as always: the bytes come from the PAGE, never from a
+ * hand-written file.
+ *
+ * ## ONE snapshot in the tree, and why that is enough
+ *
+ * Only the CURRENT version is checked out. Superseded text is not deleted —
+ * it was committed, so it lives in git history forever and comes back with
+ * `git show <sha>:apps/console/constants/legal/v1/privacy.txt`. Keeping old
+ * versions in the working tree as well is pure redundancy, and it is what made
+ * the folder list grow without bound (v1…v7 accumulated in eight days).
+ *
+ * Collapsed back to `v1` on 2026-08-20 because production held ZERO
+ * acceptance records: every version between was pre-launch churn pinning text
+ * nobody had ever agreed to, so none of it was evidence of anything. Once a
+ * real acceptance exists this stops being true — from then on a bump is
+ * required for any change, and the superseded snapshot's value is that the
+ * recorded `sha256` can still be resolved out of history.
+ *
+ * ## What the .txt is FOR, since it is not for reading
+ *
+ * Nobody is ever shown one. `LEGAL_URLS` points every human at the published
+ * pages; no runtime code reads these files and only specs do. They exist so
+ * that "you accepted v1, sha 42ea82…" is REPRODUCIBLE — a URL alone proves
+ * nothing, because the page changes (this one changed three times on the day
+ * it was written). Storing the full text on each acceptance row would be
+ * gigabytes at scale; a 64-byte hash plus one archived copy is kilobytes.
+ *
+ * ## The capture
+ *
+ * A DOM text-node walk, sliced from `Last updated:` to just BEFORE the closing
+ * `©` line. NOT `canonicalizeLegal` — that breaks on block elements and joins
+ * inline runs, which yields the same words with different line boundaries and
+ * therefore a different sha. Prove the method on an UNCHANGED pinned document
+ * before trusting a new pin; terms reproduces 35966 bytes byte-for-byte and is
+ * that control here.
  */
 export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
   {
@@ -342,7 +373,7 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'privacy',
     url: LEGAL_URLS.PRIVACY,
     sha256:
-      'e6796516e30e636024f2c544b286b4fa6b7cfe74a36595ba3a00cb8b8b75f3f5',
-    bytes: 14699,
+      '42ea82d50df140c03eafeeacce65376b8dd5b5cb3f230aedb13b2e344f216cba',
+    bytes: 15286,
   },
 ]

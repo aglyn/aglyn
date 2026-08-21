@@ -131,11 +131,13 @@ const SUMMARY_TOGGLE_SX = {
  * text of its own (AGL-2349).
  *
  * It has to walk, not test: what arrives here is the node renderer's output,
- * which wraps the authored string in a `<ShadowDom.AglynText>` element inside an
+ * which wraps the authored string in an `<AglynText>` element inside an
  * array (`libs/aglyn-node-renderer/src/lib/components/leaf.tsx`), so the string
  * is a grandchild at best and never the value itself. Descends `props.children`
- * rather than reading DOM text, because an `<aglyn-text>` host renders its
- * content into a shadow root where `innerText` reads back empty.
+ * rather than reading DOM text, because this runs on the React tree BEFORE
+ * anything is in the DOM to read. (It also predates AGL-2011, when
+ * `<aglyn-text>` was a shadow host whose `innerText` read back empty — that
+ * is no longer true, but walking props is still the right tool here.)
  */
 const childText = (node: ReactNode): string => {
   if (node == null || typeof node === 'boolean') return ''
@@ -198,7 +200,7 @@ export const AccordionSummaryElement = forwardRef<
   // production (AGL-2349). A summary's label is authored through
   // FIELD_TEXT_CONTENT, and the node renderer does not pass that string down as
   // `children` — `Leaf` lifts it out as `textContent` and renders
-  // `<Component>{children}<ShadowDom.AglynText>{textContent}</…></Component>`,
+  // `<Component>{children}<AglynText>{textContent}</…></Component>`,
   // so `children` is always an ARRAY holding an element. The string branch was
   // reachable only from a spec that handed the component a bare string, so
   // every published split summary named its chevron "Toggle section".

@@ -216,12 +216,13 @@ describe('the advertising-tag gate', () => {
     })
   })
 
-  describe('no vendor script exists without an explicit advertising yes', () => {
-    it('(a) an IMPLIED-consent visitor — the US default — gets nothing', async () => {
-      // `implied` grants ANALYTICS. That is the whole trap: a visitor
-      // defaulted in outside the prior-consent regions has answered no
-      // question about advertising, and this is the case that would go green
-      // by accident if the gate reused `isAnalyticsAllowed`.
+  describe('no vendor script exists without an advertising grant', () => {
+    it('(a) an implied visitor on a host that never ASKED gets nothing', async () => {
+      // `implied` grants analytics, and since AGL-2402 it can grant
+      // advertising too — but only where the host opted into asking. Omitted
+      // means NO, so this record carries no advertising grant and the gate
+      // must produce nothing. The trap this guards is the gate reusing
+      // `isAnalyticsAllowed`, which would go green by accident.
       const stored = storeVisitorConsent(HOST_ID, {
         status: 'implied',
         country: 'US',
@@ -232,23 +233,30 @@ describe('the advertising-tag gate', () => {
       expect(vendorScripts()).toHaveLength(0)
     })
 
-    it('(a2) …and not even when the stored record claims otherwise', async () => {
-      // A hand-edited record: `implied` with `advertising: true` written in.
-      // The engine re-derives the grant against the status, so the gate's
-      // answer must not depend on the file on disk being honest.
-      window.localStorage.setItem(
-        visitorConsentStorageKey(HOST_ID),
-        JSON.stringify({
-          v: 1,
-          at: Date.now(),
-          status: 'implied',
-          analytics: true,
-          advertising: true,
-          country: 'US',
-        }),
-      )
-      await renderGate(OUR_HOST)
-      expect(vendorScripts()).toHaveLength(0)
+    it('(a2) …and not for a REFUSAL record that claims otherwise', async () => {
+      // A hand-edited record: a refusal status with `advertising: true`
+      // written in. The engine re-derives the grant against the STATUS, so
+      // the gate's answer must not depend on the file on disk being honest.
+      //
+      // This used to pin `implied` the same way. Since AGL-2402 an implied
+      // record legitimately carries an advertising grant outside the
+      // prior-consent regions — it is what `decideVisitorConsent` writes —
+      // so the tampering case moved to the statuses that must ALWAYS refuse.
+      for (const status of ['declined', 'opted-out', 'gpc-opt-out']) {
+        window.localStorage.setItem(
+          visitorConsentStorageKey(HOST_ID),
+          JSON.stringify({
+            v: 1,
+            at: Date.now(),
+            status,
+            analytics: true,
+            advertising: true,
+            country: 'US',
+          }),
+        )
+        await renderGate(OUR_HOST)
+        expect(vendorScripts()).toHaveLength(0)
+      }
     })
 
     it('(b) a GPC visitor gets nothing', async () => {

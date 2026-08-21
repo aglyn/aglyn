@@ -230,50 +230,26 @@ const ALLOWED = new Map<string, string>([
   ['apps/docs/package-lock.json', 'Same third-party packages.'],
   ['cloud/functions/package-lock.json', '@eslint-community/* via eslint.'],
 
-  // ---- Frozen legal text (AGL-1497). ----
+  // ---- Frozen legal text (AGL-1497) — NO LONGER IN THIS REPO. ----
   //
-  // Verbatim snapshots of the Terms and Privacy Policy AS PUBLISHED, archived
-  // so a clickwrap acceptance can prove what a user was shown. Both say
-  // "community marketplace" because the published documents do.
+  // The published Terms and Privacy snapshots used to live at
+  // `constants/legal/v*/…txt` and were exempted here, because both said
+  // "community marketplace" — the published documents did, and rewriting an
+  // archived snapshot to tidy naming would have invalidated the evidence a
+  // clickwrap acceptance rests on.
   //
-  // These are the one category of file the sweep must never touch: a hash of
-  // each is recorded on every acceptance and asserted by
-  // `legal-document-version.spec.ts`, so editing a word here does not tidy up
-  // stale naming — it invalidates the evidence and fails that spec. The
-  // wording is fixed by republishing the documents and archiving a NEW
-  // version, never by rewriting an old one.
-  [
-    'apps/console/constants/legal/v1/terms.txt',
-    'Frozen published Terms of Service (v1) — immutable evidence.',
-  ],
-  [
-    'apps/console/constants/legal/v1/privacy.txt',
-    'Frozen published Privacy Policy (v1) — immutable evidence.',
-  ],
-  [
-    'apps/console/constants/legal/v2/terms.txt',
-    'Frozen published Terms of Service (v2, AGL-1499) — immutable evidence.',
-  ],
-  [
-    'apps/console/constants/legal/v2/privacy.txt',
-    'Frozen published Privacy Policy (v2, AGL-1499) — immutable evidence.',
-  ],
-  [
-    'apps/console/constants/legal/v3/terms.txt',
-    'Frozen published Terms of Service (v3, AGL-1555) — immutable evidence.',
-  ],
-  [
-    'apps/console/constants/legal/v3/privacy.txt',
-    'Frozen published Privacy Policy (v3, AGL-1555) — immutable evidence.',
-  ],
-  [
-    'apps/console/constants/legal/v4/terms.txt',
-    'Frozen published Terms of Service (v4, AGL-1565) — immutable evidence.',
-  ],
-  [
-    'apps/console/constants/legal/v4/privacy.txt',
-    'Frozen published Privacy Policy (v4, AGL-1564) — immutable evidence.',
-  ],
+  // They moved to the shared drive on 2026-08-20
+  // (`Platform Docs/Legal/Acceptance-Snapshots/<version>/`), so the sweep can
+  // no longer reach them and the exemptions went stale — which the staleness
+  // test below reported the moment it happened, exactly as it was built to.
+  // Removed rather than kept "in case": a stale exemption silently permits the
+  // word in a file that no longer has a reason to use it.
+  //
+  // Nothing is lost by the sweep no longer covering them. The current
+  // documents do not use the word at all — live Terms says "the Aglyn
+  // marketplace" — and `check:legal-snapshots` verifies the archived text
+  // against its hash in CI, which is a stricter guarantee than a naming grep.
+
   // The generated release record. `8e72befb8` (1.0.0-beta.1) rendered the
   // AGL-2066 commit subject — "the no-community sweep exempts a verbatim
   // quote, narrowly" — into the changelog, and the guard went red on main

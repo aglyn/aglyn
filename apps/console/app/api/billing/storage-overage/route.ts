@@ -114,7 +114,21 @@ async function handler(request: Request): Promise<Response> {
           metered,
           defaultCapUsd: STORAGE_CAP_FALLBACK_USD,
           maxCapUsd: STORAGE_CAP_MAX_USD,
-          includedStoragePerSiteMb: entitlements.storagePerHostMb,
+          // `UNLIMITED` is `Number.POSITIVE_INFINITY`, and `JSON.stringify`
+          // turns that into `null` — which the card then read as `Number(null)`
+          // = 0, a FINITE value that sails through its load guard and renders
+          // "your plan gives each site a fixed 0 MB of storage. Uploads stop at
+          // that limit". An Enterprise customer with unlimited storage was
+          // being told their uploads stop immediately (AGL-2404).
+          //
+          // Sent as an explicit flag rather than a magic number: `null` on the
+          // wire cannot distinguish "unlimited" from "the field is missing",
+          // and the card has to tell those apart — one is a normal plan, the
+          // other is a payload that cannot state the terms.
+          includedStoragePerSiteMb: Number.isFinite(entitlements.storagePerHostMb)
+            ? entitlements.storagePerHostMb
+            : 0,
+          includedStorageUnlimited: !Number.isFinite(entitlements.storagePerHostMb),
           // The card quotes the price storage bills at, and it must be the
           // rate the rollup bills (AGL-1957) — so it is served from the same
           // constants rather than duplicated into the client bundle. This

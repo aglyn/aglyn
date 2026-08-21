@@ -19,16 +19,24 @@ and **Agency** unlock progressively more, and **Enterprise** sits above them all
 
 ## Tiers & entitlements
 
-| Plan | Billed annually | Month-to-month | Commerce |
-|---|---|---|---|
-| Free | $0 | $0 | Build & publish only — no selling |
-| Starter | $16/mo | $25/mo | Sell up to 100 products; 2% fee on physical, 5% on digital sales |
-| Pro | $39/mo | $56/mo | 2,500 products, 0% physical / 3% digital fees, POS, abandoned-cart recovery, reviews, dropshipping |
-| Business | $99/mo | $139/mo | 10,000 products, 0% / 2% fees, subscriptions & paywalls, gift cards |
-| Scale | $179/mo | $249/mo | 25,000 products, 0% / 1% fees, 15 sites |
-| Advanced | $299/mo | $399/mo | Unlimited products, 0% / 0% fees, high-volume commerce & API |
-| Agency | $649/mo | $799/mo | 100 sites under one organization, white-label |
-| Enterprise | Custom | Custom | Unlimited everything, SSO, white-label, 0% fees |
+:::tip Prices live on one page
+Current prices — monthly, annual, transaction fees and per-unit overage rates —
+are on **[aglyn.com/pricing](https://aglyn.com/pricing)**, and your own plan and
+next invoice are in **Billing** in the console. This page explains how billing
+WORKS; it deliberately does not restate the numbers, because a second copy is a
+copy that goes stale.
+:::
+
+| Plan | Commerce |
+|---|---|
+| Free | Build & publish only — no selling |
+| Starter | Sell products, with the highest transaction fee of the paid tiers |
+| Pro | More products, a lower fee, POS, abandoned-cart recovery, reviews, dropshipping |
+| Business | More products again, a lower fee, subscriptions & paywalls, gift cards |
+| Scale | Higher product and site limits, lower fee again |
+| Advanced | Unlimited products, no transaction fee, high-volume commerce & API |
+| Agency | Many sites under one organization, white-label |
+| Enterprise | Unlimited everything, SSO, white-label, no transaction fee |
 
 Transaction fees are Aglyn platform fees on the sales you take through your site —
 storefront orders, paid memberships and paid bookings alike — separate from
@@ -110,8 +118,9 @@ wall:
 
 - **Uploads keep working.** You are never stopped from adding files because you reached
   your included storage.
-- **The extra storage is billed** on your monthly invoice, at about $0.034 per GB per
-  month — our cost plus 30%, the same rate shown in **Billing → Storage cap**.
+- **The extra storage is billed** on your monthly invoice at our infrastructure cost
+  plus 30% — the exact per-GB rate is on [the pricing page](https://aglyn.com/pricing)
+  and in **Billing → Storage cap**.
 - **We tell you before it happens.** You get an alert as you approach your included
   storage and another when you cross it, so the invoice is never the first you hear of
   it. See [usage meters](#usage-meters).
@@ -189,8 +198,9 @@ one people list — is priced as an **audience band**, not a hard cap:
 - Each tier includes a band: Free 100, Starter 1,000, Pro 10,000, Business 100,000,
   Scale 500,000, Advanced 1,000,000 contacts. Agency and Enterprise are unlimited.
 - On **paid tiers**, growing past the band never blocks or drops anything — extra
-  contacts are **metered overage** on your monthly invoice: $1.00 (Starter), $0.75
-  (Pro), $0.50 (Business), $0.40 (Scale), or $0.25 (Advanced) per extra 1,000
+  contacts are **metered overage** on your monthly invoice, at a per-1,000 rate that
+  falls as you move up the plans — see [pricing](https://aglyn.com/pricing) for the
+  current rate on your plan, per extra 1,000
   contacts per month. Upgrading a tier is always cheaper than sustained overage.
 - On **Free**, the band is a hard limit: new visitors past 100 keep their member
   accounts and orders, but no CRM record is kept. The count of missed sign-ups is
@@ -207,8 +217,8 @@ one people list — is priced as an **audience band**, not a hard cap:
   organization, not individual sites.
 - Each paid tier includes a number of datasets and an included **data storage** size
   (Starter 1 GB, Pro 5 GB, Business 25 GB, Scale 50 GB, Advanced 100 GB, Agency 500 GB).
-- Extra datasets are a monthly **[add-on](add-ons.md)** ($2/mo on Starter and Pro, $1/mo
-  on Business); storage beyond the included size is **metered overage** at $0.25 per
+- Extra datasets are a monthly **[add-on](add-ons.md)** whose price falls as you move up
+  the plans; storage beyond the included size is **metered overage**, billed per
   GB-month on your monthly invoice.
 - **The billed size is what you were storing at the end of the month**, on the same
   basis as the audience band above: the last daily reading taken before the month
@@ -223,10 +233,10 @@ organization**:
 
 | Plan | Included requests / month | Overage |
 |---|---|---|
-| Business | 100,000 | $0.50 per additional 1,000 |
-| Scale | 300,000 | $0.35 per additional 1,000 |
-| Advanced | 1,000,000 | $0.20 per additional 1,000 |
-| Agency | 5,000,000 | $0.15 per additional 1,000 |
+| Business | 100,000 | Metered per additional 1,000 |
+| Scale | 300,000 | Metered, at a lower rate than Business |
+| Advanced | 1,000,000 | Metered, lower again |
+| Agency | 5,000,000 | Metered, the lowest per-unit rate |
 | Enterprise | Unlimited | — |
 
 - Requests past the included quota **keep working** and bill as metered overage on your
@@ -299,7 +309,8 @@ monthly invoice as a usage line. See
 [POS &amp; reservations](../../commerce-and-bookings/commerce/pos-and-reservations.md#platform-fees-at-the-register).
 
 - **Annual billing** — a toggle on the plan cards; annual billing is the discounted
-  headline price (e.g. Pro $39/mo billed annually vs $56 month-to-month).
+  headline price (annual billing costs less per month than month-to-month; the two
+  figures for your plan are on [pricing](https://aglyn.com/pricing)).
 - **Plan switches** on an active subscription apply in place (no second checkout), and
   show you what's due before you confirm. **Upgrades** apply immediately and preview a
   **prorated** charge for the rest of the period. **Downgrades** take effect at the

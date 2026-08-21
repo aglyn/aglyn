@@ -393,6 +393,12 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'A path inside Aglyn own Google shared drive, plus our legal origin. Internal tool.',
   },
   {
+    file: 'tools/scripts/check-pricing-drift.mjs',
+    count: 1,
+    reason:
+      'The mount path of Aglyn own Google shared drive, where the pricing source-of-truth doc lives. Internal tool, and the leg that reads it is skipped entirely when the drive is not mounted (AGL-1885).',
+  },
+  {
     file: 'tools/scripts/lib/stripe-webhook-health.mjs',
     count: 1,
     reason:

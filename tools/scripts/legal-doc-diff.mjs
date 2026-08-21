@@ -78,6 +78,7 @@ import { createSign } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { loadLocalEnv, readServiceAccount } from './lib/firebase-rules-api.mjs'
 import { renderUnifiedDiff } from './lib/rules-drift.mjs'
+import { withProbeHeaders } from './lib/probe-headers.mjs'
 import {
   collectTocFromMarkdownLite,
   compareLegalDocument,
@@ -277,7 +278,14 @@ async function exportDocAsText(docId, token, mimeType = 'text/plain') {
 /** @returns {{ ok: true, html: string } | { ok: false, status: number }} */
 async function fetchLivePage(slug) {
   const res = await fetch(`${LEGAL_ORIGIN}/legal/${slug}`, {
-    headers: { 'User-Agent': 'aglyn-legal-doc-diff (AGL-1611)' },
+    // Our own Vercel Bot Protection challenges automated clients: without the
+    // bypass header every live fetch returns 429 (Vercel Security Checkpoint)
+    // and each document reports UNREADABLE. That reads as drift when it is
+    // only a firewall — a checker that fails for network reasons teaches
+    // people to ignore it. Matches the "CI and uptime probe bypass" rule.
+    headers: withProbeHeaders({
+      'User-Agent': 'aglyn-legal-doc-diff (AGL-1611)',
+    }),
   })
   if (!res.ok) return { ok: false, status: res.status }
   return { ok: true, html: await res.text() }

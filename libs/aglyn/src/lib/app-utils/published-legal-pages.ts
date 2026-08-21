@@ -36,7 +36,8 @@
  * documents and no others. `/legal/marketplace-publisher-agreement` joined the
  * list that day (AGL-1674), *after* the page was confirmed serving: fetched
  * once, HTTP 200, and its body read out of the Flight payload rather than the
- * DOM — `<aglyn-text>` renders into shadow roots and greps empty. The payload
+ * DOM — at the time `<aglyn-text>` rendered into shadow roots and grepped
+ * empty (no longer so since AGL-2011). The payload
  * carried exactly one text row, sha256
  * 66e1f8fb3956cfed1b71712c9aaf38ed736b956de571160b7c3cf83add923d90, identical
  * to the approved source, with all fourteen sections and no `DRAFT` or

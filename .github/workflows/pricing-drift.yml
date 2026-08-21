@@ -1,0 +1,100 @@
+name: Pricing drift
+
+# Reconciles every CHARGED price across the places one can live (AGL-1885):
+# the repo's `PLAN_PRICING` / `PLAN_ENTITLEMENTS`, the LOCKED pin committed in
+# `check-pricing-drift.mjs`, and Stripe LIVE mode — what a customer is
+# actually billed.
+#
+# WHY THIS RUNS ON A SCHEDULE AND NOT ONLY ON PUSH. Two of the three sources
+# are not in this repo. A Stripe price can be edited in the dashboard by a
+# human at any time, with no commit and no review, and nothing here would
+# know. The drift this catches is precisely the kind that arrives without a
+# pull request.
+#
+# Exit codes match legal-drift: 0 something was compared and everything
+# agrees; 1 drift; 2 nothing differs but something could not be checked.
+#
+# ⛔ The source-of-truth DOC leg only runs where Google Drive is mounted (a
+# developer's machine), so CI checks code ↔ pin ↔ Stripe. That is deliberate
+# and is not a silent gap: the pin was verified line-by-line against the doc
+# when Zach locked the price set on 2026-08-18, and re-verifying the doc is a
+# local `npm run check:pricing-drift`.
+
+on:
+  schedule:
+    # Daily, 08:29 UTC — after legal-drift (08:11), so the two do not contend
+    # for the npm cache. (GitHub schedules are best-effort and pause on
+    # 60-day-quiet repos; a green history is not proof of coverage.)
+    - cron: '29 8 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      # A push that touches a price must be reconciled immediately, not
+      # tomorrow morning.
+      - 'libs/aglyn/src/lib/app-utils/plan-entitlements.ts'
+      - 'apps/console/utils/usage-metering.ts'
+      - 'tools/scripts/check-pricing-drift.mjs'
+      - 'tools/scripts/lib/pricing-drift.mjs'
+
+concurrency:
+  group: pricing-drift
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      # The self-test FIRST. A comparator that has stopped comparing reports
+      # "no drift", which is indistinguishable from agreement — the AGL-1778
+      # lesson. Every case in this suite exists to prove the checker can go
+      # RED; it is here so a broken comparator fails the job before its
+      # verdict is printed and believed.
+      - run: npm run test:pricing-drift
+
+      # Refuse to no-op. A missing key must FAIL the job, never skip the step:
+      # a pricing guard that silently stops checking Stripe is worse than no
+      # guard, because the green check is what someone will rely on before
+      # taking real money.
+      # ONE name, deliberately. A second accepted name is a second place for
+      # an `sk_` to hide, and "it also reads the old variable" is the kind of
+      # compatibility shim that outlives everyone who remembers why it exists.
+      - name: Refuse to no-op without a Stripe key
+        env:
+          STRIPE_RESTRICTED_KEY: ${{ secrets.STRIPE_RESTRICTED_KEY }}
+        run: |
+          if [ -z "$STRIPE_RESTRICTED_KEY" ]; then
+            echo "STRIPE_RESTRICTED_KEY is not set, so the Stripe leg cannot run." >&2
+            echo "Create a RESTRICTED key with READ access to Prices and nothing" >&2
+            echo "else — this guard only ever calls prices.list, and a guard must" >&2
+            echo "not hold permission to change what it guards:" >&2
+            echo "  gh secret set STRIPE_RESTRICTED_KEY" >&2
+            exit 2
+          fi
+          # The variable is named for what it must HOLD, not for what Stripe
+          # calls the family. An `sk_` here is a misconfiguration, not a
+          # stricter-than-needed credential, and the script refuses it too.
+          case "$STRIPE_RESTRICTED_KEY" in
+            sk_*)
+              echo "STRIPE_RESTRICTED_KEY holds an UNRESTRICTED sk_ key." >&2
+              echo "Replace it with a RESTRICTED rk_ key (Prices: Read)." >&2
+              exit 2 ;;
+          esac
+
+      - name: Reconcile code, the locked pin and Stripe live
+        env:
+          STRIPE_RESTRICTED_KEY: ${{ secrets.STRIPE_RESTRICTED_KEY }}
+        run: npm run check:pricing-drift -- --summary
