@@ -69,6 +69,7 @@ import {
   parseIndexCards,
 } from './lib/legal-index-dates.mjs'
 import { withProbeHeaders } from './lib/probe-headers.mjs'
+import { loadLocalEnv } from './lib/firebase-rules-api.mjs'
 
 const DEFAULT_ORIGIN = (
   process.env.NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN || 'https://aglyn.com'
@@ -119,6 +120,7 @@ async function fetchPage(url) {
 }
 
 async function main() {
+  loadLocalEnv()
   const options = parseArgs(process.argv.slice(2))
   const indexUrl = `${options.origin}${LEGAL_INDEX_PATH}`
 

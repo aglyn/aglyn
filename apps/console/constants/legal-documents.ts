@@ -55,7 +55,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v6'
+export const LEGAL_DOCUMENT_VERSION = 'v7'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -326,9 +326,26 @@ export interface LegalDocumentManifestEntry {
  * cost no bump and have no hash.
  *
  * Publication-first as always. The capture method was re-proven byte-for-byte
- * against the v5 terms + privacy pins AND the `2026-08-18.1`
- * publisher-agreement pin before this set was taken. The publisher agreement is
- * UNCHANGED by this pass and must not be bumped for consistency.
+ * against the v6 TERMS pin before this set was taken — terms is untouched by
+ * v7, so reproducing its 35966 bytes exactly is the only control that can show
+ * the capture still matches the v5/v6 lineage. It did, and terms therefore
+ * keeps its existing hash here rather than being re-pinned.
+ *
+ * That control earned its keep. The first attempt used `canonicalizeLegal`,
+ * the comparator's own pipeline, and produced 35911 bytes — 55 short. The
+ * comparator breaks lines on BLOCK elements; the pin lineage used a DOM
+ * TEXT-NODE walk, where an inline `<strong>` splits its sentence into three
+ * lines. Same words, different canonicalisation, different sha — and to an
+ * acceptance record, a different document. A second run still missed by 66
+ * bytes: the lineage stops just BEFORE the closing `©` line, where
+ * `sliceContentBlock` includes it.
+ *
+ * v7 is the ADVERTISING disclosure pass. The Privacy Policy stopped claiming
+ * "we use no advertising technology" and now discloses sharing for
+ * cross-context behavioral advertising, a live CPRA opt-out, and GPC honored
+ * as an automatic one. The Cookie Policy changed with it but is NOT
+ * acceptance-pinned, so it costs no hash. Terms and the publisher agreement
+ * are unchanged and must not be bumped for consistency.
  */
 export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
   {
@@ -342,7 +359,7 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'privacy',
     url: LEGAL_URLS.PRIVACY,
     sha256:
-      'e6796516e30e636024f2c544b286b4fa6b7cfe74a36595ba3a00cb8b8b75f3f5',
-    bytes: 14699,
+      'ab3e6305e46416712f95a16ff85f7f7d051ce7cd596739a6108e6a620c3a97eb',
+    bytes: 15133,
   },
 ]
