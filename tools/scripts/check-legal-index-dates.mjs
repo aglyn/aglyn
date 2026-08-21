@@ -68,6 +68,7 @@ import {
   parseDocumentDate,
   parseIndexCards,
 } from './lib/legal-index-dates.mjs'
+import { withProbeHeaders } from './lib/probe-headers.mjs'
 
 const DEFAULT_ORIGIN = (
   process.env.NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN || 'https://aglyn.com'
@@ -97,13 +98,17 @@ async function fetchPage(url) {
   try {
     const response = await fetch(url, {
       redirect: 'follow',
-      headers: {
+      // `withProbeHeaders` adds our own firewall-bypass header. Without it
+      // this fetch returns 429 (Vercel Security Checkpoint) and the check
+      // reports "Nothing was compared" — which is exit 2, not a clean run.
+      // This script was the one live fetch the original bypass patch missed.
+      headers: withProbeHeaders({
         // Ask for the freshest render the edge will give us. This narrows the
         // asymmetric-staleness window described above; it does not close it,
         // and the check is designed not to need it closed.
         'cache-control': 'no-cache',
         accept: 'text/html',
-      },
+      }),
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     })
     if (!response.ok) return { html: null, error: `HTTP ${response.status}` }

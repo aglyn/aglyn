@@ -39,6 +39,8 @@
  *   node tools/scripts/probe-uptime.mjs http://localhost:4200
  */
 
+import { withProbeHeaders } from './lib/probe-headers.mjs'
+
 const DEFAULT_TARGETS = [
   ['console', 'https://app.aglyn.com'],
   ['tenant', 'https://demo.aglyn.com'],
@@ -86,12 +88,7 @@ async function probe(name, base) {
       // comment warns about. The token matches a Bypass rule on the tenant and
       // docs projects. Absent (local runs, forks), the header is simply not
       // sent and the probe behaves as before.
-      headers: {
-        'user-agent': 'aglyn-uptime-probe',
-        ...(process.env['AGLYN_PROBE_TOKEN']
-          ? { 'x-aglyn-probe': process.env['AGLYN_PROBE_TOKEN'] }
-          : {}),
-      },
+      headers: withProbeHeaders({ 'user-agent': 'aglyn-uptime-probe' }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
     const ms = Date.now() - startedAt

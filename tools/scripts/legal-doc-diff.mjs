@@ -78,6 +78,7 @@ import { createSign } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { loadLocalEnv, readServiceAccount } from './lib/firebase-rules-api.mjs'
 import { renderUnifiedDiff } from './lib/rules-drift.mjs'
+import { withProbeHeaders } from './lib/probe-headers.mjs'
 import {
   collectTocFromMarkdownLite,
   compareLegalDocument,
@@ -282,12 +283,9 @@ async function fetchLivePage(slug) {
     // and each document reports UNREADABLE. That reads as drift when it is
     // only a firewall — a checker that fails for network reasons teaches
     // people to ignore it. Matches the "CI and uptime probe bypass" rule.
-    headers: {
+    headers: withProbeHeaders({
       'User-Agent': 'aglyn-legal-doc-diff (AGL-1611)',
-      ...(process.env['AGLYN_PROBE_TOKEN']
-        ? { 'x-aglyn-probe': process.env['AGLYN_PROBE_TOKEN'] }
-        : {}),
-    },
+    }),
   })
   if (!res.ok) return { ok: false, status: res.status }
   return { ok: true, html: await res.text() }

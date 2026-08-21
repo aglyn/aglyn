@@ -124,6 +124,13 @@ jobs:
       # say is recomputed from the documents on every run, so a card that
       # drifts fails a check instead of waiting to be noticed.
       - name: Re-derive the /legal index card dates from the documents
+        env:
+          # Reads two PUBLIC pages, but they sit behind our own Bot Protection,
+          # which challenges automated clients with a 429. Without this the
+          # step reports "Nothing was compared" and exits 2 — a firewall
+          # wearing the costume of drift. Deliberately NOT a credential gate:
+          # an absent token still runs the check, it just gets challenged.
+          AGLYN_PROBE_TOKEN: ${{ secrets.AGLYN_PROBE_TOKEN }}
         run: npm run check:legal-index-dates -- --summary
 
       # Refuse to no-op. A missing credential must FAIL the job, never skip
