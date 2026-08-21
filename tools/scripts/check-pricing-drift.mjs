@@ -114,10 +114,9 @@ function parseArgs(argv) {
  * that writes.
  */
 function fetchStripePrices() {
-  const key =
-    process.env['STRIPE_RESTRICTED_KEY'] ||
-    process.env['STRIPE_SECRET_KEY'] ||
-    process.env['STRIPE_LIVE_SECRET_KEY']
+  // ONE variable. Extra accepted names are extra places for an unrestricted
+  // key to hide, and each one has to be remembered by every future reader.
+  const key = process.env['STRIPE_RESTRICTED_KEY']
 
   // Refuse an UNRESTRICTED key outright. `sk_live_…` can create and delete
   // prices, issue refunds and move money; this guard needs `prices.list` and

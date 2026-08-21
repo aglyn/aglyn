@@ -69,19 +69,13 @@ jobs:
       # a pricing guard that silently stops checking Stripe is worse than no
       # guard, because the green check is what someone will rely on before
       # taking real money.
-      # BOTH names are accepted, preferring the self-describing one. The
-      # secret was first created as STRIPE_SECRET_KEY, and a GitHub secret
-      # cannot be renamed — only deleted and re-pasted — so forcing the new
-      # name would cost a re-paste of a live credential to buy nothing. The
-      # protection that matters is on the VALUE, not the variable name: an
-      # `sk_` is refused below and again in the script, whichever name holds
-      # it. STRIPE_RESTRICTED_KEY is the name to use going forward.
+      # ONE name, deliberately. A second accepted name is a second place for
+      # an `sk_` to hide, and "it also reads the old variable" is the kind of
+      # compatibility shim that outlives everyone who remembers why it exists.
       - name: Refuse to no-op without a Stripe key
         env:
           STRIPE_RESTRICTED_KEY: ${{ secrets.STRIPE_RESTRICTED_KEY }}
-          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
         run: |
-          STRIPE_RESTRICTED_KEY="${STRIPE_RESTRICTED_KEY:-$STRIPE_SECRET_KEY}"
           if [ -z "$STRIPE_RESTRICTED_KEY" ]; then
             echo "STRIPE_RESTRICTED_KEY is not set, so the Stripe leg cannot run." >&2
             echo "Create a RESTRICTED key with READ access to Prices and nothing" >&2
@@ -103,5 +97,4 @@ jobs:
       - name: Reconcile code, the locked pin and Stripe live
         env:
           STRIPE_RESTRICTED_KEY: ${{ secrets.STRIPE_RESTRICTED_KEY }}
-          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
         run: npm run check:pricing-drift -- --summary
