@@ -84,7 +84,7 @@ const BASE = {
 describe('Storage cap · a plan with UNLIMITED storage (AGL-2404)', () => {
   it('does not tell an Enterprise customer their uploads stop at 0 MB', async () => {
     serve({ ...BASE, metered: false, includedStoragePerSiteMb: 0, includedStorageUnlimited: true })
-    render(<BillingStorageOverageCard orgId="org-1" />)
+    render(<BillingStorageOverageCard orgId="org-1" canManage />)
     await waitFor(() => expect(copy()).toMatch(/unlimited/i))
     // The exact sentence customers were shown. Asserted as ABSENT rather than
     // just checking the new copy is present, because both branches rendering
@@ -98,7 +98,7 @@ describe('Storage cap · a plan with UNLIMITED storage (AGL-2404)', () => {
     // every non-metered plan into "unlimited", which would be the same defect
     // pointed the other way.
     serve({ ...BASE, metered: false, includedStoragePerSiteMb: 250, includedStorageUnlimited: false })
-    render(<BillingStorageOverageCard orgId="org-1" />)
+    render(<BillingStorageOverageCard orgId="org-1" canManage />)
     await waitFor(() => expect(copy()).toMatch(/uploads stop at/i))
     expect(copy()).not.toMatch(/includes unlimited storage/i)
   })
@@ -107,14 +107,14 @@ describe('Storage cap · a plan with UNLIMITED storage (AGL-2404)', () => {
     // The chip said "No cap — extra storage bills" on both non-metered plans,
     // contradicting the alert directly underneath it.
     serve({ ...BASE, metered: false, includedStoragePerSiteMb: 0, includedStorageUnlimited: true })
-    render(<BillingStorageOverageCard orgId="org-1" />)
+    render(<BillingStorageOverageCard orgId="org-1" canManage />)
     await waitFor(() => expect(copy()).toMatch(/unlimited/i))
     expect(copy()).not.toMatch(/extra storage bills/i)
   })
 
   it('keeps the metered copy for a plan that DOES bill', async () => {
     serve({ ...BASE, metered: true, includedStoragePerSiteMb: 10240, includedStorageUnlimited: false })
-    render(<BillingStorageOverageCard orgId="org-1" />)
+    render(<BillingStorageOverageCard orgId="org-1" canManage />)
     await waitFor(() => expect(copy()).toMatch(/keep working/i))
     expect(copy()).not.toMatch(/no overage to cap/i)
   })
