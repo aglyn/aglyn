@@ -55,7 +55,9 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { Stack, Typography } from '@mui/material'
 import ComponentPropsDialog from '../../../../../../../../../../components/component-props-dialog.component'
-import revalidateLivePages from '../../../../../../../../../../utils/revalidate-live-pages'
+import revalidateLivePages, {
+  describeRevalidateShortfall,
+} from '../../../../../../../../../../utils/revalidate-live-pages'
 import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { observer } from 'mobx-react-lite'
@@ -279,16 +281,16 @@ function ComponentBesignerPage(props) {
       versionId,
     },
     notify: enqueueSnackbar,
-    // Tell the author what happens next when they are editing the LIVE
-    // version. Without it the only feedback is "saved", the live page keeps
-    // serving cached HTML for a moment, and the rational response is to save
-    // again — which is the loop this message and the revalidate call above
-    // exist to end together. A draft save says nothing about the live site,
-    // because it does not touch it.
-    savedMessage:
-      versionId && versionId === publishedVersionId
-        ? 'Component saved — the live pages using it are refreshing now'
-        : undefined,
+    // Tell the author what happens next — and for a component that is
+    // "publish", never "wait" (AGL-2486). This message used to promise that
+    // editing the LIVE version had already started refreshing live pages,
+    // which is not something a save can do: `getComponents` renders the
+    // PARENT doc and a save writes the version doc. The author's whole
+    // question after saving is "why has my change not appeared", and the
+    // honest answer is the one action that makes it appear. Unconditional
+    // because it is true of every component save, on the published version
+    // or a draft one.
+    savedMessage: 'Component saved. Publish to update the live pages.',
     queueLoading,
     // A definition's root is the promoted node, not the canvas root, so it
     // has to be wrapped or the canvas has no root and renders nothing
@@ -303,21 +305,26 @@ function ComponentBesignerPage(props) {
       // unsaved work has to go — otherwise the next person to join replays
       // edits that are already in the document (AGL-677).
       clearMirrorRef.current?.()
-      // Editing the PUBLISHED version edits what live screens render, so the
-      // cached HTML of every page using this component is stale the moment
-      // this returns. AGL-1150 wired revalidation to PUBLISH only, which left
-      // the commonest case uncovered: an author editing an already-live
-      // component saves, refreshes, sees the old page, and saves again.
-      // Editing a DRAFT version changes nothing live and drops nothing.
+      // NO REVALIDATION HERE, DELIBERATELY (AGL-2486).
       //
-      // A component's dependents are a node-tree SCAN rather than a pointer
-      // lookup, so the route reads more and takes longer — which is exactly
-      // why this is not awaited. Best effort: the save has already succeeded,
-      // and a cache hint that fails must never make a successful save look
-      // failed. The revalidate window stays underneath as the backstop.
-      if (versionId && versionId === publishedVersionId) {
-        void revalidateLivePages({ user, hostId, componentId })
-      }
+      // This used to drop the cached HTML of every screen using the component
+      // whenever the PUBLISHED version was saved, on the reasoning that a
+      // save on the live version edits what live screens render. That is true
+      // of a SCREEN — the tenant reads `screens/{id}/versions/{versionId}` —
+      // and false of a component: `getComponents` reads the parent doc
+      // `components/{id}`, and a save writes the version doc. So the drop was
+      // real, correctly scoped and completely pointless: every dependent page
+      // regenerated from a parent document the save had not touched, byte for
+      // byte what it served before. What the author saw was their edit not
+      // appearing, ten minutes later, with the editor claiming live pages
+      // were refreshing.
+      //
+      // Its cost was not nothing. Firing it meant a full-site node-tree scan
+      // (up to `SCAN_LIMIT` screens + layouts + components, WITH version
+      // bodies) plus a cache drop per dependent path, on every save of a live
+      // component — the most frequent event in the editor. The fan-out now
+      // rides `handlePublish` instead: once per deliberate publish, on the
+      // one write that actually moves the bytes.
       return logActivity('Saved the component', {
         type: 'component',
         id: componentId,
@@ -410,15 +417,34 @@ function ComponentBesignerPage(props) {
         versionId,
         updatedAt: Timestamp.now(),
       })
-      // Tenant pages are ISR with `revalidate = 60` and there is no
-      // on-demand revalidation hook, so propagation is a cache window, not
-      // a deploy. Saying "next build" would have people waiting for
-      // something that never happens.
       enqueueSnackbar(
-        'Published. Every screen using this component picks it up within a ' +
-          'minute — you do not need to republish them.',
+        'Published. Every screen using this component is refreshing now — ' +
+          'you do not need to republish them.',
         { variant: 'success', persist: false },
       )
+      // THIS is the write that changes what a visitor sees, so this is where
+      // the cache drop belongs (AGL-2486). The comment that stood here said
+      // there was no on-demand revalidation hook and propagation was a cache
+      // window; AGL-1161 built that hook, and every caller wired it up except
+      // this one — the component editor's own Publish button. So the path
+      // that moved the bytes waited out the full window while the path that
+      // moved nothing dropped caches on every save.
+      //
+      // BOUNDED AND OUT OF BAND. Not awaited, and fired AFTER the snackbar:
+      // the publish has already succeeded, a cache hint that fails must never
+      // make it look failed, and the 60s window is still underneath as the
+      // backstop. The console route caps its dependent scan and the tenant
+      // caps the paths it will take, so a component on 500 screens costs one
+      // bounded scan and one capped request — never 500 round trips, and
+      // never inside the write. `describeRevalidateShortfall` is what says so
+      // out loud when either cap bites, instead of reporting an unqualified
+      // success over pages that did not change (AGL-1239).
+      void revalidateLivePages({ user, hostId, componentId }).then((result) => {
+        const shortfall = describeRevalidateShortfall(result)
+        if (shortfall) {
+          enqueueSnackbar(shortfall, { variant: 'warning', persist: false })
+        }
+      })
     } catch (error) {
       // A publish that throws must never read like a success (AGL-1334).
       // `persist` because this is the one action that moves work onto live
@@ -442,6 +468,9 @@ function ComponentBesignerPage(props) {
     componentResult?.data?.rootId,
     data,
     enqueueSnackbar,
+    // The revalidate route authenticates with the caller's ID token, so the
+    // signed-in user is a real input to publishing now (AGL-2486).
+    user,
   ])
 
   // The site's theme with this site's overrides resolved over it
