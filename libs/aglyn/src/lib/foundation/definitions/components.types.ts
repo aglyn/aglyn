@@ -192,6 +192,17 @@ export type AglynNodePresetSchema = {
 }
 
 export enum FieldComponentType {
+  /**
+   * Per-breakpoint span editor (AGL-2486): a small row of breakpoint
+   * controls (All / xs / sm / md / lg / xl), each offering a column count
+   * plus MUI's `auto` and `grow` keywords. The persisted prop is still ONE
+   * string in the syntax the Grid element already parses (`"6"`, `"auto"`,
+   * `"xs:12 md:6"`) — this is an input affordance, not a shape change, so
+   * renderers and existing documents stay untouched. A value the row cannot
+   * model (a `{{token}}`, an unknown breakpoint) falls back to free text
+   * rather than being clobbered.
+   */
+  BREAKPOINT_SPAN = 'breakpoint-span',
   BUTTON = 'button',
   BUTTON_GROUP = 'button-group',
   CHECKBOX = 'checkbox',

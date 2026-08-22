@@ -17,6 +17,7 @@
 
 import type { ComponentMapper } from '../vendor/data-driven-forms'
 import {
+  FIELD_MAP_BREAKPOINT_SPAN,
   FIELD_MAP_CHECKBOX,
   FIELD_MAP_COLOR_PICKER,
   FIELD_MAP_CSS_DIMENSION,
@@ -61,6 +62,7 @@ export const componentMapper: ComponentMapper = {
   [FieldComponentType.TOGGLE_BUTTON]: FIELD_MAP_TOGGLE_BUTTON,
   [FieldComponentType.CSS_DIMENSION]: FIELD_MAP_CSS_DIMENSION,
   [FieldComponentType.CSS_GRADIENT]: FIELD_MAP_CSS_GRADIENT,
+  [FieldComponentType.BREAKPOINT_SPAN]: FIELD_MAP_BREAKPOINT_SPAN,
 }
 
 export const simpleComponentMapper = {

@@ -24,6 +24,7 @@ import {
   type FormRendererProps,
   FormSpy,
   type FormTemplateRenderProps,
+  FIELD_MAP_BREAKPOINT_SPAN,
   FIELD_MAP_CHECKBOX,
   FIELD_MAP_COLOR_PICKER,
   FIELD_MAP_CSS_DIMENSION,
@@ -215,6 +216,10 @@ export const elementPropsComponentMapper = {
   // Background fill editor for gradient-capable attributes (AGL-1331);
   // the Styles panel reaches it through the shared componentMapper.
   [Aglyn.FieldComponentType.CSS_GRADIENT]: FIELD_MAP_CSS_GRADIENT,
+  // Per-breakpoint span/offset row for Grid cells (AGL-2486). Registered
+  // here or the attributes memo's unknown-editor filter drops Span and
+  // Offset from the panel entirely rather than throwing (AGL-584).
+  [Aglyn.FieldComponentType.BREAKPOINT_SPAN]: FIELD_MAP_BREAKPOINT_SPAN,
   // Pill-rendering editor for token-capable free-text attributes
   // (AGL-586); the attributes memo rewrites TEXT_FIELD/TEXTAREA to it.
   [TOKEN_TEXT_FIELD_COMPONENT]: TokenTextField,

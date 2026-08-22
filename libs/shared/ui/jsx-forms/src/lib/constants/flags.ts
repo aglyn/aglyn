@@ -16,6 +16,8 @@
  */
 
 export enum FieldComponentType {
+  /** Per-breakpoint span/offset row; persists one string (AGL-2486). */
+  BREAKPOINT_SPAN = 'breakpoint-span',
   BUTTON = 'button',
   CHECKBOX = 'checkbox',
   COLOR_PICKER = 'color-picker',

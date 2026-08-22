@@ -18,6 +18,7 @@
 import type { ExtendedMapperComponent } from '../vendor/data-driven-forms'
 import optionIsEqualToValue from '../utils/option-is-equal-to-value'
 import {
+  FieldBreakpointSpan,
   FieldCheckbox,
   FieldColorPicker,
   FieldCssDimension,
@@ -77,6 +78,11 @@ export const FIELD_MAP_TEXT_FIELD: ExtendedMapperComponent = {
 export const FIELD_MAP_CSS_DIMENSION: ExtendedMapperComponent = {
   ...fieldSharedOptions,
   component: FieldCssDimension,
+}
+/** Per-breakpoint span/offset row, persisted as one string (AGL-2486). */
+export const FIELD_MAP_BREAKPOINT_SPAN: ExtendedMapperComponent = {
+  ...fieldSharedOptions,
+  component: FieldBreakpointSpan,
 }
 /** Fill type + angle + colour stops, persisted as one string (AGL-1331). */
 export const FIELD_MAP_CSS_GRADIENT: ExtendedMapperComponent = {

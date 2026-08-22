@@ -21,6 +21,7 @@ import type { ColorPickerProps } from '../components/color-picker.component'
 import type { IconSelectProps } from '../components/icon-select.component'
 import type { ToggleButtonProps } from '../components/toggle-button.component'
 import type {
+  BreakpointSpanProps,
   CheckboxProps,
   CssDimensionProps,
   CssGradientProps,
@@ -65,6 +66,12 @@ export const FieldTextField = dynamic<TextFieldProps>(() =>
 )
 export const FieldCssDimension = dynamic<CssDimensionProps>(() =>
   import('../mapper/css-dimension').then((mod) => mod.default),
+)
+// Per-breakpoint span/offset editor for MUI Grid cells (AGL-2486). Not
+// `ssr: false`: it is a row of plain Selects with no popper anchor of its
+// own, so it renders on the server like the other structured fields.
+export const FieldBreakpointSpan = dynamic<BreakpointSpanProps>(() =>
+  import('../mapper/breakpoint-span').then((mod) => mod.default),
 )
 // Background fill editor (AGL-1331). `ssr: false` like the other pickers:
 // it mounts a Popper on an anchor element and the react-color picker.
