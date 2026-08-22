@@ -85,16 +85,34 @@ export interface LinearConfig {
   apiKey: string
   teamId: string
   /**
-   * Optional destination project inside {@link teamId} (AGL-2185).
+   * Destination project PER REPORT KIND inside {@link teamId}.
    *
    * Linear requires a `teamId` on every issue, so the team is what makes
    * this configured at all; the project is the finer destination Zach asked
    * for on 2026-08-19 — "tracked in a separate linear **project** then our
-   * primary one". Left unset the issue still files, in the team's own
-   * backlog, which is the right answer for a self-host operator who has one
-   * team and no project structure to honour.
+   * primary one" — and on 2026-08-22 he split it by kind: "each type of
+   * issue report feature, bug etc all options should be filed under its own
+   * project in the Customer Reports team".
+   *
+   * A kind may map to `null`, and then the issue files into the team's own
+   * backlog with no project. That is not a lost report, and it is the right
+   * answer for a self-host operator who has one team and no project
+   * structure to honour (AGL-2185).
    */
-  projectId: string | null
+  projectIds: Readonly<Record<ReportKind, string | null>>
+}
+
+/**
+ * The env var naming a given kind's project.
+ *
+ * Derived from the kind rather than listed, so adding a fourth report kind
+ * to {@link REPORT_KINDS} is a one-line change that needs no new plumbing
+ * here, in the route, or in the spec — the shape that decays otherwise is a
+ * hand-maintained map that silently keeps routing a new kind to the old
+ * catch-all.
+ */
+export function projectEnvVarForKind(kind: ReportKind): string {
+  return `LINEAR_CUSTOMER_REPORTS_PROJECT_ID_${kind.toUpperCase()}`
 }
 
 /**
@@ -116,9 +134,19 @@ export function linearConfigFromEnv(
   if (!apiKey || !teamId) return null
   // Optional, and deliberately NOT part of the configured/unconfigured test:
   // a missing project is a less specific destination, not a lost report.
-  const projectId =
-    (env['LINEAR_CUSTOMER_REPORTS_PROJECT_ID'] ?? '').trim() || null
-  return { apiKey, teamId, projectId }
+  //
+  // `LINEAR_CUSTOMER_REPORTS_PROJECT_ID` stays honoured as the fallback for
+  // any kind with no project of its own. That keeps a deployment configured
+  // before the per-kind split working unchanged, and it means a kind added
+  // later lands somewhere real instead of nowhere.
+  const shared = (env['LINEAR_CUSTOMER_REPORTS_PROJECT_ID'] ?? '').trim() || null
+  const projectIds = Object.fromEntries(
+    REPORT_KINDS.map((kind) => [
+      kind,
+      (env[projectEnvVarForKind(kind)] ?? '').trim() || shared,
+    ]),
+  ) as Record<ReportKind, string | null>
+  return { apiKey, teamId, projectIds }
 }
 
 /**
@@ -332,6 +360,8 @@ export function buildReportBody(
 
 export interface CreateIssueArgs {
   config: LinearConfig
+  /** Chooses the destination project. See {@link LinearConfig.projectIds}. */
+  kind: ReportKind
   title: string
   description: string
   /** Injectable for the spec; defaults to the platform `fetch`. */
@@ -394,11 +424,11 @@ export async function createLinearIssue(
         variables: {
           input: {
             teamId: args.config.teamId,
-            // Omitted entirely when unconfigured. Sending `projectId: null`
-            // is not the same request as not sending the field, and Linear
-            // rejects the explicit null.
-            ...(args.config.projectId
-              ? { projectId: args.config.projectId }
+            // Omitted entirely when this kind has no project. Sending
+            // `projectId: null` is not the same request as not sending the
+            // field, and Linear rejects the explicit null.
+            ...(args.config.projectIds[args.kind]
+              ? { projectId: args.config.projectIds[args.kind] }
               : {}),
             title: args.title,
             description: args.description,

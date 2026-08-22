@@ -312,7 +312,12 @@ export async function POST(request: Request): Promise<Response> {
       filedAt: new Date().toISOString(),
     })
 
-    const created = await createLinearIssue({ config, title, description: body })
+    const created = await createLinearIssue({
+      config,
+      kind,
+      title,
+      description: body,
+    })
     if (!created.ok) {
       // Never 200 on a report that was not filed. The reporter still has
       // their text in the open dialog, which is the whole reason this says

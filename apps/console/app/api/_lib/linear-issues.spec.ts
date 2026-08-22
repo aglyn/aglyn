@@ -42,6 +42,8 @@ import {
   fencedBlock,
   inlineSafe,
   isReportKind,
+  projectEnvVarForKind,
+  REPORT_KINDS,
   linearConfigFromEnv,
   MAX_SUMMARY,
   LINEAR_GRAPHQL_URL,
@@ -54,7 +56,11 @@ import {
 const CONFIG = {
   apiKey: 'lin_api_TESTKEY',
   teamId: 'team-aglyn-uuid',
-  projectId: 'project-customer-bug-reports-uuid',
+  projectIds: {
+    bug: 'project-customer-bug-reports-uuid',
+    idea: 'project-customer-feature-requests-uuid',
+    question: 'project-customer-questions-uuid',
+  },
 }
 
 const CONTEXT: ReportContext = {
@@ -123,17 +129,63 @@ describe('AGL-2185 · configuration', () => {
         LINEAR_API_KEY: ' lin_api_x ',
         LINEAR_CUSTOMER_REPORTS_TEAM_ID: ' team-1 ',
       }),
-    ).toEqual({ apiKey: 'lin_api_x', teamId: 'team-1', projectId: null })
+    ).toEqual({
+      apiKey: 'lin_api_x',
+      teamId: 'team-1',
+      projectIds: { bug: null, idea: null, question: null },
+    })
   })
 
-  it('picks up the destination project when one is configured', () => {
+  it('the shared project var still routes EVERY kind — a deployment configured before the per-kind split is unchanged', () => {
     expect(
       linearConfigFromEnv({
         LINEAR_API_KEY: 'lin_api_x',
         LINEAR_CUSTOMER_REPORTS_TEAM_ID: 'team-1',
         LINEAR_CUSTOMER_REPORTS_PROJECT_ID: ' project-9 ',
       }),
-    ).toEqual({ apiKey: 'lin_api_x', teamId: 'team-1', projectId: 'project-9' })
+    ).toEqual({
+      apiKey: 'lin_api_x',
+      teamId: 'team-1',
+      projectIds: {
+        bug: 'project-9',
+        idea: 'project-9',
+        question: 'project-9',
+      },
+    })
+  })
+
+  it('each kind takes its OWN project, and a per-kind var beats the shared one', () => {
+    // Zach, 2026-08-22: "each type of issue report feature, bug etc all
+    // options should be filed under its own project in the Customer Reports
+    // team." `question` is left off deliberately: a kind with no project of
+    // its own must fall back rather than file nowhere.
+    expect(
+      linearConfigFromEnv({
+        LINEAR_API_KEY: 'lin_api_x',
+        LINEAR_CUSTOMER_REPORTS_TEAM_ID: 'team-1',
+        LINEAR_CUSTOMER_REPORTS_PROJECT_ID: 'shared-fallback',
+        LINEAR_CUSTOMER_REPORTS_PROJECT_ID_BUG: ' proj-bug ',
+        LINEAR_CUSTOMER_REPORTS_PROJECT_ID_IDEA: 'proj-idea',
+      }),
+    ).toEqual({
+      apiKey: 'lin_api_x',
+      teamId: 'team-1',
+      projectIds: {
+        bug: 'proj-bug',
+        idea: 'proj-idea',
+        question: 'shared-fallback',
+      },
+    })
+  })
+
+  it('the env var name is DERIVED from the kind, so a new kind needs no new plumbing', () => {
+    // The guard against the shape that decays: a hand-maintained map that
+    // keeps routing a newly added kind to the old catch-all.
+    for (const kind of REPORT_KINDS) {
+      expect(projectEnvVarForKind(kind)).toBe(
+        `LINEAR_CUSTOMER_REPORTS_PROJECT_ID_${kind.toUpperCase()}`,
+      )
+    }
   })
 
   it('a missing project is a vaguer destination, NOT unconfigured', () => {
@@ -147,7 +199,11 @@ describe('AGL-2185 · configuration', () => {
         LINEAR_CUSTOMER_REPORTS_TEAM_ID: 'team-1',
         LINEAR_CUSTOMER_REPORTS_PROJECT_ID: '   ',
       }),
-    ).toEqual({ apiKey: 'lin_api_x', teamId: 'team-1', projectId: null })
+    ).toEqual({
+      apiKey: 'lin_api_x',
+      teamId: 'team-1',
+      projectIds: { bug: null, idea: null, question: null },
+    })
   })
 
   it('names no Aglyn team id in the source — the id is configuration', () => {
@@ -344,6 +400,7 @@ describe('AGL-2185 · the Linear call', () => {
     })
     const result = await createLinearIssue({
       config: CONFIG,
+      kind: 'bug',
       title: '[Bug] Thing',
       description: 'Body text',
       fetchImpl: impl,
@@ -364,13 +421,53 @@ describe('AGL-2185 · the Linear call', () => {
     expect(sent.variables.input.teamId).toBe(CONFIG.teamId)
     // The whole point of the retarget: the issue lands in the "Customer bug
     // reports" PROJECT, not loose in the team (AGL-2185).
-    expect(sent.variables.input.projectId).toBe(CONFIG.projectId)
+    expect(sent.variables.input.projectId).toBe(CONFIG.projectIds.bug)
     expect(sent.variables.input.title).toBe('[Bug] Thing')
     expect(sent.variables.input.description).toBe('Body text')
     // The document is a constant: the report text is nowhere in the query, so
     // no report can alter the mutation that runs.
     expect(sent.query).not.toContain('Body text')
     expect(sent.query).toContain('issueCreate')
+  })
+
+  it('each kind is sent to ITS OWN project', async () => {
+    // The point of the 2026-08-22 split. Config resolving per-kind ids is
+    // only half of it — the id has to reach the mutation, and the bug that
+    // would survive a config-only test is a call site that keeps reading one
+    // fixed project for every kind.
+    const seen: Record<string, unknown> = {}
+    for (const kind of REPORT_KINDS) {
+      const fetchImpl = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: {
+            issueCreate: {
+              success: true,
+              issue: { id: 'i', identifier: 'CUS-1', url: 'https://x' },
+            },
+          },
+        }),
+      }) as unknown as typeof fetch
+      await createLinearIssue({
+        config: CONFIG,
+        kind,
+        title: 't',
+        description: 'd',
+        fetchImpl,
+      })
+      const sent = JSON.parse(
+        (fetchImpl as jest.Mock).mock.calls[0][1].body as string,
+      )
+      seen[kind] = sent.variables.input.projectId
+    }
+    expect(seen).toEqual({
+      bug: CONFIG.projectIds.bug,
+      idea: CONFIG.projectIds.idea,
+      question: CONFIG.projectIds.question,
+    })
+    // The premise: the three are genuinely different, so this cannot pass by
+    // every kind happening to share one project.
+    expect(new Set(Object.values(seen)).size).toBe(REPORT_KINDS.length)
   })
 
   it('OMITS projectId entirely when no project is configured', async () => {
@@ -388,7 +485,8 @@ describe('AGL-2185 · the Linear call', () => {
       },
     })
     await createLinearIssue({
-      config: { ...CONFIG, projectId: null },
+      config: { ...CONFIG, projectIds: { bug: null, idea: null, question: null } },
+      kind: 'bug',
       title: 't',
       description: 'd',
       fetchImpl: impl,
@@ -409,6 +507,7 @@ describe('AGL-2185 · the Linear call', () => {
     expect(
       await createLinearIssue({
         config: CONFIG,
+        kind: 'bug',
         title: 't',
         description: 'd',
         fetchImpl: impl,
@@ -436,6 +535,7 @@ describe('AGL-2185 · the Linear call', () => {
     expect(
       await createLinearIssue({
         config: CONFIG,
+        kind: 'bug',
         title: 't',
         description: 'd',
         fetchImpl: impl,
@@ -450,6 +550,7 @@ describe('AGL-2185 · the Linear call', () => {
     expect(
       await createLinearIssue({
         config: CONFIG,
+        kind: 'bug',
         title: 't',
         description: 'd',
         fetchImpl: impl,
@@ -462,6 +563,7 @@ describe('AGL-2185 · the Linear call', () => {
     expect(
       await createLinearIssue({
         config: CONFIG,
+        kind: 'bug',
         title: 't',
         description: 'd',
         fetchImpl: impl,
@@ -474,6 +576,7 @@ describe('AGL-2185 · the Linear call', () => {
     expect(
       await createLinearIssue({
         config: CONFIG,
+        kind: 'bug',
         title: 't',
         description: 'd',
         fetchImpl: impl,
