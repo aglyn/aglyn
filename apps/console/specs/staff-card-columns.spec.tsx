@@ -1,0 +1,159 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * AGL-2486: the staff org detail page lays its cards out as BALANCED columns.
+ *
+ * The defect was a twelve-card flex grid of six rigid rows: every item in a
+ * wrapped row is as tall as the tallest one in it, so `Effective
+ * entitlements` — a long table — stretched `Metered usage` beside it to its
+ * own height and drew it as a mostly-empty card. Measured in Chrome at 1440px
+ * with representative card heights, that empty tail was 1042px.
+ *
+ * jsdom performs no layout, so this asserts the CSS the component EMITS
+ * rather than the geometry — the mechanism, which is the part that can
+ * regress in a code change. The geometry was measured separately in a real
+ * browser against exactly the declarations pinned here.
+ */
+
+import { render } from '@testing-library/react'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import StaffCardColumns from '../components/staff-card-columns.component'
+
+/** Every rule emotion emitted for the rendered tree, as text. */
+const stylesheet = () =>
+  Array.from(document.styleSheets)
+    .flatMap((sheet) => {
+      try {
+        return Array.from(sheet.cssRules).map((rule) => rule.cssText)
+      } catch {
+        return []
+      }
+    })
+    .join('\n')
+
+const rulesFor = (className: string) =>
+  stylesheet()
+    .split('\n')
+    .filter((line) => line.includes(className))
+
+function mount(props?: { columns?: number; spacing?: number }) {
+  const { container } = render(
+    <StaffCardColumns
+      {...props}
+      items={[
+        { key: 'a', children: <div>{'card a'}</div> },
+        { key: 'b', children: <div>{'card b'}</div> },
+      ]}
+    />,
+  )
+  const root = container.firstElementChild as HTMLElement
+  const generated = root.className
+    .split(' ')
+    .find((name) => name.startsWith('css-'))
+  // Guard the guard: with no generated class every `toContain` below would be
+  // asserting over the whole document's CSS, or over nothing at all.
+  expect(generated).toBeTruthy()
+  return { root, rules: rulesFor(generated as string) }
+}
+
+describe('StaffCardColumns', () => {
+  it('emits a two-column flow that the browser BALANCES', () => {
+    const { rules } = mount()
+    const text = rules.join('\n')
+    // `column-fill` is left at its `balance` default on purpose — that
+    // default is the whole mechanism, so declaring `auto` anywhere here
+    // would silently restore a ragged first column.
+    expect(text).not.toContain('column-fill: auto')
+    expect(text).toMatch(/@media \(min-width:900px\)/)
+    expect(
+      rules.find((rule) => rule.includes('min-width:900px')),
+    ).toContain('column-count: 2')
+  })
+
+  it('collapses to ONE column below md', () => {
+    // The narrow case is not a nicety: two columns of cards at phone width is
+    // unreadable, and the flex grid it replaces collapsed via `xs: 12`.
+    const { rules } = mount()
+    const base = rules.find((rule) => rule.includes('min-width:0px'))
+    expect(base).toContain('column-count: 1')
+  })
+
+  it('never lets a card be sawn across the column boundary', () => {
+    // Multicol is a fragmentation context. Without this a long table is split
+    // in half and continues at the top of the next column — a worse defect
+    // than the hole this component exists to close.
+    const { rules } = mount()
+    const child = rules.find((rule) => rule.includes('>*'))
+    // Anchored, not `toContain`: `-webkit-column-break-inside: avoid`
+    // CONTAINS the string `break-inside: avoid`, so the loose form passes
+    // with the standard property deleted — which is what the mutation run
+    // caught. The prefixed alias alone does not stop modern Chrome.
+    expect(child).toMatch(/(^|[;{] ?)break-inside: avoid/)
+    expect(child).toContain('page-break-inside: avoid')
+    expect(child).toContain('-webkit-column-break-inside: avoid')
+  })
+
+  it('spaces the cards from the theme, not from a hard-coded pixel count', () => {
+    const wide = mount({ spacing: 3 })
+    expect(wide.rules.join('\n')).toContain('column-gap: 24px')
+    expect(wide.rules.find((rule) => rule.includes('>*'))).toContain(
+      'margin-bottom: 24px',
+    )
+    const tight = mount({ spacing: 1 })
+    expect(tight.rules.join('\n')).toContain('column-gap: 8px')
+  })
+
+  it('honours a column count other than two', () => {
+    const { rules } = mount({ columns: 3 })
+    expect(rules.find((rule) => rule.includes('min-width:900px'))).toContain(
+      'column-count: 3',
+    )
+  })
+
+  it('renders every item it is handed, in order', () => {
+    const { root } = mount()
+    expect(root.children).toHaveLength(2)
+    expect(root.textContent).toBe('card acard b')
+  })
+})
+
+describe('the org detail page uses it', () => {
+  const source = readFileSync(
+    join(__dirname, '..', 'app/(app)/admin/orgs/[orgId]/page.tsx'),
+    'utf8',
+  )
+
+  it('reads a real file', () => {
+    expect(source.length).toBeGreaterThan(10000)
+  })
+
+  it('no longer pins the cards into rigid rows of two', () => {
+    // `size={{ xs: 12, md: 6 }}` on twelve cards IS the bug: it is what makes
+    // a row, and a row is what stretches its shorter card.
+    expect(source).toContain('StaffCardColumns')
+    expect(source).not.toMatch(/size:\s*\{\s*xs:\s*12,\s*md:\s*6\s*\}/)
+  })
+
+  it('does not reach for GridItems masonry, which cannot arrange same-width cards', () => {
+    // `GridItems masonry` buckets by `size`; twelve identically-sized cards
+    // are one bucket and therefore one half-width column with the other half
+    // of the page empty. Pinned because it is the obvious wrong fix.
+    expect(source).not.toContain('GridItems')
+  })
+})
