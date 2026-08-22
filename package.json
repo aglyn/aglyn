@@ -101,6 +101,7 @@
     "test:synthetic-id": "node --test tools/scripts/lib/persisted-synthetic-id.test.mjs",
     "test:media-counter": "node --test tools/scripts/lib/media-counter.test.mjs",
     "test:firewall-posture": "node --test tools/scripts/lib/firewall-posture.test.mjs",
+    "test:probe-headers": "node --test tools/scripts/lib/probe-headers.test.mjs",
     "check:rules-drift": "node tools/scripts/check-rules-drift.mjs",
     "check:pricing-drift": "node tools/scripts/check-pricing-drift.mjs",
     "check:legal-snapshots": "node tools/scripts/check-legal-snapshots.mjs",

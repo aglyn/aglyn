@@ -1,6 +1,7 @@
 {
   "$comment": "AGL-1895. The allowlist for libs/shared/ui/jsx/src/index.ts. Everything reachable from that barrel ships eagerly on EVERY published customer page (AGL-1290). `specifiers` is what the barrel names directly; `packages` is every third-party package its transitive graph reaches. Move either only with `npm run check:jsx-barrel -- --write`, in the same commit as the export that moved it. See tools/scripts/lib/jsx-barrel.mjs.",
   "specifiers": [
+    "./lib/components/aglyn-text",
     "./lib/components/app-link",
     "./lib/components/card-display",
     "./lib/components/card-list-item",

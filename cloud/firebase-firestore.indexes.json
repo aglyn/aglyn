@@ -735,262 +735,7 @@
   ],
   "fieldOverrides": [
     {
-      "collectionGroup": "installs",
-      "fieldPath": "listingId",
-      "indexes": [
-        {
-          "queryScope": "COLLECTION",
-          "order": "ASCENDING"
-        },
-        {
-          "queryScope": "COLLECTION",
-          "order": "DESCENDING"
-        },
-        {
-          "queryScope": "COLLECTION_GROUP",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "members",
-      "fieldPath": "uid",
-      "indexes": [
-        {
-          "queryScope": "COLLECTION",
-          "order": "ASCENDING"
-        },
-        {
-          "queryScope": "COLLECTION_GROUP",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "hostMemberships",
-      "fieldPath": "orgId",
-      "indexes": [
-        {
-          "queryScope": "COLLECTION",
-          "order": "ASCENDING"
-        },
-        {
-          "queryScope": "COLLECTION",
-          "order": "DESCENDING"
-        },
-        {
-          "queryScope": "COLLECTION_GROUP",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "messages",
-      "fieldPath": "authorId",
-      "indexes": [
-        {
-          "queryScope": "COLLECTION",
-          "order": "ASCENDING"
-        },
-        {
-          "queryScope": "COLLECTION_GROUP",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "orders",
-      "fieldPath": "paymentIntentId",
-      "indexes": [
-        {
-          "queryScope": "COLLECTION",
-          "order": "ASCENDING"
-        },
-        {
-          "queryScope": "COLLECTION",
-          "order": "DESCENDING"
-        },
-        {
-          "queryScope": "COLLECTION_GROUP",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "orders",
-      "fieldPath": "createdAtMs",
-      "indexes": [
-        {
-          "queryScope": "COLLECTION",
-          "order": "ASCENDING"
-        },
-        {
-          "queryScope": "COLLECTION",
-          "order": "DESCENDING"
-        },
-        {
-          "queryScope": "COLLECTION_GROUP",
-          "order": "ASCENDING"
-        },
-        {
-          "queryScope": "COLLECTION_GROUP",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "checkouts",
-      "fieldPath": "status",
-      "indexes": [
-        {
-          "queryScope": "COLLECTION",
-          "order": "ASCENDING"
-        },
-        {
-          "queryScope": "COLLECTION",
-          "order": "DESCENDING"
-        },
-        {
-          "queryScope": "COLLECTION_GROUP",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "restockAlerts",
-      "fieldPath": "notifiedAtMs",
-      "indexes": [
-        {
-          "queryScope": "COLLECTION",
-          "order": "ASCENDING"
-        },
-        {
-          "queryScope": "COLLECTION",
-          "order": "DESCENDING"
-        },
-        {
-          "queryScope": "COLLECTION_GROUP",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "bookings",
-      "fieldPath": "startsAtMs",
-      "indexes": [
-        {
-          "queryScope": "COLLECTION",
-          "order": "ASCENDING"
-        },
-        {
-          "queryScope": "COLLECTION",
-          "order": "DESCENDING"
-        },
-        {
-          "queryScope": "COLLECTION_GROUP",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "versions",
-      "fieldPath": "nodes",
-      "indexes": []
-    },
-    {
-      "collectionGroup": "versions",
-      "fieldPath": "template",
-      "indexes": []
-    },
-    {
-      "collectionGroup": "versions",
-      "fieldPath": "layout",
-      "indexes": []
-    },
-    {
-      "collectionGroup": "versions",
-      "fieldPath": "datasetSchema",
-      "indexes": []
-    },
-    {
-      "collectionGroup": "templates",
-      "fieldPath": "nodes",
-      "indexes": []
-    },
-    {
-      "collectionGroup": "templates",
-      "fieldPath": "theme",
-      "indexes": []
-    },
-    {
-      "collectionGroup": "components",
-      "fieldPath": "nodes",
-      "indexes": []
-    },
-    {
-      "collectionGroup": "records",
-      "fieldPath": "values",
-      "indexes": []
-    },
-    {
-      "collectionGroup": "rateLimits",
-      "fieldPath": "expiresAt",
-      "ttl": true,
-      "indexes": [
-        {
-          "queryScope": "COLLECTION",
-          "order": "ASCENDING"
-        },
-        {
-          "queryScope": "COLLECTION",
-          "order": "DESCENDING"
-        },
-        {
-          "queryScope": "COLLECTION",
-          "arrayConfig": "CONTAINS"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "mediaTombstones",
-      "fieldPath": "expiresAt",
-      "ttl": true,
-      "indexes": [
-        {
-          "queryScope": "COLLECTION",
-          "order": "ASCENDING"
-        },
-        {
-          "queryScope": "COLLECTION",
-          "order": "DESCENDING"
-        },
-        {
-          "queryScope": "COLLECTION",
-          "arrayConfig": "CONTAINS"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "assistExchanges",
-      "fieldPath": "expiresAt",
-      "ttl": true,
-      "indexes": [
-        {
-          "queryScope": "COLLECTION",
-          "order": "ASCENDING"
-        },
-        {
-          "queryScope": "COLLECTION",
-          "order": "DESCENDING"
-        },
-        {
-          "queryScope": "COLLECTION",
-          "arrayConfig": "CONTAINS"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "churnSurveyDetails",
+      "collectionGroup": "analytics",
       "fieldPath": "expiresAt",
       "ttl": true,
       "indexes": [
@@ -1028,6 +773,104 @@
       ]
     },
     {
+      "collectionGroup": "assistExchanges",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "arrayConfig": "CONTAINS"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "authHandoffs",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "bookings",
+      "fieldPath": "startsAtMs",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "checkouts",
+      "fieldPath": "status",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "churnSurveyDetails",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "arrayConfig": "CONTAINS"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "components",
+      "fieldPath": "nodes",
+      "indexes": []
+    },
+    {
       "collectionGroup": "cspViolationDaily",
       "fieldPath": "expiresAt",
       "ttl": true,
@@ -1047,7 +890,43 @@
       ]
     },
     {
-      "collectionGroup": "analytics",
+      "collectionGroup": "hostMemberships",
+      "fieldPath": "orgId",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "installs",
+      "fieldPath": "listingId",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "mediaTombstones",
       "fieldPath": "expiresAt",
       "ttl": true,
       "indexes": [
@@ -1062,6 +941,116 @@
         {
           "queryScope": "COLLECTION",
           "arrayConfig": "CONTAINS"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "members",
+      "fieldPath": "uid",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "messages",
+      "fieldPath": "authorId",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "fieldPath": "createdAtMs",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "fieldPath": "paymentIntentId",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "rateLimits",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "arrayConfig": "CONTAINS"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "records",
+      "fieldPath": "values",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "restockAlerts",
+      "fieldPath": "notifiedAtMs",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -1083,6 +1072,36 @@
           "arrayConfig": "CONTAINS"
         }
       ]
+    },
+    {
+      "collectionGroup": "templates",
+      "fieldPath": "nodes",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "templates",
+      "fieldPath": "theme",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "versions",
+      "fieldPath": "datasetSchema",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "versions",
+      "fieldPath": "layout",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "versions",
+      "fieldPath": "nodes",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "versions",
+      "fieldPath": "template",
+      "indexes": []
     }
   ]
 }
