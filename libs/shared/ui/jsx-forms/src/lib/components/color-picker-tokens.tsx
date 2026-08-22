@@ -242,10 +242,23 @@ export const ColorTokenGrid = (props: {
   value: string
   onSelect: (tokenPath: string, event: unknown) => void
   onCustom: () => void
+  /**
+   * Takes the colour off entirely (AGL-2486). Omitted where there is
+   * nothing to clear, or where the caller has no unset state to offer —
+   * a gradient stop always has a colour, so it never passes this.
+   */
+  onClear?: () => void
   /** Overrides the "Theme colors" heading. */
   title?: string
 }) => {
-  const { options, value, onSelect, onCustom, title = 'Theme colors' } = props
+  const {
+    options,
+    value,
+    onSelect,
+    onCustom,
+    onClear,
+    title = 'Theme colors',
+  } = props
   return (
     <Paper sx={{ p: 1, width: 248 }}>
       <Typography
@@ -291,6 +304,17 @@ export const ColorTokenGrid = (props: {
       <Button size="small" fullWidth sx={{ mt: 0.5 }} onClick={onCustom}>
         Custom color…
       </Button>
+      {onClear ? (
+        <Button
+          size="small"
+          fullWidth
+          color="inherit"
+          sx={{ mt: 0.25, color: 'text.secondary' }}
+          onClick={onClear}
+        >
+          Clear color
+        </Button>
+      ) : null}
     </Paper>
   )
 }

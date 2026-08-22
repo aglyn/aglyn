@@ -31,7 +31,10 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useFieldApi } from '../vendor/data-driven-forms'
-import FormFieldGrid, { type FormFieldGridProps } from './form-field-grid'
+import FormFieldGrid, {
+  buildFieldClear,
+  type FormFieldGridProps,
+} from './form-field-grid'
 import type { BaseFieldProps } from './types'
 import { type ExtendedFieldMeta, validationError } from './validation-error'
 
@@ -128,6 +131,8 @@ export interface CssDimensionProps extends BaseFieldProps {
   units?: CssUnit[]
   /** How a bare number is read. See {@link DimensionNumberAs}. */
   numberAs?: DimensionNumberAs
+  /** Offer the reset-to-unset affordance (AGL-2486). */
+  clearable?: boolean
   FormFieldGridProps?: FormFieldGridProps
 }
 
@@ -146,6 +151,7 @@ export const CssDimensionField = (props: CssDimensionProps) => {
     help,
     units = CSS_UNITS,
     numberAs = 'px',
+    clearable,
     FormFieldGridProps = {},
     // Free-text leftovers from the attribute schema that must never reach
     // the DOM (the attributes it was authored with as a TEXT_FIELD).
@@ -193,6 +199,18 @@ export const CssDimensionField = (props: CssDimensionProps) => {
   )
 
   const keywordUnit = !draft.custom && !!draft.unit && isGlobalUnit(draft.unit)
+
+  // Clearing a length has to drop the UNIT too (AGL-2486). Emptying the
+  // number box alone leaves `px` selected, and the next keystroke silently
+  // re-adopts it — which is why "delete the number" was never a way back to
+  // unset.
+  const clear = buildFieldClear({
+    clearable,
+    label,
+    hasValue: value !== '',
+    locked: Boolean(isDisabled || isReadOnly),
+    onClear: () => commit({ text: '', unit: '', custom: false }),
+  })
 
   const handleTextChange = useCallback(
     (event: { target: { value: string } }) => {
@@ -254,7 +272,7 @@ export const CssDimensionField = (props: CssDimensionProps) => {
   )
 
   return (
-    <FormFieldGrid help={help} {...FormFieldGridProps}>
+    <FormFieldGrid help={help} clear={clear} {...FormFieldGridProps}>
       <MuiTextField
         // Schema leftovers first: the controlled value/handlers below must
         // win over anything the attribute was authored with.

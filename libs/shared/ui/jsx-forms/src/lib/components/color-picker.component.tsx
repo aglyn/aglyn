@@ -26,6 +26,9 @@ import {
   type FormFieldGridProps,
   validationError,
 } from '../mapper'
+// Deep import rather than through the barrel: this is a sibling module in
+// the same lib and the barrel is edited by everything.
+import { buildFieldClear } from '../mapper/form-field-grid'
 import {
   useFieldApi,
   type UseFieldApiComponentConfig,
@@ -116,6 +119,8 @@ type InternalColorPickerProps = Partial<TextFieldProps> & {
   FormControlProps?: Partial<MuiFormControlProps>
   PopperProps?: Partial<PopperProps>
   presetColors?: string[]
+  /** Offer the reset-to-unset affordance (AGL-2486). */
+  clearable?: boolean
 }
 
 export type ColorPickerProps = InternalColorPickerProps &
@@ -148,6 +153,7 @@ export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
       inputProps,
       InputProps,
       presetColors,
+      clearable,
       FormFieldGridProps,
       FormControlProps,
       ColorPickerProps,
@@ -238,8 +244,23 @@ export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
       [value, activeToken],
     )
 
+    // The way back to "no colour" (AGL-2486). A colour picker has no empty
+    // swatch and the text box re-parses whatever is left in it, so before
+    // this there was no click anywhere in the panel that took a colour off
+    // again — only another colour.
+    const clear = buildFieldClear({
+      clearable,
+      label,
+      hasValue: value !== '' && value !== undefined && value !== null,
+      locked: Boolean(isDisabled || isReadOnly),
+      onClear: () => {
+        setOpen(false)
+        handleChange('', undefined)
+      },
+    })
+
     return (
-      <FormFieldGrid ref={ref} help={help} {...FormFieldGridProps}>
+      <FormFieldGrid ref={ref} help={help} clear={clear} {...FormFieldGridProps}>
         <ClickAwayListener onClickAway={handleClickAway}>
           <div>
             <MuiTextField
@@ -287,6 +308,11 @@ export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
                   value={value}
                   onSelect={handleTokenSelect}
                   onCustom={() => setStage('custom')}
+                  // The picker itself offers the way back, not just the
+                  // field's corner (AGL-2486): an author who opened the
+                  // palette to change a colour is exactly the author who
+                  // wants to take it off.
+                  onClear={clear && !clear.hidden ? clear.onClear : undefined}
                 />
               ) : (
                 <Paper sx={{ p: 0.5 }}>

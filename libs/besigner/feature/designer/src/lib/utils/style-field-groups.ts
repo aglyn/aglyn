@@ -93,6 +93,24 @@ const STYLE_FIELD_HELP: Record<string, { title: string; excerpt: string }> = {
   },
 }
 
+/**
+ * Marks every field in a group clearable (AGL-2486).
+ *
+ * A style field's empty state is a real authoring choice — it is what
+ * "let the theme decide" looks like — and until this there was no click
+ * anywhere in the panel that produced it. Colour fields had no empty
+ * swatch, length fields re-adopted their unit the moment a number came
+ * back, and selects only offered a Default option where one had been
+ * hand-authored. Applied to the whole group rather than field by field
+ * so a field added later cannot arrive one-way.
+ */
+function withFieldClear(group: StyleFieldGroup): StyleFieldGroup {
+  return {
+    ...group,
+    fields: group.fields.map((field) => ({ clearable: true, ...field })),
+  }
+}
+
 /** Attaches {@link STYLE_FIELD_HELP} to a group's fields, each with a
  * deep link into the responsive-styling docs. */
 function withStyleFieldHelp(group: StyleFieldGroup): StyleFieldGroup {
@@ -262,7 +280,9 @@ export function buildStyleFieldGroups(
   presetColors: string[],
   options?: StyleFieldGroupOptions,
 ): StyleFieldGroup[] {
-  return styleFieldGroups(presetColors, options).map(withStyleFieldHelp)
+  return styleFieldGroups(presetColors, options)
+    .map(withStyleFieldHelp)
+    .map(withFieldClear)
 }
 
 function styleFieldGroups(
@@ -661,29 +681,31 @@ function styleFieldGroups(
  * responsive-sx pipeline as every other group.
  */
 export function buildFlexGapGroup(): StyleFieldGroup {
-  return withStyleFieldHelp({
-    $id: 'flex-gaps',
-    label: 'Gaps',
-    fields: [
-      textField(
-        'gap',
-        'Gap',
-        'Shorthand for row-gap and column-gap, e.g. 16px or 1rem.',
-      ),
-      textField(
-        'rowGap',
-        'Row Gap',
-        "Size of the gutter between the container's rows.",
-        half,
-      ),
-      textField(
-        'columnGap',
-        'Column Gap',
-        "Size of the gutter between the container's columns.",
-        half,
-      ),
-    ],
-  })
+  return withFieldClear(
+    withStyleFieldHelp({
+      $id: 'flex-gaps',
+      label: 'Gaps',
+      fields: [
+        textField(
+          'gap',
+          'Gap',
+          'Shorthand for row-gap and column-gap, e.g. 16px or 1rem.',
+        ),
+        textField(
+          'rowGap',
+          'Row Gap',
+          "Size of the gutter between the container's rows.",
+          half,
+        ),
+        textField(
+          'columnGap',
+          'Column Gap',
+          "Size of the gutter between the container's columns.",
+          half,
+        ),
+      ],
+    }),
+  )
 }
 
 /** Field names owned by a group — the only keys its save may touch. */
