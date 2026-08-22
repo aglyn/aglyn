@@ -90,7 +90,7 @@ describe('styles panel Flexbox & Grids read-back (AGL-1458)', () => {
    */
   const openFlexbox = async () => {
     act(() => {
-      fireEvent.click(screen.getByText('Flexbox & Grids'))
+      fireEvent.click(screen.getByText('Flexbox & Grid'))
     })
     // The style-group field editors are code-split (next/dynamic).
     await act(async () => undefined)

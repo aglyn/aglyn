@@ -117,7 +117,7 @@ describe('styles panel undo/redo re-sync (AGL-2486)', () => {
   it('rolls a toggle back with the document', async () => {
     const node = seedNode({ justifyContent: 'center' })
     render(panel(node))
-    await open('Flexbox & Grids')
+    await open('Flexbox & Grid')
 
     act(() => {
       fireEvent.click(

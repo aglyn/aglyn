@@ -100,7 +100,7 @@ import {
 } from '../utils/responsive-sx'
 import {
   applyStylePartialToSx,
-  buildFlexGapGroup,
+  buildFlexGridGroup,
   buildStyleFieldGroups,
   computeEffectiveStyleValues,
   computeStylePartial,
@@ -475,21 +475,27 @@ const justifySelf: ButtonGroupFormControl = {
 }
 
 /**
- * The Flexbox & Grids container toggles, in panel order (AGL-1458).
+ * The Flexbox & Grid alignment toggles, in panel order (AGL-1458).
  *
  * A list rather than eight literal call sites because every one of them
  * needs the same two wirings — the change handler AND the effective value
  * — and the shipped panel gave them only the first. One render site is one
  * place for that pair to be right.
+ *
+ * Ordered container-first, then the two per-ITEM properties (AGL-2486).
+ * `Align self` and `Justify self` describe how this element sits inside
+ * its parent, not how it arranges its own children, and reading them in
+ * the middle of the container list was half of why the panel needed a
+ * second layout section to put the rest of the per-item properties in.
  */
 const FLEXBOX_TOGGLES: ButtonGroupFormControl[] = [
+  flexDirection,
+  flexWrap,
+  justifyContent,
   alignItems,
   alignContent,
-  alignSelf,
-  flexWrap,
-  flexDirection,
   justifyItems,
-  justifyContent,
+  alignSelf,
   justifySelf,
 ]
 
@@ -542,11 +548,13 @@ export interface ElementStylesFormProps extends Partial<FormRendererProps> {
  * `applyStyleValues` call — no per-group "Save Element" buttons — and
  * every style field has exactly one home:
  *
- * - Flexbox & Grids: container toggles + the gap controls.
+ * - Flexbox & Grid: the alignment toggles plus every typed layout field
+ *   (gaps, grid tracks, item placement, flex-child sizing) — one section
+ *   since AGL-2486, where it used to be two.
  * - Visibility: device-band switches.
  * - Layout / Colors / Sizing / Typography / Borders & Shadows /
- *   Position & Overflow / Grid & Flex Child: the accordion field groups
- *   from `buildStyleFieldGroups`.
+ *   Position & Overflow: the accordion field groups from
+ *   `buildStyleFieldGroups`.
  * - Top level: breakpoint chip, BoxStyler, and the text-align toggle.
  */
 const ElementStylesForm = observer(
@@ -648,8 +656,9 @@ const ElementStylesForm = observer(
         }),
       [presetColors, target.isInstanceOverride],
     )
-    // Container gap controls, rendered inside Flexbox & Grids (AGL-587).
-    const gapGroup = useMemo(() => buildFlexGapGroup(), [])
+    // Every typed layout field, rendered under the alignment toggles in
+    // the single Flexbox & Grid section (AGL-2486).
+    const flexGridGroup = useMemo(() => buildFlexGridGroup(), [])
 
     // Breakpoint-scoped editing (AGL-333): when the artboard preview is a
     // device size, style edits write into that breakpoint's slice of the
@@ -1033,12 +1042,18 @@ const ElementStylesForm = observer(
           />
         </Container>
 
+        {/* One layout section, not two (AGL-2486). `Flexbox & Grids` and
+            `Grid & Flex Child` described the same two CSS layout models
+            from different ends and split them by a line the property names
+            did not follow — `Align self` sat with the container controls
+            while `Grid Columns`, a container property, sat under "Flex
+            Child". Every property both sections carried is here. */}
         <Accordion
-          summary="Flexbox & Grids"
+          summary="Flexbox & Grid"
           help={{
-            title: 'Flexbox & grid alignment',
+            title: 'Flexbox & grid layout',
             excerpt:
-              'Configure the selected element as a flex or grid container — alignment, wrapping, direction, and gaps between children.',
+              'Configure the selected element as a flex or grid container — alignment, wrapping, direction, gaps and track lists — and place it inside its own parent’s layout.',
             href: besignerDocsUrl('responsiveStyling', '#style-groups'),
           }}
         >
@@ -1058,19 +1073,20 @@ const ElementStylesForm = observer(
               value={effectiveValues[schema.name as string] ?? ''}
             />
           ))}
-          {/* Container gaps live with the container toggles (AGL-587);
-              they apply immediately like everything else. */}
+          {/* Gaps, grid tracks, item placement and flex-child sizing —
+              the typed half of the same section. They apply immediately
+              like everything else. */}
           <FormRenderer
             key={formSeedKey}
             FormTemplate={ElementStylesFormTemplate}
             componentMapper={componentMapper}
             keepDirtyOnReinitialize
-            onSubmit={handleGroupSave(styleGroupFieldNames(gapGroup))}
+            onSubmit={handleGroupSave(styleGroupFieldNames(flexGridGroup))}
             initialValues={pickStyleValues(
-              styleGroupFieldNames(gapGroup),
+              styleGroupFieldNames(flexGridGroup),
               effectiveValues,
             )}
-            schema={{ fields: gapGroup.fields }}
+            schema={{ fields: flexGridGroup.fields }}
           />
         </Accordion>
 

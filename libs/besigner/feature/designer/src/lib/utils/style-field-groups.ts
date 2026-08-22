@@ -33,9 +33,12 @@ import { readSxValue, type SxBreakpoint, writeSxValue } from './responsive-sx'
  *
  * Consolidation (AGL-587): every style field has exactly one home. The
  * loose base form is gone — display/float live in Layout, color/
- * backgroundColor in Colors, the container gap controls in the Flexbox &
- * Grids accordion ({@link buildFlexGapGroup}), and the per-item flex
- * fields (grow/shrink/basis/order) in Grid & Flex Child.
+ * backgroundColor in Colors.
+ *
+ * The layout half was consolidated again in AGL-2486: `Flexbox & Grids`
+ * and `Grid & Flex Child` were two sections describing the same two CSS
+ * layout models, and every typed field of both now lives in one group
+ * ({@link buildFlexGridGroup}) under the panel's alignment toggles.
  */
 export interface StyleFieldGroup {
   $id: string
@@ -611,10 +614,57 @@ function styleFieldGroups(
         ),
       ],
     },
-    {
-      $id: 'grid',
-      label: 'Grid & Flex Child',
+  ]
+}
+
+/**
+ * The typed fields of the single Flexbox & Grid section (AGL-2486).
+ *
+ * The panel used to answer "how do I lay this out?" in two places. A
+ * `Flexbox & Grids` accordion held the alignment toggles and the gaps; a
+ * separate `Grid & Flex Child` accordion, four sections further down, held
+ * the track lists, the item placement and the flex-child sizing. Both were
+ * about the same two CSS layout models, neither was complete, and their
+ * names did not divide the properties the way the names suggested — `Align
+ * self` and `Justify self` are per-ITEM properties and lived in the
+ * container section, while `Grid Columns` is a CONTAINER property and
+ * lived in the child one.
+ *
+ * So they are one section now, in reading order: how the container spaces
+ * its children (the gaps), what tracks it defines (the grid template), and
+ * where this element sits inside its own parent (placement and flex
+ * sizing). The alignment toggles render above these, from the panel — they
+ * are icon-button groups rather than schema fields and they read far better
+ * than the free-text equivalents would.
+ *
+ * Every property both sections carried is still here; the whole point is
+ * that nothing had to be dropped to stop saying it twice.
+ */
+export function buildFlexGridGroup(): StyleFieldGroup {
+  return withFieldClear(
+    withStyleFieldHelp({
+      $id: 'flex-grid',
+      label: 'Flexbox & Grid',
       fields: [
+        // Container: the gutters between children.
+        textField(
+          'gap',
+          'Gap',
+          'Shorthand for row-gap and column-gap, e.g. 16px or 1rem.',
+        ),
+        textField(
+          'rowGap',
+          'Row Gap',
+          "Size of the gutter between the container's rows.",
+          half,
+        ),
+        textField(
+          'columnGap',
+          'Column Gap',
+          "Size of the gutter between the container's columns.",
+          half,
+        ),
+        // Container: the grid it defines for them.
         textField(
           'gridTemplateColumns',
           'Grid Columns',
@@ -631,6 +681,7 @@ function styleFieldGroups(
           'How auto-placed grid items fill the tracks.',
           ['row', 'column', 'dense', 'row dense', 'column dense'],
         ),
+        // Child: where THIS element sits in its own parent's layout.
         textField(
           'gridColumn',
           'Grid Column',
@@ -668,40 +719,6 @@ function styleFieldGroups(
           'Order',
           'Visual order of this flex/grid item within its container.',
           { type: 'number', ...half },
-        ),
-      ],
-    },
-  ]
-}
-
-/**
- * Container gap controls rendered inside the Flexbox & Grids accordion
- * (AGL-587) — they configure the selected element AS a flex/grid
- * container, next to the alignment toggles, and write through the same
- * responsive-sx pipeline as every other group.
- */
-export function buildFlexGapGroup(): StyleFieldGroup {
-  return withFieldClear(
-    withStyleFieldHelp({
-      $id: 'flex-gaps',
-      label: 'Gaps',
-      fields: [
-        textField(
-          'gap',
-          'Gap',
-          'Shorthand for row-gap and column-gap, e.g. 16px or 1rem.',
-        ),
-        textField(
-          'rowGap',
-          'Row Gap',
-          "Size of the gutter between the container's rows.",
-          half,
-        ),
-        textField(
-          'columnGap',
-          'Column Gap',
-          "Size of the gutter between the container's columns.",
-          half,
         ),
       ],
     }),

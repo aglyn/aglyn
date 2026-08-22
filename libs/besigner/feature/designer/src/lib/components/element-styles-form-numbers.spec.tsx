@@ -173,7 +173,7 @@ describe('styles panel numeric values (AGL-2486)', () => {
     })
 
     it('does the same for the gap controls', async () => {
-      await renderPanel({}, 'Flexbox & Grids')
+      await renderPanel({}, 'Flexbox & Grid')
       type('Gap', '2')
       expect(live().sx).toEqual({ gap: 2 })
     })
