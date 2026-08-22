@@ -44,6 +44,13 @@ export function adminNavTabItems() {
       label: 'Feature flags',
       href: buildRoute(Route.ADMIN_FLAGS),
     },
+    // Beside Feature flags, because it is the same kind of thing: a lever
+    // over the whole platform rather than over one workspace (AGL-2486).
+    {
+      id: 'nav-tab-admin-settings',
+      label: 'Platform settings',
+      href: buildRoute(Route.ADMIN_SETTINGS),
+    },
     {
       id: 'nav-tab-admin-coupons',
       label: 'Coupons',

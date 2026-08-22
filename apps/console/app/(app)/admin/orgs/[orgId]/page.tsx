@@ -30,7 +30,7 @@ import {
   UNLIMITED,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
-import { AppLink, CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import {
@@ -61,6 +61,7 @@ import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth, useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
+import StaffCardColumns from '../../../../../components/staff-card-columns.component'
 import StaffOnly from '../../../../../components/staff-only.component'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import PluginWidgetSlot from '../../../../../components/plugin-widget-slot.component'
@@ -1009,11 +1010,12 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                 />
               </Stack>
             </CardDisplay>
-            <GridItems
-              spacing={3}
+            {/* Balanced columns, not six rigid rows of two (AGL-2486):
+                `Effective entitlements` is a long table and used to leave the
+                whole area beside it dead. */}
+            <StaffCardColumns
               items={[
                 {
-                  size: { xs: 12, md: 6 },
                   children: (
                     // Labelled + grouped, owner resolved to a person, org id
                     // copyable (AGL-938).
@@ -1033,7 +1035,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 },
                 {
-                  size: { xs: 12, md: 6 },
                   children: (
                     // Direct editing (AGL-358).
                     <CardDisplay
@@ -1205,7 +1206,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 },
                 {
-                  size: { xs: 12, md: 6 },
                   children: (
                     <CardDisplay
                       header={`Sites (${(hostDocs ?? []).length})`}
@@ -1290,7 +1290,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 },
                 {
-                  size: { xs: 12, md: 6 },
                   children: (
                     <CardDisplay
                       header={`Members (${(memberDocs ?? []).length})`}
@@ -1357,7 +1356,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 },
                 {
-                  size: { xs: 12, md: 6 },
                   children: (
                     <CardDisplay
                       header={'Effective entitlements'}
@@ -1432,7 +1430,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 },
                 {
-                  size: { xs: 12, md: 6 },
                   children: (
                     // Metered usage (AGL-939): consumption alongside the
                     // plan and its limits — the thing staff open this page
@@ -1463,7 +1460,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 },
                 {
-                  size: { xs: 12, md: 6 },
                   children: (
                     <CardDisplay
                       header={'Billing history & payment method'}
@@ -1572,7 +1568,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 },
                 {
-                  size: { xs: 12, md: 6 },
                   children: (
                     // Per-org discount (AGL-1105).
                     <CardDisplay
@@ -1732,7 +1727,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 },
                 {
-                  size: { xs: 12, md: 6 },
                   children: (
                     // Enterprise custom billing (AGL-1110).
                     <CardDisplay
@@ -1899,7 +1893,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 },
                 {
-                  size: { xs: 12, md: 6 },
                   children: (
                     <CardDisplay
                       header={'Recent admin actions on this organization'}
@@ -2002,7 +1995,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 },
                 {
-                  size: { xs: 12, md: 6 },
                   children: (
                     <CardDisplay
                       header={'Success manager'}
@@ -2091,7 +2083,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 },
                 {
-                  size: { xs: 12, md: 6 },
                   children: (
                     <CardDisplay
                       header={'Staff notes'}
