@@ -780,11 +780,56 @@ function fieldSxScheme(
 }
 
 /**
+ * A value that is ENTIRELY a number — the only shape stored as a number.
+ *
+ * Deliberately narrower than `Number()` would accept: no exponent form, no
+ * `Infinity`, no hex. Those parse to a number and are not CSS anyway, so
+ * converting them would only make the stored value harder to read back
+ * than the text the author actually typed.
+ */
+const NUMERIC_STYLE_VALUE = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/
+
+/**
+ * What a control's emitted value is STORED as (AGL-2486).
+ *
+ * The panel's free-text fields can only hand back a string, and for the
+ * fields whose bare number is a theme multiple that silently changes the
+ * value's MEANING. `borderRadius: 2` renders 8px because MUI multiplies a
+ * NUMBER by `shape.borderRadius`; the string `'2'` is passed through
+ * verbatim as `border-radius: 2` and dropped by the CSS parser. Same for
+ * `gap`/`rowGap`/`columnGap` against the spacing unit, and for
+ * `lineHeight`, where a unitless number is a ratio. Open the field on a
+ * node carrying the theme default, retype the same number, and the value
+ * is gone — with nothing anywhere to report it.
+ *
+ * The rule is the VALUE's shape, not a list of field names, and it is
+ * enforced here rather than in each control: this is the merge every
+ * control in the panel writes through, so a field added later cannot
+ * arrive with the old behaviour. Anything carrying a non-numeric character
+ * (`8px`, `50%`, `1rem`, `span 2`) is what the author wrote and stays a
+ * string.
+ *
+ * Empty — including whitespace — clears. `0` does NOT: it is falsy and it
+ * is a legitimate radius, opacity and flex-grow, and `strictNullChecks` is
+ * off repo-wide, so the emptiness test is spelled out rather than left to
+ * a falsy check.
+ */
+function normalizeStyleValue(value: unknown): unknown {
+  if (typeof value !== 'string') return value
+  const text = value.trim()
+  if (text === '') return undefined
+  if (!NUMERIC_STYLE_VALUE.test(text)) return value
+  const numeric = Number(text)
+  return Number.isFinite(numeric) ? numeric : value
+}
+
+/**
  * Merges a partial of style values into an sx object at the active
  * breakpoint + scheme scope (AGL-333 / AGL-588). Unchanged values are
  * skipped so effective (inherited) readings never get pinned into a
  * breakpoint or scheme slice by round-tripping through a form. Empty
- * strings clear.
+ * strings clear, and purely numeric text is stored as a NUMBER — see
+ * {@link normalizeStyleValue}.
  */
 export function applyStylePartialToSx(
   sx: Record<string, any> | undefined,
@@ -807,7 +852,7 @@ export function applyStylePartialToSx(
     }),
   }
   for (const [key, value] of Object.entries(partial)) {
-    const normalized = value === '' ? undefined : value
+    const normalized = normalizeStyleValue(value)
     const fieldScheme = fieldSxScheme(key, scheme)
     if (readSxValue(next, key, breakpoint, fieldScheme) === normalized) continue
     next = writeSxValue(next, key, normalized, breakpoint, fieldScheme)
