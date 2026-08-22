@@ -15,7 +15,15 @@
  * limitations under the License.
  */
 
-import { expandSxAliases } from '@aglyn/shared-data-enums'
+// Subpath, NOT the `@aglyn/shared-data-enums` barrel (AGL-2486). That barrel
+// re-exports `lib/firebase-auth`, which imports `AuthErrorCodes` from
+// `firebase/auth` as a VALUE — so a styling helper on the node-render path
+// dragged the Firebase auth graph into the client bundle of every published
+// customer page. This module and `palette-sx` were the only two edges from
+// `@aglyn/aglyn` to that barrel; pointing both at the file they actually want
+// measured -48,643 B GZIPPED off the `/[host]/[[...slug]]` route's client
+// chunks (694,808 -> 646,165 B gz, Turbopack production build).
+import { expandSxAliases } from '@aglyn/shared-data-enums/sx-property-aliases'
 import {
   isResponsiveSxObject,
   mergeSchemeValue,

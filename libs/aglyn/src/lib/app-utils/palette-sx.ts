@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import { cssVarNameToPaletteToken } from '@aglyn/shared-data-enums'
+// Subpath, NOT the `@aglyn/shared-data-enums` barrel — see the note on the
+// same import in `merge-node-sx.ts` (AGL-2486). The barrel reaches
+// `firebase/auth`; this file wants one string helper out of `lib/styles`.
+import { cssVarNameToPaletteToken } from '@aglyn/shared-data-enums/styles'
 
 /**
  * Palette-token references inside sx STRING values (AGL-1331).
