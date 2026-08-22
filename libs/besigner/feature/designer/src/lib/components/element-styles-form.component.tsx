@@ -551,8 +551,27 @@ export interface ElementStylesFormProps extends Partial<FormRendererProps> {
  */
 const ElementStylesForm = observer(
   forwardRef<any, ElementStylesFormProps>((props, ref) => {
-    const { node } = props
+    const { node: selectedNode } = props
     const deleteElementCallback = useDeleteElementCallback()
+
+    // The node as the CANVAS currently holds it (AGL-2486).
+    //
+    // Undo and redo restore a whole-document snapshot through
+    // `CanvasManager.setNodes`, which mints fresh node instances and
+    // replaces the map. The selection holds a node OBJECT, not an id, so
+    // after an undo the aside panel handed this component a DETACHED copy
+    // — the canvas rolled back and every field here kept reading the value
+    // that had just been undone, then wrote it back over the restored one
+    // on the next edit. Looking the id up in the map re-attaches the panel
+    // to what the canvas renders, and — read inside an `observer` — is
+    // also what makes an undo re-render the panel at all.
+    //
+    // The fallback keeps a node the map does not have (a spec's hand-built
+    // schema, a node deleted while its panel is still mounted) rendering
+    // rather than blanking the panel.
+    const node = (selectedNode?.$id
+      ? (Aglyn.canvas.getNode(selectedNode.$id) ?? selectedNode)
+      : selectedNode) as Aglyn.NodeSchema | undefined
 
     // The definition behind a selected instance (AGL-1332): the panel needs
     // its node tree to offer the leaves an author may style. Read from the
@@ -1045,6 +1064,7 @@ const ElementStylesForm = observer(
             key={formSeedKey}
             FormTemplate={ElementStylesFormTemplate}
             componentMapper={componentMapper}
+            keepDirtyOnReinitialize
             onSubmit={handleGroupSave(styleGroupFieldNames(gapGroup))}
             initialValues={pickStyleValues(
               styleGroupFieldNames(gapGroup),
@@ -1108,6 +1128,16 @@ const ElementStylesForm = observer(
                 key={formSeedKey}
                 FormTemplate={ElementStylesFormTemplate}
                 componentMapper={componentMapper}
+                // Re-seed from the document, but never over the caret
+                // (AGL-2486). Changing `initialValues` is what carries an
+                // undo into these fields; on its own it also resets the
+                // field being typed in the moment a SIBLING key in the same
+                // group moves. `keepDirtyOnReinitialize` draws the line
+                // where it belongs: a field whose value still equals what
+                // was last stored takes the new reading, and one the author
+                // has since changed keeps their characters until the
+                // debounced commit stores them.
+                keepDirtyOnReinitialize
                 onSubmit={handleGroupSave(fieldNames)}
                 initialValues={pickStyleValues(fieldNames, effectiveValues)}
                 schema={{ fields: group.fields }}
