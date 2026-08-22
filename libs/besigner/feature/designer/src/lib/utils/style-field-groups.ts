@@ -625,10 +625,10 @@ function styleFieldGroups(
  * separate `Grid & Flex Child` accordion, four sections further down, held
  * the track lists, the item placement and the flex-child sizing. Both were
  * about the same two CSS layout models, neither was complete, and their
- * names did not divide the properties the way the names suggested — `Align
- * self` and `Justify self` are per-ITEM properties and lived in the
- * container section, while `Grid Columns` is a CONTAINER property and
- * lived in the child one.
+ * names did not divide the properties the way the names suggested:
+ * `alignSelf` and `justifySelf` are per-ITEM properties and lived in the
+ * container section, while `gridTemplateColumns` is a CONTAINER property
+ * and lived in the child one.
  *
  * So they are one section now, in reading order: how the container spaces
  * its children (the gaps), what tracks it defines (the grid template), and
