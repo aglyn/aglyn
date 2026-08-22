@@ -298,6 +298,13 @@ export const CssDimensionField = (props: CssDimensionProps) => {
         // is free text — only the plain number+unit case is numeric.
         type={draft.custom || keywordUnit ? 'text' : 'number'}
         slotProps={{
+          // A keyword value (`auto`) is shown through the PLACEHOLDER,
+          // and MUI hides a placeholder behind CSS while the label is
+          // un-shrunk — so the field printed its label over an empty box
+          // on a node that demonstrably had a value (AGL-2486). Only this
+          // case: an ordinary empty length has nothing to reveal, and
+          // shrinking it would be a restyle rather than a fix.
+          inputLabel: keywordUnit ? { shrink: true } : undefined,
           input: {
             readOnly: isReadOnly || keywordUnit,
             endAdornment: unitSelect,

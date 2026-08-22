@@ -537,6 +537,13 @@ export const CssGradientField = (props: CssGradientProps) => {
           // Without displayEmpty a MUI Select renders NOTHING for `''`,
           // which would show the unset state as a broken control.
           select: { displayEmpty: true },
+          // …and `displayEmpty` alone prints the label ON TOP of the option
+          // it just drew (AGL-2486). MUI shrinks a label when the input
+          // reports itself FILLED, and an empty Select reports the
+          // opposite no matter what it is rendering — so the unset choice
+          // and the field name landed in the same few pixels and neither
+          // could be read. A rendered option is content; say so.
+          inputLabel: { shrink: true },
         }}
       >
         <MenuItem value="">{unsetLabel}</MenuItem>
