@@ -1,15 +1,16 @@
 ---
 sidebar_position: 10
 title: Refunds
-description: Refunding an organization's subscription charge from its org page — who may issue one, what the confirmation states, why a refund is a loss rather than a reversal, and the audit row it writes.
+description: Refunding an organization's subscription charge from its org page — how much each staff role may refund before it escalates, why a refund is a loss rather than a reversal, and the audit row it writes.
 ---
 
 # Refunds
 
 :::warning Aglyn staff only
 This card lives on **Staff → Organizations → _the organization_** and requires a staff
-claim. Reading the refundable charges is open to every staff role; **issuing** a refund
-requires the `super` role.
+claim. Reading the refundable charges is open to every staff role. **Issuing** one is
+open to every staff role too, **up to a limit** — above it, the refund needs the `super`
+role. See [How much you can refund](#how-much-you-can-refund).
 :::
 
 A refund used to mean leaving Aglyn for the Stripe dashboard. That worked, but the only
@@ -34,21 +35,62 @@ If the organization has never subscribed, the card says so. If Stripe could not 
 reached, the card says **that** — it never renders a lookup failure as "nothing to
 refund", because those two facts send an operator in opposite directions.
 
-## Who can refund {#who-can-refund}
+## How much you can refund {#how-much-you-can-refund}
 
-| Action | Role |
-| -- | -- |
-| See the charges and how much is already refunded | any staff |
-| Issue a refund | `super` only |
+| Action | `support` / `billing` | `super` |
+| -- | -- | -- |
+| See the charges and how much is already refunded | yes | yes |
+| Issue a refund, per refund | up to **$150.00** | any amount |
+| Issue refunds, per rolling 24 hours | up to **$500.00** | any amount |
 
-Issuing is `super` because it is the only staff action that sends money *out* — the same
-bar as publishing a feature flag or managing users. Support staff still see the whole
-card, because "how much of this invoice is already refunded" is a support question they
-should be able to answer without escalating.
+This started out `super`-only, and it changed for an operational reason: the person a
+customer actually reaches is support, and making them escalate a $12 refund means the
+customer waits on one person's availability. A control that turns every routine refund
+into a queue is a control people route around.
 
-The role is enforced **on the server**, in the route that talks to Stripe. The button is
-also wrapped for the role that cannot press it, but that is courtesy, not the control:
-a client-side gate is not a gate.
+**There is no second approver.** That is a deliberate decision, and it is why there are
+*two* limits rather than one.
+
+- **$150.00 per refund** covers a full month on every plan a customer can sign up to
+  self-serve, with headroom for tax and proration. It stops at the two things worth a
+  second pair of eyes: an **annual** term, which is billed twelve months up front, and
+  the largest accounts. "One month of a mainstream plan" is a transaction. "A year up
+  front" is a decision.
+- **$500.00 in a rolling 24 hours, per person** is what stops the first limit being
+  defeated by arithmetic. Without it, a $600 annual charge is four $150 refunds — each
+  one legal, and together landing exactly where the escalation existed to stop them. The
+  window is *rolling*, not a calendar day, so it cannot be doubled by refunding at
+  23:59 and again at 00:01.
+
+Neither number is a target. $500 a day is far above any plausible day of support volume,
+and it exists to bound what a mistake or a compromised session can give away. Raise it
+as volume grows — it lives in one place, `apps/console/constants/refund-authority.ts`,
+and the console reads the same numbers the server enforces.
+
+### You see your limit before you type {#you-see-your-limit}
+
+The card states your own allowance above the form, counting **down** as you spend it, so
+you never fill in a charge, an amount and a reason only to be told your role could not
+have done it. A charge larger than your per-refund limit says so on its own row, and the
+Amount field carries the refusal — with the same sentence the server would have used —
+if you type past it.
+
+If the card could not read your remaining 24-hour allowance, it says that too rather than
+showing a full one.
+
+### It is enforced on the server {#enforced-on-the-server}
+
+Both limits are checked **in the route that talks to Stripe, before Stripe is called**.
+The console's disabled button is so you are not refused after doing the work; it is not
+the control. A client-side cap is not a cap.
+
+Two consequences worth knowing:
+
+- If the 24-hour ledger cannot be read, the refund is **refused**, not allowed. The cap
+  is the only control on the largest staff action there is, so an outage must not
+  quietly lift it. Nothing is charged or refunded; retry, or ask someone with `super`.
+- A refund that **Stripe** refuses does not spend your daily allowance. No money moved,
+  so nothing was used up.
 
 ## Issuing a refund {#issuing-a-refund}
 
@@ -100,6 +142,11 @@ The route refuses these before any money moves, and says which:
 - **A fully refunded charge**, and a charge that never captured.
 - **A duplicate submit.** A double click, or a retry after a lost response, is deduped
   per attempt. A second *legitimate* partial on the same charge is not affected.
+- **More than your role may refund.** Over your per-refund limit, the refusal names the
+  amount and says to ask someone with `super` — rather than splitting it, which the
+  24-hour ceiling refuses anyway. Over your remaining 24-hour allowance, the refusal
+  names how much is left. Both come *before* the attempt is claimed, so correcting the
+  amount and submitting again works normally.
 
 When Stripe itself refuses, the attempt stays retryable — no money moved, so nothing is
 stranded.
@@ -115,6 +162,14 @@ Every settled refund writes one `adminAudit` row with `action: 'org.refund'`, ta
 - **against what** — the charge id and the invoice id
 - **the money** — what the charge captured, what was already refunded before this one,
   the amount refunded now, the resulting cumulative total, and the fee Stripe kept
+- **on whose authority** — `actorRole` (the role held at the time), `authority`
+  (`capped` or `super`), `overCap` (whether the amount was one only `super` could have
+  issued), and `capCentsAtTime` (the limit in force when the row was written)
+
+`overCap` is the field to query. It separates a refund that **needed** the escalation
+from a routine one — a `super` refunding $50 is an ordinary refund, and `authority`
+alone cannot say so. `capCentsAtTime` is recorded so that raising the limit later does
+not silently reinterpret the rows written under the old one.
 
 The fee is recorded rather than re-derived, so a later margin or churn review reads the
 true cost off the row instead of going back to Stripe months afterwards.

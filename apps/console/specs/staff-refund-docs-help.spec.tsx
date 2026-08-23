@@ -129,7 +129,11 @@ describe('the refunds topic the card depends on (AGL-2486)', () => {
     // lands at the top of the page.
     const anchors: readonly string[] = DOCS_HELP_ANCHORS.refunds ?? []
     expect(anchors).toContain('#issuing-a-refund')
-    expect(anchors).toContain('#who-can-refund')
+    // Renamed from `#who-can-refund` when refunds stopped being a yes/no on
+    // the role (AGL-2486): the question an operator now has is "how much",
+    // and the section that answers it is the one the anchor must reach.
+    expect(anchors).toContain('#how-much-you-can-refund')
+    expect(anchors).not.toContain('#who-can-refund')
     expect(anchors).toContain('#what-is-recorded')
     // The revenue linkage is the one section another surface depends on: the
     // staff revenue page reports these refunds, and the runbook is where that

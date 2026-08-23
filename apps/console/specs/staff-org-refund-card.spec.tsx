@@ -53,8 +53,11 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 
 jest.mock('../hooks/use-is-staff', () => ({
   __esModule: true,
-  useStaffRole: () => 'super',
+  useStaffRole: () => mockRole,
 }))
+
+/** Reassigned per test — the card's copy now depends on the viewer's role. */
+let mockRole: string | null = 'super'
 
 jest.mock('../constants/docs-links', () => ({
   __esModule: true,
@@ -109,6 +112,7 @@ const mockFetch = (over: Record<string, unknown> = {}) => {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockRole = 'super'
   mockFetch()
   mockConfirm.mockResolvedValue(undefined)
 })
@@ -289,5 +293,137 @@ describe('StaffOrgRefundCard (AGL-2486)', () => {
     const [message] = mockEnqueueSnackbar.mock.calls.at(-1) as [string, unknown]
     expect(message).toContain('$40.00 USD')
     expect(message).toMatch(/1\.75/)
+  })
+})
+
+/**
+ * The boundary is legible BEFORE an amount is typed (AGL-2486).
+ *
+ * Issuing is no longer `super`-only: support may refund up to a cap and
+ * escalates above it. That makes the gate amount-dependent, and an
+ * amount-dependent gate discovered on submit is the worst of both — the
+ * operator does the whole form, then learns their role could never have done
+ * it. Every assertion here is about something visible before the Refund
+ * button is reachable.
+ */
+describe('the card states the operator’s own ceiling first (AGL-2486)', () => {
+  /** A charge big enough that a capped role cannot refund all of it. */
+  const BIG = { ...CHARGE, amountCents: 60000, refundedCents: 0 }
+
+  const renderWith = async (
+    role: string,
+    authority: Record<string, unknown>,
+    charge = CHARGE,
+  ) => {
+    mockRole = role
+    postBodies = []
+    ;(globalThis as any).fetch = jest.fn(async (_url: string, init: any = {}) => {
+      if ((init.method ?? 'GET') === 'GET') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            charges: [charge],
+            hasCustomer: true,
+            authority: { role, ...authority },
+          }),
+        }
+      }
+      postBodies.push(JSON.parse(init.body))
+      return { ok: true, status: 200, json: async () => ({ ok: true }) }
+    })
+    render(<StaffOrgRefundCard orgId="org-1" />)
+    await screen.findByText(charge.id)
+  }
+
+  const capped = {
+    authority: 'capped',
+    perRefundCapCents: 15000,
+    windowCapCents: 50000,
+    windowCents: 0,
+    windowCount: 0,
+  }
+
+  it('tells a capped role both ceilings without being asked', async () => {
+    await renderWith('support', capped)
+    expect(screen.getByText(/\$150\.00 per refund/)).toBeTruthy()
+    expect(screen.getByText(/\$500\.00 in a rolling 24 hours/)).toBeTruthy()
+    expect(screen.getByText(/needs the super staff role/)).toBeTruthy()
+  })
+
+  it('counts down the remaining daily allowance rather than restating the cap', async () => {
+    // A sentence that always said "$500.00 is left" would be a constant
+    // wearing the costume of a reading.
+    await renderWith('support', { ...capped, windowCents: 32000 })
+    expect(screen.getByText(/\$180\.00 of that is left/)).toBeTruthy()
+  })
+
+  it('says the charge is bigger than the role, on the row itself', async () => {
+    await renderWith('support', capped, BIG)
+    fireEvent.mouseDown(screen.getByLabelText('Charge to refund'))
+    expect(
+      screen.getByText(/your role can refund \$150\.00 of it/),
+    ).toBeTruthy()
+  })
+
+  it('blocks an over-cap amount with the sentence the SERVER would have said', async () => {
+    await renderWith('support', capped, BIG)
+    fireEvent.mouseDown(screen.getByLabelText('Charge to refund'))
+    fireEvent.click(screen.getByRole('option', { name: /AGL-0001/ }))
+    fireEvent.change(screen.getByLabelText('Amount'), {
+      target: { value: '400' },
+    })
+    await waitFor(() =>
+      expect(
+        // The amount-specific half, which only the refusal carries — the
+        // standing allowance sentence above the form names the cap too, and
+        // matching that instead would have passed without the refusal ever
+        // being rendered.
+        screen.getByText(/\$400\.00 needs the super staff role/),
+      ).toBeTruthy(),
+    )
+    expect(
+      screen.getByRole('button', { name: /Refund/ }).hasAttribute('disabled'),
+    ).toBe(true)
+    expect(postBodies).toHaveLength(0)
+  })
+
+  it('leaves an UNDER-cap amount enabled for the same role', async () => {
+    // The direction that matters most: the change exists so support can
+    // issue the ordinary refund without escalating.
+    await renderWith('support', capped, BIG)
+    fireEvent.mouseDown(screen.getByLabelText('Charge to refund'))
+    fireEvent.click(screen.getByRole('option', { name: /AGL-0001/ }))
+    fireEvent.change(screen.getByLabelText('Amount'), {
+      target: { value: '120' },
+    })
+    fireEvent.mouseDown(screen.getByLabelText('Reason'))
+    fireEvent.click(screen.getByRole('option', { name: /Billing error/ }))
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /Refund/ }).hasAttribute('disabled'),
+      ).toBe(false),
+    )
+  })
+
+  it('tells a super role it has no ceiling, and does not invent one', async () => {
+    await renderWith('super', {
+      authority: 'super',
+      perRefundCapCents: null,
+      windowCapCents: null,
+      windowCents: 0,
+      windowCount: 0,
+    })
+    expect(screen.getByText(/can refund any amount/)).toBeTruthy()
+    expect(screen.queryByText(/rolling 24 hours/)).toBeNull()
+  })
+
+  it('says so when the remaining allowance could not be read', async () => {
+    // Never rendered as a FULL allowance — that would produce exactly the
+    // refused-after-filling-in-the-form experience the card exists to avoid.
+    await renderWith('support', { ...capped, windowCents: null })
+    expect(
+      screen.getByText(/remaining 24-hour allowance could not be read/),
+    ).toBeTruthy()
   })
 })

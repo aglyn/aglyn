@@ -491,7 +491,7 @@ export const DOCS_HELP_TOPICS = {
   refunds: {
     path: '/staff-console/refunds',
     title: 'Refunds',
-    excerpt: 'Refunding an organization\'s subscription charge from its org page — who may issue one, what the confirmation states, why a refund is a loss rather than a reversal, and the audit row it writes.',
+    excerpt: 'Refunding an organization\'s subscription charge from its org page — how much each staff role may refund before it escalates, why a refund is a loss rather than a reversal, and the audit row it writes.',
   },
   relations: {
     path: '/content-and-data/datasets/relations',
@@ -749,7 +749,7 @@ export const DOCS_HELP_ANCHORS = {
   publishYourFirstScreen: ['#1-create-a-screen', '#2-design-it-in-the-besigner', '#3-preview-and-publish', '#how-fast-changes-go-live', '#next'],
   realmBundles: ['#build-against-the-host-abi', '#the-chain-that-runs-before-a-byte-executes', '#granting-trust-staff', '#where-realm-bundles-load', '#key-rotation', '#troubleshooting'],
   redirects: ['#manage-redirects', '#metrics', '#match-modes-v2', '#related'],
-  refunds: ['#where-it-is', '#who-can-refund', '#issuing-a-refund', '#a-refund-is-a-loss', '#what-it-refuses', '#what-is-recorded', '#in-revenue', '#what-this-is-not', '#related'],
+  refunds: ['#where-it-is', '#how-much-you-can-refund', '#you-see-your-limit', '#enforced-on-the-server', '#issuing-a-refund', '#a-refund-is-a-loss', '#what-it-refuses', '#what-is-recorded', '#in-revenue', '#what-this-is-not', '#related'],
   relations: ['#reference-fields', '#many-to-many', '#using-relations', '#tips', '#related'],
   reportAnIssue: ['#is-it-us-or-your-site', '#what-to-write', '#a-bug', '#an-idea', '#a-question', '#length-caps', '#what-gets-attached-for-you', '#being-contacted', '#where-it-goes', '#when-it-does-not-send', '#rate-limits', '#verified-email', '#something-went-wrong-on-our-side', '#related'],
   responsiveStyling: ['#style-per-breakpoint', '#interaction-states', '#you-can-see-the-state-while-you-style-it', '#fields-you-dont-touch-keep-inheriting', '#states-and-breakpoints-combine', '#focus-state', '#box-stylers', '#spacing-side-names', '#spacing-units', '#spacing-steps', '#spacing-custom-amounts', '#unit-px', '#unit-rem', '#unit-em', '#unit-percent', '#unit-ch', '#unit-viewport', '#unit-small-viewport', '#style-groups', '#borders-without-css', '#picking-a-font', '#gradient-backgrounds', '#visibility-per-device-band', '#scheme-scoped-colors', '#custom-classes', '#custom-css-sx', '#semantic-sections--theme-mode', '#edit-json-for-one-element'],
