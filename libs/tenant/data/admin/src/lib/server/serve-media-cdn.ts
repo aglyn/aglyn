@@ -29,6 +29,7 @@ import { firebaseAdmin } from './firebase-admin'
 import { getPlatformLockdown } from './lockdown'
 import { getMediaQuarantine } from './media-quarantine'
 import { verifyMediaAccess } from './media-signing'
+import { mediaStoragePathInScope } from './media-storage-path'
 
 /** Variant widths generated at upload (AGL-175). */
 export const MEDIA_CDN_VARIANT_WIDTHS = [320, 640, 1280] as const
@@ -879,9 +880,25 @@ export async function serveMediaCdn(
       .bucket(process.env['NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET'])
     // Real folders: the doc records its object path; legacy assets fall
     // back to the flat layout.
-    const basePath =
-      (snapshot.get('storagePath') as string | undefined) ||
-      `${isOrg ? 'orgs' : 'hosts'}/${scopeId}/media/${mediaId}`
+    //
+    // The recorded path is CLIENT DATA and this is an ADMIN-SDK bucket read,
+    // which the Storage rules do not constrain — so it is honoured only when
+    // it is genuinely inside this scope's media prefix (AGL-1881). Without
+    // that check a host or org editor could point their own media document at
+    // any key in the shared bucket and have this route stream it to an
+    // anonymous caller behind a `s-maxage=3600` edge-cached URL, including the
+    // fixed `adminAudit-archive/` and `erasures/` retention prefixes.
+    const basePath = mediaStoragePathInScope({
+      storagePath: snapshot.get('storagePath'),
+      base: `${isOrg ? 'orgs' : 'hosts'}/${scopeId}`,
+      mediaId,
+      onRefused: (candidate) => {
+        console.error(
+          '[media-cdn] out-of-scope storagePath refused',
+          JSON.stringify({ scopeId, mediaId, candidate }),
+        )
+      },
+    })
     const objectPath = useVariant ? `${basePath}__w${width}.webp` : basePath
     const file = bucket.file(objectPath)
     const [metadata] = await file.getMetadata().catch(() => [null as any])
