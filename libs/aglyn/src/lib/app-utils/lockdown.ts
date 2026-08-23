@@ -50,6 +50,12 @@
 // scope's apex check cannot introduce a cycle here.
 import { TENANT_APEX } from './host-naming'
 import { operatorContactLine } from './operator-identity'
+// Also a leaf — `platform-brand` imports nothing — so the same no-cycle
+// argument as `host-naming` above covers it. Staff-surface copy must read
+// the CONFIGURED brand: a self-host operator cannot edit source to rename
+// the product (AGL-2153), and "Aglyn cannot reach the database" is a
+// sentence their operators would be shown about their own install.
+import { PLATFORM_BRAND_NAME } from './platform-brand'
 
 export type LockdownScope =
   | 'platform'
@@ -242,8 +248,8 @@ export function isLockdownEnforcement(
 
 /** Staff-surface labels; the key stays the wire/API identity. */
 export const LOCKDOWN_ENFORCEMENT_LABELS: Record<LockdownEnforcement, string> = {
-  standard: 'Standard — releases if Aglyn cannot reach the database',
-  takedown: 'Takedown — keeps holding if Aglyn cannot reach the database',
+  standard: `Standard — releases if ${PLATFORM_BRAND_NAME} cannot reach the database`,
+  takedown: `Takedown — keeps holding if ${PLATFORM_BRAND_NAME} cannot reach the database`,
 }
 
 /**

@@ -20,6 +20,7 @@ import {
   LOCKDOWN_FEATURE_KEYS,
   LOCKDOWN_FEATURE_LABELS,
   LOCKDOWN_REASON_CODES,
+  PLATFORM_BRAND_NAME,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
@@ -501,7 +502,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
     <TextField
       select
       size="small"
-      label="If Aglyn can't reach the database"
+      label={`If ${PLATFORM_BRAND_NAME} can't reach the database`}
       value={value}
       onChange={(event) => onChange(event.target.value)}
       sx={{ minWidth: 250 }}
