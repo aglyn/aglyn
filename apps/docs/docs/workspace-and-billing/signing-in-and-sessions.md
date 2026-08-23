@@ -197,6 +197,46 @@ the same Security section.
 If the card cannot load your history it says so. That is not the same as an
 empty list — do not read a failed load as "nothing else has signed in".
 
+## Passkeys
+
+**Manage Account → Security → Passkeys** lists every passkey on your account,
+when it was added and when it was last used, with **Set up a passkey** to add
+one and **Remove** on each row.
+
+Passkeys are *additive*. Adding one never weakens or replaces anything —
+your password and your sign-in providers keep working exactly as before — so
+losing an authenticator costs you a convenience, not your account.
+
+### Removing one
+
+Use **Remove** when a device is lost or stolen, or when you no longer want a
+particular key on the account. Removing a passkey:
+
+- stops that passkey signing in, immediately and everywhere;
+- does **not** sign you out anywhere. Sessions the passkey already started
+  are ended by [signing out of a device](#recent-sign-ins), which is a
+  separate control;
+- does **not** touch your password or your other sign-in methods.
+
+You can set the same device up again afterwards — removing a passkey frees it
+completely, rather than blocklisting it.
+
+### "Blocked — possible credential copy"
+
+Every authenticator keeps a counter that only goes up. If a passkey presents a
+counter that has gone *backwards*, that is the signature of a **copied**
+credential, so Aglyn refuses the sign-in and marks the passkey Blocked.
+
+A Blocked passkey stays refused. It is not a warning you can sign past, and it
+does not clear itself — the only signal there will ever be is the one
+regression, so throwing it away after a single refusal would throw away the
+detection. Sign in another way, then **Remove** the passkey and set the device
+up again if you still have it.
+
+Rarely, an authenticator with a buggy counter can trigger this on a device
+nobody has copied. The remedy is the same, and it is the reason Remove exists
+next to it.
+
 ## Downloading your data
 
 **Manage Account → Close account → Download my data** gives you a machine-readable JSON
@@ -213,6 +253,14 @@ export below instead.
 links are listed as *present* rather than reproduced, so the file tells you what exists
 without becoming something you can lose. An API key's identifier is withheld too,
 because that identifier is derived from the key itself.
+
+That is decided by what a value **looks like**, not only by what the field is called —
+a credential is withheld whether it sits in a field named `webhook_secret`, one named
+`supplierToken`, or one named nothing in particular. A credential carried inside a URL is
+stripped out of the address while the address itself stays, so you can still see where
+your own files live. Ordinary content, prose, identifiers and content hashes are not
+touched: a list of names is a list somebody has to keep up to date, and the whole point of
+this file is that it does not quietly stop covering something.
 
 The file opens with a `coverage` section naming every place we looked and what was done
 with each — including the two things that are deliberately *not* included, and why. If

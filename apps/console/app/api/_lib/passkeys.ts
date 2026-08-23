@@ -466,6 +466,30 @@ export async function verifyAssertion(
   ).get()
   if (!credentialSnapshot.exists) throw new PasskeyError('credential-unknown')
   const stored = credentialSnapshot.data() as StoredPasskey
+  /**
+   * A flagged credential is REFUSED, not merely flagged (AGL-1881).
+   *
+   * `suspectedCloneAt` was written on a signCount regression below and then
+   * read by nothing. It was not a control, it was a note — while the
+   * management card rendered the row as **"Blocked — possible credential
+   * copy"** and the sign-in error told the user the passkey "was refused for
+   * security reasons".
+   *
+   * And the counter check alone does not survive the attack it is named
+   * after. A cloned authenticator that increments normally simply catches
+   * up: refused a few times, then past the stored count and accepted. One
+   * whose counter is attacker-chosen is accepted on the first try and pushes
+   * the stored count so far ahead that the LEGITIMATE device is the one that
+   * gets flagged. So a single regression is the only signal there will ever
+   * be, and discarding it after one refusal discards the whole detection.
+   *
+   * Once flagged it stays refused until the owner removes the credential
+   * (`POST /api/auth/passkeys/remove`) and registers again — which is why
+   * the refusal ships together with a delete path, and not before it. A
+   * dead end that cannot be cleared is a worse product than one that never
+   * claimed to block anything.
+   */
+  if (stored.suspectedCloneAt) throw new PasskeyError('credential-cloned')
   let verified: boolean
   let newCounter: number
   try {
@@ -504,4 +528,82 @@ export async function verifyAssertion(
     { merge: true },
   )
   return { uid, credentialId, label: stored.label }
+}
+
+/**
+ * Remove ONE of the caller's own passkeys (AGL-1881).
+ *
+ * ## Why this exists
+ *
+ * It did not, and its absence was a security hole rather than a missing
+ * nicety. A user whose laptop was stolen, or whose authenticator the
+ * clone check has flagged, had no way to take the credential off the
+ * account — the store is server-write-only (correctly: a client-writable
+ * credential store is a full auth bypass), so with no endpoint there was no
+ * path at all. Three separate strings promised otherwise: the management
+ * card rendered a flagged credential as "Blocked", the sign-in failure copy
+ * said to "remove it from Manage account → Security", and the registration
+ * limit error said "Passkey limit reached — remove one first."
+ *
+ * ## The two writes, and why they are one transaction
+ *
+ * `users/{uid}/passkeys/{id}` is the credential; `passkeyCredentialIndex/{id}`
+ * is the server-only reverse index the discoverable sign-in ceremony resolves
+ * a uid from. Deleting the credential alone would leave an index row pointing
+ * at a document that no longer exists — `verifyAssertion` would refuse with
+ * `credential-unknown`, so it is not exploitable, but the id would stay
+ * claimed and `credential-exists` would refuse the owner re-registering the
+ * SAME authenticator afterwards. That is precisely what someone does after
+ * a false-positive clone flag, so the two must move together.
+ *
+ * ## The ownership check is the whole security of this function
+ *
+ * The index is read INSIDE the transaction and its `uid` must equal the
+ * caller's. Without that, a signed-in user could pass any credential id and
+ * delete the index row belonging to somebody else's passkey — locking a
+ * stranger out of a sign-in method from an authenticated session. The
+ * credential document is already uid-pathed and so cannot be reached across
+ * accounts, which is exactly why the index is the interesting one and why
+ * this check is not redundant with it.
+ *
+ * Idempotent: removing a credential that is already gone reports
+ * `removed: false` rather than failing, so a double-clicked button and a
+ * retried request do not produce an error the user has to interpret.
+ *
+ * NOT a session revocation. Passkeys are additive — a removed credential
+ * cannot start a NEW session, and any session it already minted lives or
+ * dies by the normal session machinery. "Sign out everywhere" is the
+ * separate control for that, and conflating them would make removing a
+ * spare key from a keyring log everyone out.
+ */
+export async function deletePasskey(params: {
+  firestore: Firestore
+  uid: string
+  credentialId: string
+}): Promise<{ removed: boolean; label: string | null }> {
+  const credentialId = String(params.credentialId ?? '')
+  if (!credentialId) throw new PasskeyError('credential-unknown')
+  return params.firestore.runTransaction(async (tx) => {
+    const credentialRef = passkeyRef(params.firestore, params.uid, credentialId)
+    const index = indexRef(params.firestore, credentialId)
+    const [credential, indexed] = await Promise.all([
+      tx.get(credentialRef),
+      tx.get(index),
+    ])
+    // Somebody else's credential id. Refused with the same reason an unknown
+    // one gets, so the endpoint does not become an oracle for which ids are
+    // registered on the platform.
+    if (indexed.exists && String(indexed.get('uid') ?? '') !== params.uid) {
+      throw new PasskeyError('credential-unknown')
+    }
+    if (!credential.exists && !indexed.exists) {
+      return { removed: false, label: null }
+    }
+    const label = credential.exists
+      ? String((credential.data() as StoredPasskey)?.label ?? 'Passkey')
+      : null
+    if (credential.exists) tx.delete(credentialRef)
+    if (indexed.exists) tx.delete(index)
+    return { removed: true, label }
+  })
 }

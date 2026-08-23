@@ -68,6 +68,7 @@ import {
   CHALLENGE_TTL_MS,
   createAuthenticationOptions,
   createRegistrationOptions,
+  deletePasskey,
   PasskeyError,
   resolveRpContext,
   verifyAndStoreRegistration,
@@ -628,5 +629,221 @@ describe('sign-in ceremony', () => {
       nowMs: NOW,
     })
     expect(assertion.uid).toBe('user-1')
+  })
+})
+
+/**
+ * The clone flag ENFORCES, and a passkey can be revoked (AGL-1881).
+ *
+ * ## What was wrong
+ *
+ * `suspectedCloneAt` was written on a signCount regression and read by
+ * nothing. It was a note, not a control — while the management card rendered
+ * the row as **"Blocked — possible credential copy"** and the sign-in error
+ * told the user the passkey "was refused for security reasons".
+ *
+ * The counter check on its own does not survive the attack it is named
+ * after. A cloned authenticator that increments normally is refused a few
+ * times and then simply catches up past the stored count; one whose counter
+ * is attacker-chosen is accepted on the first try and pushes the stored
+ * count so far ahead that the LEGITIMATE device becomes the one that gets
+ * flagged. One regression is the only signal there will ever be, so
+ * discarding it after a single refusal discards the detection.
+ *
+ * ## Why the two land together
+ *
+ * A refusal that cannot be cleared is a worse product than one that never
+ * claimed to block anything: before this, the credential store was
+ * server-write-only with NO delete endpoint, so a flagged credential — or a
+ * stolen laptop's — could not be taken off the account at all. Enforcement
+ * and revocation are one change for that reason.
+ */
+describe('a flagged credential is REFUSED, not merely noted (AGL-1881)', () => {
+  const flagged = {
+    'users/user-1/passkeys/cred-1': {
+      credentialId: 'cred-1',
+      publicKey: Buffer.from([9, 9]).toString('base64url'),
+      signCount: 10,
+      transports: ['internal'],
+      label: 'MacBook',
+      createdAt: NOW - 1000,
+      lastUsedAt: null,
+      suspectedCloneAt: NOW - 500,
+    },
+    'passkeyCredentialIndex/cred-1': { uid: 'user-1' },
+  }
+
+  async function attempt(firestore: any) {
+    const { challengeId } = await createAuthenticationOptions({
+      firestore,
+      originHeader: ORIGIN,
+      nowMs: NOW,
+    })
+    return verifyAssertion({
+      firestore,
+      originHeader: ORIGIN,
+      challengeId,
+      response: { id: 'cred-1' } as never,
+      nowMs: NOW,
+    })
+  }
+
+  it('refuses a flagged credential whose counter has since caught up', async () => {
+    // THE attack the old code lost to: the clone increments normally, so a
+    // few refusals later its counter is past the stored one and every check
+    // passes. `newCounter: 99` is what "caught up" looks like.
+    mockVerifyAuthenticationResponse.mockResolvedValue({
+      verified: true,
+      authenticationInfo: { newCounter: 99 },
+    })
+    await expect(attempt(memoryFirestore(flagged))).rejects.toThrow(
+      new PasskeyError('credential-cloned'),
+    )
+  })
+
+  it('refuses BEFORE the signature check — the flag is not a tie-breaker', async () => {
+    mockVerifyAuthenticationResponse.mockResolvedValue({
+      verified: true,
+      authenticationInfo: { newCounter: 99 },
+    })
+    await expect(attempt(memoryFirestore(flagged))).rejects.toThrow(
+      PasskeyError,
+    )
+    // A flagged credential must not reach the crypto layer at all: whoever
+    // is presenting it, we have already decided we do not trust it.
+    expect(mockVerifyAuthenticationResponse).not.toHaveBeenCalled()
+  })
+
+  it('does not touch the credential — the flag is not consumed by refusing', async () => {
+    // If a refusal cleared the flag, the attacker's second attempt would be
+    // treated as a fresh credential. It stays flagged until the OWNER
+    // removes it.
+    mockVerifyAuthenticationResponse.mockResolvedValue({
+      verified: true,
+      authenticationInfo: { newCounter: 99 },
+    })
+    const firestore = memoryFirestore(flagged)
+    await expect(attempt(firestore)).rejects.toThrow(PasskeyError)
+    expect(firestore._docs.get('users/user-1/passkeys/cred-1')).toMatchObject({
+      suspectedCloneAt: NOW - 500,
+      signCount: 10,
+      lastUsedAt: null,
+    })
+  })
+
+  it('leaves an UNFLAGGED credential working — the negative control', async () => {
+    // Without this the enforcement could be "refuse everything" and every
+    // assertion above would still pass.
+    mockVerifyAuthenticationResponse.mockResolvedValue({
+      verified: true,
+      authenticationInfo: { newCounter: 11 },
+    })
+    const clean = {
+      ...flagged,
+      'users/user-1/passkeys/cred-1': {
+        ...flagged['users/user-1/passkeys/cred-1'],
+        suspectedCloneAt: undefined,
+      },
+    }
+    delete (clean['users/user-1/passkeys/cred-1'] as any).suspectedCloneAt
+    const assertion = await attempt(memoryFirestore(clean))
+    expect(assertion.uid).toBe('user-1')
+  })
+})
+
+describe('deletePasskey — the revocation path that did not exist (AGL-1881)', () => {
+  const seeded = () => ({
+    'users/user-1/passkeys/cred-1': {
+      credentialId: 'cred-1',
+      publicKey: Buffer.from([9, 9]).toString('base64url'),
+      signCount: 10,
+      transports: ['internal'],
+      label: 'MacBook',
+      createdAt: NOW - 1000,
+      lastUsedAt: null,
+    },
+    'passkeyCredentialIndex/cred-1': { uid: 'user-1' },
+    // A second user's credential, for the cross-account case.
+    'users/user-2/passkeys/cred-2': { credentialId: 'cred-2', label: 'Theirs' },
+    'passkeyCredentialIndex/cred-2': { uid: 'user-2' },
+  })
+
+  it('removes the credential AND its reverse index', async () => {
+    // Both, or the id stays claimed: `verifyAndStoreRegistration` refuses a
+    // credential id the index already holds, so a half-delete would stop the
+    // owner re-registering the SAME authenticator — which is exactly what
+    // someone does after a false-positive clone flag.
+    const firestore = memoryFirestore(seeded())
+    const result = await deletePasskey({
+      firestore,
+      uid: 'user-1',
+      credentialId: 'cred-1',
+    })
+    expect(result).toEqual({ removed: true, label: 'MacBook' })
+    expect(firestore._docs.has('users/user-1/passkeys/cred-1')).toBe(false)
+    expect(firestore._docs.has('passkeyCredentialIndex/cred-1')).toBe(false)
+  })
+
+  it('refuses to touch ANOTHER account’s credential', async () => {
+    // The whole security of this function. The credential document is
+    // uid-pathed and so unreachable across accounts — but the INDEX is a
+    // top-level collection keyed only by credential id, so without the
+    // ownership check a signed-in user could delete a stranger's index row
+    // and lock them out of a sign-in method.
+    const firestore = memoryFirestore(seeded())
+    await expect(
+      deletePasskey({ firestore, uid: 'user-1', credentialId: 'cred-2' }),
+    ).rejects.toThrow(new PasskeyError('credential-unknown'))
+    expect(firestore._docs.has('passkeyCredentialIndex/cred-2')).toBe(true)
+    expect(firestore._docs.has('users/user-2/passkeys/cred-2')).toBe(true)
+  })
+
+  it('leaves every OTHER credential of the same user alone', async () => {
+    const firestore = memoryFirestore({
+      ...seeded(),
+      'users/user-1/passkeys/cred-3': { credentialId: 'cred-3', label: 'Yubi' },
+      'passkeyCredentialIndex/cred-3': { uid: 'user-1' },
+    })
+    await deletePasskey({ firestore, uid: 'user-1', credentialId: 'cred-1' })
+    expect(firestore._docs.has('users/user-1/passkeys/cred-3')).toBe(true)
+    expect(firestore._docs.has('passkeyCredentialIndex/cred-3')).toBe(true)
+  })
+
+  it('is IDEMPOTENT — a second removal reports it, rather than failing', async () => {
+    const firestore = memoryFirestore(seeded())
+    await deletePasskey({ firestore, uid: 'user-1', credentialId: 'cred-1' })
+    expect(
+      await deletePasskey({
+        firestore,
+        uid: 'user-1',
+        credentialId: 'cred-1',
+      }),
+    ).toEqual({ removed: false, label: null })
+  })
+
+  it('CLEARS a clone flag by removing the credential, so the user is not stuck', async () => {
+    // The escape hatch that makes the refusal above acceptable: the owner
+    // removes the flagged credential and registers the device again.
+    const firestore = memoryFirestore({
+      ...seeded(),
+      'users/user-1/passkeys/cred-1': {
+        credentialId: 'cred-1',
+        label: 'MacBook',
+        signCount: 10,
+        suspectedCloneAt: NOW - 500,
+      },
+    })
+    await deletePasskey({ firestore, uid: 'user-1', credentialId: 'cred-1' })
+    // Nothing is left holding the id, so re-registration is not refused with
+    // `credential-exists`.
+    expect(firestore._docs.has('passkeyCredentialIndex/cred-1')).toBe(false)
+  })
+
+  it('refuses an empty credential id rather than sweeping', async () => {
+    const firestore = memoryFirestore(seeded())
+    await expect(
+      deletePasskey({ firestore, uid: 'user-1', credentialId: '' }),
+    ).rejects.toThrow(new PasskeyError('credential-unknown'))
+    expect(firestore._docs.has('users/user-1/passkeys/cred-1')).toBe(true)
   })
 })

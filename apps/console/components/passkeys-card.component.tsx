@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
@@ -24,6 +24,7 @@ import {
   Button,
   List,
   ListItem,
+  ListItemSecondaryAction,
   ListItemText,
   Stack,
   Typography,
@@ -34,6 +35,7 @@ import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
 import {
   registerPasskey,
+  removePasskey,
   usePasskeysSupported,
   PasskeyRequestError,
 } from '../utils/passkeys'
@@ -68,13 +70,21 @@ function formatDay(ms: number | null | undefined): string | null {
  * `users/{uid}/passkeys` (rules: owner-read, server-write-only); every
  * write happens through the ceremony endpoints.
  *
- * Rename/revoke are a follow-up — the credential store is server-write
- * only, so both need their own authenticated endpoints.
+ * REMOVE is here (AGL-1881); rename is still a follow-up. The credential
+ * store is server-write-only, so both need their own authenticated
+ * endpoints — `POST /api/auth/passkeys/remove` is that endpoint for the
+ * destructive half, and it had to exist before the clone check could be
+ * allowed to actually refuse a credential. Until it did, three separate
+ * strings in the product ("Blocked", "remove it from Manage account →
+ * Security", "Passkey limit reached — remove one first") pointed at a
+ * capability with no path to it, and a user whose device was stolen had no
+ * way to take its credential off the account.
  */
 export function PasskeysCard() {
   const { data: user } = useUser()
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
+  const { confirm } = useConfirmationContext()
   const [rows, setRows] = useState<PasskeyRow[] | null>(null)
   /**
    * The listen failed (AGL-1380). Kept apart from `rows` because the error
@@ -143,6 +153,57 @@ export function PasskeysCard() {
     }
   }, [user, enqueueSnackbar])
 
+  /**
+   * Take one credential off the account (AGL-1881).
+   *
+   * Confirmed, and the confirmation says the two things a user needs before
+   * they press it: what stops working, and what does not. Removing a passkey
+   * is not a session revocation — passkeys are additive, so the account's
+   * password and providers are untouched and any session this credential
+   * already minted lives or dies by "Sign out everywhere", which is its own
+   * control and must not be silently folded into this one.
+   *
+   * The list is a live `onSnapshot` on the credential collection, so the row
+   * disappears when the server write lands. Nothing is patched locally: a
+   * removal that failed server-side must not leave a UI that says it worked.
+   */
+  const handleRemove = useCallback(
+    (row: PasskeyRow) => async () => {
+      if (!user) return
+      const confirmed = await confirm({
+        title: `Remove "${row.label}"?`,
+        description: row.suspectedCloneAt
+          ? 'This passkey is blocked and cannot be used to sign in. ' +
+            'Removing it lets you set the same device up again. Your ' +
+            'password and other sign-in methods are not affected.'
+          : 'You will not be able to sign in with this passkey again. Your ' +
+            'password and other sign-in methods are not affected, and you ' +
+            'stay signed in on devices you are already using.',
+        confirmationText: 'Remove passkey',
+      })
+        .then(() => true)
+        .catch(() => false)
+      if (!confirmed) return
+      setBusy(true)
+      try {
+        await removePasskey(user, row.id)
+        enqueueSnackbar(`Passkey "${row.label}" removed`, {
+          variant: 'success',
+          persist: false,
+        })
+      } catch (error) {
+        console.error('[passkeys-card] removal failed', error)
+        enqueueSnackbar('Removing the passkey failed. Try again.', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      } finally {
+        setBusy(false)
+      }
+    },
+    [user, confirm, enqueueSnackbar],
+  )
+
   if (tenantUser) return null
 
   return (
@@ -193,6 +254,19 @@ export function PasskeysCard() {
                           : undefined
                       }
                     />
+                    <ListItemSecondaryAction>
+                      {/* Per ROW, not a bulk control: the whole point is
+                          taking ONE stolen or flagged device off the
+                          account while the others keep working. */}
+                      <Button
+                        size="small"
+                        color="error"
+                        onClick={handleRemove(row)}
+                        disabled={busy}
+                      >
+                        {'Remove'}
+                      </Button>
+                    </ListItemSecondaryAction>
                   </ListItem>
                 )
               })}
