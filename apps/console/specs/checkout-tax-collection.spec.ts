@@ -64,7 +64,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   memberHasOrgPermission: async () => true,
   readOrgBilling: (...args: unknown[]) => mockReadOrgBilling(...args),
   resolveOrgMembership: async () => ({ orgId: 'org-1', member: { id: 'm-1' } }),
-  getServerReleaseFlagValues: async () => ({}),
+  // The checkout route resolves `release_native_checkout` through the ORG-AWARE
+  // gate (AGL-2486), so this is the seam, not `getServerReleaseFlagValues`.
+  // False keeps every case in these suites on the hosted redirect, which is
+  // the shape they assert.
+  isServerReleaseFlagOnForOrg: async () => false,
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -247,5 +251,24 @@ describe('checkout charges sales tax (AGL-1133 / AGL-1537)', () => {
     expect(capturedBody?.get('allow_promotion_codes')).toBe('true')
     expect(capturedBody?.get('mode')).toBe('subscription')
     expect(capturedBody?.get('subscription_data[metadata][orgId]')).toBe('org-1')
+  })
+
+  it('collects a payment method even when nothing is due today', async () => {
+    // AGL-2486. A $0-today signup — an enterprise first month free, a
+    // 100%-off promo code — must still put a card on file, or the FIRST
+    // RENEWAL fails and there is nothing to charge.
+    //
+    // Stripe's default for `mode: subscription` is already `always`, measured
+    // against the live API on 2026-08-23: a session carrying a 100%-off
+    // `duration: forever` coupon came back `payment_method_collection=always`
+    // with `amount_total=0`. So this parameter changes no behaviour today and
+    // is pinned for a different reason — the opposite value, `if_required`,
+    // fails SILENTLY and LATE. Nothing at signup looks wrong; the damage
+    // surfaces one billing period later, across every discounted account at
+    // once. An unstated default cannot be reviewed, and a default is not a
+    // promise Stripe made to us.
+    const post = loadCheckout()
+    await checkout(post)
+    expect(capturedBody?.get('payment_method_collection')).toBe('always')
   })
 })

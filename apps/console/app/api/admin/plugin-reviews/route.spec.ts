@@ -751,3 +751,111 @@ describe('the positioning criterion gates the customer-facing verdicts', () => {
     expect(response.status).toBe(200)
   })
 })
+
+/**
+ * Element metadata is reviewed copy too (AGL-2486).
+ *
+ * A plugin's declared elements carry a display name and a description that
+ * the besigner renders in the element picker. None of it appears on the
+ * listing page, so a reviewer who works the `positioning` item exactly as
+ * written — read the listing the way a customer would — can finish a review
+ * having never seen the copy that renders closest to the upgrade prompt.
+ * Publisher Agreement §3(h) already binds it ("Neither the Artifact nor its
+ * listing…"); nothing in the flow named it.
+ *
+ * Its own required item rather than a sentence added to `positioning`,
+ * because it is a different ACTION: the listing is read on the listing page,
+ * this is read in the picker on the throwaway install. Folded into one tick,
+ * "I read the listing" stays honestly tickable by someone who never opened
+ * the picker.
+ */
+describe('the element-metadata criterion gates the customer-facing verdicts', () => {
+  function seedVersionWithout(missing: string): void {
+    seedVersion()
+    const path = `marketplaceListings/${LISTING}/pluginVersions/${VERSION}`
+    const version = docs.get(path) as Record<string, unknown>
+    const checklist = version['reviewChecklist'] as Record<string, unknown>
+    expect(checklist[missing]).toBeDefined()
+    delete checklist[missing]
+  }
+
+  it('counts element-metadata among the required items at all', () => {
+    expect(mockChecklist.REQUIRED_CHECKLIST_IDS).toContain('element-metadata')
+  })
+
+  it('tells the reviewer where the copy is, since the listing never shows it', () => {
+    const item = mockChecklist.PLUGIN_REVIEW_CHECKLIST.find(
+      (entry: { id: string }) => entry.id === 'element-metadata',
+    )
+    // An item that says "check the element metadata" and nothing about where
+    // to find it is the unactionable kind the review page's own comment warns
+    // about — it gets ticked without being done.
+    expect(item?.detail).toMatch(/picker/i)
+  })
+
+  it('covers the fields that RANK, not only the ones that render', () => {
+    const item = mockChecklist.PLUGIN_REVIEW_CHECKLIST.find(
+      (entry: { id: string }) => entry.id === 'element-metadata',
+    )
+    // Search terms decide which element a customer is shown and never appear
+    // on screen, so an item written around "read the description" sends a
+    // reviewer looking at the half of the copy that is hardest to abuse.
+    expect(item?.detail).toMatch(/search|keyword|rank/i)
+  })
+
+  it('refuses to APPROVE a version when only element-metadata is outstanding', async () => {
+    seedListing()
+    seedVersionWithout('element-metadata')
+
+    const response = await POST(
+      post({ listingId: LISTING, action: 'approve-version', version: VERSION }),
+    )
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toMatchObject({
+      outstanding: ['element-metadata'],
+    })
+    const version = docs.get(
+      `marketplaceListings/${LISTING}/pluginVersions/${VERSION}`,
+    ) as Record<string, unknown>
+    expect(version['reviewState']).toBe(undefined)
+  })
+
+  it('refuses to LIST — the moment the elements become installable', async () => {
+    seedListing()
+    seedVersionWithout('element-metadata')
+
+    const response = await POST(post({ listingId: LISTING, action: 'list' }))
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toMatchObject({
+      outstanding: ['element-metadata'],
+    })
+    expect(
+      (docs.get(`marketplaceListings/${LISTING}`) as Record<string, unknown>)[
+        'reviewStatus'
+      ],
+    ).toBe('in_review')
+  })
+
+  it('refuses to VERIFY — the badge on top', async () => {
+    seedListing()
+    seedVersionWithout('element-metadata')
+
+    const response = await POST(post({ listingId: LISTING, action: 'verify' }))
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toMatchObject({
+      outstanding: ['element-metadata'],
+    })
+  })
+
+  it('CONTROL: the same calls succeed once element-metadata is ticked', async () => {
+    seedListing()
+    seedVersion()
+
+    const approved = await POST(
+      post({ listingId: LISTING, action: 'approve-version', version: VERSION }),
+    )
+    expect(approved.status).toBe(200)
+    const listed = await POST(post({ listingId: LISTING, action: 'list' }))
+    expect(listed.status).toBe(200)
+  })
+})

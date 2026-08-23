@@ -109,6 +109,8 @@ export const schema: Aglyn.ComponentSchema<IconProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Icon',
+  description:
+    'A single icon from the library, at the size and colour you pick.',
   category: Aglyn.ComponentCategory.MEDIA,
   icon: {
     path: mdiShapePlus.path,

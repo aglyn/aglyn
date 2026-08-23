@@ -26,10 +26,26 @@
  */
 
 import {
+  ANIMATION_EASINGS,
+  ANIMATION_STAGGER_MAX_CHILDREN,
+} from '@aglyn/aglyn/server'
+import {
   ELEMENT_ANIMATION_SCRIPT_TEXT,
   ELEMENT_ANIMATION_STYLE_TEXT,
   pageAnimationAssets,
 } from './element-animation-assets'
+
+/** The sheet as a list of `selector{declarations}` rules, keyframes aside. */
+function rulesOf(css: string): Array<{ selector: string; body: string }> {
+  return css
+    .split('}')
+    .map((chunk) => {
+      const at = chunk.indexOf('{')
+      if (at < 0) return null
+      return { selector: chunk.slice(0, at), body: chunk.slice(at + 1) }
+    })
+    .filter(Boolean) as Array<{ selector: string; body: string }>
+}
 
 /** A screen's flat node map, the shape the tenant route holds. */
 const nodesWith = (props: Record<string, any>) => ({
@@ -206,6 +222,157 @@ describe('element animation assets (AGL-2486)', () => {
       // the Styles panel and animate those too.
       expect(ELEMENT_ANIMATION_STYLE_TEXT).not.toMatch(/transition:\s*all/)
       expect(ELEMENT_ANIMATION_STYLE_TEXT).toContain('transition:transform')
+    })
+  })
+
+  describe('easing', () => {
+    it('gives every easing id a curve, so no id is a dead class', () => {
+      // The ids live in `@aglyn/aglyn` and the curves live here, on purpose —
+      // this is the seam where the two can drift, and an id with no rule is
+      // an element whose timing function silently falls back.
+      for (const ease of ANIMATION_EASINGS) {
+        expect(ELEMENT_ANIMATION_STYLE_TEXT).toContain(
+          `.aglyn-anim-ease--${ease}{--aglyn-anim-ease:`,
+        )
+      }
+    })
+
+    it('reads the curve through a fallback, so an un-eased element still moves', () => {
+      // Every screen authored before easing shipped carries no easing class.
+      // Those elements must land on the original curve rather than on the
+      // initial `ease`, which would visibly re-time published pages.
+      const timing = rulesOf(ELEMENT_ANIMATION_STYLE_TEXT).find((rule) =>
+        rule.body.includes('animation-timing-function'),
+      )
+      expect(timing?.body).toContain(
+        'animation-timing-function:var(--aglyn-anim-ease,cubic-bezier(.16,1,.3,1))',
+      )
+    })
+
+    it('never puts a raw curve on an element, only on a class', () => {
+      // The renderer writes a class, never `--aglyn-anim-ease`. If a curve
+      // could be set per element it would be author free text reaching CSS.
+      for (const rule of rulesOf(ELEMENT_ANIMATION_STYLE_TEXT)) {
+        if (!rule.body.includes('--aglyn-anim-ease:')) continue
+        expect(rule.selector).toMatch(/^\.aglyn-anim-ease--[a-z-]+$/)
+      }
+    })
+  })
+
+  describe('stagger', () => {
+    it('never gives the host itself a keyframe to run', () => {
+      // A host that animated as well as staggering its children would play
+      // two overlapping fades over the same pixels.
+      for (const rule of rulesOf(ELEMENT_ANIMATION_STYLE_TEXT)) {
+        if (!rule.body.includes('animation-name')) continue
+        for (const selector of rule.selector.split(',')) {
+          if (!selector.includes('aglyn-anim-group')) continue
+          expect(selector.trimEnd().endsWith('>*')).toBe(true)
+        }
+      }
+    })
+
+    it('hides a host\'s CHILDREN, and only under the JS-added class', () => {
+      const hiding = rulesOf(ELEMENT_ANIMATION_STYLE_TEXT).filter((rule) =>
+        rule.body.includes('opacity:0'),
+      )
+      expect(hiding.length).toBeGreaterThan(0)
+      const groupSelectors = hiding
+        .flatMap((rule) => rule.selector.split(','))
+        .filter((selector) => selector.includes('aglyn-anim-group'))
+      expect(groupSelectors.length).toBe(1)
+      expect(groupSelectors[0]).toContain('html.aglyn-anim-js ')
+      expect(groupSelectors[0].trimEnd().endsWith('>*')).toBe(true)
+    })
+
+    it('keys the preset rule on the preset class ALONE', () => {
+      // A host carries `aglyn-anim-group`, not `aglyn-anim`. If the preset
+      // rule still required the base class the host would set no keyframe
+      // name, and a whole staggered row would sit at opacity 0 for good —
+      // silently, because every other rule still matches.
+      for (const rule of rulesOf(ELEMENT_ANIMATION_STYLE_TEXT)) {
+        if (!rule.body.includes('--aglyn-anim-name:')) continue
+        expect(rule.selector).toMatch(/^\.aglyn-anim--[a-z-]+$/)
+      }
+    })
+
+    it('applies the shared timing to a host\'s children as well', () => {
+      // Without this the children inherit a keyframe name and run it at the
+      // browser's default 0s duration, i.e. they appear instantly and the
+      // author's duration, delay and easing all do nothing.
+      const timing = rulesOf(ELEMENT_ANIMATION_STYLE_TEXT).find((rule) =>
+        rule.body.includes('animation-fill-mode'),
+      )
+      expect(timing?.selector.split(',')).toContain('.aglyn-anim-group>*')
+    })
+
+    it('adds the rung to the author\'s delay rather than replacing it', () => {
+      // An author who set both a delay and a stagger means "start the row
+      // late, THEN space it out". Replacing would drop their delay silently.
+      const timing = rulesOf(ELEMENT_ANIMATION_STYLE_TEXT).find((rule) =>
+        rule.body.includes('animation-delay'),
+      )
+      expect(timing?.body).toContain(
+        'animation-delay:calc(var(--aglyn-anim-delay,0ms) + var(--aglyn-anim-stagger,0ms))',
+      )
+    })
+
+    it('resets the offset for animated descendants BEFORE climbing the ladder', () => {
+      // Custom properties inherit. Without this reset an animated element
+      // deep inside a staggered card would inherit that card's rung and start
+      // late for no reason an author could see. It has to come FIRST: a
+      // nested host's own rung rule has identical specificity, so source
+      // order is the only thing that lets the inner host win for its children.
+      const css = ELEMENT_ANIMATION_STYLE_TEXT
+      const reset = css.indexOf('.aglyn-anim-group>* .aglyn-anim{')
+      const firstRung = css.indexOf('.aglyn-anim-group>*:nth-child(')
+      expect(reset).toBeGreaterThan(-1)
+      expect(firstRung).toBeGreaterThan(-1)
+      expect(reset).toBeLessThan(firstRung)
+    })
+
+    it('gives the first child no rung rule at all', () => {
+      // `var(--aglyn-anim-stagger,0ms)` already falls back to zero, so a
+      // `calc(STEP * 0)` rule would be a rule that changes nothing.
+      expect(ELEMENT_ANIMATION_STYLE_TEXT).not.toContain(
+        '.aglyn-anim-group>*:nth-child(1)',
+      )
+    })
+
+    it('caps the ladder so a long list never strands its tail', () => {
+      const css = ELEMENT_ANIMATION_STYLE_TEXT
+      const last = ANIMATION_STAGGER_MAX_CHILDREN
+      // Everything from the cap onward shares the final rung...
+      expect(css).toContain(
+        `.aglyn-anim-group>*:nth-child(n+${last}){--aglyn-anim-stagger:calc(var(--aglyn-anim-step,90ms) * ${last - 1})}`,
+      )
+      // ...and no rung is emitted past it, which is what stops a 200-row
+      // collection waiting minutes for its last card.
+      expect(css).not.toContain(
+        `.aglyn-anim-group>*:nth-child(${last + 1})`,
+      )
+      const rungs = rulesOf(css).filter((rule) =>
+        /^\.aglyn-anim-group>\*:nth-child/.test(rule.selector),
+      )
+      expect(rungs.length).toBe(last - 1)
+    })
+
+    it('multiplies the step, so each child is one gap behind the last', () => {
+      expect(ELEMENT_ANIMATION_STYLE_TEXT).toContain(
+        '.aglyn-anim-group>*:nth-child(2){--aglyn-anim-stagger:calc(var(--aglyn-anim-step,90ms) * 1)}',
+      )
+      expect(ELEMENT_ANIMATION_STYLE_TEXT).toContain(
+        '.aglyn-anim-group>*:nth-child(5){--aglyn-anim-stagger:calc(var(--aglyn-anim-step,90ms) * 4)}',
+      )
+    })
+
+    it('ships the scroll runtime for a staggered row', () => {
+      // The children carry no animation props of their own, so the host is
+      // the only node the detector can see.
+      const assets = pageAnimationAssets(
+        nodesWith({ aglynAnimation: 'fade', aglynAnimationStagger: true }),
+      )
+      expect(assets?.scriptText).toBeTruthy()
     })
   })
 

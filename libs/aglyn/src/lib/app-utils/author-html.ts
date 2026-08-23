@@ -500,14 +500,51 @@ export function authorHtmlBreaksContainer(
 }
 
 /**
+ * Something this sanitizer took OUT, phrased for the author who typed it
+ * (AGL-2486).
+ *
+ * Collected BY the sanitizer, at the point each decision is made, rather
+ * than re-derived by a second scan of the input. That is the whole design
+ * constraint: this module's header refuses to let the policy exist in two
+ * engines, and a warning that re-implements the rules is a second engine —
+ * one that goes quietly wrong the moment the real rules move, and tells the
+ * author their markup is fine while the page drops it.
+ *
+ * The render path never asks for these. They exist for the AUTHORING side,
+ * which is the only place a person who can fix the markup is standing; the
+ * runtime is executing for a VISITOR and can do nothing but drop the value
+ * silently. Same reasoning as the reserved-name refusal in `actions.ts`.
+ */
+export interface AuthorHtmlRemoval {
+  kind: 'element' | 'attribute' | 'style' | 'url'
+  /** One sentence, addressed to the author, naming what is gone and why. */
+  message: string
+}
+
+/**
  * Sanitizes author-written HTML to a string safe to hand
  * `dangerouslySetInnerHTML`, on the server and in the browser alike.
  *
  * Pure and deterministic: the same input yields the same bytes in Node and
  * in a browser, which is what lets the server render and the first client
  * render agree without an effect (AGL-1901).
+ *
+ * `removals`, when passed, is APPENDED to with an {@link AuthorHtmlRemoval}
+ * for each thing dropped (AGL-2486). It changes nothing about the output —
+ * every existing caller is byte-identical whether it passes one or not — so
+ * the render path stays exactly as pure as it was and only the editor pays
+ * for the bookkeeping.
  */
-export function sanitizeAuthorHtml(html: string): string {
+export function sanitizeAuthorHtml(
+  html: string,
+  removals?: AuthorHtmlRemoval[],
+): string {
+  /** Records one removal, deduped so a repeated tag reads once. */
+  const note = (kind: AuthorHtmlRemoval['kind'], message: string): void => {
+    if (!removals) return
+    if (removals.some((entry) => entry.message === message)) return
+    removals.push({ kind, message })
+  }
   if (!html) return ''
   const out: string[] = []
   const open: string[] = []
@@ -603,20 +640,54 @@ export function sanitizeAuthorHtml(html: string): string {
       // Event handlers, `data-*` (ALLOW_DATA_ATTR: false on both callers),
       // namespaced names, and the two shapes both configs forbade by name.
       if (!/^[a-z][a-z0-9-]*$/.test(name)) continue
-      if (name.startsWith('on') || name.startsWith('data-')) continue
+      if (name.startsWith('on')) {
+        note(
+          'attribute',
+          `${name}="…" is removed — a published page cannot run author JavaScript from an event handler.`,
+        )
+        continue
+      }
+      if (name.startsWith('data-')) continue
       if (name === 'srcdoc' || name === 'formaction' || name === 'is') continue
       if (!GLOBAL_AUTHOR_HTML_ATTRIBUTES.has(name) && !perElement?.has(name)) continue
       let value = decodeCharacterReferences(attribute.value)
       if (name === 'style') {
         const safe = sanitizeStyleValue(value)
-        if (safe === null) continue
+        if (safe === null) {
+          note(
+            'style',
+            `the style attribute on <${tag}> is removed — inline CSS cannot use @import, expression(), behavior:, -moz-binding or javascript:.`,
+          )
+          continue
+        }
+        // Identity return means nothing was refused; anything else means a
+        // `url()` was neutered, which is invisible on the page (the image
+        // simply never appears) and therefore the case most worth naming.
+        if (safe !== value) {
+          note(
+            'url',
+            `a url() in the style attribute on <${tag}> will not load — inline CSS may only fetch over https:, data: or blob:.`,
+          )
+        }
         value = safe
       } else if (URL_LIST_ATTRIBUTES.has(name)) {
         const safe = filterSrcset(tag, name, value)
-        if (safe === null) continue
+        if (safe === null) {
+          note(
+            'url',
+            `${name} on <${tag}> is removed — only https:, data: and blob: URLs are allowed.`,
+          )
+          continue
+        }
         value = safe
       } else if (URL_ATTRIBUTES.has(name)) {
-        if (!isAllowedUrl(tag, name, value)) continue
+        if (!isAllowedUrl(tag, name, value)) {
+          note(
+            'url',
+            `${name} on <${tag}> is removed — only https:, data: and blob: URLs are allowed.`,
+          )
+          continue
+        }
       }
       parts.push(`${name}="${escapeAttribute(value)}"`)
     }
@@ -694,6 +765,10 @@ export function sanitizeAuthorHtml(html: string): string {
     )
 
     if (CONTENT_DROPPING.has(tag)) {
+      note(
+        'element',
+        `<${tag}> and everything inside it is removed — this element is not allowed in author HTML.`,
+      )
       const { end: bodyEnd } = readRawTextElement(html, tag, end)
       index = bodyEnd
       continue
@@ -705,6 +780,10 @@ export function sanitizeAuthorHtml(html: string): string {
       // Unwrapped, not dropped — matches DOMPurify's `KEEP_CONTENT` default,
       // so a `<form>` or an unknown tag loses the element and keeps the words
       // inside it.
+      note(
+        'element',
+        `<${tag}> is removed — the text inside it is kept, but the element itself is not allowed in author HTML.`,
+      )
       continue
     }
 

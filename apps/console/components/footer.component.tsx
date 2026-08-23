@@ -18,7 +18,7 @@
 
 import { BUILD_ID, PACKAGE_VERSION } from '@aglyn/shared-data-enums'
 import { AppLink, Container } from '@aglyn/shared-ui-jsx'
-import { GridButtons, type GridButtonsProps } from '@aglyn/shared-ui-jsx/components/grid-buttons'
+import { type GridButtonsProps } from '@aglyn/shared-ui-jsx/components/grid-buttons'
 import { Box, Divider, Stack, Typography } from '@mui/material'
 import { forwardRef, type HTMLAttributes } from 'react'
 import CopyrightComponent from '../components/copyright.component'
@@ -44,23 +44,49 @@ const FooterComponent = forwardRef<any, FooterProps>((props, ref) => {
               alignItems: "center"
             }}>
             <Stack component="div" sx={{
-              flexGrow: 1
+              flexGrow: 1,
+              minWidth: 0,
             }}>
               <CopyrightComponent />
             </Stack>
 
-            <Stack sx={{
-              display: "flex"
-            }}>
-              <GridButtons
-                spacing={1}
-                ItemComponent={AppLink}
-                items={tailNavigation.map((i) => ({
-                  size: 'small',
-                  componentVariant: 'button',
-                  ...i,
-                }))}
-              />
+            {/*
+              * LINKS, not buttons (AGL-2486). Zach: "probably should just do
+              * applinks and not buttons".
+              *
+              * `componentVariant: 'button'` rendered five MUI buttons, which
+              * brought uppercase labels, button padding and a hover surface
+              * to what is a row of ordinary footer links — and the padding is
+              * most of the "spacing breaks down poorly" he saw, because each
+              * label carried its own box before any gap was applied.
+              *
+              * A plain `AppLink` row instead, with the gap on the container
+              * so it wraps evenly at a narrow width rather than each item
+              * reserving its own margin.
+              */}
+            <Stack
+              direction="row"
+              component="nav"
+              sx={{
+                alignItems: 'center',
+                columnGap: 2,
+                rowGap: 0.5,
+                flexWrap: 'wrap',
+              }}
+            >
+              {tailNavigation.map((item) => (
+                <AppLink
+                  key={String(item.children)}
+                  href={item.href}
+                  target={item.target}
+                  rel={item.rel}
+                  variant="body2"
+                  color="text.secondary"
+                  underline="hover"
+                >
+                  {item.children}
+                </AppLink>
+              ))}
             </Stack>
 
             <Stack
@@ -70,10 +96,17 @@ const FooterComponent = forwardRef<any, FooterProps>((props, ref) => {
                 flexBasis: "100%",
                 justifyContent: "center"
               }}>
+              {/*
+               * `caption`, not `overline` — overline uppercases, so a
+               * semantic version and a commit sha rendered as
+               * "VERSION 1.0.0-BETA.8 (82F7EAE)". Neither is a word; a sha is
+               * hex and a prerelease tag is lowercase by spec, and shouting
+               * them makes both harder to read and harder to copy.
+               */}
               <Typography
                 align="center"
                 color="textSecondary"
-                variant="overline"
+                variant="caption"
               >
                 <span>{`Version ${PACKAGE_VERSION}`}</span>
                 {/*

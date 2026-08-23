@@ -1,21 +1,24 @@
 ---
 sidebar_position: 5
 title: Orders
-description: Read your store's orders over the API — line items, totals, refunds and disputes — to sync into accounting or fulfillment.
+description: Read your store's orders over the API — line items, totals, refunds and disputes — and record shipments back, to sync accounting and drive fulfillment.
 ---
 
 # Orders
 
 Read the orders a site's store has taken, so you can push them into accounting,
-fulfillment, or a warehouse system. Orders are **read-only** over the API — creating
-or refunding one moves money, and that stays in the console and the storefront.
+fulfillment, or a warehouse system — and **record the shipment** when your warehouse,
+3PL or label printer sends the parcel.
+
+That one write is the only one. Creating, cancelling or refunding an order moves money
+or stock, and those stay in the console and the storefront.
 
 Orders belong to a **site**, not to the organization, because each site runs its own
 store with its own numbering. A multi-site organization reads each store separately.
 
 :::info Requires commerce on your plan
-These endpoints need both the `orders:read` scope **and** a plan that includes
-commerce. If your plan doesn't, they answer `403 plan_required` with `code:
+These endpoints need the `orders:read` scope (or `orders:write` to record a
+shipment) **and** a plan that includes commerce. If your plan doesn't, they answer `403 plan_required` with `code:
 "commerce"` — see [Errors](#errors).
 :::
 
@@ -125,15 +128,23 @@ are two entries here and one unchanged `status`.
 | `trackingUrl` | string \| null | Set only when the shipper recorded one. Usually `null`; build your own from the carrier and number. |
 | `at` | string \| null | ISO 8601, like every other time on this object. `null` if the stored timestamp is unusable. |
 
-Fulfillments are **read-only over the API today**. Recording a shipment is a console
-action; see [what isn't here](#not-here).
+To add one, [record a shipment](#record-a-shipment).
 
 #### What isn't here {#not-here}
 
-Nothing on this resource is writable. `orders:write` does not exist as a scope, so
-fulfilling an order, cancelling one, or issuing a refund are console actions. Refunds
-and cancellations move money and stock and want their own decision; recording a
-shipment does neither, and is the one we expect to open first.
+`orders:write` records shipments — that is, it moves an order **forward** to
+`fulfilled` or `delivered` and attaches a carrier and tracking number. It cannot do
+anything else to an order.
+
+| Action | Over the API? | Why |
+| --- | --- | --- |
+| Mark fulfilled / delivered | **Yes**, `orders:write` | A forward status change and a timeline entry. No stock moves, no money moves. |
+| Cancel an order | No — console | Cancelling **returns held stock**, under its own transaction. |
+| Refund an order | No — console | A refund **moves money**, under its own transaction. |
+| Create an order | No — storefront, POS or a console draft | An order is created by a payment, not by a status. |
+
+Asking for `status: "cancelled"` or `"refunded"` here answers `400`, naming which of
+the two it is rather than silently doing nothing.
 
 ### Channels {#channels}
 
@@ -243,6 +254,87 @@ curl "https://app.aglyn.com/api/v1/sites/host_demo/orders/8Kd0zX2mQ1" \
   -H "Authorization: Bearer aglyn_sk_…"
 ```
 
+### Record a shipment {#record-a-shipment}
+
+`PATCH /v1/sites/{siteId}/orders/{orderId}` — scope `orders:write`.
+
+This is the fulfilment write: it moves the order forward and appends a
+[fulfillment](#fulfillments) carrying the carrier and tracking number. It returns the
+**full order object**, so you can see the shipment you just recorded without a second
+request.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `status` | string | **Required.** `"fulfilled"` or `"delivered"`. Nothing else — see [what isn't here](#not-here). |
+| `carrier` | string | Optional. Free text, e.g. `"UPS"`. Trimmed to 40 characters. |
+| `trackingNumber` | string | Optional. Free text. Trimmed to 60 characters. |
+
+Any other field in the body is **refused by name**, never ignored — so a typo like
+`tracking_number` comes back as a `400` telling you which key it didn't recognise
+rather than a `200` that quietly dropped half your shipment.
+
+```bash
+curl -X PATCH "https://app.aglyn.com/api/v1/sites/host_demo/orders/8Kd0zX2mQ1" \
+  -H "Authorization: Bearer aglyn_sk_…" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"fulfilled","carrier":"UPS","trackingNumber":"1Z999AA10123456784"}'
+```
+
+```json
+{
+  "id": "8Kd0zX2mQ1",
+  "object": "order",
+  "status": "fulfilled",
+  "fulfillments": [
+    {
+      "id": "f_8c21",
+      "lineItemIds": [0, 1],
+      "carrier": "UPS",
+      "trackingNumber": "1Z999AA10123456784",
+      "trackingUrl": null,
+      "at": "2026-08-22T09:14:02.000Z"
+    }
+  ]
+}
+```
+
+:::tip Retrying is safe, and needs no `Idempotency-Key`
+Send the same `PATCH` twice — a lost response, a re-run cron — and the second call
+finds the order already `fulfilled`, **writes nothing**, and returns the same `200`
+with the same order. It cannot record the parcel twice. This is why the endpoint
+neither needs nor accepts an [`Idempotency-Key`](../conventions.md#idempotency).
+:::
+
+#### Which moves are allowed
+
+The API and the console obey **one** status machine — the same code decides both, so
+the API can never make a move the console would refuse.
+
+| From | `fulfilled` | `delivered` |
+| --- | --- | --- |
+| `pending` | No — nothing is paid for yet | No |
+| `paid` | **Yes** | No — it has to ship first |
+| `partially_fulfilled` | **Yes** | No |
+| `fulfilled` | Already there → `200`, no write | **Yes** |
+| `delivered` | No | Already there → `200`, no write |
+| `cancelled` | No | No |
+| `refunded` | No | No |
+
+A move this table refuses answers `409 conflict` with `code: "order_transition"`, and
+the message names the status that refused it. That is the answer to give up on, not to
+retry: it means the order moved on without you — usually refunded or cancelled in the
+console while your queue was still holding it.
+
+```json
+{
+  "error": {
+    "type": "conflict",
+    "message": "Orders in \"refunded\" cannot be marked fulfilled",
+    "code": "order_transition"
+  }
+}
+```
+
 ## Recipes
 
 ### Sync new orders into another system
@@ -280,6 +372,40 @@ for (const order of all) {
 Ids are stable forever, so a set of ids is a complete and idempotent watermark. Don't
 use `number` for this — it's per site, so two sites both have an order `1`.
 
+### Ship a batch from a warehouse queue
+
+The pattern that makes a fulfilment worker safe: no bookkeeping of what you already
+sent, because the API answers the retry identically.
+
+```js
+async function recordShipment(siteId, orderId, carrier, trackingNumber, key) {
+  const response = await fetch(
+    `https://app.aglyn.com/api/v1/sites/${siteId}/orders/${orderId}`,
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status: 'fulfilled', carrier, trackingNumber }),
+    },
+  )
+  const body = await response.json()
+  if (response.ok) return body            // the order, shipment included
+
+  // 409 order_transition: the order moved on (refunded, cancelled) without us.
+  // Never retry this one — it will refuse forever. Surface it to a human.
+  if (body?.error?.code === 'order_transition') {
+    throw new Error(`Order ${orderId} can no longer ship: ${body.error.message}`)
+  }
+  throw new Error(body?.error?.message ?? `HTTP ${response.status}`)
+}
+```
+
+A timeout or a `500` is safe to retry as-is — the write is a single transaction, so
+either it landed or nothing did, and a repeat of a landed write is the no-op `200`
+above.
+
 ### Reconcile a day's takings
 
 ```js
@@ -300,10 +426,13 @@ what you sold.
 
 | Status | `type` | When |
 | --- | --- | --- |
-| `403` | `insufficient_scope` | Key lacks `orders:read` (`code` is the scope). |
+| `400` | `bad_request` | `code: "validation_failed"`. An unknown body field, a missing or unrecognised `status`, or `status: "cancelled"` / `"refunded"` — which are console actions, and the message says so. |
+| `403` | `insufficient_scope` | Key lacks `orders:read` on a read, or `orders:write` on a `PATCH` (`code` is the scope). |
 | `403` | `plan_required` | The organization's plan no longer includes commerce (`code: "commerce"`). Paid features stop at the door when the plan drops — see [downgrading](/workspace-and-billing/billing-and-plans/downgrading-and-canceling). |
 | `404` | `not_found` | Unknown or unowned site (`"No such site"`), or unknown order (`"No such order"`). |
-| `405` | `method_not_allowed` | Anything other than `GET`. |
+| `404` | `not_found` | Also answered when this deployment ships no commerce plugin at all — self-hosted installs can leave it out. |
+| `405` | `method_not_allowed` | Anything other than `GET`, or `PATCH` on one order. The `Allow` header lists what is. |
+| `409` | `conflict` | `code: "order_transition"` — the status machine refused the move; see [which moves are allowed](#which-moves-are-allowed). |
 
 A site your organization doesn't own answers `404`, never `403` — the API never
 reveals whether an id exists somewhere else. So a `404` means "not yours or not real".

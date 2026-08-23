@@ -35,6 +35,13 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
+import { useStaffRole } from '../hooks/use-is-staff'
+import {
+  checkRefundAuthority,
+  describeRefundAllowance,
+  formatRefundCap,
+  refundCapCentsForRole,
+} from '../constants/refund-authority'
 import {
   normalizeRefundReason,
   REFUND_NOTE_MAX,
@@ -43,7 +50,6 @@ import {
   refundReasonNeedsNote,
   type RefundReasonCode,
 } from '../constants/refund-reasons'
-import { SuperStaffOnly } from './staff-super-only.component'
 
 /** One refundable Stripe charge, as `/api/admin/org-refund` describes it. */
 export interface RefundableCharge {
@@ -59,6 +65,24 @@ export interface RefundableCharge {
   paid: boolean
   /** What Stripe kept on the original charge and does not return. */
   feeCents: number
+}
+
+/**
+ * What the route says THIS operator may refund, reported with the charges.
+ *
+ * `windowCents` is null when the ledger could not be read. Rendered as an
+ * explicit "could not read your remaining allowance" rather than as a full
+ * one: the whole point of stating the allowance up front is that a support
+ * engineer is never refused after filling in the form, and an optimistic
+ * number would produce exactly that.
+ */
+export interface RefundAuthorityInfo {
+  role: string
+  authority: 'super' | 'capped'
+  perRefundCapCents: number | null
+  windowCapCents: number | null
+  windowCents: number | null
+  windowCount: number | null
 }
 
 const money = (cents: number, currency: string): string =>
@@ -110,6 +134,13 @@ export interface StaffOrgRefundCardProps {
  *    (AGL-1652), and the route refuses without one. The client gate exists so
  *    the button can be disabled with something actionable; the server gate is
  *    the one that holds.
+ *  - STATES THE OPERATOR'S OWN CEILING FIRST. Issuing is no longer `super`
+ *    -only: support may refund up to a cap and escalates above it
+ *    (AGL-2486). That makes the boundary amount-dependent, so it has to be
+ *    readable BEFORE a charge is picked — the allowance sentence sits above
+ *    the form, the charge list says what the cap means for each charge, and
+ *    the Amount field carries the refusal when one applies. A support
+ *    engineer should never fill this in and then be told no.
  *  - States the cost. Stripe does NOT return its processing fee on a refund,
  *    and a dispute costs more still — the Pricing Decision Log settled that a
  *    refund is a loss and always was. The real fee from the charge's balance
@@ -126,6 +157,9 @@ export default function StaffOrgRefundCard({
   const [charges, setCharges] = useState<RefundableCharge[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [hasCustomer, setHasCustomer] = useState(true)
+  const [authorityInfo, setAuthorityInfo] = useState<RefundAuthorityInfo | null>(
+    null,
+  )
   const [chargeId, setChargeId] = useState('')
   const [amountText, setAmountText] = useState('')
   const [reason, setReason] = useState<'' | RefundReasonCode>('')
@@ -145,6 +179,9 @@ export default function StaffOrgRefundCard({
         throw new Error(payload?.error ?? `Load failed (${response.status})`)
       }
       setHasCustomer(payload.hasCustomer !== false)
+      // Refreshed after every settled refund, so the remaining daily
+      // allowance shrinks as it is spent instead of restating a constant.
+      setAuthorityInfo((payload.authority as RefundAuthorityInfo) ?? null)
       // A Stripe failure is NOT an empty charge list (AGL-940). Kept apart so
       // the card never says "nothing to refund" about an org whose charges it
       // could not read — that sentence would send staff away satisfied.
@@ -172,6 +209,34 @@ export default function StaffOrgRefundCard({
     amountText.trim().length > 0 &&
     (askedCents === null || askedCents > remaining)
   const reasonComplete = normalizeRefundReason(reason, note) !== null
+
+  // The operator's own ceiling, from the SAME predicate the route refuses
+  // with. The role comes from the route's response when it has arrived and
+  // from the claim hook until then, so the boundary is stated on first paint
+  // rather than after a round trip.
+  const claimRole = useStaffRole()
+  const effectiveRole = authorityInfo?.role ?? claimRole ?? undefined
+  const roleResolved = Boolean(authorityInfo) || claimRole !== null
+  const perRefundCapCents = refundCapCentsForRole(effectiveRole)
+  const windowSpentCents = authorityInfo?.windowCents ?? 0
+  // Explicit null test, not falsiness: `0` spent is a real, common reading
+  // and must not be confused with "we could not read it" (strictNullChecks is
+  // off repo-wide, so this is the only thing keeping the two apart).
+  const windowUnreadable =
+    authorityInfo != null &&
+    authorityInfo.authority !== 'super' &&
+    authorityInfo.windowCents == null
+  const capVerdict =
+    askedCents === null
+      ? null
+      : checkRefundAuthority({
+          role: effectiveRole,
+          amountCents: askedCents,
+          windowCents: windowSpentCents,
+          windowCount: authorityInfo?.windowCount ?? 0,
+        })
+  const overAllowance = Boolean(capVerdict && !capVerdict.allowed)
+
   const canSubmit =
     Boolean(selected) &&
     remaining > 0 &&
@@ -179,6 +244,10 @@ export default function StaffOrgRefundCard({
     askedCents !== null &&
     askedCents > 0 &&
     reasonComplete &&
+    // Never blocked while the role is still resolving — that would flash a
+    // dead button at every operator on every page load, the flicker
+    // `useStaffRole`'s null state exists to prevent.
+    !(roleResolved && overAllowance) &&
     !busy
 
   const handleRefund = useCallback(async () => {
@@ -281,8 +350,14 @@ export default function StaffOrgRefundCard({
   return (
     <CardDisplay
       header={'Refund a charge'}
-      help={docsHelp('billing', {
-        anchor: '#payments',
+      // The STAFF refunds runbook, not the customer billing page (AGL-2486).
+      // `billing` is what a workspace owner reads about their own invoices;
+      // it can never explain the super-only bar, the disputed-charge refusal
+      // or the audit row, because none of those are customer-facing. Sending
+      // an operator there for guidance on a money-moving action they are
+      // about to take was the wrong destination, not merely a vague one.
+      help={docsHelp('refunds', {
+        anchor: '#issuing-a-refund',
         excerpt:
           `Refund one of the organization's Stripe charges, in full or in part, without leaving ${PLATFORM_BRAND_NAME}. Requires a reason and is audited.`,
       })}
@@ -296,6 +371,22 @@ export default function StaffOrgRefundCard({
             'disputed charge costs more still — a refund is a loss, not a ' +
             'reversal. Audited to adminAudit with the reason you pick.'}
         </Alert>
+        {/* THE BOUNDARY, BEFORE THE FORM (AGL-2486). Stated here rather than
+            discovered on submit: support may refund up to a cap and escalate
+            above it, and an operator who fills in a charge, an amount and a
+            reason only to be told their role cannot do it has been made to
+            do the work twice. Rendered only once the role has resolved, so
+            it never flashes the wrong allowance. */}
+        {roleResolved ? (
+          <Alert severity="info">
+            {describeRefundAllowance(effectiveRole, windowSpentCents)}
+            {windowUnreadable
+              ? ' Your remaining 24-hour allowance could not be read just now, ' +
+                'so the figure above assumes none of it is spent — the server ' +
+                'will still refuse a refund past it.'
+              : ''}
+          </Alert>
+        ) : null}
         {loadError ? (
           <Alert severity="warning">
             {`Couldn't read this organization's charges — this is not "nothing to refund". ${loadError}`}
@@ -388,14 +479,29 @@ export default function StaffOrgRefundCard({
                     !charge.disputed &&
                     remainingRefundableCents(charge) > 0,
                 )
-                .map((charge) => (
-                  <MenuItem key={charge.id} value={charge.id}>
-                    {`${charge.invoiceNumber ?? charge.id} — ${money(
-                      remainingRefundableCents(charge),
-                      charge.currency,
-                    )} refundable`}
-                  </MenuItem>
-                ))}
+                .map((charge) => {
+                  const left = remainingRefundableCents(charge)
+                  // Named on the row an operator is choosing FROM, not only
+                  // in the amount field they reach afterwards. A capped role
+                  // can still refund a partial off a large charge, so the
+                  // option stays selectable — it says what the limit means
+                  // for this charge rather than hiding it.
+                  const capped =
+                    perRefundCapCents !== null && left > perRefundCapCents
+                  return (
+                    <MenuItem key={charge.id} value={charge.id}>
+                      {`${charge.invoiceNumber ?? charge.id} — ${money(
+                        left,
+                        charge.currency,
+                      )} refundable` +
+                        (capped
+                          ? ` (your role can refund ${formatRefundCap(
+                              perRefundCapCents,
+                            )} of it)`
+                          : '')}
+                    </MenuItem>
+                  )
+                })}
             </TextField>
             <TextField
               size="small"
@@ -407,11 +513,20 @@ export default function StaffOrgRefundCard({
               }
               value={amountText}
               disabled={!selected}
-              error={amountInvalid}
+              error={amountInvalid || (roleResolved && overAllowance)}
               helperText={
                 amountInvalid
                   ? `Enter an amount between $0.01 and ${money(remaining, selected?.currency ?? 'usd')}.`
-                  : 'Leave blank to refund everything still refundable on the charge.'
+                  : roleResolved && overAllowance
+                    ? // The route's own refusal sentence, from the shared
+                      // predicate — so the console can never disagree with
+                      // what the server would have said.
+                      capVerdict?.error
+                    : perRefundCapCents !== null
+                      ? `Leave blank to refund everything still refundable on the charge, up to your ${formatRefundCap(
+                          perRefundCapCents,
+                        )} limit.`
+                      : 'Leave blank to refund everything still refundable on the charge.'
               }
               onChange={(event) => setAmountText(event.target.value)}
               sx={{ maxWidth: 480 }}
@@ -457,17 +572,21 @@ export default function StaffOrgRefundCard({
               sx={{ maxWidth: 480 }}
             />
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-              <SuperStaffOnly>
-                <Button
-                  size="small"
-                  color="error"
-                  variant="contained"
-                  disabled={!canSubmit}
-                  onClick={() => void handleRefund()}
-                >
-                  {busy ? 'Refunding…' : 'Refund…'}
-                </Button>
-              </SuperStaffOnly>
+              {/* No longer wrapped in `SuperStaffOnly` (AGL-2486). The gate
+                  is no longer "which role are you" but "how much is this",
+                  so a wrapper that disables on the role alone would refuse
+                  every support refund including the ones that are now the
+                  point. The reason for a blocked click lives on the Amount
+                  field, where the amount that caused it is. */}
+              <Button
+                size="small"
+                color="error"
+                variant="contained"
+                disabled={!canSubmit}
+                onClick={() => void handleRefund()}
+              >
+                {busy ? 'Refunding…' : 'Refund…'}
+              </Button>
               {selected ? (
                 <Typography variant="caption" color="text.secondary">
                   {`${money(askedCents ?? 0, selected.currency)} of ${money(

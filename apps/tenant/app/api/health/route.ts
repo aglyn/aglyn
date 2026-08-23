@@ -38,6 +38,7 @@ import {
   deploymentCommitRef,
   deploymentEnvironmentLabel,
   healthBody,
+  healthHeadOf,
   healthHeaders,
   healthHttpStatus,
   healthStatus,
@@ -45,6 +46,11 @@ import {
   platformVersion,
   type HealthCheck,
 } from '@aglyn/aglyn/server'
+
+// lockdown-423: exempt — infrastructure liveness probe; unauthenticated by
+// design. Carried on every other health route in the tree and missing only
+// here (AGL-1148): an external monitor cannot authenticate, so the exemption
+// is the reason this endpoint is monitorable at all and belongs in writing.
 
 /** Never prerender, never revalidate — property 1 above. */
 export const dynamic = 'force-dynamic'
@@ -127,10 +133,13 @@ export async function OPTIONS(): Promise<Response> {
   })
 }
 
-/** Cheap liveness for monitors that only issue HEAD. Touches nothing. */
+/**
+ * HEAD answers exactly what GET would, minus the body (AGL-1148).
+ *
+ * It used to return a hardcoded 200 and "touches nothing" — which made it a
+ * check that could not go red, for the monitors most likely to use it. See
+ * `healthHeadOf`. The probe memo is what keeps this cheap.
+ */
 export async function HEAD(): Promise<Response> {
-  return new Response(null, {
-    status: 200,
-    headers: healthHeaders('ok'),
-  })
+  return healthHeadOf(GET)
 }

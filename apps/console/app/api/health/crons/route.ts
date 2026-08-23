@@ -58,6 +58,7 @@ import {
   cronJobsHealth,
   deploymentCommitRef,
   healthBody,
+  healthHeadOf,
   healthHeaders,
   healthHttpStatus,
   healthStatus,
@@ -153,10 +154,13 @@ export async function GET(): Promise<Response> {
   )
 }
 
-/** Cheap liveness for monitors that only issue HEAD. Touches nothing. */
+/**
+ * HEAD answers exactly what GET would, minus the body (AGL-1148).
+ *
+ * It used to return a hardcoded 200 and "touches nothing" — which made it a
+ * check that could not go red, for the monitors most likely to use it. See
+ * `healthHeadOf`. The probe memo is what keeps this cheap.
+ */
 export async function HEAD(): Promise<Response> {
-  return new Response(null, {
-    status: 200,
-    headers: healthHeaders('ok'),
-  })
+  return healthHeadOf(GET)
 }

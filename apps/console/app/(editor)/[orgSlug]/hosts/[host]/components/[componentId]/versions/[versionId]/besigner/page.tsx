@@ -23,6 +23,7 @@ import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import {
   BesignerConflictAlertComponent,
   BesignerDraftAlertComponent,
+  recoverableRoomSessions,
   publishFailureMessage,
   useAddElementDrawerCallback,
   useBesignerDocument,
@@ -249,6 +250,7 @@ function ComponentBesignerPage(props) {
     hostId,
     docType: 'component',
     docId: componentId,
+    versionId,
     selectedNodeId,
     broadcastCursor: true,
     getCanvasRoot,
@@ -284,6 +286,15 @@ function ComponentBesignerPage(props) {
       docId: componentId,
       versionId,
     },
+    // The crash-recovery prompt is withheld while anyone else is in this
+    // room (AGL-2486): the mirror already has the unsaved work, so there is
+    // nothing to recover and both of its buttons could only take something
+    // away. Presence, not the mirror alone, because a colleague who has the
+    // document open but has not typed since we joined publishes nothing.
+    roomSessions: recoverableRoomSessions(
+      presence.status,
+      presence.entries.length,
+    ),
     notify: enqueueSnackbar,
     // Tell the author what happens next — and for a component that is
     // "publish", never "wait" (AGL-2486). This message used to promise that

@@ -57,6 +57,12 @@ export const NODE_ANIMATION_DURATION_PROP = 'aglynAnimationDuration'
 export const NODE_ANIMATION_DELAY_PROP = 'aglynAnimationDelay'
 /** Repeat prop: re-play every time the element scrolls back into view. */
 export const NODE_ANIMATION_REPEAT_PROP = 'aglynAnimationRepeat'
+/** Easing prop: the shape of the motion curve. */
+export const NODE_ANIMATION_EASE_PROP = 'aglynAnimationEase'
+/** Stagger prop: animate the children one after another, not the element. */
+export const NODE_ANIMATION_STAGGER_PROP = 'aglynAnimationStagger'
+/** Stagger step prop: how much later each child starts, in milliseconds. */
+export const NODE_ANIMATION_STAGGER_STEP_PROP = 'aglynAnimationStaggerStep'
 
 /** Every reserved animation prop, for the renderer's strip step. */
 export const NODE_ANIMATION_PROPS = [
@@ -65,6 +71,9 @@ export const NODE_ANIMATION_PROPS = [
   NODE_ANIMATION_DURATION_PROP,
   NODE_ANIMATION_DELAY_PROP,
   NODE_ANIMATION_REPEAT_PROP,
+  NODE_ANIMATION_EASE_PROP,
+  NODE_ANIMATION_STAGGER_PROP,
+  NODE_ANIMATION_STAGGER_STEP_PROP,
 ] as const
 
 /**
@@ -93,19 +102,81 @@ export const ANIMATION_TRIGGERS = ['load', 'scroll', 'hover'] as const
 
 export type AnimationTrigger = (typeof ANIMATION_TRIGGERS)[number]
 
+/**
+ * Easing ids — the SHAPE of the motion, which is the third dial Zach named
+ * alongside duration and delay. Persisted; never rename one.
+ *
+ * Only the ids live here. The `cubic-bezier()` curves themselves are in the
+ * server-only stylesheet module, for the same reason the keyframes are: this
+ * file is reachable from the client bundle and six bezier literals is ~200
+ * bytes that every visitor to a still page would otherwise carry. The id
+ * becomes a class, the class sets a custom property, and the curve is read
+ * from the sheet that only an animating page ships.
+ */
+export const ANIMATION_EASINGS = [
+  'smooth',
+  'steady',
+  'gentle-start',
+  'gentle-end',
+  'gentle-both',
+  'overshoot',
+] as const
+
+export type AnimationEase = (typeof ANIMATION_EASINGS)[number]
+
 /** Default when an author picks a preset but leaves the dials alone. */
 export const ANIMATION_DEFAULT_TRIGGER: AnimationTrigger = 'scroll'
 export const ANIMATION_DEFAULT_DURATION_MS = 600
 export const ANIMATION_DEFAULT_DELAY_MS = 0
+/**
+ * The curve every animation used before easing was authorable. Keeping it as
+ * the default means every screen authored before this shipped renders byte
+ * for byte the same.
+ */
+export const ANIMATION_DEFAULT_EASE: AnimationEase = 'smooth'
+/** Default gap between staggered children. */
+export const ANIMATION_DEFAULT_STAGGER_STEP_MS = 90
 
 /** Upper bounds. A 30s entrance is an author mistake, not an intent. */
 export const ANIMATION_MAX_DURATION_MS = 3000
 export const ANIMATION_MAX_DELAY_MS = 3000
+/**
+ * A stagger step is capped far lower than a delay, because it MULTIPLIES:
+ * the last of twelve cards waits eleven steps. At the 500ms cap that is
+ * already 5.5s, which is why {@link ANIMATION_STAGGER_MAX_CHILDREN} stops the
+ * ladder climbing rather than letting a long list run off the end.
+ */
+export const ANIMATION_MAX_STAGGER_STEP_MS = 500
+/**
+ * How many children get their own rung of the stagger ladder. Beyond this
+ * every remaining child shares the last rung, so a 200-row collection cannot
+ * leave its tail invisible for a minute — the tail arrives together, which is
+ * the least surprising failure and the one an author can actually see.
+ *
+ * Also the size of the generated rule block, which is why it is a number and
+ * not "all of them": each rung is one selector.
+ */
+export const ANIMATION_STAGGER_MAX_CHILDREN = 24
 
 /** Base class every animated element carries. */
 export const ANIMATION_CLASS = 'aglyn-anim'
+/**
+ * Base class of a STAGGER HOST — an element whose children animate one after
+ * another instead of the element itself animating.
+ *
+ * It is a different base class rather than a modifier on {@link
+ * ANIMATION_CLASS} because the two are mutually exclusive by construction: an
+ * element carrying both would play its own entrance AND run its children's,
+ * which is two overlapping fades on the same pixels. The preset and easing
+ * modifiers are shared, and reach the children through custom-property
+ * inheritance — the host sets `--aglyn-anim-name`, every child reads it, and
+ * the stylesheet needs no per-preset child rule.
+ */
+export const ANIMATION_GROUP_CLASS = 'aglyn-anim-group'
 /** Per-preset modifier, e.g. `aglyn-anim--slide-up`. */
 export const ANIMATION_PRESET_CLASS_PREFIX = 'aglyn-anim--'
+/** Per-easing modifier, e.g. `aglyn-anim-ease--overshoot`. */
+export const ANIMATION_EASE_CLASS_PREFIX = 'aglyn-anim-ease--'
 /** Added by the scroll runtime once an element has entered the viewport. */
 export const ANIMATION_IN_CLASS = 'aglyn-anim--in'
 /**
@@ -124,6 +195,14 @@ export const ANIMATION_REPEAT_ATTR = 'data-aglyn-anim-repeat'
 /** Custom properties carrying the author's dials. */
 export const ANIMATION_DURATION_VAR = '--aglyn-anim-duration'
 export const ANIMATION_DELAY_VAR = '--aglyn-anim-delay'
+/** Set on a stagger host; every child reads it through inheritance. */
+export const ANIMATION_STAGGER_STEP_VAR = '--aglyn-anim-step'
+/**
+ * Set on each child BY the stylesheet's nth-child ladder, not by the
+ * renderer — the renderer never sees a child's index, and asking it to would
+ * mean the host re-rendering whenever a sibling was inserted.
+ */
+export const ANIMATION_STAGGER_OFFSET_VAR = '--aglyn-anim-stagger'
 
 /**
  * Clamp a millisecond dial. `strictNullChecks` is OFF repo-wide and `0` is a
@@ -140,9 +219,13 @@ function clampMs(value: unknown, fallback: number, max: number): number {
 export interface ResolvedElementAnimation {
   preset: AnimationPreset
   trigger: AnimationTrigger
+  ease: AnimationEase
   durationMs: number
   delayMs: number
   repeat: boolean
+  /** True when the CHILDREN animate in sequence rather than this element. */
+  stagger: boolean
+  staggerStepMs: number
   /** Classes to append to the element. */
   className: string
   /** DOM attributes the stylesheet and runtime select on. */
@@ -187,27 +270,59 @@ export function resolveElementAnimation(
     ANIMATION_DEFAULT_DELAY_MS,
     ANIMATION_MAX_DELAY_MS,
   )
+  const rawEase = props?.[NODE_ANIMATION_EASE_PROP]
+  const ease = (
+    typeof rawEase === 'string' &&
+    (ANIMATION_EASINGS as readonly string[]).includes(rawEase)
+      ? rawEase
+      : ANIMATION_DEFAULT_EASE
+  ) as AnimationEase
+
   // Repeat only means anything for the scroll trigger — `load` fires once by
   // definition and `hover` is a transition, not a keyframe run.
   const repeat = trigger === 'scroll' && Boolean(props?.[NODE_ANIMATION_REPEAT_PROP])
+
+  // Stagger is refused for `hover` on purpose. A hover effect is a transition
+  // that must reverse the instant the pointer leaves; a staggered one would
+  // leave half a row mid-flight, and the ladder below only ever feeds
+  // `animation-delay`, which a transition does not read.
+  const stagger =
+    trigger !== 'hover' && Boolean(props?.[NODE_ANIMATION_STAGGER_PROP])
+  const staggerStepMs = stagger
+    ? clampMs(
+        props?.[NODE_ANIMATION_STAGGER_STEP_PROP],
+        ANIMATION_DEFAULT_STAGGER_STEP_MS,
+        ANIMATION_MAX_STAGGER_STEP_MS,
+      )
+    : 0
 
   const attributes: Record<string, string> = {
     [ANIMATION_TRIGGER_ATTR]: trigger,
   }
   if (repeat) attributes[ANIMATION_REPEAT_ATTR] = '1'
 
+  const style: Record<string, string> = {
+    [ANIMATION_DURATION_VAR]: `${durationMs}ms`,
+    [ANIMATION_DELAY_VAR]: `${delayMs}ms`,
+  }
+  // Written only for a stagger host, so a plain animated element's inline
+  // style is byte for byte what it was before this shipped.
+  if (stagger) style[ANIMATION_STAGGER_STEP_VAR] = `${staggerStepMs}ms`
+
   return {
     preset: preset as AnimationPreset,
     trigger,
+    ease,
     durationMs,
     delayMs,
     repeat,
-    className: `${ANIMATION_CLASS} ${ANIMATION_PRESET_CLASS_PREFIX}${preset}`,
+    stagger,
+    staggerStepMs,
+    className: `${stagger ? ANIMATION_GROUP_CLASS : ANIMATION_CLASS} ${
+      ANIMATION_PRESET_CLASS_PREFIX
+    }${preset} ${ANIMATION_EASE_CLASS_PREFIX}${ease}`,
     attributes,
-    style: {
-      [ANIMATION_DURATION_VAR]: `${durationMs}ms`,
-      [ANIMATION_DELAY_VAR]: `${delayMs}ms`,
-    },
+    style,
   }
 }
 

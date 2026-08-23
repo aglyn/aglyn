@@ -99,6 +99,7 @@ import { hasEntitlement } from '../../../../../../../../../../constants/entitlem
 import { buildScreenSeoUpdate } from '../../../../../../../../../../constants/screen-seo'
 import { buildRoute, Route } from '../../../../../../../../../../constants/route-links'
 import { useHostId, useHostSubdomain } from '../../../../../../../../../../components/host-id-provider'
+import DocumentPresenceLive from '../../../../../../../../../../components/document-presence-live.component'
 import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import { resolveScreenLiveUrl } from '../../../../../../../../../../constants/tenant-links'
 import {
@@ -918,8 +919,24 @@ function ScreenDetails() {
           children: displayName,
           icon: { path: ICON_VARIANT_PAGES.path },
         }}
+        // Presence leads the actions, beside the button that would join the
+        // room (AGL-2486). Zach: "identify who is currently in the document
+        // already before joining" — so it belongs where the joining decision
+        // is made. This page WATCHES without announcing: a detail page that
+        // joined on arrival would report everybody browsing as an editor and
+        // destroy the signal it exists to give.
+        //
+        // Unlike the other four detail pages, this one's version comes
+        // straight from the route, so the room it watches is exactly the one
+        // Open Besigner opens — no resolution, no guess.
         headerRight={
-          <Stack direction="row" spacing={1}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            <DocumentPresenceLive
+              hostId={hostId}
+              docType="screen"
+              docId={screenId}
+              versionId={versionId}
+            />
             {liveUrl ? (
               <AppLink
                 componentVariant="button"

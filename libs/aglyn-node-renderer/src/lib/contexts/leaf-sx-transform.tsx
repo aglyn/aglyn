@@ -25,8 +25,14 @@ import { createContext } from 'react'
  * queries (visibility bands, custom width queries) at the simulated
  * device width. Production tenant rendering never mounts the provider,
  * so published sites keep real media-query behavior untouched.
+ *
+ * `nodeId` (AGL-2486) lets a transform apply to ONE node rather than the
+ * whole canvas — the interaction-state hold renders only the SELECTED
+ * element as if hovered/pressed/focused, and every other leaf must keep
+ * rendering its resting state. Optional and ignored by the device-width
+ * transform, which is canvas-wide.
  */
-export type LeafSxTransform = (sx: unknown) => unknown
+export type LeafSxTransform = (sx: unknown, nodeId?: string) => unknown
 
 export const LeafSxTransformContext = createContext<
   LeafSxTransform | undefined

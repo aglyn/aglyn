@@ -50,6 +50,8 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import DocumentPresenceChips from './document-presence-chips.component'
+import usePresenceSummary from '../hooks/use-presence-summary'
 import * as Aglyn from '@aglyn/aglyn'
 import {
   isBelowMarketplacePriceFloor,
@@ -346,6 +348,20 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
 
   // Same column/action shape the layouts and screens lists use (AGL-693),
   // so the four artifact listings read as one product rather than three.
+  /**
+   * Who is already in each component, beside its name (AGL-2486).
+   *
+   * ONE request for the whole list. The RTDB rules admit a client to exactly
+   * one room at a time, so a chip per row would mean a subscription per row —
+   * and the presence tree is sparse enough (2 occupied rooms against a largest
+   * host of 69 documents) that ~97% of them would report an empty room.
+   *
+   * Rolled up across VERSIONS, because a row names a document and not a
+   * version. The chip's own copy carries that caveat so the count cannot be
+   * read as "already in the one you are about to open".
+   */
+  const { peopleIn } = usePresenceSummary(hostId)
+
   const columns: GridColDef[] = [
     {
       field: 'displayName',
@@ -353,15 +369,18 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
       minWidth: 220,
       type: 'string',
       renderCell: ({ id, value }: any) => (
-        <AppLink
-          href={buildRoute(Route.COMPONENT_DETAILS, {
-            orgSlug,
-            host,
-            componentId: id as string,
-          })}
-        >
-          {value || (id as string)}
-        </AppLink>
+        <Stack direction="row" sx={{ alignItems: 'center', gap: 0.5 }}>
+          <AppLink
+            href={buildRoute(Route.COMPONENT_DETAILS, {
+              orgSlug,
+              host,
+              componentId: id as string,
+            })}
+          >
+            {value || (id as string)}
+          </AppLink>
+          <DocumentPresenceChips people={peopleIn('component', id as string)} />
+        </Stack>
       ),
     },
     { field: '$id', headerName: 'ID', type: 'string', minWidth: 150 },

@@ -49,6 +49,7 @@ import {
   Stack,
   Switch,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import Box from '@mui/material/Box'
@@ -126,6 +127,39 @@ const AutoSaveOnChange = memo(function AutoSaveOnChange({
  * @TODO ⚠️ remove and reimplement following PR merge
  *   https://github.com/data-driven-forms/react-forms/pull/1218
  */
+/**
+ * Whether a node's text is FORMATTED — it carries a `html` prop the renderer
+ * draws in preference to `children` (AGL-2486).
+ *
+ * An instance is excluded: its text rides `propValues`, not a `html` prop of
+ * its own, so the question does not arise there.
+ */
+export function isFormattedText(
+  node: Aglyn.NodeSchema<any> | undefined | null,
+): boolean {
+  if (!node) return false
+  if (node.componentId === Aglyn.REUSABLE_INSTANCE_COMPONENT_ID) return false
+  const html = (node.props as { html?: unknown } | undefined)?.html
+  return typeof html === 'string' && html.length > 0
+}
+
+/**
+ * The same props with the formatting dropped and the words kept
+ * (AGL-2486).
+ *
+ * `children` is deliberately untouched. It already holds the plain reading
+ * of the markup — and since `richTextToPlain` keeps line breaks, that
+ * reading has the author's breaks in it — so the element goes on saying the
+ * same thing in the same shape, in a form this panel can edit.
+ */
+export function withoutFormatting(
+  props: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const next = { ...(props ?? {}) }
+  delete next['html']
+  return next
+}
+
 export const ElementPropsFormTemplate = forwardRef<
   any,
   FormTemplateRenderProps
@@ -417,9 +451,23 @@ export function buildVisibilityFields(
  *
  * Presets rather than a keyframes box, because the audience includes people
  * who have never written CSS: an author picks "Slide up", "on scroll into
- * view", and two numbers. The four dials are the ones that actually change how
- * an animation FEELS; everything else (easing, distance, the difference
- * between a transition and a keyframe run) is decided for them.
+ * view", and adjusts a few obvious knobs. Zach named the knobs — duration,
+ * delay, easing — plus stagger, and this is that list and nothing more. There
+ * is deliberately no keyframe editor and no general trigger picker; the
+ * things that are NOT offered (the distance a slide travels, the difference
+ * between a transition and a keyframe run, arbitrary curves) are decided for
+ * the author, and an author who needs them has the sx tab.
+ *
+ * Easing is a named list, never a `cubic-bezier()` text box. That keeps the
+ * curve out of author free-text — the id becomes a class and the curve is
+ * looked up in the tenant's own stylesheet — so there is nothing here for the
+ * sx sanitizer to have to catch.
+ *
+ * "Stagger children" is the one control that changes WHAT animates rather
+ * than how: the element stops animating and its children animate in
+ * sequence instead. It reads as a switch rather than a separate "Stagger"
+ * preset because stagger is orthogonal to fade/slide/zoom — a "Stagger"
+ * preset would have had to answer "stagger which animation?".
  *
  * Offered on every element, unlike the visibility directives above, because an
  * animation is meaningful on any node on any screen — there is no context in
@@ -440,6 +488,13 @@ export function buildAnimationFields(): Array<Record<string, unknown>> {
     is: Aglyn.ANIMATION_PRESETS.filter(
       (preset) => preset !== Aglyn.ANIMATION_NONE,
     ),
+  }
+  // Stagger is an entrance idea. Named rather than inlined twice so the
+  // switch and its step field can never drift apart and leave a step control
+  // visible for a trigger that ignores it.
+  const staggerable = {
+    when: Aglyn.NODE_ANIMATION_TRIGGER_PROP,
+    is: ['scroll', 'load'],
   }
   const help = (label: string, description: string) => ({
     label,
@@ -507,6 +562,62 @@ export function buildAnimationFields(): Array<Record<string, unknown>> {
       type: 'number',
       condition: animated,
       initialValue: Aglyn.ANIMATION_DEFAULT_DELAY_MS,
+    },
+    {
+      name: Aglyn.NODE_ANIMATION_EASE_PROP,
+      ...help(
+        'Easing',
+        'The shape of the motion — whether it eases off as it arrives, moves ' +
+          'at one steady speed, or travels a little past its mark and comes ' +
+          'back to it.',
+      ),
+      component: Aglyn.FieldComponentType.SELECT,
+      condition: animated,
+      initialValue: Aglyn.ANIMATION_DEFAULT_EASE,
+      options: [
+        { value: 'smooth', label: 'Smooth' },
+        { value: 'steady', label: 'Steady' },
+        { value: 'gentle-start', label: 'Gentle start' },
+        { value: 'gentle-end', label: 'Gentle end' },
+        { value: 'gentle-both', label: 'Gentle start and end' },
+        // The LABEL changed, the value did not (AGL-2486). `overshoot` is the
+        // stored id: it is written into `aglynAnimationEase` on every node
+        // that uses it, published as the `aglyn-anim-ease--overshoot` class,
+        // and keyed in `EASE_CURVES`. Renaming the value would silently drop
+        // the easing from every document already using it, which is why only
+        // the human-facing string here moves.
+        { value: 'overshoot', label: 'Settles into place' },
+      ],
+    },
+    {
+      name: Aglyn.NODE_ANIMATION_STAGGER_PROP,
+      ...help(
+        'Stagger children',
+        'Animate the things inside this element one after another, instead ' +
+          'of animating the element as a whole. Turn this on for a row of ' +
+          'cards or a list.',
+      ),
+      component: Aglyn.FieldComponentType.SWITCH,
+      // Not offered for hover: a hover effect has to reverse the moment the
+      // pointer leaves, and a staggered one would strand half a row.
+      condition: [animated, staggerable],
+    },
+    {
+      name: Aglyn.NODE_ANIMATION_STAGGER_STEP_PROP,
+      ...help(
+        'Stagger step (ms)',
+        `How much later each one starts than the one before it. ` +
+          `${Aglyn.ANIMATION_DEFAULT_STAGGER_STEP_MS} is a natural default; ` +
+          `anything over ${Aglyn.ANIMATION_MAX_STAGGER_STEP_MS} is capped, ` +
+          `because this gap multiplies down the row.`,
+      ),
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      type: 'number',
+      // `is` accepts the string form too: a switch that has been round-tripped
+      // through a text-shaped store comes back as `'true'`, and a step field
+      // that silently stopped appearing would be blamed on the switch.
+      condition: [animated, staggerable, { when: Aglyn.NODE_ANIMATION_STAGGER_PROP, is: [true, 'true'] }],
+      initialValue: Aglyn.ANIMATION_DEFAULT_STAGGER_STEP_MS,
     },
     {
       name: Aglyn.NODE_ANIMATION_REPEAT_PROP,
@@ -615,6 +726,26 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       Aglyn.getKnownPluginInstallsVersion,
       Aglyn.getKnownPluginInstallsVersion,
     )
+
+    /**
+     * Whether this element's text is FORMATTED, i.e. it carries a `html`
+     * prop that the renderer draws in preference to `children` (AGL-2486).
+     *
+     * When it does, the two fields disagree about which one is the content:
+     * the canvas draws `html`, and this panel's Text field edits `children`,
+     * so typing here changes a prop nothing renders. The field appears to do
+     * nothing, which is the worst of the three possible behaviours.
+     *
+     * The alternative considered and rejected was letting a plain edit
+     * silently clear `html`. Its failure mode is typing one character and
+     * losing every link in the paragraph, with no sign until the damage is
+     * done. Merging plain text back into markup was rejected too: mapping
+     * arbitrary text onto a marked-up tree has no correct answer once the
+     * edit is structural. So the canvas owns formatted text, this field
+     * shows it read-only and says why, and dropping the formatting is an
+     * explicit, undoable act — see {@link handleRemoveFormatting}.
+     */
+    const hasFormattedText = isFormattedText(node)
 
     const attributes = useMemo(() => {
       const entityListFor = (component: Aglyn.FieldComponentType) => {
@@ -760,6 +891,22 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
             ],
           }
         }
+        // Formatted text is owned by the canvas (AGL-2486). Shown, with
+        // the reason, rather than silently editable into a prop the
+        // renderer ignores.
+        if (field.name === 'children' && hasFormattedText) {
+          return {
+            ...field,
+            component: TOKEN_TEXT_FIELD_COMPONENT,
+            multiline: true,
+            isReadOnly: true,
+            description:
+              'This text is formatted — double-click the element on the ' +
+              'canvas to edit it. Remove formatting to edit it here.',
+            tokenOptions: insertOptions,
+            tokenLabelContext,
+          }
+        }
         if (
           (field.component === Aglyn.FieldComponentType.TEXT_FIELD ||
             field.component === Aglyn.FieldComponentType.TEXTAREA) &&
@@ -796,6 +943,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         return known
       })
     }, [
+      hasFormattedText,
       rawAttributes,
       screens,
       labels,
@@ -987,6 +1135,25 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       () => (rawAttributes ?? []).some((field: any) => field?.name === 'alt'),
       [rawAttributes],
     )
+    /**
+     * Drops the formatting and keeps the words (AGL-2486).
+     *
+     * Destructive to formatting and labelled as such. It is ONE
+     * `updateNodeProps`, so it is one undo entry — undo restores the markup,
+     * not merely the text, which is what makes offering it honest.
+     *
+     * `children` is left exactly as it is: since the projection keeps line
+     * breaks it already holds the plain reading of the markup, so the
+     * element goes on saying the same thing in the same shape.
+     */
+    const handleRemoveFormatting = useCallback(() => {
+      if (!node?.$id) return
+      const current = (Aglyn.canvas.toJSON().nodes as Record<string, any>)[
+        node.$id
+      ]
+      Aglyn.canvas.updateNodeProps(node, withoutFormatting(current?.props))
+    }, [node])
+
     const handleBrowseMedia = useCallback(
       (propName: string) => () => {
         // Written through verbatim: the host app decides the persisted form
@@ -1149,15 +1316,71 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'flex-end',
-                      mb: -1,
+                      // The pull-up closes the gap under a row that holds
+                      // only the help icon, which is shorter than the line
+                      // box it sits in. `Remove formatting` is a full-height
+                      // Button, so the same -8px drives its label into the
+                      // outlined field's notch and overprints the `Text`
+                      // legend (AGL-2486) — found while capturing the docs
+                      // shot of this exact control.
+                      mb: hasFormattedText ? 0 : -1,
                     }}
                   >
-                    <HelpTip
-                      title="Editing text"
-                      excerpt="The Text attribute and double-clicking the element on the canvas edit the same value. Rich text is opt-in per element."
-                      href={besignerDocsUrl('textEditing', '#the-text-attribute')}
-                      sx={{ fontSize: '0.9em' }}
-                    />
+                    {/* The escape hatch beside the read-only field
+                        (AGL-2486). Named for what it DOES — it throws the
+                        formatting away — and it is one `updateNodeProps`,
+                        so a single undo brings the markup back. */}
+                    {hasFormattedText ? (
+                      /* A warning-coloured button named for a deletion has to
+                         say WHAT it deletes before it is pressed, not after
+                         (AGL-2486). The words and the line breaks survive —
+                         which is the half an author actually worries about —
+                         so the tooltip leads with that, then names what goes,
+                         then says it is undoable. Without it the only way to
+                         find out is to press it. */
+                      <Tooltip
+                        title={
+                          'Keeps every word and line break. Removes bold, ' +
+                          'italic, underline, links and lists, so the text ' +
+                          'becomes editable in this field. One undo brings ' +
+                          'the formatting back.'
+                        }
+                      >
+                        <Button
+                          size="small"
+                          color="warning"
+                          onClick={handleRemoveFormatting}
+                          sx={{ mr: 'auto', textTransform: 'none' }}
+                        >
+                          {'Remove formatting'}
+                        </Button>
+                      </Tooltip>
+                    ) : null}
+                    {/* The help tip follows the state the author is IN: with
+                        formatted text the live question is what the greyed
+                        field and that button mean, so it deep-links there
+                        rather than to the section's opening paragraph. */}
+                    {hasFormattedText ? (
+                      <HelpTip
+                        title="This text is formatted"
+                        excerpt="Formatted text is edited on the canvas — double-click the element. Remove formatting to edit it in this field instead; the words and line breaks are kept."
+                        href={besignerDocsUrl(
+                          'textEditing',
+                          '#text-field-read-only',
+                        )}
+                        sx={{ fontSize: '0.9em' }}
+                      />
+                    ) : (
+                      <HelpTip
+                        title="Editing text"
+                        excerpt="The Text attribute and double-clicking the element on the canvas edit the same value. Rich text is opt-in per element."
+                        href={besignerDocsUrl(
+                          'textEditing',
+                          '#the-text-attribute',
+                        )}
+                        sx={{ fontSize: '0.9em' }}
+                      />
+                    )}
                   </Box>
                 ) : null}
                 <ElementPropsFormTemplate

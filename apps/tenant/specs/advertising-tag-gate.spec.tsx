@@ -30,6 +30,7 @@
  */
 import {
   ADVERTISING_TAG_ATTRIBUTE,
+  ADVERTISING_VENDORS,
   META_PIXEL_VENDOR,
   resolveAdvertisingTags,
   revokeAdvertisingTags,
@@ -574,12 +575,30 @@ describe('the advertising-tag gate', () => {
       expect(files.some((f) => f.file.endsWith('constants/cookie-inventory.ts')))
         .toBe(true)
 
-      const offenders = files.filter(
-        ({ source }) =>
-          source.includes('app-utils/advertising-tags') ||
-          source.includes(META_PIXEL_VENDOR.scriptMatch) ||
-          /\bfbq\b/.test(source),
-      )
+      // Comments are STRIPPED before the scan (AGL-2486). This guard is about
+      // an import, not about a word: `apps/console/constants/cookie-inventory.ts`
+      // has a docstring explaining why the coverage check lives in THIS file
+      // and not there, and that explanation necessarily names
+      // `app-utils/advertising-tags` — so the substring scan read the reason
+      // for the rule as a violation of it, and turned this case red on `main`
+      // for every hourly Main Gate sweep. A comment cannot load a pixel.
+      //
+      // The stripping is deliberately crude and that is the safe direction: it
+      // removes `//` lines and `/* … */` blocks, so the worst it can do is
+      // fail to strip something and go red, never strip real code and go
+      // green. A string literal containing `//` survives, which is fine —
+      // nothing here needs one.
+      const withoutComments = (source: string) =>
+        source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+
+      const offenders = files.filter(({ source }) => {
+        const code = withoutComments(source)
+        return (
+          code.includes('app-utils/advertising-tags') ||
+          code.includes(META_PIXEL_VENDOR.scriptMatch) ||
+          /\bfbq\b/.test(code)
+        )
+      })
       expect(offenders.map((f) => f.file)).toEqual([])
     })
 
@@ -608,6 +627,72 @@ describe('the advertising-tag gate', () => {
       // Non-emptiness first: a grep that found nothing would "prove" scope by
       // proving the feature does not exist.
       expect(mounts).toEqual(['apps/tenant/app/[host]/[[...slug]]/site-analytics.tsx'])
+    })
+  })
+  /**
+   * (g) Every vendor the gate can load is DISCLOSED (AGL-2486).
+   *
+   * `META_PIXEL_VENDOR` declared `cookiePrefixes: ['_fbp','_fbc']` from the day
+   * advertising shipped, and no row in the console's cookie inventory named
+   * either. Every check in the repo was green throughout, because the
+   * inventory's own guard keys on files that WRITE a cookie and our advertising
+   * code only ever CLEARS one — a writer-based scan cannot see a vendor whose
+   * tag sets cookies from a script we do not author, which is nearly every
+   * vendor there will ever be.
+   *
+   * `cookiePrefixes` is the right key precisely because it is maintained for
+   * TEARDOWN: a vendor cannot be complete enough to revoke while being too
+   * incomplete to disclose.
+   *
+   * ## Why this lives HERE and reads the inventory as TEXT
+   *
+   * It belongs to the console's inventory and was written there first — which
+   * turned (f) red, because importing `app-utils/advertising-tags` from
+   * `apps/console` is exactly the DPA §3.2 boundary (f) exists to defend. That
+   * guard was right and stays untouched. So the check moved to the side that
+   * may legitimately hold the vendor registry, and reaches the inventory the
+   * same way (f) reaches console sources: as source text, no import, no
+   * dependency edge in either direction.
+   */
+  describe('(g) every vendor the gate can load is disclosed', () => {
+    const INVENTORY = 'apps/console/constants/cookie-inventory.ts'
+
+    const inventorySource = () =>
+      readFileSync(resolve(__dirname, '../../..', INVENTORY), 'utf8')
+
+    /** Vendor prefixes with no cookie name declared for them. */
+    const undisclosed = (source: string): string[] => {
+      const declared = [...source.matchAll(/'(_[A-Za-z0-9_<>]+)'/g)].map(
+        (match) => match[1],
+      )
+      const missing: string[] = []
+      for (const vendor of ADVERTISING_VENDORS) {
+        for (const prefix of vendor.cookiePrefixes) {
+          if (!declared.some((name) => name.startsWith(prefix))) {
+            missing.push(`${vendor.label}: ${prefix}`)
+          }
+        }
+      }
+      return missing
+    }
+
+    it('the inventory names a cookie for every vendor prefix', () => {
+      const source = inventorySource()
+      // Anti-vacuity: prove the file was actually read and the registry is
+      // populated, or "nothing undisclosed" is just "nothing looked at".
+      expect(source.length).toBeGreaterThan(1000)
+      expect(ADVERTISING_VENDORS.length).toBeGreaterThan(1)
+      expect(undisclosed(source)).toEqual([])
+    })
+
+    it('CONTROL — the same check REPORTS a prefix the inventory omits', () => {
+      // The state the repo was actually in until AGL-2486. Strip Meta's names
+      // from the text and the check must name Meta, otherwise the green above
+      // is the matcher reading nothing.
+      const stripped = inventorySource()
+        .replace(/'_fbp'/g, "'x'")
+        .replace(/'_fbc'/g, "'x'")
+      expect(undisclosed(stripped).join(' ')).toContain('Meta')
     })
   })
 })

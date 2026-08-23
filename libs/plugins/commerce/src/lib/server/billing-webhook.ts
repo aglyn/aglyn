@@ -39,6 +39,7 @@ import { recordContactRefund } from './contact-refund'
 import { mintDownloadToken, tokenSigningSecret } from './download'
 import { alertLowStockCrossing } from './low-stock'
 import { decrementVariantStock } from './reserve-stock'
+import { releaseStockHold } from './stock-hold'
 import {
   releasePromotionHold,
   settlePromotionSlot,
@@ -1442,6 +1443,21 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
       .firestore()
       .collection('hosts')
       .doc(expiredHostId)
+    // THE UNITS COME BACK FIRST (AGL-2356), because they are the reservation a
+    // shopper is actually waiting on. A discount slot sitting against a cap is
+    // a merchant-facing annoyance; a held unit is a sale the store cannot make,
+    // and this event is what turns an abandoned checkout back into stock inside
+    // a minute rather than at the TTL.
+    //
+    // Correctness does not depend on this firing — every read prunes lapsed
+    // holds, so a unit is never stranded waiting on a webhook, and it will not
+    // fire at all unless the endpoint subscribes to the event. What it buys is
+    // that the shelf and the storefront agree PROMPTLY, which is the difference
+    // between a hold a merchant can reason about and one they cannot.
+    await releaseStockHold(
+      expiredHostRef,
+      String(object?.metadata?.stockHoldKey ?? ''),
+    )
     const couponHoldKey = String(object?.metadata?.couponHoldKey ?? '')
     const couponCode = String(object?.metadata?.couponCode ?? '')
     if (couponHoldKey && couponCode) {
@@ -2887,6 +2903,27 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           // basket is one nudge per product that breached.
           alertLowStockCrossing(String(hostId), moved.before, moved.after)
         }
+        // SETTLEMENT: the reservation becomes the decrement (AGL-2356).
+        //
+        // AFTER the loop, never before it. Between the decrement and this
+        // release the units are counted twice — once off the shelf, once still
+        // held — so availability UNDER-reports for the few hundred milliseconds
+        // it takes to get here. That is the safe direction: it can only refuse
+        // a sale that a moment later succeeds. Releasing first would open the
+        // opposite window, in which the unit is neither on the shelf nor
+        // spoken for, and that window is the oversell itself.
+        //
+        // The decrement is deliberately NOT made conditional on the hold. A
+        // paid order must decrement whether or not its reservation survived —
+        // an expired hold, a session from before this deploy, a merchant who
+        // saved the product editor mid-checkout — and `decrementVariantStock`
+        // is byte-identical to what it was before this issue for exactly that
+        // reason. The hold refuses the SECOND shopper; it never gates the
+        // first one's goods.
+        await releaseStockHold(
+          hostRef,
+          String(object.metadata?.stockHoldKey ?? ''),
+        )
         void notifyHostManagers(String(hostId), {
           type: 'content.order',
           title: `New order — $${(Number(object?.amount_total ?? 0) / 100).toFixed(2)}`,
@@ -3791,6 +3828,13 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             }
           }
         }
+        // Settlement, the same way round and for the same reason as the cart
+        // branch above (AGL-2356): the decrement lands first, then the
+        // reservation is dropped.
+        await releaseStockHold(
+          hostRef,
+          String(object.metadata?.stockHoldKey ?? ''),
+        )
         if (couponCode) {
           await settleRedemption({
             firestore,

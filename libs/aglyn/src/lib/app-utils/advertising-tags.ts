@@ -107,6 +107,7 @@ import {
 } from './analytics-environment'
 import { isPlatformMarketingHost } from './platform-marketing-host'
 import {
+  ADVERTISING_COOKIE_PREFIXES,
   advertisingGrantedByRecord,
   clearCookiesWithPrefixes,
   hostConsentRequired,
@@ -133,6 +134,15 @@ export const ADVERTISING_TAG_ATTRIBUTE = 'data-aglyn-ad-tag'
  * revoked, whose script cannot be found in the document, and whose cookies are
  * not named, cannot be consent-gated at all; requiring the descriptor to
  * answer all three is what stops a future vendor being added load-only.
+ *
+ * TWO SHAPES, since AGL-2486. A vendor we MOUNT answers all three and every
+ * field below is required of it. A {@link AdvertisingVendor.sweepOnly} vendor
+ * answers only the third, because there is no script of ours to find or stop —
+ * its cookies are a side effect of a tag another module owns. The mount fields
+ * are therefore optional at the type level and mandatory in practice for
+ * anything without that flag, which `advertising-tag-gate.spec.tsx` asserts.
+ * `cookiePrefixes` stays required of BOTH: naming the cookies is the one thing
+ * no vendor is excused from, and it is what the Cookie Policy is written from.
  */
 export interface AdvertisingVendor {
   /** Stable key: the `analytics.adTags` map key and the attribute value. */
@@ -140,22 +150,42 @@ export interface AdvertisingVendor {
   /** Human name, for the cookie policy and the consent copy. */
   readonly label: string
   /**
+   * A vendor this module never LOADS — its cookies are a side effect of a tag
+   * some other module owns (today: the GA4 gtag that `site-analytics.tsx`
+   * mounts, which writes `_gcl_*` once `ad_storage` is granted). AGL-2486.
+   *
+   * It is a member of this registry because the registry's job is every
+   * advertising artifact that touches the browser, and because the disclosure
+   * guard in `cookie-inventory.spec.ts` keys on `cookiePrefixes` — a vendor
+   * missing from here is a vendor missing from the Cookie Policy. Meta being
+   * present while Google was absent is the asymmetry that produced the gap.
+   *
+   * Such a vendor declares `id`, `label` and `cookiePrefixes` and NOTHING
+   * else: there is no script to mount, none to remove, and no vendor-specific
+   * consent call — GA's own consent-mode signals carry the state. The mount
+   * fields below are therefore optional, and `advertising-tag-gate.spec.tsx`
+   * asserts every vendor WITHOUT this flag still declares all of them, so the
+   * original invariant — a vendor that cannot be revoked cannot be gated —
+   * survives for everything that does load.
+   */
+  readonly sweepOnly?: true
+  /**
    * Strict format check on the configured account id. The id lands inside an
    * inline script, so this is load-bearing exactly as
    * `GA_MEASUREMENT_ID_PATTERN` is (the AGL-138 concern).
    */
-  readonly accountIdPattern: RegExp
+  readonly accountIdPattern?: RegExp
   /** The vendor library URL. Constant — no interpolation reaches it. */
-  readonly scriptSrc: string
+  readonly scriptSrc?: string
   /**
    * Substring that identifies a RESIDENT script element for this vendor,
    * used together with {@link ADVERTISING_TAG_ATTRIBUTE} at teardown.
    */
-  readonly scriptMatch: string
+  readonly scriptMatch?: string
   /** Cookie-name prefixes this vendor sets, swept on withdrawal. */
   readonly cookiePrefixes: readonly string[]
   /** The inline boot snippet, built from a FORMAT-CHECKED account id. */
-  readonly bootSnippet: (accountId: string) => string
+  readonly bootSnippet?: (accountId: string) => string
   /**
    * Tell a RESIDENT tag what the visitor decided. The vendor's own documented
    * opt-out mechanism — the `ga-disable-<id>` analogue — reached through
@@ -163,7 +193,7 @@ export interface AdvertisingVendor {
    * who withdraws and changes their mind in one pageview is not silently
    * unmeasured until they navigate.
    */
-  readonly setConsent: (
+  readonly setConsent?: (
     scope: Record<string, unknown>,
     granted: boolean,
   ) => void
@@ -237,9 +267,40 @@ export const META_PIXEL_VENDOR: AdvertisingVendor = {
   },
 }
 
-/** Every vendor this gate knows how to load AND how to tear down. */
+/**
+ * Google advertising storage — a SWEEP-ONLY vendor (AGL-2486).
+ *
+ * There is no Google ad script for this module to load. `_gcl_*` and `_gac_*`
+ * are written by the GA4 gtag that `site-analytics.tsx` already mounts, once
+ * the visitor's `ad_storage` is granted. So the tag is somebody else's to
+ * mount and somebody else's to signal; what belongs here is the half nobody
+ * owned, which is the cookies.
+ *
+ * `_gcl_au` is the specific reason this exists. It does not begin with `_ga`,
+ * so {@link ANALYTICS_COOKIE_PREFIXES} never reached it, and `revokeAdvertisingTags`
+ * could not either — that function acts on marked script ELEMENTS, and there
+ * has never been one for Google. The cookie therefore survived every
+ * withdrawal on every surface. See {@link ADVERTISING_COOKIE_PREFIXES} for why
+ * the prefixes are `_gcl`/`_gac` and cannot reach `_ga`/`_gid`.
+ *
+ * The prefixes are IMPORTED rather than restated. They are consumed in two
+ * places — the universal sweep in `storeVisitorConsent` and the element-scoped
+ * one below — and a second copy would be a second thing to forget.
+ */
+export const GOOGLE_ADS_VENDOR: AdvertisingVendor = {
+  id: 'google-ads',
+  label: 'Google advertising',
+  sweepOnly: true,
+  cookiePrefixes: ADVERTISING_COOKIE_PREFIXES,
+}
+
+/**
+ * Every vendor this gate knows how to tear down — which is a SUPERSET of the
+ * vendors it knows how to load, now that a sweep-only member exists.
+ */
 export const ADVERTISING_VENDORS: readonly AdvertisingVendor[] = [
   META_PIXEL_VENDOR,
+  GOOGLE_ADS_VENDOR,
 ]
 
 /**
@@ -288,6 +349,10 @@ export function resolveAdvertisingTags(
   if (!configured) return []
   const tags: ResolvedAdvertisingTag[] = []
   for (const vendor of ADVERTISING_VENDORS) {
+    // Sweep-only: nothing to mount, and no `accountIdPattern` to test with.
+    // Skipped explicitly rather than left to fail a pattern check, so a stray
+    // `adTags['google-ads']` cannot conjure a script (AGL-2486).
+    if (vendor.sweepOnly || !vendor.accountIdPattern) continue
     const accountId = String(configured[vendor.id] ?? '')
     if (vendor.accountIdPattern.test(accountId)) {
       tags.push({ vendor, accountId })
@@ -310,6 +375,12 @@ export function resolveAdvertisingTags(
  */
 function markedVendorElements(vendor: AdvertisingVendor): Element[] {
   if (typeof document === 'undefined') return []
+  // A sweep-only vendor has no script of ours and therefore no element that
+  // could be "ours" (AGL-2486). Returning early is also what stops an absent
+  // `scriptMatch` reaching `src.includes(...)` below — an empty string there
+  // would have matched EVERY marked script, handing one vendor's teardown
+  // another vendor's elements.
+  if (vendor.sweepOnly || !vendor.scriptMatch) return []
   try {
     const selector = `script[${ADVERTISING_TAG_ATTRIBUTE}="${vendor.id}"]`
     return Array.from(document.querySelectorAll(selector)).filter((element) => {
@@ -356,10 +427,19 @@ export function revokeAdvertisingTags(hostname?: string | null): string[] {
   const acted: string[] = []
   const scope = window as unknown as Record<string, unknown>
   for (const vendor of ADVERTISING_VENDORS) {
+    // A sweep-only vendor cannot be gated on something of ours being resident,
+    // because nothing of ours ever is (AGL-2486). The element check below is
+    // what USED to make this loop skip Google entirely, which is how `_gcl_au`
+    // survived every withdrawal.
+    if (vendor.sweepOnly) {
+      const swept = clearCookiesWithPrefixes(vendor.cookiePrefixes, hostname)
+      if (swept.length > 0) acted.push(vendor.id)
+      continue
+    }
     const elements = markedVendorElements(vendor)
     if (elements.length === 0) continue
     acted.push(vendor.id)
-    vendor.setConsent(scope, false)
+    vendor.setConsent?.(scope, false)
     for (const element of elements) {
       try {
         element.remove()
@@ -390,7 +470,7 @@ export function restoreAdvertisingTags(): string[] {
   const scope = window as unknown as Record<string, unknown>
   const acted: string[] = []
   for (const vendor of residentAdvertisingVendors()) {
-    vendor.setConsent(scope, true)
+    vendor.setConsent?.(scope, true)
     acted.push(vendor.id)
   }
   return acted

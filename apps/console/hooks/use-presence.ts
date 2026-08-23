@@ -407,6 +407,46 @@ export function pointerIsOnCanvas(
   return false
 }
 
+/**
+ * The version segment when a document has no versions of its own.
+ *
+ * MUST stay identical to the mirror's, which builds
+ * `coedit/{org}/{host}/{docType}/{docId}/${versionId ?? 'current'}/nodes`. The
+ * template editor passes `versionId: undefined`, so this sentinel is the only
+ * thing putting its presence room and its mirror room in the same scope — get
+ * it wrong and templates rejoin the exact disagreement this exists to end.
+ * `presence-version-scope.spec.ts` reads both files and fails if they drift.
+ */
+export const PRESENCE_CURRENT_VERSION = 'current'
+
+/**
+ * The room a session belongs in — PER VERSION, not per document (AGL-2486).
+ *
+ * Zach's call, after seeing the trade-off: you should only see people editing
+ * the version you are editing. Presence used to be keyed per document while
+ * the co-edit mirror was keyed per version, so two people on different
+ * versions of one screen appeared to each other as collaborators while not one
+ * of their edits reached the other — an avatar promising a collaboration that
+ * could not happen, which is the same family of lie as a phantom cursor.
+ *
+ * The `v` segment is a literal, and it is what makes the transition safe: it
+ * sits beside the LEGACY `$uid` wildcard in the rules rather than replacing
+ * it, so document-scoped rooms stay both readable and writable while old
+ * clients are still live. RTDB permits one wildcard per level, so without the
+ * literal a version id and a uid would occupy the same slot and no rule could
+ * tell them apart.
+ */
+export function presenceRoomPath(
+  orgId: string,
+  docType: string,
+  docId: string,
+  versionId: string | undefined,
+): string {
+  return `presence/${orgId}/${docType}/${docId}/v/${
+    versionId || PRESENCE_CURRENT_VERSION
+  }`
+}
+
 /** Secondary Firebase app holding the presence-scoped session. */
 const PRESENCE_APP_NAME = 'AGLYN_PRESENCE'
 
@@ -837,8 +877,39 @@ export function usePresence(options: {
   hostId: string | undefined
   docType: 'screen' | 'layout' | 'component' | 'template' | 'email'
   docId: string | undefined
+  /**
+   * The version being edited. Part of the ROOM KEY, so two people on
+   * different versions of one document are correctly in different rooms.
+   * `undefined` is meaningful, not missing — the template editor has no
+   * versions and shares the mirror's `'current'` sentinel.
+   */
+  versionId: string | undefined
   /** Currently selected node, broadcast so others can see where you are. */
   selectedNodeId?: string
+  /**
+   * WATCH the room without joining it (AGL-2486).
+   *
+   * For the surfaces that report presence without being an editing session —
+   * a document's detail page, where Zach's ask is to "identify who is
+   * currently in the document already BEFORE joining". Reading someone's
+   * answer to that question must not change it: if merely opening a detail
+   * page announced you, then everybody browsing would be reported as editing,
+   * and the signal the page exists to give would be the thing it destroys.
+   *
+   * It suppresses every WRITE — the announce, the `onDisconnect` arm, the
+   * heartbeat, the selection and cursor broadcasts, and the removal on
+   * unmount — and keeps the mint and the room subscription, which is exactly
+   * what the RTDB rules already split: reading a room is gated on
+   * `presenceOrg`, writing a session node additionally on `auth.uid === $uid`.
+   * So an observer needs no rules change; it simply never exercises the
+   * second half.
+   *
+   * `ownOtherSessions` keeps its meaning and is the reason your own row is
+   * still drawn here: an observer has no session of its own in the room, so
+   * every row it sees — including one of your own tabs — is somebody
+   * genuinely in the document.
+   */
+  observeOnly?: boolean
   /**
    * Broadcast pointer position over the canvas (AGL-677). Off by default:
    * it is the highest-frequency thing in the room, and only the editing
@@ -857,9 +928,11 @@ export function usePresence(options: {
     hostId,
     docType,
     docId,
+    versionId,
     selectedNodeId,
     broadcastCursor,
     getCanvasRoot,
+    observeOnly = false,
   } = options
   const { data: user } = useUser()
   const uid = (user as { uid?: string } | undefined)?.uid
@@ -923,8 +996,8 @@ export function usePresence(options: {
    * time somebody opened a different screen on the same site. A ref gives the
    * sweep the CURRENT room without buying a token exchange per navigation.
    */
-  const roomRef = useRef({ docType, docId })
-  roomRef.current = { docType, docId }
+  const roomRef = useRef({ docType, docId, versionId })
+  roomRef.current = { docType, docId, versionId }
   /** This tab's node while it is announced; null between rooms. */
   const meRefHolder = useRef<ReturnType<typeof ref> | null>(null)
   /** Latest root resolver, so the pointer listener is not re-bound per render. */
@@ -991,6 +1064,7 @@ export function usePresence(options: {
             hostId,
             docType: roomRef.current.docType,
             docId: roomRef.current.docId,
+            versionId: roomRef.current.versionId,
           }),
         })
         // A bare `if (!response.ok) return` sat here and logged NOTHING. It
@@ -1164,7 +1238,12 @@ export function usePresence(options: {
     if (!session || !uid || !docId) return
     const database = session.database
 
-    const roomPath = `presence/${session.orgId}/${docType}/${docId}`
+    const roomPath = presenceRoomPath(
+      session.orgId,
+      docType,
+      docId,
+      versionId,
+    )
     // One node per TAB, nested under the uid so the write rule is unchanged.
     const meRef = ref(database, `${roomPath}/${uid}/${TAB_SESSION_ID}`)
 
@@ -1244,12 +1323,15 @@ export function usePresence(options: {
     // one, which is exactly the set of moments the row and its handler have
     // to be re-established. A `false` needs no action: the server is already
     // applying the handler we armed.
-    const unsubscribeConnected = onValue(
-      ref(database, '.info/connected'),
-      (snapshot) => {
-        if (snapshot.val() === true) void announce()
-      },
-    )
+    // An OBSERVER never announces, so it never arms a disconnect handler and
+    // never has a row to re-establish — there is nothing for a reconnection
+    // to heal. Subscribing to `.info/connected` at all would only buy a
+    // listener whose callback does nothing.
+    const unsubscribeConnected = observeOnly
+      ? () => undefined
+      : onValue(ref(database, '.info/connected'), (snapshot) => {
+          if (snapshot.val() === true) void announce()
+        })
 
     // The last room snapshot, re-projected on a timer as well as on change.
     // Staleness is a function of the CLOCK, not of RTDB traffic: a ghost
@@ -1364,23 +1446,58 @@ export function usePresence(options: {
      */
     const heartbeat = setInterval(() => {
       project()
+      // An observer still re-projects — staleness is a function of the clock,
+      // so a room nobody is writing to must still fade — but it writes no
+      // liveness, because it has no session to keep alive.
+      if (observeOnly) return
       void update(meRef, { displayName, lastSeenAt: Date.now() }).catch(
         () => undefined,
       )
     }, PRESENCE_HEARTBEAT_MS)
 
-    meRefHolder.current = meRef
+    meRefHolder.current = observeOnly ? null : meRef
     return () => {
       meRefHolder.current = null
       clearInterval(heartbeat)
       unsubscribe()
+      /**
+       * TEAR THE CONNECTION LISTENER DOWN TOO (AGL-2486).
+       *
+       * It was created and never unsubscribed, and because this effect
+       * re-runs on `docId` and `versionId`, moving between documents left one
+       * live `.info/connected` listener per room visited — each still holding
+       * the `meRef` of a room already left. The removal below is a one-shot,
+       * but the listener is not: the next reconnection fired the OLD room's
+       * `announce()` and wrote the row back, so a single wifi blip put you
+       * into every document you had opened that session and left you there
+       * until the reaper swept.
+       *
+       * That is the same class of defect as the leak this listener was added
+       * to fix, arriving from the other direction — a row that outlives the
+       * session, saying somebody is editing a document they have navigated
+       * away from.
+       */
+      unsubscribeConnected()
+      if (observeOnly) return
       void remove(meRef).catch(() => undefined)
     }
     // `selectedNodeId` is deliberately NOT a dependency: it changes on every
     // click, and tearing the room down to re-announce would unsubscribe,
     // delete and rewrite this tab's entry each time. The effect below pushes
     // it as a field update instead.
-  }, [session, uid, docType, docId, displayName, photoURL])
+    // `versionId` is in the list because it is part of the ROOM KEY: moving
+    // between versions of one document must leave the old room and join the
+    // new one, exactly as moving between documents does.
+  }, [
+    session,
+    uid,
+    docType,
+    docId,
+    versionId,
+    displayName,
+    photoURL,
+    observeOnly,
+  ])
 
   // 3. Broadcast where we are looking, without disturbing the subscription.
   useEffect(() => {

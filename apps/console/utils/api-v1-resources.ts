@@ -33,12 +33,15 @@ import {
   createResourceUid,
   defaultScopeForNewResource,
   effectiveDatasetModel,
+  getOrderFulfilmentService,
   inspectUploadBytes,
+  isHostPluginEnabled,
   isBlockedSubdomain,
   newResourceScopeFields,
   normalizeContactEmail,
   ORG_SCOPE_TOKEN,
   readImageDimensions,
+  type OrderFulfilmentTarget,
   screenRoutePathToUrl,
   SUBDOMAIN_PATTERN,
   validateDocument,
@@ -1046,6 +1049,7 @@ async function handleSites(
     return listResponse(sites, nextCursor, ctx.headers)
   }
 
+
   if (!orgOwnsHost(ctx, hostId)) {
     return ApiErrors.notFound({ message: 'No such site', headers: ctx.headers })
   }
@@ -1578,12 +1582,25 @@ async function handleOrders(
   url: URL,
 ): Promise<Response> {
   const [, hostId, , orderId] = segments
+  // `orders:write` is checked BEFORE `orders:read`, matching `handleSites`
+  // and `handleScopedMedia` (AGL-900): a fulfilment key that only records
+  // shipments must not be told it lacks a read scope it was never meant to
+  // hold.
+  if (request.method === 'PATCH' && orderId) {
+    const deniedWrite = requireScope(ctx, 'orders:write')
+    if (deniedWrite) return deniedWrite
+    const unentitledWrite = requireCommerce(ctx)
+    if (unentitledWrite) return unentitledWrite
+    return updateOrder(request, ctx, hostId, orderId)
+  }
   const denied = requireScope(ctx, 'orders:read')
   if (denied) return denied
   const unentitled = requireCommerce(ctx)
   if (unentitled) return unentitled
   if (request.method !== 'GET') {
-    return ApiErrors.methodNotAllowed({ headers: ctx.headers })
+    return ApiErrors.methodNotAllowed({
+      headers: { ...ctx.headers, Allow: orderId ? 'GET, PATCH' : 'GET' },
+    })
   }
   const collection = hostRef(ctx, hostId).collection('orders')
 
@@ -1612,6 +1629,198 @@ async function handleOrders(
     .map(orderView)
     .filter((order) => (channel === 'online' ? order.channel === 'online' : true))
   return listResponse(data, nextCursor, ctx.headers)
+}
+
+/**
+ * Statuses this endpoint will move an order TO, and the two it names as
+ * refused. Kept as data so the 400 can list them and the docs can be checked
+ * against the same source the handler branches on.
+ */
+const ORDER_WRITE_TARGETS: OrderFulfilmentTarget[] = ['fulfilled', 'delivered']
+
+/**
+ * Transitions that exist in the commerce model and are DELIBERATELY not
+ * reachable here — refused by name with a 400 that says why, never silently
+ * ignored. `cancelled` releases held stock under its own transaction and
+ * `refunded` moves money under another; admitting either here would hand a
+ * caller a door around exactly the specifics those two routes exist to
+ * enforce, and an API key is the credential least able to answer the
+ * questions they ask.
+ */
+const ORDER_WRITE_REFUSED: Record<string, string> = {
+  cancelled:
+    'Cancelling an order releases held stock, so it is not part of this endpoint. Cancel it in the console.',
+  refunded:
+    'Refunding an order moves money, so it is not part of this endpoint. Refund it in the console.',
+}
+
+/**
+ * `PATCH /v1/sites/{siteId}/orders/{orderId}` — record a shipment (AGL-2461).
+ *
+ * ## The write does not live here, and that is the point
+ *
+ * Not one line of order semantics is implemented in this file. The transition
+ * rule, the transaction that re-asks it under the write, the fulfillment
+ * append and the timeline entry all belong to the commerce plugin, which
+ * `apps/console` may not import (`eslint.config.mjs`, `scope:app` →
+ * `notDependOnLibsWithTags:['aglyn:addons']`). This handler reaches them
+ * through the core `registerOrderFulfilmentService` capability registry, the
+ * same app↔plugin shape as the billing-webhook hooks and site-page resolvers.
+ *
+ * A second copy of `ORDER_TRANSITIONS` inside `/v1` was the alternative, and
+ * it is the bug rather than the fix: two tables drift, and drift here means
+ * the API writing an order status the console forbids — `paid → delivered`
+ * skipping fulfilment, or a write onto a `refunded` order. That is the class
+ * AGL-1818/AGL-1819 exist to close, and it is money-adjacent.
+ *
+ * ## What THIS function is responsible for: all of the authorization
+ *
+ * The capability is pre-authorized by contract — it takes `hostId` on trust —
+ * so every gate is here, and all four are load-bearing:
+ *
+ * 1. `orders:write` on the key (checked by the caller, above).
+ * 2. The `commerce` PLAN entitlement (checked by the caller, above) — the
+ *    plan, never the plugin switch, which is the AGL-1873 distinction.
+ * 3. **Org owns the site** — `handleSites` refuses an unowned `hostId` with a
+ *    404 before dispatching to any sub-resource, which is what keeps this
+ *    from being a cross-tenant write primitive addressable by anyone who can
+ *    guess a host id. Deliberately NOT re-checked here: a second copy would
+ *    be a gate no test can redden (removing either one alone leaves the other
+ *    answering), and an unproven guard on a cross-tenant write is worse than
+ *    the one guard a test actually holds. `api-v1-order-fulfilment.spec.ts`'s
+ *    "CANNOT move another org's order" case is that test, and it fails when
+ *    `handleSites`' `orgOwnsHost` is removed.
+ * 4. **The plugin is switched on for this site.** The registry is process-
+ *    global and filled by `ensureAll`, so a registered service says nothing
+ *    about one org's configuration; without this an org that switched
+ *    commerce off for a site would still accept writes into it, which is the
+ *    per-site enablement rule (AGL-1014) the plugin API dispatcher applies to
+ *    every other commerce door.
+ *
+ * ## No `Idempotency-Key`
+ *
+ * None is needed and none is accepted: the capability returns without writing
+ * when the order is already in the target status, so a retry lands the same
+ * state AND returns the same `200` with the same order body — the contract
+ * `updateRecord`, `updateContact` and `updateFormSubmission` are held to.
+ */
+async function updateOrder(
+  request: Request,
+  ctx: ApiV1Context,
+  hostId: string,
+  orderId: string,
+): Promise<Response> {
+  const body = await readJsonBody(request)
+  const unknown = Object.keys(body).filter(
+    (key) => key !== 'status' && key !== 'carrier' && key !== 'trackingNumber',
+  )
+  if (unknown.length > 0) {
+    // Named, not dropped — the `updateFormSubmission` / `updateContact` rule.
+    // A silently ignored `trackingUrl` here reads as "we recorded your
+    // shipment as you described it" when half of it went nowhere, and the
+    // caller is a warehouse system that will never look again.
+    return ApiErrors.badRequest({
+      message:
+        'Only `status`, `carrier` and `trackingNumber` can be set on an order',
+      code: 'validation_failed',
+      fields: Object.fromEntries(
+        unknown.map((key) => [key, 'Not writable on an order']),
+      ),
+      headers: ctx.headers,
+    })
+  }
+
+  const status = String(body.status ?? '')
+  const refusal = ORDER_WRITE_REFUSED[status]
+  if (refusal) {
+    return ApiErrors.badRequest({
+      message: refusal,
+      code: 'validation_failed',
+      fields: { status: refusal },
+      headers: ctx.headers,
+    })
+  }
+  if (!(ORDER_WRITE_TARGETS as string[]).includes(status)) {
+    return ApiErrors.badRequest({
+      message: 'Order failed validation',
+      code: 'validation_failed',
+      fields: {
+        status: `Must be one of: ${ORDER_WRITE_TARGETS.join(', ')}`,
+      },
+      headers: ctx.headers,
+    })
+  }
+  // Bounded exactly as the console route bounds them, so one field cannot be
+  // used to stuff an order document through a door the console keeps narrow.
+  const carrier = String(body.carrier ?? '').slice(0, 40)
+  const trackingNumber = String(body.trackingNumber ?? '').slice(0, 60)
+
+  // The plugin's server surface, activated the same way the plugin API
+  // dispatcher activates it — one shared loader per process, so this costs
+  // nothing after the first request.
+  //
+  // IMPORTED HERE, NOT AT MODULE SCOPE, and that is not a style choice.
+  // `server-plugin-loader` builds the console's plugin manifest as a side
+  // effect of being loaded, so a top-level import would run that for EVERY
+  // /v1 request — a contacts read, a dataset write — to serve the one path
+  // that needs it. It also drags the whole plugin manifest into the module
+  // graph of every module that touches this file. Both are paid only by the
+  // request that actually records a shipment this way. Node caches the
+  // module, so the second call is a map lookup.
+  const { serverPluginLoader } = await import('./server-plugin-loader')
+  await serverPluginLoader.ensureAll(['consoleApi'])
+  const service = getOrderFulfilmentService()
+  if (!service) {
+    // No loaded plugin provides order fulfilment — a build without commerce,
+    // or a self-host that dropped it. The endpoint genuinely does not exist
+    // in that deployment, and 404 is the honest answer rather than a 500.
+    return ApiErrors.notFound({
+      message: 'Order fulfilment is not available on this deployment',
+      headers: ctx.headers,
+    })
+  }
+
+  // Gate 4. `service.pluginId`, never a hard-coded `'commerce'` — the app
+  // does not know the addon layer's names, and asking the capability which
+  // plugin owns it is what keeps that true.
+  const hostSnap = await hostRef(ctx, hostId).get()
+  if (!isHostPluginEnabled(ctx.org, hostSnap.data(), service.pluginId)) {
+    return ApiErrors.notFound({
+      message: 'No such site',
+      headers: ctx.headers,
+    })
+  }
+
+  const outcome = await service.recordShipment({
+    hostId,
+    orderId,
+    to: status as OrderFulfilmentTarget,
+    carrier,
+    trackingNumber,
+  })
+  if (outcome.outcome === 'no_such_order') {
+    return ApiErrors.notFound({
+      message: 'No such order',
+      headers: ctx.headers,
+    })
+  }
+  if (outcome.outcome === 'blocked') {
+    // A NEW 409 code (`order_transition`), because an integrator has to be
+    // able to tell "the order moved on without me" apart from every other
+    // conflict this API can raise — it is the one a fulfilment poller will
+    // actually hit, and the one it must not retry forever.
+    return ApiErrors.conflict({
+      message: `Orders in "${outcome.from}" cannot be marked ${status}`,
+      code: 'order_transition',
+      headers: ctx.headers,
+    })
+  }
+  // The order object, on both `recorded` and `already` — a retry lands the
+  // same state and reads the same 200. Re-read after the write so the body
+  // shows the shipment that was just recorded rather than the one before it.
+  return apiJson(orderView(await hostRef(ctx, hostId).collection('orders').doc(orderId).get()), {
+    headers: ctx.headers,
+  })
 }
 
 /**

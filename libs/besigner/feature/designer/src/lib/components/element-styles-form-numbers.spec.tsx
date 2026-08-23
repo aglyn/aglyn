@@ -19,9 +19,13 @@ import * as Aglyn from '@aglyn/aglyn'
 // The panel's BoxStyler reads `palette.surface`, which only the editor's
 // own theme carries — a bare `createTheme()` renders the panel not at all.
 import { consoleThemeCssVar, ThemeProvider } from '@aglyn/shared-ui-theme'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 
-import { applyStylePartialToSx } from '../utils/style-field-groups'
+import {
+  applyStylePartialToSx,
+  buildFlexGridGroup,
+  buildStyleFieldGroups,
+} from '../utils/style-field-groups'
 import { ATTRIBUTE_COMMIT_DEBOUNCE_MS } from './element-props-form.component'
 import ElementStylesForm from './element-styles-form.component'
 
@@ -116,6 +120,71 @@ describe('styles panel numeric values (AGL-2486)', () => {
     })
   })
 
+  /**
+   * The other half of the same rule (AGL-2486, items 9 + 10 together).
+   *
+   * Storing a number is only half a value domain. The panel's FORM holds a
+   * copy of every value too, and a control hands back whatever its own
+   * input produces — text from a box, the option's own value from a preset
+   * menu. So the form's copy of a stored `2` was `'2'` from one control and
+   * `2` from another, and react-final-form calls that inequality DIRTY.
+   * Item 9's re-seed spares dirty fields, so a numeric field was
+   * permanently dirty and an undo never reached it — see
+   * `element-styles-form-undo.spec.tsx` for that behaviour end to end.
+   *
+   * This is the structural half: the same function the merge writes through
+   * is attached to EVERY field, on the way in, so the two agree by
+   * construction and a field added later cannot arrive without it.
+   */
+  describe('the domain the form holds a value in', () => {
+    const allFields = () =>
+      [...buildStyleFieldGroups([], {} as any), buildFlexGridGroup()].flatMap(
+        (group) => group.fields,
+      )
+
+    it('is the document’s, for every field in the panel', () => {
+      const fields = allFields()
+      // A guard on the guard: an empty list would pass the loop below
+      // without reading anything.
+      expect(fields.length).toBeGreaterThan(30)
+
+      for (const field of fields) {
+        const parse = (field as any).FieldProps?.parse as (
+          v: unknown,
+        ) => unknown
+        // Named in every expectation so a failure says WHICH field.
+        expect([field.name, typeof parse]).toEqual([field.name, 'function'])
+        expect([field.name, parse('2')]).toEqual([field.name, 2])
+        // Zero is a value, not an absence — falsy, and `strictNullChecks`
+        // is off repo-wide.
+        expect([field.name, parse('0')]).toEqual([field.name, 0])
+        // Anything carrying a non-numeric character is what the author
+        // wrote: existing documents keep rendering.
+        expect([field.name, parse('8px')]).toEqual([field.name, '8px'])
+        expect([field.name, parse('50%')]).toEqual([field.name, '50%'])
+        // Empty still clears.
+        expect([field.name, parse('')]).toEqual([field.name, undefined])
+        // And a control already speaking the document’s language — the
+        // preset menus emit their option’s own value — is left alone.
+        expect([field.name, parse(3)]).toEqual([field.name, 3])
+      }
+    })
+
+    it('agrees with what the merge would store, so nothing is dirty at rest', () => {
+      // The two ends of the round trip, stated together: what the field
+      // parses to is exactly what the merge writes, which is exactly what
+      // seeds the field back. That equality IS pristine.
+      const gap = allFields().find((field) => field.name === 'gap') as any
+      for (const typed of ['2', '0', '1.5', '-1', '8px', 'auto']) {
+        const parsed = gap.FieldProps.parse(typed)
+        expect([typed, merge({ gap: typed })]).toEqual([
+          typed,
+          parsed === undefined ? {} : { gap: parsed },
+        ])
+      }
+    })
+  })
+
   describe('through the panel', () => {
     const seedNode = (sx: Record<string, any>) => {
       Aglyn.canvas.reset()
@@ -155,20 +224,48 @@ describe('styles panel numeric values (AGL-2486)', () => {
       Aglyn.canvas.reset()
     })
 
-    it('keeps Corner Radius a theme multiple when it is retyped', async () => {
+    it('keeps Corner Radius a theme multiple when it is picked', async () => {
       // The reported shape, end to end: a node carrying the theme default
-      // as a NUMBER, opened and nudged the way an author would.
+      // as a NUMBER, opened and nudged the way an author would. Corner
+      // Radius is a preset picker now (AGL-2486), so "nudged" is choosing
+      // the next rung — but the guarantee under test is unchanged and is
+      // the reason the rungs are numbers: what lands in `sx` has to stay a
+      // NUMBER, or MUI stops multiplying it by `shape.borderRadius` and the
+      // declaration is dropped by the CSS parser.
+      //
+      // Two layers guarantee that and this test covers the OUTCOME, not
+      // either layer: the control emits the option'''s own value, and
+      // `normalizeStyleValue` would rescue it even if the control regressed
+      // to a string. The control-level half is pinned separately in
+      // `preset-choice.spec.tsx` — a mutation proved this test alone cannot
+      // see it.
       await renderPanel({ borderRadius: 2 }, 'Borders & Shadows')
-      expect(
-        (screen.getByLabelText('Corner Radius') as HTMLInputElement).value,
-      ).toBe('2')
-      type('Corner Radius', '3')
+      act(() => {
+        fireEvent.mouseDown(screen.getByLabelText('Corner Radius'))
+      })
+      act(() => {
+        fireEvent.click(
+          within(screen.getByRole('listbox')).getByText('More rounded'),
+        )
+      })
+      act(() => jest.advanceTimersByTime(ATTRIBUTE_COMMIT_DEBOUNCE_MS))
       expect(live().sx).toEqual({ borderRadius: 3 })
+      expect(typeof (live().sx as any).borderRadius).toBe('number')
     })
 
     it('takes an explicit unit as the string it is', async () => {
+      // Through the raw escape hatch, which is where a hand-typed length
+      // goes now — and it must NOT be coerced to a number.
       await renderPanel({ borderRadius: 2 }, 'Borders & Shadows')
-      type('Corner Radius', '8px')
+      act(() => {
+        fireEvent.mouseDown(screen.getByLabelText('Corner Radius'))
+      })
+      act(() => {
+        fireEvent.click(
+          within(screen.getByRole('listbox')).getByText('Custom…'),
+        )
+      })
+      type('Corner Radius custom value', '8px')
       expect(live().sx).toEqual({ borderRadius: '8px' })
     })
 

@@ -19,6 +19,8 @@
  * @jest-environment node
  */
 
+import { readdirSync, readFileSync } from 'fs'
+import { dirname, join, resolve } from 'path'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import {
@@ -26,7 +28,11 @@ import {
   createEmotionCache,
   withEmotionCache,
 } from '../../vendor/emotion'
-import { APP_EMOTION_CACHE_OPTIONS, EMOTION_CACHE_KEY } from './emotion-cache'
+import {
+  APP_EMOTION_CACHE_OPTIONS,
+  EMOTION_CACHE_KEY,
+  MUI_CSS_LAYER_NAME,
+} from './emotion-cache'
 
 /**
  * AGL-1266. Every tenant page threw a hydration mismatch whose diff was the
@@ -77,6 +83,43 @@ describe('emotion cache key (AGL-1266)', () => {
     // to being invisible — including to the tenant production smoke, which
     // greps the served HTML for exactly this prefix.
     expect(EMOTION_CACHE_KEY).not.toBe('css')
+  })
+
+  it('names the layer MUI actually emits, so a replica cannot drift', () => {
+    // `enableCssLayer` is not an emotion option — it is implemented by
+    // `AppRouterCacheProvider` monkey-patching `cache.insert` to wrap the
+    // styles string, and the layer name is HARD-CODED there. Surfaces that
+    // cannot use that provider (the besigner canvas's shadow-root cache)
+    // reproduce the patch via `createLayeredEmotionCache`, and they have to
+    // land in the SAME layer or the editor resolves the cascade differently
+    // from the published page — AGL-2486, "what you see is not what you
+    // publish". Read from the installed source rather than restated, so an
+    // upstream rename fails here instead of silently splitting the two
+    // surfaces apart again.
+    // Located by scanning the package rather than by hard-coding the internal
+    // filename, which is versioned (`v13-appRouter/appRouterV13.mjs` today,
+    // re-exported by every later entry point) and is not in the export map.
+    const root = resolve(
+      dirname(require.resolve('@mui/material-nextjs/v16-appRouter')),
+      '..',
+    )
+    const sources: string[] = []
+    const scan = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name)
+        if (entry.isDirectory()) scan(full)
+        else if (/\.(mjs|js)$/.test(entry.name))
+          sources.push(readFileSync(full, 'utf8'))
+      }
+    }
+    scan(root)
+    const emitted = sources
+      .map((source) => /`@layer ([a-zA-Z0-9_-]+) \{\$\{/.exec(source)?.[1])
+      .filter(Boolean)
+    // Fails loudly if MUI stops emitting a layer at all, rather than passing
+    // vacuously on an empty match set.
+    expect(emitted.length).toBeGreaterThan(0)
+    expect([...new Set(emitted)]).toEqual([MUI_CSS_LAYER_NAME])
   })
 
   it('carries the cascade layer alongside the key', () => {

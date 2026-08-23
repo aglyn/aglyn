@@ -41,7 +41,14 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, doc, limit, query, setDoc } from 'firebase/firestore'
+import {
+  collection,
+  doc,
+  getDoc,
+  limit,
+  query,
+  setDoc,
+} from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import {
   useFirestore,
@@ -326,10 +333,45 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
         },
         async () => {
           if (product) {
+            /**
+             * RESERVATIONS ARE NOT THE EDITOR'S TO WRITE (AGL-2356).
+             *
+             * Checkout stores live stock holds in a `stockHolds` map on this
+             * document, and this is a `merge: false` replace of a payload
+             * built from the dialog's SEED. Left alone it would write whatever
+             * that seed happened to carry, and both directions are wrong: a
+             * seed taken before a shopper reached checkout erases a live
+             * reservation and reopens the oversell for that session, and a
+             * seed carrying a hold that has since settled resurrects a
+             * reservation against stock that is already sold.
+             *
+             * So the field is dropped from the payload and re-read from the
+             * server immediately before the write. One extra read on a product
+             * save, in exchange for an editor that cannot invent or destroy a
+             * reservation. The AGL-1358 seed guard above bounds how stale the
+             * REST of this payload can be; it cannot help here, because a hold
+             * legitimately appears seconds after a perfectly fresh seed.
+             */
+            const productRef = doc(
+              firestore,
+              'hosts',
+              hostId,
+              'products',
+              product.$id,
+            )
+            const { stockHolds: _seededHolds, ...withoutHolds } =
+              base as typeof base & { stockHolds?: Record<string, unknown> }
+            const liveHolds = await getDoc(productRef)
+              .then((snapshot) => snapshot.get('stockHolds'))
+              .catch(() => undefined)
             // Edit stays client-direct (no quota consumed); full replace.
             await setDoc(
-              doc(firestore, 'hosts', hostId, 'products', product.$id),
-              { ...base, updatedAt: Timestamp.now() },
+              productRef,
+              {
+                ...withoutHolds,
+                ...(liveHolds ? { stockHolds: liveHolds } : {}),
+                updatedAt: Timestamp.now(),
+              },
               { merge: false },
             )
           } else {

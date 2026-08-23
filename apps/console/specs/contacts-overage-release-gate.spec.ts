@@ -90,6 +90,13 @@ let mockOrgPlans: Record<string, string>
 let mockFlagValues: Record<string, ReleaseFlagValue>
 /** Per-org release-flag overrides on `orgs/{id}` (AGL-1635). */
 let mockOrgOverrides: Record<string, Record<string, boolean>>
+/**
+ * Whether the org document is ABSENT — the unknown-tier case (AGL-2486).
+ *
+ * Distinct from any plan value on purpose: a doc that could not be read is
+ * not a Free org, and the two have to stay distinguishable at the gate.
+ */
+let mockOrgDocMissing: boolean
 /** Stripe meter-event request bodies, captured at the `fetch` boundary. */
 let mockMeterEvents: string[]
 
@@ -153,12 +160,20 @@ function fakeOrgRef(orgId: string) {
     id: orgId,
     path,
     get: async () =>
-      snapshotOf(orgId, {
-        plan: mockOrgPlans[orgId] ?? 'starter',
-        ...(mockOrgOverrides[orgId] && {
-          releaseFlags: mockOrgOverrides[orgId],
-        }),
-      }),
+      snapshotOf(
+        orgId,
+        // No document at all is the UNKNOWN tier, not a Free one:
+        // `snapshot.data()` comes back undefined and the plan the gate is
+        // evaluated against must stay null rather than defaulting.
+        mockOrgDocMissing
+          ? null
+          : {
+              plan: mockOrgPlans[orgId] ?? 'starter',
+              ...(mockOrgOverrides[orgId] && {
+                releaseFlags: mockOrgOverrides[orgId],
+              }),
+            },
+      ),
     collection: (name: string) => {
       if (name === 'counters') {
         return { doc: (counter: string) => counterDocRef(path, counter) }
@@ -270,8 +285,11 @@ function seed(options: {
   flag?: ReleaseFlagValue
   /** `orgs/org-1.releaseFlags`, the per-org override map (AGL-1635). */
   overrides?: Record<string, boolean>
+  /** Drop the org document entirely — an unknown tier (AGL-2486). */
+  missingOrgDoc?: boolean
 }) {
   mockOrgOverrides = options.overrides ? { 'org-1': options.overrides } : {}
+  mockOrgDocMissing = options.missingOrgDoc === true
   mockHosts = [{ id: 'site-a', orgId: 'org-1' }]
   mockHostMediaBytes = {
     'hosts/site-a/counters/media': options.hostMediaBytes ?? 0,
@@ -463,5 +481,81 @@ describe('nothing else about the usage cron moves', () => {
     const on = (await rollUp())['org-1']
     expect(on.contactsOverageUsd).toBe(0)
     expect(on.billedCents).toBe(off.billedCents)
+  })
+})
+
+/**
+ * Tier targeting reaches the INVOICE (AGL-2486).
+ *
+ * `plans` narrows a flag to a set of tiers, and an UNKNOWN tier fails a
+ * declared list — deliberately, so a caller that cannot say which workspace
+ * it is asking about never gets a confidently wrong answer. That
+ * conservatism turns into lost revenue the moment a caller that DOES know
+ * the tier forgets to say so: this sweep holds `orgData` already, and a gate
+ * that dropped it would read every plan-targeted flag as OFF and silently
+ * stop invoicing the audience band for exactly the orgs entitled to reach
+ * the Contacts page. Nothing throws, nothing logs, and the rollup writes a
+ * plausible $0.00 — the shape that is worse than an error.
+ *
+ * No extra read pays for this: the plan is resolved from the org document
+ * the batch above already fetched, the same one the overrides come off.
+ */
+describe('tier targeting reaches the invoice', () => {
+  it('bills an org inside the targeted tiers', async () => {
+    // The regression case. Starter is the org's real, known tier and the
+    // flag names it, so the page is reachable and the band is invoiced.
+    seed({ plan: 'starter', flag: { enabled: true, plans: ['starter'] } })
+    const write = (await rollUp())['org-1']
+    expect(write.contactsOverageBilled).toBe(true)
+    expect(write.contactsOverageUsd).toBeCloseTo(OVERAGE_USD, 6)
+    expect(write.billedCents).toBe(OVERAGE_CENTS)
+    expect(mockMeterEvents).toHaveLength(1)
+  })
+
+  it('withholds from an org below the tier floor', async () => {
+    // The other direction, which is not the same assertion: an org outside
+    // the targeted tiers cannot open the page, so it must not be invoiced.
+    // Pinned here because a "fix" that simply passed a constant tier would
+    // bill everyone and still satisfy the case above.
+    seed({ plan: 'starter', flag: { enabled: true, plans: ['enterprise'] } })
+    const write = (await rollUp())['org-1']
+    expect(write.contactsOverageBilled).toBe(false)
+    expect(write.contactsOverageWithheldUsd).toBeCloseTo(OVERAGE_USD, 6)
+    expect(write.billedCents).toBe(0)
+    expect(mockMeterEvents).toEqual([])
+  })
+
+  it('matches a Free-targeted flag for an org KNOWN to be Free', async () => {
+    // Half the boundary. A known `'free'` is a MATCH, so the verdict has to
+    // travel as the tier itself and not as "some plan, or nothing".
+    seed({ plan: 'free', contacts: 5_000, flag: { enabled: true, plans: ['free'] } })
+    const write = (await rollUp())['org-1']
+    expect(write.contactsOverageBilled).toBe(true)
+    // Free hard-bands and carries no per-1k rate, so the verdict is the
+    // observable — there is no overage on this tier to price either way.
+    expect(write.contactsOverageUsd).toBe(0)
+  })
+
+  it('still refuses when the org document could not be read', async () => {
+    // The other half, and the reason the plan is not simply resolved from a
+    // defaulted org: `resolveEffectivePlan(undefined)` answers `'free'`,
+    // which would hand this same Free-targeted flag to every org whose read
+    // failed — missing, denied, or no Firestore at all.
+    seed({
+      missingOrgDoc: true,
+      contacts: 5_000,
+      flag: { enabled: true, plans: ['free'] },
+    })
+    const write = (await rollUp())['org-1']
+    expect(write.contactsOverageBilled).toBe(false)
+  })
+
+  it('leaves an untargeted flag reaching every tier', async () => {
+    // The compatibility half: every flag published before AGL-2486 has no
+    // `plans` key, and passing a tier must not narrow it.
+    seed({ plan: 'starter', flag: { enabled: true } })
+    const write = (await rollUp())['org-1']
+    expect(write.contactsOverageBilled).toBe(true)
+    expect(write.billedCents).toBe(OVERAGE_CENTS)
   })
 })

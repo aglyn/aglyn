@@ -68,6 +68,7 @@
  * or a provisional pass under `--require-fresh`).
  */
 
+import { withProbeHeaders } from './lib/probe-headers.mjs'
 import {
   RETIRED_COLOURS,
   auditRenderedPage,
@@ -120,7 +121,12 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 async function read(path) {
   const response = await fetch(`${base}${path}`, {
     redirect: 'manual',
-    headers: { 'user-agent': 'aglyn-retired-colour-check' },
+    // Bot Protection challenges automated clients on our own hosts, so
+    // without this the census reads `HTTP 429` on every route and reports the
+    // marketing site as unreadable rather than as clean or dirty — which is
+    // exactly what it did from 2026-08-21 until AGL-2486. Absent a token the
+    // header is not sent at all; see lib/probe-headers.mjs.
+    headers: withProbeHeaders({ 'user-agent': 'aglyn-retired-colour-check' }),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   })
   const age = Number(response.headers.get('age') ?? 0)

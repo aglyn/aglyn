@@ -94,9 +94,56 @@ export const ORG_BILLING_MOVED_KEYS = [
 
 export type OrgBillingMovedKey = (typeof ORG_BILLING_MOVED_KEYS)[number]
 
+/**
+ * The TEST-mode Stripe customer id, stored beside the live one (AGL-2486).
+ *
+ * `stripeCustomerId` held ONE id with no notion of Stripe livemode, so an org
+ * that had been through live checkout could never be exercised in test mode
+ * and vice versa: every billing call answered
+ *
+ *   No such customer: 'cus_…'; a similar object exists in live mode, but a
+ *   test mode key was used to make this request.
+ *
+ * — a raw 502 out of `/api/billing/checkout`, `/invoices` and `/addons`. For a
+ * team running both modes against ONE Firestore that is permanent, and it made
+ * the test-mode path we need before September 1 unusable on any real org.
+ *
+ * Worse than the 502, and the reason this is a stored-shape change rather than
+ * a better error message: a test-mode run that COMPLETED would write its test
+ * customer into the single slot and destroy the live linkage — silently, with
+ * every subsequent live invoice scattering onto a customer the Billing page no
+ * longer queries.
+ *
+ * ## Why a second field and not a mode-keyed map
+ *
+ * The live id stays at `stripeCustomerId`, untouched. That makes the migration
+ * EMPTY — every value production holds today was written by a `sk_live_`
+ * deployment and is already in the right slot — and it makes the change a
+ * NO-OP in live mode by construction: the live path reads the same field name
+ * it always read. Only test mode, which is 100% broken today, behaves
+ * differently. A `{live,test}` map would have required rewriting every
+ * existing document to gain nothing.
+ *
+ * The `stripeCustomers` reverse index needs NO equivalent treatment: it is
+ * keyed BY the customer id, and Stripe customer ids are unique across modes, so
+ * a test and a live entry are simply two documents that both resolve to the
+ * same org. That is why this fix is contained.
+ *
+ * Physical field names are an implementation detail of `org-billing.ts` — read
+ * and write through `readOrgBilling`/`writeOrgBilling`, which project the
+ * deployment's mode onto the logical `stripeCustomerId` key. Nothing else
+ * should name this constant.
+ */
+export const STRIPE_CUSTOMER_ID_TEST_FIELD = 'stripeCustomerIdTest'
+
 /** The manager-gated document's shape. */
 export interface OrgBillingDoc {
   stripeCustomerId?: string | null
+  /**
+   * The test-mode twin. Present on the stored document only; the accessors
+   * collapse the pair to `stripeCustomerId` for every reader.
+   */
+  stripeCustomerIdTest?: string | null
   subscription?: OrgSubscription | null
 }
 

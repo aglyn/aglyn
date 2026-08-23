@@ -20,264 +20,254 @@
  */
 
 /**
- * AGL-2179: every result console search can show is one the caller could
- * already read.
+ * AGL-2179/AGL-2486: the palette RENDERS what the hook found, and renders a
+ * failure as a failure.
  *
- * A search that surfaces another organization's order is worse than having no
- * search, so the scoping is asserted at the QUERY, not at the rendered list.
- * Filtering results after the fact is the version that can be got wrong by a
- * later edit and still look right in a screenshot; the reads here are scoped
- * by their own shape:
+ * The query-shape and cost claims live in `use-global-search.spec.tsx`; this
+ * file is about the three things only the rendered dialog can be wrong about:
  *
- *  * sites are read from `users/{uid}/hostMemberships` — the caller's own
- *    membership projection, which the rules would refuse for anyone else —
- *    narrowed to the open workspace;
- *  * screens are read from the site already open, which `HostGuard` admitted
- *    the caller to.
- *
- * The dangerous case is neither of those going wrong on purpose. It is
- * AGL-2350: an unresolved `orgId` makes the `where` clause `undefined`, which
- * does not narrow the query — it DROPS the filter and returns this person's
- * site memberships across every org they belong to. That is the hold under
- * test, and it is why `skip` matters more here than any assertion about the
- * happy path.
+ *  * a result row is a real link that a click can follow;
+ *  * a group that could not be READ says so, instead of looking like a group
+ *    with no matches;
+ *  * the palette cannot be rendered inert by another dialog, which is the
+ *    measured cause of "clicking a result does nothing".
  */
 
-/** Every `useSwitcherCollection` call, in mount order, with its options. */
-const switcherCalls: Array<Record<string, any>> = []
+const mockGroups: any[] = []
+let mockActive = true
 
-let mockOrgId: string | null = 'org-1'
-let mockHostId: string | null = 'host-1'
-let mockHostReady = true
+// `AppLink` reads the current path to decide its active class; without this
+// the row renders nothing and the href assertions below silently pass on an
+// empty list rather than proving anything.
+jest.mock('next/navigation', () => ({
+  usePathname: () => '/acme/hosts/demo',
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), prefetch: jest.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useUser: () => ({ data: { uid: 'user-1' } }),
-  useSwitcherCollection: (options: Record<string, any>) => {
-    switcherCalls.push(options)
-    return { items: [], loading: false, hasQuery: false }
-  },
+}))
+
+jest.mock('../components/global-search/use-global-search', () => ({
+  __esModule: true,
+  SEARCH_WINDOW: 30,
+  default: () => ({
+    groups: mockGroups,
+    loading: false,
+    active: mockActive,
+    total: mockGroups.reduce((sum, group) => sum + group.rows.length, 0),
+    readCount: 0,
+  }),
 }))
 
 jest.mock('../components/host-id-provider', () => ({
-  useHostId: () => mockHostId,
-  useHostReady: () => mockHostReady,
-  useHostSubdomain: () => (mockHostId ? 'acme' : null),
+  useHostId: () => 'host-1',
+  useHostReady: () => true,
+  useHostSubdomain: () => 'demo',
 }))
-
-// Global search reads the URL-NAMED workspace, not the ambient scope
-// (AGL-2486) — `mockOrgId = null` is how this suite says "no workspace here",
-// and before the fix that state was unreachable in the real app because the
-// scope always fell back to a remembered org.
 jest.mock('../hooks/use-url-names-org', () => ({
-  useUrlNamedOrg: () => (mockOrgId ? { $id: mockOrgId } : null),
+  useUrlNamedOrg: () => ({ $id: 'org-1' }),
 }))
 jest.mock('../hooks/use-org-scope', () => ({
-  useOrgScope: () => ({ currentOrg: mockOrgId ? { $id: mockOrgId } : null }),
-  useOrgSlug: () => 'acme-studio',
+  useOrgScope: () => ({ currentOrg: { $id: 'org-1' } }),
+  useOrgSlug: () => 'acme',
+}))
+jest.mock('../hooks/use-current-org', () => ({
+  __esModule: true,
+  default: () => ({ org: { plan: 'pro' }, orgId: 'org-1', ready: true }),
 }))
 
 import { render, screen } from '@testing-library/react'
 import GlobalSearchDialogComponent from '../components/global-search/global-search-dialog.component'
-import GlobalSearchTriggerComponent from '../components/global-search/global-search-trigger.component'
+import { GLOBAL_SEARCH_ENTITIES } from '../components/global-search/global-search-scope'
 
-/** The options of the read aimed at a given collection, or undefined. */
-const callFor = (segment: string) =>
-  switcherCalls.find((call) => call.path?.includes(segment))
+const definitionOf = (id: string) =>
+  GLOBAL_SEARCH_ENTITIES.find((entity) => entity.id === id)
+
+const group = (id: string, rows: any[], extra: Record<string, any> = {}) => ({
+  definition: definitionOf(id),
+  rows,
+  failed: false,
+  truncated: false,
+  ...extra,
+})
 
 beforeEach(() => {
-  switcherCalls.length = 0
-  mockOrgId = 'org-1'
-  mockHostId = 'host-1'
-  mockHostReady = true
+  mockGroups.length = 0
+  mockActive = true
 })
 
-describe('the sites query', () => {
-  it("reads the caller's OWN membership projection, not a global list", () => {
-    render(<GlobalSearchDialogComponent open onClose={() => undefined} />)
-    const sites = callFor('hostMemberships')
-    // `users/{uid}/…` is the scoping. A query over a top-level collection
-    // would be the shape that can leak, whatever it filtered on.
-    expect(sites?.path).toEqual(['users', 'user-1', 'hostMemberships'])
-  })
+const open = () =>
+  render(<GlobalSearchDialogComponent open onClose={() => undefined} />)
 
-  it('narrows to the workspace that is open', () => {
-    render(<GlobalSearchDialogComponent open onClose={() => undefined} />)
-    expect(callFor('hostMemberships')?.where).toEqual(['orgId', '==', 'org-1'])
-    expect(callFor('hostMemberships')?.skip).toBe(false)
-  })
+/**
+ * The anchors that are RESULT ROWS.
+ *
+ * A MUI `Dialog` renders through a portal, so the RTL `container` never holds
+ * it — everything here reads `document.body`. That also picks up the footer's
+ * docs-help link, which is not a result, hence the list scope.
+ */
+const resultAnchors = () =>
+  Array.from(document.body.querySelectorAll('.MuiList-root a'))
 
+describe('a result row', () => {
   /**
-   * The AGL-2350 hold, and the single most important assertion in this file.
-   * An unresolved workspace must stop the read, because the `where` it would
-   * otherwise carry is `undefined` — which widens the query to every org this
-   * person belongs to rather than failing.
-   *
-   * There are TWO layers holding it, and mutation testing is what established
-   * that both are real rather than one being decoration:
-   *
-   *  * `resolveGlobalSearchScope` returns no entities without an org, so
-   *    `searchesSites` is false. Breaking only this turns three cases red —
-   *    but NOT this one, because the dialog's own `|| !orgId` still holds.
-   *  * the dialog re-checks `orgId` itself. Breaking both is what turns this
-   *    case red, which is the demonstration that this assertion guards the
-   *    second layer specifically and is not a restatement of the first.
+   * The reported defect was a row that does nothing when clicked. Driving a
+   * real signed-in console showed the wiring is sound, so what this pins is
+   * the property that makes it sound: the row is an ANCHOR carrying the href
+   * the route table built. A row rendered as a bare button would look
+   * identical and navigate nowhere.
    */
-  it('is HELD, not widened, while the workspace is unresolved', () => {
-    mockOrgId = null
-    render(<GlobalSearchDialogComponent open onClose={() => undefined} />)
-    const sites = callFor('hostMemberships')
-    expect(sites?.skip).toBe(true)
-    // And if `skip` were ever dropped, an absent filter must not be what
-    // stands between one agency client's sites and another's.
-    expect(sites?.where).toBeUndefined()
-  })
-})
-
-describe('the screens query', () => {
-  it('reads only the site that is already open', () => {
-    render(<GlobalSearchDialogComponent open onClose={() => undefined} />)
-    expect(callFor('screens')?.path).toEqual(['hosts', 'host-1', 'screens'])
-    expect(callFor('screens')?.skip).toBe(false)
-  })
-
-  /**
-   * Screens are host-scoped, so searching them across an org would be one
-   * query per site — a fan-out on an interactive path. Off a site the read is
-   * not made narrower, it is not made at all.
-   */
-  it('is held entirely when no site is open', () => {
-    mockHostId = null
-    render(<GlobalSearchDialogComponent open onClose={() => undefined} />)
-    expect(callFor('screens')?.skip).toBe(true)
+  it('is an anchor carrying a real href', () => {
+    mockGroups.push(
+      group('screens', [
+        { $id: 's1', $label: 'Home', $score: 800, versionId: 'v1' },
+      ]),
+    )
+    open()
+    // A MUI `Dialog` renders through a PORTAL, so the RTL `container` never
+    // contains it — querying `container` returns null for every row and makes
+    // an href assertion look like it passed. Everything here reads
+    // `document.body`, which is where the dialog actually is.
+    const anchor = resultAnchors()[0]
+    expect(anchor).toBeTruthy()
+    expect(anchor?.getAttribute('href')).toBe(
+      '/acme/hosts/demo/screens/s1/versions/v1/view',
+    )
+    expect(screen.getByText('Home')).toBeTruthy()
   })
 
-  it('is held while the host id is still resolving', () => {
-    // A half-resolved host would address `hosts//screens`.
-    mockHostReady = false
-    render(<GlobalSearchDialogComponent open onClose={() => undefined} />)
-    expect(callFor('screens')?.skip).toBe(true)
+  /** A row that cannot be addressed is dropped, never rendered inert. */
+  it('is dropped when it has nowhere to go', () => {
+    mockGroups.push(
+      group('screens', [
+        // Addressable: proves this test can see a row at all, so the
+        // assertion below is about the versionless one and not about the
+        // query finding nothing.
+        { $id: 's0', $label: 'Openable', $score: 800, versionId: 'v1' },
+        { $id: 's1', $label: 'Never opened', $score: 800 },
+      ]),
+    )
+    open()
+    // Result rows only — the footer's docs-help tip is an anchor too, and
+    // counting every anchor on the page would make this assertion about the
+    // chrome rather than about the rows.
+    expect(resultAnchors()).toHaveLength(1)
+    expect(screen.getByText('Openable')).toBeTruthy()
+    expect(screen.queryByText('Never opened')).toBeNull()
   })
 
-  it('excludes email templates, which are not pages of the site', () => {
-    render(<GlobalSearchDialogComponent open onClose={() => undefined} />)
-    const filter = callFor('screens')?.filter
-    expect(filter({ kind: 'email' })).toBe(false)
-    expect(filter({ deletedAt: 1 })).toBe(false)
-    expect(filter({ displayName: 'Home' })).toBe(true)
+  it('links each kind of row at its own route', () => {
+    mockGroups.push(
+      group('layouts', [{ $id: 'l1', $label: 'Main Layout', $score: 600 }]),
+      group('workflows', [{ $id: 'w1', $label: 'Quote', $score: 600 }]),
+    )
+    open()
+    const hrefs = resultAnchors().map((a) => a.getAttribute('href'))
+    expect(hrefs).toContain('/acme/hosts/demo/layouts/l1')
+    expect(hrefs).toContain('/acme/hosts/demo/workflows')
   })
 })
 
-describe('what the dialog tells the reader', () => {
-  it('promises only what this context can answer', () => {
-    render(<GlobalSearchDialogComponent open onClose={() => undefined} />)
-    expect(
-      screen.getByPlaceholderText('Search sites and pages…'),
-    ).toBeTruthy()
-  })
-
-  it('shrinks the promise off a site', () => {
-    mockHostId = null
-    render(<GlobalSearchDialogComponent open onClose={() => undefined} />)
-    expect(screen.getByPlaceholderText('Search sites…')).toBeTruthy()
-  })
-
+describe('a group that could not be read', () => {
   /**
-   * The honest half, rendered rather than merely defined. A prefix match is
-   * not the search box people expect, and an unqualified empty result reads
-   * as "you do not have one".
+   * The rule: a swallowed query renders as a measured zero, which is worse
+   * than an error because nothing looks wrong. The reader concludes they do
+   * not have the thing and creates a duplicate.
    */
-  it('states the prefix rule and the two things it cannot find', () => {
-    render(<GlobalSearchDialogComponent open onClose={() => undefined} />)
-    const note = screen.getByText(/STARTS with/)
-    expect(note.textContent).toContain('Orders and contacts are not searchable')
+  it('says it is a read error, not an empty result', () => {
+    mockGroups.push(group('layouts', [], { failed: true }))
+    open()
+    const note = screen.getByText(/could not be searched/)
+    expect(note.textContent).toContain('not an empty result')
+    expect(screen.queryByText('Nothing matched.')).toBeNull()
+  })
+
+  it('does not suppress the groups that succeeded', () => {
+    mockGroups.push(
+      group('layouts', [], { failed: true }),
+      group('screens', [
+        { $id: 's1', $label: 'Home', $score: 800, versionId: 'v1' },
+      ]),
+    )
+    open()
+    expect(screen.getByText(/could not be searched/)).toBeTruthy()
+    expect(screen.getByText('Home')).toBeTruthy()
   })
 })
 
-describe('the top-bar trigger', () => {
+describe('a group whose window filled', () => {
   /**
-   * A button that opens a field which can answer nothing is the defect this
-   * issue is about, one viewport smaller. On the workspace picker — and on
-   * every surface reached before the org resolves — there is nothing to
-   * search, so there is nothing to press.
+   * Absence is only evidence of absence if everything was looked at.
    */
-  it('renders nothing at all when nothing is searchable', () => {
-    mockOrgId = null
-    const { container } = render(<GlobalSearchTriggerComponent />)
-    expect(container.innerHTML).toBe('')
+  it('says how much of it was actually searched', () => {
+    mockGroups.push(
+      group(
+        'screens',
+        [{ $id: 's1', $label: 'Home', $score: 800, versionId: 'v1' }],
+        { truncated: true },
+      ),
+    )
+    open()
+    expect(screen.getByText(/Only the first 30 pages were searched/)).toBeTruthy()
   })
 
-  it('offers the affordance once a workspace has resolved', () => {
-    const { container } = render(<GlobalSearchTriggerComponent />)
-    expect(container.innerHTML).not.toBe('')
-    expect(screen.getByLabelText('Search sites and pages…')).toBeTruthy()
+  it('stays quiet when the window had room left', () => {
+    mockGroups.push(
+      group('screens', [
+        { $id: 's1', $label: 'Home', $score: 800, versionId: 'v1' },
+      ]),
+    )
+    open()
+    expect(screen.queryByText(/Only the first/)).toBeNull()
+  })
+})
+
+describe('what the reader is told', () => {
+  it('asks for a longer query rather than reading for a one-letter one', () => {
+    mockActive = false
+    open()
+    expect(screen.getByText(/Type at least 2 characters/)).toBeTruthy()
   })
 
-  /**
-   * The trigger must not issue the reads. It renders on every console page,
-   * so querying before it is opened would put two Firestore reads on every
-   * navigation in the console to serve a dialog nobody asked for.
-   *
-   * Caught by this test rather than by review: the first version passed
-   * `open={open}` to a permanently mounted dialog, and a MUI `Dialog` that is
-   * closed has still run every hook inside it.
-   */
-  it('reads nothing until it is opened', () => {
-    render(<GlobalSearchTriggerComponent />)
-    expect(switcherCalls).toHaveLength(0)
+  it('promises a match on any part of a name, and states the window', () => {
+    open()
+    const note = screen.getByText(/any part of a name/)
+    expect(note.textContent).toContain('30')
+    // The old copy's promise, which the mechanism no longer has to make.
+    expect(note.textContent).not.toContain('STARTS')
+  })
+
+  it('distinguishes "nothing matched" from "not searched yet"', () => {
+    open()
+    expect(screen.getByText('Nothing matched.')).toBeTruthy()
+    expect(screen.queryByText(/Type at least/)).toBeNull()
   })
 })
 
 /**
- * The AGL-1414 invariant this feature had to not break.
+ * The measured cause of "clicking a result does nothing".
  *
- * ## What this proves, and what it does not
- *
- * It reads the source rather than a rendered page, so it is a STRUCTURAL
- * claim, not a measurement: it cannot tell you the bar fits in 375px. It is
- * here because the property that matters is structural. AGL-1414's failure was
- * a flex child with the default `min-width: auto` growing without bound and
- * shoving the notifications bell off the right edge; its fix was a
- * `min-width: 0` chain through the elastic centre column, which holds the org
- * switcher.
- *
- * A `flexShrink: 0` child added OUTSIDE that column cannot reproduce that
- * failure. It takes a fixed width, and the elastic column absorbs it by
- * ellipsizing the org name — which is precisely the behaviour AGL-1414 built.
- * The two things that would break it are putting the trigger inside the centre
- * column, or letting it shrink; both are what this pins.
- *
- * The rendered-page check AGL-2179 asks for was NOT run: it needs an
- * authenticated console, and the console e2e suite records that authenticated
- * flows cannot run against local emulators. That verification is still owed.
+ * Every MUI `Dialog` renders at `theme.zIndex.modal`, so with two mounted the
+ * winner is decided by DOM order — and this palette opens from the top bar of
+ * EVERY console page, including pages that raise their own dialog. Measured
+ * with `document.elementFromPoint` against a real signed-in console: with the
+ * notifications prompt mounted, every row hit-tests to the OTHER dialog's
+ * container and the click is refused; dismissed, the same rows hit-test to
+ * themselves and navigate.
  */
-describe('the top bar keeps its AGL-1414 shape', () => {
-  const layoutSource = require('node:fs').readFileSync(
-    require('node:path').join(
-      __dirname,
-      '../components/layouts/main.layout.tsx',
-    ),
-    'utf8',
-  )
-
-  it('mounts the trigger in a flexShrink: 0 cluster', () => {
-    const mount = layoutSource.indexOf('<GlobalSearchTriggerComponent />')
-    expect(mount).toBeGreaterThan(-1)
-    // The nearest enclosing Stack must pin its width.
-    const enclosing = layoutSource.slice(0, mount).lastIndexOf('<Stack')
-    expect(layoutSource.slice(enclosing, mount)).toContain('flexShrink: 0')
-  })
-
-  it('leaves the elastic centre column untouched', () => {
-    // The chain the org switcher's ellipsis depends on. A trigger spliced in
-    // here instead would re-establish the `auto` floor AGL-1414 removed.
-    expect(layoutSource).toContain('minWidth: 0')
-    const centre = layoutSource.indexOf('flexGrow: 1')
-    const mount = layoutSource.indexOf('<GlobalSearchTriggerComponent />')
-    expect(centre).toBeGreaterThan(-1)
-    expect(mount).toBeGreaterThan(centre)
-    // Nothing of ours lands between the centre column and its closing tag.
-    const centreBlock = layoutSource.slice(centre, mount)
-    expect(centreBlock).toContain('AppBarMenubarComponent')
+describe('the palette cannot be buried by another dialog', () => {
+  it('renders above the modal layer', () => {
+    open()
+    const root = document.body.querySelector('.MuiDialog-root')
+    expect(root).toBeTruthy()
+    const zIndex = Number(
+      getComputedStyle(root as Element).zIndex || '0',
+    )
+    // MUI's `zIndex.modal` is 1300; anything at or below it can be covered by
+    // a dialog that mounts later.
+    expect(zIndex).toBeGreaterThan(1300)
   })
 })

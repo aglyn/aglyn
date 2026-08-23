@@ -113,6 +113,8 @@ export const schema: Aglyn.ComponentSchema = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Stack',
+  description:
+    'Lays children out in a row or column with even spacing — the workhorse for most layouts.',
   category: Aglyn.ComponentCategory.LAYOUT,
   icon: {
     path: mdiViewColumn.path,

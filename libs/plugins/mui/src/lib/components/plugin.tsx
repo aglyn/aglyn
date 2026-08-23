@@ -191,6 +191,8 @@ export const schema: Aglyn.ComponentSchema<MarketplacePluginProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Plugin',
+  description:
+    'Where an installed marketplace plugin renders, in its own sandbox.',
   category: Aglyn.ComponentCategory.DATA_DISPLAY,
   icon: { path: mdiPuzzle.path, sx: { color: '#5e35b1' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

@@ -101,8 +101,34 @@ export async function seedUserProfile(
   // replaces one somebody uploaded. `photoUrl` here, not `photoURL` — this
   // doc's spelling differs from the roster's, and writing the roster's would
   // add a field Manage Account does not read.
+  //
+  // THE REMOVAL MARKER (AGL-2486). Absent-only is what protects an avatar
+  // somebody SET; it does nothing for one they REMOVED, because removing it
+  // is precisely what makes the field absent again. So this seed runs on the
+  // next sign-in, finds a blank field and a directory thumbnail, and puts
+  // back the picture the person just deleted — from the customer's own IdP,
+  // on every sign-in, forever.
+  //
+  // `propagateMemberPhoto` already refuses this on the roster row, and says
+  // why: it clears with `FieldValue.delete()` rather than `''` so the
+  // backfill's identical `blank()` cannot read the clear as "never set". The
+  // roster half got that treatment and this half did not, and no deletion
+  // sentinel can fix it here — an absent field is exactly the state a
+  // removal produces, so the two are indistinguishable without a marker.
+  //
+  // Hence `photoUrlErasedAt`, the same shape as `phoneNumberErasedAt` and
+  // `addressErasedAt` above and below, and owner-writable for the same
+  // reason: the only party who can clear it is the person it protects, and a
+  // person clearing their own marker is a person asking for IdP prefill
+  // again. Manage Account drops it on any save that stores a photo, so
+  // opting back in is just setting an avatar.
+  //
+  // Not a privacy control, unlike those two — an avatar is a picture the
+  // directory published, not a contact channel. It is a "stop overruling me"
+  // control, which is the whole of what "set AND CHANGE your own avatar"
+  // requires when a directory is asserting one on every sign-in.
   if (input.photoUrl?.trim() && blank(snapshot.get('photoUrl'))) {
-    seed['photoUrl'] = input.photoUrl.trim()
+    if (!snapshot.get('photoUrlErasedAt')) seed['photoUrl'] = input.photoUrl.trim()
   }
   // The phone is the one seeded field with a legal dimension, so it carries
   // two guards the others do not (AGL-1592).

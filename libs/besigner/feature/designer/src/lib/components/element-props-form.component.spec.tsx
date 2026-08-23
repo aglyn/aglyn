@@ -26,11 +26,14 @@ import { join } from 'node:path'
 import * as Aglyn from '@aglyn/aglyn'
 import {
   ATTRIBUTE_COMMIT_DEBOUNCE_MS,
+  buildAnimationFields,
   buildInstancePropFields,
   buildVisibilityFields,
   elementPropsComponentMapper,
   inheritedAltPatch,
+  isFormattedText,
   useDebouncedCommit,
+  withoutFormatting,
 } from './element-props-form.component'
 
 // Regression guard for AGL-567: committing an attribute edit runs
@@ -481,5 +484,267 @@ describe('the Screen picker and a target the host has lost (AGL-1893)', () => {
     )
     expect(deps.length).toBeGreaterThan(0)
     expect(depsList).toContain('nodeProps,')
+  })
+})
+
+/**
+ * AGL-2486 — the two fields that disagreed about which one is the content.
+ *
+ * The renderer draws `props.html` in preference to `children`, while this
+ * panel's Text field edits `children`. On a formatted node, typing in that
+ * field therefore changed a prop nothing renders: the field appeared to do
+ * nothing at all.
+ *
+ * The resolution: the canvas owns formatted text, the panel shows it
+ * read-only and says why, and dropping the formatting is explicit and
+ * undoable. The alternative — letting a plain edit silently clear `html` —
+ * was rejected because its failure mode is typing one character and losing
+ * every link in the paragraph, invisible until the damage is done. Merging
+ * plain text back into markup was rejected too: mapping arbitrary text onto
+ * a marked-up tree has no correct answer once the edit is structural.
+ */
+describe('formatted text is owned by the canvas (AGL-2486)', () => {
+  const node = (props: Record<string, unknown>, componentId = 'muiTypography') =>
+    ({ $id: 'n1', componentId, props, nodes: [] }) as any
+
+  describe('isFormattedText', () => {
+    it('is true when the node carries markup the renderer prefers', () => {
+      expect(
+        isFormattedText(
+          node({ children: 'Your entire web presence. ', html: 'a <div>b</div>' }),
+        ),
+      ).toBe(true)
+    })
+
+    it('is false with no html at all', () => {
+      expect(isFormattedText(node({ children: 'plain' }))).toBe(false)
+    })
+
+    /**
+     * `''` and absent are the same document — the renderer gates on
+     * `Boolean(html)` — so an empty string must not put the field into a
+     * read-only state nothing can explain (d7ba450b5).
+     */
+    it('is false for an empty html string', () => {
+      expect(isFormattedText(node({ children: 'plain', html: '' }))).toBe(false)
+    })
+
+    it('is false for a component instance, whose text rides propValues', () => {
+      expect(
+        isFormattedText(
+          node({ html: '<b>x</b>' }, Aglyn.REUSABLE_INSTANCE_COMPONENT_ID),
+        ),
+      ).toBe(false)
+    })
+
+    it('is false with no node', () => {
+      expect(isFormattedText(undefined)).toBe(false)
+    })
+  })
+
+  describe('withoutFormatting', () => {
+    it('drops the markup', () => {
+      expect(
+        withoutFormatting({ children: 'a b', html: 'a <div>b</div>' }),
+      ).not.toHaveProperty('html')
+    })
+
+    /**
+     * `children` is deliberately untouched: it already holds the plain
+     * reading of the markup, and since `richTextToPlain` keeps line breaks
+     * that reading has the author's breaks in it. The element goes on saying
+     * the same thing in the same shape.
+     */
+    it('keeps the words, and every other prop', () => {
+      expect(
+        withoutFormatting({
+          children: 'Your entire web \npresence. ',
+          html: 'Your entire web <div>presence. </div>',
+          component: 'span',
+          variant: 'h3',
+        }),
+      ).toEqual({
+        children: 'Your entire web \npresence. ',
+        component: 'span',
+        variant: 'h3',
+      })
+    })
+
+    it('does not mutate the props it was given', () => {
+      const props = { children: 'a', html: '<b>a</b>' }
+      withoutFormatting(props)
+      expect(props.html).toBe('<b>a</b>')
+    })
+
+    it('copes with a node that has no props yet', () => {
+      expect(withoutFormatting(undefined)).toEqual({})
+    })
+  })
+})
+
+/**
+ * AGL-2486 — the affordances beside the read-only Text field.
+ *
+ * `isFormattedText` and `withoutFormatting` above prove the DECISION and the
+ * transform. They cannot prove that the panel explains either one, and that
+ * is the half a user actually meets: a warning-coloured button named
+ * "Remove formatting" beside text they cannot type into. Told nothing more,
+ * the only way to learn whether the words survive is to press it and find
+ * out — on the paragraph, not on a copy.
+ *
+ * So the tooltip has to lead with what is KEPT. It is asserted here rather
+ * than rendered for the reason recorded on the Screen-picker block below:
+ * this branch sits in an unexported render tree behind the besigner's
+ * context stack. Read from source, with a guard on the guard.
+ */
+describe('the read-only Text field explains itself (AGL-2486)', () => {
+  const source = readFileSync(
+    join(__dirname, 'element-props-form.component.tsx'),
+    'utf8',
+  )
+  const formattedBranch = source.slice(
+    source.indexOf('{hasFormattedText ? ('),
+    source.indexOf('<ElementPropsFormTemplate'),
+  )
+
+  it('is looking at the right branch', () => {
+    // Without this, every check below would pass on an empty string.
+    expect(formattedBranch).toContain("'Remove formatting'")
+    expect(formattedBranch.length).toBeGreaterThan(400)
+  })
+
+  it('says what survives before the button is pressed, not after', () => {
+    // The words and the breaks are the reassurance; a tooltip that only
+    // named the losses would read as a warning and stop people using a
+    // button that is safe and undoable.
+    expect(formattedBranch).toContain('Tooltip')
+    expect(formattedBranch).toMatch(/Keeps every word and line break/)
+    expect(formattedBranch).toMatch(/One undo brings/)
+  })
+
+  it('names the formatting it does remove', () => {
+    expect(formattedBranch).toMatch(/bold, .*italic, underline, links and lists/s)
+  })
+
+  /**
+   * A help link is only help if it lands on the paragraph answering the
+   * question the reader has RIGHT NOW. With formatted text that question is
+   * "why can I not type in this box", which is its own section — not the
+   * general "the two fields edit the same value" opener.
+   */
+  it('deep-links to the section for the state the author is in', () => {
+    expect(formattedBranch).toContain("'#text-field-read-only'")
+    expect(formattedBranch).toContain("'#the-text-attribute'")
+  })
+})
+
+/**
+ * The easing formerly labelled "Slight overshoot" is now "Settles into
+ * place" (AGL-2486).
+ *
+ * The rename is Zach's, and the curve is deliberately untouched: it is still
+ * `cubic-bezier(.34,1.56,.64,1)`, still the only one of the six that leaves
+ * the 0–1 range. What changed is the promise the name makes. The docs page
+ * says every preset only fades, slides or resizes and that nothing bounces,
+ * and a control labelled "overshoot" advertised the one thing the page said
+ * the platform does not do — an author reading the label chose it expecting
+ * a bounce, or avoided it expecting one.
+ *
+ * THE ID IS THE PART THAT MUST NOT MOVE, and it is why this spec exists at
+ * all rather than the rename being a one-word diff. `overshoot` is persisted:
+ * it is written into `aglynAnimationEase` on every node that uses it, keyed
+ * in `EASE_CURVES`, and published as the `aglyn-anim-ease--overshoot` class.
+ * `ANIMATION_EASINGS` says "Persisted; never rename one" for that reason.
+ * Renaming the VALUE alongside the label would leave every screen already
+ * using it carrying an id nothing maps, and the failure mode is silent — the
+ * element still renders, it just stops easing. So the select's option values
+ * are asserted to be exactly the shared id list, which is a check the next
+ * person renaming a label will trip if they touch the wrong string.
+ */
+describe('the overshoot easing is labelled by what it does (AGL-2486)', () => {
+  const easing = buildAnimationFields().find(
+    (field) => field['name'] === Aglyn.NODE_ANIMATION_EASE_PROP,
+  ) as { options?: Array<{ value: string; label: string }> } | undefined
+
+  it('is looking at the easing field at all', () => {
+    // Without this every assertion below would pass vacuously on `undefined`
+    // — the field is found by a shared constant, and a rename of THAT would
+    // otherwise turn this whole block green while testing nothing.
+    expect(easing).toBeDefined()
+    expect(easing?.options?.length).toBe(Aglyn.ANIMATION_EASINGS.length)
+  })
+
+  it('offers "Settles into place" and no longer offers "Slight overshoot"', () => {
+    const labels = (easing?.options ?? []).map((option) => option.label)
+    expect(labels).toContain('Settles into place')
+    expect(labels).not.toContain('Slight overshoot')
+  })
+
+  it('keeps the STORED id, which is what documents already hold', () => {
+    const option = (easing?.options ?? []).find(
+      (candidate) => candidate.label === 'Settles into place',
+    )
+    expect(option?.value).toBe('overshoot')
+    // And nothing else in the list drifted from the persisted vocabulary.
+    expect((easing?.options ?? []).map((candidate) => candidate.value)).toEqual([
+      ...Aglyn.ANIMATION_EASINGS,
+    ])
+  })
+
+  /**
+   * The field's own help text described the curve as "overshoots slightly",
+   * which was the sentence carrying the old name's promise. Renaming the
+   * option and leaving that behind would have moved the word rather than
+   * retired it.
+   */
+  it('no longer describes the curve as an overshoot in the help text', () => {
+    // The PROSE only — deliberately not the whole field. The serialized
+    // field still contains the string "overshoot" and always must, because
+    // that is the stored option value the test above pins.
+    const prose = [
+      String((easing as any)?.description ?? ''),
+      String((easing as any)?.help?.excerpt ?? ''),
+    ].join(' ')
+    expect(prose.length).toBeGreaterThan(40)
+    expect(prose).not.toMatch(/overshoot/i)
+    expect(prose).toMatch(/past its mark/)
+  })
+
+  /**
+   * Label/docs parity. The docs page covers easing in full and named the old
+   * label twice — once in the table, once in the accessibility section that
+   * calls it the most emphatic curve on offer. A console that says one thing
+   * and a docs page that says another is the failure this catches.
+   */
+  describe('the docs page uses the same name', () => {
+    const page = readFileSync(
+      join(
+        __dirname,
+        '../../../../../../../apps/docs/docs/building-sites/besigner/animations.md',
+      ),
+      'utf8',
+    )
+
+    it('is reading the animations page', () => {
+      expect(page).toContain('# Element animations')
+      expect(page).toContain('### Easing')
+    })
+
+    it('names the easing "Settles into place" everywhere it names it', () => {
+      expect(page).toContain('**Settles into place**')
+      expect(page).not.toContain('Slight overshoot')
+    })
+
+    it('still explains what the curve does, having lost the word for it', () => {
+      // The name no longer carries the behaviour, so the prose has to. Both
+      // mentions describe the travel-past-and-return, in the table and in
+      // the accessibility section.
+      expect(page).toMatch(
+        /\*\*Settles into place\*\* \| Travels a little past its resting place/,
+      )
+      expect(page).toMatch(
+        /most emphatic thing on offer is the \*\*Settles into place\*\*[\s\S]{0,120}travels a little past its resting place/,
+      )
+    })
   })
 })

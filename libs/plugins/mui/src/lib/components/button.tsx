@@ -173,6 +173,8 @@ export const schema: Aglyn.ComponentSchema<LinkableButtonProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Button',
+  description:
+    'A button — or a link styled as one, if you point it at a screen or URL.',
   category: Aglyn.ComponentCategory.INPUT,
   icon: {
     path: mdiGestureTapButton.path,

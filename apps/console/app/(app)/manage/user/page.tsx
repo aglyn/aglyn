@@ -80,6 +80,7 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { accountPhotoProfilePatch } from '../../../../components/account-photo-payload'
 import MemberAvatar from '../../../../components/member-avatar.component'
 import AccountEmailsCard from '../../../../components/account-emails-card.component'
 import AccountIdentitiesCard from '../../../../components/account-identities-card.component'
@@ -402,7 +403,14 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
     }
     const dequeueLoading = queueLoading()
     try {
-      await setDoc(userRef, { photoUrl: cleaned }, { merge: true })
+      // `deleteField()` on a clear plus a removal marker, never a bare `''`
+      // (AGL-2486) — `accountPhotoProfilePatch` holds the rule and the
+      // reasoning, and its spec is where the two sentinels are pinned.
+      await setDoc(
+        userRef,
+        accountPhotoProfilePatch(cleaned, { deleteField, serverTimestamp }),
+        { merge: true },
+      )
       await updateProfile(user, { photoURL: cleaned || null })
       // Neither of the two writes above is what a COLLEAGUE reads (AGL-1976).
       // Every member surface — Team, the member detail page, activity,
@@ -761,9 +769,46 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
             </Typography>
           </Stack>
         </Stack>
+        {/* WHY THERE IS NO PICTURE, for the only accounts that cannot
+            answer it themselves (AGL-2486).
+
+            A self-serve account arrives through Google and brings a photo
+            with it, so an empty avatar there means "you have not set one".
+            An SSO account does not: its picture can only come from a
+            `picture` attribute in the SAML assertion, and a SAML assertion
+            carries only what the customer's IdP admin chose to map. Google
+            Workspace's SAML app offers no photo attribute at ALL — measured
+            on the live `aglyn-org-y5v14` tenant, whose auth record, provider
+            entry and profile document are all still photo-less after a
+            sign-in three weeks after the mapping shipped — so for those
+            orgs there is nothing to map and nothing coming.
+
+            Without this the page is silent about that, and an empty field
+            beside a grey initial reads as "not loaded yet" or "the SSO
+            import is broken", which is the ticket this text answers. It is
+            NOT a per-account diagnosis of the assertion: we do not keep the
+            attributes, and claiming to know what a specific IdP sent would
+            be a guess. It says what is true of every SSO account — the
+            picture is yours to set here — and only while there is none. */}
+        {ssoGoverned && !photoUrl.trim() && !resolvedPhotoUrl ? (
+          <Alert severity="info">
+            {'Your organization signs you in through its identity provider, ' +
+              'and identity providers usually do not send a profile picture — ' +
+              'many, including Google Workspace SAML, cannot. Set yours ' +
+              'here: ' +
+              // Only offer Browse when there IS one. The button beside the
+              // field is org-scoped and simply does not render without a
+              // workspace, and advice pointing at a control that is not on
+              // the screen is worse than the shorter sentence.
+              (currentOrg
+                ? 'browse your organization’s media library, where you can ' +
+                  'upload an image, or paste an https link.'
+                : 'paste an https link to an image.')}
+          </Alert>
+        ) : null}
         <MediaUrlField
           label="Image URL"
-          helperText="Browse the org media library or paste an https URL"
+          helperText="Browse the org media library to upload or pick an image, or paste an https URL"
           orgId={currentOrg?.$id ?? null}
           value={photoUrl}
           onChange={setPhotoUrl}

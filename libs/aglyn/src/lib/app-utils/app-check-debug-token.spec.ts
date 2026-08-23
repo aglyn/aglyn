@@ -72,6 +72,18 @@ const REPORTING_TOOL = 'tools/deploy/verify-env-isolation.mjs'
 
 /** This file, which necessarily contains the pattern it searches for. */
 const SELF = 'libs/aglyn/src/lib/app-utils/app-check-debug-token.spec.ts'
+/**
+ * The rotation runbook (AGL-2403) names both variables in its inventory — as
+ * the two entries whose instruction is **delete, do not rotate**, citing this
+ * guard by path as what keeps them deleted.
+ *
+ * Exempt because this guard's subject is CODE THAT READS a debug token, and a
+ * runbook telling an operator to remove one is the opposite of that. Naming
+ * the single file rather than exempting `docs/**` is deliberate: a doc that
+ * told someone to SET one would still be caught, which is the failure worth
+ * catching.
+ */
+const ROTATION_RUNBOOK = 'docs/SECRET_ROTATION.md'
 
 function filesNaming(pattern: string): string[] {
   try {
@@ -104,7 +116,8 @@ describe('App Check debug tokens are read by nothing (AGL-2402)', () => {
 
   it('no file outside the audit tool names an App Check debug token', () => {
     const offenders = filesNaming(DEBUG_TOKEN_NAMES).filter(
-      (file) => file !== REPORTING_TOOL && file !== SELF,
+      (file) =>
+        file !== REPORTING_TOOL && file !== SELF && file !== ROTATION_RUNBOOK,
     )
     expect(offenders).toEqual([])
   })

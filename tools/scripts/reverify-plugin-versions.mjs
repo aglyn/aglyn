@@ -20,6 +20,11 @@
  * which the console runtime already has, and one home for the rules means a
  * local run and the scheduled one can never disagree.
  */
+// Bot Protection challenges automated clients on app.aglyn.com, so a hand run
+// from a machine the firewall does not know answers 429 with a checkpoint page
+// rather than reaching the route (AGL-2486).
+import { withProbeHeaders } from './lib/probe-headers.mjs'
+
 const apply = process.argv.includes('--apply')
 const force = process.argv.includes('--force')
 const baseUrl = process.env.CONSOLE_BASE_URL ?? 'https://app.aglyn.com'
@@ -36,7 +41,10 @@ console.log(`POST ${url}${apply ? '' : ' (dry run)'}${force ? ' --force' : ''}`)
 const response = await fetch(url, {
   method: 'POST',
   redirect: 'manual',
-  headers: { 'content-type': 'application/json', 'x-cron-secret': cronSecret },
+  headers: withProbeHeaders({
+    'content-type': 'application/json',
+    'x-cron-secret': cronSecret,
+  }),
   body: JSON.stringify({ dryRun: !apply, force }),
 })
 

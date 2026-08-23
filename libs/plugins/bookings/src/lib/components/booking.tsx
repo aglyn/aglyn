@@ -340,6 +340,8 @@ export const schema: Aglyn.ComponentSchema<BookingProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Booking',
+  description:
+    'Service and time picker that books appointments. It is double-booking safe.',
   category: Aglyn.ComponentCategory.INPUT,
   icon: {
     path: mdiCalendarClock.path,

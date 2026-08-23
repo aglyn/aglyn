@@ -22,8 +22,20 @@ import {
   isImpersonationSession,
   readOrgBilling,
 } from '@aglyn/tenant-data-admin'
-import { createHash } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
 import { normalizeRefundReason } from '../../../../constants/refund-reasons'
+import {
+  checkRefundAuthority,
+  refundAuthorityForRole,
+  refundCapCentsForRole,
+  refundWindowCapCentsForRole,
+  STAFF_REFUND_CAP_CENTS,
+} from '../../../../constants/refund-authority'
+import {
+  readRefundWindowUsage,
+  releaseRefundWindow,
+  reserveRefundWindow,
+} from '../../../../utils/server/staff-refund-ledger'
 
 /**
  * Staff subscription refunds from the org page (AGL-2486).
@@ -67,6 +79,21 @@ import { normalizeRefundReason } from '../../../../constants/refund-reasons'
  * operator can act on rather than a raw 502, and never invent a refund the
  * customer's own charge does not back.
  *
+ * ## Who may issue one
+ *
+ * Not `super`-only any more (AGL-2486). Support may refund up to a cap and
+ * escalates above it — Zach's call, on the grounds that the person a customer
+ * actually reaches is support, and making them escalate a $12 refund means
+ * the customer waits on one person's availability. He declined a second
+ * approver, so the cap IS the control and there are two of them: per refund,
+ * and a rolling 24-hour per-actor ceiling that stops the first being defeated
+ * by splitting one large refund into several small ones. See
+ * `constants/refund-authority.ts` for the numbers and the reasoning.
+ *
+ * Both are evaluated HERE, before Stripe is touched — the console disables
+ * the button and states the allowance up front, but that is so an operator is
+ * never refused after filling in a form, not the boundary itself.
+ *
  * ## The fee is not returned
  *
  * Stripe keeps its processing fee on a refunded charge. The Pricing Decision
@@ -74,8 +101,6 @@ import { normalizeRefundReason } from '../../../../constants/refund-reasons'
  * were — so the GET returns the ACTUAL fee Stripe took on each charge rather
  * than a sentence about fees in general, and the console shows it beside the
  * amount before anyone presses the button.
- *
- * Super staff only: this is the one staff action that moves money outward.
  */
 
 async function stripe(
@@ -164,6 +189,9 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Staff only' }, { status: 403 })
     }
     const firestore = firebaseAdmin.app().firestore()
+    // Fails closed to the least-privileged role like every other staff route
+    // (AGL-495): a token with no `staffRole` claim is `support`, i.e. capped.
+    const actorRole = String(decoded['staffRole'] ?? 'support')
     // AGL-1028: the customer id lives at `orgs/{orgId}/billing/stripe`, with
     // the org doc as the fallback the backfill has not reached.
     const customerId = (await readOrgBilling(orgId)).stripeCustomerId as
@@ -171,12 +199,29 @@ async function handler(request: Request): Promise<Response> {
       | undefined
 
     if (method === 'GET') {
+      // The caller's own allowance, reported alongside the charges so the
+      // card can state the boundary BEFORE an amount is typed. `windowCents`
+      // is null when the ledger could not be read — rendered as "could not
+      // read your remaining allowance", never as a full one, because a
+      // fabricated ceiling is worse than none shown.
+      const usage =
+        refundAuthorityForRole(actorRole) === 'super'
+          ? { cents: 0, count: 0 }
+          : await readRefundWindowUsage(firestore, decoded.uid)
+      const authority = {
+        role: actorRole,
+        authority: refundAuthorityForRole(actorRole),
+        perRefundCapCents: refundCapCentsForRole(actorRole),
+        windowCapCents: refundWindowCapCentsForRole(actorRole),
+        windowCents: usage ? usage.cents : null,
+        windowCount: usage ? usage.count : null,
+      }
       if (!customerId) {
         // Distinct from a failed lookup (AGL-940). The console has to be able
         // to say "never subscribed" rather than showing an empty list that
         // could equally mean Stripe was unreachable.
         return Response.json(
-          { charges: [], hasCustomer: false },
+          { charges: [], hasCustomer: false, authority },
           { status: 200 },
         )
       }
@@ -193,26 +238,22 @@ async function handler(request: Request): Promise<Response> {
         // operator to the Stripe dashboard believing there was nothing to
         // refund.
         return Response.json(
-          { charges: [], hasCustomer: true, stripeError: detail },
+          { charges: [], hasCustomer: true, stripeError: detail, authority },
           { status: 200 },
         )
       }
       const charges = Array.isArray(res.body?.data)
         ? res.body.data.map(describeCharge)
         : []
-      return Response.json({ charges, hasCustomer: true }, { status: 200 })
-    }
-
-    // POST: move money. Super-only — the same bar as flag publishing and
-    // user management, and this one is irreversible in the other direction.
-    const actorRole = String(decoded['staffRole'] ?? 'support')
-    if (actorRole !== 'super') {
       return Response.json(
-        { error: 'Requires the super staff role' },
-        { status: 403 },
+        { charges, hasCustomer: true, authority },
+        { status: 200 },
       )
     }
 
+    // POST: move money. Any staff role may reach here now; HOW MUCH they may
+    // move is decided below, after the amount is known — see the two-cap
+    // block before the Stripe call.
     const reason = normalizeRefundReason(body?.reason, body?.note)
     if (!reason) {
       // Refused BEFORE anything is claimed or charged. The reason is the
@@ -308,6 +349,20 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
+    // ── THE CAP, PART ONE: this refund's own size ────────────────────────
+    // Checked here, before anything is claimed or reserved, because it needs
+    // no store read and refusing it must leave the attempt perfectly
+    // retryable — an operator who mistyped an amount should be able to
+    // correct it and submit again, not be told their key is in use.
+    const sizeVerdict = checkRefundAuthority({
+      role: actorRole,
+      amountCents: asked,
+      windowCents: 0,
+    })
+    if (!sizeVerdict.allowed) {
+      return Response.json({ error: sizeVerdict.error }, { status: 403 })
+    }
+
     // Point of no return: everything past here moves money. Same primitive as
     // the commerce path — an atomic `create()`, whose rejection on an
     // existing document IS the dedupe — in the same `apiIdempotency`
@@ -360,6 +415,49 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
+    // ── THE CAP, PART TWO: this actor's rolling 24 hours ─────────────────
+    // AFTER the claim, so a double-click cannot reserve twice; BEFORE Stripe,
+    // because a ceiling checked after the money moved is a report, not a cap.
+    // The check and the increment are one transaction: two refunds submitted
+    // together would otherwise each read the same prior total, each find room
+    // and each proceed, which is the read-then-write race that lets a
+    // create-time quota be laundered.
+    const windowEntryId = randomUUID()
+    let reservation: Awaited<ReturnType<typeof reserveRefundWindow>>
+    try {
+      reservation = await reserveRefundWindow(firestore, {
+        actorUid: decoded.uid,
+        role: actorRole,
+        amountCents: asked,
+        entryId: windowEntryId,
+      })
+    } catch (error) {
+      // FAILS CLOSED. Zach declined a second approver, so this cap is the
+      // only control on the largest staff action there is; a store outage
+      // that silently lifted it would be an unbounded window nobody could
+      // see. One escalation is the cost of being wrong this way.
+      console.error('Refund ceiling unreadable', { orgId, chargeId }, error)
+      await claimRef?.delete().catch(() => undefined)
+      return Response.json(
+        {
+          error:
+            'Could not read your 24-hour refund ceiling, so this refund was ' +
+            'not issued. Nothing was charged or refunded. Retry shortly, or ' +
+            'ask someone with the super staff role.',
+        },
+        { status: 503 },
+      )
+    }
+    if (!reservation.verdict.allowed) {
+      // Released, not burned: no money moved, so the same attempt key must
+      // stay usable once the window has room again.
+      await claimRef?.delete().catch(() => undefined)
+      return Response.json(
+        { error: reservation.verdict.error },
+        { status: 403 },
+      )
+    }
+
     const refundRes = await stripe(
       secretKey,
       'refunds',
@@ -378,8 +476,11 @@ async function handler(request: Request): Promise<Response> {
     if (!refundRes.ok) {
       const code = String(refundRes.body?.error?.code ?? '')
       // The claim is released, not burned: Stripe said no, so we KNOW no
-      // money moved and the same attempt must remain retryable.
+      // money moved and the same attempt must remain retryable. The window
+      // reservation goes back for the same reason — a refund Stripe refused
+      // must not spend the operator's daily ceiling.
       await claimRef?.delete().catch(() => undefined)
+      await releaseRefundWindow(firestore, decoded.uid, windowEntryId)
       if (code === 'charge_disputed' || code === 'refund_disputed_payment') {
         return Response.json(
           {
@@ -443,6 +544,27 @@ async function handler(request: Request): Promise<Response> {
         },
         reason: reason.reason,
         note: reason.note,
+        // WHICH AUTHORITY MOVED THE MONEY (AGL-2486). Support may refund up
+        // to a cap and `super` may refund anything, so "a staff member issued
+        // a refund" is no longer one fact. Three fields rather than one,
+        // because they answer three different questions after the fact:
+        //
+        //   actorRole — who they were at the time. The claim can change;
+        //     the row must not be re-derived from today's claim.
+        //   authority — `capped` or `super`. Which rule admitted it.
+        //   overCap   — whether the AMOUNT was one only `super` could have
+        //     issued. This is the one that distinguishes an escalated refund
+        //     from a routine one: a `super` refunding $12 is routine, and
+        //     `authority` alone cannot say so. Query it to read every refund
+        //     that needed the escalation, which is the review nobody can run
+        //     against Stripe's own record.
+        actorRole,
+        authority: reservation.verdict.authority,
+        overCap: reservation.verdict.overCap,
+        // The threshold IN FORCE when the row was written, so raising the cap
+        // later does not silently reinterpret the history (AGL-2113's lesson
+        // about thresholds drifting away from the readouts that quote them).
+        capCentsAtTime: STAFF_REFUND_CAP_CENTS,
         at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       })
       .catch((error: unknown) => {

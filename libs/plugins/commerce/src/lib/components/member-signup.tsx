@@ -169,6 +169,7 @@ export const schema: Aglyn.ComponentSchema<MemberSignupProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Member sign-up',
+  description: 'A create-account form for site membership.',
   category: Aglyn.ComponentCategory.MEMBERS,
   icon: { path: mdiAccountPlusOutline.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

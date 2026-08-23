@@ -166,6 +166,8 @@ export const schema: Aglyn.ComponentSchema<GatedVideoProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Members video',
+  description:
+    'A video only entitled members can play, resuming where they left off.',
   category: Aglyn.ComponentCategory.COMMERCE,
   icon: { path: mdiPlayCircleOutline.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

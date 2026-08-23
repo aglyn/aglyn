@@ -914,7 +914,11 @@ async function assertCollaboratorSeats(options: {
   orgRef: FirebaseFirestore.DocumentReference
   org: Partial<AglynOrgBilling>
   hostIds: string[]
-  self: { uid?: string | null; email?: string | null }
+  self: {
+    uid?: string | null
+    email?: string | null
+    emails?: readonly (string | null | undefined)[] | null
+  }
   read: (query: FirebaseFirestore.Query) => Promise<FirebaseFirestore.QuerySnapshot>
 }): Promise<void> {
   const { orgRef, org, hostIds, self, read } = options
@@ -1015,6 +1019,13 @@ export interface UpsertOrgMemberOptions {
   allHosts?: boolean
   /** Per-site grants. `author` (AGL-2334) rides the shared union. */
   hostAccess?: Record<string, HostAccessRole>
+  /**
+   * Further CONFIRMED addresses on the joining account (AGL-2486), so a
+   * pending invite addressed to a secondary is recognised as this same
+   * person and does not bill them a second collaborator seat. Must contain
+   * only addresses proven to belong to `uid`.
+   */
+  seatAliasEmails?: readonly (string | null | undefined)[] | null
   /** Custom role reference (AGL-243); null clears it. */
   roleId?: string | null
   email?: string | null
@@ -1052,6 +1063,7 @@ export async function upsertOrgMember(
     hostAccess,
     roleId,
     email,
+    seatAliasEmails,
     displayName,
     photoURL,
     title,
@@ -1084,7 +1096,7 @@ export async function upsertOrgMember(
         hostAccess: hostAccess ?? {},
         existing: existing.data() as Partial<AglynOrgMember> | undefined,
       }),
-      self: { uid, email },
+      self: { uid, email, emails: seatAliasEmails },
       read: (query) => tx.get(query),
     })
     tx.set(

@@ -45,26 +45,20 @@
  * That is configuration, and it is independent of the request.
  */
 
-/** Explicit ops override, for the case where key-prefix inference is wrong. */
-const LIVEMODE_OVERRIDE = 'STRIPE_LIVEMODE'
-
 /**
- * Whether THIS deployment is the live one.
+ * Re-exported, not defined here (AGL-2486). The implementation moved into
+ * `libs/aglyn` so `org-billing.ts` — a LIBRARY, which cannot import from an
+ * app — can key the stored Stripe customer id by the same notion of "which
+ * mode is this deployment". A second copy of the `sk_live_` inference would
+ * have put two answers to a money-path question in the tree.
  *
- * Derived from `STRIPE_SECRET_KEY`'s prefix, with an explicit
- * `STRIPE_LIVEMODE=true|false` override that wins when set. Note the
- * asymmetry, which is deliberate: only `sk_live_` yields `true`. An unset or
- * unrecognised key is NOT a live deployment, because a deployment with no
- * Stripe secret key cannot be charging anyone.
+ * Imported by its DEEP path, not from `@aglyn/aglyn/server`. The barrel is
+ * mocked wholesale by the webhook suites, and a re-export through it resolved
+ * to `undefined` at call time — `deploymentLivemode is not a function`, inside
+ * the AGL-2040 livemode gate. The deep path is not covered by those mocks, so
+ * this stays a plain function no matter what a spec does to the barrel.
  */
-export function deploymentLivemode(
-  env: Partial<Record<string, string>> = process.env,
-): boolean {
-  const override = env[LIVEMODE_OVERRIDE]
-  if (override === 'true') return true
-  if (override === 'false') return false
-  return String(env['STRIPE_SECRET_KEY'] ?? '').startsWith('sk_live_')
-}
+export { deploymentLivemode } from '@aglyn/aglyn/app-utils/stripe-deployment-mode'
 
 /**
  * Whether a parsed Stripe event claims to be a LIVE event.

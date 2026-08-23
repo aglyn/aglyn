@@ -218,6 +218,8 @@ export const schema: Aglyn.ComponentSchema<MemberRecoveryProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Password recovery',
+  description:
+    'Forgot-password request, and the reset form the emailed link opens.',
   category: Aglyn.ComponentCategory.MEMBERS,
   icon: { path: mdiLockReset.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

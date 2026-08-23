@@ -26,6 +26,7 @@ import {
   isReleaseFlagOnForOrg,
   nodeMapBytes,
   parseOrgReleaseFlagOverrides,
+  resolveEffectivePlan,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/server'
 import {
@@ -713,6 +714,15 @@ async function handler(request: Request): Promise<Response> {
       // One read of the org doc for every quota decision below — the four
       // meters must agree about which plan they are pricing against.
       const orgData = orgSnapshot.data() as any
+      // The tier every release-flag verdict below is evaluated against
+      // (AGL-2486), off the document already in hand — no extra read.
+      //
+      // `null` when the document is ABSENT, deliberately not
+      // `resolveEffectivePlan(undefined)`: that answers `'free'`, and a
+      // Free-targeted flag would then switch on for every org whose read
+      // came back empty. An unknown tier must refuse; a KNOWN `'free'` must
+      // match. Those are different facts, so they are spelled differently.
+      const releaseFlagPlan = orgData ? resolveEffectivePlan(orgData) : null
       // The ORG LIBRARY as one more storage snapshot (AGL-1473).
       //
       // `resolveMediaScope` sends an org DAM upload to
@@ -780,6 +790,7 @@ async function handler(request: Request): Promise<Response> {
         releaseFlagValues['release_inbox'],
         orgId,
         parseOrgReleaseFlagOverrides(orgData?.['releaseFlags']),
+        releaseFlagPlan,
       )
       // WHAT REACHES THE INVOICE, not what is counted. The snapshots feeding
       // `estimate` are untouched, so `costUsd`, the recorded `formSubmissions`
@@ -961,6 +972,11 @@ async function handler(request: Request): Promise<Response> {
         releaseFlagValues['release_contacts'],
         orgId,
         parseOrgReleaseFlagOverrides(orgData?.['releaseFlags']),
+        // Tier targeting included (AGL-2486), from the same `orgData` as the
+        // overrides. Omitting it made every `plans`-declaring flag read OFF —
+        // and this line is where that stops being a gating curiosity and
+        // becomes an invoice that is quietly short.
+        releaseFlagPlan,
       )
       const contactsOverageUsd = contactsOverageBilled
         ? contactQuota.overageMonthlyUsd

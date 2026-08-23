@@ -41,7 +41,7 @@ import { CART_UPDATED_EVENT } from './cart'
 import { ID as PRODUCT_REVIEWS_ID } from './product-reviews'
 import { ID as RELATED_PRODUCTS_ID } from './related-products'
 import { readLocalWishlist, toggleWishlist } from './wishlist'
-import { StorefrontPaymentElementFallback } from './storefront-payment-element'
+import { StorefrontPaymentElementFallback } from './storefront-payment-element-fallback'
 
 /**
  * The Payment Element (AGL-1944), behind a lazy boundary rather than a plain
@@ -439,6 +439,19 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               component="img"
               src={galleryImage}
               alt={resolved.name}
+              // DELIBERATELY NOT DEFERRED (AGL-2486). This is the gallery
+              // hero at the top of a product page — the one image on this
+              // surface that really is the LCP candidate, and the browser
+              // default here is already `eager`. Spreading
+              // `DEFERRED_IMAGE_ATTRIBUTES` over it to "finish the job" is
+              // the obvious next edit and it re-introduces the bug this
+              // issue opened with: an LCP image not discovered until after
+              // layout has run. The thumbnail strip below it IS deferred.
+              //
+              // No `fetchpriority` either, for the reason written out at
+              // `image.tsx`: `high` is a claim about every other request in
+              // flight, and a page whose real LCP is the product NAME would
+              // pay for that claim.
               sx={{
                 width: '100%',
                 aspectRatio: '1 / 1',
@@ -475,6 +488,11 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                     borderColor:
                       index === activeImage ? 'primary.main' : 'transparent',
                   }}
+                  // Deferred (AGL-2486): 56px thumbnails that exist to swap
+                  // the hero above. They were fetching eagerly ALONGSIDE
+                  // that hero, so a five-image gallery had the hero
+                  // competing with four thumbnails nobody had asked for yet.
+                  {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
                 />
               ))}
             </Box>
@@ -732,6 +750,7 @@ export const schema: Aglyn.ComponentSchema<ProductDetailProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Product detail',
+  description: "One product's gallery, options and buy button.",
   category: Aglyn.ComponentCategory.COMMERCE,
   icon: { path: mdiTagOutline.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

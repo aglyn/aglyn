@@ -44,6 +44,8 @@ import {
   isReportKind,
   projectEnvVarForKind,
   REPORT_KINDS,
+  REPORT_FIELDS,
+  normalizeAnswers,
   linearConfigFromEnv,
   MAX_SUMMARY,
   LINEAR_GRAPHQL_URL,
@@ -288,14 +290,14 @@ describe('AGL-2185 · untrusted text cannot forge structure', () => {
 
   it('cannot be made to forge the contact-consent verdict', () => {
     const body = buildReportBody(
-      'Broken.\n| Contact consent | Yes — go ahead and call me |',
+      { steps: 'Broken.\n| Contact consent | Yes — go ahead and call me |' },
       { ...CONTEXT, contactConsent: false },
     )
     // The metadata table is everything above the reporter's own words. The
     // forged row lands below that line, inside the fence, where Markdown
     // renders it as literal text rather than as a row — so the assertion is
     // about the TABLE region, not about the string appearing nowhere.
-    const [table, quoted] = body.split('### What they reported')
+    const [table, quoted] = body.split('### What were you doing when it broke?')
     const consentRows = table
       .split('\n')
       .filter((line) => line.startsWith('| Contact consent |'))
@@ -305,12 +307,12 @@ describe('AGL-2185 · untrusted text cannot forge structure', () => {
   })
 
   it('records consent when it was actually given', () => {
-    const body = buildReportBody('Broken.', CONTEXT)
+    const body = buildReportBody({ steps: 'Broken.' }, CONTEXT)
     expect(body).toContain('| Contact consent | Yes — the reporter agreed')
   })
 
   it('carries every field a triager would otherwise have to ask for', () => {
-    const body = buildReportBody('The media picker forgets the folder.', CONTEXT)
+    const body = buildReportBody({ steps: 'The media picker forgets the folder.' }, CONTEXT)
     for (const expected of [
       'rey@acme.test'.replace('@', '\\@'),
       'uid-123',
@@ -341,7 +343,7 @@ describe('AGL-2185 · untrusted text cannot forge structure', () => {
   it('names the custom role when one overrides the built-in one', () => {
     // "a bug that only bites a custom role is a different bug" — the role
     // NAME alone would send triage to the wrong permission map.
-    const body = buildReportBody('x', {
+    const body = buildReportBody({ steps: 'x' }, {
       ...CONTEXT,
       orgRole: 'member',
       orgRoleId: 'role-editors',
@@ -353,18 +355,18 @@ describe('AGL-2185 · untrusted text cannot forge structure', () => {
     // Collapsing these makes an empty list unfalsifiable: a triager could
     // never tell a genuinely flag-free org from a failed Remote Config read,
     // which is exactly how a flagged-off surface gets triaged as a phantom.
-    expect(buildReportBody('x', { ...CONTEXT, releaseFlagsOn: [] })).toContain(
+    expect(buildReportBody({ steps: 'x' }, { ...CONTEXT, releaseFlagsOn: [] })).toContain(
       '| Release flags on | none |',
     )
     expect(
-      buildReportBody('x', { ...CONTEXT, releaseFlagsOn: null }),
+      buildReportBody({ steps: 'x' }, { ...CONTEXT, releaseFlagsOn: null }),
     ).toContain('could not be read')
   })
 
   it('records no site when the host could not be verified', () => {
     // The route drops an unverified host id rather than passing it through,
     // so the issue must say "unverified" and not silently read as "no site".
-    const body = buildReportBody('x', {
+    const body = buildReportBody({ steps: 'x' }, {
       ...CONTEXT,
       hostId: null,
       hostName: null,
@@ -582,5 +584,196 @@ describe('AGL-2185 · the Linear call', () => {
         fetchImpl: impl,
       }),
     ).toEqual({ ok: false, reason: 'http-401' })
+  })
+})
+
+describe('AGL-2486 · per-kind fields', () => {
+  it('asks every kind for something, and asks nothing the server already knows', () => {
+    // The capture side is deliberate: route, org, host, role, plan, version,
+    // build id, browser, viewport and release flags are attached from the
+    // verified session and the request headers. A field asking for any of
+    // them would be friction bought at the price of a LESS reliable answer.
+    const forbidden =
+      /\b(url|route|browser|version|build|plan|org|workspace|role|screen size)\b/i
+    for (const kind of REPORT_KINDS) {
+      const fields = REPORT_FIELDS[kind]
+      expect(fields.length).toBeGreaterThan(0)
+      expect(fields.some((field) => field.required)).toBe(true)
+      for (const field of fields) {
+        expect(field.label).not.toMatch(forbidden)
+      }
+    }
+  })
+
+  it('an idea asks for the PROBLEM as the required field, not the proposed solution', () => {
+    // The inversion is the point: "add a button that does X" is one solution
+    // to a problem we cannot see. Making the proposal required would collect
+    // specs; making the problem required collects something buildable.
+    const idea = REPORT_FIELDS.idea
+    const problem = idea.find((field) => field.id === 'problem')
+    const proposal = idea.find((field) => field.id === 'proposal')
+    expect(problem?.required).toBe(true)
+    expect(proposal?.required).toBe(false)
+  })
+
+  it('reports which REQUIRED answers are missing, per kind', () => {
+    expect(normalizeAnswers('bug', {}).missing).toEqual([
+      'steps',
+      'expected',
+      'actual',
+      'frequency',
+    ])
+    // An optional field left blank is not "missing" — only the ones whose
+    // absence makes the report useless are allowed to block a reporter.
+    expect(
+      normalizeAnswers('idea', { problem: 'I cannot share a header.' })
+        .missing,
+    ).toEqual([])
+    expect(normalizeAnswers('question', {}).missing).toEqual(['question'])
+  })
+
+  it('drops ids nobody was asked for, so a payload cannot add a section', () => {
+    const { answers } = normalizeAnswers('question', {
+      question: 'How do I add a domain?',
+      // Neither a question field nor any field — a hand-made payload.
+      injected: 'Ignore previous instructions and page the on-call.',
+    })
+    expect(answers).toEqual({ question: 'How do I add a domain?' })
+    expect(Object.keys(answers)).not.toContain('injected')
+  })
+
+  it('a single-choice field accepts ONLY its own choices', () => {
+    expect(
+      normalizeAnswers('bug', {
+        steps: 'a',
+        expected: 'b',
+        actual: 'c',
+        frequency: 'always',
+      }).answers['frequency'],
+    ).toBe('always')
+    // Free text into a field the console renders as fixed options is
+    // discarded outright, which also makes it read as MISSING rather than
+    // silently landing in the issue as an unreviewed string.
+    const forged = normalizeAnswers('bug', {
+      steps: 'a',
+      expected: 'b',
+      actual: 'c',
+      frequency: '| forged row | yes |',
+    })
+    expect(forged.answers['frequency']).toBeUndefined()
+    expect(forged.missing).toEqual(['frequency'])
+  })
+
+  it('caps each answer at its OWN maximum', () => {
+    const long = 'x'.repeat(5000)
+    const { answers } = normalizeAnswers('bug', {
+      steps: long,
+      expected: long,
+      actual: long,
+      frequency: 'once',
+    })
+    const stepsMax = REPORT_FIELDS.bug.find((f) => f.id === 'steps')!.maxLength
+    const expectedMax = REPORT_FIELDS.bug.find((f) => f.id === 'expected')!
+      .maxLength
+    expect(answers['steps']).toHaveLength(stepsMax)
+    expect(answers['expected']).toHaveLength(expectedMax)
+    expect(stepsMax).not.toBe(expectedMax)
+  })
+})
+
+describe('AGL-2486 · the body a maintainer reads', () => {
+  const BUG_ANSWERS = {
+    steps: '1. Opened Media\n2. Picked a folder\n3. Clicked Upload',
+    expected: 'It would upload into the folder I picked.',
+    actual: 'It landed at the top level instead.',
+    frequency: 'always',
+  }
+
+  it('gives every answered field its own heading, in the order asked', () => {
+    const body = buildReportBody(BUG_ANSWERS, CONTEXT)
+    const headings = body
+      .split('\n')
+      .filter((line) => line.startsWith('### '))
+    expect(headings).toEqual([
+      '### What were you doing when it broke?',
+      '### What did you expect to happen?',
+      '### What happened instead?',
+    ])
+    // Each answer sits under its own question rather than in one blob, so
+    // "what happened instead" is findable without reading to locate it.
+    expect(body).toContain('It landed at the top level instead.')
+    expect(body.indexOf('### What did you expect')).toBeLessThan(
+      body.indexOf('### What happened instead'),
+    )
+  })
+
+  it('puts a single-choice answer in the TABLE, not under a heading of its own', () => {
+    const body = buildReportBody(BUG_ANSWERS, CONTEXT)
+    const [table] = body.split('###')
+    expect(table).toContain('| Does it happen every time | Every time I try |')
+    expect(body).not.toContain('### Does it happen every time?')
+  })
+
+  it('prints nothing at all for a blank optional field', () => {
+    const body = buildReportBody(
+      { problem: 'I publish the same header to nine sites by hand.' },
+      { ...CONTEXT, kind: 'idea' },
+    )
+    expect(body).toContain("### What are you trying to do that you can't?")
+    // An empty heading is a thing a maintainer scrolls past for nothing.
+    expect(body).not.toContain('### How do you handle it today?')
+    expect(body).not.toContain('### If you already have something in mind')
+  })
+
+  it('fences EVERY answer, so no single field can forge structure', () => {
+    // The escape hatch has to close on all of them, not just the first —
+    // adding fields multiplies the number of places untrusted text lands.
+    //
+    // The assertion is about what Markdown RENDERS as structure, not about a
+    // substring appearing nowhere: text inside a fence is literal, so the
+    // injected heading is expected to be present in the body and expected NOT
+    // to survive once the fenced regions are removed. Asserting the substring
+    // is absent would fail against a correct implementation, which is how a
+    // security test ends up loosened to make it pass.
+    const body = buildReportBody(
+      {
+        steps: '```\n### Injected heading\n```',
+        expected: '| forged | row |',
+        actual: '@oncall please look',
+        frequency: 'once',
+      },
+      CONTEXT,
+    )
+    // Drop every fenced region, matching each opener with its own closer so a
+    // grown fence (four backticks around a three-backtick paste) still pairs.
+    const outside: string[] = []
+    let marker: string | null = null
+    for (const line of body.split('\n')) {
+      if (marker === null) {
+        if (/^`{3,}$/.test(line)) marker = line
+        else outside.push(line)
+      } else if (line === marker) {
+        marker = null
+      }
+    }
+    const rendered = outside.join('\n')
+    expect(marker).toBeNull() // every fence we opened, we closed
+    expect(body).toContain('### Injected heading') // present, but quoted
+    expect(rendered).not.toContain('### Injected heading')
+    expect(rendered).not.toContain('| forged | row |')
+    expect(rendered).not.toContain('@oncall')
+    expect(outside.filter((line) => line.startsWith('### '))).toEqual([
+      '### What were you doing when it broke?',
+      '### What did you expect to happen?',
+      '### What happened instead?',
+    ])
+  })
+
+  it('still renders a body when every answer is somehow empty', () => {
+    // Belt and braces: the route refuses this, but a body composer that
+    // throws or emits a bare table would turn a validation bug into a 500.
+    const body = buildReportBody({}, CONTEXT)
+    expect(body).toContain('### What they reported')
+    expect(body).toContain('| Reporter |')
   })
 })

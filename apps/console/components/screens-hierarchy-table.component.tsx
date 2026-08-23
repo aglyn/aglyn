@@ -94,6 +94,16 @@ export interface ScreensHierarchyTableProps {
   renderRowActions: (row: ScreenHierarchyRow) => ReactNode
   /** Actions rendered beside the drag handle, left of the name (AGL-693). */
   renderRowLeadingActions?: (row: ScreenHierarchyRow) => ReactNode
+  /**
+   * Who is already in this screen, drawn beside its name (AGL-2486).
+   *
+   * Beside the NAME rather than in the actions column, because it is a fact
+   * about the document and not something to click. It must return nothing
+   * when the screen is empty — which is the common case, measured at 2
+   * occupied rooms against a largest host of 69 documents — so the row keeps
+   * its height and the list does not grow a column of blanks.
+   */
+  renderRowPresence?: (row: ScreenHierarchyRow) => ReactNode
   /** Row click target — the whole row opens the screen's detail page. */
   onRowOpen?: (row: ScreenHierarchyRow) => void
   /** Onboarding CTA rendered inside the empty state (AGL-125). */
@@ -214,6 +224,7 @@ function ScreenTableRow(props: {
   onToggleCollapse: (id: ScreenUid) => void
   renderRowActions: ScreensHierarchyTableProps['renderRowActions']
   renderRowLeadingActions: ScreensHierarchyTableProps['renderRowLeadingActions']
+  renderRowPresence: ScreensHierarchyTableProps['renderRowPresence']
   anyExpandable: boolean
   onRowOpen: ScreensHierarchyTableProps['onRowOpen']
   routingMap?: Record<ScreenUid, string>
@@ -226,6 +237,7 @@ function ScreenTableRow(props: {
     onToggleCollapse,
     renderRowActions,
     renderRowLeadingActions,
+    renderRowPresence,
     onRowOpen,
     anyExpandable,
     routingMap,
@@ -323,7 +335,10 @@ function ScreenTableRow(props: {
         </Box>
       </TableCell>
       <TableCell>
-        <Typography variant="body2">{row.displayName || '--'}</Typography>
+        <Stack direction="row" sx={{ alignItems: 'center', gap: 0.5 }}>
+          <Typography variant="body2">{row.displayName || '--'}</Typography>
+          {renderRowPresence?.(row)}
+        </Stack>
       </TableCell>
       <TableCell>{row.$id}</TableCell>
       <TableCell>
@@ -381,6 +396,7 @@ export function ScreensHierarchyTableComponent(
     onMoveScreen,
     renderRowActions,
     renderRowLeadingActions,
+    renderRowPresence,
     onRowOpen,
     emptyAction,
     collectionTemplates,
@@ -570,6 +586,7 @@ export function ScreensHierarchyTableComponent(
                     onToggleCollapse={handleToggleCollapse}
                     renderRowActions={renderRowActions}
                     renderRowLeadingActions={renderRowLeadingActions}
+                    renderRowPresence={renderRowPresence}
                     onRowOpen={onRowOpen}
                     anyExpandable={anyExpandable}
                     routingMap={routingMap}

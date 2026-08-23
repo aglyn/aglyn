@@ -15,15 +15,16 @@ belong to. Workspace-level things — the team roster, roles, billing — live u
 [Organization → Team](teams-and-roles/overview.md) and
 [Billing](billing-and-plans/overview.md) instead.
 
-The page is four tabs.
+The page is five tabs.
 
 ## Account
 
-Your **email** and how you sign in.
+Your **primary email** and how you sign in.
 
-The email field is read-only, with a **Email verified** or **Email unverified** chip
-beside it. Your email comes from the provider you sign in with, so it changes there,
-not here.
+The email field here is read-only, with an **Email verified** or **Email unverified**
+chip beside it. It shows your **primary** address — the one Aglyn's sign-in record
+holds. To add other addresses, or to make a different one primary, use the
+[Email addresses](#email-addresses) tab.
 
 ### Sign-in methods
 
@@ -57,16 +58,100 @@ Your account is never left with no way in: if removing a method would orphan an
 account, it is skipped and reported to your administrators instead.
 :::
 
+## Email addresses
+
+You can keep up to **five** addresses on one account — a work address and a personal
+one, say — instead of running two accounts.
+
+Type an address into **Add an email address** and Aglyn emails a confirmation link to
+it. Until you follow that link the address is listed as **Unconfirmed** and does
+nothing at all: it cannot be used to sign in, it cannot receive an invitation, and it
+cannot become your primary. Confirming is the only thing that makes an address count,
+because following a link in an inbox is the proof that the inbox is actually yours.
+
+Each address in the list carries a **Confirmed** or **Unconfirmed** chip, and one
+carries **Primary**. The buttons beside a row change with its state:
+
+- **Resend** — on an unconfirmed address, sends a fresh confirmation link. Links
+  expire after **24 hours**; an expired one tells you to send a new one rather than
+  quietly failing.
+- **Make primary** — on a confirmed address that isn't already primary.
+- **Remove** — on any address that isn't your primary.
+
+### What each address does
+
+Once confirmed, an address is two things and nothing more:
+
+- **A way to sign in.** Type any confirmed address on the sign-in page with your usual
+  password and you're in. You don't have to remember which one the account was opened
+  with.
+- **A place an invitation can arrive.** If a workspace administrator invites the
+  address, you can accept it from the account you already have.
+
+Your **primary** address is the one that receives receipts, password resets, and
+account notices. It's also the address shown on the Account tab.
+
+:::warning Adding an address never joins you to a workspace
+This is the one thing people expect that is deliberately not true. Adding
+`you@bigcompany.com` to your account does **not** put you in BigCompany's workspace,
+and confirming it doesn't either.
+
+Access to a workspace comes from an invitation somebody there sent you, or from that
+organization's own single sign-on. Nothing you can do on your own settings page grants
+it. If that were not so, anyone could reach a customer's workspace by typing their
+domain into this form.
+:::
+
+### Removing an address
+
+Two removals are refused, both to stop you locking yourself out:
+
+- **Your primary.** Make a different address primary first, then remove this one.
+- **Your last confirmed address.** An account with no confirmed address has nowhere to
+  receive a password reset, so it can't be recovered.
+
+Removing a confirmed address frees it — it can then be added and confirmed on a
+different account. While it's confirmed on yours, nobody else can claim it: an
+attempt on another account is refused with *"That address is already in use on another
+account."*
+
+### If your organization uses single sign-on
+
+Two limits apply, and both exist so that adding an address can't route around your
+identity provider.
+
+You **cannot move your primary off a domain your organization governs**. If your
+primary is `you@company.com` and Company requires single sign-on for that domain, the
+switch is refused and points you at an administrator. Your primary is what your
+organization's identity checks read, so demoting it would take you outside their
+control while leaving your access intact — which is the thing single sign-on is bought
+to prevent. This refusal applies whether or not enforcement has been switched on yet.
+
+You also **cannot make an address primary on a governed domain you don't sign in
+through**. Confirming a mailbox proves mail reaches you; it does not put you inside
+that organization's identity provider, and promoting the address would leave the
+account unable to sign in at all.
+
 ## Profile image
 
 Your avatar, shown in the account menu, on the workspace team roster, and beside
 your activity. Pick an image from the organization's
 [media library](../content-and-data/media/overview.md) or paste an `https` image URL.
 
-Leave it empty and Aglyn falls back to the photo your sign-in provider gave us, and
+Never set one and Aglyn falls back to the photo your sign-in provider gave us, and
 then to your initials, drawn by Aglyn. Nothing about you is sent to an outside
 avatar service to work out what to show. The preview beside the field shows exactly
 what everyone else sees.
+
+**Clearing the field is different from never having set one.** Emptying it and
+saving removes your picture and keeps it removed — signing in again does not put
+your provider's photo back. Save an image here again whenever you want that
+prefill returned.
+
+If your company signs you in through its own identity provider and this is blank,
+that provider is most likely not sending a picture — many cannot, including Google
+Workspace SAML, which has no photo attribute to map. Set one here: the media
+library accepts an upload, or paste an `https` link.
 
 ## Basic info
 

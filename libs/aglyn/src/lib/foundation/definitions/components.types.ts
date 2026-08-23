@@ -208,6 +208,16 @@ export enum FieldComponentType {
   CHECKBOX = 'checkbox',
   COLOR_PICKER = 'color-picker',
   /**
+   * Border editor (AGL-2486): a thickness box plus a plain-English line-style
+   * picker (solid / dashed / dotted / double / no line). The persisted prop is
+   * still ONE CSS shorthand string (`"1px solid"`, `"none"`, `""`), so
+   * renderers and existing documents stay untouched. A value the pair cannot
+   * model (`thin solid`, `1px solid #f00`, a binding token) falls back to free
+   * text rather than being clobbered, and flips back the moment the text is a
+   * plain `<width> <style>` again.
+   */
+  CSS_BORDER = 'css-border',
+  /**
    * CSS length editor (AGL-1219): a number box plus a unit picker sharing
    * the styles panel's unit list. The persisted prop is still ONE CSS
    * string (`"920px"`, `"100%"`, `"auto"`, `""`) — this is an input
@@ -246,6 +256,15 @@ export enum FieldComponentType {
   INPUT_ADDON_BUTTON_GROUP = 'input-addon-button-group',
   INPUT_ADDON_GROUP = 'input-addon-group',
   PLAIN_TEXT = 'plain-text',
+  /**
+   * Named-preset picker with a raw escape hatch (AGL-2486): the theme's own
+   * answers first, then plain-English presets that PREVIEW themselves, then
+   * Custom…. The persisted prop is whatever the property already stored — a
+   * number where a bare number is a theme multiple, a CSS string otherwise —
+   * and a stored value matching no preset opens the field in its custom state
+   * holding that value rather than dropping it.
+   */
+  PRESET_CHOICE = 'preset-choice',
   RADIO = 'radio',
   /**
    * Select listing the host's screens; the editor resolves the options from

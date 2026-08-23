@@ -274,10 +274,41 @@ describe('AGL-1693 · /api/health/rate-limits', () => {
     expect(queries).toHaveLength(1)
   })
 
-  it('HEAD is liveness only: 200, touches nothing', async () => {
+  it('HEAD is 200 with no body when the limiters are healthy', async () => {
+    // The healthy fixture has to be set now that HEAD actually READS. Before
+    // AGL-1148 this test passed with no fixture at all, because HEAD looked
+    // at nothing — it was green in a state where GET answers 503.
+    mockGet.mockImplementation(docsOf())
     const route = await freshRoute()
     const response = await route.HEAD()
     expect(response.status).toBe(200)
-    expect(queries).toHaveLength(0)
+    expect(await response.text()).toBe('')
+  })
+
+  /**
+   * HEAD used to be a hardcoded 200 that read nothing (AGL-1148). That made
+   * it a check incapable of reporting an outage, for exactly the monitors
+   * most likely to use it — and this spec asserted the defect as if it were
+   * the design. It now answers what GET answers.
+   */
+  it('HEAD goes RED with GET, which is the whole point of watching it', async () => {
+    mockGet.mockRejectedValue(new Error('7 PERMISSION_DENIED: nope'))
+    const route = await freshRoute()
+    // Compared against GET rather than a literal: the contract is that the
+    // two AGREE, and a HEAD pinned to 503 would be broken the other way.
+    expect((await route.GET()).status).toBe(503)
+    const head = await route.HEAD()
+    expect(head.status).toBe(503)
+    expect(await head.text()).toBe('')
+    expect(head.headers.get('cache-control')).toContain('no-store')
+  })
+
+  it('HEAD adds no query of its own — it shares the probe memo', async () => {
+    mockGet.mockImplementation(docsOf())
+    const route = await freshRoute()
+    await route.GET()
+    const afterGet = queries.length
+    await route.HEAD()
+    expect(queries.length).toBe(afterGet)
   })
 })

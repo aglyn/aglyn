@@ -26,6 +26,7 @@
 
 export { default as Checkbox, SingleCheckbox, type CheckboxProps, type SingleCheckboxProps } from './checkbox'
 export { default as BreakpointSpan, BreakpointSpanField, seedSpanDraft, serializeSpanDraft, type BreakpointSpanProps, type SpanDraft } from './breakpoint-span'
+export { default as CssBorder, CssBorderField, seedBorderDraft, serializeBorderDraft, CSS_BORDER_STYLES, CSS_BORDER_STYLE_LABELS, type BorderDraft, type CssBorderProps, type CssBorderStyle } from './css-border'
 export { default as CssDimension, CssDimensionField, seedDimensionDraft, serializeDimensionDraft, type CssDimensionProps } from './css-dimension'
 export { default as CssGradient, CssGradientField, seedGradientDraft, serializeGradientDraft, type CssGradientProps } from './css-gradient'
 export { default as DatePicker, type DatePickerProps } from './date-picker'
@@ -34,6 +35,7 @@ export { default as FieldArray, DynamicArray, type FieldArrayProps } from './fie
 export { default as FormFieldGrid, type FormFieldGridProps } from './form-field-grid'
 export { default as MultipleChoiceList, type MultipleChoiceListProps } from './multiple-choice-list'
 export { default as PlainText, type PlainTextProps } from './plain-text'
+export { default as PresetChoice, PresetChoiceField, findPresetChoice, presetChoiceValueToText, PRESET_CHOICE_CUSTOM, type PresetChoiceOption, type PresetChoicePreview, type PresetChoiceProps } from './preset-choice'
 export { default as Radio, type RadioProps } from './radio'
 export { default as Select, type SelectProps } from './select'
 export { default as Slider, type SliderProps } from './slider'

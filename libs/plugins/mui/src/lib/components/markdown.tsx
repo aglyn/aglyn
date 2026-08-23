@@ -228,8 +228,12 @@ const Markdown = forwardRef<HTMLDivElement, MarkdownProps>((props, ref) => {
               // an author-typed hotlink — passes through untouched.
               src={Aglyn.resolveMediaSrc(block.src, { hostId })}
               alt={block.alt}
-              loading="lazy"
               sx={{ maxWidth: '100%', borderRadius: 1, my: 2 }}
+              // `lazy` alone until AGL-2486. A markdown image is by
+              // definition inside prose the reader scrolls through, so it
+              // belongs in the same deferred rank as everything else that is
+              // not the lead image.
+              {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
             />
           )
         }
@@ -732,6 +736,8 @@ export const markdownSchema: Aglyn.ComponentSchema<MarkdownProps> = {
   $id: MARKDOWN_ID,
   pluginId: BUNDLE_ID,
   displayName: 'Markdown',
+  description:
+    'A whole document written as markdown. It takes no child elements.',
   category: Aglyn.ComponentCategory.TEXT,
   icon: { path: mdiLanguageMarkdown.path, sx: { color: '#455a64' } },
   flags: {
@@ -763,6 +769,8 @@ export const tableOfContentsSchema: Aglyn.ComponentSchema<TableOfContentsProps> 
     $id: TABLE_OF_CONTENTS_ID,
     pluginId: BUNDLE_ID,
     displayName: 'Table of Contents',
+    description:
+      "An on-this-page list linking to a Markdown element's headings.",
     category: Aglyn.ComponentCategory.NAVIGATION,
     icon: { path: mdiTableOfContents.path, sx: { color: '#455a64' } },
     flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

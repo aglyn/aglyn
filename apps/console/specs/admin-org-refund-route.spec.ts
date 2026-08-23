@@ -48,6 +48,37 @@ const mockClaimSet = jest.fn(async () => undefined)
 const mockClaimDelete = jest.fn(async () => undefined)
 const mockReadOrgBilling = jest.fn(async () => ({ stripeCustomerId: 'cus_1' }))
 
+/**
+ * The rolling 24-hour refund ledger, in memory (AGL-2486).
+ *
+ * A real double, not a stub that always says "room left": the entries array
+ * it holds is the same shape the route writes and prunes, so a test that
+ * pre-loads it exercises the actual sum-and-compare rather than a mock's
+ * opinion of one. A double that modelled "allowed" as a boolean would have
+ * made the splitting case — four refunds each under the per-refund cap —
+ * impossible to write, which is the case the daily ceiling exists for.
+ */
+let mockLedgerDoc: Record<string, any>
+/** Set to make the ledger transaction throw, i.e. simulate Firestore down. */
+let mockLedgerFailure: Error | null
+
+const mockRunTransaction = jest.fn(async (updateFunction: any) => {
+  if (mockLedgerFailure) throw mockLedgerFailure
+  return updateFunction({
+    get: async () => ({ get: (field: string) => mockLedgerDoc[field] }),
+    set: (_ref: unknown, data: Record<string, unknown>) => {
+      Object.assign(mockLedgerDoc, data)
+    },
+  })
+})
+
+/** What the ledger currently holds, summed the way the route sums it. */
+const ledgerCents = () =>
+  (mockLedgerDoc['entries'] ?? []).reduce(
+    (total: number, entry: any) => total + Number(entry.cents ?? 0),
+    0,
+  )
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
@@ -59,12 +90,19 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         collection: (name: string) => ({
           add: async (row: unknown) => mockAuditAdd(name, row),
           doc: () => ({
-            get: (...args: unknown[]) => mockClaimGet(...(args as [])),
+            get: (...args: unknown[]) =>
+              name === 'rateLimits'
+                ? Promise.resolve({
+                    get: (field: string) => mockLedgerDoc[field],
+                  })
+                : mockClaimGet(...(args as [])),
             create: (...args: unknown[]) => mockClaimCreate(...(args as [])),
             set: (...args: unknown[]) => mockClaimSet(...(args as [])),
             delete: (...args: unknown[]) => mockClaimDelete(...(args as [])),
           }),
         }),
+        runTransaction: (...args: unknown[]) =>
+          mockRunTransaction(...(args as [any])),
       }),
     }),
     firestore: { FieldValue: { serverTimestamp: () => 'SERVER_TIMESTAMP' } },
@@ -135,6 +173,8 @@ beforeEach(() => {
   mockReadOrgBilling.mockResolvedValue({ stripeCustomerId: 'cus_1' })
   mockClaimGet.mockResolvedValue({ get: () => undefined })
   mockClaimCreate.mockResolvedValue(undefined)
+  mockLedgerDoc = {}
+  mockLedgerFailure = null
   process.env.STRIPE_SECRET_KEY = 'sk_test_not_a_real_key'
   ;(globalThis as any).fetch = jest.fn(async (url: string, init: any = {}) => {
     const path = String(url).replace('https://api.stripe.com/v1/', '')
@@ -187,6 +227,29 @@ const good = (over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
+/**
+ * A charge large enough that the WINDOW is what refuses, not the charge.
+ *
+ * Without this the ceiling tests pass for the wrong reason — the default
+ * fixture captures $50, so a $150 attempt is refused by "only $50 is left on
+ * this charge" and never reaches the ceiling at all. A green there would have
+ * proved nothing about the cap.
+ */
+const bigCharge = () => {
+  stripeReplies['charges/ch_1'] = {
+    body: { ...CHARGE, amount: 1_000_00, amount_refunded: 0 },
+  }
+}
+
+/** Re-authenticate the next call as a CAPPED role. */
+const asSupport = () =>
+  mockVerifyIdToken.mockResolvedValue({
+    uid: 'staff-2',
+    email_verified: true,
+    staff: true,
+    staffRole: 'support',
+  })
+
 /** Did the handler ask Stripe to move money? */
 const refundCalls = () => stripeCalls.filter((call) => call.url === 'refunds')
 
@@ -204,19 +267,64 @@ describe('POST /api/admin/org-refund (AGL-2486)', () => {
       expect(refundCalls()).toHaveLength(0)
     })
 
-    it('refuses support staff — this is the one action that moves money out', async () => {
-      mockVerifyIdToken.mockResolvedValue({
-        uid: 'staff-2',
-        email_verified: true,
-        staff: true,
-        staffRole: 'support',
+    it('lets support refund UNDER the cap — the whole point of the change', async () => {
+      asSupport()
+      // $50, well under $150. Nine days from launch the person the customer
+      // reaches is support; making them escalate this is what the cap
+      // replaced.
+      const response = await postRefund(good({ amountCents: 5000 }))
+      expect(response.status).toBe(200)
+      expect(refundCalls()).toHaveLength(1)
+      expect(auditRows()[0]).toMatchObject({
+        actorRole: 'support',
+        authority: 'capped',
+        overCap: false,
       })
-      const response = await postRefund(good())
+    })
+
+    it('refuses support ABOVE the cap, before Stripe is touched', async () => {
+      asSupport()
+      stripeReplies['charges/ch_1'] = {
+        body: { ...CHARGE, amount: 60000, amount_refunded: 0 },
+      }
+      const response = await postRefund(good({ amountCents: 20000 }))
       expect(response.status).toBe(403)
       await expect(response.json()).resolves.toEqual({
-        error: 'Requires the super staff role',
+        error: expect.stringContaining('needs the super staff role'),
       })
+      // BOTH directions. A guard that answered 403 after the POST had gone
+      // out would not be a guard, and the charge lookup is the only Stripe
+      // call that may have happened.
       expect(refundCalls()).toHaveLength(0)
+      // Nothing claimed, nothing reserved: a mistyped amount must stay
+      // retryable with the same key.
+      expect(mockClaimCreate).not.toHaveBeenCalled()
+      expect(ledgerCents()).toBe(0)
+    })
+
+    it('still lets SUPER refund above the cap, and records that it did', async () => {
+      stripeReplies['charges/ch_1'] = {
+        body: { ...CHARGE, amount: 60000, amount_refunded: 0 },
+      }
+      const response = await postRefund(good({ amountCents: 20000 }))
+      expect(response.status).toBe(200)
+      expect(auditRows()[0]).toMatchObject({
+        actorRole: 'super',
+        authority: 'super',
+        // The field that separates an escalated refund from a routine one.
+        overCap: true,
+      })
+    })
+
+    it('records a SUPER refund under the cap as routine, not escalated', async () => {
+      // `authority` alone cannot answer "which refunds needed the
+      // escalation" — a super issuing $50 is an ordinary refund.
+      const response = await postRefund(good({ amountCents: 5000 }))
+      expect(response.status).toBe(200)
+      expect(auditRows()[0]).toMatchObject({
+        authority: 'super',
+        overCap: false,
+      })
     })
 
     it('501s rather than 500s when Stripe is not configured', async () => {
@@ -224,6 +332,114 @@ describe('POST /api/admin/org-refund (AGL-2486)', () => {
       const response = await postRefund(good())
       expect(response.status).toBe(501)
     })
+  })
+
+  /**
+   * The cap that stops the cap being defeated by arithmetic.
+   *
+   * Zach declined a second approver, so the per-refund cap is the whole
+   * control — and on its own it is evaded by splitting: a $600 annual charge
+   * refunded as four $150 partials passes a $150 per-refund cap four times
+   * and lands exactly where the cap existed to stop it.
+   */
+  describe('the rolling 24-hour ceiling', () => {
+    it('refuses the refund that would take the actor past it', async () => {
+      asSupport()
+      bigCharge()
+      // $400 already spent today, all of it in legal sub-cap refunds.
+      mockLedgerDoc = {
+        entries: [
+          { atMs: Date.now() - 60_000, cents: 15000, entryId: 'a' },
+          { atMs: Date.now() - 50_000, cents: 15000, entryId: 'b' },
+          { atMs: Date.now() - 40_000, cents: 10000, entryId: 'c' },
+        ],
+      }
+      const response = await postRefund(good({ amountCents: 15000 }))
+      expect(response.status).toBe(403)
+      await expect(response.json()).resolves.toEqual({
+        // Names what is left, not just that there was a limit.
+        error: expect.stringContaining('$100.00 is left'),
+      })
+      expect(refundCalls()).toHaveLength(0)
+    })
+
+    it('allows exactly the remainder — the boundary is not off by one', async () => {
+      asSupport()
+      bigCharge()
+      mockLedgerDoc = {
+        entries: [{ atMs: Date.now(), cents: 40000, entryId: 'a' }],
+      }
+      const response = await postRefund(good({ amountCents: 10000 }))
+      expect(response.status).toBe(200)
+      expect(refundCalls()).toHaveLength(1)
+    })
+
+    it('SPLITTING a large refund into legal-sized ones still hits the wall', async () => {
+      asSupport()
+      bigCharge()
+      // Four $150 refunds are each under the per-refund cap. The fourth is
+      // the one the per-refund cap alone would have let through.
+      const outcomes: number[] = []
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        const response = await postRefund(
+          good({ amountCents: 15000, idempotencyKey: `attempt-${attempt}` }),
+        )
+        outcomes.push(response.status)
+      }
+      expect(outcomes).toEqual([200, 200, 200, 403])
+      expect(refundCalls()).toHaveLength(3)
+      expect(ledgerCents()).toBe(45000)
+    })
+
+    it('ages entries out — yesterday does not spend today', async () => {
+      asSupport()
+      bigCharge()
+      mockLedgerDoc = {
+        entries: [
+          // 25 hours ago: outside the window, so it neither counts nor is
+          // carried forward into the document that gets written back.
+          { atMs: Date.now() - 25 * 60 * 60 * 1000, cents: 50000, entryId: 'old' },
+        ],
+      }
+      const response = await postRefund(good({ amountCents: 15000 }))
+      expect(response.status).toBe(200)
+      expect(ledgerCents()).toBe(15000)
+    })
+
+    it('does not reserve against a SUPER actor at all', async () => {
+      const response = await postRefund(good({ amountCents: 5000 }))
+      expect(response.status).toBe(200)
+      // Uncapped: a ledger entry would be enforcement state enforcing
+      // nothing, at the cost of a transaction on every super refund.
+      expect(mockRunTransaction).not.toHaveBeenCalled()
+    })
+
+    it('FAILS CLOSED when the ledger cannot be read', async () => {
+      asSupport()
+      mockLedgerFailure = new Error('firestore unavailable')
+      const response = await postRefund(good({ amountCents: 5000 }))
+      // A store outage that silently lifted the only control on the largest
+      // staff action would be an unbounded window nobody could see.
+      expect(response.status).toBe(503)
+      expect(refundCalls()).toHaveLength(0)
+      // And the attempt stays retryable once the store is back.
+      expect(mockClaimDelete).toHaveBeenCalled()
+    })
+
+    it('gives the reservation back when STRIPE refuses', async () => {
+      asSupport()
+      bigCharge()
+      stripeReplies['refunds'] = {
+        ok: false,
+        status: 400,
+        body: { error: { code: 'charge_already_refunded', message: 'nope' } },
+      }
+      const response = await postRefund(good({ amountCents: 15000 }))
+      expect(response.status).toBeGreaterThanOrEqual(400)
+      // No money moved, so the day's ceiling must not have been spent.
+      expect(ledgerCents()).toBe(0)
+    })
+
   })
 
   describe('the reason is a boundary, not a suggestion', () => {
@@ -495,6 +711,19 @@ describe('GET /api/admin/org-refund (AGL-2486)', () => {
   it('tells "never subscribed" apart from "lookup failed"', async () => {
     mockReadOrgBilling.mockResolvedValue({ stripeCustomerId: undefined })
     const payload = await (await get('org-1')).json()
-    expect(payload).toEqual({ charges: [], hasCustomer: false })
+    expect(payload).toEqual({
+      charges: [],
+      hasCustomer: false,
+      // The allowance travels with EVERY GET, including this one: a card
+      // that cannot list charges must still be able to state the boundary.
+      authority: {
+        role: 'super',
+        authority: 'super',
+        perRefundCapCents: null,
+        windowCapCents: null,
+        windowCents: 0,
+        windowCount: 0,
+      },
+    })
   })
 })

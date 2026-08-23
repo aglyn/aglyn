@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { createEmotionCache } from '@aglyn/shared-ui-theme'
+import { createLayeredEmotionCache } from '@aglyn/shared-ui-theme'
 import { Portal } from '@mui/material'
 import { kebabCase } from 'change-case'
 import {
@@ -160,7 +160,20 @@ export const MuiShadowDomRenderer = (props: MuiShadowRendererProps) => {
   const cache = !cacheMap.has(container)
     ? (() => {
         if (cacheMap.has(container)) return cacheMap.get(container)
-        const cache = createEmotionCache({
+        // AGL-2486: LAYERED, exactly as the published document is. The
+        // canvas renders site content through this cache; the tenant renders
+        // the same content through `AppRouterCacheProvider`, whose
+        // `enableCssLayer` wraps every rule in `@layer mui`. When this cache
+        // was plain (measured: 183 unlayered `.msd-*` rules in the canvas
+        // shadow root, against the tenant's 72 layer blocks and zero
+        // unlayered `.mui-*`), any CSS that does NOT pass through emotion — a
+        // Custom HTML `css` block, a realm plugin's stylesheet — beat every
+        // component and `sx` rule on the published page regardless of
+        // specificity, while merely competing on specificity here. That is
+        // "what you see is not what you publish". See
+        // `createLayeredEmotionCache` for the measurements and for why the
+        // editor is the side that had to move.
+        const cache = createLayeredEmotionCache({
           container,
           key: 'msd',
           prepend: true,

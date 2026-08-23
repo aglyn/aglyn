@@ -698,3 +698,63 @@ describe('basic-interaction tiering (AGL-577)', () => {
     }
   })
 })
+/**
+ * showHtml tells the author what the render-time sanitizer will take out
+ * (AGL-2486).
+ *
+ * The runtime executes for a VISITOR and can only drop refused markup in
+ * silence — the step still "succeeds" and the page shows nothing. Every
+ * caller of `validateHostAction` is an EDITOR surface (the workflows card,
+ * the console interaction dialogs, the besigner presets), so this is the
+ * only place the person who can fix the markup will ever read it.
+ */
+describe('showHtml sanitizer feedback (AGL-2486)', () => {
+  const withHtml = (html: string): HostAction => ({
+    ...base,
+    steps: [{ type: 'showHtml', html }],
+  })
+
+  it('still accepts HTML that survives the sanitizer whole', () => {
+    expect(
+      validateHostAction(
+        withHtml('<p style="color:#333">Thanks — <strong>see you soon</strong>.</p>'),
+      ),
+    ).toBeNull()
+  })
+
+  it('still demands some HTML', () => {
+    expect(validateHostAction(withHtml('  '))).toMatch(/enter the HTML/)
+  })
+
+  it('names a dropped element rather than letting it fail on the live page', () => {
+    const problem = validateHostAction(
+      withHtml('<div>Widget</div><script src="https://vendor.test/w.js"></script>'),
+    )
+    expect(problem).toMatch(/script/)
+  })
+
+  it('names a refused inline style', () => {
+    expect(
+      validateHostAction(withHtml('<p style="width:expression(alert(1))">x</p>')),
+    ).toMatch(/style attribute/)
+  })
+
+  it('names a url() that will not load', () => {
+    expect(
+      validateHostAction(withHtml('<p style="background:url(http://t.test/p.gif)">x</p>')),
+    ).toMatch(/url\(\)/)
+  })
+
+  it('says so when nothing at all can be shown', () => {
+    expect(validateHostAction(withHtml('<script>alert(1)</script>'))).toMatch(
+      /none of this HTML can be shown/,
+    )
+  })
+
+  it('counts the rest rather than listing them all', () => {
+    const problem = validateHostAction(
+      withHtml('<script>a</script><p onclick="b()" style="behavior:url(#x)">t</p>'),
+    )
+    expect(problem).toMatch(/\+2 more/)
+  })
+})

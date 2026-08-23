@@ -16,6 +16,8 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+// Deep import, NOT the barrel (AGL-2486) — see `plugin-styles-ui.tsx`.
+import { PluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles-ui'
 import {
   AglynNodeRenderer,
   Leaf,
@@ -50,6 +52,7 @@ import {
   devicePreviewWidth,
   resolveSxForDeviceWidth,
 } from '../utils/device-preview-styles'
+import { hoistStateSx } from '../utils/state-sx'
 import CanvasDropIndicator from './dnd/canvas-drop-indicator'
 import InlineMarkdownEditorComponent from './inline-markdown-editor.component'
 import InlineTextEditorComponent from './inline-text-editor.component'
@@ -167,13 +170,27 @@ const ThemedElementContainer = ({ children }) => {
         : createDevicePinnedTheme(hostTheme, deviceWidth),
     [hostTheme, deviceWidth],
   )
-  const sxTransform = useMemo(
-    () =>
-      deviceWidth == null
-        ? undefined
-        : (sx: unknown) => resolveSxForDeviceWidth(sx, deviceWidth),
-    [deviceWidth],
-  )
+  // Interaction-state hold (AGL-2486): while the Styles panel is editing a
+  // state slice, the SELECTED element renders as if it were in that state —
+  // you cannot hover an element from a side panel, so a state you cannot see
+  // is a state you cannot design. Composed into the SAME canvas-only
+  // transform the device-width pin uses, so there is still exactly one
+  // substitution path and the tenant (which never mounts this provider) is
+  // untouched. The hoist runs FIRST so a media key inside the slice reaches
+  // the width transform at the top level.
+  const [heldState] = useAglynBesignerFlag('heldState')
+  const [heldStateNodeId] = useAglynBesignerFlag('heldStateNodeId')
+  const sxTransform = useMemo(() => {
+    const held = heldState && heldStateNodeId ? heldState : null
+    if (deviceWidth == null && !held) return undefined
+    return (sx: unknown, nodeId?: string) => {
+      const scoped =
+        held && nodeId === heldStateNodeId ? hoistStateSx(sx, held) : sx
+      return deviceWidth == null
+        ? scoped
+        : resolveSxForDeviceWidth(scoped, deviceWidth)
+    }
+  }, [deviceWidth, heldState, heldStateNodeId])
   return (
     <ThemeProvider theme={canvasTheme}>
       <CssBaseline />
@@ -231,6 +248,17 @@ const SiteContainer = observer(
       >
         <>
           {ViewportGlobalStyles}
+          {/* Plugin stylesheets (AGL-2486). THIS is the gap `8dc718ed4` named
+              and left open: a plugin's raw CSS goes into `document.head`,
+              which a `mode: 'closed'` shadow root with `:host { all: initial }`
+              and no `adoptedStyleSheets` never sees. Measured — the identical
+              rule that beats every `@layer mui` declaration on the published
+              page had literally NO effect on this canvas. Rendered here as a
+              plain `<style>` child, so it lands in the shadow root in the same
+              unlayered slot it occupies on the published document; `shadow`
+              scope is what pulls in the MIRRORED sheets a bundle injected into
+              the console's own head, which is the copy that never crossed. */}
+          <PluginStyles scope="shadow" />
           <ThemedElementContainer>
             <FramePaper>
               {chromeRoot ? (

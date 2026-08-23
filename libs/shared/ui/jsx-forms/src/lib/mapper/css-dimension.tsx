@@ -280,9 +280,16 @@ export const CssDimensionField = (props: CssDimensionProps) => {
         }
         inputProps={{ 'aria-label': 'Theme scale' }}
         sx={{
-          '& .MuiSelect-select': { pr: '20px !important', py: 0 },
+          '& .MuiSelect-select': {
+            pr: '20px !important',
+            py: 0,
+            // The token label is the part that may be clipped when the
+            // row is tight — never the value (AGL-2486).
+            textOverflow: 'ellipsis',
+          },
           fontSize: '0.8125rem',
           color: 'text.secondary',
+          minWidth: 0,
           maxWidth: 92,
         }}
       >
@@ -318,6 +325,7 @@ export const CssDimensionField = (props: CssDimensionProps) => {
           fontSize: '0.8125rem',
           color: 'text.secondary',
           minWidth: 44,
+          flexShrink: 0,
         }}
       >
         <MenuItem value="">
@@ -375,7 +383,22 @@ export const CssDimensionField = (props: CssDimensionProps) => {
               </>
             ),
           },
-          htmlInput: { inputMode: 'decimal' },
+          /**
+           * The VALUE is never the control that gets squeezed
+           * (AGL-2486, Zach 2026-08-23).
+           *
+           * The number box is the only part of this row with no width of
+           * its own — the two pickers are `endAdornment` siblings with
+           * fixed widths, so the input is whatever is left, and in a
+           * narrow docked panel that was a couple of characters: Font
+           * Size read `2.:`. A floor here makes the PICKERS give way
+           * instead, which is the right order — a clipped unit label is
+           * a nuisance, a clipped value is unreadable.
+           */
+          htmlInput: {
+            inputMode: 'decimal',
+            style: { minWidth: '4.5ch' },
+          },
         }}
       />
     </FormFieldGrid>

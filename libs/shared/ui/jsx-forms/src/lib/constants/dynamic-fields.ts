@@ -23,12 +23,14 @@ import type { ToggleButtonProps } from '../components/toggle-button.component'
 import type {
   BreakpointSpanProps,
   CheckboxProps,
+  CssBorderProps,
   CssDimensionProps,
   CssGradientProps,
   DatePickerProps,
   DualListSelectProps,
   FieldArrayProps,
   PlainTextProps,
+  PresetChoiceProps,
   RadioProps,
   SelectProps,
   SliderProps,
@@ -67,6 +69,17 @@ export const FieldTextField = dynamic<TextFieldProps>(() =>
 )
 export const FieldCssDimension = dynamic<CssDimensionProps>(() =>
   import('../mapper/css-dimension').then((mod) => mod.default),
+)
+// Border thickness + line style (AGL-2486). Not `ssr: false`: a number box
+// and a Select with no popper anchor of its own, like the other structured
+// fields.
+export const FieldCssBorder = dynamic<CssBorderProps>(() =>
+  import('../mapper/css-border').then((mod) => mod.default),
+)
+// Named presets + raw escape hatch for radius, shadow and font family
+// (AGL-2486). Plain Selects and a text box — server-renderable.
+export const FieldPresetChoice = dynamic<PresetChoiceProps>(() =>
+  import('../mapper/preset-choice').then((mod) => mod.default),
 )
 // Per-breakpoint span/offset editor for MUI Grid cells (AGL-2486). Not
 // `ssr: false`: it is a row of plain Selects with no popper anchor of its

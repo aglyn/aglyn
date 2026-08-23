@@ -17,6 +17,7 @@
 
 import {
   PRESENCE_REAP_AFTER_MS,
+  deadDocumentPaths,
   deadSessionKeys,
 } from './presence-reaper'
 
@@ -115,5 +116,69 @@ describe('an unmeasurable row is kept, not guessed at', () => {
     expect(deadSessionKeys({}, NOW)).toEqual([])
     expect(deadSessionKeys({ u: null } as never, NOW)).toEqual([])
     expect(deadSessionKeys({ u: { s: null } } as never, NOW)).toEqual([])
+  })
+})
+
+describe('sweeping a DOCUMENT clears both room shapes (AGL-2486)', () => {
+  const NOW2 = 1_800_000_000_000
+  const at2 = (agoMs: number) => ({ lastSeenAt: NOW2 - agoMs })
+  const DEAD = PRESENCE_REAP_AFTER_MS + 1
+
+  it('reaps a dead row inside a version-scoped room', () => {
+    expect(
+      deadDocumentPaths({ v: { ver1: { u1: { s1: at2(DEAD) } } } }, NOW2),
+    ).toEqual(['v/ver1/u1/s1'])
+  })
+
+  it('reaps LEGACY document-scoped rows an older client left behind', () => {
+    // Nothing reads these once a client is version-scoped, so without this
+    // they would sit there until something else happened to look.
+    expect(deadDocumentPaths({ u1: { s1: at2(DEAD) } }, NOW2)).toEqual([
+      'u1/s1',
+    ])
+  })
+
+  it('reaps both shapes in one pass, which is the point of sweeping the document', () => {
+    const dead = deadDocumentPaths(
+      {
+        v: { ver1: { u1: { s1: at2(DEAD) } }, ver2: { u2: { s2: at2(DEAD) } } },
+        u3: { s3: at2(DEAD) },
+      },
+      NOW2,
+    )
+    expect(dead.sort()).toEqual(['u3/s3', 'v/ver1/u1/s1', 'v/ver2/u2/s2'])
+  })
+
+  it('sweeps versions the joining caller is NOT in', () => {
+    // A version nobody reopens would otherwise keep its dead rows forever;
+    // the join read already has them in hand.
+    expect(
+      deadDocumentPaths({ v: { other: { u1: { s1: at2(DEAD) } } } }, NOW2),
+    ).toEqual(['v/other/u1/s1'])
+  })
+
+  it('leaves a LIVE session alone in either shape', () => {
+    expect(
+      deadDocumentPaths(
+        { v: { ver1: { u1: { s1: at2(1_000) } } }, u2: { s2: at2(1_000) } },
+        NOW2,
+      ),
+    ).toEqual([])
+  })
+
+  it('never mistakes the literal `v` segment for a uid', () => {
+    // `v` is a path literal; a Firebase uid is 28 characters and is never it.
+    // Reading it as a uid would build `v/{versionId}` as a session path and
+    // delete a whole version room.
+    const dead = deadDocumentPaths({ v: { ver1: { u1: { s1: at2(DEAD) } } } }, NOW2)
+    expect(dead).not.toContain('v/ver1')
+    expect(dead.every((path) => path.split('/').length === 4)).toBe(true)
+  })
+
+  it('survives an empty or malformed document node', () => {
+    expect(deadDocumentPaths(null, NOW2)).toEqual([])
+    expect(deadDocumentPaths({}, NOW2)).toEqual([])
+    expect(deadDocumentPaths({ v: null } as never, NOW2)).toEqual([])
+    expect(deadDocumentPaths({ v: { ver1: null } } as never, NOW2)).toEqual([])
   })
 })

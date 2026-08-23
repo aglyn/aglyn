@@ -258,6 +258,8 @@ export const schema: Aglyn.ComponentSchema<ProductReviewsProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Product reviews',
+  description:
+    'Approved reviews with verified-buyer badges, and a form to add one.',
   category: Aglyn.ComponentCategory.COMMERCE,
   icon: { path: mdiStarOutline.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

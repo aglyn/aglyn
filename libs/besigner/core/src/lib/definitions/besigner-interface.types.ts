@@ -23,6 +23,7 @@ import type { LogLevelString } from '@aglyn/shared-util-logger'
 import type { BehaviorSubject } from 'rxjs'
 import type {
   BesignerDeviceFlag,
+  BesignerStateFlag,
   BesignerPanelTabFlag,
   BesignerPanelViewFlag,
   InteractionModeFlag,
@@ -43,6 +44,13 @@ export type BesignerContext = {
     devicePreview?: BesignerDeviceFlag
     /** Color scheme the canvas previews the host theme in; console UI is unaffected. */
     canvasScheme?: HostThemeScheme
+    /**
+     * Interaction state held ON for the element being styled (AGL-2486).
+     * Canvas only, never persisted — see {@link BesignerStateFlag}.
+     */
+    heldState?: BesignerStateFlag
+    /** The node the held state applies to; every other leaf renders at rest. */
+    heldStateNodeId?: string
     /** What kind of host view the canvas is editing (screen or shared layout). */
     viewType?: HostViewType
     /**

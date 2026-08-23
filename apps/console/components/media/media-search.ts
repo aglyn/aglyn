@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { Fuse } from '@aglyn/shared-util-vendor'
+import { Fuse } from '@aglyn/shared-util-vendor/fuse'
 
 /**
  * DAM search (AGL-1460): the reading of the query, and the honest account of

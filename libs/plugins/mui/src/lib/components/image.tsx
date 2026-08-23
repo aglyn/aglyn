@@ -39,9 +39,16 @@ export const ID: Aglyn.ComponentId = 'image'
  * is looking at: with everything lazy and everything low, nothing outranked
  * anything, so the order was whatever the network felt like.
  *
- * So the first image gets `loading="eager"` + `fetchpriority="high"` and the
- * rest get `fetchpriority="low"`, which is the browser-level knob that stops
+ * So the first image gets `loading="eager"` and the rest get
+ * `fetchpriority="low"`, which is the browser-level knob that stops
  * below-the-fold images competing with the one above it.
+ *
+ * The first image does NOT get `fetchpriority="high"` any more, and the
+ * reasoning is at the `fetchPriority` prop below. Short version: this
+ * function answers "which image is first", which was being read as "which
+ * element is the LCP", and on any site with a logo in its header those are
+ * different elements — measured on aglyn.com, where the logo took the hint
+ * and the `<h1>` was the LCP at six times its area.
  *
  * Resolved from the tree rather than a render-order counter on purpose: the
  * renderer walks the tree in document order on the server AND on hydrate, but
@@ -254,13 +261,32 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
               .join(', ')
           : undefined
       }
-      // `100vw` is the honest answer only for an image that really is full
-      // bleed. When the author pinned a pixel width, saying `100vw` made the
-      // browser pick the 1280w or 1920w candidate to fill a 320px slot on
-      // every screen — which is most of what "Improve image delivery" is
-      // reporting (AGL-2486). A pinned width describes the slot exactly, so
-      // it is the better `sizes`; anything else (%, vw, auto, calc) still
-      // falls back to the old value rather than guessing.
+      // `sizes` is NOT only a delivery hint, and treating it as one broke every
+      // fluid image (AGL-2486). With `w` descriptors the browser derives the
+      // image's density-corrected INTRINSIC size from `sizes`, so `sizes` is
+      // what a CSS `width: 100%` resolves against whenever the containing block
+      // is content-sized — shrink-to-fit, inline-block, a flex item sized on its
+      // content. Measured in Chrome at a 1200px viewport with the author CSS
+      // `width:100%;height:auto;display:block`:
+      //
+      //   parent                        sizes=100vw   sizes=auto
+      //   inline-block (shrink-to-fit)     1184px        300px
+      //   block / fixed-width flex          900px        900px
+      //
+      // 300px is the spec's default object size, used because resolving `auto`
+      // against a content-sized parent is circular. So `sizes="auto"` — which
+      // genuinely does pick a better candidate, `?w=320` instead of a 357 KB
+      // original in a 158px slot — rendered those images tiny and centred in
+      // their box, on the canvas, in _preview and on published sites alike.
+      //
+      // A delivery win may not be paid for in layout, so this is back to
+      // `100vw`: it overfetches, but it is the value every published document
+      // was authored against. A pinned pixel width is still the better answer
+      // where the author gave one, because it is a definite length and cannot
+      // be circular. Getting image delivery right for fluid images needs the
+      // media pipeline (a WebP variant at source width) or real intrinsic
+      // `width`/`height` attributes from media metadata — neither of which
+      // perturbs layout the way `sizes` does.
       sizes={isCdnUrl ? (pinnedWidth ?? '100vw') : undefined}
       // Unset alt keeps rendering `alt=""` exactly as it always has —
       // existing documents must not change output (AGL-1305). Decorative
@@ -268,16 +294,63 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
       // so the a11y intent is explicit rather than an accident of blank.
       alt={decorative ? '' : (alt ?? '')}
       title={decorative ? undefined : title || undefined}
-      loading={eager ? 'eager' : 'lazy'}
-      // The ordering signal (AGL-2486). `high` on the one image that is
-      // probably the LCP element; `low` on everything else, so a footer
-      // image cannot be fetched ahead of the section the reader is in.
-      fetchPriority={eager ? 'high' : 'low'}
+      // The ordering signal, ONE-DIRECTIONAL on purpose (AGL-2486).
+      //
+      // `low` on every deferred image, so a footer image cannot be fetched
+      // ahead of the section the reader is in. That half is safe in a way the
+      // other half is not: deprioritising an image that is provably not being
+      // looked at cannot starve whatever the LCP turns out to be.
+      //
+      // The lead image gets NO `fetchpriority` — the browser's `auto` — where
+      // it used to get `high`. `high` is not a statement about this image, it
+      // is a claim that this image outranks everything else in flight,
+      // including the stylesheet and the webfont that a TEXT LCP is waiting
+      // on. We are not in a position to make that claim: the only evidence
+      // behind it was "first `<img>` in document order", and document order's
+      // first image is the HEADER LOGO on any site whose header has one.
+      //
+      // Measured on aglyn.com at a 375x812 viewport, which is what sent this
+      // back: the element carrying `fetchpriority="high"` was the logo at
+      // 145x44 = 6,380 px², while the `<h1>` under it was 343x113 =
+      // 38,893 px² — six times the area, and the element Lighthouse named as
+      // the LCP. So the hint was being spent to make a text LCP arrive later.
+      //
+      // `auto` is not a retreat to the old behaviour. The old bug was that
+      // everything was `lazy`, so the lead image was not discovered until
+      // after layout; it still gets `loading="eager"` above, which is the
+      // discovery fix and the part that actually earned the win. What goes is
+      // only the RANKING claim, back to Chrome's own in-viewport heuristic —
+      // which decides after layout, with the viewport and the geometry this
+      // function provably does not have.
+      //
+      // Deliberately not replaced with a size heuristic: nothing here knows
+      // the rendered size. `width`/`height` are optional author CSS strings,
+      // routinely `100%`, and a logo constrained by its container measures
+      // small while declaring nothing. A guess that fails the same way is not
+      // an improvement on a guess.
+      //
+      // An author who genuinely has an image LCP should be able to SAY so —
+      // but not through this control. The `loading` field is labelled
+      // "Loading" and described in terms of lazy versus eager; an author
+      // picking Eager for the top image is not asserting a priority ranking,
+      // and reading one out of that choice is how the logo got `high` in the
+      // first place. A real priority affordance needs its own control and its
+      // own words. After September 1.
       // Decoding off the main thread for the deferred ones — they have no
       // paint deadline, and decoding them synchronously is main-thread time
       // spent on pixels nobody is looking at yet. The eager image keeps the
       // browser's default (`auto`) so it is free to decode in time to paint.
-      decoding={eager ? undefined : 'async'}
+      //
+      // The deferred set is `DEFERRED_IMAGE_ATTRIBUTES` rather than three
+      // literals because every OTHER `<img>` a published page renders has to
+      // land in the same rank to be ranked at all — a product grid, an event
+      // list, a cart line. Those carried no hint whatsoever and so were
+      // fetched EAGERLY, ahead of anything this component deferred. The set
+      // is documented at its definition; the reasoning for each member is
+      // the two paragraphs above and the two below.
+      {...(eager
+        ? { loading: 'eager' as const }
+        : Aglyn.DEFERRED_IMAGE_ATTRIBUTES)}
       {...rest}
       sx={[
         {
@@ -301,6 +374,8 @@ export const schema: Aglyn.ComponentSchema<ImageProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Image',
+  description:
+    'A picture from your media library or any URL, with fit, size and an optional link.',
   category: Aglyn.ComponentCategory.MEDIA,
   icon: {
     path: mdiImage.path,

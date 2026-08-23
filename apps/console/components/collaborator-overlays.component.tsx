@@ -18,9 +18,19 @@
 
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn'
 import { useRenderedCanvasElements } from '@aglyn/besigner-ui'
+import { getElementFragmentRects } from '@aglyn/shared-util-dom'
 import { Box } from '@mui/material'
 import { useEffect, useRef, useState } from 'react'
+import { avatarColourFor } from './member-avatar.component'
 import type { PresenceEntry } from '../hooks/use-presence'
+
+/** One box of a collaborator's selection, in viewport pixels. */
+interface SelectionFragment {
+  top: number
+  left: number
+  width: number
+  height: number
+}
 
 /** Where one collaborator's marks should be painted, in viewport pixels. */
 interface Placement {
@@ -30,7 +40,17 @@ interface Placement {
   colour: string
   isSelf?: boolean
   cursor?: { x: number; y: number }
-  selection?: { top: number; left: number; width: number; height: number }
+  /**
+   * One box per LINE FRAGMENT of the selected element (AGL-2486).
+   *
+   * A single rectangle cannot describe a wrapped inline run, and this is the
+   * one surface where nobody can see that it is wrong: a colleague's
+   * selection is drawn on YOUR screen, so they never watch their own box
+   * miss the second line of their heading. It reads from the same
+   * `getElementFragmentRects` the besigner's own selection outline does, so
+   * the two cannot drift.
+   */
+  selection?: SelectionFragment[]
 }
 
 /**
@@ -115,7 +135,14 @@ export function CollaboratorOverlays({
           // your own second window, is exactly the confusion the flag
           // exists to prevent (AGL-2486).
           displayName: entry.isSelf ? 'You, in another tab' : entry.displayName,
-          colour: entry.colour ?? '#1a73e8',
+          // The SAME fallback the avatar chip uses, not a hardcoded blue
+          // (AGL-2486). Both surfaces read `entry.colour` from one room-wide
+          // allocation, so in practice they always agree — but they used to
+          // disagree about what to do if it were ever missing, and the whole
+          // point of the dashed chip matching the dashed outline is that the
+          // two cannot drift. One fallback, seeded from the session key, so
+          // they land on the same colour even in the case neither expects.
+          colour: entry.colour ?? avatarColourFor(entry.key),
           isSelf: entry.isSelf,
         }
         if (
@@ -129,14 +156,17 @@ export function CollaboratorOverlays({
           }
         }
         if (entry.selectedNodeId) {
-          const box = registry[entry.selectedNodeId]?.node?.getBoundingClientRect()
-          if (box?.width || box?.height) {
-            placement.selection = {
-              top: box.top,
-              left: box.left,
-              width: box.width,
-              height: box.height,
-            }
+          const element = registry[entry.selectedNodeId]?.node
+          const geometry = element
+            ? getElementFragmentRects(element)
+            : undefined
+          if (geometry && (geometry.union.width || geometry.union.height)) {
+            placement.selection = geometry.fragments.map((fragment) => ({
+              top: fragment.top,
+              left: fragment.left,
+              width: fragment.width,
+              height: fragment.height,
+            }))
           }
         }
         if (placement.cursor || placement.selection) next.push(placement)
@@ -146,11 +176,17 @@ export function CollaboratorOverlays({
           (placement) =>
             `${placement.key}|${placement.displayName}|${placement.colour}|` +
             `${round(placement.cursor?.x)},${round(placement.cursor?.y)}|` +
-            `${round(placement.selection?.top)},${round(
-              placement.selection?.left,
-            )},${round(placement.selection?.width)},${round(
-              placement.selection?.height,
-            )}`,
+            // EVERY fragment, not just the first: a reflow that moves only
+            // the second line of a wrapped selection must still commit, or
+            // the box left behind is the stale outline this guard exists to
+            // avoid (AGL-2486).
+            (placement.selection ?? [])
+              .map(
+                (fragment) =>
+                  `${round(fragment.top)},${round(fragment.left)},` +
+                  `${round(fragment.width)},${round(fragment.height)}`,
+              )
+              .join('/'),
         )
         .join(';')
       if (fingerprint !== committed) {
@@ -184,7 +220,7 @@ export function CollaboratorOverlays({
     >
       {placements.map((placement) => (
         <Box key={placement.key}>
-          {placement.selection ? (
+          {(placement.selection ?? []).map((fragment, index) => (
             <Box
               // A hook the overlays can be VERIFIED through (AGL-2486). They
               // are drawn from measured rectangles into a `position: fixed`
@@ -192,39 +228,46 @@ export function CollaboratorOverlays({
               // reachable from the accessibility tree or from a click — which
               // left "the overlay renders" as something only a human eye could
               // confirm, on the one feature whose whole job is to be seen.
+              key={index}
               data-aglyn-collaborator-selection={placement.key}
+              data-aglyn-collaborator-fragment={index}
               data-aglyn-collaborator-self={placement.isSelf ? '' : undefined}
               sx={{
                 position: 'absolute',
-                top: placement.selection.top,
-                left: placement.selection.left,
-                width: placement.selection.width,
-                height: placement.selection.height,
+                top: fragment.top,
+                left: fragment.left,
+                width: fragment.width,
+                height: fragment.height,
                 border: `2px ${placement.isSelf ? 'dashed' : 'solid'} ${placement.colour}`,
                 borderRadius: '2px',
                 boxSizing: 'border-box',
               }}
             >
-              <Box
-                sx={{
-                  position: 'absolute',
-                  top: -18,
-                  left: -2,
-                  px: 0.75,
-                  height: 18,
-                  lineHeight: '18px',
-                  fontSize: 11,
-                  fontWeight: 600,
-                  whiteSpace: 'nowrap',
-                  color: '#fff',
-                  bgcolor: placement.colour,
-                  borderRadius: '2px 2px 0 0',
-                }}
-              >
-                {placement.displayName}
-              </Box>
+              {/* The name rides the FIRST fragment only. One name over a
+                  two-line selection reads as one collaborator on one
+                  element; a name per line reads as two people. */}
+              {index === 0 ? (
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: -18,
+                    left: -2,
+                    px: 0.75,
+                    height: 18,
+                    lineHeight: '18px',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                    color: '#fff',
+                    bgcolor: placement.colour,
+                    borderRadius: '2px 2px 0 0',
+                  }}
+                >
+                  {placement.displayName}
+                </Box>
+              ) : null}
             </Box>
-          ) : null}
+          ))}
           {placement.cursor ? (
             <Box
               data-aglyn-collaborator-cursor={placement.key}
@@ -251,7 +294,7 @@ export function CollaboratorOverlays({
                   strokeLinejoin="round"
                 />
               </Box>
-              {!placement.selection ? (
+              {!placement.selection?.length ? (
                 <Box
                   sx={{
                     ml: 1.25,

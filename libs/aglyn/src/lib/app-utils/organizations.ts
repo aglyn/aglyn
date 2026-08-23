@@ -352,16 +352,38 @@ export function collaboratorSeatKeys(
  * Both identities are dropped, not whichever one is present. A person can be
  * on the roster under a uid with no mirrored email and hold an invite under
  * that address, and the seat is still one seat.
+ *
+ * ## `emails`, not `email` — an account holds several (AGL-2486)
+ *
+ * Since an invitation may be accepted at any CONFIRMED address on the account,
+ * the pending invite the accepter is about to consume can be keyed by an
+ * address that is not their primary. `exclude.email` alone is the primary, so
+ * that invite survived the exclusion and the person was counted against a cap
+ * they are the subject of — the exact double-count the paragraph above says
+ * this function exists to prevent, re-opened by widening the accept match.
+ *
+ * It fails CLOSED (a spurious "out of seats" refusal, never a free seat), and
+ * only for an org sitting exactly on its cap, which is why it survived review.
+ *
+ * `emails` takes every address PROVEN to belong to the principal being
+ * admitted. Passing an address that is not theirs would hand out a free seat,
+ * so callers must pass confirmed addresses for that uid and nothing else.
  */
 export function countCollaboratorSeats(
   entries: ReadonlyArray<CollaboratorSeatEntry | null | undefined>,
   hostId: string,
-  exclude?: { uid?: string | null; email?: string | null },
+  exclude?: {
+    uid?: string | null
+    email?: string | null
+    /** Further addresses on the SAME account; see above. */
+    emails?: readonly (string | null | undefined)[] | null
+  },
 ): number {
   const keys = collaboratorSeatKeys(entries, hostId)
-  const email =
-    typeof exclude?.email === 'string' ? exclude.email.trim().toLowerCase() : ''
-  if (email) keys.delete(email)
+  for (const candidate of [exclude?.email, ...(exclude?.emails ?? [])]) {
+    const email = typeof candidate === 'string' ? candidate.trim().toLowerCase() : ''
+    if (email) keys.delete(email)
+  }
   const uid = typeof exclude?.uid === 'string' ? exclude.uid.trim() : ''
   if (uid) keys.delete(`uid:${uid}`)
   return keys.size

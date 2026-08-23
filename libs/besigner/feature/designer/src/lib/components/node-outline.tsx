@@ -18,7 +18,6 @@
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import { generateComponentClassKeys } from '@aglyn/shared-ui-theme'
-import { getElementClientRectBounding } from '@aglyn/shared-util-dom'
 import { styled } from '@mui/material'
 import clsx from 'clsx'
 import { observer } from 'mobx-react-lite'
@@ -110,18 +109,24 @@ export const NodeOutline = observer(
   forwardRef<HTMLDivElement, NodeOutlineProps>((props, ref) => {
     const { className, node, style, ...rest } = props
     const $id = node?.$id
-    const elementRef = Besigner.refs.get($id)
     const isSelected = Besigner.focus.isNodeSelected(node)
     const isHovered = Besigner.focus.isNodeHovered(node)
     const isDragging = Besigner.dnd.isDraggingNode(node)
     const isDraggingOver = Besigner.dnd.isDraggingOverDropNode(node)
-    const rect = getElementClientRectBounding(elementRef?.current)
 
     return (
       <NodeOutlineRoot
         ref={ref}
         data-aglyn={`outline:${$id}`}
-        style={{ width: rect?.width, height: rect?.height, ...style }}
+        // Geometry comes from the caller and ONLY from the caller
+        // (AGL-2486). This used to take a second, independent
+        // `getBoundingClientRect()` of the node and then let `style`
+        // override it — a forced layout on every observer tick whose result
+        // was always discarded. Now that one outline is drawn per line
+        // FRAGMENT that read would happen once per fragment per render, and
+        // it could never answer the question anyway: a single rect cannot
+        // say which fragment this one is.
+        style={style}
         className={clsx(
           {
             [classKeys.selectedSelf]: Boolean(isSelected),

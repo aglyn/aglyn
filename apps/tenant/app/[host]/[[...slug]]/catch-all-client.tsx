@@ -18,6 +18,10 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+// Deep import, NOT the barrel (AGL-2486): the plugin-manager barrel is
+// reachable from `@aglyn/aglyn/server`, and a client-only React hook on that
+// path 500s every server route. See `plugin-styles-ui.tsx`.
+import { PluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles-ui'
 import { AglynNodeRenderer } from '@aglyn/aglyn-node-renderer'
 import { observer } from 'mobx-react-lite'
 import {
@@ -358,12 +362,25 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
         {memberDenied ? (
           <>
             <h1 style={{ fontSize: 22 }}>{'This page is for members'}</h1>
-            <p style={{ opacity: 0.8 }}>
-              <a href="/signin">{'Sign in'}</a>
-              {' or '}
-              <a href="/signup">{'create an account'}</a>
-              {' to view it.'}
-            </p>
+            {/*
+              Only offer the member pages when this site actually serves them
+              (AGL-2486). With User Accounts off, `/signin` and `/signup` are
+              404s, so linking them would send a visitor who already hit one
+              dead end straight to another — and it would advertise a
+              sign-in page the site does not have.
+            */}
+            {props.memberAuthRoutes ? (
+              <p style={{ opacity: 0.8 }}>
+                <a href="/signin">{'Sign in'}</a>
+                {' or '}
+                <a href="/signup">{'create an account'}</a>
+                {' to view it.'}
+              </p>
+            ) : (
+              <p style={{ opacity: 0.8 }}>
+                {'You need an account on this site to view it.'}
+              </p>
+            )}
           </>
         ) : (
           <p style={{ opacity: 0.7 }}>{'Checking your membership…'}</p>
@@ -695,6 +712,14 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
           automations engine hydrates. The besigner canvas deliberately
           omits this rule so hidden elements stay editable. */}
       <style>{Aglyn.ELEMENT_HIDDEN_STYLE_TEXT}</style>
+      {/* Plugin stylesheets (AGL-2486). The published page is the SOURCE of
+          truth for where plugin CSS sits in the cascade — unlayered, so it
+          beats every `@layer mui` rule regardless of specificity — and the
+          besigner canvas renders the same component in the same position
+          inside its shadow root so the editor agrees. `scope="document"`
+          skips MIRRORED sheets: those are still live in this document's own
+          head, where the bundle put them. */}
+      <PluginStyles scope="document" />
       {/* Plugin site runtimes (AGL-419): experiment runners, automation
           engines, overlays — each registered from its plugin's site
           surface and reading back the page-props slices its own server
@@ -768,6 +793,18 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
                   src={brandLogo}
                   alt=""
                   aria-hidden
+                  // Explicit intrinsic size (AGL-2486). Lighthouse named THIS
+                  // image as the page's only unsized one, and it is unsized in
+                  // the way that actually costs: the mark is an SVG declaring
+                  // `width="100%" height="100%"`, so it carries no intrinsic
+                  // size of its own and the browser reserves nothing for it
+                  // until the file has been fetched and parsed — then reflows
+                  // the badge. The viewBox is `0 0 24 24`, i.e. exactly 1:1,
+                  // so 14x14 is the true ratio at the rendered height rather
+                  // than a guess. The CSS below still governs final layout;
+                  // these attributes only supply the aspect ratio to reserve.
+                  width={14}
+                  height={14}
                   style={{ height: 14, width: 'auto', display: 'block' }}
                 />
               ) : null}

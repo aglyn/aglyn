@@ -1107,6 +1107,14 @@ export async function eraseOrg(
     // correlates that identity back to this workspace (AGL-1448). Deleting
     // only the first left exactly the record AGL-1028 denied to every client.
     step = 'stripe'
+    // `readOrgBilling` hands back the customer for THIS deployment's Stripe
+    // mode (AGL-2486), which is the only one `deleteStripeCustomer` could act
+    // on anyway — it spends `STRIPE_SECRET_KEY`, and a live key cannot delete a
+    // test customer. Known residue, deliberately not chased here: an org that
+    // was also exercised in TEST mode leaves its test customer standing at
+    // Stripe after a live erasure. That is synthetic data created by us, not
+    // subject data supplied by the workspace, and reaching it would mean
+    // erasure spending a second API key in a mode this deployment is not in.
     if (!dryRun) await deleteStripeCustomer(stripeCustomerId)
     progress.stripeIndex = await eraseOrgStripeIndex(orgId, dryRun)
 

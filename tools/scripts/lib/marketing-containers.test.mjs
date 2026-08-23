@@ -43,6 +43,7 @@ import { describe, it } from 'node:test'
 import {
   STOCK_MAX_WIDTHS,
   auditContainerNodes,
+  containerAncestor,
   containerDepth,
 } from './marketing-containers.mjs'
 
@@ -65,6 +66,7 @@ describe('container-width detector (AGL-1296)', () => {
     assert.deepEqual(census.bespoke, [])
     assert.deepEqual(census.nonStock, [])
     assert.deepEqual(census.uncontained, [])
+    assert.deepEqual(census.nested, [])
     assert.equal(census.sections, 1)
     assert.deepEqual(census.widths, { '"xl"': 1 })
   })
@@ -148,6 +150,117 @@ describe('container-width detector (AGL-1296)', () => {
     })
     assert.equal(census.sections, 0)
     assert.deepEqual(census.uncontained, [])
+  })
+
+  it('is CLEAN on nesting for a stock screen', () => {
+    // The baseline the nesting failures below are measured against: one
+    // Container under a band is not nested, and a check that cannot say so
+    // would flag every screen on the host.
+    assert.deepEqual(auditContainerNodes(screen()).nested, [])
+  })
+
+  it('flags a Container INSIDE another Container — the +24px shape (AGL-2366)', () => {
+    // Both nodes are stock `xl`, so every other rule in this file reports
+    // clean while the inner one's content starts 24px right of the section
+    // above it. The finding has to name the ancestor: "a Container is wrong"
+    // is not actionable, "this one is inside that one" is.
+    const census = auditContainerNodes(
+      {
+        root: { componentId: 'box', nodes: ['band'] },
+        band: { componentId: 'muiStack', parentId: 'root', nodes: ['outer'] },
+        outer: {
+          componentId: 'muiContainer',
+          parentId: 'band',
+          nodes: ['inner'],
+          props: { maxWidth: 'xl' },
+        },
+        inner: {
+          componentId: 'muiContainer',
+          parentId: 'outer',
+          nodes: [],
+          props: { maxWidth: 'xl' },
+        },
+      },
+      { name: 'changelog' },
+    )
+    assert.equal(census.nested.length, 1)
+    assert.equal(census.nested[0].nodeId, 'inner')
+    assert.equal(census.nested[0].ancestorId, 'outer')
+    assert.equal(census.nested[0].name, 'changelog')
+    // Directly inside, so nothing on the path and nothing that repeats.
+    assert.deepEqual(census.nested[0].through, [])
+    assert.equal(census.nested[0].repeats, false)
+    // And the width census still says both are stock — which is exactly why
+    // this needed its own rule rather than a tighter width rule.
+    assert.deepEqual(census.bespoke, [])
+    assert.deepEqual(census.nonStock, [])
+  })
+
+  it('marks nesting through a collectionEntries block as REPEATING', () => {
+    // The real corpus shape (AGL-2366): ONE authored Container inside the
+    // repeater, cloned once per published entry. `repeats` is the difference
+    // between "one node to unwrap" and "ten misaligned rows on the page",
+    // and the audit's reader needs to be told which they are looking at.
+    const census = auditContainerNodes({
+      root: { componentId: 'box', nodes: ['band'] },
+      band: { componentId: 'muiStack', parentId: 'root', nodes: ['outer'] },
+      outer: {
+        componentId: 'muiContainer',
+        parentId: 'band',
+        nodes: ['entries'],
+        props: { maxWidth: 'xl' },
+      },
+      entries: {
+        componentId: 'collectionEntries',
+        parentId: 'outer',
+        nodes: ['inner'],
+        props: { collectionSlug: 'changelog' },
+      },
+      inner: {
+        componentId: 'muiContainer',
+        parentId: 'entries',
+        nodes: [],
+        props: { maxWidth: 'xl' },
+      },
+    })
+    assert.equal(census.nested.length, 1)
+    assert.deepEqual(census.nested[0].through, ['collectionEntries'])
+    assert.equal(census.nested[0].repeats, true)
+  })
+
+  it('does not flag two Containers that are SIBLINGS', () => {
+    // `/blog` is the control the issue named: it is collection-driven too
+    // and carries five Containers, none nested. A rule that counted
+    // Containers per document instead of asking about ancestry would flag it
+    // — and a fix aimed at that finding would remove sections that belong.
+    const census = auditContainerNodes({
+      root: { componentId: 'box', nodes: ['a', 'b'] },
+      a: {
+        componentId: 'muiContainer',
+        parentId: 'root',
+        nodes: [],
+        props: { maxWidth: 'xl' },
+      },
+      b: {
+        componentId: 'muiContainer',
+        parentId: 'root',
+        nodes: [],
+        props: { maxWidth: 'xl' },
+      },
+    })
+    assert.deepEqual(census.nested, [])
+  })
+
+  it('survives a parentId cycle rather than hanging on it', () => {
+    // This reads authored data. A corrupt map must fail the document, never
+    // the whole audit — an audit that hangs gets run with a timeout, and a
+    // check nobody waits for is a check nobody has.
+    const nodes = {
+      a: { componentId: 'muiContainer', parentId: 'b', props: {} },
+      b: { componentId: 'muiStack', parentId: 'a' },
+    }
+    assert.equal(containerAncestor('a', nodes), null)
+    assert.deepEqual(auditContainerNodes(nodes).nested, [])
   })
 
   it('finds a Container at any depth under the band', () => {

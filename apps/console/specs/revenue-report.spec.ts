@@ -23,7 +23,11 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   commerceSettledSummary,
+  commerceHostAttribution,
   contractedSummary,
+  marketplaceListingAttribution,
+  marketplacePublisherAttribution,
+  orgAttribution,
   marketplaceSettledSummary,
   revenueGap,
   subscriptionSettledSummary,
@@ -420,5 +424,220 @@ describe('the earned total excludes everything that is not Aglyn margin', () => 
       subscriptions.grossCents + marketplace.grossCents + commerce.applicationFeeCents
     expect(earned).toBeLessThan(naive)
     expect(earned).toBeLessThan(naive - marketplace.sellerTransferCents)
+  })
+})
+
+/**
+ * Per-org attribution (AGL-2486) — "show which orgs did what".
+ *
+ * The assertions that matter are the RECONCILIATION ones: a table whose rows
+ * do not sum to the figure above it is worse than no table, because a reader
+ * trusts the number they can see the working for.
+ */
+describe('orgAttribution', () => {
+  const paying = (orgId: string, name: string, mrr = 'starter') => ({
+    orgId,
+    billing: {
+      name,
+      plan: mrr,
+      billingStatus: 'active',
+      subscription: { status: 'active', interval: 'month' },
+    },
+  })
+  const invoice = (orgId: string, grossCents: number, taxCents = 0) => ({
+    id: `in_${orgId}_${grossCents}`,
+    orgId,
+    grossCents,
+    taxCents,
+  })
+
+  it('names the comped orgs the summary only counts', () => {
+    const orgs = [
+      { orgId: 'o1', billing: { name: 'Aglyn LLC', plan: 'enterprise' } },
+      { orgId: 'o2', billing: { name: 'Personal', plan: 'starter' } },
+      { orgId: 'o3', billing: { name: 'Free Co', plan: 'free' } },
+    ]
+    const summary = contractedSummary(orgs)
+    const attribution = orgAttribution(orgs, [])
+    const comped = attribution.rows.filter((row) => row.state === 'comped')
+
+    // The COUNT and the NAMES must agree — this is the whole point.
+    expect(comped).toHaveLength(summary.compedOrgs)
+    expect(comped.map((row) => row.name).sort()).toEqual([
+      'Aglyn LLC',
+      'Personal',
+    ])
+    // A genuinely free org contributes nothing and is not a row.
+    expect(attribution.rows.some((row) => row.orgId === 'o3')).toBe(false)
+  })
+
+  it('reconciles settled cash to subscriptionSettledSummary exactly', () => {
+    const rows = [invoice('o1', 2500), invoice('o1', 1000, 100), invoice('o2', 700)]
+    const total = subscriptionSettledSummary(rows)
+    const attribution = orgAttribution(
+      [paying('o1', 'One'), paying('o2', 'Two')],
+      rows,
+    )
+    const summed = attribution.rows.reduce(
+      (sum, row) => sum + row.settledCents,
+      0,
+    )
+    expect(summed).toBe(total.netOfReversalsCents)
+    // And the per-org split is the real one, not everything on one row.
+    const byId = Object.fromEntries(
+      attribution.rows.map((row) => [row.orgId, row]),
+    )
+    expect(byId['o1'].invoices).toBe(2)
+    expect(byId['o2'].invoices).toBe(1)
+  })
+
+  it('reconciles contracted MRR to contractedSummary exactly', () => {
+    const orgs = [paying('o1', 'One'), paying('o2', 'Two')]
+    const summary = contractedSummary(orgs)
+    const attribution = orgAttribution(orgs, [])
+    const summed = attribution.rows.reduce((sum, row) => sum + row.mrrUsd, 0)
+    expect(summed).toBeCloseTo(summary.total.mrrUsd, 2)
+    expect(summed).toBeGreaterThan(0)
+  })
+
+  it('keeps cash from an org whose document no longer exists', () => {
+    // An erased workspace still has invoices. Dropping them would make the
+    // rows sum BELOW the total, which is the failure this guards.
+    const rows = [invoice('gone', 5000)]
+    const total = subscriptionSettledSummary(rows)
+    const attribution = orgAttribution([], rows)
+    expect(attribution.rows).toHaveLength(1)
+    expect(attribution.rows[0].settledCents).toBe(total.netOfReversalsCents)
+    expect(attribution.rows[0].name).toContain('no org record')
+  })
+
+  it('carries the omitted remainder as FIGURES when it caps', () => {
+    const orgs = Array.from({ length: 5 }, (_, index) =>
+      paying(`o${index}`, `Org ${index}`),
+    )
+    const rows = orgs.map((org, index) => invoice(org.orgId, (index + 1) * 100))
+    const total = subscriptionSettledSummary(rows)
+    const attribution = orgAttribution(orgs, rows, 2)
+
+    expect(attribution.rows).toHaveLength(2)
+    expect(attribution.omittedOrgs).toBe(3)
+    // Shown + omitted still equals the true total: the table is a complete
+    // ACCOUNTING even when it is not a complete list.
+    const shown = attribution.rows.reduce((s, r) => s + r.settledCents, 0)
+    expect(shown + attribution.omittedSettledCents).toBe(
+      total.netOfReversalsCents,
+    )
+    // And it kept the LARGEST contributors, not an arbitrary two.
+    expect(attribution.rows[0].settledCents).toBe(500)
+  })
+})
+
+/**
+ * Attribution by listing, publisher and host (AGL-2486).
+ *
+ * The reconciliation assertions are the point: "a plugin table that does not
+ * sum to the marketplace line is worse than no plugin table".
+ */
+describe('attribution by source', () => {
+  const sale = (
+    listingId: string,
+    sellerOrgId: string,
+    amountCents: number,
+    feeCents: number,
+    refundedCents = 0,
+  ) => ({
+    id: `cs_${listingId}_${amountCents}`,
+    listingId,
+    sellerOrgId,
+    amountCents,
+    taxCents: 0,
+    feeCents,
+    transferCents: amountCents - feeCents,
+    refundedCents,
+  })
+  const order = (
+    hostId: string,
+    amountCents: number,
+    feeCents: number,
+    refundedCents = 0,
+  ) => ({
+    id: `o_${hostId}_${amountCents}`,
+    hostId,
+    amountCents,
+    feeCents,
+    refundedCents,
+  })
+
+  it('sums listing rows to the marketplace commission line exactly', () => {
+    const rows = [
+      sale('office-hours', 'pub1', 10_000, 1_500),
+      sale('office-hours', 'pub1', 4_000, 600),
+      sale('promo-countdown', 'pub2', 8_000, 1_200, 8_000),
+    ]
+    const total = marketplaceSettledSummary(rows)
+    const byListing = marketplaceListingAttribution(rows)
+    const summed = byListing.rows.reduce((s, r) => s + r.gainCents, 0)
+
+    expect(summed).toBe(total.commissionNetCents)
+    expect(byListing.rows).toHaveLength(2)
+    // Losses carry a name too — the fully refunded sale is attributable.
+    const refundRow = byListing.rows.find((r) => r.key === 'promo-countdown')
+    expect(refundRow?.lossCents).toBe(1_200)
+    expect(refundRow?.gainCents).toBe(0)
+  })
+
+  it('sums publisher rows to the same marketplace line', () => {
+    const rows = [
+      sale('a', 'pub1', 10_000, 1_500),
+      sale('b', 'pub2', 4_000, 600),
+    ]
+    const total = marketplaceSettledSummary(rows)
+    const byPublisher = marketplacePublisherAttribution(rows)
+    expect(byPublisher.rows.reduce((s, r) => s + r.gainCents, 0)).toBe(
+      total.commissionNetCents,
+    )
+    // Two groupings of the SAME money must agree with each other.
+    const byListing = marketplaceListingAttribution(rows)
+    expect(byPublisher.rows.reduce((s, r) => s + r.gainCents, 0)).toBe(
+      byListing.rows.reduce((s, r) => s + r.gainCents, 0),
+    )
+  })
+
+  it('sums host rows to the storefront commission line exactly', () => {
+    const rows = [
+      order('host-a', 20_000, 2_000),
+      order('host-a', 5_000, 700),
+      order('host-b', 9_000, 1_100, 9_000),
+      // A zero-fee order: counted, but there is no take to attribute.
+      order('host-c', 3_000, 0),
+    ]
+    const total = commerceSettledSummary(rows)
+    const byHost = commerceHostAttribution(rows)
+    expect(byHost.rows.reduce((s, r) => s + r.gainCents, 0)).toBe(
+      total.commissionNetCents,
+    )
+    expect(byHost.rows.find((r) => r.key === 'host-c')?.gainCents).toBe(0)
+  })
+
+  it('keeps a row whose entity id is missing rather than dropping the money', () => {
+    // Dropping it would make the rows sum BELOW the total — the exact fault
+    // these tables exist to avoid.
+    const rows = [{ id: 'x', amountCents: 10_000, feeCents: 1_500 }]
+    const total = marketplaceSettledSummary(rows)
+    const byListing = marketplaceListingAttribution(rows)
+    expect(byListing.rows).toHaveLength(1)
+    expect(byListing.rows[0].key).toBe('Listing not recorded')
+    expect(byListing.rows[0].gainCents).toBe(total.commissionNetCents)
+  })
+
+  it('carries the omitted remainder as figures when capped', () => {
+    const rows = Array.from({ length: 4 }, (_, index) =>
+      sale(`l${index}`, 'pub', (index + 1) * 10_000, (index + 1) * 1_000),
+    )
+    const total = marketplaceSettledSummary(rows)
+    const capped = marketplaceListingAttribution(rows, 2)
+    const shown = capped.rows.reduce((s, r) => s + r.gainCents, 0)
+    expect(capped.omittedRows).toBe(2)
+    expect(shown + capped.omittedGainCents).toBe(total.commissionNetCents)
   })
 })

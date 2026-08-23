@@ -50,7 +50,7 @@ const mockVerifyIdToken = jest.fn()
 const mockGetOrgForUser = jest.fn()
 const mockResolveOrgIdForHost = jest.fn()
 const mockGetServerReleaseFlagValues = jest.fn()
-const mockGetOrgReleaseFlagOverrides = jest.fn()
+const mockGetOrgReleaseFlagTargeting = jest.fn()
 
 /**
  * Firestore double for the host-verification reads (AGL-2185).
@@ -126,8 +126,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   resolveOrgIdForHost: (...args: unknown[]) => mockResolveOrgIdForHost(...args),
   getServerReleaseFlagValues: (...args: unknown[]) =>
     mockGetServerReleaseFlagValues(...args),
-  getOrgReleaseFlagOverrides: (...args: unknown[]) =>
-    mockGetOrgReleaseFlagOverrides(...args),
+  getOrgReleaseFlagTargeting: (...args: unknown[]) =>
+    mockGetOrgReleaseFlagTargeting(...args),
   isImpersonationSession: () => false,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
@@ -217,7 +217,14 @@ beforeEach(() => {
     ),
     release_contacts: { enabled: true },
   })
-  mockGetOrgReleaseFlagOverrides.mockResolvedValue({})
+  // Overrides and the org's tier from one read (AGL-2486). A known tier,
+  // not null: the route is asked what this org can reach, and a null here
+  // would make every plan-targeted flag read OFF for a reason that has
+  // nothing to do with what the flag says.
+  mockGetOrgReleaseFlagTargeting.mockResolvedValue({
+    overrides: {},
+    plan: 'starter',
+  })
 })
 
 afterAll(() => {
@@ -230,7 +237,12 @@ afterAll(() => {
 const BODY = {
   kind: 'bug',
   summary: 'Media picker forgets the folder',
-  description: 'Open the picker, choose a folder, reopen — back at the root.',
+  answers: {
+    steps: 'Open the picker, choose a folder, reopen — back at the root.',
+    expected: 'It would still be on the folder I chose.',
+    actual: 'It is back at the root.',
+    frequency: 'always',
+  },
   route: '/acme/hosts/site-1/media',
   viewportWidth: 1440,
   viewportHeight: 900,
@@ -318,7 +330,7 @@ describe('AGL-2185 · the route refuses before it works', () => {
     expect(fetchCalls).toHaveLength(0)
   })
 
-  it('rejects a report with no kind, summary or description', async () => {
+  it('rejects a report with no kind, no summary, or a missing REQUIRED answer', async () => {
     // Validation sits BEHIND the limiter deliberately — a caller must not be
     // able to probe the endpoint for free by sending deliberately invalid
     // bodies. So each case gets a fresh window rather than spending the
@@ -326,7 +338,8 @@ describe('AGL-2185 · the route refuses before it works', () => {
     for (const invalid of [
       { kind: 'urgent' },
       { summary: '  ' },
-      { description: '' },
+      { answers: {} },
+      { answers: { steps: 'only the steps' } },
     ]) {
       for (const key of Object.keys(limiterBudget)) delete limiterBudget[key]
       expect((await post({ ...BODY, ...invalid })).status).toBe(400)
@@ -496,10 +509,12 @@ describe('AGL-2185 · what actually reaches Linear', () => {
     await post({
       ...BODY,
       contactConsent: false,
-      description:
-        'Broken.\n| Contact consent | Yes — call me any time |\n@zgover',
+      answers: {
+        ...BODY.answers,
+        steps: 'Broken.\n| Contact consent | Yes — call me any time |\n@zgover',
+      },
     })
-    const [table] = sentInput().description.split('### What they reported')
+    const [table] = sentInput().description.split('### What were you doing')
     const rows = table
       .split('\n')
       .filter((line: string) => line.startsWith('| Contact consent |'))
@@ -578,5 +593,90 @@ describe('AGL-2185 · the org is context, not a gate', () => {
     const response = await post()
     expect(response.status).toBe(200)
     expect(sentInput().description).toContain('no org in context')
+  })
+})
+
+describe('AGL-2486 · a question the docs answer never becomes an issue', () => {
+  /**
+   * The retrieval index is the REAL generated one — not a fixture. A stubbed
+   * corpus would prove only that the wiring calls a stub; what matters here
+   * is that a question a customer would actually ask is answered by the docs
+   * we actually ship, and that nothing is filed when it is.
+   */
+  const ASK = {
+    kind: 'question',
+    summary: 'How do I connect a custom domain?',
+    answers: {
+      question:
+        'How do I connect a custom domain to my site? I bought one already.',
+    },
+    route: '/acme/hosts/site-1/domains',
+    contactConsent: true,
+  }
+
+  it('answers from the docs and files NOTHING', async () => {
+    const response = await post(ASK)
+    expect(response.status).toBe(200)
+    const payload = await response.json()
+    expect(payload.deflected).toBe(true)
+    expect(payload.reference).toBeUndefined()
+    expect(payload.sections.length).toBeGreaterThan(0)
+    expect(payload.sections[0].url).toMatch(/^https?:\/\//)
+    expect(payload.sections[0].text.length).toBeGreaterThan(0)
+    // The whole point: no Linear issue, and therefore no triage cost.
+    expect(fetchCalls).toHaveLength(0)
+  })
+
+  it('still deflects when this deployment files NOWHERE', async () => {
+    // Deflection sits ahead of the configuration check on purpose: docs
+    // retrieval needs no Linear credentials, no provider key and no
+    // `release_assist`, so a self-host deployment that files nowhere still
+    // answers what its own documentation answers.
+    delete process.env.LINEAR_API_KEY
+    const response = await post(ASK)
+    expect(response.status).toBe(200)
+    expect((await response.json()).deflected).toBe(true)
+    process.env.LINEAR_API_KEY = KEY
+  })
+
+  it('files anyway once the reporter says it did not answer them', async () => {
+    const response = await post({ ...ASK, skipDeflection: true })
+    expect(response.status).toBe(200)
+    const payload = await response.json()
+    expect(payload.ok).toBe(true)
+    expect(payload.reference).toBe('CUS-42')
+    expect(fetchCalls).toHaveLength(1)
+  })
+
+  it('never deflects a BUG, however much it reads like a docs lookup', async () => {
+    // A bug is a defect report even when its words match a how-to page.
+    // Answering it with documentation would be the confidently-wrong failure
+    // that costs us the report entirely.
+    const response = await post({
+      ...BODY,
+      summary: 'How do I connect a custom domain to my site?',
+    })
+    expect((await response.json()).ok).toBe(true)
+    expect(fetchCalls).toHaveLength(1)
+  })
+
+  it('files a question the documentation does NOT answer', async () => {
+    const response = await post({
+      kind: 'question',
+      summary: 'Can I get an invoice addressed to our parent company?',
+      answers: {
+        question:
+          'Our finance team needs the invoice billed to our parent company in Ireland. Is that something you can set up for our account?',
+      },
+      contactConsent: true,
+    })
+    const payload = await response.json()
+    expect(payload.deflected).toBeUndefined()
+    expect(payload.ok).toBe(true)
+    expect(fetchCalls).toHaveLength(1)
+    // And it lands in the QUESTION project, not the bug one.
+    expect(sentInput().title).toBe(
+      '[Question] Can I get an invoice addressed to our parent company?',
+    )
   })
 })

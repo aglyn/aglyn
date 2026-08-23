@@ -69,6 +69,59 @@ describe('publisher attestation (AGL-969)', () => {
     expect(attestationLabels(['nope'])).toEqual([])
   })
 
+  /**
+   * Element metadata is publisher-authored copy that renders in OUR console
+   * (AGL-2486).
+   *
+   * A plugin's declared elements carry a display name and a description that
+   * the besigner renders in the element picker — inside the customer's
+   * console, beside our own elements, and nowhere on the listing page. The
+   * listing-conduct statement was written when the listing was the only
+   * publisher copy a customer could read, so a publisher ticking it had no
+   * reason to think it reached the strings in their manifest.
+   *
+   * Asserted on the item rather than through `requiredAttestationIds`, which
+   * every other test here goes through: widening the obligation without
+   * widening the sentence leaves all of those green.
+   */
+  describe('the listing-conduct statement reaches in-bundle element copy', () => {
+    const item = PUBLISHER_ATTESTATION.find(
+      (entry) => entry.id === 'listing-conduct',
+    )
+
+    it('names elements, not only the listing', () => {
+      expect(item).toBeDefined()
+      expect(`${item?.label} ${item?.detail}`).toMatch(/element/i)
+    })
+
+    /**
+     * The element fields that never render (AGL-2486).
+     *
+     * `tags` and `keywords` are searched by the picker's ranking, so they
+     * decide which element a customer is SHOWN without ever appearing on
+     * screen. A sentence about what an element "says about itself" does not
+     * obviously reach a competitor's name stuffed into a search term, and a
+     * publisher can only be held to what they were asked.
+     */
+    it('reaches text that RANKS as well as text that renders', () => {
+      expect(`${item?.label} ${item?.detail}`).toMatch(/rank|search/i)
+    })
+
+    it('still keeps its id, so attestations already stored still count', () => {
+      // The id is what a stored tick is keyed by (see `attestationsForBytes`).
+      // Renaming it to something truer to the widened wording would silently
+      // orphan every attestation on file as an unrecognised id.
+      expect(PUBLISHER_ATTESTATION.map((entry) => entry.id)).toContain(
+        'listing-conduct',
+      )
+    })
+
+    it('is asked of a FIRST publish — the one that sets the copy', () => {
+      expect(item?.updateOnly).toBeFalsy()
+      expect(requiredAttestationIds(false)).toContain('listing-conduct')
+    })
+  })
+
   describe('attestationsForBytes', () => {
     const stored = {
       license: { by: 'uid-1', sha256: 'aaa' },

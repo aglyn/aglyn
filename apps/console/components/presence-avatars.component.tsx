@@ -28,6 +28,7 @@ import {
   Typography,
 } from '@mui/material'
 import { type MouseEvent, useState } from 'react'
+import DocsHelpTip from './docs-help-tip.component'
 import MemberAvatar, { memberInitials } from './member-avatar.component'
 import {
   presenceFaultNotice,
@@ -276,12 +277,17 @@ function RoomAvatars({ entries }: { entries: PresenceEntry[] }) {
               size={28}
               data-aglyn-presence-session={entry.key}
               data-aglyn-presence-self={entry.isSelf ? '' : undefined}
-              // NO self-specific ring (AGL-2486). Every session's ring is
-              // its own colour, drawn the same way, and the monitor badge
-              // below is the only thing that says "this one is me". Zach
-              // raised the dashed border three times — first orange, then in
-              // the session colour — and the answer each time was that the
-              // badge already carries that meaning.
+              // DASHED for your own other sessions, in that session's own
+              // colour, to match the canvas (AGL-2486). Zach: "go ahead and
+              // go back to the dashed border on the avatars when it is you in
+              // the other tabs so it matches what appears in the canvas."
+              //
+              // `collaborator-overlays` draws the selection outline for the
+              // same session dashed, from the same `entry.colour`, so the
+              // chip and the outline are now one visual statement about one
+              // session. Making this solid did not remove a redundant signal;
+              // it made two surfaces disagree.
+              ringStyle={entry.isSelf ? 'dashed' : 'solid'}
             />
             {entry.isSelf ? (
               <Box
@@ -323,36 +329,120 @@ function RoomAvatars({ entries }: { entries: PresenceEntry[] }) {
               fontWeight: 600,
               bgcolor: 'action.selected',
               color: 'text.secondary',
+              // The overflow chip is in the row too, so it has to be the same
+              // SIZE as the row (AGL-2486). A ring paints 2px outside the
+              // circle, so without one this chip sat 4px smaller than every
+              // session beside it — the same unevenness Zach reported, on the
+              // one chip that is not a `MemberAvatar` and so was not fixed by
+              // fixing that component. Found by measuring the live stack; the
+              // unit test for the avatar could not have seen it.
+              //
+              // In its OWN background colour, because it represents no session
+              // and has no identity colour to show. It reads as a plain disc,
+              // just one the same size as its neighbours.
+              outline: '2px solid',
+              outlineColor: (theme) => theme.palette.action.selected,
+              outlineOffset: 0,
             }}
           >
             {`+${overflow}`}
           </Avatar>
         </Tooltip>
       ) : null}
+      {/* The one route from presence to its documentation (AGL-2486).
+          `liveCoEditing` was a registered help topic with ELEVEN anchors and
+          not a single call site anywhere in the product — the `API_SCOPES`
+          shape again, where a typed, generated promise of a help link reads
+          as coverage and its absence is the only symptom.
+
+          It belongs here rather than on a list row: the per-chip tooltips
+          answer "who is this", and the questions they raise instead — what a
+          room is, why a colleague on another version is invisible, whether
+          any of this locks the document — are exactly the page's headings.
+          A row-level tip would repeat that on every row of every list.
+
+          Rendered only alongside real sessions, since `RoomAvatars` is not
+          mounted when you are alone; an explanation of who is here has
+          nothing to explain to someone working by themselves. */}
+      <DocsHelpTip
+        topic="liveCoEditing"
+        anchor="#whos-here"
+        title="Who else is here"
+        excerpt="One avatar per editing session, in that session's colour. A room is one VERSION of a document, so someone editing a different version will not appear."
+        sx={{ ml: 0.5, fontSize: '0.9em' }}
+      />
     </Stack>
   )
 }
 
 /**
- * What the tooltip says about ONE session, and why your own reads as a
- * hazard rather than as company.
+ * What the tooltip says about ONE session (AGL-2486).
  *
- * Two windows of your own account are two independent `CanvasManager`s, so
- * the second save quietly replaces the first and the concurrent-edit guard
- * does NOT fire — the stamp moved on *your* write (AGL-674). They also share
- * one local draft key (AGL-1256), last writer wins. A colleague at least
- * trips the guard; you do not, which is why the wording is sharper for you
- * than for them.
+ * ## Why this no longer says "saves are not merged"
+ *
+ * Zach: *"Why are saves not merged? Isn't this the point of being able to
+ * collaborate together and build a page alongside someone at the same
+ * time"* — and again, on the guard that stopped him: *"any user
+ * collaborating should be able to save as they all go along and make
+ * changes... there should be no problem with this"*.
+ *
+ * The old copy described the STORAGE and presented it as the experience.
+ * The unit of live collaboration is a node (`use-coediting`, AGL-677), so
+ * two people on different elements both keep their work; and the save guard
+ * now asks whether this document INCORPORATES what is stored rather than
+ * whether the stored version moved, so in a converged room either of you
+ * can save, in any order, as often as you like.
+ *
+ * ## What it still has to admit
+ *
+ * The same element changed at the same time is last-writer-wins. Co-editing
+ * shares a node; it does not merge two versions of one. That limit is real
+ * and stated — a tooltip that oversells merging is how somebody loses an
+ * afternoon — and it is also the one thing the guard still refuses, so it
+ * earns its place in the sentence twice over.
+ *
+ * What is NOT in the copy, deliberately: the refusal that remains. A
+ * session whose mirror has fallen behind is still stopped, but that is a
+ * fault condition with its own banner, and describing it here would put the
+ * exception in front of the rule for every reader who will never meet it.
+ *
+ * ## Your own second window is not the sharp case
+ *
+ * This used to say the guard would not fire "because both are you". It
+ * never worked that way — it reads the document's content, not a uid — and
+ * the one route by which another session's write could slip past it is
+ * closed (`expectOwnWriteRef` in `use-besigner-document`). So your own
+ * window is described as what it is: another session, treated the same. The
+ * badge still says which one is yours.
+ */
+/**
+ * WHAT MAKES THIS COPY TRUE is the room being VERSION-scoped (AGL-2486).
+ *
+ * "Edits merge live, element by element" is a promise about the co-edit
+ * mirror, and the mirror is keyed per version
+ * (`coedit/…/{docId}/{versionId}/nodes`). While presence was keyed per
+ * DOCUMENT, anyone editing a different version of the same document appeared
+ * in this stack and got told their edits would merge — they would not, and
+ * nothing on screen said so.
+ *
+ * Presence is now keyed to the same scope as the mirror, so everyone this
+ * sentence is said about really is somewhere their edits reach. Widen the room
+ * again and the sentence goes back to being false, so revisit it here if that
+ * ever happens.
  */
 export function describe(entry: PresenceEntry): string {
   if (entry.isSelf) {
     return (
-      'This is YOU, in another window or tab. Nothing merges between them: ' +
-      'whichever one saves last wins, and it will not warn you, because ' +
-      'both are you.'
+      'This is YOU, in another window or tab. It counts as a separate ' +
+      'session: edits merge live between them, element by element, and ' +
+      'either window can save.'
     )
   }
-  return `${entry.displayName} has this open too \u2014 saves are not merged.`
+  return (
+    `${entry.displayName} has this open too. Edits merge live, element by ` +
+    'element, and either of you can save at any time \u2014 if you both ' +
+    'change the same element, the last change wins.'
+  )
 }
 
 PresenceAvatars.displayName = 'PresenceAvatars'

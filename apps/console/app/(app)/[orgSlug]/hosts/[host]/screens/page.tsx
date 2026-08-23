@@ -110,6 +110,8 @@ import { checkOrgQuota } from '../../../../../../constants/entitlements'
 import { docsHelp } from '../../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
+import DocumentPresenceChips from '../../../../../../components/document-presence-chips.component'
+import usePresenceSummary from '../../../../../../hooks/use-presence-summary'
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 import { resolveScreenLiveUrl } from '../../../../../../constants/tenant-links'
 import {
@@ -611,6 +613,26 @@ function Screens(props) {
     [orgSlug, host],
   )
 
+  /**
+   * Who is already in this screen, beside its name (AGL-2486).
+   *
+   * ONE request for the whole list, not one per row: the RTDB rules admit a
+   * client to exactly one room at a time, so per-row subscriptions would be a
+   * listener per screen and — measured at 2 occupied rooms against 69
+   * documents — about 97% of them would exist only to report an empty room.
+   *
+   * The count is the DOCUMENT's, rolled up across its versions, because "is
+   * anybody in this at all" is the question a row is asked. The chip's own
+   * copy says so; it must never imply the reader would land beside them.
+   */
+  const { peopleIn } = usePresenceSummary(hostId)
+  const renderRowPresence = useCallback(
+    (row: { $id: string }) => (
+      <DocumentPresenceChips people={peopleIn('screen', row.$id)} />
+    ),
+    [peopleIn],
+  )
+
   const handleRowOpen = useCallback(
     (row: any) => {
       router.push(
@@ -823,6 +845,7 @@ function Screens(props) {
             {/*/>*/}
             <ScreensHierarchyTableComponent
               renderRowLeadingActions={renderRowLeadingActions}
+              renderRowPresence={renderRowPresence}
               onRowOpen={handleRowOpen}
               screens={screens}
               routingMap={routingMap}

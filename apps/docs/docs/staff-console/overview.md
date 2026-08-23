@@ -189,6 +189,16 @@ tier), respecting each recipient's mute preferences; audited.
 Every organization's Stripe **invoice history** and default
 **payment method** (with delinquency state) render on its detail page.
 
+### [Refunds](refunds.md) {#refunds}
+
+Directly under the invoice history, **Refund a charge** issues a full or partial
+refund against one of that organization's charges without leaving Aglyn. Any staff
+role can read the charges and how much of each is already refunded; **issuing** one
+is `super`, because it is the only staff action that sends money out. A reason is
+required, the confirmation names the amount and the charge, and the result is
+audited — see the [refunds runbook](refunds.md) before you use it, particularly on
+why a refund is a loss rather than a reversal.
+
 ### Impersonation {#impersonation}
 
 Staff can open the console as a customer account (audited **with a

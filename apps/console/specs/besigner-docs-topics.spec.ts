@@ -159,6 +159,10 @@ const TOPIC_SURFACES: Record<string, { file: string; marker: string }> = {
     file: `${DESIGNER}/aside-panel.component.tsx`,
     marker: "{'Add Element'}",
   },
+  elementCatalog: {
+    file: `${DESIGNER}/element-detail.component.tsx`,
+    marker: "{'Learn more'}",
+  },
   interactions: {
     file: `${DESIGNER}/element-props-form.component.tsx`,
     marker: "{'Interactions'}",
@@ -205,12 +209,20 @@ describe('besigner docs topics point at the right panel (AGL-2167)', () => {
       const window = lines
         .slice(Math.max(0, at - NEAR_LINES), at + NEAR_LINES + 1)
         .join('\n')
-      if (!window.includes(`besignerDocsUrl('${topic}'`)) {
+      // Matched with the SAME regex the error message reports with, so the
+      // two cannot disagree. A literal single-line match made this guard
+      // formatting-sensitive: prettier splitting the call across lines —
+      // which it does the moment the surrounding JSX gains a level of
+      // indentation — read as "the topic is not linked here" while the
+      // message underneath cheerfully printed the topic it had just found
+      // (AGL-2486).
+      const nearby = [
+        ...window.matchAll(/besignerDocsUrl\(\s*'([A-Za-z]+)'/g),
+      ].map((match) => match[1])
+      if (!nearby.includes(topic)) {
         // What IS next to the marker, if anything — a wrong topic is the
         // failure this test exists for, so name it.
-        const wrong = [
-          ...window.matchAll(/besignerDocsUrl\(\s*'([A-Za-z]+)'/g),
-        ].map((match) => match[1])
+        const wrong = nearby
         throw new Error(
           `${file} should link besignerDocsUrl('${topic}') within ${NEAR_LINES} lines of ${marker} (line ${
             at + 1

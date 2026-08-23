@@ -69,6 +69,19 @@ export const HostOrgErrorContext = createContext<boolean>(false)
  */
 export const HostDisabledPluginsContext = createContext<readonly string[]>([])
 /**
+ * The current host's per-site plugin OPT-IN list (AGL-2486): the
+ * `defaultOffPerSite` capabilities this site has switched ON, today just
+ * `accounts`. [] off host routes or while the doc loads.
+ *
+ * Separate from the deny-list above because it is read the other way round.
+ * A deny-list cannot express "off until asked" — absent means ON there — so
+ * without this the console and the besigner would go on reporting a
+ * capability as available on every site that had simply never mentioned it,
+ * which is exactly how the component drawer kept offering Members blocks for
+ * a site whose /signin returns 404.
+ */
+export const HostEnabledPluginsContext = createContext<readonly string[]>([])
+/**
  * Whether the signed-in user is an ADMIN of the current host (AGL-1014):
  * `memberRoles[uid] === 'admin'`, false off host routes or while loading.
  * Gates the host Admin tab and page; the rules enforce the same boundary.
@@ -76,6 +89,7 @@ export const HostDisabledPluginsContext = createContext<readonly string[]>([])
 export const HostAdminContext = createContext<boolean>(false)
 
 export const useHostId = () => useContext(HostIdContext)
+export const useHostEnabledPlugins = () => useContext(HostEnabledPluginsContext)
 export const useHostDisabledPlugins = () =>
   useContext(HostDisabledPluginsContext)
 export const useIsHostAdmin = () => useContext(HostAdminContext)
@@ -114,12 +128,19 @@ function HostPluginPolicyBridge({
         : [],
     [host?.disabledPlugins],
   )
+  const optedInPlugins = useMemo(
+    () =>
+      Array.isArray(host?.enabledPlugins) ? host.enabledPlugins.map(String) : [],
+    [host?.enabledPlugins],
+  )
   const isAdmin = Boolean(uid && host?.memberRoles?.[uid] === 'admin')
   return (
     <HostDisabledPluginsContext.Provider value={disabledPlugins}>
-      <HostAdminContext.Provider value={isAdmin}>
-        {children}
-      </HostAdminContext.Provider>
+      <HostEnabledPluginsContext.Provider value={optedInPlugins}>
+        <HostAdminContext.Provider value={isAdmin}>
+          {children}
+        </HostAdminContext.Provider>
+      </HostEnabledPluginsContext.Provider>
     </HostDisabledPluginsContext.Provider>
   )
 }

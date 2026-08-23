@@ -46,6 +46,14 @@
  *  3. **Does every page section sit in a Container?** Zach's standard, stated
  *     2026-08-08: every section is a Container, and full-bleed is expressed
  *     with the width attribute rather than by omitting the component.
+ *  4. **Does any Container sit INSIDE another one?** (AGL-2366) Two stock
+ *     `xl` Containers, one nested in the other, take two sets of 24px
+ *     gutters — so the inner one's content starts 24px right of every other
+ *     section on the page while questions 1-3 all report clean. The
+ *     changelog and newsroom lists shipped that way: the offending node was
+ *     a single authored Container inside a `collectionEntries` block, which
+ *     clones its children once per published entry, so ONE node produced ten
+ *     misaligned rows on `/changelog` and one on `/newsroom`.
  *
  * ## Three ways a scan of this corpus reports a confident wrong answer
  *
@@ -74,8 +82,8 @@
  * is reported. A `reusableInstance` band resolves to a component document
  * that is audited on its own, so it is counted as delegated, not as missing.
  *
- * Exit codes: 0 clean · 1 a bespoke cap or an uncontained section · 2
- * operational.
+ * Exit codes: 0 clean · 1 a bespoke cap, a non-stock width, a nested
+ * Container or an uncontained section · 2 operational.
  */
 
 import { applicationDefault, initializeApp } from 'firebase-admin/app'
@@ -118,6 +126,7 @@ const bespoke = []
  * cover, and the reason the ban needed measuring rather than assuming.
  */
 const nonStock = []
+const nested = []
 const uncontained = []
 let reads = 0
 let documents = 0
@@ -146,6 +155,7 @@ function auditDocument(snapshot, meta) {
     widths[width] = (widths[width] ?? 0) + count
   bespoke.push(...census.bespoke)
   nonStock.push(...census.nonStock)
+  nested.push(...census.nested)
   uncontained.push(...census.uncontained)
   sections += census.sections
 }
@@ -216,6 +226,7 @@ if (asJson) {
         sections,
         bespoke,
         nonStock,
+        nested,
         uncontained,
         errors,
       },
@@ -277,9 +288,27 @@ if (asJson) {
       )
   } else console.log('  Every props.maxWidth is a prebuilt breakpoint.')
 
+  if (nested.length) {
+    console.log(
+      `\n  ${nested.length} Container(s) sit INSIDE another Container ` +
+        '(double gutters, +24px):',
+    )
+    for (const hit of nested)
+      console.log(
+        `    ${hit.kind}/${hit.name} ${hit.nodeId} — inside ${hit.ancestorId}` +
+          `${hit.through.length ? ` via ${hit.through.join(' > ')}` : ''}` +
+          `${hit.repeats ? ' — REPEATS once per published entry' : ''}` +
+          `\n      ${hit.path}`,
+      )
+  } else console.log('  No Container sits inside another Container.')
+
   for (const failure of errors)
     console.log(`  ERROR ${failure.path} — ${failure.error}`)
 }
 
 if (errors.length) process.exit(2)
-process.exit(bespoke.length || nonStock.length || uncontained.length ? 1 : 0)
+process.exit(
+  bespoke.length || nonStock.length || nested.length || uncontained.length
+    ? 1
+    : 0,
+)

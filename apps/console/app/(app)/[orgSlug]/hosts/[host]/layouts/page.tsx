@@ -45,6 +45,8 @@ import { DataTableComponent } from '@aglyn/shared-ui-jsx/components/data-table.c
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { Button, Stack } from '@mui/material'
+import DocumentPresenceChips from '../../../../../../components/document-presence-chips.component'
+import usePresenceSummary from '../../../../../../hooks/use-presence-summary'
 import TemplateGalleryDialog from '../../../../../../components/templates/template-gallery-dialog.component'
 import { GridActionsCellItem, type GridColDef } from '@mui/x-data-grid'
 import {
@@ -282,6 +284,20 @@ function Layouts(props) {
     [confirm, firestore, hostId, queueLoading],
   )
 
+  /**
+   * Who is already in each layout, beside its name (AGL-2486).
+   *
+   * ONE request for the whole list. The RTDB rules admit a client to exactly
+   * one room at a time, so a chip per row would mean a subscription per row —
+   * and the presence tree is sparse enough (2 occupied rooms against a largest
+   * host of 69 documents) that ~97% of them would report an empty room.
+   *
+   * Rolled up across VERSIONS, because a row names a document and not a
+   * version. The chip's own copy carries that caveat so the count cannot be
+   * read as "already in the one you are about to open".
+   */
+  const { peopleIn } = usePresenceSummary(hostId)
+
   const columns: GridColDef[] = [
     {
       field: 'actions',
@@ -349,15 +365,18 @@ function Layouts(props) {
       // The name leads to the detail page (AGL-695); the row's edit action
       // still goes straight to the besigner for anyone who wants that.
       renderCell: ({ id, value }: any) => (
-        <AppLink
-          href={buildRoute(Route.LAYOUT_DETAILS, {
-            orgSlug,
-            host,
-            layoutId: id as string,
-          })}
-        >
-          {value || (id as string)}
-        </AppLink>
+        <Stack direction="row" sx={{ alignItems: 'center', gap: 0.5 }}>
+          <AppLink
+            href={buildRoute(Route.LAYOUT_DETAILS, {
+              orgSlug,
+              host,
+              layoutId: id as string,
+            })}
+          >
+            {value || (id as string)}
+          </AppLink>
+          <DocumentPresenceChips people={peopleIn('layout', id as string)} />
+        </Stack>
       ),
     },
     {

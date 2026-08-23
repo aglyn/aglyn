@@ -20,14 +20,16 @@ import { useLoading } from '@aglyn/shared-ui-jsx'
 import { SplashScreen } from '@aglyn/shared-ui-jsx/components/splash-screen'
 import { continueParam, useContinueUrl } from '@aglyn/shared-util-next'
 import { useRouter } from 'next/navigation'
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { useSigninCheck } from '@aglyn/tenant-feature-instance'
 import useIdleLogout from '../../hooks/use-idle-logout'
 import {
   getSessionReauth,
+  requestSessionReauth,
   subscribeSessionReauth,
   type SessionReauthState,
 } from '../../utils/session-reauth'
+import { recordSignInBounce } from '../../utils/signin-bounce'
 import ImpersonationBanner from '../impersonation-banner.component'
 import SessionHealthBanner from '../session-health-banner.component'
 import SessionReauthDialog from '../session-reauth-dialog.component'
@@ -90,6 +92,9 @@ function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
   // read out of fetched content.
   const [reauth, setReauth] = useState<SessionReauthState>(getSessionReauth)
   useEffect(() => subscribeSessionReauth(setReauth), [])
+  /** One app → `/signin` round trip is one MOUNT (AGL-2486). */
+  const countedBounce = useRef(false)
+  const bounceBudgetLeft = useRef(true)
   const reauthActive = reauth.reason !== null
 
   // Only meaningful while signed in: when a re-auth prompt is holding a
@@ -106,6 +111,31 @@ function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
     if (!signedIn) {
       // Session lost mid-use with the re-auth dialog up (AGL-664): stay.
       if (reauthActive) return void 0
+      // …and stop bouncing once this tab has made the round trip too many
+      // times without settling (AGL-2486). `AuthenticatingLayout` pushes
+      // back here the moment the session returns, so a session that flaps
+      // makes these two layouts volley forever — which is what Zach saw on
+      // production, with no way out of it from inside the app.
+      //
+      // The prompt this raises is NOT a softer outcome than the redirect it
+      // replaces: `unstable` carries `requiresSignIn`, so the only way
+      // forward is still a real credential sign-in. What changes is that
+      // the user is told what happened instead of watching the URL
+      // oscillate. Requested once per tab, not once per render, because
+      // `reauthActive` is then true and this branch returns above.
+      //
+      // Counted at most once per MOUNT, which is the unit a round trip
+      // actually has: this effect re-runs on any dep change (`next` moves
+      // with the URL), and counting per run would let one stuck render
+      // spend the whole budget without the user having been redirected
+      // anywhere.
+      if (!countedBounce.current) {
+        countedBounce.current = true
+        bounceBudgetLeft.current = recordSignInBounce()
+      }
+      if (!bounceBudgetLeft.current) {
+        return void requestSessionReauth('unstable')
+      }
       return void pushToRequestAuth(`/signin`)
     }
     // Redirect only once the impersonation claim has resolved to false — while

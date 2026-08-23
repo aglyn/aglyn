@@ -88,23 +88,31 @@ describe('per-org release flag overrides (AGL-1635)', () => {
       // `release_edit_bar` ships dark. Before this, the only way to give one
       // customer the admin bar was to turn it on for everybody.
       expect(
-        isReleaseFlagOnForOrg('release_edit_bar', off, 'org_a', {
-          release_edit_bar: true,
-        }),
+        isReleaseFlagOnForOrg(
+          'release_edit_bar',
+          off,
+          'org_a',
+          { release_edit_bar: true },
+          null,
+        ),
       ).toBe(true)
       // and it stays off for everyone else
-      expect(isReleaseFlagOnForOrg('release_edit_bar', off, 'org_b', {})).toBe(
-        false,
-      )
+      expect(
+        isReleaseFlagOnForOrg('release_edit_bar', off, 'org_b', {}, null),
+      ).toBe(false)
     })
 
     it('revokes a globally-on flag for one org', () => {
       // The per-org KILL switch is half the point: a customer hitting a bug
       // in a released feature can be taken off it without a global rollback.
       expect(
-        isReleaseFlagOnForOrg('release_bookings', on, 'org_a', {
-          release_bookings: false,
-        }),
+        isReleaseFlagOnForOrg(
+          'release_bookings',
+          on,
+          'org_a',
+          { release_bookings: false },
+          null,
+        ),
       ).toBe(false)
     })
 
@@ -128,10 +136,10 @@ describe('per-org release flag overrides (AGL-1635)', () => {
 
       // An override wins over the bucket either way.
       expect(
-        isReleaseFlagOnForOrg(key, rollout, inside, { [key]: false }),
+        isReleaseFlagOnForOrg(key, rollout, inside, { [key]: false }, null),
       ).toBe(false)
       expect(
-        isReleaseFlagOnForOrg(key, rollout, outside, { [key]: true }),
+        isReleaseFlagOnForOrg(key, rollout, outside, { [key]: true }, null),
       ).toBe(true)
     })
 
@@ -139,13 +147,17 @@ describe('per-org release flag overrides (AGL-1635)', () => {
       const rollout = { enabled: false, rolloutPercent: 100 }
       // An override for a DIFFERENT flag must not leak across.
       expect(
-        isReleaseFlagOnForOrg('release_email', rollout, 'org_a', {
-          release_edit_bar: false,
-        }),
+        isReleaseFlagOnForOrg(
+          'release_email',
+          rollout,
+          'org_a',
+          { release_edit_bar: false },
+          null,
+        ),
       ).toBe(true)
-      expect(isReleaseFlagOnForOrg('release_email', off, 'org_a', {})).toBe(
-        false,
-      )
+      expect(
+        isReleaseFlagOnForOrg('release_email', off, 'org_a', {}, null),
+      ).toBe(false)
     })
 
     it('matches isReleaseFlagOn exactly when there is no override', () => {
@@ -161,10 +173,10 @@ describe('per-org release flag overrides (AGL-1635)', () => {
         for (const value of values) {
           for (const subject of ['org_a', 'org_b', 'uid_c', null]) {
             expect(
-              isReleaseFlagOnForOrg(definition.key, value, subject, {}),
+              isReleaseFlagOnForOrg(definition.key, value, subject, {}, null),
             ).toBe(isReleaseFlagOn(definition.key, value, subject))
             expect(
-              isReleaseFlagOnForOrg(definition.key, value, subject, null),
+              isReleaseFlagOnForOrg(definition.key, value, subject, null, null),
             ).toBe(isReleaseFlagOn(definition.key, value, subject))
           }
         }
@@ -176,9 +188,13 @@ describe('per-org release flag overrides (AGL-1635)', () => {
       // An override is a decision about a named org, so it must not need the
       // subject to be threaded through as well.
       expect(
-        isReleaseFlagOnForOrg('release_edit_bar', off, null, {
-          release_edit_bar: true,
-        }),
+        isReleaseFlagOnForOrg(
+          'release_edit_bar',
+          off,
+          null,
+          { release_edit_bar: true },
+          null,
+        ),
       ).toBe(true)
     })
 
@@ -188,14 +204,22 @@ describe('per-org release flag overrides (AGL-1635)', () => {
       // registry is overridable so a flag added later is covered too.
       for (const definition of RELEASE_FLAGS) {
         expect(
-          isReleaseFlagOnForOrg(definition.key, { enabled: false }, 'org_a', {
-            [definition.key]: true,
-          }),
+          isReleaseFlagOnForOrg(
+            definition.key,
+            { enabled: false },
+            'org_a',
+            { [definition.key]: true },
+            null,
+          ),
         ).toBe(true)
         expect(
-          isReleaseFlagOnForOrg(definition.key, { enabled: true }, 'org_a', {
-            [definition.key]: false,
-          }),
+          isReleaseFlagOnForOrg(
+            definition.key,
+            { enabled: true },
+            'org_a',
+            { [definition.key]: false },
+            null,
+          ),
         ).toBe(false)
       }
     })

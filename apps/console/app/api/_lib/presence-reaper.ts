@@ -98,6 +98,64 @@ interface RoomEntry {
  * cannot be shown to be dead, and the safe direction here is to leave a row
  * that should have gone rather than remove one that should have stayed.
  */
+/**
+ * Dead rows anywhere under ONE DOCUMENT, as paths relative to that node
+ * (AGL-2486).
+ *
+ * A document node holds two shapes at once during the transition to
+ * version-scoped rooms:
+ *
+ *   {docId}/v/{versionId}/{uid}/{sessionId}   the version-scoped rooms
+ *   {docId}/{uid}/{sessionId}                 LEGACY, document-scoped
+ *
+ * Sweeping the document rather than the one room the caller joined is what
+ * clears the legacy rows: nothing reads them once a client is version-scoped,
+ * so left alone they would sit there until something else happened to look.
+ * They are ephemeral by nature and a live session rewrites its own row within
+ * a heartbeat, so removing them costs nothing and leaves no orphan behind.
+ *
+ * It also sweeps the OTHER versions of the same document, which the joining
+ * caller is not in — the same read already has them in hand, and a version
+ * nobody opens again would otherwise never be visited.
+ *
+ * `v` is a literal segment in the path, so it cannot be mistaken for a uid: a
+ * Firebase uid is 28 characters and is never the string `v`.
+ */
+export function deadDocumentPaths(
+  document: Record<string, unknown> | null | undefined,
+  now: number,
+  olderThanMs: number = PRESENCE_REAP_AFTER_MS,
+): string[] {
+  const dead: string[] = []
+  for (const [key, value] of Object.entries(document ?? {})) {
+    if (!value || typeof value !== 'object') continue
+    if (key === 'v') {
+      for (const [versionId, room] of Object.entries(
+        value as Record<string, unknown>,
+      )) {
+        if (!room || typeof room !== 'object') continue
+        for (const relative of deadSessionKeys(
+          room as Record<string, Record<string, RoomEntry>>,
+          now,
+          olderThanMs,
+        )) {
+          dead.push(`v/${versionId}/${relative}`)
+        }
+      }
+      continue
+    }
+    // Legacy, document-scoped: `key` is a uid and its children are sessions.
+    for (const relative of deadSessionKeys(
+      { [key]: value as Record<string, RoomEntry> },
+      now,
+      olderThanMs,
+    )) {
+      dead.push(relative)
+    }
+  }
+  return dead
+}
+
 export function deadSessionKeys(
   room: Record<string, Record<string, RoomEntry>> | null | undefined,
   now: number,

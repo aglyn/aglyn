@@ -15,9 +15,11 @@
  * limitations under the License.
  */
 
+import { deploymentLivemode } from '@aglyn/aglyn/app-utils/stripe-deployment-mode'
 import {
   ORG_BILLING_DOC_ID,
   ORG_BILLING_SUBCOLLECTION,
+  STRIPE_CUSTOMER_ID_TEST_FIELD,
   STRIPE_CUSTOMER_INDEX_COLLECTION,
   hasInlineOrgBilling,
   orgBillingStatusFrom,
@@ -37,6 +39,45 @@ import { firebaseAdmin } from './firebase-admin'
  */
 
 const db = () => firebaseAdmin.app().firestore()
+
+/**
+ * Which PHYSICAL field holds this deployment's Stripe customer id (AGL-2486).
+ *
+ * Live keeps `stripeCustomerId`, so live behaviour is byte-identical to before
+ * this existed and no stored document needs migrating. Test mode gets its own
+ * slot, which starts empty on every org — the first test-mode checkout mints a
+ * fresh test customer instead of sending a live `cus_…` to a `sk_test` key and
+ * taking a 502.
+ *
+ * Read at call time rather than at module load: a spec flips
+ * `process.env.STRIPE_SECRET_KEY` between cases, and a cached verdict would
+ * make the second case answer for the first.
+ */
+function customerIdField(): 'stripeCustomerId' | typeof STRIPE_CUSTOMER_ID_TEST_FIELD {
+  return deploymentLivemode() ? 'stripeCustomerId' : STRIPE_CUSTOMER_ID_TEST_FIELD
+}
+
+/**
+ * Collapse a stored billing document to the logical shape callers expect.
+ *
+ * `stripeCustomerId` on the RESULT always means "the customer id for the mode
+ * this deployment spends in". The test id never leaks out under its physical
+ * name, and — the part that matters — test mode does NOT fall back to the live
+ * id when its own slot is empty. That fallback is precisely the bug: it is what
+ * sent `cus_UuQjDdd1oxPMNH` to a `sk_test` key.
+ */
+function projectBillingMode(doc: OrgBillingDoc): OrgBillingDoc {
+  const stored = { ...(doc ?? {}) } as Record<string, unknown>
+  const testId = stored[STRIPE_CUSTOMER_ID_TEST_FIELD]
+  // The physical twin never reaches a caller in either mode: every reader
+  // treats `stripeCustomerId` as THE customer, so a second field carrying a
+  // second answer is exactly the ambiguity this fix removes.
+  delete stored[STRIPE_CUSTOMER_ID_TEST_FIELD]
+  if (deploymentLivemode()) return stored as OrgBillingDoc
+  // No `??` fallback to the live id. That fallback IS the bug.
+  stored['stripeCustomerId'] = (testId ?? null) as string | null
+  return stored as OrgBillingDoc
+}
 
 /** `orgs/{orgId}/billing/stripe`. */
 export function orgBillingRef(orgId: string) {
@@ -65,10 +106,16 @@ export async function readOrgBilling(orgId: string): Promise<OrgBillingDoc> {
   if (!orgId) return {}
   const billingSnapshot = await orgBillingRef(orgId).get()
   if (billingSnapshot.exists) {
-    return (billingSnapshot.data() ?? {}) as OrgBillingDoc
+    return projectBillingMode((billingSnapshot.data() ?? {}) as OrgBillingDoc)
   }
   const orgSnapshot = await db().collection('orgs').doc(orgId).get()
-  return pickOrgBillingFields(orgSnapshot.data() as never) as OrgBillingDoc
+  // The legacy inline fields predate mode-keying entirely, so anything found
+  // there is a LIVE id by construction — the org doc was last written by a
+  // `sk_live_` deployment. Projected all the same, so a test-mode read of an
+  // un-backfilled org gets no customer rather than a live one.
+  return projectBillingMode(
+    pickOrgBillingFields(orgSnapshot.data() as never) as OrgBillingDoc,
+  )
 }
 
 /**
@@ -101,7 +148,16 @@ export async function writeOrgBilling(
 ): Promise<void> {
   if (!orgId) return
   const { writeInline = false } = options
-  const fields = pickOrgBillingFields(patch as never)
+  const fields = pickOrgBillingFields(patch as never) as Record<string, unknown>
+  // The logical key becomes the mode's PHYSICAL key (AGL-2486). A test-mode
+  // write therefore cannot overwrite the live customer id — which it silently
+  // did before this, destroying the live linkage on the first completed test
+  // checkout.
+  const field = customerIdField()
+  if (field !== 'stripeCustomerId' && 'stripeCustomerId' in fields) {
+    fields[field] = fields['stripeCustomerId']
+    delete fields['stripeCustomerId']
+  }
   const batch = db().batch()
   const orgRef = db().collection('orgs').doc(orgId)
 
@@ -116,7 +172,11 @@ export async function writeOrgBilling(
   }
   if (Object.keys(orgPatch).length) batch.set(orgRef, orgPatch, { merge: true })
 
-  const customerId = fields.stripeCustomerId
+  // Off the PHYSICAL field, so a test-mode write indexes its own customer.
+  // The index needs no mode-keying of its own: it is keyed by the customer id,
+  // and Stripe ids are unique across modes, so the live and test entries are
+  // two documents that both resolve to this org.
+  const customerId = fields[field]
   if (typeof customerId === 'string' && customerId) {
     batch.set(
       db().collection(STRIPE_CUSTOMER_INDEX_COLLECTION).doc(customerId),

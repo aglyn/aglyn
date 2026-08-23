@@ -18,6 +18,7 @@
 
 import { ICON_VARIANT_SEARCH } from '@aglyn/shared-data-enums'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { resolveOrgEntitlements } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   Box,
   CircularProgress,
@@ -31,86 +32,102 @@ import {
   Typography,
 } from '@mui/material'
 import { useEffect, useMemo, useState } from 'react'
-import { useFirestore, useSwitcherCollection, useUser } from '@aglyn/tenant-feature-instance'
-import { buildRoute, Route } from '../../constants/route-links'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { buildRoute } from '../../constants/route-links'
 import { useHostId, useHostReady, useHostSubdomain } from '../host-id-provider'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import { useUrlNamedOrg } from '../../hooks/use-url-names-org'
+import useCurrentOrg from '../../hooks/use-current-org'
+import DocsHelpTip from '../docs-help-tip.component'
 import {
+  buildResultHref,
   globalSearchScopeMessage,
   resolveGlobalSearchScope,
 } from './global-search-scope'
+import useGlobalSearch, { SEARCH_WINDOW } from './use-global-search'
+import { MIN_QUERY_LENGTH } from '@aglyn/aglyn'
 
 export interface GlobalSearchDialogProps {
   open: boolean
   onClose: () => void
 }
 
-interface ResultRow {
-  key: string
-  label: string
-  caption: string
-  href: string
-  group: string
-}
-
 /**
- * Console-wide search (AGL-2179).
+ * Console-wide search (AGL-2179, rebuilt under AGL-2486).
  *
  * A dialog rather than a field in the top bar, and that is a deliberate
  * reading of AGL-1414: `TopAppBar` carries the besigner's FILE/EDIT/INSERT
  * menubar in its centre slot, its clusters are tuned around a measured 375px
  * budget, and a `min-width: 0` chain runs through it that a single `auto`
- * anywhere in the middle breaks. A text field spliced into that is the one
- * class of change no unit test can see. An icon button in the existing
- * `flexShrink: 0` cluster costs a fixed ~40px and cannot distort the chain,
- * and the field itself lives in here where there is room to be honest about
- * what it searches.
+ * anywhere in the middle breaks. An icon button in the existing `flexShrink: 0`
+ * cluster costs a fixed ~40px and cannot distort the chain, and the field
+ * itself lives in here where there is room to be honest about what it searches.
  *
- * ## Scoping
+ * ## The dead click, named
  *
- * Neither query is filtered down to the caller after the fact — both are
- * scoped by the shape of the read, which is the only version that cannot be
- * got wrong by a later edit:
+ * Zach: *"console search does not seem to do anything when you click on it"*.
+ * Driven against a real signed-in console, the row markup turned out to be
+ * sound — the anchor carries its `href`, `AppLink` resolves it through
+ * `NextLink`, and clicking one navigates. Two other things were producing the
+ * symptom, and both are fixed here:
  *
- * * **Sites** come from `users/{uid}/hostMemberships`, the caller's OWN
- *   membership projection, narrowed to the open workspace. Another org's
- *   sites are not filtered out of the result — they were never in the query,
- *   and the rules would refuse another user's projection outright. `skip` is
- *   what holds it until the workspace id is known: an unresolved `orgId`
- *   makes the `where` clause `undefined`, which does not narrow the query, it
- *   DROPS the filter (AGL-2350).
- * * **Screens** come from `hosts/{hostId}/screens` for the site already open,
- *   which `HostGuard` has already admitted the caller to and which the
- *   Firestore rules gate on host membership.
- *
- * So a result this dialog can render is a document the caller could already
- * read. There is no fan-out across an org's sites, which is also why screens
- * are offered only on a site.
+ * 1. **Typing emptied the list.** See `global-search-scope.ts` — the old
+ *    prefix query ordered by a field most documents do not carry, so results
+ *    vanished the moment a character was typed. That is the bulk of the fix
+ *    and it lives in the scope and match modules.
+ * 2. **A second dialog made this one inert.** Every MUI `Dialog` renders at
+ *    `theme.zIndex.modal`, so when two are mounted the winner is decided by
+ *    DOM order, and the palette is reachable from the top bar of EVERY
+ *    console page — including pages that raise their own dialog. Measured
+ *    with `document.elementFromPoint` at each row's centre: with the
+ *    notifications prompt mounted, every row hit-tests to the OTHER dialog's
+ *    container and Playwright refuses the click outright ("subtree intercepts
+ *    pointer events"); dismiss it and the same rows hit-test to themselves and
+ *    navigate. The palette now sits one step above `modal`, which is correct
+ *    for it specifically: it is opened by an explicit gesture, it is
+ *    transient, and Escape closes it — so it can never strand the reader
+ *    behind it the way a genuine confirmation dialog could.
  */
 export function GlobalSearchDialogComponent(props: GlobalSearchDialogProps) {
   const { open, onClose } = props
   const firestore = useFirestore()
   const { data: user } = useUser()
   // The URL-named workspace, matching the trigger (AGL-2486) — the dialog
-  // labels itself "Search this workspace" and narrows its queries by this id,
+  // labels itself "Search this workspace" and narrows its reads by this id,
   // so it must not be a workspace the route never mentioned.
   const currentOrg = useUrlNamedOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   const orgSlug = useOrgSlug()
   const hostId = useHostId()
   const hostReady = useHostReady()
   const hostSubdomain = useHostSubdomain()
   const [text, setText] = useState('')
 
-  const uid = user?.uid
+  const uid = user?.uid ?? null
   const orgId = currentOrg?.$id ?? null
 
+  // Quotas and feature flags flattened into one lookup, because a group is
+  // gated by whichever of the two its definition names. `null` until the org
+  // has actually resolved: a loading default that answers "free tier" would
+  // hide half the palette from a paying workspace for the first second of
+  // every page, and hiding a group is indistinguishable from having none.
+  const entitlements = useMemo(() => {
+    if (!orgReady || !org) return null
+    const resolved = resolveOrgEntitlements(org as any)
+    return { ...resolved, ...(resolved as any).features } as Record<string, unknown>
+  }, [org, orgReady])
+
   const scope = useMemo(
-    () => resolveGlobalSearchScope({ orgId, hostId, hostReady }),
-    [orgId, hostId, hostReady],
+    () =>
+      resolveGlobalSearchScope({
+        orgId,
+        hostId,
+        hostReady,
+        entitlements,
+        entitlementsReady: orgReady,
+      }),
+    [orgId, hostId, hostReady, entitlements, orgReady],
   )
-  const searchesSites = scope.entities.includes('sites')
-  const searchesScreens = scope.entities.includes('screens')
 
   // Reset between openings so a stale query never renders against a scope it
   // was not typed in — reopening on a different site is a scope change.
@@ -118,81 +135,40 @@ export function GlobalSearchDialogComponent(props: GlobalSearchDialogProps) {
     if (!open) setText('')
   }, [open])
 
-  const { items: siteHits, loading: sitesLoading } = useSwitcherCollection<any>({
+  const { groups, loading, active, total, readCount } = useGlobalSearch({
     firestore,
-    path: ['users', uid ?? '', 'hostMemberships'],
-    where: orgId ? ['orgId', '==', orgId] : undefined,
-    // See the scoping note above: without this an unresolved workspace lists
-    // every org's sites rather than none.
-    skip: !searchesSites || !orgId,
-    query: text,
-    idField: '$id',
-    deps: [firestore, uid, orgId],
+    entities: scope.entities,
+    uid,
+    orgId,
+    hostId,
+    text,
   })
 
-  const { items: screenHits, loading: screensLoading } =
-    useSwitcherCollection<any>({
-      firestore,
-      path: ['hosts', hostId ?? '', 'screens'],
-      skip: !searchesScreens,
-      query: text,
-      idField: '$id',
-      // Email templates live in this collection too and are edited from the
-      // Emails page, not as pages of the site.
-      filter: (screen: any) => !screen.deletedAt && screen.kind !== 'email',
-      deps: [firestore, hostId],
-    })
+  const rows = useMemo(
+    () =>
+      groups.map((group) => ({
+        ...group,
+        items: group.rows
+          .map((row) => ({
+            key: `${group.definition.id}:${row.$id}`,
+            label: row.$label || String(row.$id),
+            href: buildResultHref(
+              group.definition.id,
+              row,
+              { orgSlug, hostSubdomain },
+              buildRoute as any,
+            ),
+          }))
+          // A row with nowhere to go is dropped rather than rendered dead —
+          // an inert row is the complaint this issue opened with.
+          .filter((item) => Boolean(item.href)),
+      })),
+    [groups, orgSlug, hostSubdomain],
+  )
 
-  const rows = useMemo<ResultRow[]>(() => {
-    if (!orgSlug) return []
-    const out: ResultRow[] = []
-    if (searchesSites) {
-      for (const site of siteHits ?? []) {
-        if (!site?.subdomain) continue
-        out.push({
-          key: `site:${site.$id}`,
-          label: String(site.displayName ?? site.subdomain),
-          caption: 'Site',
-          group: 'Sites',
-          href: buildRoute(Route.HOST_DASHBOARD, {
-            orgSlug,
-            host: String(site.subdomain),
-          }),
-        })
-      }
-    }
-    if (searchesScreens && hostSubdomain) {
-      for (const screen of screenHits ?? []) {
-        // A screen with no version has never been published or opened, so
-        // there is nothing to link to — the besigner routes are version-keyed.
-        if (!screen?.versionId) continue
-        out.push({
-          key: `screen:${screen.$id}`,
-          label: String(screen.displayName ?? screen.$id),
-          caption: screen.route ? `/${screen.route}` : 'Page',
-          group: 'Pages',
-          href: buildRoute(Route.SCREEN_DETAILS, {
-            orgSlug,
-            host: hostSubdomain,
-            screenId: String(screen.$id),
-            versionId: String(screen.versionId),
-          }),
-        })
-      }
-    }
-    return out
-  }, [
-    orgSlug,
-    searchesSites,
-    searchesScreens,
-    siteHits,
-    screenHits,
-    hostSubdomain,
-  ])
-
-  const loading =
-    (searchesSites && sitesLoading) || (searchesScreens && screensLoading)
-  const scopeMessage = globalSearchScopeMessage(scope)
+  const scopeMessage = globalSearchScopeMessage(scope, SEARCH_WINDOW)
+  const shown = rows.reduce((sum, group) => sum + group.items.length, 0)
+  const anyFailed = rows.some((group) => group.failed)
 
   return (
     <Dialog
@@ -201,6 +177,10 @@ export function GlobalSearchDialogComponent(props: GlobalSearchDialogProps) {
       fullWidth
       maxWidth="sm"
       slotProps={{ paper: { sx: { alignSelf: 'flex-start', mt: 8 } } }}
+      // See the class comment: a palette that another dialog can render inert
+      // is the reported defect. `modal + 1` rather than a large constant so
+      // the snackbar and tooltip layers above it are untouched.
+      sx={{ zIndex: (theme) => theme.zIndex.modal + 1 }}
       aria-label="Search this workspace"
     >
       <Stack direction="row" sx={{ alignItems: 'center', px: 2, py: 1.5 }}>
@@ -221,48 +201,81 @@ export function GlobalSearchDialogComponent(props: GlobalSearchDialogProps) {
       </Stack>
       <Divider />
 
-      <Box sx={{ maxHeight: 360, overflowY: 'auto' }}>
-        {rows.length === 0 ? (
+      <Box sx={{ maxHeight: 420, overflowY: 'auto' }}>
+        {!active ? (
           <Typography
             variant="body2"
             color="text.secondary"
             sx={{ px: 2, py: 3 }}
           >
-            {loading
-              ? 'Searching…'
-              : text.trim()
-                ? 'Nothing matched.'
-                : 'Recently updated appears here as you type.'}
+            {`Type at least ${MIN_QUERY_LENGTH} characters to search.`}
+          </Typography>
+        ) : shown === 0 && !loading && !anyFailed ? (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ px: 2, py: 3 }}
+          >
+            Nothing matched.
           </Typography>
         ) : (
           <List dense disablePadding>
-            {rows.map((row, index) => {
-              const previous = rows[index - 1]
-              return (
-                <Box key={row.key}>
-                  {previous?.group === row.group ? null : (
-                    <Typography
-                      variant="overline"
-                      color="text.secondary"
-                      sx={{ display: 'block', px: 2, pt: 1.5 }}
-                    >
-                      {row.group}
-                    </Typography>
-                  )}
+            {rows.map((group) => (
+              <Box key={group.definition.id}>
+                {group.items.length === 0 && !group.failed ? null : (
+                  <Typography
+                    variant="overline"
+                    color="text.secondary"
+                    sx={{ display: 'block', px: 2, pt: 1.5 }}
+                  >
+                    {group.definition.group}
+                  </Typography>
+                )}
+                {/*
+                  A failed group SAYS it failed. Folding the failure into an
+                  empty group would render a read error as a measured zero,
+                  which is worse than an error because nothing looks wrong —
+                  the reader concludes they do not have the thing.
+                */}
+                {group.failed ? (
+                  <Typography
+                    variant="body2"
+                    color="error"
+                    sx={{ px: 2, py: 1 }}
+                  >
+                    {`${group.definition.group} could not be searched — this is a read error, not an empty result.`}
+                  </Typography>
+                ) : null}
+                {group.items.map((item) => (
                   <ListItemButton
+                    key={item.key}
                     component={AppLink}
-                    href={row.href}
+                    href={item.href as string}
                     onClick={onClose}
                   >
                     <ListItemText
-                      primary={row.label}
-                      secondary={row.caption}
+                      primary={item.label}
+                      secondary={group.definition.group}
                       slotProps={{ primary: { noWrap: true } }}
                     />
                   </ListItemButton>
-                </Box>
-              )
-            })}
+                ))}
+                {/*
+                  The window filled, so this group may hold matches that were
+                  never read. Saying so is what stops a partial set from
+                  reading as a complete one.
+                */}
+                {group.truncated && !group.failed ? (
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: 'block', px: 2, pb: 1 }}
+                  >
+                    {`Only the first ${SEARCH_WINDOW} ${group.definition.noun} were searched.`}
+                  </Typography>
+                ) : null}
+              </Box>
+            ))}
           </List>
         )}
       </Box>
@@ -271,17 +284,37 @@ export function GlobalSearchDialogComponent(props: GlobalSearchDialogProps) {
         <>
           <Divider />
           {/*
-            The honest half. A prefix match is not the search box people
-            expect, and an unqualified empty result reads as "you do not have
-            one" — see `globalSearchScopeMessage`.
+            The honest half. `total` is referenced so the count the reader
+            sees and the count the hook produced cannot drift apart.
           */}
+          <Stack
+            direction="row"
+            sx={{ alignItems: 'center', gap: 0.5, px: 2, py: 1.25 }}
+          >
           <Typography
             variant="caption"
             color="text.secondary"
-            sx={{ display: 'block', px: 2, py: 1.25 }}
+            sx={{ display: 'block' }}
+            data-search-total={total}
+            /*
+              The measured read cost of this palette session, surfaced so it
+              can be ASSERTED rather than estimated — `global-search.e2e.mjs`
+              reads it after driving a real signed-in console, and the number
+              in the issue comes from there. A cost claim nobody can check is
+              the kind that drifts.
+            */
+            data-search-reads={readCount}
           >
             {scopeMessage}
           </Typography>
+          {/*
+            The caption states the RULE; the full list of what is and is not
+            searchable, and why a group can report being only partly searched,
+            is a page rather than a sentence. `DOCS_HELP_TOPICS.consoleSearch`
+            is that page, and this is its one call site.
+          */}
+          <DocsHelpTip topic="consoleSearch" />
+          </Stack>
         </>
       ) : null}
     </Dialog>

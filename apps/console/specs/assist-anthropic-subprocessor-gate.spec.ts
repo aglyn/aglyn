@@ -160,6 +160,18 @@ const MENTIONS_ONLY = new Map<string, string>([
     'libs/plugins/marketplace/src/lib/components/ai-assist-provider.component.tsx',
     'Client component; names the key only to explain the 501 degrade.',
   ],
+  [
+    'apps/console/app/api/_lib/assist-deflection.ts',
+    'The deflection gate (AGL-2486). Names the key only in prose, explaining why a keyless deployment must still answer follow-ups from the docs. It never reads `process.env` and holds no client — it takes retrieved sections and returns strings, which is the reason the route can answer at all with no provider configured.',
+  ],
+  [
+    'libs/tenant/data/admin/src/lib/server/assist-usage.ts',
+    'The meters (AGL-2486). Names the key only in the comment on the `docs-links` zero-rate sentinel, explaining which deployments produce it. Rates and counters; no provider call and no `process.env` read.',
+  ],
+  [
+    'apps/console/components/assist-panel.component.spec.tsx',
+    'The panel suite (AGL-2486). Names the key only inside a CANNED 501 body it arms, to assert the panel does NOT relay that operator string to the user. A test double, not a flow — and the assertion is that the string stops there.',
+  ],
   ['docs/PLATFORM_PROVISIONING.md', 'Documentation.'],
   ['apps/docs/docs/developers/self-hosting.md', 'Documentation.'],
   [

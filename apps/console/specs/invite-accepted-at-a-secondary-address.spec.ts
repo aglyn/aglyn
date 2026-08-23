@@ -51,6 +51,7 @@
  */
 
 const mockVerifyIdToken = jest.fn()
+const mockIsImpersonationSession = jest.fn()
 const mockVerifiedAccountEmails = jest.fn()
 const mockUpsertOrgMember = jest.fn()
 const mockInviteSet = jest.fn()
@@ -70,7 +71,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     Response.json({ error: 'Verify your email' }, { status: 403 }),
   collaboratorSeatRefusalResponse: () => null,
   collaboratorSeatRefusal: () => null,
-  isImpersonationSession: () => false,
+  isImpersonationSession: (...args: unknown[]) => mockIsImpersonationSession(...args),
   lockdownRefusal: async () => null,
   logOrgActivity: async () => undefined,
   memberHasOrgPermission: async () => true,
@@ -165,6 +166,7 @@ beforeEach(() => {
     acceptedAt: null,
     invitedBy: 'admin-1',
   }
+  mockIsImpersonationSession.mockReturnValue(false)
   mockUpsertOrgMember.mockResolvedValue(undefined)
   mockInviteSet.mockResolvedValue(undefined)
   // The account's PRIMARY is a personal address; the work address is a
@@ -187,6 +189,27 @@ describe('an invitation addressed to a confirmed secondary is accepted', () => {
       expect.objectContaining({ uid: 'user-ada', role: 'editor' }),
     )
     expect(mockInviteSet).toHaveBeenCalledTimes(1)
+  })
+
+  it('hands the seat count every address, so it does not bill its own invitee', async () => {
+    /*
+     * WIRING, not arithmetic — `countCollaboratorSeats` is unit-tested in
+     * `libs/aglyn/.../organizations.spec.ts`. What this pins is that the
+     * accept path actually SUPPLIES the aliases.
+     *
+     * The collaborator seat count reads pending invites, and the invite being
+     * consumed is still pending at the moment `upsertOrgMember` runs its cap
+     * check. Keyed by the secondary, it is not the primary the exclusion
+     * carries — so without this argument an org sitting exactly on its cap
+     * refuses the very person it invited. Dropping `seatAliasEmails` from the
+     * call turns this case red and nothing else.
+     */
+    await accept()
+    expect(mockUpsertOrgMember).toHaveBeenCalledWith(
+      expect.objectContaining({
+        seatAliasEmails: expect.arrayContaining(['ada@work.test']),
+      }),
+    )
   })
 
   it('still works for the PRIMARY address — the ordinary case is untouched', async () => {
@@ -219,6 +242,30 @@ describe('the refusal still bites', () => {
       uid: 'user-ada',
       email: 'ada@personal.test',
       email_verified: false,
+    })
+    const response = await accept()
+    expect(response.status).toBe(403)
+    expect(mockUpsertOrgMember).not.toHaveBeenCalled()
+  })
+
+  it('refuses an unverified token on a staff IMPERSONATION session too', async () => {
+    /*
+     * The route-wide email gate at the top of the handler is written
+     * `!decoded.email_verified && !isImpersonationSession(decoded)`, so an
+     * impersonation token walks straight past it. On THAT path the accept
+     * branch's own `email_verified` floor is the only one left.
+     *
+     * Without this case the floor is untestable: every other case in this
+     * file is refused by the route-wide gate first, so deleting the accept
+     * branch's check leaves the whole suite green. Proven by deleting it —
+     * six green before this case, this case red after.
+     */
+    mockIsImpersonationSession.mockReturnValue(true)
+    mockVerifyIdToken.mockResolvedValue({
+      uid: 'user-ada',
+      email: 'ada@personal.test',
+      email_verified: false,
+      impersonatedBy: 'staff-1',
     })
     const response = await accept()
     expect(response.status).toBe(403)

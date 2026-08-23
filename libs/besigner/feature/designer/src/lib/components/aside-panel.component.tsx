@@ -71,6 +71,7 @@ import ElementPropsForm from './element-props-form.component'
 import ElementStylesForm from './element-styles-form.component'
 import NodeTreeView, { type NodeTreeViewProps } from './node-tree-view'
 import SiteThemeColorTokensProvider from './site-theme-color-tokens-provider.component'
+import { usePublishActiveHostTheme } from '../utils/active-host-theme'
 import { besignerDocsUrl } from '../utils/docs-help'
 import WorkspacePanelComponent, {
   type WorkspacePanelComponentProps,
@@ -457,6 +458,13 @@ export interface AsidePanelComponentProps extends WorkspacePanelComponentProps {
 export const AsidePanelComponent = forwardRef<any, AsidePanelComponentProps>(
   (props, ref) => {
     const { children, panel: panelKey, ...rest } = props
+
+    // Republish the page's site theme for surfaces that render OUTSIDE the
+    // page tree (AGL-2486). This panel is inside `HostThemeDocumentContext`;
+    // the Choose-element dialog — rendered by `withBesignerContext`, which
+    // wraps the page — is not, and its element preview was painting the
+    // console's brand onto someone else's site.
+    usePublishActiveHostTheme()
 
     const [panel, setPanel] = useAglynBesignerPanel(panelKey)
     const {

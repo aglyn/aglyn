@@ -107,15 +107,20 @@ async function loadDevRealmBundles(): Promise<void> {
         new Blob([await response.arrayBuffer()], { type: 'text/javascript' }),
       )
       try {
-        const mod = (await import(/* webpackIgnore: true */ blobUrl)) as {
-          register?: (host: unknown) => void
-          default?: { register?: (host: unknown) => void }
-        }
-        const register = mod.register ?? mod.default?.register
-        if (typeof register !== 'function') {
-          throw new Error('bundle exports no register(host)')
-        }
-        register(host)
+        // AGL-2486: same style capture the verified path uses, so the dev
+        // loop shows a plugin author the cascade their published users will
+        // get rather than a canvas their CSS silently misses.
+        await Aglyn.capturePluginStyles(pluginId, async () => {
+          const mod = (await import(/* webpackIgnore: true */ blobUrl)) as {
+            register?: (host: unknown) => void
+            default?: { register?: (host: unknown) => void }
+          }
+          const register = mod.register ?? mod.default?.register
+          if (typeof register !== 'function') {
+            throw new Error('bundle exports no register(host)')
+          }
+          register(host)
+        })
         console.info(`dev realm bundle loaded (UNVERIFIED): ${pluginId}`)
       } finally {
         URL.revokeObjectURL(blobUrl)

@@ -23,6 +23,7 @@ import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import {
   BesignerConflictAlertComponent,
   BesignerDraftAlertComponent,
+  recoverableRoomSessions,
   useAddElementDrawerCallback,
   useBesignerDocument,
   useRenderedCanvasElements,
@@ -246,6 +247,7 @@ function TemplateBesignerPage(props) {
     hostId,
     docType: 'template',
     docId: templateId,
+    versionId: undefined,
     selectedNodeId,
     broadcastCursor: true,
     getCanvasRoot,
@@ -280,6 +282,15 @@ function TemplateBesignerPage(props) {
       kind: 'template',
       docId: templateId,
     },
+    // The crash-recovery prompt is withheld while anyone else is in this
+    // room (AGL-2486): the mirror already has the unsaved work, so there is
+    // nothing to recover and both of its buttons could only take something
+    // away. Presence, not the mirror alone, because a colleague who has the
+    // document open but has not typed since we joined publishes nothing.
+    roomSessions: recoverableRoomSessions(
+      presence.status,
+      presence.entries.length,
+    ),
     notify: enqueueSnackbar,
     queueLoading,
     // A page template holds a screen's canvas tree (already rooted at the

@@ -82,7 +82,16 @@ export * from './lib/components/mui-shadow-dom'
 // `@aglyn/shared-ui-jsx/components/navigation-drawer.component`.
 export * from './lib/components/shadow-dom'
 export * from './lib/components/sr-only'
-export * from './lib/components/zoomable-panning-component'
+// zoomable-panning-component is NOT re-exported (AGL-2486), for the same
+// reason navigation-drawer is not — and with less excuse, because nothing
+// imports it. The only references left in the tree are a COMMENTED-OUT import
+// in `viewport-canvas.component.tsx` and three prose mentions; the barrel
+// export was its last live edge, so every published customer page was paying
+// to parse an editor-only pan/zoom canvas class (and the five
+// `getBoundingClientRect()` call sites in it) that nothing on the page mounts.
+// Still importable from
+// `@aglyn/shared-ui-jsx/components/zoomable-panning-component` if the besigner
+// ever uncomments that import.
 
 export * from './lib/contexts/confirmation.context'
 export * from './lib/contexts/loading.context'
@@ -108,7 +117,14 @@ export * from './lib/hooks/use-observer-mutation'
 export * from './lib/hooks/use-node-property'
 export * from './lib/hooks/use-on-mouse-enter'
 export * from './lib/hooks/use-on-mouse-over'
-export * from './lib/hooks/use-observer-resize'
+// use-observer-resize is NOT re-exported (AGL-2486). It has no consumers at
+// all — not in the apps, not in any plugin — so nothing can call it, and a
+// React hook cannot be reached except by importing it. Its only cost was
+// dragging `resize-observer-polyfill` into the eager graph of every
+// published customer page, for an API that has been baseline in every
+// browser since 2020. Measured at -2.3 KB gz off the barrel's transitive
+// graph. Importable by subpath if a caller ever appears — at which point
+// it should use the native ResizeObserver rather than the polyfill.
 export * from './lib/hooks/use-subscribable'
 export * from './lib/hooks/use-tag-name'
 export * from './lib/hooks/use-timeout'
@@ -129,7 +145,6 @@ export * from './lib/types'
 
 export * from './lib/hooks/mdi-icon/use-mdi-icon'
 export * from './lib/hooks/mdi-icon/use-mdi-icons'
-export * from './lib/hooks/mdi-icon/use-mdi-icons-fuzzy'
 
 export * from './lib/components/mdi-icon/mdi-icon'
 export * from './lib/components/mdi-icon/mdi-icon-from-id'

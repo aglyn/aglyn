@@ -357,3 +357,289 @@ describe('a figure that cannot be trusted is never shown as a total', () => {
     )
   })
 })
+
+/**
+ * The gap model, and Zach's "this negative number is confusing" (AGL-2486).
+ *
+ * On July 2026 in production the gap read `$-25.00` with the whole amount as
+ * "unexplained residual". The arithmetic was right and the MODEL was wrong:
+ * contracted is a run-rate measured today, settled is cash collected during
+ * the period, and for a CLOSED period subtracting them measures two different
+ * instants. The residual's own copy says a large one means "something this
+ * page does not model" — but a subscription that collected and has since
+ * ended IS modelled. So the page stops computing a difference it cannot
+ * defend, rather than labelling a known artefact "unexplained".
+ */
+describe('the gap is not computed across two different instants', () => {
+  const closed = { ...payload, periodIsClosed: true }
+
+  it('shows no gap figure and no residual for a period that has ended', async () => {
+    global.fetch = jest.fn(async () => ({ ok: true, json: async () => closed })) as never
+    render(<AdminRevenue />)
+    await waitFor(() =>
+      expect(screen.getByText(/No gap is shown for a period that has ended/i)).toBeTruthy(),
+    )
+    expect(screen.getByText('Not comparable')).toBeTruthy()
+    // The residual is the specific thing that confused the reader.
+    expect(screen.queryByText(/Unexplained residual/i)).toBeNull()
+  })
+
+  it('drops the causes that are measured TODAY rather than over the period', async () => {
+    global.fetch = jest.fn(async () => ({ ok: true, json: async () => closed })) as never
+    render(<AdminRevenue />)
+    await waitFor(() => expect(screen.getByText('Not comparable')).toBeTruthy())
+    // Period-scoped causes stay...
+    expect(screen.getByText(/Refunded and charged back/i)).toBeTruthy()
+    // ...contracted-derived ones go: they describe the book now, not then.
+    expect(screen.queryByText(/Past due — contracted, owed, not collected/i)).toBeNull()
+    expect(screen.queryByText(/Trialing — contracted, converts later/i)).toBeNull()
+  })
+
+  it('still computes the gap for a period still in progress', async () => {
+    // The negative control: the model change must not silently disable the
+    // gap everywhere, which would pass every assertion above.
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({ ...payload, periodIsClosed: false }),
+    })) as never
+    render(<AdminRevenue />)
+    await waitFor(() => expect(screen.getByText(/Unexplained residual/i)).toBeTruthy())
+    expect(screen.queryByText('Not comparable')).toBeNull()
+    expect(screen.getByText(/Past due — contracted, owed, not collected/i)).toBeTruthy()
+  })
+
+  it('defines what a NEGATIVE gap means, not only a positive one', async () => {
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({ ...payload, periodIsClosed: false }),
+    })) as never
+    render(<AdminRevenue />)
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Negative means cash arrived that the contracted base does not account for/i),
+      ).toBeTruthy(),
+    )
+  })
+})
+
+describe('money renders the sign outside the currency symbol', () => {
+  it('renders a negative gap as -$25.00, never $-25.00', async () => {
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        ...payload,
+        periodIsClosed: false,
+        gap: { ...payload.gap, gapCents: -2500, unexplainedCents: -2500 },
+      }),
+    })) as never
+    render(<AdminRevenue />)
+    await waitFor(() => expect(screen.getAllByText('-$25.00').length).toBeGreaterThan(0))
+    expect(screen.queryByText('$-25.00')).toBeNull()
+  })
+})
+
+describe('every figure is traceable to the org behind it', () => {
+  const withAttribution = {
+    ...payload,
+    attribution: {
+      rows: [
+        {
+          orgId: 'hz_KgetqSq',
+          name: 'Test Org',
+          plan: 'free',
+          state: 'inactive',
+          mrrUsd: 0,
+          listPriceUsd: 0,
+          settledCents: 2500,
+          invoices: 1,
+          refundedCents: 0,
+        },
+        {
+          orgId: 'jWmGooWE3L',
+          name: 'Aglyn LLC',
+          plan: 'enterprise',
+          state: 'comped',
+          mrrUsd: 0,
+          listPriceUsd: 0,
+          settledCents: 0,
+          invoices: 0,
+          refundedCents: 0,
+        },
+      ],
+      omittedOrgs: 0,
+      omittedMrrUsd: 0,
+      omittedSettledCents: 0,
+      totalOrgs: 6,
+    },
+  }
+
+  it('names the orgs behind the totals, including the comped ones', async () => {
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => withAttribution,
+    })) as never
+    render(<AdminRevenue />)
+    // TWICE by design: once as a labelled bar in the chart, once as a row in
+    // the table beneath it. Asserting both is what stops the chart being
+    // wired to a different source than the table it sits above.
+    await waitFor(() =>
+      expect(screen.getAllByText('Test Org').length).toBe(2),
+    )
+    // "Comped / staff override: 5" is useless until it names them.
+    expect(screen.getAllByText('Aglyn LLC').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Comped \/ staff override/i).length).toBeGreaterThan(0)
+  })
+
+  it('says an empty table is a real answer, not a failed read', async () => {
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({ ...payload, attribution: { rows: [] } }),
+    })) as never
+    render(<AdminRevenue />)
+    await waitFor(() =>
+      expect(screen.getByText(/real answer, not a failed read/i)).toBeTruthy(),
+    )
+  })
+
+  it('carries the omitted remainder as figures so the table still adds up', async () => {
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        ...withAttribution,
+        attribution: {
+          ...withAttribution.attribution,
+          omittedOrgs: 3,
+          omittedMrrUsd: 42,
+          omittedSettledCents: 1234,
+        },
+      }),
+    })) as never
+    render(<AdminRevenue />)
+    await waitFor(() =>
+      expect(screen.getByText(/3 more org\(s\) not listed/i)).toBeTruthy(),
+    )
+    expect(screen.getByText(/\$42\.00 of contracted/i)).toBeTruthy()
+    expect(screen.getByText(/\$12\.34 of\s+settled cash/i)).toBeTruthy()
+  })
+})
+
+describe('every source is attributed on its own dimension', () => {
+  const withSources = {
+    ...payload,
+    attributionByListing: {
+      rows: [
+        {
+          key: 'ChiOYRKDeI',
+          name: 'Office Hours',
+          detail: 'Aglyn LLC',
+          gainCents: 4_100,
+          lossCents: 900,
+          count: 3,
+        },
+      ],
+      omittedRows: 0,
+      omittedGainCents: 0,
+      omittedLossCents: 0,
+    },
+    attributionByPublisher: {
+      rows: [
+        {
+          key: 'jWmGooWE3L',
+          name: 'Aglyn LLC',
+          detail: '',
+          gainCents: 4_100,
+          lossCents: 900,
+          count: 3,
+        },
+      ],
+      omittedRows: 0,
+      omittedGainCents: 0,
+      omittedLossCents: 0,
+    },
+    attributionByHost: {
+      rows: [
+        {
+          key: '4uYCmrbU5t',
+          name: 'Northwind Coffee',
+          detail: 'northwind-coffee',
+          gainCents: 2_600,
+          lossCents: 0,
+          count: 5,
+        },
+      ],
+      omittedRows: 0,
+      omittedGainCents: 0,
+      omittedLossCents: 0,
+    },
+  }
+
+  it('names the plugin, the publisher and the storefront', async () => {
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => withSources,
+    })) as never
+    render(<AdminRevenue />)
+    // Chart label and table row, for each dimension.
+    await waitFor(() =>
+      expect(screen.getAllByText('Office Hours').length).toBe(2),
+    )
+    expect(screen.getAllByText('Northwind Coffee').length).toBe(2)
+    expect(screen.getAllByText(/northwind-coffee/).length).toBeGreaterThan(0)
+    expect(screen.getByText(/Marketplace commission by publisher/i)).toBeTruthy()
+  })
+
+  it('shows a LOSS beside the gain rather than netting it away', async () => {
+    // "A loss with no name on it is the one you most need to chase."
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => withSources,
+    })) as never
+    render(<AdminRevenue />)
+    await waitFor(() =>
+      expect(screen.getAllByText('Office Hours').length).toBeGreaterThan(0),
+    )
+    expect(screen.getAllByText('−$9.00').length).toBeGreaterThan(0)
+  })
+
+  it('says an empty source table is a real answer, not a failed read', async () => {
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({ ...payload, attributionByListing: { rows: [] } }),
+    })) as never
+    render(<AdminRevenue />)
+    await waitFor(() =>
+      expect(
+        screen.getByText(/no sales means no commission — not a failed read/i),
+      ).toBeTruthy(),
+    )
+  })
+})
+
+describe('the page reads summary first, detail last', () => {
+  it('puts the composition of earnings before the per-source breakdowns', async () => {
+    // Order is part of the argument the page makes: a reader should meet the
+    // headline, then how it divides, then what was subtracted, and only then
+    // the row-by-row attribution. The breakdown tables used to sit ABOVE the
+    // total they break down.
+    render(<AdminRevenue />)
+    await waitFor(() =>
+      expect(screen.getByText('Where the money came from')).toBeTruthy(),
+    )
+    const order = ['h2']
+      .flatMap(() => [...document.querySelectorAll('h2')])
+      .map((node) => node.textContent ?? '')
+    const at = (heading: string) => order.findIndex((text) => text === heading)
+
+    expect(at('The two bases')).toBeGreaterThanOrEqual(0)
+    expect(at('The two bases')).toBeLessThan(at('The gap, and what is in it'))
+    expect(at('The gap, and what is in it')).toBeLessThan(
+      at('Where the money came from'),
+    )
+    expect(at('Where the money came from')).toBeLessThan(
+      at('Which orgs did what'),
+    )
+    expect(at('Which orgs did what')).toBeLessThan(
+      at('Which plugin, and which storefront'),
+    )
+  })
+})

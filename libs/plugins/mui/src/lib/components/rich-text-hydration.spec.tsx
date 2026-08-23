@@ -66,6 +66,23 @@ function referenceCustomHtmlPurify(html: string): string {
   })
 }
 
+/**
+ * The exact DOMPurify config `site-runtime.tsx`'s `showHtml` step carried
+ * before AGL-2486 — the third caller, and the LOOSEST of the three.
+ *
+ * Two differences from the two above, both of which the shared sanitizer
+ * closed: `form` is missing from `FORBID_TAGS`, and (like every DOMPurify
+ * config) it filters no CSS at all.
+ */
+function referenceShowHtmlPurify(html: string): string {
+  return DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true },
+    FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'base'],
+    FORBID_ATTR: ['srcdoc', 'formaction'],
+    ALLOW_DATA_ATTR: false,
+  })
+}
+
 /** Tag names and `tag@attribute` pairs present in a markup string. */
 function shapeOf(markup: string): Set<string> {
   const host = document.createElement('div')
@@ -306,6 +323,29 @@ describe('rich text hydration and allowlist parity (AGL-1901)', () => {
         return shapeOf(sanitizeAuthorHtml(input)).has(`${tag}@${attribute}`)
       })
       expect(survived.length).toBeGreaterThan(everyAllowedPair.length * 0.9)
+    })
+
+    it.each(CORPUS)(
+      'showHtml emits nothing its DOMPurify config would have dropped: %s',
+      (html) => {
+        // AGL-2486 pointed `showHtml` at this sanitizer too, so the subset
+        // claim in its call site is measured here for that config as well —
+        // not only for the two AGL-1901 moved.
+        const ours = shapeOf(sanitizeAuthorHtml(html))
+        const reference = shapeOf(referenceShowHtmlPurify(html))
+        const extra = [...ours].filter((entry) => !reference.has(entry))
+        expect(extra).toEqual([])
+      },
+    )
+
+    it('closes the form gap the showHtml config alone carried (AGL-2486)', () => {
+      // Both halves, so the test cannot pass by the reference also refusing:
+      // this config KEPT a password field, which is what made two sanitizers
+      // on one surface a security defect rather than an inconsistency.
+      const html = '<form action="https://e.test"><input name="p" type="password"></form>'
+      expect(referenceShowHtmlPurify(html)).toContain('type="password"')
+      expect(sanitizeAuthorHtml(html)).not.toContain('password')
+      expect(sanitizeAuthorHtml(html)).not.toContain('<form')
     })
 
     it('keeps the AGL-1725 style-attribute rule DOMPurify never applied', () => {

@@ -140,6 +140,11 @@ jest.mock('@aglyn/aglyn/server', () => {
     checkContactQuota: actual.checkContactQuota,
     checkDataStorageQuota: actual.checkDataStorageQuota,
     resolveOrgEntitlements: actual.resolveOrgEntitlements,
+    // The org's effective tier, REAL (AGL-2486): the release-flag gates in
+    // this route are evaluated against it, and an allow-list mock that omits
+    // an export the route imports does not fail loudly — the per-org catch
+    // swallows the TypeError and the sweep answers 207 with no rollup at all.
+    resolveEffectivePlan: actual.resolveEffectivePlan,
     // AGL-2405: the route resolves the metered price through
     // `utils/server/billing-addons`, which derives PAID_PLANS from
     // SELF_SERVE_PLANS at module load. REAL, because these ARE the pricing

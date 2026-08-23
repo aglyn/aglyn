@@ -36,7 +36,10 @@ import {
   findMarkdownAttributeName,
   inlineMarkdownEdit,
 } from '../../utils/inline-markdown-edit.store'
-import { inlineTextEdit } from '../../utils/inline-text-edit.store'
+import {
+  inlineTextEdit,
+  isInlineEditWithin,
+} from '../../utils/inline-text-edit.store'
 import { findInstanceLeafAtPoint } from '../../utils/instance-leaf-hit'
 
 export interface DraggableDroppableProps<T extends Aglyn.NodeSchema<any>> {
@@ -171,11 +174,41 @@ export const DraggableDroppable = observer(
         }
       }
       function handleMouseOver(e: Event) {
+        // Same stand-down, same reason to consume it: a hover repaint while
+        // the author is typing is a re-render of the subtree they are
+        // editing, and an ancestor leaf would repaint for them instead.
+        if (isInlineEditWithin(el)) {
+          e.stopPropagation()
+          return
+        }
         e.preventDefault()
         e.stopPropagation()
         Besigner.focus.setHoveredNode(node)
       }
       function handleMouseDown(e: Event) {
+        // Stand down while an edit is open in this leaf OR ANY LEAF INSIDE
+        // IT (AGL-2486) — but CONSUME the event rather than ignoring it.
+        //
+        // Two different mistakes produced the same symptom, an editor that
+        // was open, styled and completely uninteractive. First, asking only
+        // "is this leaf the node being edited?": a nested run — a Span
+        // typography inside a Typography — silenced its OWN leaf, the event
+        // bubbled to the ancestor leaf, and the ancestor called the
+        // `preventDefault` that suppresses caret placement. Second, standing
+        // down by simply returning: that also skipped `stopPropagation`, so
+        // the gesture carried on up to the viewport, which treats a
+        // mousedown on empty canvas as a deselect — and moving the selection
+        // off the node closes the editor. A drag meant to select three words
+        // tore the editor down instead.
+        //
+        // So: no `preventDefault`, because that is the caret; but still
+        // `stopPropagation`, because nothing else on this canvas should see
+        // a gesture aimed at text being edited. `stopPropagation` does not
+        // suppress a default action, only delivery.
+        if (isInlineEditWithin(el)) {
+          e.stopPropagation()
+          return
+        }
         e.preventDefault()
         e.stopPropagation()
         // Element-picker capture (AGL-574): while the interaction builder is

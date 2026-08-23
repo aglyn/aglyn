@@ -16,7 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn/server'
-import { Fuse } from '@aglyn/shared-util-vendor'
+import { Fuse } from '@aglyn/shared-util-vendor/fuse'
 import {
   orgDataQueryForHost, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {

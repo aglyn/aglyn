@@ -72,7 +72,18 @@ describe('per-site plugin enablement wiring (AGL-1014)', () => {
       // plugin pages and widget slots, and must subtract the host deny-list.
       name: 'console enabled-plugin ids hook',
       file: 'apps/console/components/console-plugins-gate.component.tsx',
-      mustContain: ['subtractDisabledPlugins', 'useHostDisabledPlugins'],
+      mustContain: [
+        'subtractDisabledPlugins',
+        'useHostDisabledPlugins',
+        // Both halves (AGL-2486). Subtracting the deny-list alone reports a
+        // `defaultOffPerSite` capability as available on every site that has
+        // never mentioned it — which is how the besigner went on offering
+        // Members blocks for a site whose /signin returns 404. The editor
+        // reads this very set through EnabledPluginsContext, so a regression
+        // here re-opens the component drawer, not merely a nav tab.
+        'applyDefaultOffOptIn',
+        'useHostEnabledPlugins',
+      ],
     },
     {
       // The EDITOR (AGL-1014): `withSitePlugins` wraps every besigner and
@@ -90,7 +101,15 @@ describe('per-site plugin enablement wiring (AGL-1014)', () => {
       // cannot un-register what an earlier site already registered.
       name: 'besigner component drawer',
       file: 'libs/besigner/feature/designer/src/lib/hooks/use-visible-component-categories.ts',
-      mustContain: ['useEnabledPlugins()', 'isFromEnabledPlugin('],
+      mustContain: [
+        'useEnabledPlugins()',
+        'isFromEnabledPlugin(',
+        // Category-level capability gating (AGL-2486). `pluginId` alone
+        // cannot express "this site has no member pages": the Members blocks
+        // are registered by the COMMERCE bundle, so they rode commerce's
+        // verdict and were offered on sites whose /signin returns 404.
+        'isCategoryCapabilityEnabled(',
+      ],
     },
   ]
 
@@ -113,10 +132,21 @@ describe('per-site plugin enablement wiring (AGL-1014)', () => {
       'libs/aglyn/src/lib/foundation/definitions/platform.types.ts',
     )
     expect(types).toContain('disabledPlugins?: string[]')
+    // The AGL-2486 opt-in companion. A deny-list cannot express "off until
+    // asked", so a default-off capability needs its own field — and it is
+    // useless unless the host document actually declares it.
+    expect(types).toContain('enabledPlugins?: string[]')
   })
 
-  it('the rules restrict the deny-list to site admins', () => {
+  it('the rules restrict BOTH per-site plugin fields to site admins', () => {
     const rules = read('cloud/firebase-firestore.rules')
-    expect(rules).toContain("hasAny(['disabledPlugins'])")
+    // One `hasAny` list, not two branches: the opt-in key is the one that
+    // makes `/signin` exist on a live site, so an editor able to write it
+    // could stand up a sign-in page on the org's marketing domain. Asserting
+    // the keys share a list is what stops a later edit splitting them and
+    // leaving the newer one open.
+    expect(rules).toContain(
+      "hasAny(['disabledPlugins', 'enabledPlugins'])",
+    )
   })
 })

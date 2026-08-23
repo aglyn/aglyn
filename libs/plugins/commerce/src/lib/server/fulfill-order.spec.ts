@@ -16,7 +16,9 @@
  */
 
 import type { PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
-import { fulfillOrderHandler } from './fulfill-order'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { fulfillOrderHandler, recordOrderShipment } from './fulfill-order'
 
 /**
  * Fulfil and mark-delivered re-ask the transition under the write (AGL-1819).
@@ -641,5 +643,153 @@ describe('access', () => {
     expect(result.status).toBe(500)
     expect(result.body).toEqual({ error: 'Fulfill failed' })
     expect(storedOrder().status).toBe('paid')
+  })
+})
+
+/**
+ * AGL-2461: the transaction is now a CAPABILITY, and `/v1` is its second
+ * caller.
+ *
+ * Everything above exercises the console route, which authenticates a Firebase
+ * ID token. The customer REST API authenticates an org API key with no uid, so
+ * it shares none of that preamble — and `apps/console` may not import this
+ * library at all (`eslint.config.mjs`, `scope:app` →
+ * `notDependOnLibsWithTags:['aglyn:addons']`). The write therefore had to be
+ * reachable without the route: `recordOrderShipment` is exactly what the route
+ * used to do below its auth, lifted out, and the app reaches it through the
+ * core `registerOrderFulfilmentService` registry.
+ *
+ * These cases assert the two halves that could rot independently:
+ *
+ * - the lifted function still enforces AGL-1819's guarantees when called with
+ *   no authentication anywhere in sight (that is the whole risk of lifting
+ *   it), and
+ * - the capability is actually REGISTERED — an unregistered one is a `/v1`
+ *   404 with every unit test in both projects still green, which is the
+ *   AGL-2227 shape.
+ *
+ * Non-vacuity, each mutation reverted: dropping the `canTransitionOrder` call
+ * reddens the refunded case, dropping the already-in-target return reddens the
+ * duplicate-shipment case, computing the timeline from an empty order reddens
+ * the timeline case, and deleting the `registerOrderFulfilmentService(...)`
+ * call from `server.ts` reddens all four wire cases.
+ */
+describe('recordOrderShipment is the shared, PRE-AUTHORIZED transaction (AGL-2461)', () => {
+  it('re-asks the transition rule with no caller identity at all', async () => {
+    // RED CHECK: remove the `canTransitionOrder` guard inside
+    // `recordOrderShipment` and this returns `recorded`, writing `fulfilled`
+    // straight onto a refunded order — the API writing a status the console
+    // forbids, which is the AGL-1818/1819 class and the reason a second copy
+    // of ORDER_TRANSITIONS inside /v1 was refused.
+    seedOrder({ status: 'refunded' })
+    const outcome = await recordOrderShipment({
+      hostId: HOST,
+      orderId: ORDER,
+      to: 'fulfilled',
+    })
+    expect(outcome).toEqual({ outcome: 'blocked', from: 'refunded' })
+    expect(storedOrder().status).toBe('refunded')
+    expect(storedOrder().fulfillments).toBeUndefined()
+  })
+
+  it('records the shipment, with lineItemIds and timeline from its own read', async () => {
+    // RED CHECK: compute `timeline` from an empty order rather than the
+    // transaction's read and the seeded `paid` event disappears — a note
+    // landed from another tab silently dropped, with a 200 either way.
+    seedOrder()
+    const outcome = await recordOrderShipment({
+      hostId: HOST,
+      orderId: ORDER,
+      to: 'fulfilled',
+      carrier: 'UPS',
+      trackingNumber: '1Z999',
+    })
+    expect(outcome).toEqual({ outcome: 'recorded' })
+    expect(storedOrder().status).toBe('fulfilled')
+    expect(storedOrder().fulfillments).toHaveLength(1)
+    expect(storedOrder().fulfillments[0]).toMatchObject({
+      carrier: 'UPS',
+      trackingNumber: '1Z999',
+      // Both seeded line items, indexed from the transaction's read.
+      lineItemIds: [0, 1],
+    })
+    expect(storedOrder().timeline[0]).toMatchObject({ event: 'paid' })
+    expect(storedOrder().timeline.at(-1)).toMatchObject({ event: 'fulfilled' })
+  })
+
+  it('a retry returns `already` and appends NO second shipment', async () => {
+    // RED CHECK: delete the already-in-target return and the retry appends a
+    // duplicate fulfillment — two shipments recorded for one parcel, from a
+    // caller that merely lost a response. `/v1` takes no Idempotency-Key
+    // precisely because this guard is what makes the retry safe.
+    seedOrder()
+    await recordOrderShipment({ hostId: HOST, orderId: ORDER, to: 'fulfilled' })
+    const before = JSON.stringify(storedOrder())
+    const retry = await recordOrderShipment({
+      hostId: HOST,
+      orderId: ORDER,
+      to: 'fulfilled',
+    })
+    expect(retry).toEqual({ outcome: 'already' })
+    expect(storedOrder().fulfillments).toHaveLength(1)
+    expect(JSON.stringify(storedOrder())).toBe(before)
+  })
+
+  it('reports a missing order rather than conjuring one', async () => {
+    const outcome = await recordOrderShipment({
+      hostId: HOST,
+      orderId: 'nope',
+      to: 'delivered',
+    })
+    expect(outcome).toEqual({ outcome: 'no_such_order' })
+    expect(docs.has(`hosts/${HOST}/orders/nope`)).toBe(false)
+  })
+})
+
+describe('the capability is WIRED, not merely written (AGL-2461)', () => {
+  /**
+   * Source-text assertions rather than an import, for the reason
+   * `recovery-jobs-scheduled.spec.ts` gives: `server.ts` pulls in
+   * firebase-admin and Stripe at module scope, so importing it here would
+   * mean a closed-world mock of the entire commerce backend to observe one
+   * registry call.
+   */
+  const serverBarrel = readFileSync(
+    join(__dirname, '..', 'server.ts'),
+    'utf8',
+  )
+
+  it('registers the order-fulfilment service', () => {
+    expect(serverBarrel).toContain('registerOrderFulfilmentService({')
+  })
+
+  it('registers it under the commerce plugin id, from the shared BUNDLE_ID', () => {
+    const block = new RegExp(
+      'registerOrderFulfilmentService\\(\\{[\\s\\S]*?\\n {2}\\}\\)',
+    ).exec(serverBarrel)
+    expect(block).not.toBeNull()
+    // `pluginId` is what the app gates per-site enablement on, so a literal
+    // that drifts from the catalog id would silently 404 every write.
+    expect(block?.[0]).toContain('pluginId: BUNDLE_ID')
+    // The SAME function the console route calls — a second implementation
+    // here is the drift this whole change exists to prevent.
+    expect(block?.[0]).toContain('recordShipment: recordOrderShipment')
+  })
+
+  it('registers inside the consoleApi surface the /v1 loader activates', () => {
+    // `/v1` reaches the registry through `ensureAll(['consoleApi'])`. A
+    // registration at module scope, or inside the site-facing
+    // `registerCommerceApi`, would leave the capability absent for the caller
+    // that needs it while every test here still passed.
+    const consoleApi = serverBarrel.slice(
+      serverBarrel.indexOf('export function registerCommerceConsoleApi'),
+    )
+    expect(consoleApi).toContain('registerOrderFulfilmentService({')
+  })
+
+  it('exports recordOrderShipment for that registration to reference', () => {
+    expect(
+      readFileSync(join(__dirname, 'fulfill-order.ts'), 'utf8'),
+    ).toContain('export async function recordOrderShipment(')
   })
 })

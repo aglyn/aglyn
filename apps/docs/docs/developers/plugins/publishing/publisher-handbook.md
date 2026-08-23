@@ -539,6 +539,13 @@ version never changes it — change that from the listing itself.
 - Declare `hostAbi` in your manifest; when the platform bumps its ABI
   you'll rebuild against the new template and publish a compatible
   version (installs warn, loaders refuse, until you do).
+- Most platform changes are **not** an ABI bump, so don't wait for one to
+  pick up new capability. The ABI describes the host object your bundle is
+  compiled against — React, the JSX runtime and `aglyn`. New **optional**
+  fields on the schemas you author (a component's `tags`, say) reach you
+  without a bump: your existing bundle keeps working and simply doesn't set
+  them, and you adopt them whenever you next publish. A bump means the host
+  object itself changed, or something you were relying on became required.
 
 ## How installs work (the buyer side)
 

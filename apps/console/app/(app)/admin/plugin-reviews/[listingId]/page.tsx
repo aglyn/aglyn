@@ -64,6 +64,16 @@ interface VersionEntry {
   sha256: string
   hostAbi: number | null
   capabilities: { network?: string[]; events?: string[] }
+  /**
+   * Canvas elements this version declares (AGL-1031) — publisher-authored
+   * text the besigner renders in the element picker AND ranks its search on,
+   * and the subject of the `element-metadata` criterion (AGL-2486).
+   *
+   * Deliberately untyped past the entry itself. The page prints whatever the
+   * manifest holds rather than the fields it knew about when it was written,
+   * so a reviewer keeps seeing everything the publisher wrote.
+   */
+  elements?: Array<Record<string, unknown>>
   publishedAt: string | null
   signed: boolean
   reviewState: string
@@ -369,6 +379,42 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
     )
   }
 
+  /**
+   * Every string a publisher wrote on one declared element (AGL-2486).
+   *
+   * Derived by WALKING the entry rather than by reading named fields, so text
+   * added to the manifest later — the way `tags` and `keywords` became
+   * searched after `description` became rendered — shows up here without
+   * anyone remembering this page. The criterion asks a reviewer to check the
+   * publisher's text, so the page has to show all of it, including the search
+   * terms that rank without ever rendering.
+   */
+  const publisherTextOf = (element: Record<string, unknown>): string[] => {
+    const lines: string[] = []
+    const walk = (value: unknown, path: string) => {
+      if (lines.length >= 40) return
+      if (typeof value === 'string') {
+        if (value.trim()) lines.push(`${path}: ${value}`)
+        return
+      }
+      if (Array.isArray(value)) {
+        value.forEach((entry, index) => walk(entry, `${path}[${index}]`))
+        return
+      }
+      if (value && typeof value === 'object') {
+        for (const [key, entry] of Object.entries(value)) {
+          walk(entry, `${path}.${key}`)
+        }
+      }
+    }
+    for (const [key, value] of Object.entries(element ?? {})) {
+      // The icon is an mdi NAME looked up in our own set, not publisher prose.
+      if (key === 'id' || key === 'icon') continue
+      walk(value, key)
+    }
+    return lines
+  }
+
   const checklistLink = (
     itemId: string,
   ): { href: string; label: string; external?: boolean } | null => {
@@ -409,6 +455,20 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
             }
           : null
       }
+      case 'element-metadata':
+        // Where the copy is READ, which is the whole difficulty with this
+        // one: the picker lives in the besigner on whatever site the
+        // reviewer installed it to, so the listing is the closest thing to
+        // a starting point this page can hand them.
+        return detail.publisherSlug
+          ? {
+              href: buildRoute(Route.ORG_MARKETPLACE_LISTING, {
+                orgSlug: detail.publisherSlug,
+                listingId: detail.listingId,
+              }),
+              label: 'Install, then open the element picker',
+            }
+          : null
       case 'behaviour':
         return detail.publisherSlug
           ? {
@@ -738,6 +798,45 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                       reviewVersionEntry?.hostAbi ?? 'none (legacy)'
                     }, platform runs ${detail.platformHostAbi}`}
                   </Typography>
+                  {/* Declared elements (AGL-2486). Not a capability — copy.
+                      The picker renders this name and description inside the
+                      customer's console, and the listing page shows neither,
+                      so a reviewer working from the listing alone never meets
+                      it. "Declares none" and "we never looked" must not read
+                      the same, hence the explicit empty line. */}
+                  <Stack spacing={0.5}>
+                    <Typography variant="body2" color="text.secondary">
+                      {`Declared elements: ${
+                        reviewVersionEntry?.elements?.length ?? 0
+                      } — publisher text the picker renders and ranks its search on, none of it on the listing page.`}
+                    </Typography>
+                    {(reviewVersionEntry?.elements ?? []).map((element) => (
+                      <Stack key={String(element['id'])} sx={{ pl: 1 }}>
+                        <Typography variant="caption" color="text.secondary">
+                          {`${String(element['displayName'] || element['id'])}${
+                            element['category']
+                              ? ` · ${String(element['category'])}`
+                              : ''
+                          }`}
+                        </Typography>
+                        {publisherTextOf(element).map((line) => (
+                          <Typography
+                            key={line}
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{
+                              pl: 1,
+                              fontFamily: 'monospace',
+                              fontSize: 11,
+                              wordBreak: 'break-word',
+                            }}
+                          >
+                            {line}
+                          </Typography>
+                        ))}
+                      </Stack>
+                    ))}
+                  </Stack>
                   {/* "No findings" and "never checked" must not look the
                       same. A null verdict means the artifacts bucket is
                       unreachable or unconfigured, and rendering that as a

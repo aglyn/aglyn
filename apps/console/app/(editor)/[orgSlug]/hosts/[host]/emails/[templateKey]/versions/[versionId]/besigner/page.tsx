@@ -22,6 +22,7 @@ import * as Besigner from '@aglyn/besigner'
 import {
   BesignerConflictAlertComponent,
   BesignerDraftAlertComponent,
+  recoverableRoomSessions,
   CloseableDrawerComponent,
   useAddElementDrawerCallback,
   useBesignerDocument,
@@ -241,6 +242,7 @@ function HostEmailBesignerPage() {
     hostId,
     docType: 'email',
     docId: templateKey,
+    versionId,
     selectedNodeId,
     broadcastCursor: true,
     getCanvasRoot,
@@ -273,6 +275,15 @@ function HostEmailBesignerPage() {
       docId: templateKey,
       versionId,
     },
+    // The crash-recovery prompt is withheld while anyone else is in this
+    // room (AGL-2486): the mirror already has the unsaved work, so there is
+    // nothing to recover and both of its buttons could only take something
+    // away. Presence, not the mirror alone, because a colleague who has the
+    // document open but has not typed since we joined publishes nothing.
+    roomSessions: recoverableRoomSessions(
+      presence.status,
+      presence.entries.length,
+    ),
     notify: enqueueSnackbar,
     queueLoading,
     onSaved: () => {

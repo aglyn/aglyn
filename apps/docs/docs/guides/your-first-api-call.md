@@ -24,7 +24,7 @@ with Windows 10 and later. There's a JavaScript version of each step underneath.
 ## Step 1 — Create an API key {#step-1-create-a-key}
 
 1. Open the console and switch to the organization you want to use.
-2. Go to **Organization → Settings**, and find the **API keys** card.
+2. Go to **Organization → Settings → API keys**.
 3. Choose **Create API key**.
 4. Give it a **name** that says what it's for — `zapier-orders-sync`, not `key 1`. The
    name is what you'll be looking at in six months deciding whether it's safe to
@@ -32,6 +32,8 @@ with Windows 10 and later. There's a JavaScript version of each step underneath.
 5. Select its **scopes**. A scope is one permission. Grant the fewest that do the job:
    for this walkthrough, tick **Datasets — read**.
 6. Choose **Create**.
+
+![The Create API key dialog with a descriptive name typed and the Datasets — read scope ticked, showing every available scope](/img/api/create-key-scopes.png)
 
 **Copy the key now.** It's shown exactly once. Aglyn stores only a hash of it and
 genuinely cannot show it to you again — if you lose it, the fix is to revoke it and

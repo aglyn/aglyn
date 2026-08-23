@@ -46,19 +46,23 @@ export class AglynPreset<P = JSX.AnyProps> implements PresetSchema<P> {
   public icon: MdiIconProps
   public pluginId: PluginId
   public interactions?: PresetInteractionSchema[]
+  public tags?: string[]
+  public keywords?: string[]
 
   constructor(schema: PresetSchema<P>) {
-    this.$id = schema.$id
+    // Copy EVERY field the schema carries. This was a field-by-field
+    // assignment, which meant registration held an opinion about which
+    // fields exist: anything added to `PresetSchema` afterwards was dropped
+    // silently between registration and the drawer's resolved option, with
+    // nothing failing. It had already cost `interactions` once (AGL-589),
+    // which needed a line of its own — and a line of its own is exactly what
+    // the next field would have needed too (AGL-2486).
+    Object.assign(this, schema)
+
+    // The invariants registration DOES own, applied after the copy so a
+    // malformed schema cannot talk its way past them.
+    this.type = NodeType.PRESET
     this.category = schema.category || ComponentCategory.UNCATEGORIZED
-    this.data = schema.data
-    this.description = schema.description
-    this.displayName = schema.displayName
-    this.icon = schema.icon
-    this.pluginId = schema.pluginId
-    // Interaction templates ride along so the add-element flow can wire
-    // them at insert (AGL-589) — an explicit copy, or the field is lost
-    // between registration and the drawer's resolved option.
-    this.interactions = schema.interactions
 
     makeAutoObservable(this)
   }

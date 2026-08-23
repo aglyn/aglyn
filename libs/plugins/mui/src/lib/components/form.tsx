@@ -647,6 +647,8 @@ export const formSchema: Aglyn.ComponentSchema<FormProps> = {
   $id: FORM_ID,
   pluginId: BUNDLE_ID,
   displayName: 'Form',
+  description:
+    'Collects its Form Fields and sends the answers to you, or into a dataset.',
   category: Aglyn.ComponentCategory.FORMS,
   icon: { path: mdiEmailFastOutline.path, sx: { color: '#0288d1' } },
   attributes: [
@@ -741,6 +743,8 @@ export const formFieldSchema: Aglyn.ComponentSchema<FormFieldProps> = {
   $id: FORM_FIELD_ID,
   pluginId: BUNDLE_ID,
   displayName: 'Form Field',
+  description:
+    'One input inside a form — text, select, radio, checkbox or rating.',
   category: Aglyn.ComponentCategory.FORMS,
   icon: { path: mdiFormTextbox.path, sx: { color: '#0288d1' } },
   flags: {

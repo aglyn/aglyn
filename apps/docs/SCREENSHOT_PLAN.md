@@ -130,12 +130,12 @@ seeded emulator stack). Use two accounts with distinct names/photos.
 
 - **Docs page:** `building-sites/besigner/live-co-editing.md` → `#whos-here`
 - **Capture:** besigner with a second account editing the same screen. Hover the
-  collaborator's avatar so the tooltip "«Name» is editing this too — saves are not
-  merged" is visible.
+  collaborator's avatar so the tooltip "«Name» has this open too. Edits merge live,
+  element by element, and either of you can save at any time…" is visible.
 - **Frame:** the toolbar's right half — avatar stack + tooltip + the Live/Preview/
   Save controls for context. Component-level crop, not the whole editor.
 - **Alt text:** A collaborator's avatar in the besigner toolbar, with its tooltip
-  explaining that saves are not merged.
+  explaining that edits merge live and either of you can save.
 
 ### 10. `static/img/besigner/remote-cursor-and-selection.png`
 
@@ -151,7 +151,7 @@ seeded emulator stack). Use two accounts with distinct names/photos.
 
 ### 11. `static/img/besigner/concurrent-save-banner.png`
 
-- **Docs page:** `building-sites/besigner/live-co-editing.md` → `#when-saves-collide`
+- **Docs page:** `building-sites/besigner/live-co-editing.md` → `#when-a-save-is-refused`
 - **Capture:** both sessions edit; session B saves. Session A immediately shows the
   warning banner under the toolbar: "Someone else saved this screen while you were
   editing. Saving is paused so their work is not overwritten — reload to pick up
@@ -249,6 +249,26 @@ crop. Paste each `spec` into the `SHOTS` array, run the harness, then replace
 the `<!-- screenshot: … -->` comment on the named docs page with a standard
 image reference using the alt text given.
 
+## Run of 2026-08-23 (AGL-1950) — 6 captured, 10 not
+
+Six are in the tree and on their pages: **A3, A4, A5, A6, A9, A16**. The other
+ten are **not captured, and none of them is a matter of running the harness
+again** — each is marked below with what actually blocks it. Two things the run
+established that the specs could not have known:
+
+- **The seeded e2e org has no Stripe customer.** `seed-e2e.mjs` writes
+  `subscription: { status: 'active' }` and nothing else, so anything that needs
+  a real subscription refuses with a **"No billing account yet"** toast. That is
+  the line: everything in the cancel funnel *up to* the final confirm is
+  client-side and captured; A1 and A2 sit on the far side of it.
+- **There were no `<!-- screenshot: … -->` placeholders to replace.** None of
+  the sixteen was ever inserted into a docs page, so the images were placed at
+  the anchors each entry names instead. The instruction above is kept because it
+  is right for the rest of this file.
+
+Several specs also carry selectors or counts that have drifted since 2026-08-18.
+Each correction is recorded on its own entry rather than silently applied.
+
 Two conventions worth restating because most of these need them:
 
 - **`clipTo` beats a full page.** Zach's ask is section- and component-level
@@ -266,7 +286,7 @@ must hide the staff-preview chip — noted per shot.
 
 ## Billing lifecycle (AGL-1905)
 
-### A1. `static/img/billing-and-plans/pending-downgrade-chip.png`
+### A1. `static/img/billing-and-plans/pending-downgrade-chip.png` — ⛔ BLOCKED (AGL-1950)
 
 - **Docs page:** `workspace-and-billing/billing-and-plans/downgrading-and-canceling.md` → `#pending-downgrade`
 - **Precondition:** an org on a paid tier with a **scheduled downgrade** —
@@ -279,6 +299,11 @@ must hide the staff-preview chip — noted per shot.
 - **Callouts:** ① the pending-downgrade chip, ② Keep my current plan.
 - **Alt text:** The Current plan card with a chip reading that the plan moves to
   a lower tier on a future date, and a Keep my current plan button beside it.
+- **⛔ Blocked (2026-08-23):** the chip only exists once a downgrade has actually
+  been *scheduled*, which is a Stripe subscription mutation. The seeded org has
+  no Stripe customer, so **Downgrade** answers **"No billing account yet"** and
+  no schedule can be created. Unblocking it means a real test-mode customer with
+  a live subscription on the fixture org — not a harness change.
 
 ```js
 {
@@ -296,7 +321,7 @@ must hide the staff-preview chip — noted per shot.
 }
 ```
 
-### A2. `static/img/billing-and-plans/downgrade-preview-zero-due.png`
+### A2. `static/img/billing-and-plans/downgrade-preview-zero-due.png` — ⛔ BLOCKED (AGL-1950)
 
 - **Docs page:** `workspace-and-billing/billing-and-plans/downgrading-and-canceling.md` → `#when-changes-take-effect`
 - **Precondition:** an active paid subscription. Open the plan switch confirm
@@ -306,6 +331,12 @@ must hide the staff-preview chip — noted per shot.
   and a crop where the amount is readable but the date is not proves half of it.
 - **Alt text:** The downgrade confirmation dialog showing $0 due today and the
   date the new plan takes effect.
+- **⛔ Blocked (2026-08-23):** same wall as A1 — the confirm dialog never opens.
+  Clicking **Downgrade** on a lower plan raises **"No billing account yet"**,
+  because the preview is a Stripe call and the fixture org has no customer.
+- **Spec correction:** the button on a lower plan's card reads **DOWNGRADE**, not
+  `Switch`, and the disclosure that reveals those cards reads *"Looking for
+  something smaller"* / *"Hide lower plans"*, not `Show 2 lower plans`.
 
 ```js
 {
@@ -320,7 +351,7 @@ must hide the staff-preview chip — noted per shot.
 }
 ```
 
-### A3–A6. The retention funnel, one shot per step
+### A3–A6. The retention funnel, one shot per step — ✅ ALL FOUR CAPTURED (AGL-1950)
 
 - **Docs page:** `workspace-and-billing/billing-and-plans/downgrading-and-canceling.md` → `#the-cancel-dialog`
 - **Precondition:** an org with a live subscription and **no prior winback**
@@ -336,6 +367,19 @@ must hide the staff-preview chip — noted per shot.
 | A4 | `retention-downsell.png` | Downsell | The named smaller plan and **No thanks, continue** |
 | A5 | `retention-winback.png` | Winback | The **percentage and the month count** — the bound is the point |
 | A6 | `retention-confirm.png` | Confirm | The over-Free-limits warning and **Keep my plan** |
+
+- **✅ All four captured 2026-08-23.** Every step before the final confirm is
+  **client-side**, which is why these are capturable on a fixture org with no
+  Stripe customer while A1 and A2 are not. The run stopped at the confirm step;
+  **Yes, cancel** was never clicked.
+- **Reaching the winback does not spend it.** The offer is once per organization,
+  but it is *accepting* it that consumes it — the step was reached repeatedly
+  during this run and still renders. So A5 is repeatable, and the "capture it
+  before anything else exercises the funnel" ordering is not needed. Do not click
+  **Apply the discount**.
+- **Spec correction:** pick the survey reason by radio **value**
+  (`too_expensive`), not by its label — the labels use a typographic apostrophe
+  (*It's too expensive*) that a plain-quote selector will not match.
 
 - **Alt text (A3):** The cancellation survey asking why you're leaving, with
   seven reasons and an optional comment box.
@@ -364,7 +408,7 @@ must hide the staff-preview chip — noted per shot.
 // and for A6 add it twice.
 ```
 
-### A7. `static/img/billing-and-plans/invoice-tax-line.png`
+### A7. `static/img/billing-and-plans/invoice-tax-line.png` — ⛔ BLOCKED (AGL-1950)
 
 - **Docs page:** `workspace-and-billing/billing-and-plans/overview.md` → `#sales-tax`
 - **Precondition:** a paid invoice **with a non-zero tax line** on an org whose
@@ -380,9 +424,14 @@ must hide the staff-preview chip — noted per shot.
 *(No shot spec — this is on Stripe's domain, outside the harness. Capture by
 hand and redact.)*
 
+- **⛔ Blocked (2026-08-23):** unchanged, and deliberately so. It needs a real
+  paid invoice carrying a real tax line, reached through Stripe's own pages —
+  the one shot in this file that renders live billing data. Not automatable, and
+  not something to fake.
+
 ## API (AGL-1928, guides)
 
-### A8. `static/img/api/api-keys-card.png`
+### A8. `static/img/api/api-keys-card.png` — ⛔ BLOCKED (AGL-1950)
 
 - **Docs page:** `guides/your-first-api-call.md` → `#step-1-create-a-key`
 - **Capture:** **Organization → Settings**, scrolled to the **API keys** card,
@@ -394,6 +443,14 @@ hand and redact.)*
   ③ the last-used column.
 - **Alt text:** The API keys card listing two keys with their scopes, truncated
   prefixes and last-used times, and a Create API key button.
+- **⛔ Blocked (2026-08-23):** the fixture org has **no API keys**, and the shot
+  is specifically of a *populated* list with a revoked row. Creating two real
+  keys to photograph them is the A10 problem one step removed. Unblock by seeding
+  two key documents (one revoked) in `seed-e2e.mjs` — then this becomes a plain
+  harness shot.
+- **Spec correction:** **API keys** is a section in the Settings page's left
+  **Navigation** list, not a card on the General page, so `scroll` will never
+  reach it — it has to be clicked.
 
 ```js
 {
@@ -412,7 +469,7 @@ hand and redact.)*
 }
 ```
 
-### A9. `static/img/api/create-key-scopes.png`
+### A9. `static/img/api/create-key-scopes.png` — ✅ CAPTURED (AGL-1950)
 
 - **Docs page:** `guides/your-first-api-call.md` → `#step-1-create-a-key`
 - **Capture:** the **Create API key** dialog with a name typed and **Datasets —
@@ -423,7 +480,18 @@ hand and redact.)*
 - **Callouts:** ① the name field, ② the ticked scope, ③ the three commerce and
   media scopes as a group.
 - **Alt text:** The Create API key dialog with a descriptive name typed and the
-  Datasets — read scope ticked, showing all eight available scopes.
+  Datasets — read scope ticked, showing every available scope.
+- **✅ Captured 2026-08-23.** Opening the dialog writes nothing; the key is only
+  created on submit, which the shot never presses.
+- **Spec correction — there are THIRTEEN scopes, not eight:** Datasets read/write,
+  Contacts read/write, Sites read/publish/create, Form submissions read/write,
+  Orders read, Products read, Media read/upload. The spec's warning still stands
+  and now bites harder: a crop that stops early republishes a stale surface.
+- **Two traps the spec walks into.** (1) **Datasets — read is ticked by default**,
+  so the instruction to tick it turns it *off*; the first run of this shot
+  published an unticked box. (2) At 1440×900 the dialog is **taller than the
+  window**, and a `clip` is clamped to the viewport, so the last scope rows and
+  the Create button were cropped away. The shot sets its own taller `viewport`.
 
 ```js
 {
@@ -444,7 +512,7 @@ hand and redact.)*
 }
 ```
 
-### A10. `static/img/api/key-shown-once.png`
+### A10. `static/img/api/key-shown-once.png` — ⛔ BLOCKED (AGL-1950)
 
 - **Docs page:** `guides/your-first-api-call.md` → `#step-1-create-a-key`
 - **Capture:** the moment after creating a key, where the full token is shown
@@ -458,9 +526,13 @@ hand and redact.)*
 
 *(No shot spec — creating a key is a real write. Capture by hand, then revoke.)*
 
+- **⛔ Blocked (2026-08-23):** unchanged. The image is of a live credential, and
+  the only safe version is one revoked immediately after. That is a deliberate
+  human step, not an automated one.
+
 ## Agency workspace (guides)
 
-### A11. `static/img/guides/team-managers-vs-collaborators.png`
+### A11. `static/img/guides/team-managers-vs-collaborators.png` — ⛔ BLOCKED (AGL-1950)
 
 - **Docs page:** `guides/run-an-agency-workspace.md` → `#step-3-access`
 - **Capture:** **Organization → Team** on an org holding both a workspace
@@ -471,6 +543,12 @@ hand and redact.)*
   ③ the seat counts.
 - **Alt text:** The team members table showing a workspace manager alongside a
   site collaborator, with their different access scopes and the seat counts.
+- **⛔ Blocked (2026-08-23):** the fixture org has two members and **both are
+  Team managers** (owner + editor). The shot's entire subject is a manager and a
+  site collaborator side by side, so an owner-and-editor table would assert the
+  distinction rather than show it. Unblock by seeding a site-scoped collaborator
+  — note the seat-count line is rendered from these rows, so check what else
+  asserts on it before changing the fixture.
 
 ```js
 {
@@ -484,7 +562,7 @@ hand and redact.)*
 }
 ```
 
-### A12. `static/img/guides/site-members-invite.png`
+### A12. `static/img/guides/site-members-invite.png` — ⛔ BLOCKED (AGL-1950)
 
 - **Docs page:** `guides/run-an-agency-workspace.md` → `#step-3-access`
 - **Capture:** a **site's** members card with the invite control open, showing
@@ -492,6 +570,12 @@ hand and redact.)*
 - **Frame:** the card plus the open invite control.
 - **Alt text:** A site's members card with the invite control open, granting
   access to that one site.
+- **⛔ Blocked (2026-08-23) — the surface moved.** `/{host}/setup` has no Members
+  card: its Navigation is Basic details, SEO, Theme, Custom domain, Emails,
+  Activity. The equivalent control now lives on the **organization Team** page,
+  as the invite row whose **All sites** checkbox can be unticked to scope an
+  invite to one site. Re-point the spec there and re-check the guide's prose
+  before capturing — the page it illustrates describes the old location.
 
 ```js
 {
@@ -508,7 +592,7 @@ hand and redact.)*
 
 ## Commerce (AGL-1794, AGL-1873)
 
-### A13. `static/img/commerce/order-charged-back.png`
+### A13. `static/img/commerce/order-charged-back.png` — ⛔ BLOCKED (AGL-1950)
 
 - **Docs page:** `commerce-and-bookings/commerce/overview.md` → `#a-lost-dispute`
 - **Precondition:** a seeded order carrying `dispute` with a lost outcome and a
@@ -521,6 +605,12 @@ hand and redact.)*
   ③ the Disputes filter.
 - **Alt text:** An order showing Charged back status with the reversed amount,
   distinct from a refund, and the Disputes filter on the orders list.
+- **⛔ Blocked (2026-08-23):** the seed carries **no orders at all**, so there is
+  nothing to photograph — the precondition (an order with a lost dispute and a
+  non-zero `refundedCents`) has to be seeded first.
+- **Spec correction:** the route is wrong. `/{host}/commerce/orders` **404s**;
+  orders are a section of `/{host}/products` (Catalog · Orders · Promotions ·
+  Reservations · Settings · Analytics).
 
 ```js
 {
@@ -535,7 +625,7 @@ hand and redact.)*
 }
 ```
 
-### A14. `static/img/commerce/selling-not-enabled.png`
+### A14. `static/img/commerce/selling-not-enabled.png` — ⛔ BLOCKED (AGL-1950)
 
 - **Docs page:** `commerce-and-bookings/commerce/overview.md` → `#orders`
 - **Precondition:** an org on a plan **without** commerce whose site still has
@@ -550,9 +640,13 @@ hand and redact.)*
 
 *(No shot spec — needs an org in a deliberately downgraded state. Set up by hand.)*
 
+- **⛔ Blocked (2026-08-23):** unchanged. It needs an org deliberately put on a
+  plan without commerce while its site keeps the plugin on, which no fixture
+  currently produces.
+
 ## Tooltips (AGL-1943)
 
-### A15. `static/img/getting-started/assist-panel-help-tip.png`
+### A15. `static/img/getting-started/assist-panel-help-tip.png` — ⛔ BLOCKED (AGL-1950)
 
 - **Docs page:** `getting-started/aglyn-assist.md` → `#what-it-can-do`
 - **Frame:** the Assist panel header with the `?` tooltip **open**.
@@ -562,6 +656,26 @@ hand and redact.)*
   customer doc is the AGL-1600 leak.
 - **Alt text:** The Aglyn Assist panel header with its help tooltip open,
   linking to the documentation.
+- **⛔ Not captured 2026-08-23 — deliberately, and this one is a judgement call
+  a human should confirm.** The surface renders and the shot is technically
+  easy: the launcher is `[aria-label="Open Aglyn Assist"]` and the tip is
+  `Help: Aglyn Assist`. Three things argued against publishing it:
+  - **`release_assist` still ships `defaultEnabled: false`**, and its own
+    description says it is blocked on two *published legal artifacts* — the
+    privacy-policy disclosure for stored Q&A, and the Anthropic row on
+    `/legal/subprocessors` that was removed on the premise that no production
+    key existed. A screenshot is a stronger claim that a feature is here than
+    prose hedged with a rollout caution.
+  - **The hazard the spec guards against no longer reproduces.** There is now no
+    **Staff preview** chip anywhere in the panel, so the spec's mitigation — hide
+    the chip, then assert it is gone — protects nothing. That is worse, not
+    better: the staff-only render is now visually identical to the shipped one.
+  - **The staff-only guard cannot see this surface.** `data-staff-only` is set
+    only in `secondary-nav-bar.component.tsx`, so `assertNoStaffOnlyChrome`
+    would pass on a page full of Assist. Nothing mechanical would have caught it.
+
+  If the flag is on — or the legal artifacts are published and the rollout
+  decision is made — this is a two-minute capture.
 
 ```js
 {
@@ -582,7 +696,7 @@ hand and redact.)*
 }
 ```
 
-### A16. `static/img/billing-and-plans/lower-tiers-expanded-tip.png`
+### A16. `static/img/billing-and-plans/lower-tiers-expanded-tip.png` — ✅ CAPTURED (AGL-1950)
 
 - **Docs page:** `workspace-and-billing/billing-and-plans/downgrading-and-canceling.md` → `#when-changes-take-effect`
 - **Capture:** the billing plan cards with **lower plans expanded** (the `?`
@@ -591,6 +705,13 @@ hand and redact.)*
   should be partly visible beneath, so the image shows *what* was disclosed.
 - **Alt text:** The Show lower plans control expanded, with a help tooltip
   explaining that a downgrade takes effect at the end of the paid period.
+- **✅ Captured 2026-08-23.**
+- **Spec corrections.** The tip is `[aria-label^="Help: Moving to a lower plan
+  takes effect later"]`, not `Help: Downgrading`. The disclosure reads *"Looking
+  for something smaller"*. And the lower-tier cards are **above** this control,
+  not beneath it, so no crop holds both them and the tooltip at a readable size;
+  cropping to the named full-width `MuiStack` caught the Enterprise card sitting
+  to its right instead. The frame is the disclosure row and its tip.
 
 ```js
 {
@@ -692,3 +813,121 @@ terminal is worse than the code block it would replace.
   IA; the image should be confirmed against it rather than assumed. Re-capture only
   if the panel no longer matches the caption — an unchanged image needs no churn.
 - **Frame:** unchanged from the original.
+
+---
+
+# 2026-08-23 additions (AGL-2486)
+
+The canvas work of the August 23 release. Same conventions as above: 1440×900,
+light scheme, seeded emulator stack, component-level crops, `static/img/besigner/`.
+
+**Two of these need a document state the seed does not have** (a formatted text
+element, a wrapped inline heading). Add the state in the shot's `actions` rather
+than seeding it, so the capture also proves the feature works — a shot that has to
+be hand-staged is a shot that silently rots.
+
+> **A staged shot must clear the unsaved state it leaves behind, and there are TWO
+> halves of it.** The besigner publishes unsaved edits to the co-editing mirror in
+> RTDB *and* writes a private crash-recovery draft to `localStorage`; the next
+> editor load restores from either. Four of these five carry `stagesDocument: true`,
+> which drops both before the page opens. Without it the shots photograph each
+> other — `inline-text-editing.png` first came out 32px low, wearing the margin the
+> box-styler shot had just set, and the double-click landed on the Stack instead of
+> the heading. The failure looks like a mis-measured `clip`, not like contamination.
+
+### N1. `static/img/besigner/state-chips-row.png` — ✅ CAPTURED (AGL-2486)
+
+- **Docs page:** `building-sites/besigner/responsive-styling.md` → `#interaction-states`
+- **Capture:** besigner → select a **Button** → **Styles** panel. The breakpoint chip
+  row and the state chip row must both be in frame, with **Hover** selected so the
+  canvas hold banner is showing and Hover's chip carries its **×**.
+- **Frame:** from the breakpoint chip down to the first style group heading. Crop out
+  the canvas.
+- **Alt text:** The Styles panel with the breakpoint chips above a row of state chips
+  — Default, Hover, Active, Focus, Disabled — with Hover selected.
+- **Note:** pick an element that already has a hover style, so at least one *other*
+  chip shows the **•** that marks a state with styles. All-empty chips do not show
+  what the dot means, and the dot is the only way to tell at a glance where styling
+  already exists.
+- **As captured:** the seeded `Order now` button, with the shot itself giving
+  **Focus** a slice and then **Hover** one — so `Hover • ⊗` and `Focus •` are both
+  in frame and the dot and the clear are told apart.
+
+### N2. `static/img/besigner/box-styler-diagram.png` — ✅ CAPTURED (AGL-2486)
+
+- **Docs page:** `building-sites/besigner/responsive-styling.md` → `#box-stylers`
+- **Capture:** besigner → select an element with **padding and margin already set**
+  (northwind-coffee's Business Home hero works) → **Styles** → the spacing diagram,
+  with **one side selected** so its editor is open beneath and the selected region
+  carries its tint.
+- **Frame:** the diagram, its legend, and the open side editor showing the **Apply
+  to** toggle and the step select. Crop at the next style group.
+- **Alt text:** The box model diagram with margin, border, padding and contents
+  regions labelled, one side selected, and its spacing editor open below.
+- **Note:** capture in **light** per the convention, but check the dark scheme
+  renders too — the figure has no mode branch and is meant to re-resolve on the class
+  swap, so a dark capture is the cheapest proof that still holds. Sides with values
+  must show the resolved amount (`80px`), not the step number.
+- **As captured:** the seeded hero **Stack** (`py: 8`, so padding reads back `64px`),
+  with the shot adding a `32px` top margin so the outer ring carries a value too, and
+  landing on the padding-top side. Dark scheme checked under
+  `colorScheme: 'dark'` — the regions, labels and the selected tint all re-resolve,
+  so no mode branch is needed. Note the artboard's own scheme toggle is *not* this:
+  it repaints the canvas, not the panel.
+
+### N3. `static/img/besigner/inline-text-editing.png` — ✅ CAPTURED (AGL-2486)
+
+- **Docs page:** `building-sites/besigner/text-editing.md` → `#edit-inline`
+- **Capture:** double-click a **Typography** heading on the canvas so the in-place
+  editor is open, with the floating toolbar above it and the caret in the text.
+- **Frame:** the heading and its toolbar, plus enough of the surrounding page to show
+  the text sitting **on the page** rather than in a box. The point of the shot is the
+  absence of chrome, so do not crop so tight that there is nothing to be absent.
+- **Alt text:** A heading being edited directly on the canvas, with a small floating
+  toolbar above it and no selection outline around it.
+
+### N4. `static/img/besigner/text-field-read-only.png` — ✅ CAPTURED (AGL-2486)
+
+- **Docs page:** `building-sites/besigner/text-editing.md` → `#text-field-read-only`
+- **Capture:** on a Typography element, bold a word in place first so it carries
+  formatting, then click away and look at the **Attributes** panel.
+- **Frame:** the **Remove formatting** button, the read-only **Text** field, and its
+  helper line ("This text is formatted — double-click the element on the canvas to
+  edit it. Remove formatting to edit it here."). The helper text is the content of
+  this shot and must be legible.
+- **Alt text:** The Attributes panel showing a read-only Text field explaining that
+  the text is formatted, with a Remove formatting button above it.
+- **Annotate:** ~~call out the **Remove formatting** button~~ — **not done, and the
+  reason is worth keeping.** Cropped to the button, the field and the helper line,
+  the button is the only coloured thing in frame and needs no pointing at; and the
+  outline the harness draws sits 3px proud of the element, which put it straight
+  through the field's `Text` legend a few pixels below. Annotate what a reader would
+  otherwise hunt for, not what the crop already isolates.
+- **Found while capturing:** the row holding this button carries `mb: -1`, sized for
+  a row with only the help icon in it. A full-height Button in the same row drove its
+  label into the outlined field's notch and overprinted the `Text` legend. Fixed in
+  `element-props-form.component.tsx` before the shot was taken — a docs image of a
+  broken control is a bug report nobody filed.
+
+### N5. `static/img/besigner/element-search-best-matches.png` — ✅ CAPTURED (AGL-2486)
+
+- **Docs page:** `building-sites/besigner/element-catalog.md` → `#element-search`
+- **Capture:** the **Elements** panel → type `space` into **Search elements**.
+- **Frame:** the search field and the flattened **Best matches** list beneath it.
+- **Alt text:** The Elements panel searched for "grid", showing a single Best matches
+  list with Grid first and elements matched on their description below it.
+- **Note:** `space` was chosen deliberately — it matches Stack on its **description**,
+  not its name, which is the behaviour the section documents. A query that matches a
+  title would illustrate nothing the reader could not already assume.
+- **Captured as `grid` instead, measured rather than assumed.** There is no element
+  *named* `Stack` in the picker — the presets are `Stack Horizontal` and `Stack
+  Vertical` — and `space` ranks them **38th and 42nd**, behind FAQ, Card, Hero,
+  Image and Paper. The image would have sat under a sentence saying `space` finds
+  Stack while showing that it does not. `grid` shows **both** documented rules in one
+  frame: `Grid`, `Grid Cell`, `Feature Grid`, `Product grid` by name, then `Shop
+  catalog` and `Box` on their descriptions. The prose's `space` example is not wrong,
+  only unillustratable; leave it, or reword it against the ranking as it measures.
+- **Do NOT capture the element detail view yet.** Its placement changed twice during
+  the August 23 release and is the least settled surface in the editor; a capture now
+  would be wrong within the hour. The prose deliberately describes what the detail
+  *says* and not where it appears, for the same reason.

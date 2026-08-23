@@ -171,6 +171,34 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
   }, [productDocs, search, statusFilter])
 
   /**
+   * A CLOCK, because a hold lapses without anybody writing anything
+   * (AGL-2356).
+   *
+   * The Firestore listener re-renders on document changes, and a reservation
+   * expiring is not one — `expiresAtMs` simply passes. Without a tick the
+   * "reserved" caption below would keep naming a hold that lapsed twenty
+   * minutes ago, which is worse than not showing it at all: the merchant would
+   * be told stock is spoken for while the storefront happily sells it.
+   *
+   * Only runs while something is actually held, so an ordinary catalog costs
+   * no timer. A NEW hold arrives as a document change, which re-renders, which
+   * re-arms this.
+   */
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  const anyHeld = useMemo(
+    () =>
+      products.some(
+        (product) => CommerceModel.heldProductUnits(product, nowMs) > 0,
+      ),
+    [products, nowMs],
+  )
+  useEffect(() => {
+    if (!anyHeld) return undefined
+    const timer = setInterval(() => setNowMs(Date.now()), 60_000)
+    return () => clearInterval(timer)
+  }, [anyHeld])
+
+  /**
    * The catalog HEAD-COUNT is a server aggregate, not the length of the
    * capped listener (AGL-1716, the AGL-1706 shape).
    *
@@ -474,6 +502,25 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     if (total == null) return '—'
     return total > 0 ? String(total) : 'Sold out'
   }
+  /**
+   * RESERVED UNITS, NAMED (AGL-2356).
+   *
+   * Checkout now takes a hold on the units a live session is about to buy, and
+   * that hold deliberately does NOT move `inventory` — the shelf count means
+   * units on the shelf, and half the product reads it that way. The
+   * consequence a merchant meets is that the storefront can refuse a sale of
+   * the third unit while this column says `3`, and without this caption the
+   * number is right and the behaviour looks broken.
+   *
+   * The house style of `stock-movements-card.component.tsx`: a trailing
+   * `caption` in `text.secondary`, rendered ONLY when there is something to
+   * say. Nothing is held on the overwhelming majority of products, so the
+   * column reads exactly as it does today.
+   */
+  const formatHeld = (product: ProductRow) => {
+    const held = CommerceModel.heldProductUnits(product, nowMs)
+    return held > 0 ? ` (${held} reserved)` : ''
+  }
 
   return (
     <CardDisplay
@@ -596,7 +643,18 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
                     </TableCell>
                     <TableCell>{product.type}</TableCell>
                     <TableCell>{formatPrice(product)}</TableCell>
-                    <TableCell>{formatStock(product)}</TableCell>
+                    <TableCell>
+                      {formatStock(product)}
+                      {formatHeld(product) ? (
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          component="span"
+                        >
+                          {formatHeld(product)}
+                        </Typography>
+                      ) : null}
+                    </TableCell>
                     <TableCell>{product.variants.length}</TableCell>
                     <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                       <Button size="small" onClick={() => setEditing(product)}>
@@ -858,7 +916,19 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
               .filter((variant) => variant.inventory != null)
               .map((variant) => (
                 <MenuItem key={variant.id} value={variant.id}>
-                  {`${Object.values(variant.options ?? {}).join(' / ') || 'Default'} — ${variant.inventory} in stock`}
+                  {`${Object.values(variant.options ?? {}).join(' / ') || 'Default'} — ${variant.inventory} in stock${
+                    CommerceModel.heldVariantUnits(
+                      adjusting?.product,
+                      variant.id,
+                      nowMs,
+                    ) > 0
+                      ? `, ${CommerceModel.heldVariantUnits(
+                          adjusting?.product,
+                          variant.id,
+                          nowMs,
+                        )} reserved in checkout`
+                      : ''
+                  }`}
                 </MenuItem>
               ))}
           </TextField>

@@ -20,6 +20,7 @@
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import { FIELD_SCHEMA_EMAIL } from '@aglyn/shared-data-forms'
 import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
+import { isSafeContinueUrl, useContinueHref } from '@aglyn/shared-util-next'
 import { LoadingTextComponent } from '@aglyn/shared-ui-jsx/components/loading-text.component'
 import type { FormSchema } from '@aglyn/shared-ui-jsx-forms'
 import { FormRenderer, simpleComponentMapper } from '@aglyn/shared-ui-jsx-forms'
@@ -45,6 +46,44 @@ import { describeSsoError } from '../../../utils/sso-errors'
 // Enterprise SSO (AGL-1101): the SAML redirect leaves and returns here, so the
 // tenant is stashed across the hop and restored before getRedirectResult.
 const SSO_PENDING_KEY = 'aglyn.sso.pending'
+
+/**
+ * Put the stashed `continue` back on the URL after a SAML redirect (AGL-2486).
+ *
+ * The mobile leg leaves the browser entirely. Firebase records the full
+ * `location.href` and normally returns to it query intact, so this is usually
+ * a no-op — but "usually" is not a guarantee across an EXTERNAL IdP, and when
+ * the query does not come back the destination is gone with no trace of why.
+ * The value therefore also rides in the pending stash, and this restores it.
+ *
+ * ## The returned value is untrusted, and it is treated that way
+ *
+ * We put it in `sessionStorage`, which is enough for it to be worth carrying
+ * and not nearly enough to trust: same-origin script, an extension, or an
+ * earlier flow can have written anything there. So it is re-validated with
+ * the same predicate that guards every other continue, and a value that
+ * fails is dropped rather than corrected — {@link isSafeContinueUrl} already
+ * rejects protocol-relative `//host`, `javascript:`, off-origin absolutes,
+ * and (AGL-2486) backslash forms that the URL parser resolves off-site.
+ *
+ * A `continue` ALREADY on the URL always wins: it survived the round trip, it
+ * is what the layout is about to read, and overwriting it from a stale stash
+ * would be this function inventing a destination.
+ *
+ * Runs synchronously at the top of the effect, before any `await`, so the URL
+ * is repaired before the layout's signed-in branch can read it. `replaceState`
+ * rather than a router navigation: this is correcting the address of the page
+ * already showing, not going anywhere, and a navigation here would race the
+ * redirect result it is meant to support.
+ */
+function restoreContinueFromStash(stashed?: string): void {
+  if (!stashed || !isSafeContinueUrl(stashed)) return
+  const current = new URL(window.location.href)
+  const onUrl = current.searchParams.get('continue') ?? ''
+  if (isSafeContinueUrl(onUrl)) return
+  current.searchParams.set('continue', stashed)
+  window.history.replaceState(window.history.state, '', current.toString())
+}
 
 const ssoSchema: FormSchema & { submitLabel?: string } = {
   fields: [FIELD_SCHEMA_EMAIL],
@@ -72,6 +111,10 @@ function SsoSignIn() {
   } | null>(null)
   const { data: signInCheckResult } = useSigninCheck()
   const signedIn = signInCheckResult?.signedIn === true
+  // The reciprocal of the SSO button's own fix (AGL-2486): someone who lands
+  // here by mistake and takes the escape hatch must arrive back at `/signin`
+  // still pointed at where they were going.
+  const backToSignInHref = useContinueHref('/signin')
 
   // Complete a returning SAML redirect (mobile path): restore the tenant,
   // consume the result, and JIT-map before the layout routes.
@@ -79,12 +122,13 @@ function SsoSignIn() {
     if (typeof window === 'undefined') return
     const raw = window.sessionStorage.getItem(SSO_PENDING_KEY)
     if (!raw) return
-    let pending: { tenantId?: string } = {}
+    let pending: { tenantId?: string; continueUrl?: string } = {}
     try {
       pending = JSON.parse(raw)
     } catch {
       /* corrupt — cleared below */
     }
+    restoreContinueFromStash(pending.continueUrl)
     if (!pending.tenantId) {
       window.sessionStorage.removeItem(SSO_PENDING_KEY)
       return
@@ -179,9 +223,17 @@ function SsoSignIn() {
         const provider = createAuthProvider(payload.providerId, value)
         if (isMobileBrowser()) {
           navigatingAway = true
+          // The continue rides in the stash as well as on the URL (AGL-2486)
+          // — the URL is the primary carrier and the stash is what survives
+          // an IdP that does not hand the query back.
           window.sessionStorage.setItem(
             SSO_PENDING_KEY,
-            JSON.stringify({ tenantId: payload.tenantId }),
+            JSON.stringify({
+              tenantId: payload.tenantId,
+              continueUrl:
+                new URL(window.location.href).searchParams.get('continue') ??
+                '',
+            }),
           )
           await signInWithRedirect(firebaseAuth, provider)
           return
@@ -253,7 +305,7 @@ function SsoSignIn() {
       }
       paperAfter={
         <Typography component="div" variant="body2">
-          <AppLink href="/signin">{'← Back to sign in'}</AppLink>
+          <AppLink href={backToSignInHref}>{'← Back to sign in'}</AppLink>
         </Typography>
       }
     >

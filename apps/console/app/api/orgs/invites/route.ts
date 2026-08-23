@@ -666,6 +666,12 @@ async function handler(request: Request): Promise<Response> {
         displayName: resolveIdpDisplayName(decoded) || undefined,
         photoURL: resolveIdpPhotoUrl(decoded) || undefined,
         invitedBy: invite['invitedBy'] ?? null,
+        // The invite being consumed may be addressed to a CONFIRMED secondary
+        // (AGL-2486). The collaborator seat count reads pending invites, and
+        // this one is still pending at this moment — so without the aliases
+        // it is keyed by an address `self.email` (the primary) does not match,
+        // and the accepter is billed a seat against their own acceptance.
+        seatAliasEmails: acceptableEmails,
       })
       await invitesRef.doc(inviteId).set(
         {

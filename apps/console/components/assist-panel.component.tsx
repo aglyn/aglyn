@@ -266,6 +266,78 @@ function UnderTheHood({ technical }: { technical: string }) {
 }
 
 /**
+ * The source links under an answer (AGL-2486).
+ *
+ * `docs` is server-resolved retrieval output and has ridden every `done`
+ * event since Assist shipped, but NOTHING rendered it: it set the `grounded`
+ * analytics flag and stopped there. So every answer carried its citations to
+ * a reader who never saw them, and on the MODEL path that array is the only
+ * citation there is — the completion is prose, and nothing obliges it to name
+ * the page it was grounded in.
+ *
+ * ## Why this FILTERS rather than rendering the array straight
+ *
+ * The DEFLECTED path is the opposite case. `composeDocsAnswer` deliberately
+ * puts the citation in the answer TEXT as `[label](url)`, because a link is
+ * the one markup this panel speaks (`renderAssistText`) — that is a recorded
+ * decision, not an oversight, and its own docstring names this array as the
+ * tempting-but-wrong home for the citation *because* nothing renders it.
+ * Rendering the array underneath would therefore print every heading a second
+ * time on exactly the answers that already cite well. Anything whose url is
+ * already linked in the text is dropped, which leaves a deflected answer
+ * reading precisely as it does today and gives the model answer the sources
+ * it has never shown.
+ *
+ * ## Why the array is not simply suppressed server-side instead
+ *
+ * That was the other candidate and it is a trap: `docs.length > 0` is what
+ * sets the `grounded` analytics flag, so a docs-QUOTING answer would report
+ * itself ungrounded. The most grounded turn the product serves would be
+ * counted as a documentation gap, which is precisely backwards for the signal
+ * `assist-signal-mining` exists to read.
+ */
+export function AssistSources({
+  text,
+  docs,
+}: {
+  text: string
+  docs?: readonly AssistDocLink[]
+}) {
+  const unseen: AssistDocLink[] = []
+  const shown = new Set<string>()
+  for (const doc of docs ?? []) {
+    // Already a link in the prose, or already listed here. Both are the same
+    // failure to the reader: the same page offered twice.
+    if (!doc?.url || text.includes(doc.url) || shown.has(doc.url)) continue
+    shown.add(doc.url)
+    unseen.push(doc)
+  }
+  if (!unseen.length) return null
+  return (
+    <Box sx={{ mt: 0.75 }}>
+      <Typography variant="caption" color="text.secondary" component="div">
+        {unseen.length === 1 ? 'Source' : 'Sources'}
+      </Typography>
+      <Stack spacing={0.25} sx={{ mt: 0.25 }}>
+        {unseen.map((doc) => (
+          <Typography key={doc.url} variant="caption" component="div">
+            {doc.url.startsWith('/') ? (
+              <AppLink componentVariant="naked" href={doc.url}>
+                {doc.title}
+              </AppLink>
+            ) : (
+              <Link href={doc.url} target="_blank" rel="noreferrer">
+                {doc.title}
+              </Link>
+            )}
+          </Typography>
+        ))}
+      </Stack>
+    </Box>
+  )
+}
+
+/**
  * The confirm card — the whole of "automate current view", and the whole of
  * its boundary.
  *
@@ -459,8 +531,24 @@ export function AssistPanelComponent() {
         if (locked) {
           failAnswer(lockdownRefusalText(locked))
         } else if (response.status === 501) {
+          // 501 now means the narrow thing it says: no model is available AND
+          // the documentation had nothing to offer for this question either
+          // — the server hands back the closest pages whenever it has any
+          // (AGL-2486), so reaching here means it had none.
+          //
+          // Written for the person who is actually reading it. The old line
+          // was "is not configured on this deployment", which names a
+          // deployment the reader does not administer and a configuration
+          // they cannot see; Zach met it mid-thread, after a working answer,
+          // and read it as the product being broken. What a user needs here
+          // is what happened, what to try, and who can fix it — in that
+          // order, in words that assume no idea what an API key is. The
+          // operator's half (the env var) stays in the API error body, where
+          // an operator looks and a customer does not.
           failAnswer(
-            `${branding.productName} Assist is not configured on this deployment.`,
+            `I could not find anything in the documentation about that, and I cannot work it through with you myself yet — ` +
+              `${branding.productName} Assist has not been fully switched on here. ` +
+              `Try asking in different words, or ask whoever set up this workspace to finish enabling the assistant.`,
           )
         } else if (response.status === 429 && payload?.reason === 'quota') {
           if (payload.quota) setQuota(payload.quota as AssistQuotaInfo)
@@ -743,6 +831,9 @@ export function AssistPanelComponent() {
                         technical={splitAssistDisclosure(message.text).technical}
                       />
                     )}
+                  {message.role === 'assistant' && (
+                    <AssistSources text={message.text} docs={message.docs} />
+                  )}
                   {message.role === 'assistant' &&
                     message.proposal &&
                     !message.proposalResolved && (

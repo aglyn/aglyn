@@ -18,6 +18,13 @@
     "lint": {
       "executor": "@nx/eslint:lint",
       "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/shared/util/dom"],
+      "options": {
+        "jestConfig": "libs/shared/util/dom/jest.config.ts"
+      }
     }
   }
 }

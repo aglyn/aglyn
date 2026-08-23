@@ -17,6 +17,7 @@
 'use client'
 
 import {
+  applyDefaultOffOptIn,
   EnabledPluginsContext,
   filterPluginsByReleaseFlags,
   listConsoleProviders,
@@ -28,7 +29,11 @@ import type React from 'react'
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import BootSplash from './boot-splash.component'
 import { consolePluginLoader } from '../constants/console-plugin-loader'
-import { useHostDisabledPlugins } from './host-id-provider'
+import {
+  useHostDisabledPlugins,
+  useHostEnabledPlugins,
+  useHostId,
+} from './host-id-provider'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useReleaseFlags } from '../hooks/use-release-flags'
 import { useUrlNamedOrg, useUrlNamesOrg } from '../hooks/use-url-names-org'
@@ -82,6 +87,20 @@ export function useEnabledPluginIds(): string[] {
   // `disabledPlugins` deny-list is subtracted, so nav tabs, plugin pages
   // and widget slots all read the per-site set. [] off host routes.
   const hostDisabled = useHostDisabledPlugins()
+  // The per-site OPT-IN half (AGL-2486). Subtracting a deny-list is the
+  // whole story for the twelve ordinary bundles and exactly wrong for a
+  // `defaultOffPerSite` one: an absent field means OFF for `accounts`, so a
+  // resolver that only ever subtracts reported it as available on every site
+  // that had never mentioned it — which is how the besigner went on offering
+  // Members blocks for a site whose /signin returns 404.
+  //
+  // Applied only INSIDE a host route. Off one there is no site to have opted
+  // in, and an empty opt-in list would subtract rather than no-op — unlike
+  // the deny-list above, where [] already means "narrow nothing". Answering
+  // a host question on a page that names no host is what AGL-2486 fixed
+  // immediately below for the org set; this keeps the same discipline.
+  const hostOptIn = useHostEnabledPlugins()
+  const hostId = useHostId()
   // There is no "current workspace's" plugin set on a route that names no
   // workspace (AGL-2486). `useEffectiveEnabledPlugins` reads `useCurrentOrg`,
   // which falls back to a remembered org, so this answered with THAT org's
@@ -97,11 +116,16 @@ export function useEnabledPluginIds(): string[] {
     () =>
       namedOrg
         ? subtractDisabledPlugins(
-            enabledKey.split(',').filter(Boolean),
+            hostId
+              ? applyDefaultOffOptIn(
+                  enabledKey.split(',').filter(Boolean),
+                  hostOptIn,
+                )
+              : enabledKey.split(',').filter(Boolean),
             hostDisabled,
           )
         : [],
-    [enabledKey, hostDisabled, namedOrg],
+    [enabledKey, hostDisabled, hostOptIn, hostId, namedOrg],
   )
 }
 

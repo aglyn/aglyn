@@ -31,6 +31,14 @@ profile, same workspaces, no duplicate account. Manage them under
 Your last remaining sign-in method can never be removed, so there's no way to lock
 yourself out.
 
+### Signing in with any of your addresses
+
+If you keep more than one [email address](manage-account.md#email-addresses) on your
+account, you can type **any confirmed one** on the sign-in page with your usual
+password — you don't have to remember which address the account was opened with.
+Unconfirmed addresses don't work here, and neither does an address on somebody else's
+account.
+
 **Single sign-on accounts are the exception.** If your company signs you in through
 its own identity provider, no other method can be linked — see
 [Manage Account](manage-account.md#sign-in-methods) for why, and for what happens
@@ -95,6 +103,36 @@ sign-out — yours, or a staff-initiated revocation — retires the shared sessi
 :::note Self-hosting
 The idle window is configurable via the `NEXT_PUBLIC_AUTH_IDLE_TIMEOUT_MINUTES`
 environment variable (default `60`; set `0` to disable).
+:::
+
+## When the console asks you to sign in again
+
+Sometimes a session stops working without ending. A tab left open overnight, a laptop
+that slept for a long weekend, or a sign-out somewhere else can leave the console holding
+credentials the server no longer accepts. The pages you already loaded keep rendering
+from their cache, so nothing looks broken — but anything the console tries to fetch comes
+back refused, and lists load empty.
+
+When that happens the console opens **Sign in again to verify your device** over whatever
+you were doing. You do not have to find a message and work out what to do about it: the
+dialog *is* the fix.
+
+- **You stay where you are.** No redirect, no lost page, and unsaved changes stay on
+  screen behind the dialog.
+- **Sign in with your usual method** — your password, your Google or single sign-on
+  account, or a passkey. The dialog closes and the data that would not load, loads.
+- **Not now** puts it away. The page stays usable and read-only-ish: what is already on
+  screen is fine, but lists that failed will still be incomplete, and each of them offers
+  **Sign in again** to bring the dialog back.
+
+It is a real sign-in, not a confirmation. There is no way to dismiss your way back into a
+working session, because the session itself is what stopped working.
+
+:::note
+Occasionally the console instead says it cannot reach your data and that **signing in
+again will not help**. That is a different problem — it is not your account and not your
+session, nothing has been deleted, and it usually clears on its own. Signing out at that
+point only makes it harder to diagnose, so don't.
 :::
 
 ## Recent sign-ins

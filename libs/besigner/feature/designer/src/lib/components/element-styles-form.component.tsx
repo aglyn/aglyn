@@ -68,6 +68,7 @@ import { useHostThemeDocument } from '@aglyn/shared-ui-theme'
 import { objectFlatten } from '@aglyn/shared-util-vendor'
 import {
   Alert,
+  Box,
   Chip,
   FormControlLabel,
   FormHelperText,
@@ -88,11 +89,27 @@ import {
   type SyntheticEvent,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import ComponentPromotionContext from '../contexts/component-promotion-context'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
+import {
+  deriveStateSlice,
+  stateScopedSx,
+  stripStateSlices,
+  stateAdvisory,
+  sxHasStateSlice,
+  sxStateSliceLabel,
+  SX_STATE_DESCRIPTIONS,
+  SX_STATE_LABELS,
+  SX_STATE_PROSE,
+  SX_STATES,
+  writeStateSlice,
+  type SxState,
+} from '../utils/state-sx'
 import useDeleteElementCallback from '../hooks/use-delete-element-callback'
 import { besignerDocsUrl } from '../utils/docs-help'
 import {
@@ -698,6 +715,93 @@ const ElementStylesForm = observer(
     const [canvasScheme] = useAglynBesignerFlag('canvasScheme')
     const activeScheme = canvasSchemeToSxScheme(canvasScheme)
 
+    // Interaction-state scope (AGL-2486 item 39): a state chip puts the panel
+    // into that state's slice — every field then reads and writes
+    // `sx['&:hover']` instead of the base. Selecting the chip ALSO holds the
+    // state on the canvas for this element, because you cannot hover an
+    // element while working in a side panel. The hold is a canvas flag, never
+    // a document field, so it cannot be saved and cannot reach Preview or a
+    // published page; and it is not a toggle that can be left on by mistake —
+    // going back to `Default` ends it.
+    const [heldState, setHeldState] = useAglynBesignerFlag('heldState')
+    const [, setHeldStateNodeId] = useAglynBesignerFlag('heldStateNodeId')
+    const activeState = (heldState ?? null) as SxState | null
+
+    // What THIS panel is holding, tracked in a ref so the release paths below
+    // can read it without depending on it. Two reasons it is not the flag
+    // itself: an effect that read the flag would have registered its unmount
+    // cleanup on the render where it was still undefined (the chip is clicked
+    // AFTER mount) and stranded the canvas holding a state with no visible
+    // control left to explain it; and the release must be able to tell "we
+    // hold nothing" from "we hold nothing yet", because writing a flag needs a
+    // live besigner app and a panel rendered without one — which is every
+    // panel unit test — would throw on mount.
+    const heldRef = useRef<SxState | null>(null)
+
+    const selectState = useCallback(
+      (next: SxState | null) => {
+        heldRef.current = next
+        setHeldState(next ?? undefined)
+        setHeldStateNodeId(next ? node?.$id : undefined)
+      },
+      [setHeldState, setHeldStateNodeId, node],
+    )
+
+    /** Ends the hold, and writes nothing when there is nothing to end. */
+    const releaseHold = useCallback(() => {
+      if (!heldRef.current) return
+      heldRef.current = null
+      setHeldState(undefined)
+      setHeldStateNodeId(undefined)
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+
+    // The hold dies with the panel: a preview nothing on screen explains any
+    // more is worse than no preview.
+    useEffect(() => () => releaseHold(), [releaseHold])
+
+    // …and it follows the SELECTION. Clicking element B while holding hover on
+    // element A must not leave either of them rendering as hovered — the panel
+    // now describes a different element, and a scope the chips no longer show
+    // is a scope the author cannot get out of.
+    useEffect(() => {
+      releaseHold()
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [node?.$id])
+
+    /** Drops a whole state slice — the clear affordance, one level up. */
+    const clearState = useCallback(
+      (state: SxState) => {
+        if (!node) return
+        Aglyn.canvas.transact(
+          () => {
+            target.setSx(
+              writeStateSlice(
+                (target.sx ?? {}) as Record<string, any>,
+                state,
+                undefined,
+              ),
+            )
+          },
+          ['sx', node.$id, 'clear-state', state].join(':'),
+        )
+      },
+      [node, target],
+    )
+
+    // Allowed on every element, but said out loud where it will never fire.
+    const stateAdvisoryText = useMemo(
+      () =>
+        stateAdvisory(activeState, {
+          componentId: node?.componentId,
+          hasHref: !!(node?.props as Record<string, unknown>)?.['href'],
+          hasTabIndex:
+            (node?.props as Record<string, unknown>)?.['tabIndex'] !==
+            undefined,
+        }),
+      [activeState, node],
+    )
+
     /**
      * Merges style values into node.sx at the active breakpoint + scheme
      * scope. Unchanged values are skipped so effective (inherited)
@@ -719,25 +823,50 @@ const ElementStylesForm = observer(
         // carries `styleOverrides` like any other node field.
         Aglyn.canvas.transact(
           () => {
+            const current = (target.sx ?? {}) as Record<string, any>
+            if (!activeState) {
+              target.setSx(
+                applyStylePartialToSx(
+                  current,
+                  partial,
+                  activeBreakpoint,
+                  activeScheme,
+                ),
+              )
+              return
+            }
+            // A state scope edits the MERGED reading — base with the slice
+            // over it, i.e. what the element actually looks like hovered —
+            // and the write is split back out so only a genuine difference
+            // is stored. That one rule gives all three behaviours: a changed
+            // value lands in the slice, a value set back to the base leaves
+            // it, and a cleared value leaves it so the state inherits again.
+            const base = stripStateSlices(current)
+            const edited = applyStylePartialToSx(
+              stateScopedSx(current, activeState) as Record<string, any>,
+              partial,
+              activeBreakpoint,
+              activeScheme,
+            )
             target.setSx(
-              applyStylePartialToSx(
-                (target.sx ?? {}) as Record<string, any>,
-                partial,
-                activeBreakpoint,
-                activeScheme,
+              writeStateSlice(
+                current,
+                activeState,
+                deriveStateSlice(base, edited),
               ),
             )
           },
           [
             'sx',
             node.$id,
+            activeState ?? 'base',
             activeBreakpoint ?? 'base',
             activeScheme ?? 'light',
-            Object.keys(partial).sort().join(','),
+            Object.keys(partial).sort().join(':'),
           ].join(':'),
         )
       },
-      [node, target, activeBreakpoint, activeScheme],
+      [node, target, activeBreakpoint, activeScheme, activeState],
     )
 
     // Effective scalar values at the active breakpoint + scheme — feeds
@@ -746,11 +875,18 @@ const ElementStylesForm = observer(
     const effectiveValues = useMemo(
       () =>
         computeEffectiveStyleValues(
-          nodeSx as Record<string, any>,
+          // In a state scope the panel reads the slice merged over the base
+          // (AGL-2486), so a field the author has not overridden for hover
+          // shows the inherited value rather than empty — the same reading
+          // the breakpoint scope gives, and what the browser actually paints.
+          stateScopedSx(
+            nodeSx as Record<string, any>,
+            activeState,
+          ) as Record<string, any>,
           activeBreakpoint,
           activeScheme,
         ),
-      [nodeSx, activeBreakpoint, activeScheme],
+      [nodeSx, activeBreakpoint, activeScheme, activeState],
     )
 
     /**
@@ -771,6 +907,16 @@ const ElementStylesForm = observer(
       },
       [applyStyleValues],
     )
+
+    /**
+     * The border shorthand the box diagram draws for context (AGL-2486).
+     * Read only — border width, style and colour are edited in the
+     * Borders & Shadows section, which is their one home.
+     */
+    const boxBorder =
+      effectiveValues['border'] === undefined
+        ? undefined
+        : `${effectiveValues['border']}`
 
     const boxMeasurements = {
       marginTop: effectiveValues['marginTop'] ?? undefined,
@@ -932,7 +1078,7 @@ const ElementStylesForm = observer(
     // override target or the artboard scope changes (AGL-540/588/1332).
     const formSeedKey =
       `${node?.$id ?? ''}:${overrideKey}:${activeBreakpoint ?? 'base'}` +
-      `:${activeScheme ?? 'light'}`
+      `:${activeScheme ?? 'light'}:${activeState ?? 'base'}`
 
     return (
       <>
@@ -1002,6 +1148,101 @@ const ElementStylesForm = observer(
             </Tooltip>
           ) : null}
         </Container>
+        {/* Interaction states (AGL-2486 item 39): a sibling of the breakpoint
+            chip above, not a second mechanism — same "which slice am I
+            editing" question, same answer shape. Picking a state also HOLDS
+            it on the canvas for this element, which is the only way to see
+            what you are styling from a side panel. */}
+        <Container gutterY={[1]} dense sx={{ position: 'relative', pr: 3 }}>
+          <HelpTip
+            title="Hover, focus & other states"
+            excerpt="Style how this element looks when someone points at it, presses it or reaches it with the keyboard. Picking a state also shows it on the canvas while you work — that preview is never saved."
+            href={besignerDocsUrl('responsiveStyling', '#interaction-states')}
+            sx={{
+              position: 'absolute',
+              top: 0,
+              right: 8,
+              zIndex: 1,
+              fontSize: '0.9em',
+            }}
+          />
+          {/* The row is structurally unable to wrap. Five labelled chips need
+              ~272px and a 375px panel offers 359, so they fit at every normal
+              width — but the panel is resizable, and at ~260px nothing fits at
+              any size consistent with the rest of the panel. `nowrap` plus
+              `overflow-x` makes the failure mode a few pixels of scroll rather
+              than an orphaned chip on a second line, which is what this row
+              shipped as and what Zach reported. */}
+          <Box
+            sx={{
+              display: 'flex',
+              flexWrap: 'nowrap',
+              alignItems: 'center',
+              gap: 0.5,
+              overflowX: 'auto',
+              // The scrollbar would eat more height than the chips it serves.
+              scrollbarWidth: 'none',
+              '&::-webkit-scrollbar': { display: 'none' },
+              // Tightened from the stock small chip so the row clears a narrow
+              // panel; the 0.75rem type still matches the breakpoint chip above.
+              '& .MuiChip-label': { px: 0.75 },
+              '& .MuiChip-root': { flexShrink: 0 },
+              '& .MuiChip-deleteIcon': { ml: '-2px', mr: '2px' },
+            }}
+          >
+            {/* Default is FILLED and the states are OUTLINED, always — the base
+                scope reads as a different kind of thing at a glance rather than
+                as a fifth state, and unlike a divider it costs no width. */}
+            <Tooltip title="Styles that apply at rest, and everywhere a state does not override them.">
+              <Chip
+                size="small"
+                variant="filled"
+                color={activeState ? 'default' : 'primary'}
+                label="Default"
+                onClick={() => selectState(null)}
+              />
+            </Tooltip>
+            {SX_STATES.map((state) => (
+              <Tooltip key={state} title={SX_STATE_DESCRIPTIONS[state]}>
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  color={activeState === state ? 'primary' : 'default'}
+                  label={
+                    sxHasStateSlice(nodeSx as Record<string, any>, state)
+                      ? `${SX_STATE_LABELS[state]} •`
+                      : SX_STATE_LABELS[state]
+                  }
+                  onClick={() => selectState(state)}
+                  // The X clears the WHOLE slice, and only appears on the state
+                  // being edited that actually has one — the same clear
+                  // affordance individual values have, one level up.
+                  onDelete={
+                    activeState === state &&
+                    sxHasStateSlice(nodeSx as Record<string, any>, state)
+                      ? () => clearState(state)
+                      : undefined
+                  }
+                />
+              </Tooltip>
+            ))}
+          </Box>
+        </Container>
+        {activeState ? (
+          <Container gutterY={[1]} dense>
+            <Alert severity="warning" sx={{ fontSize: '0.8125rem' }}>
+              {`The canvas is showing this element's ${SX_STATE_PROSE[activeState]}` +
+                ' state so you can see what you are styling. ' +
+                'It is a preview — it is not saved and does not affect your ' +
+                'published page. Choose Default to stop.'}
+            </Alert>
+            {stateAdvisoryText ? (
+              <Alert severity="info" sx={{ fontSize: '0.8125rem', mt: 1 }}>
+                {stateAdvisoryText}
+              </Alert>
+            ) : null}
+          </Container>
+        ) : null}
         {/* Instance override layer (AGL-1306): on a component instance the
             whole panel writes per-instance overrides, never the component.
             The chip names the mode; each overridden property lists as a
@@ -1084,7 +1325,13 @@ const ElementStylesForm = observer(
                   variant="outlined"
                   sx={{ ml: 1, mt: 0.5 }}
                   label={
-                    property === SX_SCHEME_DARK_KEY ? 'dark scheme' : property
+                    property === SX_SCHEME_DARK_KEY
+                      ? 'dark scheme'
+                      : // A state slice is a whole nested block, not a
+                        // property — printing the raw `&:hover` here would
+                        // show an author a selector they never typed
+                        // (AGL-2486).
+                        (sxStateSliceLabel(property) ?? property)
                   }
                   onDelete={handleClearOverride(property)}
                 />
@@ -1096,12 +1343,14 @@ const ElementStylesForm = observer(
         <Container gutterY={[2]} dense sx={{ position: 'relative' }}>
           <HelpTip
             title="Margin & padding"
-            excerpt="The box stylers set the element's outer margin and inner padding at the active breakpoint — click a side, then type or drag."
+            excerpt="Click a side of the box to set its space at the active breakpoint — a step from your theme's spacing scale, or an exact amount in the unit of your choice."
             href={besignerDocsUrl('responsiveStyling', '#box-stylers')}
             sx={{ position: 'absolute', top: 0, right: 8, zIndex: 1, fontSize: '0.9em' }}
           />
           <BoxStyler
             measurements={boxMeasurements}
+            spacingSteps={themeScales.spacing}
+            border={boxBorder}
             onChange={handleBoxStylerChange}
           />
         </Container>

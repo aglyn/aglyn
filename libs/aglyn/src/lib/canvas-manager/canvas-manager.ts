@@ -602,11 +602,54 @@ export class CanvasManager {
    *
    * Measured before this fix: a peer's edit came back reverted, and a node
    * the peer had CREATED was deleted outright.
+   *
+   * ## An apply that changed nothing is not a peer edit (AGL-2486)
+   *
+   * `previousJson` is the node's serialization from BEFORE the apply. When
+   * the apply left it byte-for-byte identical, this records nothing: no
+   * mark, no epoch bump. That is not an optimisation, it is the difference
+   * between a peer edit and an ECHO, and getting it wrong broke undo
+   * outright.
+   *
+   * The mirror is per node and every session in the room republishes what it
+   * holds, so a value you wrote can come back to you from ANOTHER SESSION —
+   * your own second tab most of all, which is ordinary once same-account
+   * sessions count as co-editors. The room already drops your own tab's
+   * echoes by session id, but not another session's echo of your value.
+   *
+   * Marking that echo is fatal because the mark is what {@link
+   * restoreSnapshot} reads. It lands with a FRESH epoch, therefore newer
+   * than every snapshot already on your stack, so the overlay puts the live
+   * value back over each one of them. Undo then consumed its entry and
+   * changed nothing at all — measured on the running editor, one account,
+   * two tabs on one screen: `past: 0, future: 1, canUndo: false`, the node
+   * still holding the edit that had just been undone.
+   *
+   * Note what this deliberately does NOT do: it does not ask whose session
+   * or whose account the change came from. A genuinely different value from
+   * your other tab is a real concurrent edit with its own undo stack and is
+   * protected like any other. "Foreign" keeps its one meaning — a session
+   * other than this tab moved this node — and the defect was counting a
+   * non-change as a change.
    */
-  public markRemoteNode(nodeId: NodeId): this {
+  public markRemoteNode(nodeId: NodeId, previousJson?: string): this {
     if (!nodeId) return this
+    if (previousJson !== undefined) {
+      const live = this.nodes.get(nodeId)
+      const nowJson = live ? JSON.stringify(live.toJSON()) : undefined
+      if (nowJson === previousJson) return this
+    }
     this._foreignAt.set(nodeId, ++this._epoch)
     return this
+  }
+  /**
+   * A node's serialization as it stands right now, for handing back to
+   * {@link markRemoteNode} after an apply — the "before" half of the echo
+   * test. `undefined` when the node is not in the map.
+   */
+  public serializeNode(nodeId: NodeId): string | undefined {
+    const node = this.nodes.get(nodeId)
+    return node ? JSON.stringify(node.toJSON()) : undefined
   }
   /**
    * Restores a history snapshot, keeping every node a remote session has
@@ -629,6 +672,18 @@ export class CanvasManager {
    *
    * A peer that adds a child republishes the parent's child list, so the
    * parent is marked too and its list survives with the child.
+   *
+   * ## Both directions, and why redo is not the special case it looks like
+   *
+   * This serves {@link redo} as well as {@link undo}, and the stamp is what
+   * makes that work rather than a second rule (AGL-2486). A `future` entry
+   * replays a state from before the undo, so the intuition is that it must
+   * predate any later peer change and roll it back. It does not:
+   * `HistoryManager.undo` captures the present and stamps it with the epoch
+   * AT THE TIME OF THE UNDO, so a peer change that lands between the undo
+   * and the redo is strictly newer than `snapshot.epoch` and is kept here —
+   * including a node the peer CREATED in that gap, which the `future` entry
+   * has no key for at all and a bare replace would broadcast as a delete.
    */
   private restoreSnapshot(
     snapshot: HistorySnapshot<NodeId, NodeSchema<any>>,
@@ -718,8 +773,22 @@ export class CanvasManager {
       coalesceKey === undefined ? undefined : { key: coalesceKey, at: now }
     return mutate()
   }
+  /**
+   * Drops BOTH history stacks and any open {@link transact} burst.
+   *
+   * Both, deliberately (AGL-2486). This used to clear `past` alone, which
+   * left a caller that had just "cleared history" holding a live redo stack
+   * — `canRedo` still true, still offering a snapshot of the state before
+   * the clear. `reset` was the only caller and compensated for it a line
+   * later, which is exactly how the next caller inherits the trap.
+   *
+   * A stale redo is worse than a stale undo in a co-editing session: redo
+   * replays a WHOLE-DOCUMENT snapshot, and the restored map is diffed
+   * against the co-editing shadow and published, so every node the snapshot
+   * does not have goes out as a delete under this session's id.
+   */
   public clearHistory() {
-    this._history.clearPast()
+    this._history.clearHistory()
     this._coalescing = undefined
   }
   public createNodeId(): NodeId {
@@ -755,7 +824,6 @@ export class CanvasManager {
     // preserve node ids that mean something else here (AGL-1958).
     this._foreignAt.clear()
     this._epoch = 0
-    this._history.clearFuture()
     return this
   }
   /**

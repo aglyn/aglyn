@@ -19,6 +19,9 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import ConsentBannerUi from '@aglyn/aglyn/app-utils/consent-banner-ui'
+// Deep import for the same reason as `consent-banner-ui` above (AGL-2486):
+// the plugin-manager barrel is server-reachable and this hook is not.
+import { PluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles-ui'
 import { AglynNodeRenderer, useAglynSiteTheme } from '@aglyn/aglyn-node-renderer'
 import {
   getGoogleFontsUrl,
@@ -103,6 +106,43 @@ const SIMULATED_COUNTRY: Record<'eu' | 'us' | 'unknown', string | null> = {
   unknown: null,
 }
 
+/**
+ * Where the simulator's own chrome sits in the stack (AGL-2486).
+ *
+ * Zach opened the region picker and its menu painted UNDER this panel's helper
+ * text. Both elements are direct children of `<body>` and both are positioned,
+ * so they share the root stacking context and the numbers really are
+ * comparable — measured in the preview, the panel resolved to 2147483500 and
+ * MUI's portalled menu to `theme.zIndex.modal`, i.e. 1300. Nothing exotic: the
+ * menu simply never had a value that could clear the panel it belongs to.
+ *
+ * The panel's own number stays what it was, because it is load-bearing against
+ * a ladder that lives OUTSIDE this component — the consent banner (2147483400)
+ * and the "Your Privacy Choices" pill (2147483390) in `consent-banner-ui.tsx`,
+ * and the marketing popup backdrop (2147483200). Those are deliberately near
+ * the ceiling because on a published page they must beat arbitrary customer
+ * content, and the preview renders that same page. Naming it here rather than
+ * leaving a bare literal is the whole change.
+ *
+ * Transient chrome that must clear the panel takes `theme.zIndex.max` — the
+ * scale's existing ceiling token, already used by `SplashScreen` and
+ * `LoadingModal`, rather than a fresh literal invented one higher than
+ * whatever was in the way. It reaches this component through the SITE theme,
+ * which merges `consoleOptions` as its base, so the token resolves here.
+ */
+const PREVIEW_PANEL_Z_INDEX = 2147483500
+
+/**
+ * The stack for the picker's menu and the snackbar, as an `sx` fragment.
+ *
+ * The snackbar has the same defect and the same cause: MUI gives it
+ * `theme.zIndex.snackbar` (1400) and anchors it bottom-centre, which is
+ * exactly where the consent banner sits at 2147483400 — so the one Alert the
+ * preview uses to explain why a click did nothing was rendering behind the
+ * banner that click was about.
+ */
+const ABOVE_PREVIEW_CHROME = { zIndex: 'max' } as const
+
 export interface DocumentPreviewProps {
   ids?: PreviewStateIds | null
 }
@@ -144,8 +184,14 @@ export function DocumentPreview(props: DocumentPreviewProps) {
   const [consentHost, setConsentHost] = useState<Aglyn.VisitorConsentHost | null>(
     null,
   )
-  const [simDecision, setSimDecision] =
-    useState<Aglyn.VisitorConsentStatus | null>(null)
+  // A click made inside the simulation. Carries the ADVERTISING answer as well
+  // as the status (AGL-2486): `ConsentBannerUi` reports both through
+  // `onDecision`, and dropping the second argument meant ticking the
+  // advertising box in preview changed nothing the panel could show.
+  const [simDecision, setSimDecision] = useState<{
+    status: Aglyn.VisitorConsentStatus
+    advertising: boolean
+  } | null>(null)
 
   const hostId = ids?.hostId
   const kind = ids?.kind
@@ -187,15 +233,23 @@ export function DocumentPreview(props: DocumentPreviewProps) {
     }
     const now = Date.now()
     const country = consentSim === 'gpc' ? null : SIMULATED_COUNTRY[consentSim]
+    // Whether this site asks the advertising question at all (AGL-1649). The
+    // banner needs it to render the second checkbox, and the verdict below
+    // needs it to say anything true about advertising.
+    const asksAds = Aglyn.hostAsksAboutAdvertising(consentHost)
     let stored: Aglyn.StoredVisitorConsent | null = null
     let posture: Aglyn.VisitorConsentPosture | null = null
     if (simDecision) {
       stored = {
         v: 1,
         at: now,
-        status: simDecision,
-        analytics: Aglyn.analyticsGrantedByStatus(simDecision),
+        status: simDecision.status,
+        analytics: Aglyn.analyticsGrantedByStatus(simDecision.status),
         country,
+        // Only ever recorded on a site that ASKED — the same condition the
+        // tenant applies before writing a grant, so the simulated record
+        // cannot claim a decision the visitor was never offered.
+        ...(asksAds ? { advertising: simDecision.advertising } : {}),
       }
     } else if (consentSim === 'gpc') {
       stored = {
@@ -208,7 +262,17 @@ export function DocumentPreview(props: DocumentPreviewProps) {
     } else {
       posture = Aglyn.resolveConsentPosture(consentHost, country)
       if (posture === 'opt-out') {
-        stored = { v: 1, at: now, status: 'implied', analytics: true, country }
+        stored = {
+          v: 1,
+          at: now,
+          status: 'implied',
+          analytics: true,
+          country,
+          // The implied default carries the advertising grant too where the
+          // host asks (AGL-2402) — `decideVisitorConsent` writes exactly this,
+          // and a preview that omitted it UNDERSTATED what a US visitor gets.
+          advertising: asksAds,
+        }
       }
     }
     return {
@@ -216,7 +280,11 @@ export function DocumentPreview(props: DocumentPreviewProps) {
       stored,
       posture,
       country,
+      asksAds,
       allowed: Aglyn.isAnalyticsAllowed(consentHost, stored),
+      // The advertising verdict, from the SAME predicate the tenant gates the
+      // tags with — not a re-derivation that could drift from it.
+      adsAllowed: Aglyn.advertisingGrantedByRecord(consentHost, stored),
     }
   }, [consentSim, consentHost, hostId, simDecision])
 
@@ -451,6 +519,12 @@ export function DocumentPreview(props: DocumentPreviewProps) {
           renders the same nodes, so it ships the same rule — without it the
           panel is stuck open. */}
       <style>{Aglyn.ELEMENT_HIDDEN_STYLE_TEXT}</style>
+      {/* Plugin stylesheets (AGL-2486), same reasoning as the hidden-class
+          rule above: Preview renders the same nodes as the published page, so
+          it ships the same plugin CSS in the same unlayered slot. `document`
+          scope — Preview is NOT shadow-rooted, so a mirrored sheet is already
+          applying to it from the console document's own head. */}
+      <PluginStyles scope="document" />
       {root ? (
         // Preview renders draft state outside the tenant site: screen links
         // show their content but must not navigate the console origin.
@@ -474,6 +548,9 @@ export function DocumentPreview(props: DocumentPreviewProps) {
         autoHideDuration={5000}
         onClose={() => setBlocked(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        // Same defect as the picker's menu: bottom-centre is where the consent
+        // banner sits, and 1400 loses to it (AGL-2486).
+        sx={ABOVE_PREVIEW_CHROME}
       >
         <Alert severity="info" onClose={() => setBlocked(null)}>
           {blocked}
@@ -501,7 +578,7 @@ export function DocumentPreview(props: DocumentPreviewProps) {
           position: 'fixed',
           top: 12,
           right: 12,
-          zIndex: 2147483500,
+          zIndex: PREVIEW_PANEL_Z_INDEX,
           padding: 1.5,
           width: 250,
         }}
@@ -516,6 +593,12 @@ export function DocumentPreview(props: DocumentPreviewProps) {
               setSimDecision(null)
               setConsentSim(event.target.value as ConsentSimulation)
             }}
+            // The menu portals to `<body>`, so it does NOT inherit the panel's
+            // stack and has to be told (AGL-2486). `slotProps.select`, not the
+            // `SelectProps` this would have been written as — MUI removed that
+            // one, and on v9 it is silently ignored rather than rejected, so
+            // the wrong spelling looks exactly like a fix that did not work.
+            slotProps={{ select: { MenuProps: { sx: ABOVE_PREVIEW_CHROME } } }}
           >
             {CONSENT_SIMULATIONS.map((option) => (
               <MenuItem key={option.value} value={option.value}>
@@ -537,6 +620,15 @@ export function DocumentPreview(props: DocumentPreviewProps) {
                   (consentPreview.stored
                     ? ` — recorded "${consentPreview.stored.status}"`
                     : ' — awaiting the visitor choice') +
+                  // The advertising verdict, reported only where the site asks
+                  // the question (AGL-2486). Zach read "I only see GA" off this
+                  // very caption; it named one category because it only ever
+                  // knew about one.
+                  (consentPreview.asksAds
+                    ? consentPreview.adsAllowed
+                      ? '. Advertising storage: GRANTED'
+                      : '. Advertising storage: denied'
+                    : '. Advertising: not asked on this site') +
                   '. Simulated: nothing is saved.'}
               </Typography>
             ) : (
@@ -558,7 +650,16 @@ export function DocumentPreview(props: DocumentPreviewProps) {
           stored={consentPreview.stored}
           posture={consentPreview.posture}
           country={consentPreview.country}
-          onDecision={setSimDecision}
+          // AGL-2486. This prop's own doc comment names the console preview as
+          // the reason it exists ("resolved by the caller from the host
+          // document, because this component is also mounted by the console
+          // preview against a simulated host") — and the console preview was
+          // the one caller that never passed it, so the preview rendered the
+          // analytics-only banner on every site, including sites that DO ask.
+          advertising={consentPreview.asksAds}
+          onDecision={(status, advertising) =>
+            setSimDecision({ status, advertising: advertising === true })
+          }
         />
       ) : null}
     </ThemeProvider>

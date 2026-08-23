@@ -273,6 +273,15 @@ export const ASSIST_MODEL_RATES_USD: Record<string, AssistTokenRates> = {
    * only shows up when someone later records a token count against it.
    */
   'docs-retrieval': rates(0, 0),
+  /**
+   * The sentinel a CLOSEST-PAGES answer is metered under (AGL-2486) — a
+   * deployment with no `ANTHROPIC_API_KEY` handing back the best docs links
+   * it has instead of refusing. Zero for the reason above; distinct from
+   * `docs-retrieval` because it counts questions that went UNANSWERED, and
+   * folding the two would make a keyless deployment look like the most
+   * efficient one on the platform.
+   */
+  'docs-links': rates(0, 0),
   'claude-sonnet-5': rates(3, 15),
   'claude-sonnet-4-6': rates(3, 15),
   'claude-haiku-4-5': rates(1, 5),

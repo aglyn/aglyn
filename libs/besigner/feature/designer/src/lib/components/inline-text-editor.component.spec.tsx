@@ -480,3 +480,191 @@ describe('InlineTextEditorComponent: a commit that changes nothing (AGL-2486)', 
     expect(props['html']).toContain('<strong>')
   })
 })
+
+/**
+ * AGL-2486 — clicking away selected another element instead of committing.
+ *
+ * Zach: *"After editing text directly in the canvas and clicking out the
+ * click just selects other elements rather than applying and closing the
+ * editable text box"*.
+ *
+ * The editor commits on `blur`, and a canvas leaf never lets that blur
+ * happen. `DraggableDroppable` registers its own listeners on the leaf
+ * element and `handleMouseDown` opens with
+ * `e.preventDefault(); e.stopPropagation()` for BOTH `mousedown` and
+ * `pointerdown` (`dnd/draggable-droppable.tsx`). Preventing the default of
+ * a mousedown suppresses the focus change it would otherwise cause, so the
+ * editable keeps focus, no `blur` is dispatched, and nothing commits — while
+ * the very same handler runs `Besigner.focus.handleNodeSelection(node, …)`
+ * and moves the selection. The editor is left open over a node the panel is
+ * no longer showing.
+ *
+ * That is the data-loss shape this repo has already recorded once: an
+ * attribute that commits on blur, where selecting the next node discards
+ * the edit and the canvas still looks right.
+ *
+ * The fix is a capture-phase `pointerdown` on the document, which runs
+ * BEFORE the leaf's own bubble-phase listener can prevent the default, and
+ * routes to the SAME `commit()` the Done button calls — not a second commit
+ * path beside it. These tests model the canvas faithfully: a `pointerdown`
+ * whose default is prevented, and NO blur afterwards, because in the real
+ * editor there is none.
+ */
+describe('InlineTextEditorComponent: clicking away commits (AGL-2486)', () => {
+  const rect = { left: 10, top: 10, width: 120, height: 24 }
+
+  let updateNodeProps: jest.SpyInstance
+  let canvasStandIn: HTMLElement
+
+  beforeEach(() => {
+    updateNodeProps = jest
+      .spyOn(Aglyn.canvas, 'updateNodeProps')
+      .mockImplementation((() => undefined) as any)
+    // Stands in for a canvas leaf: `DraggableDroppable` prevents the default
+    // of the pointerdown, which is exactly why no blur follows.
+    canvasStandIn = document.createElement('div')
+    canvasStandIn.setAttribute('data-aglyn', 'leaf:other-node')
+    canvasStandIn.addEventListener('pointerdown', (event) =>
+      event.preventDefault(),
+    )
+    document.body.appendChild(canvasStandIn)
+  })
+  afterEach(() => {
+    act(() => inlineTextEdit.close())
+    updateNodeProps.mockRestore()
+    canvasStandIn.remove()
+  })
+
+  const plainNode = (children: string) =>
+    ({
+      $id: 'agl2486-clickaway',
+      type: 'node',
+      componentId: 'text',
+      props: { children },
+      componentSchema: { flags: {} },
+      nodes: [],
+    }) as any
+
+  const richNodeWithoutHtml = (children: string) =>
+    ({
+      $id: 'agl2486-clickaway-rich',
+      type: 'node',
+      componentId: 'rich-text',
+      props: { children },
+      componentSchema: {
+        flags: { richTextEditable: Aglyn.FEATURE_FLAG.ENABLED },
+      },
+      nodes: [],
+    }) as any
+
+  const openEditor = async (node: any) => {
+    render(<InlineTextEditorComponent />)
+    act(() => inlineTextEdit.open(node, rect))
+    const label =
+      ((node.componentSchema?.flags?.richTextEditable ?? 0) &
+        Aglyn.FEATURE_FLAG.ENABLED) !==
+      0
+        ? 'Edit rich text'
+        : 'Edit text'
+    const surface = await screen.findByRole('textbox', { name: label })
+    await waitFor(() =>
+      expect(surface.textContent && surface.textContent.length > 0).toBe(true),
+    )
+    return surface
+  }
+
+  it('applies the edit when the click lands on another canvas element', async () => {
+    const node = plainNode('Hello')
+    const surface = await openEditor(node)
+    surface.appendChild(document.createTextNode(' world'))
+
+    // No blur: the canvas prevented the default that would have moved focus.
+    fireEvent.pointerDown(canvasStandIn)
+
+    expect(updateNodeProps).toHaveBeenCalledWith(
+      node,
+      expect.objectContaining({ children: 'Hello world' }),
+    )
+    expect(inlineTextEdit.node).toBeUndefined()
+  })
+
+  it('closes the editor so the click can select the element it landed on', async () => {
+    await openEditor(plainNode('Hello'))
+    fireEvent.pointerDown(canvasStandIn)
+    expect(inlineTextEdit.node).toBeUndefined()
+    expect(screen.queryByRole('textbox', { name: 'Edit text' })).toBeNull()
+  })
+
+  it('commits a rich edit the same way', async () => {
+    const node = richNodeWithoutHtml('bold me')
+    const surface = await openEditor(node)
+    surface.innerHTML = '<strong>bold me</strong>'
+
+    fireEvent.pointerDown(canvasStandIn)
+
+    const props = updateNodeProps.mock.calls.at(-1)?.[1] as Record<
+      string,
+      unknown
+    >
+    expect(props['html']).toContain('<strong>')
+  })
+
+  /**
+   * The no-op has to STAY a no-op on this path too (AGL-2486, `d7ba450b5`):
+   * a commit that invents `props.html: ''` is published by the co-editing
+   * mirror and replayed into every joiner's canvas for seven days.
+   */
+  it('is still not an edit when nothing was typed', async () => {
+    await openEditor(richNodeWithoutHtml('Be first through the door'))
+
+    fireEvent.pointerDown(canvasStandIn)
+
+    expect(updateNodeProps).not.toHaveBeenCalled()
+    expect(inlineTextEdit.node).toBeUndefined()
+  })
+
+  it('leaves the editor open for a pointerdown on its own toolbar', async () => {
+    const node = plainNode('Hello')
+    await openEditor(node)
+
+    fireEvent.pointerDown(
+      screen.getByRole('button', { name: 'Insert data token' }),
+    )
+
+    expect(updateNodeProps).not.toHaveBeenCalled()
+    expect(inlineTextEdit.node?.$id).toBe(node.$id)
+  })
+
+  /**
+   * Measured on `localhost:4200`, screen `yFjgqiG2wm`: node `XlqFJTz4ej`
+   * ("Be first through the door") went to `children: ''` from a double-click
+   * and a click-away with nothing typed. The surface is populated and focused
+   * on a `requestAnimationFrame`, and a background tab never runs one — so
+   * the commit read an empty box as a deletion, and the co-editing mirror
+   * published the blank to everyone.
+   */
+  it('does not empty the node when the surface has not been built yet', async () => {
+    const node = plainNode('Be first through the door')
+    render(<InlineTextEditorComponent />)
+    act(() => inlineTextEdit.open(node, rect))
+    // Deliberately NOT awaiting the seeding frame.
+    expect(
+      (await screen.findByRole('textbox', { name: 'Edit text' })).textContent,
+    ).toBe('')
+
+    fireEvent.pointerDown(canvasStandIn)
+
+    expect(updateNodeProps).not.toHaveBeenCalled()
+    expect(inlineTextEdit.node).toBeUndefined()
+  })
+
+  it('leaves the editor open for a pointerdown on the editable surface', async () => {
+    const node = plainNode('Hello')
+    const surface = await openEditor(node)
+
+    fireEvent.pointerDown(surface)
+
+    expect(updateNodeProps).not.toHaveBeenCalled()
+    expect(inlineTextEdit.node?.$id).toBe(node.$id)
+  })
+})

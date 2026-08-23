@@ -89,13 +89,39 @@ The checks are file-level heuristics: they catch a whole surface added with no
 help at all (how the screen detail page was missed, AGL-604), not partial
 coverage inside a file that already uses help elsewhere.
 
+## Before the commit
+
+`.husky/pre-commit` runs `tools/scripts/check-staged-docs-registries.mjs`,
+which fails the commit when a staged `apps/docs` change leaves any of the four
+generated registries stale (AGL-2486). The gates below still run — this one
+only moves the same verdict off the promotion gate, and off an unrelated
+agent's `nx test console` run where it reads as their bug, and onto the commit
+that causes it.
+
+It judges the git INDEX, not the working tree, and it never stages anything for
+you. Both properties matter in this shared checkout. The registries regenerate
+from ALL of `apps/docs`, so regenerating while another agent has an uncommitted
+docs edit folds their page into your output. Reading the index means their edit
+cannot fail your commit; and if you *did* sweep their page into your generated
+files, this fails you for that instead. `git commit --only <paths>` is handled
+correctly, because git exports its temporary index as `GIT_INDEX_FILE`.
+
+Cost: ~50 ms for a commit touching no docs (a shell pre-filter, node never
+starts), ~350 ms for one that does.
+
 ## CI
 
-Two gates run as part of `nx test console`:
+Three gates run as part of `nx test console`:
 
 - **Freshness** — `npm run generate:docs-help:check` fails if the generated
   files are stale relative to `apps/docs`. Fix: `npm run generate:docs-help`
   and commit.
+- **Assist corpus** — `docs-links.spec.ts` runs
+  `generate-assist-docs-index.mjs --check`. `assist-docs-index.generated.ts`
+  is what Aglyn Assist retrieves from, and it is a separate generator with a
+  separate failure: a body-prose edit changes the corpus while leaving the
+  docs-help registry byte-identical. Fix:
+  `node tools/scripts/generate-assist-docs-index.mjs`.
 - **Coverage** — `help-coverage.spec.ts` fails if a new page/card skipped
   help. Fix: add `help` (see call-site examples above) or an `EXCEPTIONS`
   entry.

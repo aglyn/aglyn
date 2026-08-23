@@ -114,6 +114,49 @@ export function healthHttpStatus(status: 'ok' | 'degraded'): number {
 }
 
 /**
+ * A HEAD response for a health endpoint: the SAME status and headers its GET
+ * would return, with no body (AGL-1148).
+ *
+ * ## Why this exists
+ *
+ * Every health route used to answer HEAD with a hardcoded `200` and the
+ * comment "cheap liveness for monitors that only issue HEAD. Touches
+ * nothing." Touching nothing is precisely the problem: **a HEAD that knows
+ * nothing is a health check that cannot go red.** A monitor configured with
+ * HEAD — which several uptime providers use by default — would have reported
+ * green through any outage that left the function able to boot, which is most
+ * of them. `/api/health/crons` sat at 503 for fifty-one hours; a HEAD monitor
+ * pointed at it would have agreed with the green board the whole time.
+ *
+ * It also violated the contract this file opens with. "The status code is the
+ * contract" cannot hold for one method and not another, and HTTP requires a
+ * HEAD response to carry the same status and headers its GET would.
+ *
+ * ## The cost argument, which is why this is safe
+ *
+ * Delegating to GET means HEAD runs the dependency probe. Every route
+ * memoises that probe (`memoizeWithTtl`, 15s on the root and 5 minutes on the
+ * subsystems) explicitly so a public unauthenticated endpoint cannot be made
+ * to read in a loop — the same bound that already lets a fifteen-minute probe
+ * hit seven endpoints for nearly nothing. HEAD now costs exactly what GET
+ * costs, which is a memo lookup between refreshes, and it serializes no body.
+ *
+ * Headers are carried over rather than rebuilt so `Cache-Control: no-store`,
+ * the open CORS origin and `Retry-After` reach a HEAD client identically — a
+ * HEAD response that was cacheable while its GET was not would be the same
+ * lie one layer down.
+ */
+export async function healthHeadOf(
+  get: () => Promise<Response>,
+): Promise<Response> {
+  const response = await get()
+  return new Response(null, {
+    status: response.status,
+    headers: response.headers,
+  })
+}
+
+/**
  * Firestore backup state, reduced to a health verdict (AGL-1490, AGL-1502).
  *
  * The 2026-08-02 backup sat at `NOT_AVAILABLE` for eleven days and nothing
@@ -742,6 +785,103 @@ export function beaconHealth(
     ...(write.ok ? {} : { code: write.code ?? 'heartbeat-failed' }),
     logId,
     service,
+  }
+}
+
+/**
+ * A tenant page render, reduced to a health verdict (AGL-2486).
+ *
+ * ## The gap this closes
+ *
+ * `marketing-home` (`aglyn.com/`) and `customer-site` (`demo.aglyn.app/`) are
+ * the only two external checks that watched a REAL PAGE rather than a health
+ * endpoint. Both sat at 0% from 2026-08-21, because bot protection answered
+ * Google's checkers with a 429 checkpoint. The health-path firewall bypass
+ * that recovered `tenant-health` and `beacon-heartbeat tenant` cannot reach
+ * them: they fetch `/`, not `/api/health/*`.
+ *
+ * The alternative was allowlisting Google's 54 checker IPs — rejected because
+ * an IP-valued bypass rule is one the drift checker cannot meaningfully
+ * assert, and Google rotates the list. So the render moves to where the
+ * bypass already is: an endpoint under `/api/health` that renders the page
+ * server-side and grades the result.
+ *
+ * ## Why this is not "200 because the route exists"
+ *
+ * The caller runs the SAME loader the catch-all page route runs, against the
+ * SAME host, and this grades what came back. A page that resolves no host,
+ * 404s, redirects away, or composes an EMPTY node tree is a failure — and
+ * those are the shapes an outage actually takes. A canary that cannot go red
+ * for a broken page is worse than the dark check it replaces, because it
+ * reports a confidence it has not earned.
+ *
+ * ## What is deliberately NOT asserted
+ *
+ * Never a string from the page. The marker is STRUCTURAL — a host resolved
+ * and a non-empty composed node tree. Asserting copy would page whoever is
+ * on call for an ordinary content edit, and this endpoint is public, so
+ * customer content must not appear in its body either. `nodeCount` is a
+ * count, which is enough to tell "rendered nothing" from "rendered" without
+ * disclosing what was rendered.
+ */
+export type RenderOutcome =
+  /** The loader returned props. `nodeCount` is the composed node total. */
+  | { kind: 'rendered'; hostResolved: boolean; nodeCount: number }
+  /** The loader chose the not-found branch. */
+  | { kind: 'not-found' }
+  /** The loader chose to redirect — a home page should never do this. */
+  | { kind: 'redirect' }
+  /** The loader threw, or could not be reached at all. */
+  | { kind: 'unavailable' }
+  /**
+   * No target host is configured. A failure on purpose: "we are watching
+   * nothing" must never read the same as "the page is fine".
+   */
+  | { kind: 'not-configured' }
+
+export interface RenderCheck extends HealthCheck {
+  /**
+   * Composed nodes the page produced. A COUNT, never the nodes: this endpoint
+   * is public and the nodes are the customer's page. Zero is the failure.
+   */
+  nodeCount: number
+  /**
+   * Which tenant host was rendered — a CONFIGURED host, never one derived
+   * from the request, so no caller can choose what we render. Empty string
+   * when nothing is configured.
+   */
+  host: string
+}
+
+export function renderHealth(
+  outcome: RenderOutcome,
+  host: string,
+  ms: number,
+): RenderCheck {
+  const base = { ms, host }
+  switch (outcome.kind) {
+    case 'rendered':
+      // Both halves are load-bearing. A host that resolved but composed
+      // nothing is a blank page served with a 200 — the exact outage a
+      // reachability ping calls healthy.
+      if (!outcome.hostResolved) {
+        return { ...base, ok: false, code: 'host-unresolved', nodeCount: outcome.nodeCount }
+      }
+      if (outcome.nodeCount <= 0) {
+        return { ...base, ok: false, code: 'rendered-empty', nodeCount: 0 }
+      }
+      return { ...base, ok: true, nodeCount: outcome.nodeCount }
+    case 'not-found':
+      return { ...base, ok: false, code: 'not-found', nodeCount: 0 }
+    case 'redirect':
+      return { ...base, ok: false, code: 'redirected', nodeCount: 0 }
+    case 'not-configured':
+      return { ...base, ok: false, code: 'not-configured', nodeCount: 0 }
+    case 'unavailable':
+    default:
+      // Same rule as `beaconHealth`: "we could not determine whether the page
+      // renders" is a failure, never calm.
+      return { ...base, ok: false, code: 'render-unavailable', nodeCount: 0 }
   }
 }
 

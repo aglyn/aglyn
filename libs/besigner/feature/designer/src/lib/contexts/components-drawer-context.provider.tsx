@@ -87,7 +87,7 @@ export function ComponentsDrawerContextProvider(
 
   return (
     <Fragment>
-      <ElementDrawerContext.Provider value={{ elementDrawer }}>
+      <ElementDrawerContext.Provider value={{ elementDrawer, open }}>
         {children}
       </ElementDrawerContext.Provider>
       <ComponentPicker

@@ -222,6 +222,35 @@ async function buildSitemapUrls(
     excluded.add(screenId)
   }
 
+  // Error screens are not pages either (AGL-2486). `aglyn.com` published
+  // `/401`, `/404` and `/503` into its sitemap, which hands a brand-new domain
+  // the worst possible first crawl: Google fetches them, gets the status code
+  // each one exists to represent, and logs crawl errors and soft-404s against
+  // a site it has never seen before. Measured on production 2026-08-23, the
+  // sitemap carried all three among 97 URLs.
+  //
+  // BOTH sources are excluded, because the binding is not how these exist
+  // today. `resolveNotFoundScreenId` records that `errorScreens` was unset on
+  // EVERY host as of 2026-08-19, and that an error screen on this platform is
+  // simply a screen published at the status path — so filtering only the
+  // bound ids would have changed nothing on the site that has the problem.
+  // Filtering only the path would miss a host that did bind one.
+  const errorScreens = (host as unknown as {
+    errorScreens?: Record<string, string | undefined>
+    notFoundScreenId?: string
+  } | null) ?? {}
+  for (const bound of [
+    ...Object.values(errorScreens.errorScreens ?? {}),
+    errorScreens.notFoundScreenId,
+  ]) {
+    if (typeof bound === 'string' && bound) excluded.add(bound)
+  }
+  for (const [screenId, path] of Object.entries(host.screens ?? {})) {
+    // A bare HTTP status code as the whole path. Anchored so a real page at
+    // `/404-guide` or `/products/503` keeps its place in the sitemap.
+    if (/^\/?[1-5][0-9][0-9]$/.test(String(path))) excluded.add(screenId)
+  }
+
   const urls = Object.entries(host.screens ?? {})
     .filter(([screenId]) => !excluded.has(screenId))
     .map(([, path]) => `${base}${screenRoutePathToUrl(path)}`)

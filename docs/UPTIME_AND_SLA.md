@@ -27,8 +27,20 @@ GET  https://app.aglyn.com/api/health/billing  Stripe webhook delivery (AGL-1924
 GET  https://app.aglyn.com/api/health/error-beacon
                                                console beacon liveness (AGL-1923)
 GET  https://aglyn.com/api/health/error-beacon tenant beacon liveness (AGL-1923)
-HEAD <any>                                     liveness only, touches nothing
+GET  https://app.aglyn.com/api/health/crons    scheduled-job liveness (AGL-1955)
+GET  https://aglyn.com/api/health/render/marketing
+                                               marketing home RENDERS (AGL-2486)
+GET  https://demo.aglyn.app/api/health/render/site
+                                               a tenant site RENDERS (AGL-2486)
+HEAD <any>                                     the SAME probe and status as GET
 ```
+
+:::caution `HEAD` is not a liveness shortcut any more
+It used to return a hardcoded `200` and "touch nothing", which made every one
+of these a check that **could not go red** for the monitors most likely to use
+it. `healthHeadOf(GET)` now runs the same probe and returns the same status
+and headers, minus the body; the per-route memo is what keeps that cheap.
+:::
 
 ```json
 {
@@ -139,8 +151,8 @@ Console: https://console.cloud.google.com/monitoring/uptime?project=aglyn-main
 | `console-health` | `app.aglyn.com/api/health` | HTTP 2xx **and** `$.status == "ok"` | 5 min |
 | `console-imaging` | `app.aglyn.com/api/health` | `$.imaging.ok == true` | 15 min |
 | `tenant-health` | `aglyn.com/api/health` | HTTP 2xx **and** `$.status == "ok"` | 5 min |
-| `marketing-home` | `aglyn.com/` | 2xx and body contains `Aglyn` | 5 min |
-| `customer-site` | `demo.aglyn.app/` | 2xx and body contains `Aglyn Demo` | 5 min |
+| `marketing-home` | `aglyn.com/` → **repoint to** `/api/health/render/marketing` | 2xx and body contains `Aglyn` → `$.status == "ok"` | 5 min |
+| `customer-site` | `demo.aglyn.app/` → **repoint to** `/api/health/render/site` | 2xx and body contains `Aglyn Demo` → `$.status == "ok"` | 5 min |
 | `backup-state` | `app.aglyn.com/api/health/backups` | HTTP 2xx and `$.status == "ok"` | 15 min |
 | `signup-volume` | `app.aglyn.com/api/health/signups` | HTTP 2xx and `$.status == "ok"` | 5 min |
 | `rate-limiter` | `app.aglyn.com/api/health/rate-limits` | HTTP 2xx and `$.status == "ok"` | 5 min |
@@ -150,6 +162,18 @@ Console: https://console.cloud.google.com/monitoring/uptime?project=aglyn-main
 | `scheduled-jobs` | `app.aglyn.com/api/health/crons` | HTTP 2xx and `$.status == "ok"` | 15 min |
 | Cloud Functions | `execution_count{status != ok}` | > 2 failures in 5 min | metric |
 | Cloud Scheduler | job attempt logged at `severity >= ERROR` | any | log match |
+
+:::danger Read this table with two corrections
+**Four of these checks have been at 0% since 2026-08-21** — every one of them
+on a host our own bot protection challenges. See
+[Four of these checks have been red](#four-checks-red).
+**`scheduled-jobs` has never been created at all**, and it is the check that
+would have caught the fifty-one-hour cron outage. See
+[Creating the missing check](#creating-the-missing-scheduled-jobs-check).
+A table of what is *meant* to be watched is not a list of what *is*; verify it
+with [the read-only commands below](#verifying-the-monitor-yourself) before
+quoting it.
+:::
 
 Notes that keep these honest:
 
@@ -325,17 +349,437 @@ Notes that keep these honest:
   weekly, 90 min for the frequent sweeps): GitHub delays scheduled workflows
   routinely, and a row that reds on ordinary lateness is one people mute.
   **Clearing event:** the next invocation of that job; nothing latches.
-  **Owed:** the uptime check in the table above is not created yet — this
-  lands read-only against production, so somebody has to add it by hand in
-  Monitoring. Until then the endpoint is watched by the staff Health page
-  (Staff → Health, `Scheduled jobs`) and by anything that curls it, and it
-  answers the same 200/503 either way.
-- `customer-site` asserts on the demo site's own content. If someone renames
-  the demo site's title away from "Aglyn Demo", this check goes red — update
-  the content matcher, don't delete the check.
+  **⚠️ STILL OWED, AND IT HAS NOW COST SOMETHING.** The `scheduled-jobs` row
+  in the table above has never been created in Monitoring. Verified against
+  the live project on 2026-08-23: `gcloud monitoring uptime list-configs
+  --project=aglyn-main` returns **eleven** checks and this is not one of them,
+  and no alert policy names it either. The table listed it as watched while
+  this note recorded it as owed, twelve paragraphs further down — and the
+  table is what people read.
+  **What that bought:** `/api/health/crons` answered 503 with
+  `campaigns-process-scheduled: job-silent` for **fifty-one hours** and
+  nothing said a word. The `Uptime probe` workflow was green every fifteen
+  minutes throughout, because it read only `/api/health` — which aggregates
+  exactly one check — and GCP was not reading this endpoint at all. Two
+  independent gaps, and each one on its own was enough.
+  The probe half is fixed (it now reads all seven subsystem endpoints, so a
+  `job-silent` verdict fails a run every fifteen minutes). **The GCP half is
+  a console action nobody has taken — see
+  [Creating the missing `scheduled-jobs` check](#creating-the-missing-scheduled-jobs-check).**
+  Until it exists, the endpoint is watched by the staff Health page
+  (Staff → Health, `Scheduled jobs`), by the GitHub probe, and by anything
+  that curls it; it answers the same 200/503 either way.
+- `customer-site` **used to assert on the demo site's own content** — renaming
+  the demo site's title away from "Aglyn Demo" turned it red. The render
+  canary that replaces it (AGL-2486) asserts a resolved host and a non-empty
+  node COUNT instead, so a content edit can no longer page anyone. ⚠️ **The
+  repoint is still owed** — see
+  [Repointing `marketing-home` and `customer-site`](#repointing-the-two-page-checks).
 - Incident emails carry a runbook snippet pointing back at this file. Alert
   fires after ~10 minutes of sustained failure (2+ probe regions), so a single
   blip does not page.
+
+### ⚠️ Four of these checks have been red since 2026-08-21 {#four-checks-red}
+
+**Our own bot protection is failing our own monitors, again — this time the
+one that matters.** Measured against the live project on 2026-08-23, pass rate
+over the trailing six hours:
+
+| Check | Host | Pass rate |
+| --- | --- | --- |
+| `console-health`, `console-imaging`, `backup-state`, `signup-volume`, `rate-limiter`, `billing-webhook`, `beacon-heartbeat console` | `app.aglyn.com` | **100%** |
+| `tenant-health` | `aglyn.com/api/health` | **0%** → ✅ fixed 08-23 |
+| `beacon-heartbeat tenant` | `aglyn.com/api/health/error-beacon` | **0%** → ✅ fixed 08-23 |
+| `marketing-home` | `aglyn.com/` | **0%** — fix ready, needs repointing |
+| `customer-site` | `demo.aglyn.app/` | **0%** — fix ready, needs repointing |
+
+**Two of the four were fixed on 2026-08-23** by the `Health endpoint bypass`
+rule (AGL-2486, option 1 below); expect them back at 100% within two check
+periods.
+
+The other two probe **real pages**, which a path bypass cannot reach. Their
+fix has SHIPPED but is not applied: `/api/health/render/marketing` and
+`/api/health/render/site` render those pages server-side and grade them, under
+the bypassed prefix. They stay red until someone runs
+[Repointing `marketing-home` and `customer-site`](#repointing-the-two-page-checks),
+which needs the authenticated `gcloud` session a build agent cannot hold.
+
+`tenant-health` ran at 100% through 2026-08-20, 3.9% on 08-21, and 0% since.
+Every one of the four red hosts is served by `aglyn-tenant`, and every one of
+them answers **429 Vercel Security Checkpoint** to an anonymous automated
+client:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -A 'Monitor/1.0' https://aglyn.com/api/health   # 429
+curl -s -o /dev/null -w '%{http_code}\n' -A 'Monitor/1.0' https://app.aglyn.com/api/health # 200
+```
+
+**The cause is known and half-fixed already.** Vercel Bot Protection is set to
+*Challenge* on `aglyn-tenant` and `aglyn-docs`. That was found on 2026-08-20
+and fixed **for the GitHub probe only**, by sending `x-aglyn-probe` against a
+Bypass rule (`withProbeHeaders`, AGL-1611). The GCP uptime checks send no such
+header and cannot be given one without storing a shared secret in a second
+system — so the same root cause has had four of the eleven external checks red
+for three days, with their alert policies enabled the whole time.
+
+**This is worse than it looks, and worse than the missing `scheduled-jobs`
+check.** A board with four permanently-red rows is a board people stop reading,
+and this file already records what that costs: AGL-1843's permanently-red
+backup check was "actively teaching the one person who receives it that a
+backup page is noise". Alert fatigue here is not a hypothetical — it is the
+condition under which a real `/api/health/crons` outage went unnoticed for
+fifty-one hours.
+
+#### What to do, in preference order
+
+1. ~~**Bypass bot protection on the health PATHS of `aglyn-tenant`.**~~
+   ✅ **DONE 2026-08-23 (AGL-2486).** Bypass rule `Health endpoint bypass`,
+   one `path pre /api/health` group, added with `PATCH` / `rules.insert` and
+   declared in `tools/scripts/lib/firewall-posture.mjs`. Those endpoints are
+   public, unauthenticated and free of secrets, so challenging them protected
+   nothing and broke the only thing watching them; needing no shared secret,
+   the fix also covers any monitor chosen later. Verified anonymously:
+   `/api/health` and `/api/health/error-beacon` answer **200**, `/` still
+   answers **429**. This clears `tenant-health` and `beacon-heartbeat tenant`
+   only — the two below are unaffected and still open.
+2. ~~**Allowlist Google's uptime checkers by IP.**~~ ⛔ **REJECTED on the
+   merits, 2026-08-23.** `gcloud monitoring uptime list-ips` is 54 addresses
+   across four regions and Google rotates it. Worse than the maintenance: an
+   IP-valued bypass rule is one `check-firewall-posture.mjs` cannot
+   meaningfully assert. Pin all 54 in the posture table and every rotation
+   reads as drift; leave them out and the rule's scope is not asserted at all.
+   A guard that quietly stops guarding is the failure this whole file is
+   about.
+3. ✅ **DONE — move the RENDER to where the bypass already is (AGL-2486).**
+   Two new endpoints under `/api/health` server-render a real page and grade
+   it, so Google's checkers reach them through the rule added in option 1 and
+   no IP list or shared secret is involved. See
+   [Repointing `marketing-home` and `customer-site`](#repointing-the-two-page-checks).
+4. **Last resort: put `x-aglyn-probe` in each GCP check's custom headers.**
+   It works, but it copies a shared secret into a second system and fixes only
+   the monitor that holds it. `probe-headers.mjs` says not to hand this header
+   to third parties for a reason.
+
+:::danger Do not "fix" this with a firewall PUT
+Editing Vercel firewall config with a `PUT` **wipes bot protection entirely**.
+Use `PATCH`, or the dashboard. Turning the challenge off wholesale would make
+every check green and would be the wrong fix — the challenge is doing real work
+on the pages that are not health endpoints.
+:::
+
+**How to know it worked:** the `curl` above returns 200 from an anonymous
+client, and the four checks return to 100% within two check periods (10
+minutes). Re-run the pass-rate query in
+[Verifying the monitor yourself](#verifying-the-monitor-yourself).
+
+### Verifying the monitor yourself {#verifying-the-monitor-yourself}
+
+The lesson of the fifty-one hours is that a documented monitor is not a
+monitor. **Confirm the sink exists before trusting the report.** Both of these
+are read-only and need only an authenticated `gcloud` session:
+
+```bash
+# Which checks actually exist? Compare against the table above.
+gcloud monitoring uptime list-configs --project=aglyn-main \
+  --format='table(displayName,monitoredResource.labels.host,httpCheck.path,period)'
+
+# Which alert policies exist, are enabled, and have somewhere to send?
+# A policy with zero notification channels is a check nobody reads.
+curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  'https://monitoring.googleapis.com/v3/projects/aglyn-main/alertPolicies?fields=alertPolicies(displayName,enabled,notificationChannels)'
+```
+
+And the one that answers "is any of this actually passing", which neither of
+the above can tell you — pass rate per check over the last six hours:
+
+```bash
+gcloud monitoring time-series list \
+  --project=aglyn-main \
+  --filter='metric.type="monitoring.googleapis.com/uptime_check/check_passed"' \
+  --format='value(metric.labels.check_id)' | sort -u
+```
+
+A check listed in this file but absent from the first command is a monitor that
+does not exist. A check present in all three but sitting at 0% is a monitor
+nobody is reading any more.
+
+### Creating the missing `scheduled-jobs` check {#creating-the-missing-scheduled-jobs-check}
+
+**This is the one open item in AGL-1148's "wire an external monitor" step.**
+Everything else in the table above exists; this does not, and it is the check
+that would have caught the fifty-one hours.
+
+It needs an authenticated `gcloud` session against `aglyn-main`, which is why
+it has never been done from a PR — a build agent cannot hold that credential
+and should not. It is two commands, or five minutes of clicking.
+
+The endpoint is already correct and already answers 200/503 with
+`$.status`, so nothing in the app has to change first. Confirm it before and
+after:
+
+```bash
+curl -si https://app.aglyn.com/api/health/crons | head -20
+```
+
+#### Option A — two commands
+
+Modelled exactly on the existing `backup-state` check and its policy, so the
+new one behaves identically to the eleven that already work.
+
+```bash
+# 1. The check. 900s to match the other subsystem checks; the endpoint
+#    memoises for 5 minutes, so anything tighter reads the same memo twice.
+gcloud monitoring uptime create \
+  'scheduled-jobs — app.aglyn.com/api/health/crons status=ok' \
+  --project=aglyn-main \
+  --resource-type=uptime-url \
+  --resource-labels=host=app.aglyn.com,project_id=aglyn-main \
+  --path=/api/health/crons \
+  --port=443 --protocol=https --request-method=get \
+  --validate-ssl=true \
+  --status-classes=2xx \
+  --matcher-type=matches-json-path \
+  --json-path='$.status' --json-path-matcher-type=exact-match \
+  --matcher-content='"ok"' \
+  --period=15 --timeout=10
+
+# 2. Read back the generated check id — the alert policy filters on it, and
+#    it is generated from the display name plus a random suffix, so it
+#    CANNOT be predicted and must not be guessed. `name.basename()` prints the
+#    bare id; `value(name)` would print the full resource path, and pasting
+#    that into the filter below yields a policy that matches no time series
+#    and therefore never fires.
+gcloud monitoring uptime list-configs --project=aglyn-main \
+  --filter='displayName~scheduled-jobs' --format='value(name.basename())'
+```
+
+:::caution `--validate-ssl` defaults to FALSE on the CLI
+All eleven existing checks have `validateSsl: true`, because the console
+checkbox is on by default — the CLI's is not. Omitting the flag creates the
+one check in the set that would keep reporting green through an expired or
+invalid certificate on `app.aglyn.com`. Verified against the live configs on
+2026-08-23 (AGL-2486): 11 of 11 `true`.
+:::
+
+Then create the policy, substituting the id from step 2:
+
+```bash
+CHECK_ID='<paste the id from step 2>'
+cat > /tmp/scheduled-jobs-policy.json <<JSON
+{
+  "displayName": "Uptime failure: scheduled-jobs (app.aglyn.com/api/health/crons)",
+  "combiner": "OR",
+  "conditions": [{
+    "displayName": "Scheduled-jobs check failing",
+    "conditionThreshold": {
+      "filter": "metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND metric.label.check_id=\"${CHECK_ID}\" AND resource.type=\"uptime_url\"",
+      "comparison": "COMPARISON_GT",
+      "thresholdValue": 1,
+      "duration": "600s",
+      "trigger": { "count": 1 },
+      "aggregations": [{
+        "alignmentPeriod": "1800s",
+        "perSeriesAligner": "ALIGN_NEXT_OLDER",
+        "crossSeriesReducer": "REDUCE_COUNT_FALSE",
+        "groupByFields": ["resource.label.*"]
+      }]
+    }
+  }],
+  "documentation": {
+    "content": "A scheduled job has stopped being scheduled: it did not run when its own cron said it should (job-silent), has never run since we started watching (job-never-reported), or its marks could not be read (beats-unavailable). Downstream of these jobs are metered billing, GDPR erasures, the audit archive and scheduled publishing. Open https://app.aglyn.com/api/health/crons and read which job is named. Runbook: docs/UPTIME_AND_SLA.md.",
+    "mimeType": "text/markdown"
+  },
+  "notificationChannels": [
+    "projects/aglyn-main/notificationChannels/7043898327231541746"
+  ],
+  "enabled": true
+}
+JSON
+
+curl -s -X POST \
+  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  -H 'Content-Type: application/json' \
+  -d @/tmp/scheduled-jobs-policy.json \
+  'https://monitoring.googleapis.com/v3/projects/aglyn-main/alertPolicies'
+```
+
+#### Option B — the console, by clicking
+
+1. https://console.cloud.google.com/monitoring/uptime?project=aglyn-main →
+   **Create uptime check**.
+2. Protocol **HTTPS**, Resource type **URL**, Hostname `app.aglyn.com`,
+   Path `/api/health/crons`. **Next.**
+3. Response validation: check timeout **10s**; leave **Validate SSL
+   certificates** checked (it is on by default here — this is the setting
+   Option A has to pass explicitly); **Content matching** on →
+   Response content type **JSON**, matcher **Matches JSON path**,
+   JSON path `$.status`, JSON path matcher **Exact match**,
+   Content `"ok"` (with the quotes). Accepted status codes: **2xx**. **Next.**
+4. Alert & notification: create an alert, name it
+   `Uptime failure: scheduled-jobs (app.aglyn.com/api/health/crons)`,
+   duration **10 minutes**, notification channel the existing
+   **zach@aglyn.com** email channel. **Next.**
+5. Title `scheduled-jobs — app.aglyn.com/api/health/crons status=ok`,
+   frequency **15 minutes**. **Test** — it should come back green — then
+   **Create**.
+
+#### Confirm the new check matches the known-good one
+
+Whichever option you took, diff the created config against `backup-state` —
+the check this one was modelled on. Every field but the path, the display
+name and the generated id should be identical, so anything else the diff
+prints is a mistake worth fixing before you trust the check.
+
+```bash
+dump() {  # dump <displayName filter>
+  gcloud monitoring uptime list-configs --project=aglyn-main \
+    --filter="displayName~$1" --format=json |
+    python3 -c 'import json,sys; c=json.load(sys.stdin)[0]; c.pop("name",None); c.pop("displayName",None); c["httpCheck"].pop("path",None); print(json.dumps(c,indent=2,sort_keys=True))'
+}
+diff <(dump backup-state) <(dump scheduled-jobs) && echo "IDENTICAL apart from path/name/id"
+```
+
+An empty diff is the pass. In particular it catches a missing
+`"validateSsl": true`, which nothing else in this runbook would surface.
+
+#### Prove it can go red before trusting it
+
+A check that has never been seen to fail is a check nobody has verified. The
+cheapest honest test does not require breaking a real job: delete the
+bootstrap document and the endpoint reports every job as never having
+reported.
+
+```bash
+# Re-opens the watch window: `platformCronBeats/<watch doc>` is a plain
+# document, not a reserved id, and the next request recreates it.
+# Expect a 503 within one probe TTL (5 min), an email within ~10 more.
+```
+
+Recreate it by hitting the endpoint once, and the next probe clears. **Name
+the clearing event before running any forced-failure test**, and unwind it the
+same day — a check left red is a check about to be muted.
+
+### Repointing `marketing-home` and `customer-site` {#repointing-the-two-page-checks}
+
+**These two checks already exist — they are UPDATED, not created.** Both have
+been at 0% since 2026-08-21 because they fetch `/`, which bot protection
+challenges. The fix is to point them at the render canaries added in
+`AGL-2486`, which live under the bypassed `/api/health` prefix:
+
+| check | new path | replaces fetching |
+| --- | --- | --- |
+| `marketing-home` | `/api/health/render/marketing` | `aglyn.com/` |
+| `customer-site` | `/api/health/render/site` | `demo.aglyn.app/` |
+
+:::danger Step 0 — configure the marketing target, or it stays red
+The canaries name **no Aglyn host of their own**: the self-host ratchet
+forbids it, and a canary hard-wired to `aglyn.com` is dead weight on somebody
+else's install. The marketing target resolves
+`AGLYN_CANARY_MARKETING_HOST` → `cname--{NEXT_PUBLIC_WORKSPACE_DOMAIN}` →
+**nothing**, and nothing is reported as `503 not-configured` rather than a
+green it has not earned.
+
+Measured on `aglyn-tenant` 2026-08-23: **both are unset**, so
+`/api/health/render/marketing` answers `not-configured` until one is set.
+`AGLYN_TENANT_DEMO` *is* set, so `/api/health/render/site` needs nothing.
+
+Set one of these on the `aglyn-tenant` project and **redeploy** — an env var
+added without a redeploy does not reach the running deployment:
+
+```
+AGLYN_CANARY_MARKETING_HOST=cname--aglyn.com
+```
+
+Repointing the check before this is done just moves the red from one cause to
+another.
+:::
+
+**Confirm both endpoints are green BEFORE repointing anything.** Repointing a
+check at an endpoint that is failing tells you nothing you did not already
+know, and it costs you the ability to tell "the fix did not work" from "the
+page is genuinely broken":
+
+```bash
+curl -s -A 'Monitor/1.0' https://aglyn.com/api/health/render/marketing | python3 -m json.tool
+curl -s -A 'Monitor/1.0' https://demo.aglyn.app/api/health/render/site | python3 -m json.tool
+# Expect: HTTP 200, "status": "ok", checks.render.nodeCount > 0.
+# "code": "not-configured"  -> Step 0 above is not done (or not redeployed).
+# "code": "not-found"       -> the host resolves nothing; check the cname-- sentinel.
+# "code": "rendered-empty"  -> the page really is blank. That is a real outage.
+```
+
+**Keep each check's HOSTNAME as it is.** Only the path and the matcher change.
+`aglyn.com` and `demo.aglyn.app` both serve these endpoints, and leaving the
+hostnames alone means each check still proves DNS, the TLS certificate and
+edge routing *for that hostname* — coverage the old checks had and that a
+render assertion alone would not replace.
+
+:::note What the hostname does and does not cover
+The canary renders a **pinned** host (`AGLYN_CANARY_MARKETING_HOST` /
+`AGLYN_CANARY_SITE_HOST`), not one derived from the request's `Host` header —
+deliberately, so nobody can make our deployment render an arbitrary host by
+choosing a URL. So the hostname you fetch proves DNS/TLS/edge for that name,
+while the render half always grades the same two pinned sites.
+:::
+
+Each endpoint answers the ordinary health contract — `200` with
+`$.status == "ok"`, or **`503`** when the page fails to render — so the
+matcher becomes the same JSON-path matcher the other nine checks use, and
+`marketing-home` and `customer-site` stop being special.
+
+```bash
+# 1. The ids. `update` takes the CHECK ID positionally, so this is the same
+#    name.basename() correction as above — the full resource path is rejected.
+gcloud monitoring uptime list-configs --project=aglyn-main \
+  --filter='displayName~marketing-home' --format='value(name.basename())'
+gcloud monitoring uptime list-configs --project=aglyn-main \
+  --filter='displayName~customer-site' --format='value(name.basename())'
+
+# 2. Repoint each one. --validate-ssl is passed EXPLICITLY: both checks carry
+#    validateSsl: true today, the CLI default is false, and an update that
+#    omits it is exactly how the one check that stays green through an expired
+#    certificate gets created.
+gcloud monitoring uptime update '<marketing-home id>' --project=aglyn-main \
+  --path=/api/health/render/marketing \
+  --validate-ssl=true \
+  --set-status-classes=2xx \
+  --matcher-type=matches-json-path \
+  --json-path='$.status' --json-path-matcher-type=exact-match \
+  --matcher-content='"ok"' \
+  --display-name='marketing-home — aglyn.com/api/health/render/marketing status=ok'
+
+gcloud monitoring uptime update '<customer-site id>' --project=aglyn-main \
+  --path=/api/health/render/site \
+  --validate-ssl=true \
+  --set-status-classes=2xx \
+  --matcher-type=matches-json-path \
+  --json-path='$.status' --json-path-matcher-type=exact-match \
+  --matcher-content='"ok"' \
+  --display-name='customer-site — demo.aglyn.app/api/health/render/site status=ok'
+```
+
+Then re-run the pass-rate query in
+[Verifying the monitor yourself](#verifying-the-monitor-yourself); both should
+return to 100% within two check periods (10 minutes at their 5-minute period).
+
+#### Why these can go red, and how that was proved
+
+A canary that cannot fail is worse than the dark check it replaces. `renderHealth`
+fails a page that resolves no host, 404s, redirects away, composes an **empty
+node tree**, or cannot be loaded at all — a blank page served with a `200` is
+precisely the outage a reachability ping calls healthy.
+`apps/tenant/specs/render-canary-can-go-red.spec.ts` drives the real handlers
+for every one of those shapes on **GET and HEAD alike**, and the assertions
+were verified by mutation: making `HEAD` return a hardcoded `200`, grading an
+empty node tree as healthy, and grading "could not determine" as calm each
+turned exactly the corresponding tests red.
+
+The marker is **structural** — a resolved host and a non-empty node *count*,
+never a string from the page. Two reasons: asserting copy would page whoever is
+on call for an ordinary content edit, and the endpoint is public, so customer
+content must not appear in its body. Both probed hosts are Aglyn's own (`demo`
+is the platform demonstration site the middleware falls back to for
+`app.aglyn.com` and every preview), so no customer can turn these red.
 
 ### What is deliberately NOT watched (the honest list)
 

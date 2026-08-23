@@ -79,6 +79,10 @@ import {
 } from '@mui/material'
 import { useEffect, useMemo, useState } from 'react'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
+import {
+  CompositionBar,
+  RankedBars,
+} from '../../../../components/revenue-charts.component'
 import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
@@ -89,10 +93,99 @@ import {
   dollars,
   earnedLines,
   gapCauses,
+  money,
+  ORG_STATE_LABELS,
   revenuePeriodOptions,
   usdDollars,
+  usdMoney,
+  type SourceAttributionView,
   type RevenuePayload,
 } from '../../../../utils/revenue-view'
+
+/**
+ * One attributed source table — listing, publisher or host (AGL-2486).
+ *
+ * GAIN and LOSS sit side by side in every one of them. A refund or chargeback
+ * with no name on it is the row someone most needs to chase, so a reversal is
+ * never netted silently into the earnings column.
+ */
+function SourceTable({
+  table,
+  unit,
+  countLabel,
+  empty,
+}: {
+  table: SourceAttributionView | undefined
+  unit: string
+  countLabel: string
+  empty: string
+}) {
+  const rows = table?.rows ?? []
+  if (rows.length === 0) {
+    return (
+      <Typography variant="body2" color="text.secondary">
+        {empty}
+      </Typography>
+    )
+  }
+  return (
+    <>
+      <Box sx={{ overflowX: 'auto' }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>{unit}</TableCell>
+              <TableCell align="right">Earned</TableCell>
+              <TableCell align="right">Returned</TableCell>
+              <TableCell align="right">{countLabel}</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rows.map((row) => (
+              <TableRow key={row.key}>
+                <TableCell>
+                  {row.name}
+                  {row.detail ? (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: 'block' }}
+                    >
+                      {row.detail}
+                    </Typography>
+                  ) : null}
+                </TableCell>
+                <TableCell align="right">{money(row.gainCents)}</TableCell>
+                <TableCell align="right">
+                  {Number(row.lossCents ?? 0) > 0 ? (
+                    <Typography variant="body2" color="error.main">
+                      −{money(row.lossCents)}
+                    </Typography>
+                  ) : (
+                    money(0)
+                  )}
+                </TableCell>
+                <TableCell align="right">{row.count}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
+      {Number(table?.omittedRows ?? 0) > 0 ? (
+        <Alert severity="info" sx={{ mt: 2 }}>
+          <AlertTitle>
+            {table?.omittedRows} more not listed
+          </AlertTitle>
+          The table shows the largest contributors. The rest account for{' '}
+          {money(table?.omittedGainCents)} earned and{' '}
+          {money(table?.omittedLossCents)} returned between them, so these rows
+          plus this line still add up to the total above — a shortened list,
+          never a partial accounting.
+        </Alert>
+      ) : null}
+    </>
+  )
+}
 
 /** A large figure with its basis stated directly beneath it, never beside. */
 function Figure({
@@ -176,10 +269,25 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
   const subscriptions = settled?.subscriptions ?? {}
   const marketplace = settled?.marketplace ?? {}
   const commerce = settled?.commerce ?? {}
+  // TRUNCATION ONLY. `commerceQueryFailed` is deliberately NOT folded in
+  // here: a query that could not run is not a sweep that hit a ceiling, and
+  // reporting the failure as a row cap is what sent this page's own diagnosis
+  // to the wrong half of the system (AGL-2486).
   const truncated =
     payload?.subscriptionsTruncated === true ||
     payload?.marketplaceTruncated === true ||
+    payload?.contractedTruncated === true ||
     payload?.attention?.commerceTruncated === true
+  const truncatedSources = payload?.truncatedSources ?? []
+  // A CLOSED period cannot be compared like for like: contracted is a
+  // run-rate measured today, settled is cash collected then. See the route's
+  // `periodIsClosed` note — the page shows both figures and computes no
+  // difference, rather than calling a known artefact "unexplained".
+  const periodClosed = payload?.periodIsClosed === true
+  const shownCauses = periodClosed
+    ? causes.filter((cause) => cause.periodScoped)
+    : causes
+  const attributionRows = payload?.attribution?.rows ?? []
 
   return (
     <DashboardLayout
@@ -232,18 +340,52 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
 
             {truncated ? (
               <Alert severity="warning">
-                <AlertTitle>These figures are a lower bound</AlertTitle>
-                The sweep hit its row cap, so at least one total below is
-                incomplete. Narrow the period rather than quoting these
-                numbers.
+                <AlertTitle>
+                  {truncatedSources.length > 0
+                    ? `A lower bound: ${truncatedSources.join(', ')}`
+                    : 'These figures are a lower bound'}
+                </AlertTitle>
+                {truncatedSources.length > 0
+                  ? `The sweep stopped at its safety ceiling for ${truncatedSources.join(
+                      ', ',
+                    )}, so those totals are incomplete. Every other figure on this page is whole.`
+                  : 'The sweep stopped at its safety ceiling, so at least one total below is incomplete.'}{' '}
+                Narrow the period rather than quoting the incomplete numbers. A
+                period this large is past what a request-time report should
+                compute — the answer is a precomputed monthly rollup, not a
+                bigger ceiling.
+              </Alert>
+            ) : null}
+            {payload?.periodPrecedesCoverage === true ||
+            payload?.settledMirrorEmpty === true ? (
+              <Alert severity="warning">
+                <AlertTitle>
+                  Settled figures do not cover this whole period
+                </AlertTitle>
+                {payload?.settledMirrorEmpty === true
+                  ? `No invoice has ever been recorded, so every settled figure below is unanswerable rather than zero.`
+                  : `Invoices have only been recorded since ${new Date(
+                      String(payload?.settledCoverageStart),
+                    ).toLocaleDateString()}. Anything ${PLATFORM_BRAND_NAME} collected before that was never mirrored, so the settled figures below are a lower bound for this period — not a measured zero.`}{' '}
+                Contracted figures are unaffected: they are point-in-time and
+                read the subscription mirror directly.
+              </Alert>
+            ) : null}
+            {payload?.unbilledMeteredFailed === true ? (
+              <Alert severity="warning">
+                <AlertTitle>Unbilled metered usage could not be read</AlertTitle>
+                The gap below is missing that cause entirely, so its residual is
+                overstated by however much usage went unbilled.
               </Alert>
             ) : null}
             {payload?.commerceQueryFailed === true ? (
               <Alert severity="warning">
                 <AlertTitle>Storefront orders could not be read</AlertTitle>
                 The storefront commission below reads $0 because the query
-                failed, not because there were no sales. This usually means the
-                collection-group index is not deployed.
+                failed, not because there were no sales. The sweep needs the
+                COLLECTION_GROUP index on <code>orders.createdAtMs</code> —
+                check it is still declared in the Firestore index config and
+                actually deployed, since indexes ship separately from the app.
               </Alert>
             ) : null}
             {Number(payload?.attention?.rowsOutsideEveryPeriod ?? 0) > 0 ? (
@@ -289,7 +431,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                     children: (
                       <Figure
                         label={`Settled & earned (${payload?.period ?? period})`}
-                        value={`$${dollars(settled?.totalEarnedCents)}`}
+                        value={money(settled?.totalEarnedCents)}
                         caption={`Money Stripe actually collected in the period and ${PLATFORM_BRAND_NAME} actually kept: subscriptions, marketplace commission and storefront take — net of sales tax, seller payouts, card processing, refunds and disputes.`}
                       />
                     ),
@@ -423,8 +565,12 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                     children: (
                       <Figure
                         label="Should have collected"
-                        value={`$${dollars(gap?.collectingMrrCents)}`}
-                        caption="Contracted MRR excluding trialing and past-due, which settle $0 by definition."
+                        value={money(gap?.collectingMrrCents)}
+                        caption={
+                          periodClosed
+                            ? 'Contracted MRR excluding trialing and past-due. Measured TODAY, not during the period below — a run-rate, not a historical figure.'
+                            : 'Contracted MRR excluding trialing and past-due, which settle $0 by definition.'
+                        }
                       />
                     ),
                   },
@@ -433,23 +579,47 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                     children: (
                       <Figure
                         label="Subscription cash settled"
-                        value={`$${dollars(gap?.settledSubscriptionCents)}`}
+                        value={money(gap?.settledSubscriptionCents)}
                         caption="Paid invoices in the period, net of tax and of every reversal. Marketplace and storefront are excluded here so the comparison is like for like."
                       />
                     ),
                   },
                   {
                     size: { xs: 12, md: 4 },
-                    children: (
+                    children: periodClosed ? (
                       <Figure
                         label="Gap"
-                        value={`$${dollars(gap?.gapCents)}`}
-                        caption="Positive means money contracted that did not arrive. The causes below account for it."
+                        value="Not comparable"
+                        caption="This period has ended, so the two figures beside this one are measured at different instants. No difference is computed — see below."
+                      />
+                    ) : (
+                      <Figure
+                        label="Gap"
+                        value={money(gap?.gapCents)}
+                        caption="Positive means money contracted that did not arrive. Negative means cash arrived that the contracted base does not account for — most often an annual invoice landing in one month, or a subscription that has since ended. The causes below account for it."
                       />
                     ),
                   },
                 ]}
               />
+              {periodClosed ? (
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  <AlertTitle>
+                    No gap is shown for a period that has ended
+                  </AlertTitle>
+                  Contracted is what the book bills <strong>today</strong>;
+                  settled is cash collected <strong>during the period</strong>.
+                  Subtracting them would measure two different instants, so a
+                  subscription that collected in the period and has since ended
+                  shows up as cash with no contracted counterpart — and the
+                  difference would look like a modelling failure every time.
+                  That case is known and modelled, not unexplained, so this page
+                  declines to compute a residual rather than label it one. A
+                  past period&apos;s contracted base is not recoverable: org
+                  records carry only current state and nothing snapshots MRR per
+                  month.
+                </Alert>
+              ) : null}
               <Divider sx={{ my: 2 }} />
               <Table size="small">
                 <TableHead>
@@ -460,30 +630,32 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {causes.map((cause) => (
+                  {shownCauses.map((cause) => (
                     <TableRow key={cause.id}>
                       <TableCell>{cause.label}</TableCell>
                       <TableCell align="right">
-                        ${dollars(cause.cents)}
+                        {money(cause.cents)}
                       </TableCell>
                       <TableCell>{cause.action}</TableCell>
                     </TableRow>
                   ))}
-                  <TableRow>
-                    <TableCell>
-                      <strong>Unexplained residual</strong>
-                    </TableCell>
-                    <TableCell align="right">
-                      <strong>${dollars(gap?.unexplainedCents)}</strong>
-                    </TableCell>
-                    <TableCell>
-                      What is left once every cause above is accounted for. A
-                      large residual means something this page does not model —
-                      a mid-period signup or cancellation, a proration, or an
-                      invoice that has not been paid yet. Investigate it; do not
-                      treat it as noise.
-                    </TableCell>
-                  </TableRow>
+                  {periodClosed ? null : (
+                    <TableRow>
+                      <TableCell>
+                        <strong>Unexplained residual</strong>
+                      </TableCell>
+                      <TableCell align="right">
+                        <strong>{money(gap?.unexplainedCents)}</strong>
+                      </TableCell>
+                      <TableCell>
+                        What is left once every cause above is accounted for. A
+                        large residual means something this page does not model
+                        — a mid-period signup or cancellation, a proration, or
+                        an invoice that has not been paid yet. Investigate it;
+                        do not treat it as noise.
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
               {payload?.unbilledMeteredApplies === false ? (
@@ -508,6 +680,16 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
               contentGutterX
               contentGutterY
             >
+              <Box sx={{ mb: 3 }}>
+                <CompositionBar
+                  slices={earned.map((line) => ({
+                    key: line.id,
+                    label: line.label,
+                    cents: line.cents,
+                  }))}
+                  emptyMessage={`Nothing settled in this period, so there is no total to divide. The chart appears as soon as ${PLATFORM_BRAND_NAME} earns something — it is waiting for data, not failing to load.`}
+                />
+              </Box>
               <Table size="small">
                 <TableHead>
                   <TableRow>
@@ -521,7 +703,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                     <TableRow key={line.id}>
                       <TableCell>{line.label}</TableCell>
                       <TableCell align="right">
-                        ${dollars(line.cents)}
+                        {money(line.cents)}
                       </TableCell>
                       <TableCell>{line.note}</TableCell>
                     </TableRow>
@@ -531,7 +713,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                       <strong>Total earned</strong>
                     </TableCell>
                     <TableCell align="right">
-                      <strong>${dollars(settled?.totalEarnedCents)}</strong>
+                      <strong>{money(settled?.totalEarnedCents)}</strong>
                     </TableCell>
                     <TableCell>
                       {`Net throughout. There is no gross figure here that means “${PLATFORM_BRAND_NAME}’s money” — see the gross-versus-net table below.`}
@@ -682,6 +864,221 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                 </Stack>
               </Box>
             </CardDisplay>
+            {/* ---- Who produced the numbers ---- */}
+            <CardDisplay
+              header="Which orgs did what"
+              help={docsHelp('revenue', {
+                anchor: '#how-each-org-is-treated',
+                excerpt:
+                  'Every figure above, traced to the org behind it. Contracted MRR is measured today; settled cash is measured over the selected period.',
+              })}
+              contentGutterX
+              contentGutterY
+            >
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                The totals above, attributed. <strong>Contracted</strong> is
+                what each org bills today; <strong>settled</strong> is what it
+                actually paid during the period, net of tax and reversals. The
+                two columns answer different questions on purpose — an org can
+                have one without the other, and that is usually the interesting
+                row rather than an error.
+              </Typography>
+              {attributionRows.length > 0 ? (
+                <Box sx={{ mb: 3 }}>
+                  <RankedBars
+                    rows={attributionRows.map((row) => ({
+                      key: String(row.orgId),
+                      label: String(row.name),
+                      sublabel: ORG_STATE_LABELS[String(row.state)],
+                      cents: Number(row.settledCents ?? 0),
+                    }))}
+                    emptyMessage="No org settled cash in this period."
+                  />
+                </Box>
+              ) : null}
+              {attributionRows.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  No org contributed to either base in this period. That is a
+                  real answer, not a failed read — every banner above would be
+                  showing if a query had failed.
+                </Typography>
+              ) : (
+                <Box sx={{ overflowX: 'auto' }}>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Org</TableCell>
+                        <TableCell>State</TableCell>
+                        <TableCell>Plan</TableCell>
+                        <TableCell align="right">Contracted / mo</TableCell>
+                        <TableCell align="right">Settled in period</TableCell>
+                        <TableCell align="right">Unbilled meter</TableCell>
+                        <TableCell align="right">Invoices</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {attributionRows.map((row) => (
+                        <TableRow key={row.orgId}>
+                          <TableCell>{row.name}</TableCell>
+                          <TableCell>
+                            <Chip
+                              size="small"
+                              label={
+                                ORG_STATE_LABELS[String(row.state)] ??
+                                String(row.state)
+                              }
+                              color={
+                                row.state === 'collecting'
+                                  ? 'success'
+                                  : row.state === 'pastDue'
+                                    ? 'error'
+                                    : row.state === 'trialing'
+                                      ? 'info'
+                                      : 'default'
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>{row.plan}</TableCell>
+                          <TableCell align="right">
+                            {usdMoney(row.mrrUsd)}
+                          </TableCell>
+                          <TableCell align="right">
+                            {money(row.settledCents)}
+                            {Number(row.refundedCents ?? 0) > 0 ? (
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ display: 'block' }}
+                              >
+                                after {money(row.refundedCents)} returned
+                              </Typography>
+                            ) : null}
+                          </TableCell>
+                          <TableCell align="right">
+                            {Number(row.unbilledMeteredCents ?? 0) > 0 ? (
+                              <Typography variant="body2" color="error.main">
+                                −{money(row.unbilledMeteredCents)}
+                              </Typography>
+                            ) : (
+                              money(0)
+                            )}
+                          </TableCell>
+                          <TableCell align="right">{row.invoices}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </Box>
+              )}
+              {Number(payload?.attribution?.omittedOrgs ?? 0) > 0 ? (
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  <AlertTitle>
+                    {payload?.attribution?.omittedOrgs} more org(s) not listed
+                  </AlertTitle>
+                  The table shows the largest contributors. The rest carry{' '}
+                  {usdMoney(payload?.attribution?.omittedMrrUsd)} of contracted
+                  MRR and {money(payload?.attribution?.omittedSettledCents)} of
+                  settled cash between them, so the rows above plus this line
+                  still account for the totals — a shortened list, never a
+                  partial accounting.
+                </Alert>
+              ) : null}
+              {payload?.contractedTruncated === true ? (
+                <Alert severity="warning" sx={{ mt: 2 }}>
+                  <AlertTitle>This attribution is incomplete</AlertTitle>
+                  The org sweep hit its safety ceiling, so orgs beyond it are in
+                  neither the table nor the totals.
+                </Alert>
+              ) : null}
+            </CardDisplay>
+
+            {/* ---- Marketplace and storefront attribution ---- */}
+            <CardDisplay
+              header="Which plugin, and which storefront"
+              help={docsHelp('revenue', {
+                anchor: '#where-the-money-came-from',
+                excerpt:
+                  'Marketplace commission attributed by listing and by publisher; storefront take attributed by host. Each table sums to its line in "Where the money came from".',
+              })}
+              contentGutterX
+              contentGutterY
+            >
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Each source is attributed on the dimension it is actually
+                measured in — commission by the plugin that earned it, take by
+                the storefront that generated it. Every table sums to its own
+                line in “Where the money came from”; a plugin table that did
+                not would be worse than no plugin table.
+              </Typography>
+
+              <Typography variant="overline" color="text.secondary">
+                Marketplace commission by listing
+              </Typography>
+              <Box sx={{ mb: 2 }}>
+                <RankedBars
+                  rows={(payload?.attributionByListing?.rows ?? []).map(
+                    (row) => ({
+                      key: String(row.key),
+                      label: String(row.name),
+                      sublabel: row.detail ? String(row.detail) : undefined,
+                      cents: Number(row.gainCents ?? 0),
+                    }),
+                  )}
+                  emptyMessage="No plugin earned a commission in this period — nothing to plot yet."
+                />
+              </Box>
+              <SourceTable
+                table={payload?.attributionByListing}
+                unit="Listing"
+                countLabel="Sales"
+                empty={`No marketplace sale settled in this period. ${PLATFORM_BRAND_NAME}'s commission is a share of each sale, so no sales means no commission — not a failed read.`}
+              />
+
+              <Divider sx={{ my: 3 }} />
+              <Typography variant="overline" color="text.secondary">
+                Marketplace commission by publisher
+              </Typography>
+              <SourceTable
+                table={payload?.attributionByPublisher}
+                unit="Publisher"
+                countLabel="Sales"
+                empty={`No publisher earned ${PLATFORM_BRAND_NAME} a commission in this period.`}
+              />
+
+              <Divider sx={{ my: 3 }} />
+              <Typography variant="overline" color="text.secondary">
+                Storefront take by host
+              </Typography>
+              <Box sx={{ mb: 2 }}>
+                <RankedBars
+                  rows={(payload?.attributionByHost?.rows ?? []).map((row) => ({
+                    key: String(row.key),
+                    label: String(row.name),
+                    sublabel: row.detail ? String(row.detail) : undefined,
+                    cents: Number(row.gainCents ?? 0),
+                  }))}
+                  emptyMessage="No storefront earned a take in this period — nothing to plot yet."
+                />
+              </Box>
+              <SourceTable
+                table={payload?.attributionByHost}
+                unit="Storefront"
+                countLabel="Orders"
+                empty={`No storefront order settled in this period. Note this is ${PLATFORM_BRAND_NAME}'s take only — the shopper's spend is the merchant's money and is never counted here.`}
+              />
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mt: 2 }}
+              >
+                Storefront figures above are the advertised take with
+                Stripe&apos;s processing cost already subtracted, on the basis
+                stated in “Gross versus net” below. Attribution is by host
+                rather than by org because one org can run several storefronts,
+                and rolling them up destroys the question.
+              </Typography>
+            </CardDisplay>
+
           </Stack>
         </StaffOnly>
       </Container>

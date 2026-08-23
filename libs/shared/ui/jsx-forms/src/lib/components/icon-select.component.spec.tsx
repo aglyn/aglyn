@@ -26,13 +26,15 @@ const CATALOG = [
   { id: 'mdiTablet', name: 'Tablet', path: 'M3 3h1z', tags: [] },
 ]
 
-jest.mock('@aglyn/shared-ui-jsx', () => {
-  const actual = jest.requireActual('@aglyn/shared-ui-jsx')
-  return {
-    ...actual,
-    useMdiIconsFuzzy: () => [CATALOG, CATALOG, jest.fn(), jest.fn()],
-  }
-})
+// Mocked at the SUBPATH, not the barrel (AGL-2486). The hook left
+// `@aglyn/shared-ui-jsx`'s barrel because reaching it from there dragged
+// `fuse.js` into the eager graph of every published customer page; this
+// component is its only consumer and imports it directly now. A barrel
+// override would silently stop intercepting and hand the component the real
+// hook — which is exactly how this spec failed when the import moved.
+jest.mock('@aglyn/shared-ui-jsx/hooks/mdi-icon/use-mdi-icons-fuzzy', () => ({
+  useMdiIconsFuzzy: () => [CATALOG, CATALOG, jest.fn(), jest.fn()],
+}))
 
 // The grid is virtualized (react-virtuoso), which renders nothing in a
 // zero-height jsdom container. Only the windowing is replaced; the cards it

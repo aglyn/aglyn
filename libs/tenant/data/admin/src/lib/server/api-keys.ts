@@ -109,6 +109,23 @@ export const API_SCOPES = [
   // writes here move money or stock and want their own decision, in the same
   // change that ships them (the AGL-899 rule for `contacts:write`).
   'orders:read',
+  // AGL-2461. The read-only note above says commerce writes wait for "their
+  // own decision, in the same change that ships them" because they "move
+  // money or stock". Recording a shipment does NEITHER — `fulfill-order.ts`'s
+  // own header says so: "a forward status flip plus a timeline entry, no
+  // stock moved, no money moved" — so it is precisely the write that rule
+  // admits, and it is the day-one commerce automation: a 3PL, ShipStation, or
+  // a warehouse's own system marking an order shipped with a tracking number.
+  // A public API that can take an order and never ship it is a fulfilment
+  // dead end.
+  //
+  // Fulfilment ONLY. `cancelled` and `refunded` are refused by name with a
+  // 400: those move stock and money through their own transactions, and this
+  // scope must never become the door around them. The transition rule itself
+  // is not re-implemented here at all — the write goes through the commerce
+  // plugin's own transaction via the order-fulfilment capability registry,
+  // so the API can never write a status the console forbids.
+  'orders:write',
   'products:read',
   'media:read',
   // AGL-2463. `media:read` was the only media scope, so an agency onboarding a

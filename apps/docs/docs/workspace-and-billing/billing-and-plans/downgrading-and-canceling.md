@@ -28,6 +28,8 @@ so you keep everything you paid for until it runs out. There is no proration
 credit on a downgrade because there is nothing to credit — nothing changes
 today.
 
+![The Show lower plans control expanded, with a help tooltip explaining that a downgrade takes effect at the end of the paid period](/img/billing-and-plans/lower-tiers-expanded-tip.png)
+
 ## Downgrading to a lower plan
 
 A downgrade changes your **entitlements** — which features you can use and how
@@ -107,14 +109,22 @@ it surprise you:
    missing features, not using it enough, switching to something else, technical
    problems, just pausing, something else) plus an optional comment box. This is
    the only required step, and the comment is genuinely optional.
+
+   ![The cancellation survey asking why you're leaving, with seven reasons and an optional comment box](/img/billing-and-plans/retention-survey.png)
 2. **A downsell**, if a smaller paid plan would still fit you. It names the plan
    and its price. **No thanks, continue** moves on.
+
+   ![The downsell step offering a smaller paid plan, with a No thanks, continue button](/img/billing-and-plans/retention-downsell.png)
 3. **A winback discount**, if you haven't used one before. It states the exact
    percentage *and the exact number of months* it lasts, because a discount
    whose end date you can't see isn't an offer. **No thanks, continue** moves on.
+
+   ![The winback step offering a percentage discount for a stated number of months](/img/billing-and-plans/retention-winback.png)
 4. **The confirmation.** This step also lists anything you'll be **over the Free
    plan's limits** on once the cancel lands — extra sites, datasets, seats — so
    the consequence is visible at the moment you decide, not afterwards.
+
+   ![The cancel confirmation listing what will be over the Free plan's limits, with Keep my plan and the cancel action](/img/billing-and-plans/retention-confirm.png)
 
 Things worth knowing about the offers:
 

@@ -20,7 +20,6 @@ import {
   claimAttempt,
   isCustomPricedPlan,
   isOrgSubscriptionLive,
-  isReleaseFlagOn,
   pluginRequestFromWeb,
   Route,
   type AttemptClaim,
@@ -30,8 +29,8 @@ import {
   emailUnverifiedResponse,
   featureLockdownRefusal,
   firebaseAdmin,
-  getServerReleaseFlagValues,
   isImpersonationSession,
+  isServerReleaseFlagOnForOrg,
   memberHasOrgPermission,
   readOrgBilling,
   resolveOrgMembership,
@@ -234,22 +233,31 @@ async function handler(request: Request): Promise<Response> {
     //
     // The redirect stays the default until a real card has been through this,
     // which is not something a test suite can do for us.
-    const flagValues = await getServerReleaseFlagValues()
     // BOTH conditions, not just the flag. An embedded session returns a client
     // secret and no `url`, so if the browser cannot mount it — which needs a
     // publishable key that is currently set nowhere — flipping the flag would
     // strand a paying customer with a dead Upgrade button. Requiring the key
     // here means the worst case of a premature flag flip is the redirect we
     // already ship.
+    //
+    // Resolved through `isServerReleaseFlagOnForOrg` (AGL-2486), NOT by reading
+    // `getServerReleaseFlagValues()` and calling `isReleaseFlagOn` here. That
+    // two-step is what this route used to do, and it made the per-org overrides
+    // unreachable on the one code path that takes money: a staff grant on
+    // `orgs/{orgId}.releaseFlags` was written, cached and then ignored, so
+    // native checkout was all-or-nothing platform-wide and there was no way to
+    // pilot it with a single customer. Which is precisely what the note above
+    // asks for — the redirect stays the default until a real card has been
+    // through this, and a per-org grant is how that first card gets there.
+    //
+    // The org is the subject for both halves: it selects the override AND it is
+    // the rollout bucket, so a rollout moves a whole workspace together rather
+    // than showing one owner a different checkout from their colleague, and the
+    // console cannot land on the opposite side of a percentage from the
+    // storefront's `resolveNativeCheckoutMode` for the same org (AGL-1656).
     const embedded =
       Boolean(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) &&
-      isReleaseFlagOn(
-        'release_native_checkout',
-        flagValues['release_native_checkout'],
-        // Bucket by org, so a rollout moves a whole workspace together rather
-        // than showing one owner a different checkout from their colleague.
-        orgId,
-      )
+      (await isServerReleaseFlagOnForOrg('release_native_checkout', orgId))
     const params = new URLSearchParams({
       mode: 'subscription',
       'line_items[0][price]': priceId,
@@ -300,6 +308,18 @@ async function handler(request: Request): Promise<Response> {
       // checkout. Stripe validates the code and the discount rides the
       // resulting subscription; the webhook mirrors it onto org.discount.
       allow_promotion_codes: 'true',
+      // Pinned, not defaulted (AGL-2486). Stripe's default for `mode:
+      // subscription` IS `always` — measured against the live API on
+      // 2026-08-23: a session carrying a 100%-off `duration: forever` coupon
+      // came back `payment_method_collection=always` with `amount_total=0`,
+      // so a discounted signup still saves a card. We state it anyway because
+      // the failure mode is silent and delayed: if this ever resolved to
+      // `if_required`, every $0-today signup — an enterprise first month
+      // free, a full-discount promo code — would complete with NO payment
+      // method on file, and we would not find out until the first renewal
+      // failed across all of them at once. The word `always` here is what a
+      // reviewer checks; an unstated default is not.
+      payment_method_collection: 'always',
       // Billing identity on the customer (AGL-1133). An invoice that has to
       // satisfy a tax authority needs an address on it, and a B2B one needs
       // the buyer's tax id.

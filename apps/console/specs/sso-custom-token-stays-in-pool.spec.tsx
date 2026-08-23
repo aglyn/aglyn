@@ -51,7 +51,10 @@ const mockNotFound = jest.fn(() => {
 })
 jest.mock('next/navigation', () => ({ notFound: () => mockNotFound() }))
 
-import { signInWithPooledCustomToken } from '../utils/pooled-custom-token'
+import {
+  adoptRestoredPool,
+  signInWithPooledCustomToken,
+} from '../utils/pooled-custom-token'
 import { StaffGuard } from '../components/staff-guard.component'
 
 /**
@@ -99,6 +102,61 @@ describe('a custom token is exchanged in the pool it was minted in', () => {
     auth.tenantId = TENANT
     await signInWithPooledCustomToken(auth as never, 'tok', undefined)
     expect(poolAtExchange).toBeNull()
+  })
+})
+
+/**
+ * The RESTORE half (AGL-2486). AGL-1993 fixed the pool of an EXCHANGE, and
+ * an exchange only happens when this origin has no local user. The commoner
+ * path — a second visit, or a second tab — finds the user already in
+ * IndexedDB, where `directlySetCurrentUser` sets `currentUser` and leaves
+ * `tenantId` at the constructor's `null`. An SSO session restored that way
+ * runs on an instance that believes it is on the project pool, and the
+ * cross-tab sync path then throws `auth/tenant-id-mismatch` rather than
+ * tracking what the rest of the browser profile is doing.
+ */
+describe('a restored session is put back in its own pool', () => {
+  it('adopts the tenant of a user restored from persistence', () => {
+    const auth = { tenantId: null as string | null }
+    adoptRestoredPool(auth as never, { tenantId: TENANT })
+    // The assertion that fails on the original code: it stayed `null`, and
+    // every request from that instance went to the project pool.
+    expect(auth.tenantId).toBe(TENANT)
+  })
+
+  it('clears a stale tenant for a restored project-pool user', () => {
+    // The reverse. `tenantId` is sticky instance state, so a conditional
+    // assignment would leave a project-pool account pointed at a tenant.
+    const auth = { tenantId: TENANT as string | null }
+    adoptRestoredPool(auth as never, { tenantId: null })
+    expect(auth.tenantId).toBeNull()
+  })
+
+  it('treats an absent tenantId as the project pool, not as no opinion', () => {
+    const auth = { tenantId: TENANT as string | null }
+    adoptRestoredPool(auth as never, {})
+    expect(auth.tenantId).toBeNull()
+  })
+
+  it('never invents a pool when there is no user to read one from', () => {
+    const auth = { tenantId: null as string | null }
+    adoptRestoredPool(auth as never, null)
+    expect(auth.tenantId).toBeNull()
+  })
+
+  it('is wired into the RESTORE branch, and only there', () => {
+    const hook = readFileSync(
+      join(__dirname, '..', 'hooks', 'use-session-cookie.tsx'),
+      'utf8',
+    )
+    // A correct helper nothing calls is precisely the failure AGL-1993 was
+    // made of — the server carried a comment asserting the client set
+    // `auth.tenantId`, and the client never did.
+    expect(hook).toContain('adoptRestoredPool(auth')
+    // Exactly one call site. A second one would be a sign-in path, where
+    // adopting the OUTGOING user's pool aims the in-flight sign-in at the
+    // wrong one — the same cross-pool bug pointed backwards.
+    expect(hook.match(/adoptRestoredPool\(auth/g)).toHaveLength(1)
   })
 })
 

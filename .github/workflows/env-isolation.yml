@@ -1,0 +1,122 @@
+name: Env isolation
+
+# No secret holds the SAME value in production and in development/preview
+# (AGL-2403, AGL-2401, AGL-2402).
+#
+# ## Why this exists
+#
+# `RELEASE_CHECKLIST.md` §3 has carried the line "rotate any dev-shared
+# secrets" since the checklist was written. It was never done, and nothing
+# noticed, because nothing looked. The AGL-1874 audit finally looked — by hand,
+# once, on 2026-08-19 — and found ten. A one-time audit is exactly the shape of
+# work that decays: the next credential added on all three targets restores the
+# problem and there is no second audit scheduled.
+#
+# So this is the audit, on a schedule, with a verdict.
+#
+# ## It reads METADATA, never a value
+#
+# A Vercel environment variable is a RECORD with one value and a `target`
+# array. A single record whose target spans `production` and `development` is
+# PROOF that development holds the production value — no decryption, no
+# fingerprint, no plaintext anywhere. The original audit established the same
+# fact by pulling every value to a laptop and comparing salted hashes, i.e. by
+# putting ten production secrets in a file to prove they should not be in a
+# file. This asks the question the other way round.
+#
+# ## The shared scope is the whole point
+#
+# `vercel env ls` shows PROJECT-scope variables only. `CRON_SECRET`,
+# `TOKEN_SIGNING_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and
+# `GA4_API_SECRET` are all team-SHARED records, invisible to it. An audit built
+# on `env ls` reports this repo clean. The checker reads both scopes and treats
+# a failure to read the shared scope as exit 2, never as a pass.
+#
+# ## ⚠️ THIS JOB IS RED TODAY, AND THAT IS THE DELIVERABLE
+#
+# As of 2026-08-23 it reports 25 findings. Turning it green is remediation work
+# in the Vercel dashboard (AGL-2403 / AGL-2401 / AGL-2402) — the runbook is
+# `docs/SECRET_ROTATION.md`. Do NOT add `continue-on-error`, and do NOT move a
+# finding into the checker's ACCEPTED table to quiet it: an ACCEPTED entry
+# needs a name and a reason and is still printed on every run. A guard that
+# cannot be red is not a guard.
+#
+# ## Configuration
+#
+# - secret VERCEL_TOKEN — a Vercel access token scoped to the `aglyn` team,
+#   the same secret firewall-drift.yml reads (created 2026-08-23). A token
+#   WITHOUT team scope reports HTTP 403 and exits 2, not 0.
+#
+# Exit codes: 0 every secret is environment-isolated; 1 at least one spans;
+# 2 could not check.
+
+on:
+  schedule:
+    # Daily, 08:47 UTC — after firewall-drift (08:29) and pricing-drift (08:29)
+    # so the drift jobs do not contend. (GitHub schedules are best-effort and
+    # pause on 60-day-quiet repos; a green history is not proof of continuous
+    # coverage.)
+    - cron: '47 8 * * *'
+  workflow_dispatch:
+  # Scoped to the checker itself, so a change to the guard is exercised by the
+  # change that makes it — the thing that would otherwise only be discovered
+  # the next morning.
+  push:
+    branches: [main]
+    paths:
+      - tools/deploy/verify-env-isolation.mjs
+      - .github/workflows/env-isolation.yml
+
+concurrency:
+  group: env-isolation
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      # Guard the guard, BEFORE the live read and BEFORE the credential gate.
+      # Every case in --self-test is a state the live data does NOT contain:
+      # today every finding is red, so nothing about the live run proves the
+      # check can still go GREEN once the split is done, nor that a NEW shared
+      # credential would be reported as UNTRACKED rather than folded into the
+      # nearest issue. Pure node, no network, no token — so it must still run
+      # on a day the secret is missing.
+      #
+      # No `npm ci` on purpose: the checker uses only built-in fetch, so this
+      # step cannot be broken by a dependency, a lockfile or a registry outage.
+      - run: npm run test:env-isolation
+
+      - name: Refuse to no-op without credentials
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "The VERCEL_TOKEN repo secret is not set." >&2
+            echo "" >&2
+            echo "This job reads LIVE Vercel env metadata for the team-shared" >&2
+            echo "scope and both projects. Without a token it cannot see live," >&2
+            echo "and passing anyway would be the silent-drift failure it exists" >&2
+            echo "to prevent (AGL-2403)." >&2
+            echo "" >&2
+            echo "  gh secret set VERCEL_TOKEN --body '<token>'" >&2
+            exit 2
+          fi
+
+      # CI is set by Actions, which disables the checker's local Vercel-CLI
+      # auth-file fallback — a CI run can only ever authenticate with the repo
+      # secret above.
+      - name: Assert no secret spans production and development/preview
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npm run check:env-isolation

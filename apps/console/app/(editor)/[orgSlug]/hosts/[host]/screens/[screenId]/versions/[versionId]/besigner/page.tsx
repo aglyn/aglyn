@@ -28,6 +28,7 @@ import {
   besignerDocsUrl,
   BesignerConflictAlertComponent,
   BesignerDraftAlertComponent,
+  recoverableRoomSessions,
   LayoutChromeContext,
   PropertiesDialogComponent,
   useAddElementDrawerCallback,
@@ -192,6 +193,7 @@ function BesignerPage(props) {
     hostId,
     docType: 'screen',
     docId: screenId,
+    versionId,
     selectedNodeId,
     broadcastCursor: true,
     getCanvasRoot,
@@ -322,6 +324,15 @@ function BesignerPage(props) {
       docId: screenId,
       versionId,
     },
+    // The crash-recovery prompt is withheld while anyone else is in this
+    // room (AGL-2486): the mirror already has the unsaved work, so there is
+    // nothing to recover and both of its buttons could only take something
+    // away. Presence, not the mirror alone, because a colleague who has the
+    // document open but has not typed since we joined publishes nothing.
+    roomSessions: recoverableRoomSessions(
+      presence.status,
+      presence.entries.length,
+    ),
     notify: enqueueSnackbar,
     // Tell the author what happens next when they are editing the LIVE
     // version. Without it the only feedback is "saved", the live page keeps

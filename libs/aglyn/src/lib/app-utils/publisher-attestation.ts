@@ -108,12 +108,32 @@ export const PUBLISHER_ATTESTATION: readonly PublisherAttestationItem[] = [
     detail:
       'These exact bytes, not an earlier build. Static review cannot tell a reviewer what your plugin does at runtime.',
   },
+  /**
+   * Publisher Agreement §3(h), which binds "Neither the Artifact nor its
+   * listing" — so it already reached the element names and descriptions a
+   * plugin declares in its manifest, which ship INSIDE the artifact. This
+   * sentence did not, and a publisher can only be held to what they were
+   * asked (AGL-2486).
+   *
+   * Written as a CAPABILITY — any text you supply that renders in, or ranks
+   * within, the console — rather than as a list of today's fields. The list
+   * was already wrong once: `tags` and `keywords` reached the picker's search
+   * ranking days after `description` reached its detail panel, and a sentence
+   * enumerating fields goes stale the next time one is added. Ranking is
+   * named explicitly because it is the non-obvious half: a search term never
+   * appears on screen, yet it decides which element a customer is SHOWN.
+   *
+   * The id stays `listing-conduct` deliberately. A stored tick is keyed by
+   * id (see {@link attestationsForBytes}), so renaming it to something truer
+   * to the widened wording would orphan every attestation on file as an
+   * unrecognised id, and re-ask for bytes already attested.
+   */
   {
     id: 'listing-conduct',
     label:
-      `The listing does not disparage ${PLATFORM_BRAND_NAME}, quote what its plans cost, or sell a way around one`,
+      `Neither my listing nor any text on my elements disparages ${PLATFORM_BRAND_NAME}, quotes what its plans cost, or sells a way around one`,
     detail:
-      `Saying which ${PLATFORM_BRAND_NAME} plans or features your plugin needs, or works with, is fine and useful. Editorialising about ${PLATFORM_BRAND_NAME}’s prices or quotas, stating or implying what a plan contains, or pitching this version as a way to avoid a plan or an upgrade is not — the listing renders inside the customer’s own console.`,
+      `Saying which ${PLATFORM_BRAND_NAME} plans or features your plugin needs, or works with, is fine and useful. Editorialising about ${PLATFORM_BRAND_NAME}’s prices or quotas, stating or implying what a plan contains, or pitching this version as a way to avoid a plan or an upgrade is not. This covers any text you supply that renders in — or ranks within — the console, not only the listing: an element’s name, description, tags, search keywords and attribute labels all ship inside your bundle, and a customer meets them in their own element picker. Search terms count even though nobody reads them, because they decide which element gets shown.`,
   },
   {
     id: 'changelog',

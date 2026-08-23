@@ -130,6 +130,15 @@ export interface UseBesignerDocumentOptions<TData = unknown>
    * override of the same key produce the same string.
    */
   draft?: BesignerDraftIds
+  /**
+   * Other live editing sessions in this document's room, or null while
+   * presence has not settled — see `recoverableRoomSessions` (AGL-2486).
+   *
+   * Only the crash-recovery prompt reads it. The conflict guard deliberately
+   * does NOT: a room is a live-collaboration fact and saving must be
+   * protected whether or not presence is working at all.
+   */
+  roomSessions?: number | null
   notify?: BesignerNotify
   queueLoading?: BesignerQueueLoading
   /** Called after a successful save, for activity logging. */
@@ -268,6 +277,7 @@ export function useBesignerDocument<TData = unknown>(
     viewType,
     documentKey,
     draft: draftIds,
+    roomSessions,
     notify = noopNotify,
     queueLoading = noopQueueLoading,
     onSaved,
@@ -339,8 +349,47 @@ export function useBesignerDocument<TData = unknown>(
    * client can key on.
    */
   const baseNodesRef = useRef<Aglyn.ProcessableNodes | undefined>(undefined)
-  /** Set when we save, so the resulting snapshot is adopted, not flagged. */
-  const expectOwnWriteRef = useRef(false)
+  /**
+   * What THIS editing session last wrote, held until the snapshot carrying
+   * it arrives — so "is this my own echo?" is answered by evidence rather
+   * than by a flag (AGL-2486).
+   *
+   * ## The hole this closes
+   *
+   * It used to be a boolean: save, set it, and adopt the NEXT moving
+   * snapshot as ours whatever it contained. That is a bet on delivery order,
+   * and the console runs `persistentMultipleTabManager`, so the tabs of one
+   * browser share a cache and their snapshots coalesce. Two sessions saving
+   * within a beat of each other therefore reach this:
+   *
+   *   1. this tab saves and arms the flag;
+   *   2. another session commits before our echo is delivered;
+   *   3. one snapshot arrives, carrying THEIR nodes;
+   *   4. the flag consumes it — `remoteChanged` stays false, and both
+   *      baselines advance to their write.
+   *
+   * The second half is the damage. With the baseline advanced, the next
+   * Save passes the client guard AND the AGL-1301 transaction — the stamp
+   * and content it presents are the ones actually stored — so their work is
+   * overwritten with no warning at either layer. That is exactly the "the
+   * second save silently replaces the first, and it will not warn you"
+   * Zach hits with four tabs open, and nothing about it needs the two
+   * writers to be different people: it needs them to be different SESSIONS,
+   * which two tabs of one account are.
+   *
+   * Comparing the content closes it without a schema change. A snapshot is
+   * our echo only if it carries what we wrote; anything else is somebody
+   * else's write and is flagged. Two sessions that saved IDENTICAL content
+   * match and are adopted, which is correct — there is no work to lose
+   * between two writes that agree.
+   *
+   * Note what stays untouched: the guard still reads no uid anywhere, so it
+   * has never distinguished a colleague from your own other window, and now
+   * refuses both alike. The server-side half is unchanged and is what makes
+   * this safe — because the baseline no longer advances, the stale save is
+   * refused inside the transaction as well.
+   */
+  const expectOwnWriteRef = useRef<{ nodes: unknown } | null>(null)
   const [remoteChanged, setRemoteChanged] = useState(false)
 
   useEffect(() => {
@@ -372,6 +421,24 @@ export function useBesignerDocument<TData = unknown>(
     }
   }, [nodes, pendingWrites])
 
+  /**
+   * The canvas as the STORE would hold it — the same conversion `handleSave`
+   * performs, so "does my document contain theirs" is asked in the shape the
+   * answer has to be true in (AGL-2486).
+   *
+   * Null when the canvas cannot be expressed in that shape at all: a
+   * component-kind document mid-edit that `fromCanvasNodes` refuses
+   * (AGL-681) has no stored form to compare, and "no answer" must read as a
+   * conflict rather than as agreement.
+   */
+  const storedShapeOfCanvas = useCallback((): Record<string, unknown> | null => {
+    if (!Aglyn.canvas.didSetInitial) return null
+    const canvasNodes = Aglyn.canvas.toJSON().nodes as Record<string, unknown>
+    if (!fromCanvasNodes) return canvasNodes
+    const prepared = fromCanvasNodes(canvasNodes)
+    return 'error' in prepared ? null : prepared.nodes
+  }, [fromCanvasNodes])
+
   useEffect(() => {
     const stored = Aglyn.versionStamp(updatedAt)
     const stampMoved = Aglyn.hasConcurrentWrite(baseStampRef.current, stored)
@@ -381,15 +448,57 @@ export function useBesignerDocument<TData = unknown>(
       baseNodesRef.current != null &&
       !isEqual(nodes, baseNodesRef.current)
     if (!stampMoved && !nodesMoved) return
-    if (expectOwnWriteRef.current) {
-      // This is the echo of our own save landing.
-      expectOwnWriteRef.current = false
+    const ownWrite = expectOwnWriteRef.current
+    if (ownWrite && isEqual(nodes, ownWrite.nodes)) {
+      // This is the echo of our own write landing — it carries what we sent.
+      expectOwnWriteRef.current = null
       baseStampRef.current = stored
       baseNodesRef.current = nodes
       return
     }
+    // Somebody else's write. Whether it is a CONFLICT is a different
+    // question from whether the document moved (AGL-2486).
+    //
+    // Zach: *"I made an edit in the top browser, saved it in the bottom
+    // browser, then the alert appeared in the top browser for someone else
+    // saved… any user collaborating should be able to save as they all go
+    // along and make changes."* He is right, and the reason is the mirror:
+    // their changes reached this canvas node by node before they pressed
+    // Save, so this session usually already holds what they stored and its
+    // own write is a superset of it. `incorporatesStoredNodes` is the
+    // evidence for that — never an assumption that co-editing is healthy —
+    // and a session that has fallen behind cannot satisfy it, which is the
+    // case the guard exists for and still refuses.
+    //
+    // Advancing the baseline here is what lets the save through, and it is
+    // safe because the store re-runs the AGL-1301 precondition against what
+    // is ACTUALLY stored at commit time: anything that lands between this
+    // decision and that commit moves `nodes` away from the baseline just
+    // adopted, and the transaction refuses it. The promise that "even a save
+    // racing the conflict by milliseconds is refused" is untouched — the
+    // client simply stops refusing saves the server would have accepted.
+    const ourNodes = storedShapeOfCanvas()
+    if (Aglyn.incorporatesStoredNodes(baseNodesRef.current, nodes, ourNodes)) {
+      expectOwnWriteRef.current = null
+      baseStampRef.current = stored
+      baseNodesRef.current = nodes
+      setRemoteChanged(false)
+      // …and when the canvas holds NOTHING beyond what was just stored,
+      // there is nothing left to save. Without this the editor keeps
+      // offering SAVE over a document it agrees with completely, which is
+      // the second half of the same report: the mirror made the canvas
+      // dirty against a baseline recorded at load, and their save is what
+      // made that baseline stale rather than the canvas wrong. No argument,
+      // so the canvas as it stands becomes the saved state.
+      if (isEqual(ourNodes, nodes)) Aglyn.canvas.updateInitialNodes()
+      return
+    }
+    // Our own expectation is void too: whatever it was waiting for either
+    // lost the race or is behind this, and a later matching snapshot must
+    // not be allowed to walk the baseline forward over a reported conflict.
+    expectOwnWriteRef.current = null
     setRemoteChanged(true)
-  }, [updatedAt, nodes])
+  }, [updatedAt, nodes, storedShapeOfCanvas])
 
   // Crash net (AGL-1256). Shares the conflict guard's stamp so the restore
   // prompt can tell "your unsaved work" from "your unsaved work, and someone
@@ -399,6 +508,7 @@ export function useBesignerDocument<TData = unknown>(
     loaded: Aglyn.canvas.didSetInitial,
     dirty: saveAvailable,
     storedStamp: Aglyn.versionStamp(updatedAt),
+    roomSessions,
   })
 
   const handleSave = useCallback(async () => {
@@ -485,9 +595,10 @@ export function useBesignerDocument<TData = unknown>(
       // Fire-and-forget attribution (AGL-676) — an audit miss must not break
       // the edit that triggered it.
       onSaved?.()
-      // Our own write moves the stamp; the new value arrives on the next
-      // snapshot, so mark it as ours rather than somebody else's edit.
-      expectOwnWriteRef.current = true
+      // Our own write moves the stamp; the new value arrives on a later
+      // snapshot, which we will recognise by the nodes we just sent rather
+      // than by it merely being the next one to arrive (AGL-2486).
+      expectOwnWriteRef.current = { nodes: nextNodes }
       setRemoteChanged(false)
       notify(
         savedMessage ??
@@ -529,9 +640,14 @@ export function useBesignerDocument<TData = unknown>(
     draftIds,
   ])
 
-  // Same flag `handleSave` sets, for writes that do not go through it.
+  // Same expectation `handleSave` records, for writes that do not go through
+  // it. Those write OTHER fields — component properties are the first
+  // (AGL-1247) — so the echo they produce moves the stamp and leaves `nodes`
+  // exactly as the baseline has them. Expecting that is what makes the
+  // announcement precise: if a colleague's node save lands first, it does
+  // not match, and declaring a property no longer swallows their write.
   const markOwnWrite = useCallback(() => {
-    expectOwnWriteRef.current = true
+    expectOwnWriteRef.current = { nodes: baseNodesRef.current }
   }, [])
 
   const [jsonOpen, setJsonOpen] = useState(false)

@@ -28,6 +28,7 @@ import {
   holdPromotionSlot,
   promotionHoldKey,
 } from './promotion-hold'
+import { holdStock, stockHoldKey } from './stock-hold'
 import {
   applyNativeCheckoutParams,
   nativeCheckoutStripeHeaders,
@@ -104,6 +105,20 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     couponSlot = null
     couponHoldKey = ''
     if (slot) await slot.release()
+  }
+  /**
+   * The units this attempt reserved (AGL-2356), hoisted for the same reason the
+   * coupon slot is: every refusal below the claim — and the catch — has to hand
+   * them back, or an abandoned request stands on a merchant's last unit until
+   * the TTL lapses.
+   */
+  let stockHold: { holdKey: string; release: () => Promise<void> } | null = null
+  let heldStockKey = ''
+  const releaseStock = async (): Promise<void> => {
+    const held = stockHold
+    stockHold = null
+    heldStockKey = ''
+    if (held) await held.release()
   }
   try {
     const firestore = firebaseAdmin.app().firestore()
@@ -438,6 +453,55 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       return derived ? { 'Idempotency-Key': derived } : {}
     }
 
+    // THE UNITS ARE RESERVED HERE (AGL-2356), not merely read above.
+    //
+    // The `canPurchase` gate at the top of this handler is a plain `.get()`
+    // compared against a number, and the webhook decremented minutes later
+    // without ever re-asking. Nothing was written, so there was no document to
+    // contend on: every shopper who reached this line while the shelf held one
+    // unit passed it, and they all paid. This is the write that makes them
+    // serialise — see `model/commerce-stock-holds.ts` for why the shelf count
+    // itself deliberately does not move.
+    //
+    // FIRST among the holds, before the coupon slot below: stock is the
+    // likeliest refusal on this path, and reserving a promotion slot for a
+    // basket the store cannot fill is a slot held against the merchant's cap
+    // for nothing.
+    {
+      const held = await holdStock({
+        firestore,
+        hostRef,
+        holdKey: stockHoldKey(claimed.claim.stripeKey),
+        // Empty when there is nothing to reserve ON — an untracked variant or
+        // a `backorder` product, whose merchant chose to sell past zero. See
+        // the note in `cart-checkout.ts`: the unlimited case stays off the
+        // write path entirely, and `holdStock` opens no transaction for it.
+        lines: CommerceModel.stockIsReservable(lifted, variant.id, Date.now())
+          ? [{ productId, variantId: variant.id, quantity }]
+          : [],
+        label: `buy-now ${hostId}/${productId}`,
+      })
+      if (!held.ok) {
+        // Nothing has been minted yet, so the key goes back and the same
+        // button works when the units return (AGL-1697). `sold-out` is named
+        // separately from an empty shelf: the merchant HAS stock and someone
+        // else is in checkout with it, and a shopper told "sold out" leaves
+        // while a shopper told to wait a few minutes comes back.
+        await releaseStock()
+        await claim.release()
+        return res.status(409).json({
+          error:
+            held.reason === 'sold-out'
+              ? CommerceModel.STOCK_HELD_MESSAGE
+              : 'Sold out',
+        })
+      }
+      if (held.holdKey) {
+        stockHold = held
+        heldStockKey = held.holdKey
+      }
+    }
+
     // THE COUPON SLOT IS RESERVED HERE (AGL-2453), not merely read above.
     //
     // The check at the top of this handler was a comparison against a plain
@@ -461,6 +525,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         // back (AGL-1697). Exhaustion is named; anything else reads as the
         // same invalid-code refusal the pre-filter above would have given.
         await releaseCouponSlot()
+        await releaseStock()
         await claim.release()
         return res.status(400).json({
           error:
@@ -491,6 +556,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         // Nothing was sold — hand the key back so the same button works
         // once Stripe does (AGL-1697).
         await releaseCouponSlot()
+        await releaseStock()
         await claim.release()
         return res.status(502).json({ error: 'Checkout failed' })
       }
@@ -563,6 +629,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       // key — released, not burned (AGL-1697). The tax rate possibly minted
       // above replays from its cache (or its derived key) on the retry.
       await releaseCouponSlot()
+      await releaseStock()
       await claim.release()
       return res.status(400).json({
         error: 'Choose where you’re shipping to.',
@@ -575,6 +642,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         body.shippingCountry,
       )
       await releaseCouponSlot()
+      await releaseStock()
       await claim.release()
       return res.status(409).json({
         error: `This store does not ship to ${
@@ -590,6 +658,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // path — the shopper can change the basket and retry under the same key.
     if (shippingPlan.refusal === 'cart-unpriceable') {
       await releaseCouponSlot()
+      await releaseStock()
       await claim.release()
       return res
         .status(409)
@@ -830,6 +899,26 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       // which is right for an uncapped coupon and for a session minted before
       // this deploy — both of which reserved nothing and must still be counted.
       ...(couponHoldKey ? { 'metadata[couponHoldKey]': couponHoldKey } : {}),
+      // Set only when units were actually reserved (AGL-2356). Its ABSENCE is
+      // what tells the webhook there is nothing to release — right for an
+      // untracked or backorder product, and right for a session minted before
+      // this deploy, neither of which reserved anything.
+      ...(heldStockKey ? { 'metadata[stockHoldKey]': heldStockKey } : {}),
+      // A HALF-HOUR SESSION, AND IT IS THE HOLD'S WHOLE SAFETY ARGUMENT
+      // (AGL-2356). Stripe's default is 24 hours, and a hold must outlive any
+      // session that can still be paid — so the default would mean one
+      // abandoned cart standing on a merchant's last unit for a day, which is
+      // exactly the unbounded, invisible UNDER-sell this issue was held back
+      // for. Shortening the SESSION is what bounds it; 30 minutes is Stripe's
+      // own minimum and the same figure the bookings plugin gives a held room.
+      // Sent on subscription sessions too, deliberately: a shopper who has been
+      // sitting on a payment page for half an hour is starting again either
+      // way, and one rule is one thing to reason about.
+      expires_at: String(
+        Math.floor(
+          (Date.now() + CommerceModel.CHECKOUT_SESSION_TTL_MS) / 1000,
+        ),
+      ),
     })
     // Both keys or neither (AGL-1720). Stripe will not apply a shipping rate
     // without an address to ship to, and a merchant who configured nothing
@@ -901,6 +990,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       // Nothing was sold — hand the key back so one flaky moment does not
       // lock this product out for the shopper.
       await releaseCouponSlot()
+      await releaseStock()
       await claim.release()
       return res.status(502).json({ error: 'Checkout failed' })
     }
@@ -910,6 +1000,10 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // leave a paid order whose redemption is never counted — the same
     // over-redemption this fix closes, arriving through the release path.
     couponSlot = null
+    // And so do the units (AGL-2356), for the stronger version of the same
+    // reason: releasing here would hand the last unit to the next shopper while
+    // this one still holds a payable session, which is the oversell itself.
+    stockHold = null
     await claim.record(200, payload)
     return res.status(200).json(payload)
   } catch (error) {
@@ -917,6 +1011,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // Release on the way out so a transient failure does not strand the key
     // (AGL-1691's rule).
     await releaseCouponSlot()
+    await releaseStock()
     await claim?.release()
     return res.status(500).json({ error: 'Checkout failed' })
   }

@@ -83,9 +83,41 @@ import { TAB_SESSION_ID, type PresenceSession } from './use-presence'
  * honest in both directions: it rewinds *your* edits and leaves theirs
  * alone.
  *
- * Operation-based collaborative undo is still future work (AGL-1958): undo
- * remains whole-document snapshots plus this overlay, so there is still no
- * per-user redo across a session. What is closed is the data loss.
+ * **A node only counts as touched when the value actually moved** — the mark
+ * is passed the node's serialization from before the apply, and an apply
+ * that changed nothing records nothing (AGL-2486). The mirror is per node
+ * and every session republishes what it holds, so a value you wrote comes
+ * back to you from another session, your own second tab most of all once
+ * same-account sessions count as co-editors. The room drops your own TAB's
+ * echoes by session id (see the `by` check below) but cannot drop another
+ * session's echo of your value. Marking that echo stamped YOUR node foreign
+ * at a fresh epoch — newer than every snapshot on your stack — and the
+ * overlay then laid the live value back over each one, so undo consumed its
+ * entry and changed nothing at all.
+ *
+ * **Redo is protected by the same overlay, not left out of it** (AGL-2486).
+ * That is worth stating because the shape invites the opposite guess: a
+ * `future` entry replays a state that existed BEFORE the undo, so it looks
+ * like it must predate a peer's later change and roll it back. It does not.
+ * `HistoryManager.undo` pushes a live capture of the present stamped with
+ * the epoch AT THE TIME OF THE UNDO, so a peer change landing afterwards is
+ * strictly newer than that stamp and `withForeignNodes` keeps it — exactly
+ * as on the undo side.
+ *
+ * Measured on the running editor, two sessions on one screen (2026-08-23):
+ * across an interleaved run of two undos and two redos, with the peer
+ * editing, creating and deleting nodes in the gaps, the only node id the
+ * undoing tab ever wrote to RTDB was its own. No value revert, no tombstone,
+ * and the peer's canvas never moved. See the `redo against a co-editor`
+ * specs, which fail if the overlay is taken off the redo path.
+ *
+ * What is still future work (AGL-1958) is narrower than "redo": a node the
+ * peer has taken over SINCE your undo resolves to them, so redoing your own
+ * edit to that one node is a no-op — the step is consumed and nothing is
+ * published. That is the same per-node last-writer-wins rule as everywhere
+ * else (AGL-677), so nothing is destroyed; re-applying your operation on top
+ * of theirs is what an operation-based history would buy, and this one is
+ * still whole-document snapshots plus this overlay.
  */
 
 /** How long to coalesce local edits before publishing them. */
@@ -379,13 +411,19 @@ export function applyRemoteNode(nodeId: string, entry: MirrorEntry): boolean {
   try {
     const node = JSON.parse(entry.json)
     recordPrior(nodeId)
+    // Captured BEFORE the apply so the mark can tell a peer edit from an
+    // echo of a value this canvas already holds — see `markRemoteNode`.
+    // Every session republishes what it holds, so your own edit comes back
+    // from your other tab, and marking that echo made your own undo a no-op
+    // (AGL-2486).
+    const previousJson = Aglyn.canvas.serializeNode(nodeId)
     Aglyn.canvas.setNodes({ [nodeId]: node } as never, true)
     // Keeping this out of local undo (above) stops a remote edit being
     // rewound by an undo it is not part of. The mark is the other half:
     // it stops the snapshots ALREADY on the stack — every one of which
     // predates this change — from rolling it back and republishing the
     // rollback to its author (AGL-1958).
-    Aglyn.canvas.markRemoteNode(nodeId)
+    Aglyn.canvas.markRemoteNode(nodeId, previousJson)
     scheduleRemoteReconcile()
     return true
   } catch {

@@ -60,6 +60,46 @@ batch, so read registries lazily rather than snapshotting.
 | `registerSitePageResolver(fn)` | Composes plugin-owned pages (commerce PDP/PLP). |
 | `registerSitePageEnricher(fn)` | Contributes page-prop slices; **enricher errors are isolated** — a broken plugin drops its slice, never the page. |
 
+## Stylesheets — `plugin-styles`
+
+Raw CSS your plugin ships, routed so the besigner canvas resolves it exactly
+as a published page does.
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginStyles({pluginId, styleId?, css})` | Registers (or replaces) one stylesheet. Rendered as a plain `<style>` at the site-content root of **every** surface — published tenant, editor Preview, and inside the besigner canvas's shadow root. |
+| `unregisterPluginStyles(pluginId, styleId?)` | Drops one sheet, or all of a plugin's. |
+| `listPluginStyles()` / `subscribeToPluginStyles(fn)` | The registry, and a change subscription. |
+| `capturePluginStyles(pluginId, load)` | Used by the realm loader; see below. |
+
+**Why you cannot just write to `document.head`.** You can, and on a published
+page it works — but the besigner canvas renders site content inside a
+**closed shadow root**, which a document-level rule never reaches. Measured:
+the same rule that beats every MUI declaration on the published page has *no
+effect at all* on the canvas. So a plugin that styles itself that way looks
+one way in the editor and another way live.
+
+`loadRealmPlugins` therefore wraps each bundle's module evaluation and
+`register()` in `capturePluginStyles`, which picks up any `<style>` the bundle
+appends to `document.head` — the shape `import './styles.css'` compiles to in
+every bundler — and mirrors it into the canvas. The original element is left
+where the bundle put it, so CSS you ship for a **console** surface keeps
+working. Anything injected outside that window (lazily, or from a `<link>`)
+is not mirrored: call `registerPluginStyles` for those.
+
+**Cascade position.** Plugin CSS is deliberately **unlayered**, while all MUI
+and author `sx` output sits in `@layer mui`. An unlayered normal declaration
+beats every layered one regardless of specificity, so a one-tag selector of
+yours outranks a MUI component default — by design, and identically on both
+surfaces. Do not wrap your rules in `@layer mui`; that puts them *inside* the
+layer, where they start losing.
+
+**Sanitising.** Every registered and captured sheet goes through the same
+`sanitizeAuthorCss` the Custom HTML element uses: `url()` targets with a
+refused scheme (`http:` and anything unrecognised) are rewritten to
+`about:invalid`. `https:`, `data:`, `blob:` and relative forms pass through,
+and hosts are not restricted.
+
 ## Billing — `billing-webhook-hooks` (`/server`)
 
 `registerBillingWebhookHandler(eventTypePrefix, handler)` — receives the

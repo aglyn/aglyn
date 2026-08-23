@@ -90,14 +90,23 @@ function healthyTenantConfig() {
           },
         ],
       },
+      {
+        name: 'Health endpoint bypass',
+        id: 'rule_health_endpoint_bypass_X48B7Y',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [{ conditions: [{ type: 'path', op: 'pre', value: '/api/health' }] }],
+      },
     ],
   }
 }
 
 /**
- * The console as it was actually deployed on 2026-08-21: the probe rule, plus
- * ONE machine-traffic rule that is a single hole with twelve mouths — eleven
- * exact paths and one `/api/health` prefix.
+ * The console as actually deployed: the probe rule; ONE machine-traffic rule
+ * that is a single hole with twelve mouths (eleven exact paths and one
+ * `/api/health` prefix); and, since 2026-08-23, the plugin loader control
+ * plane bypass — one exact path plus one prefix.
  */
 function healthyConsoleConfig() {
   const paths = [
@@ -138,6 +147,17 @@ function healthyConsoleConfig() {
         conditionGroup: [
           { conditions: [{ op: 'pre', type: 'path', value: '/api/health' }] },
           ...paths.map((value) => ({ conditions: [{ op: 'eq', type: 'path', value }] })),
+        ],
+      },
+      {
+        name: 'Plugin loader control plane bypass',
+        id: 'rule_loader_console',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [
+          { conditions: [{ op: 'eq', type: 'path', value: '/api/marketplace/listing-versions' }] },
+          { conditions: [{ op: 'pre', type: 'path', value: '/api/plugin-host-origins' }] },
         ],
       },
     ],
@@ -300,11 +320,11 @@ test('a non-bypass custom rule is not reported as an undeclared hole', () => {
   assert.deepEqual(evalTenant(config).findings, [])
 })
 
-test('a config with no rules at all fails for both declared rules', () => {
+test('a config with no rules at all fails for every declared rule', () => {
   const config = healthyTenantConfig()
   config.rules = []
   const findings = evalTenant(config).findings
-  assert.equal(findings.length, 2)
+  assert.equal(findings.length, tenantExpected.bypassRules.length)
   assert.ok(findings.every((f) => /is MISSING/.test(f)))
 })
 
@@ -368,6 +388,142 @@ test('losing the machine-traffic rule fails — billing and every cron would be 
   assert.match(result.findings.join('\n'), /"Machine traffic bypass" is MISSING/)
 })
 
+// ── The plugin loader control plane bypass (AGL-2483, 2026-08-23) ──────────
+//
+// This rule exists because challenging these two endpoints does not degrade
+// the plugin sandbox, it BREAKS it: with the host-origins lookup blocked, the
+// loader omits the customer's own domain from `frame-ancestors` and the
+// browser refuses the iframe. So the failure direction of losing this rule is
+// a customer-visible outage, and each decay below has to be caught by name.
+
+const LOADER_RULE = 'Plugin loader control plane bypass'
+
+test('losing the loader bypass fails — custom-domain sites could not frame a plugin', () => {
+  const config = healthyConsoleConfig()
+  config.rules = config.rules.filter((r) => r.name !== LOADER_RULE)
+  const result = evalConsole(config)
+  assert.equal(result.ok, false)
+  assert.match(result.findings.join('\n'), /"Plugin loader control plane bypass" is MISSING/)
+})
+
+test('the loader bypass deactivated fails', () => {
+  const config = healthyConsoleConfig()
+  ruleNamed(config, LOADER_RULE).active = false
+  const result = evalConsole(config)
+  assert.equal(result.ok, false)
+  assert.match(result.findings.join('\n'), /Plugin loader control plane bypass" is present but INACTIVE/)
+})
+
+test('listing-versions widened from `eq` to `pre` fails — it would admit listing-versions-*', () => {
+  // The sharp one. `pre` looks like a harmless generalisation and reads
+  // identically in the Vercel UI, but it opens every sibling route whose path
+  // merely STARTS with the declared one.
+  const config = healthyConsoleConfig()
+  const group = ruleNamed(config, LOADER_RULE).conditionGroup.find((g) =>
+    g.conditions.some((c) => c.value === '/api/marketplace/listing-versions'),
+  )
+  group.conditions[0].op = 'pre'
+  const result = evalConsole(config)
+  assert.equal(result.ok, false)
+  assert.match(result.findings.join('\n'), /NO LONGER REQUIRES path eq "\/api\/marketplace\/listing-versions"/)
+})
+
+test('a THIRD group on the loader bypass, for an undeclared path, fails', () => {
+  // Groups are OR'd, so a rule can be re-opened without touching either
+  // existing group. Appending `/api/admin` here would hand the whole staff
+  // surface a bot-protection bypass while both declared groups still read
+  // exactly right.
+  const config = healthyConsoleConfig()
+  ruleNamed(config, LOADER_RULE).conditionGroup.push({
+    conditions: [{ op: 'pre', type: 'path', value: '/api/admin' }],
+  })
+  const result = evalConsole(config)
+  assert.equal(result.ok, false)
+  assert.match(result.findings.join('\n'), /condition group 3 of 3/)
+})
+
+test('the host-origins prefix retargeted to another route fails', () => {
+  const config = healthyConsoleConfig()
+  const group = ruleNamed(config, LOADER_RULE).conditionGroup.find((g) =>
+    g.conditions.some((c) => c.value === '/api/plugin-host-origins'),
+  )
+  group.conditions[0].value = '/api/plugin'
+  const result = evalConsole(config)
+  assert.equal(result.ok, false)
+  // Named specifically: `/api/plugin` also prefixes `/api/plugins/run-jobs`,
+  // so this widening would hand the job runner a second, undeclared bypass.
+  assert.match(result.findings.join('\n'), /NO LONGER REQUIRES path eq "\/api\/marketplace\/listing-versions"/)
+})
+
+test('the loader bypass mitigating with something other than bypass fails', () => {
+  const config = healthyConsoleConfig()
+  ruleNamed(config, LOADER_RULE).action = bypass('challenge')
+  const result = evalConsole(config)
+  assert.equal(result.ok, false)
+  assert.match(result.findings.join('\n'), /no longer mitigates with "bypass"/)
+})
+
+// ── Health endpoint bypass decay (AGL-2486) ────────────────────────────────
+// This rule is the only thing keeping `tenant-health` and `beacon-heartbeat
+// tenant` green: without it the challenge answers GCP with a 429 checkpoint
+// and both go to 0%, which is how they sat for three days. It decays in two
+// opposite directions and BOTH are failures — losing it puts the monitoring
+// back in the dark, and widening it unchallenges routes that are not health
+// endpoints. Each shape below has to be caught by name.
+
+test('losing the health bypass fails — the tenant uptime checks would go dark again', () => {
+  const config = healthyTenantConfig()
+  config.rules = config.rules.filter((r) => r.name !== 'Health endpoint bypass')
+  assert.match(findingsFor(config), /"Health endpoint bypass" is MISSING/)
+})
+
+test('the health bypass deactivated fails', () => {
+  const config = healthyTenantConfig()
+  ruleNamed(config, 'Health endpoint bypass').active = false
+  assert.match(findingsFor(config), /"Health endpoint bypass" is present but INACTIVE/)
+})
+
+test('the health bypass narrowed from `pre` to `eq` fails — the beacon heartbeat is a SUBPATH', () => {
+  // `/api/health` would still answer 200 and a one-URL smoke test would call
+  // it fixed, while `/api/health/error-beacon` — the `beacon-heartbeat
+  // tenant` check — stayed challenged and stayed at 0%.
+  const config = healthyTenantConfig()
+  ruleNamed(config, 'Health endpoint bypass').conditionGroup = [
+    { conditions: [{ type: 'path', op: 'eq', value: '/api/health' }] },
+  ]
+  assert.match(findingsFor(config), /"Health endpoint bypass" NO LONGER REQUIRES path pre "\/api\/health"/)
+})
+
+test('the health bypass widened to the whole /api prefix fails', () => {
+  // The dangerous direction: one character deleted from the prefix and every
+  // tenant API route is unchallenged, while the rule still passes any check
+  // that merely looks for a rule of this name matching a path.
+  const config = healthyTenantConfig()
+  ruleNamed(config, 'Health endpoint bypass').conditionGroup = [
+    { conditions: [{ type: 'path', op: 'pre', value: '/api' }] },
+  ]
+  assert.match(findingsFor(config), /"Health endpoint bypass" NO LONGER REQUIRES path pre "\/api\/health"/)
+})
+
+test('a SECOND, wider group on the health bypass re-opens it and fails', () => {
+  // The original group is untouched and still correctly scoped; the hole is
+  // the appended one. `conditionGroup` entries are OR'd, so this is the decay
+  // that survives any check looking for "a group that matches".
+  const config = healthyTenantConfig()
+  const rule = ruleNamed(config, 'Health endpoint bypass')
+  rule.conditionGroup = [
+    ...rule.conditionGroup,
+    { conditions: [{ type: 'path', op: 'pre', value: '/' }] },
+  ]
+  assert.match(findingsFor(config), /"Health endpoint bypass" \(condition group 2 of 2\) NO LONGER REQUIRES/)
+})
+
+test('the health bypass mitigating with something other than bypass fails', () => {
+  const config = healthyTenantConfig()
+  ruleNamed(config, 'Health endpoint bypass').action = bypass('deny')
+  assert.match(findingsFor(config), /no longer mitigates with "bypass"/)
+})
+
 // ── Aggregate + strict mode ────────────────────────────────────────────────
 
 function configsMatchingLiveToday() {
@@ -385,7 +541,7 @@ function docsConfig() {
   return config
 }
 
-test('the posture measured live on 2026-08-21, after the console was protected, passes', () => {
+test('the posture measured live on 2026-08-23, after the loader bypass went in, passes', () => {
   const result = evaluatePosture({ configs: configsMatchingLiveToday() })
   assert.equal(result.ok, true)
   assert.equal(result.failedCount, 0)

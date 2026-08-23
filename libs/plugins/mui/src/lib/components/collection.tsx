@@ -33,7 +33,7 @@ import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 // The icon picker's fuzzy matcher (use-mdi-icons-fuzzy), not a re-implementation
 // (AGL-1516): search here has to feel like search does everywhere else in the
 // product, and two matchers is how they drift.
-import { Fuse } from '@aglyn/shared-util-vendor'
+import { Fuse } from '@aglyn/shared-util-vendor/fuse'
 import Box from '@mui/material/Box'
 import Chip from '@mui/material/Chip'
 import IconButton from '@mui/material/IconButton'
@@ -547,6 +547,7 @@ export const collectionEntriesSchema: Aglyn.ComponentSchema<CollectionEntriesPro
     $id: ENTRIES_ID,
     pluginId: BUNDLE_ID,
     displayName: 'Collection Entries',
+    description: 'Repeats its children once per entry in a content collection.',
     category: Aglyn.ComponentCategory.DATA_DISPLAY,
     icon: { path: mdiPostOutline.path, sx: { color: '#00796b' } },
     attributes: [
@@ -770,15 +771,13 @@ const CollectionEntryBody = forwardRef<
               // has no reason to be stored in a more fragile form.
               src={Aglyn.resolveMediaSrc(block.src, { hostId })}
               alt={block.alt}
+              sx={{ maxWidth: '100%', borderRadius: 1, my: 1 }}
               // An image inside an entry body is below the fold by
               // construction — the title, byline and opening paragraphs are
               // above it. This one carried no loading hint at all, so it was
               // fetched EAGERLY, at default priority, competing with the
               // entry's own cover (AGL-2486).
-              loading="lazy"
-              fetchPriority="low"
-              decoding="async"
-              sx={{ maxWidth: '100%', borderRadius: 1, my: 1 }}
+              {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
             />
           )
         }
@@ -928,6 +927,7 @@ export const collectionEntryBodySchema: Aglyn.ComponentSchema<CollectionEntryBod
     $id: ENTRY_BODY_ID,
     pluginId: BUNDLE_ID,
     displayName: 'Entry Body',
+    description: "The current entry's markdown body, on an entry template.",
     category: Aglyn.ComponentCategory.TEXT,
     icon: { path: mdiTextLong.path, sx: { color: '#00796b' } },
     flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
@@ -1078,7 +1078,6 @@ const CollectionRelated = forwardRef<HTMLDivElement, CollectionRelatedProps>(
           // cover is the LINK's own content, so it must carry an accessible
           // name rather than go silent.
           alt={Aglyn.renderedMediaAlt(entry.coverImageAlt, entry.title)}
-          loading="lazy"
           sx={{
             display: 'block',
             width: '100%',
@@ -1086,6 +1085,12 @@ const CollectionRelated = forwardRef<HTMLDivElement, CollectionRelatedProps>(
             objectFit: 'cover',
             borderRadius: 1,
           }}
+          // `lazy` ALONE was the bug in miniature (AGL-2486): a lazy image
+          // at default priority still outranks a lazy image at `low`, so
+          // this related-entries rail — which sits at the bottom of an entry
+          // by construction — was beating the deferred Image elements in the
+          // body above it. The hint only works as a set.
+          {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
         />
       )
     }
@@ -1167,6 +1172,7 @@ export const collectionRelatedSchema: Aglyn.ComponentSchema<CollectionRelatedPro
     $id: RELATED_ID,
     pluginId: BUNDLE_ID,
     displayName: 'Related Posts',
+    description: "Other entries sharing this one's category or tags.",
     category: Aglyn.ComponentCategory.DATA_DISPLAY,
     icon: { path: mdiNewspaperVariantOutline.path, sx: { color: '#00796b' } },
     flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
@@ -1323,6 +1329,7 @@ export const collectionShareSchema: Aglyn.ComponentSchema<CollectionShareProps> 
     $id: SHARE_ID,
     pluginId: BUNDLE_ID,
     displayName: 'Share Bar',
+    description: 'Share buttons for the current page, plus a copy link.',
     category: Aglyn.ComponentCategory.NAVIGATION,
     icon: { path: mdiShareVariant.path, sx: { color: '#00796b' } },
     flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
@@ -1500,7 +1507,6 @@ const CollectionEntryMeta = forwardRef<
           // Decorative: the byline names the author in text right beside it,
           // so a screen reader announcing the mark again is noise.
           alt=""
-          loading="lazy"
           sx={{
             display: 'block',
             width: ENTRY_AVATAR_SIZE,
@@ -1510,6 +1516,10 @@ const CollectionEntryMeta = forwardRef<
             // No background plate: a brand mark with a transparent ground
             // would sit on a grey disc nobody asked for.
           }}
+          // `lazy` alone, same as the related rail above (AGL-2486). A
+          // byline avatar is decorative and tiny; it has no business
+          // outranking anything.
+          {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
         />
       ) : null}
       {line ? (
@@ -1530,6 +1540,8 @@ export const collectionEntryMetaSchema: Aglyn.ComponentSchema<CollectionEntryMet
     $id: ENTRY_META_ID,
     pluginId: BUNDLE_ID,
     displayName: 'Entry Meta',
+    description:
+      'The byline row for an entry — author, date, category and tags.',
     category: Aglyn.ComponentCategory.TEXT,
     icon: { path: mdiTagOutline.path, sx: { color: '#00796b' } },
     flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
@@ -1737,6 +1749,7 @@ export const collectionCategoriesSchema: Aglyn.ComponentSchema<CollectionCategor
     $id: CATEGORIES_ID,
     pluginId: BUNDLE_ID,
     displayName: 'Category Pills',
+    description: 'A pill per collection category, each filtering the listing.',
     category: Aglyn.ComponentCategory.NAVIGATION,
     icon: { path: mdiTagMultipleOutline.path, sx: { color: '#00796b' } },
     flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

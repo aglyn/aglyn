@@ -10,39 +10,90 @@ Found something broken? Open the **account menu** in the top right and choose
 **Report an issue**. The dialog is available from every console page, and on
 every plan — including Free.
 
+## Is it Aglyn, or your own site? {#is-it-us-or-your-site}
+
+This channel is for problems with **Aglyn itself** — the editor, the console,
+publishing, domains, billing. It is not the place to change something on a
+site built with Aglyn.
+
+The line is not simply "platform versus content", so here it is in cases:
+
+| What you noticed | Where it belongs |
+| --- | --- |
+| The heading on your About page is the wrong colour, or says the wrong thing | Your site. Change it in the editor, or ask whoever builds the site for you. |
+| Headings render at the wrong size on **every** site you open | Aglyn. Report it. |
+| A page returns 404 after you renamed it | Aglyn. Report it. |
+| The contact form on your site emails the wrong address | Your site — that address is a setting on the form. |
+| The contact form never delivers, whatever address you set | Aglyn. Report it. |
+
+The pattern: if changing it means editing **your** content or settings, it is
+yours. If it happens the same way regardless of what any one site contains, it
+is ours.
+
+If you did not build the site and cannot change it, the people who can are
+whoever set the workspace up — an agency, a colleague, or whoever sent you
+your invitation. Aglyn cannot edit a customer's site on their behalf. Some
+workspaces put their own support link in the dialog; when one is configured,
+it appears as **Get help with this site**.
+
+Still unsure? Send it anyway. A report filed in the wrong place costs us a
+moment; a problem nobody hears about costs everyone more.
+
 ## What to write
 
-Three fields, none of them long.
+The dialog asks different things depending on what kind of report it is,
+because a bug and an idea need different answers. Pick the kind first.
 
-**What kind of report is this?** — a dropdown with three choices:
+**Summary** — always required, one line, the way you would describe it to a
+colleague. It becomes the filed issue's title.
 
-- **Something is broken**
-- **An idea or request**
-- **A question**
+### If something is broken {#a-bug}
 
-**Summary** — one line, the way you would describe it to a colleague. The
-placeholder shows the shape we are after: "The media picker forgets the folder
-I chose".
+Four questions, all required. They are what turn a report into a fix:
 
-**What happened?** — what you did, what you expected, and what happened
-instead. If you can say how to make it happen again, say that.
+- **What were you doing when it broke?** — step by step, so we can follow
+  along. This is the single most valuable thing you can write.
+- **What did you expect to happen?**
+- **What happened instead?** — quote any error message exactly.
+- **Does it happen every time?** — one click: every time, sometimes, once, or
+  you have not tried again. It changes what we do first, so it is not
+  optional.
 
-**Send report** stays disabled until both **Summary** and **What happened?**
-have something in them. The kind is preset to **Something is broken**, so a
-bug report needs no choice at all.
+### If it is an idea {#an-idea}
 
-### The two length caps {#length-caps}
+One required question, and it is deliberately not "what should we build":
 
-**Summary** stops accepting text at **120 characters** and **What happened?**
-at **5,000**. Both are hard stops in the field itself rather than an error on
-submit, so what you can see is what gets filed — nothing is truncated later
-without telling you.
+- **What are you trying to do that you can't?** — the problem, not the
+  feature. There may already be a way to do it, and where there is not,
+  knowing the goal gets you a better answer than a specification would.
+- **How do you handle it today?** and **If you already have something in
+  mind** are both optional.
 
-Only **What happened?** carries a counter (`0 / 5000`, under the box, counting
-as you type). **Summary** has none, so the first sign you have reached its cap
-is that typing stops changing the field. It is the shorter of the two on
-purpose: the summary becomes the filed issue's title, and a title a triager
-cannot read at a glance is a title nobody reads.
+### If it is a question {#a-question}
+
+- **What do you need to know?** — required.
+- **What have you already tried or read?** — optional, and it saves us
+  sending you back to a page you have read.
+
+Questions take one extra step: before anything is filed, we check whether the
+documentation already answers you. If it does, the dialog shows the relevant
+pages, word for word, under **This may already be answered** — and nothing is
+filed. If that covers it you are done; if it does not, **This didn't answer it
+— send anyway** files the question as normal.
+
+**Send report** stays disabled until **Summary** and every required question
+for that kind have something in them.
+
+### The length caps {#length-caps}
+
+**Summary** stops accepting text at **120 characters**; each of the other
+boxes has its own cap, between **600** and **2,000** characters, sized to the
+answer it asks for. They are hard stops in the field itself rather than an
+error on submit, so what you can see is what gets filed — nothing is truncated
+later without telling you.
+
+Summary is the shortest on purpose: it becomes the filed issue's title, and a
+title a triager cannot read at a glance is a title nobody reads.
 
 ## What gets attached for you
 

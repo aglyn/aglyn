@@ -16,7 +16,7 @@
  */
 
 import { hostRoleCanWrite, pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { deadSessionKeys } from '../../_lib/presence-reaper'
+import { deadDocumentPaths } from '../../_lib/presence-reaper'
 import {
   authForPool,
   emailUnverifiedResponse,
@@ -167,14 +167,17 @@ async function handler(request: Request): Promise<Response> {
     const docId = String(body?.docId ?? '')
     if (docType && docId && /^[A-Za-z0-9_-]{1,64}$/.test(docId)) {
       try {
-        const roomRef = firebaseAdmin
+        // The DOCUMENT node, not the one room being joined (AGL-2486). Rooms
+        // are version-scoped now, and the same read already holds every
+        // version plus any legacy document-scoped rows left by an older
+        // client — so one read tidies all of them, and a version nobody
+        // reopens does not keep its dead rows forever.
+        const docRef = firebaseAdmin
           .database()
           .ref(`presence/${orgId}/${docType}/${docId}`)
-        const room = (await roomRef.get()).val()
-        const dead = deadSessionKeys(room, Date.now())
-        await Promise.all(
-          dead.map((key) => roomRef.child(key).remove()),
-        )
+        const document = (await docRef.get()).val()
+        const dead = deadDocumentPaths(document, Date.now())
+        await Promise.all(dead.map((path) => docRef.child(path).remove()))
       } catch (sweepError) {
         console.warn('[presence/token] room sweep skipped:', sweepError)
       }

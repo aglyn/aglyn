@@ -22,6 +22,7 @@ import { IconButton, Tooltip } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useHostId, useHostReady } from '../host-id-provider'
 import { useUrlNamedOrg } from '../../hooks/use-url-names-org'
+import useCurrentOrg from '../../hooks/use-current-org'
 import GlobalSearchDialogComponent from './global-search-dialog.component'
 import { resolveGlobalSearchScope } from './global-search-scope'
 
@@ -48,18 +49,26 @@ export function GlobalSearchTriggerComponent() {
   // whichever org the fallback happened to land on. On the picker that is a
   // page whose entire purpose is that you have not chosen one yet.
   const currentOrg = useUrlNamedOrg()
+  const { ready: orgReady } = useCurrentOrg()
   const hostId = useHostId()
   const hostReady = useHostReady()
   const [open, setOpen] = useState(false)
 
+  // The trigger only needs to know whether ANYTHING is searchable, and the
+  // ungated groups (pages, content, authors) settle that on their own — so it
+  // deliberately passes no entitlements. Resolving them here would make the
+  // button flicker in on every navigation as the org doc lands, and the
+  // dialog does its own, complete, resolution when it opens.
   const scope = useMemo(
     () =>
       resolveGlobalSearchScope({
         orgId: currentOrg?.$id ?? null,
         hostId,
         hostReady,
+        entitlements: null,
+        entitlementsReady: orgReady,
       }),
-    [currentOrg?.$id, hostId, hostReady],
+    [currentOrg?.$id, hostId, hostReady, orgReady],
   )
 
   const close = useCallback(() => setOpen(false), [])

@@ -175,6 +175,11 @@ async function listingDetail(
       sha256: String(doc.get('sha256') ?? ''),
       hostAbi: Number(doc.get('manifest.hostAbi')) || null,
       capabilities: doc.get('manifest.capabilities') ?? {},
+      // Declared canvas elements (AGL-1031), for THESE bytes. Publisher copy
+      // that renders in the customer's element picker and nowhere on the
+      // listing page — so without it here, the `element-metadata` criterion
+      // asks a reviewer to check text this page never shows (AGL-2486).
+      elements: doc.get('manifest.elements') ?? [],
       publishedAt: publishedAt?.toDate?.()?.toISOString() ?? null,
       // Per-version installs (AGL-1036). "How many workspaces would a revoke
       // actually hit" is a per-version question, and the listing total shown

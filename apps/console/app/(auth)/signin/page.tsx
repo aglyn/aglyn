@@ -29,6 +29,7 @@ import {
   FIELD_SCHEMA_PASSWORD,
 } from '@aglyn/shared-data-forms'
 import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
+import { useContinueHref } from '@aglyn/shared-util-next'
 import type { FormSchema } from '@aglyn/shared-ui-jsx-forms'
 import { FormRenderer, simpleComponentMapper } from '@aglyn/shared-ui-jsx-forms'
 import {
@@ -200,6 +201,13 @@ function SignIn() {
   const signedIn = signInCheckResult?.signedIn === true
   // Effect-gated so the server render (no WebAuthn) never mismatches.
   const passkeySupported = usePasskeysSupported()
+  // The SSO button is a LINK to another page, and a link built from a bare
+  // string drops the query it was standing on (AGL-2486). A signed-out user
+  // deep-linked here arrives at `/signin?continue=…`; the password and
+  // Google paths never leave this URL so they keep it, and `/sso` did not,
+  // so an enterprise user authenticated successfully and landed on the
+  // dashboard instead of the page they asked for.
+  const ssoHref = useContinueHref('/sso')
 
   const handleSignIn = useCallback(
     async (values?: any) => {
@@ -389,7 +397,7 @@ function SignIn() {
         <Button
           variant="outlined"
           component={AppLink}
-          href="/sso"
+          href={ssoHref}
           startIcon={<MdiIcon path={mdiShieldKeyOutline.path} />}
         >
           {'Single sign-on (SSO)'}

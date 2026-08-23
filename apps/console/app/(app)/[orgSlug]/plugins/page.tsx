@@ -19,6 +19,7 @@
 import {
   canManageOrg,
   FIRST_PARTY_PLUGINS,
+  resolveDisableCascade,
   resolveEnabledPlugins,
   resolveUpdateState,
   updateStateLabel,
@@ -38,6 +39,9 @@ import { buildRoute, Route } from '../../../../constants/route-links'
 import { useOrgHosts } from '../../../../hooks/use-org-hosts'
 import useBranding from '../../../../hooks/use-branding'
 import useCurrentOrg from '../../../../hooks/use-current-org'
+import PluginDisableCascadeDialog, {
+  type CascadeEntry,
+} from '../../../../components/plugin-disable-cascade-dialog.component'
 import useFirestoreCollection from '../../../../hooks/use-firestore-collection'
 import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
 
@@ -219,10 +223,33 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
     }
   }, [firestore, listingIdsKey])
 
-  const enabled = useMemo(
-    () => new Set(resolveEnabledPlugins((org as any)?.enabledPlugins)),
-    [org],
-  )
+  // The ORG DOCUMENT, not `org.enabledPlugins` (AGL-2486). This passed the
+  // array, and an array has no `enabledPlugins` property — so the resolver
+  // saw `undefined` and returned DEFAULT_ENABLED_PLUGINS every time. The
+  // page reported every plugin as enabled whatever the workspace had stored,
+  // and `toggle` below read-modify-WRITES off this value into an API that
+  // REPLACES the array, so flipping any one plugin silently switched every
+  // plugin this workspace had turned off back on, for every site in it. The
+  // `as any` is what kept the compiler from saying so, which is why it is
+  // gone rather than merely corrected.
+  const enabled = useMemo(() => new Set(resolveEnabledPlugins(org)), [org])
+
+  /**
+   * The pending cascade (AGL-2486). This switchboard SAVES on change, so the
+   * dialog has to stand between the toggle and the write — held here, applied
+   * only on confirm. Cancel drops it and writes nothing, and because the
+   * switch is controlled by `enabled` (which comes from the org doc, and has
+   * not moved) it springs back to ON by itself.
+   */
+  const [pending, setPending] = useState<{
+    id: string
+    label: string
+    cascade: CascadeEntry[]
+  } | null>(null)
+
+  const labelFor = (pluginId: string) =>
+    FIRST_PARTY_PLUGINS.find((plugin) => plugin.id === pluginId)?.label ??
+    pluginId
 
   const saveEnabledPlugins = async (pluginIds: string[]) => {
     const idToken = await (
@@ -264,9 +291,35 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
         { variant: 'info', persist: false },
       )
     }
+    if (on) {
+      const next = new Set(enabled)
+      next.add(pluginId)
+      return void saveEnabledPlugins([...next])
+    }
+    // AGL-2486. Only a DISABLE can strand a dependent, and the org level
+    // cascades further than the site level: a site can never turn back on
+    // what the workspace has switched off, so this lands on every site.
+    const cascade = resolveDisableCascade(pluginId, [...enabled])
+    if (!cascade.length) return void disableWithCascade(pluginId, [])
+    setPending({
+      id: pluginId,
+      label: labelFor(pluginId),
+      cascade: cascade.map((one) => ({ id: one, label: labelFor(one) })),
+    })
+  }
+
+  /**
+   * ONE write for the whole cascade (AGL-2486). `set-enabled-plugins`
+   * REPLACES the array, so the plugin and everything depending on it are
+   * removed in a single request — there is no window in which A is off while
+   * B still believes it can use A, and no half-applied cascade to recover
+   * from. Nothing records that these were cascaded, so re-enabling the
+   * plugin does NOT bring them back; the dialog says so before you agree.
+   */
+  const disableWithCascade = (pluginId: string, cascade: readonly string[]) => {
     const next = new Set(enabled)
-    if (on) next.add(pluginId)
-    else next.delete(pluginId)
+    next.delete(pluginId)
+    for (const id of cascade) next.delete(id)
     void saveEnabledPlugins([...next])
   }
 
@@ -429,27 +482,63 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
                   plugin.description ?? '',
                   <Switch
                     size="small"
+                    // The row is a link and the label is rendered as its own
+                    // text, so without this the control has no accessible
+                    // name of its own — nothing a screen reader (or a test)
+                    // can use to say WHICH plugin a switch belongs to.
+                    slotProps={{
+                      input: { 'aria-label': `Toggle ${plugin.label}` },
+                    }}
                     checked={plugin.alwaysOn || enabled.has(plugin.id)}
                     // Unready means these switch positions are the defaults,
                     // not this workspace's (AGL-1422) — so they are not
                     // something to act on yet.
                     disabled={plugin.alwaysOn || !canManage || !orgReady}
-                    // The row is a link, so the switch has to stop the
-                    // click reaching it — otherwise toggling a plugin also
-                    // navigates away from the list you were toggling in.
+                    /*
+                     * The toggle is driven from the CLICK, not from `onChange`
+                     * — and that is a fix, not a style choice (AGL-2486).
+                     *
+                     * The row is a link, so the switch must stop the click
+                     * reaching it or toggling a plugin also navigates away.
+                     * But `preventDefault()` on a checkbox cancels its
+                     * activation behaviour, which reverts `checked` and means
+                     * no change event is ever produced — so `onChange` never
+                     * ran and EVERY switch on this page has been inert since
+                     * AGL-1011 (160df6a5f). Verified with a real mouse click
+                     * in the browser: no navigation, no save, no state move.
+                     *
+                     * `onClick` does fire — it is what cancels the navigation
+                     * — so the intent is read there, against the controlled
+                     * value rather than the input's own (which preventDefault
+                     * is about to revert anyway).
+                     */
                     onClick={(event) => {
                       event.preventDefault()
                       event.stopPropagation()
+                      toggle(plugin.id, !enabled.has(plugin.id))
                     }}
-                    onChange={(event) =>
-                      toggle(plugin.id, event.target.checked)
-                    }
                   />,
                 ),
               )}
             </Stack>
           </CardDisplay>
         </Stack>
+        <PluginDisableCascadeDialog
+          open={Boolean(pending)}
+          pluginId={pending?.id ?? ''}
+          pluginLabel={pending?.label ?? ''}
+          cascade={pending?.cascade ?? []}
+          scope="org"
+          onCancel={() => setPending(null)}
+          onConfirm={() => {
+            if (!pending) return
+            disableWithCascade(
+              pending.id,
+              pending.cascade.map((entry) => entry.id),
+            )
+            setPending(null)
+          }}
+        />
       </Container>
     </DashboardLayout>
   )

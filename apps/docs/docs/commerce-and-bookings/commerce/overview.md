@@ -53,6 +53,31 @@ The **Products** page is the catalog manager:
 - **Adjustment history** with reason codes (sale, restock, correction…).
 - **Locations** split stock across warehouses/storefronts (plan-capped);
   adjustments and POS sales bucket per location.
+- **Reserved in checkout** holds units for a shopper who has reached the
+  payment page, so the last one cannot be sold twice.
+
+### Reserved stock {#reserved-stock}
+
+When a shopper reaches the payment page, the units in their basket are
+**reserved** — the next shopper is offered what is left, not the same unit. It
+is what stops two people paying for the last one.
+
+Your stock count does **not** move when a unit is reserved. A reservation is a
+promise, not a sale, and the count means what is on the shelf. The products
+list names the difference instead: `3 (1 reserved)` is three units on the shelf
+with one of them spoken for, so two are available to buy right now.
+
+A reservation is released when the shopper pays (the count moves then), when
+they abandon the checkout, or **after 31 minutes**, whichever comes first. A
+checkout page left open expires on its own, so nothing stays reserved by
+someone who walked away.
+
+Two cases reserve nothing, deliberately: a variant with no stock tracking has
+no number to reserve against, and a product set to **allow backorders** is one
+you have told us to keep selling past zero.
+
+Sales at the register are not affected — the till never refuses a sale, because
+the shelf in front of the cashier is the truth.
 
 ### Stock movements {#stock-movements}
 

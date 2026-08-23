@@ -1,0 +1,316 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+// Deliberately NO 'use client' directive — see the note at the top of
+// `app-utils/consent-banner-ui.tsx`. Inside @aglyn/aglyn the directive splits
+// the bundler into a duplicate module graph and the second canvas singleton
+// renders the tenant blank (AGL-52). Every importer is itself a client module.
+
+import { sanitizeAuthorCss } from '../app-utils/author-css'
+
+/**
+ * Plugin stylesheet registry (AGL-2486) — the route a plugin's raw CSS takes
+ * onto EVERY surface that renders site content, so the besigner canvas shows
+ * what the published page will show.
+ *
+ * ## The divergence this closes, as measured
+ *
+ * `8dc718ed4` layered the canvas emotion cache so CSS that never touches
+ * emotion resolves against `@layer mui` the same way on both surfaces. It
+ * left one route open, and named it: a plugin's CSS has no way into the
+ * canvas at all. Measured 2026-08-23 in a real browser, injecting the SAME
+ * rule the SAME way a bundle's CSS injector does
+ * (`document.head.appendChild(<style>)`), against a stand-in emotion rule of
+ * specificity 0-1-0 inside `@layer mui`, with a 0-0-1 plugin selector:
+ *
+ * | | published tenant | besigner canvas |
+ * | -- | -- | -- |
+ * | emotion rule alone | `rgb(9,9,9)` | `rgb(9,9,9)` |
+ * | plugin CSS via `document.head` | **`rgb(1,2,3)` — wins** | `rgb(9,9,9)` — **no effect at all** |
+ * | plugin CSS in the shadow root | n/a | `rgb(1,2,3)` — wins |
+ * | control: plugin CSS wrapped in `@layer mui` | `rgb(9,9,9)` — loses | `rgb(9,9,9)` — loses |
+ *
+ * The canvas shadow root is `mode: 'closed'` with `:host { all: initial }`
+ * and no `adoptedStyleSheets`, so a document-level rule cannot cross into it
+ * — not a specificity loss, a total miss. On the published page the same rule
+ * beats every MUI and `sx` declaration UNCONDITIONALLY, because an unlayered
+ * normal declaration outranks every layered one. Two opposite outcomes from
+ * one plugin. That is "what you see is not what you publish".
+ *
+ * The control row is the load-bearing half: wrapped in `@layer mui` the
+ * identical rule LOSES on both surfaces, so the win is the layer and not
+ * insertion order — and the canvas now agrees with the published page on
+ * both the win and the loss.
+ *
+ * ## The shape of the fix
+ *
+ * Registered CSS is rendered by `PluginStyles` — the React half, which lives
+ * in the sibling `plugin-styles-ui.tsx` and is deep-imported rather than
+ * exported from this barrel, because a client-only hook on a barrel that
+ * `src/server.ts` re-exports 500s every server route (that is not
+ * hypothetical: it is how this shipped the first time). It renders each sheet
+ * as a plain `<style>` child of the site-content root — the same position, and the same unlayered
+ * cascade slot, that a Custom HTML `css` block already occupies
+ * (`custom-html.tsx`). On the tenant that root is the document; on the canvas
+ * it is inside the closed shadow root. One component, one order, one outcome.
+ *
+ * Two writers, because a route nothing writes to is not a fix:
+ *
+ * - `registerPluginStyles` is the sanctioned API, on the realm host ABI
+ *   (the host hands bundles the whole `aglyn` namespace) and available to
+ *   first-party plugins by import.
+ * - {@link capturePluginStyles} brackets a realm bundle's module evaluation
+ *   and `register()` call and picks up any `<style>` it appends to
+ *   `document.head` itself — which is exactly what every bundler's CSS
+ *   injector emits for an `import './styles.css'`. Those are registered as
+ *   MIRRORS: the original element is left alone, so anything a plugin styles
+ *   on the console side keeps working, and only shadow surfaces render the
+ *   copy (the document already has the original).
+ *
+ * ## What this deliberately does NOT do
+ *
+ * It does not remove or neutralise the plugin's own `document.head` element.
+ * A realm plugin can register console surfaces as well as site components,
+ * and CSS it injected for its console panel must keep applying there. The
+ * consequence — a realm bundle can still restyle console chrome through its
+ * own `document.head` write — is unchanged by this file and is not a boundary
+ * CSS was ever holding: a realm bundle is staff-reviewed, signed code running
+ * in the app realm with the host's React, so it can already do anything the
+ * console can. See [[project_plugin_sandbox_boundary]].
+ *
+ * What the NEW route adds is strictly less power than that: on the canvas it
+ * lands inside a closed shadow root, so it cannot match a console element at
+ * all, and it is scheme-filtered on the way in.
+ */
+export interface PluginStyleSheet {
+  /** Owning plugin id — the listing id for a realm bundle. */
+  pluginId: string
+  /** Stable id within the plugin; re-registering the pair replaces. */
+  styleId: string
+  /** CSS text, already through {@link sanitizeAuthorCss}. */
+  css: string
+  /**
+   * True when these rules ALSO exist as a live `<style>` in the host
+   * document, because {@link capturePluginStyles} mirrored them rather than
+   * moving them. Document surfaces must not render a mirror — the original
+   * already applies there and a second copy would only double the bytes.
+   * Shadow surfaces must, because nothing in the document reaches them.
+   */
+  mirrored: boolean
+}
+
+export interface RegisterPluginStylesInput {
+  pluginId: string
+  /** Defaults to `'default'`; give distinct ids to register several sheets. */
+  styleId?: string
+  css: string
+}
+
+/** Where `PluginStyles` is rendering, which decides mirror handling. */
+export type PluginStylesScope = 'document' | 'shadow'
+
+const sheets: PluginStyleSheet[] = []
+const listeners = new Set<() => void>()
+// `useSyncExternalStore` compares snapshots by identity and calls
+// `getSnapshot` during render, so it MUST be a cached array — returning
+// `sheets.slice()` fresh each call is an infinite render loop.
+let snapshot: readonly PluginStyleSheet[] = []
+
+function publish(): void {
+  snapshot = sheets.slice()
+  for (const listener of [...listeners]) listener()
+}
+
+function keyOf(pluginId: string, styleId: string): string {
+  return `${pluginId}\x00${styleId}`
+}
+
+/**
+ * Registers (or replaces) one plugin stylesheet.
+ *
+ * The CSS is scheme-filtered by {@link sanitizeAuthorCss} — the same
+ * function the published Custom HTML path uses — so an `http:` or unknown
+ * scheme in a `url()` becomes `about:invalid` and contacts nobody. Hosts are
+ * deliberately not restricted; that is the AGL-1725 warn-and-disclose
+ * decision, and applying a different rule here would mean a plugin's CSS
+ * rendered differently from an author's.
+ *
+ * Registering identical CSS again is a no-op (no re-render), so a plugin may
+ * call this on every render without thinking about it.
+ *
+ * Do NOT wrap your rules in `@layer mui`. The unlayered slot is the whole
+ * point; inside the layer the same rule starts losing to component defaults
+ * it is meant to beat (the control row in the table above).
+ */
+export function registerPluginStyles(input: RegisterPluginStylesInput): void {
+  const pluginId = input?.pluginId
+  const styleId = input?.styleId || 'default'
+  if (!pluginId || typeof input?.css !== 'string') return
+  writeSheet({
+    pluginId,
+    styleId,
+    css: sanitizeAuthorCss(input.css),
+    mirrored: false,
+  })
+}
+
+function writeSheet(next: PluginStyleSheet): void {
+  const key = keyOf(next.pluginId, next.styleId)
+  const index = sheets.findIndex(
+    (sheet) => keyOf(sheet.pluginId, sheet.styleId) === key,
+  )
+  if (index >= 0) {
+    const current = sheets[index]
+    if (current.css === next.css && current.mirrored === next.mirrored) return
+    sheets[index] = next
+  } else {
+    sheets.push(next)
+  }
+  publish()
+}
+
+/** Drops one sheet, or every sheet a plugin owns when `styleId` is omitted. */
+export function unregisterPluginStyles(
+  pluginId: string,
+  styleId?: string,
+): void {
+  const before = sheets.length
+  for (let index = sheets.length - 1; index >= 0; index--) {
+    const sheet = sheets[index]
+    if (sheet.pluginId !== pluginId) continue
+    if (styleId !== undefined && sheet.styleId !== styleId) continue
+    sheets.splice(index, 1)
+  }
+  if (sheets.length !== before) publish()
+}
+
+/** Every registered sheet, in registration order. Identity-stable. */
+export function listPluginStyles(): readonly PluginStyleSheet[] {
+  return snapshot
+}
+
+/** Subscribes to registry changes; returns the unsubscribe. */
+export function subscribeToPluginStyles(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
+/** Test seam. Never called by product code. */
+export function resetPluginStylesForTest(): void {
+  sheets.length = 0
+  publish()
+}
+
+/**
+ * Runs `load` with `document.head` watched, and registers every `<style>`
+ * the bundle appends while it runs as a MIRRORED sheet.
+ *
+ * This is the writer that makes the registry real for bundles nobody has
+ * updated. `import './styles.css'` in any bundler compiles to a
+ * `document.head.appendChild(styleElement)` at module-evaluation time, which
+ * is inside this window, so the commonest shape of plugin CSS is picked up
+ * with no change to the plugin.
+ *
+ * Notes for whoever touches this next:
+ *
+ * - `<link rel="stylesheet">` is deliberately NOT captured. Next adds its own
+ *   chunk `<link>`s to the head at unpredictable moments, and a window this
+ *   wide cannot tell one from a plugin's — neutralising the wrong one breaks
+ *   the console. A plugin needing a linked stylesheet calls
+ *   {@link registerPluginStyles} with an `@import`, or inlines it.
+ * - There is deliberately no `takeRecords()` drain before `disconnect()`, and
+ *   adding one back would be dead code: a `MutationObserver` queues its
+ *   microtask AT MUTATION TIME, and the microtask queue is FIFO, so anything
+ *   appended inside `load` is always delivered before the `await load()`
+ *   continuation that reaches the `finally`. A drain was written first and
+ *   removed when mutating it away turned no test red — which is the only
+ *   honest signal that a branch is unreachable.
+ * - Text written to a captured element AFTER the window closes still
+ *   propagates: each captured element keeps its own observer for the life of
+ *   the page. That is what keeps a dev-mode emotion instance (which sets
+ *   `textContent`) in sync. A production emotion instance in "speedy" mode
+ *   inserts through `CSSOM` with no mutation to observe and is NOT tracked —
+ *   but a realm bundle carrying its own emotion is already an ABI violation
+ *   (it would carry a second React with it), so that is a shape this loader
+ *   refuses for other reasons.
+ * - Failures here must never take the load down: a plugin that renders is
+ *   better than a console that does not.
+ */
+export async function capturePluginStyles<T>(
+  pluginId: string,
+  load: () => Promise<T>,
+): Promise<T> {
+  const doc = typeof document === 'undefined' ? null : document
+  if (!doc?.head || typeof MutationObserver === 'undefined') return load()
+
+  const captured = new Map<HTMLStyleElement, string>()
+  const take = (nodes: NodeList | Node[]): void => {
+    for (const node of Array.from(nodes)) {
+      if (!isStyleElement(node) || captured.has(node)) continue
+      const styleId = `captured-${captured.size + 1}`
+      captured.set(node, styleId)
+      trackCapturedStyle(pluginId, styleId, node)
+    }
+  }
+  const observer = new MutationObserver((records) => {
+    for (const record of records) take(record.addedNodes)
+  })
+  try {
+    observer.observe(doc.head, { childList: true })
+    return await load()
+  } finally {
+    try {
+      observer.disconnect()
+    } catch (error) {
+      console.warn(`plugin styles: capture for ${pluginId} failed:`, error)
+    }
+  }
+}
+
+function isStyleElement(node: Node): node is HTMLStyleElement {
+  return (
+    (node as Element)?.nodeType === 1 &&
+    (node as Element).tagName?.toUpperCase() === 'STYLE'
+  )
+}
+
+function trackCapturedStyle(
+  pluginId: string,
+  styleId: string,
+  element: HTMLStyleElement,
+): void {
+  const sync = () => {
+    writeSheet({
+      pluginId,
+      styleId,
+      css: sanitizeAuthorCss(element.textContent ?? ''),
+      mirrored: true,
+    })
+  }
+  sync()
+  try {
+    new MutationObserver(sync).observe(element, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    })
+  } catch {
+    // An environment without a working observer still gets the initial text.
+  }
+}

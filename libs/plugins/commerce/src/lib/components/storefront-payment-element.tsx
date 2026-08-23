@@ -18,11 +18,20 @@
 'use client'
 
 import { CheckoutProvider, PaymentElement, useCheckout } from '@stripe/react-stripe-js'
-import { loadStripe, type Stripe } from '@stripe/stripe-js'
+// `/pure` deliberately, not the bare entry (AGL-2486). The bare entry ends
+// with a module-scope `Promise.resolve().then(() => getStripePromise())`,
+// so merely EVALUATING it injects the js.stripe.com/v3 script tag —
+// 249 KB gzipped — on any page that reaches this module, whether or not
+// `loadStripe` is ever called. `/pure` is the same API without that
+// statement, so the script is fetched when we ask for it and not before.
+import { loadStripe } from '@stripe/stripe-js/pure'
+// The TYPE only, and from the bare entry because `/pure` does not re-export
+// it. `import type` is erased entirely at compile time, so this adds no
+// runtime import and cannot re-introduce the script injection above.
+import type { Stripe } from '@stripe/stripe-js'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
-import CircularProgress from '@mui/material/CircularProgress'
 import { useCallback, useMemo, useState } from 'react'
 
 /**
@@ -188,13 +197,14 @@ export function StorefrontPaymentElement({
   )
 }
 
-/** Loading fallback for the lazy boundary the callers mount this behind. */
-export function StorefrontPaymentElementFallback() {
-  return (
-    <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-      <CircularProgress size={24} />
-    </Box>
-  )
-}
+/**
+ * Re-exported so the old import path still resolves, but the definition now
+ * lives in its own module (AGL-2486): a fallback imported FROM the lazily
+ * loaded module drags that module into the eager bundle and cancels the
+ * `lazy()`. Callers must import it from `./storefront-payment-element-fallback`
+ * — importing it from here is exactly the bug, and re-exporting it does not
+ * make that safe.
+ */
+export { StorefrontPaymentElementFallback } from './storefront-payment-element-fallback'
 
 export default StorefrontPaymentElement

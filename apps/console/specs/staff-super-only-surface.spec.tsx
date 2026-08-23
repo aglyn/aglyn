@@ -201,14 +201,16 @@ const GATED_SURFACES: Record<string, { ui: string[]; via: RegExp }> = {
     ui: ['app/(app)/admin/plugin-reviews/[listingId]/page.tsx'],
     via: /SuperStaffOnly/,
   },
-  // Staff refunds (AGL-2486). READING the refundable charges is open to every
-  // staff role — "how much of this invoice is already refunded" is a support
-  // question — and ISSUING one is `super`, the same bar as `flags`, because it
-  // is the only staff action that sends money out. Only the button is wrapped,
-  // so the card stays readable for the role that cannot press it.
+  // Staff refunds (AGL-2486). The only entry here whose gate is not "which
+  // role are you" but "how much is this": support may refund up to a cap and
+  // escalates above it, so a `SuperStaffOnly` wrapper would refuse every
+  // support refund including the ones the cap exists to allow. The card reads
+  // the role — from the route's own response, falling back to the claim hook
+  // — and disables on the AMOUNT, stating the ceiling above the form so the
+  // boundary is legible before anything is typed.
   'org-refund/route.ts': {
     ui: ['components/staff-org-refund-card.component.tsx'],
-    via: /SuperStaffOnly/,
+    via: /useStaffRole/,
   },
   'users/manage/route.ts': {
     ui: ['app/(app)/admin/users/page.tsx'],

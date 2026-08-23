@@ -17,6 +17,47 @@
 
 // Fails when a legal Google Doc drifts from its published page (AGL-1611).
 //
+// ## WHAT THIS CANNOT DETECT — read before treating a green run as compliance
+//
+// This compares a Google Doc against the page that serves it. Both sides are
+// PROSE. Nothing here reads the codebase, so there is an entire class of legal
+// exposure it is structurally blind to:
+//
+//     the policy is faithfully published, and describes a platform that
+//     does something the policy does not disclose.
+//
+// A doc and a page can agree perfectly while the product sets a cookie, shares
+// a data category, or loads a vendor that neither one mentions. Drift here is
+// doc-vs-page; the gap is policy-vs-CAPABILITY, and green means only that the
+// paste happened, never that the disclosure is complete.
+//
+// This is not hypothetical. AGL-2486 found `META_PIXEL_VENDOR` declaring
+// `_fbp`/`_fbc` for teardown with no row in `cookie-inventory.ts` — the
+// platform could load an advertising vendor the inventory did not name, and
+// every check in the repo was green throughout. (The published Cookie Policy
+// did name Meta, so the exposure was inverted from the dangerous direction,
+// which was luck rather than detection.)
+//
+// The countermeasure is not to extend this script — it has no business reading
+// application code. It is to make each capability carry its own disclosure
+// registry, checked where the capability is DEFINED, with a key that survives
+// the vendor writing its own cookies from its own script:
+//
+//   * cookies      → `apps/console/constants/cookie-inventory.ts`, checked by
+//                    `cookie-inventory.spec.ts`. Note it needs BOTH keys: the
+//                    writer scan for our own `Set-Cookie` calls, and
+//                    `ADVERTISING_VENDORS.cookiePrefixes` for vendors whose
+//                    tags we never author. A writer-only guard misses every
+//                    third-party vendor there will ever be.
+//   * data sharing → no registry exists. A new processor or a new shared data
+//                    category is disclosed by whoever remembers to.
+//   * subprocessors→ no registry exists.
+//
+// So: the cookie half is covered, and the rest is not. Anyone adding a
+// capability that processes or shares personal data should assume no automated
+// check will catch a missing disclosure, and that this script's green says
+// nothing about it either way.
+//
 // Since the 2026-08-13 move to Google Docs, `Platform Docs/Legal/*.gdoc` are
 // 169-byte POINTERS — no content on disk, so nothing could diff a Doc against
 // what `aglyn.com/legal/<slug>` actually serves, and the two are known to have

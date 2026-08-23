@@ -162,6 +162,11 @@ jest.mock('firebase/firestore', () => ({
   getCountFromServer: (name: string) => countSpy(name),
   addDoc: jest.fn().mockResolvedValue(undefined),
   deleteDoc: jest.fn().mockResolvedValue(undefined),
+  // AGL-2356: the product editor re-reads the stored `stockHolds` immediately
+  // before its full-document replace, so a stale seed can neither erase a live
+  // checkout reservation nor resurrect a settled one. A double without
+  // `getDoc` makes that read throw and the save never lands.
+  getDoc: jest.fn().mockResolvedValue({ get: () => undefined }),
   setDoc: jest.fn().mockResolvedValue(undefined),
   updateDoc: jest.fn().mockResolvedValue(undefined),
 }))

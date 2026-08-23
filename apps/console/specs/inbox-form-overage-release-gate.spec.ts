@@ -459,3 +459,33 @@ describe('the suppression is scoped to form submissions', () => {
     expect(on.formSubmissions).toEqual(SUBMISSIONS)
   })
 })
+
+/**
+ * Tier targeting reaches the invoice (AGL-2486), on the flag next door.
+ *
+ * Same defect and the same money as the Contacts gate: this sweep already
+ * holds the org document, so dropping the tier would make every
+ * `plans`-declaring flag read OFF and withhold the form-submission overage
+ * from precisely the orgs that CAN open the Inbox page — silently, with a
+ * plausible zero written to the rollup.
+ */
+describe('tier targeting reaches the invoice', () => {
+  it('bills an org inside the targeted tiers', async () => {
+    seed({ plan: 'starter', flag: { enabled: true, plans: ['starter'] } })
+    const write = (await rollUp())['org-1']
+    expect(write.formSubmissionsBilled).toBe(true)
+    expect(write.formSubmissionsOverageWithheldUsd).toBe(0)
+    expect(write.billedCents).toBe(BILLED_CENTS)
+  })
+
+  it('withholds from an org below the tier floor', async () => {
+    // The opposite direction, so a gate that passed a constant tier to
+    // satisfy the case above fails here.
+    seed({ plan: 'starter', flag: { enabled: true, plans: ['enterprise'] } })
+    const write = (await rollUp())['org-1']
+    expect(write.formSubmissionsBilled).toBe(false)
+    expect(write.formSubmissionsOverageWithheldUsd).toBeCloseTo(WITHHELD_USD, 6)
+    expect(write.billedCents).toBe(0)
+    expect(mockMeterEvents).toEqual([])
+  })
+})

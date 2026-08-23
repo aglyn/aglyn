@@ -1,13 +1,13 @@
 ---
 sidebar_position: 13
 title: Element animations
-description: Add fade, slide and zoom motion to any element, choose when it plays, and keep the page fast and accessible.
+description: Add fade, slide and zoom motion to any element, stagger a row of cards, choose when it plays, and keep the page fast and accessible.
 ---
 
 # Element animations
 
 Any element on a screen can animate. Pick a preset, choose when it plays,
-and adjust two numbers — there is no CSS to write.
+and adjust a few numbers — there is no CSS to write.
 
 ## Add an animation
 
@@ -45,8 +45,46 @@ Both are in milliseconds. **Duration** is how long the motion takes; 600 is a
 natural default and anything over 3000 is capped. **Delay** is how long to
 wait before starting.
 
-Delay is how you stagger a group. Give a row of three cards delays of 0, 100
-and 200 and they arrive one after another instead of all at once.
+### Easing
+
+Easing is the *shape* of the motion — whether it starts fast and settles, or
+moves at one steady speed. It changes how an animation feels far more than
+its duration does.
+
+| Easing | Feels like |
+| --- | --- |
+| **Smooth** (default) | Starts quickly and settles gently. The safe choice. |
+| **Steady** | One constant speed from start to finish. Mechanical, good for subtle moves. |
+| **Gentle start** | Eases in slowly, then arrives quickly. |
+| **Gentle end** | Starts quickly, then slows into place. |
+| **Gentle start and end** | Slow at both ends, quickest in the middle. |
+| **Settles into place** | Travels a little past its resting place and settles back onto it. The most emphatic curve on offer — use it sparingly. |
+
+Leaving this alone gives you **Smooth**, which is the curve every animation
+used before this setting existed — so nothing you built earlier has changed.
+
+### Stagger children
+
+Turn **Stagger children** on and the element stops animating as a whole.
+Instead, the things *inside* it animate one after another. This is what you
+want for a row of cards, a feature list or a grid of logos: they arrive in
+sequence rather than all landing at once.
+
+**Stagger step** is the gap between one child and the next, in milliseconds.
+90 is a natural default. It is capped at 500, because this gap multiplies —
+the tenth card in a row waits nine steps, so a large number turns into a very
+long wait very quickly.
+
+A few things worth knowing:
+
+- The stagger applies to the element's **direct children** only.
+- Your **Delay** still applies, to the whole group. Set a delay of 200 and a
+  step of 90 and the first child waits 200ms, the second 290ms, and so on.
+- Beyond the 24th child, everything remaining arrives together. This stops a
+  long list from leaving its last rows invisible for a minute.
+- Stagger is not offered for **on hover**, because a hover effect has to
+  reverse the moment the pointer leaves and a staggered one would strand half
+  a row mid-move.
 
 ### Replay each time
 
@@ -72,8 +110,10 @@ no movement at all — including elements set to animate on scroll. You do not
 have to do anything, and there is no way to override it.
 
 This is also why the presets are what they are. Every one of them only fades,
-slides a short distance or changes size slightly; none of them spin, bounce
-or parallax.
+slides a short distance or changes size slightly; none of them spin or
+parallax, and the most emphatic thing on offer is the **Settles into place**
+easing — which travels a little past its resting place before coming back to
+it, and which you have to choose deliberately.
 
 ## Speed and layout
 
@@ -81,6 +121,10 @@ Animations are pure CSS. A published page loads no animation library, and a
 page with no animations on it ships nothing extra at all — no stylesheet, no
 script. A page that uses the scroll trigger adds a few hundred bytes of
 inline code to watch for elements entering the viewport.
+
+Staggering a row costs nothing extra. The page watches the row, not each card
+in it, so twelve cards arriving one after another is one thing to keep track
+of rather than twelve — the spacing between them is plain CSS.
 
 The presets only ever change an element's opacity and its position on the
 screen, never the space it takes up. Nothing on the page moves to make room

@@ -43,6 +43,7 @@ import {
   retrieveDocsSections,
 } from '../../_lib/assist-retrieval'
 import {
+  composeDocsLinksAnswer,
   deflectToDocs,
   sectionLabel,
   sectionUrl,
@@ -69,7 +70,8 @@ import {
  * staff bypass) → 403 unscoped/wrong org (AGL-1934 — the request must NAME
  * the org it meters) → 423 lockdown (platform/org/user + the `ai-assist`
  * feature kill switch) → 429 rate limit → **the docs answer, if retrieval is
- * confident** → 501 no ANTHROPIC_API_KEY → 429 quota (free: N messages/UTC-
+ * confident** → with no ANTHROPIC_API_KEY: **the closest docs pages**, or 501
+ * when retrieval found nothing at all → 429 quota (free: N messages/UTC-
  * day; entitled: monthly runaway guard; plus a monthly SPEND ceiling on both,
  * ARMED by default at $40/org — `assistOrgMonthlyCostLimitUsd`, removed only
  * by the literal word `off`) → the model call.
@@ -464,6 +466,19 @@ const DOCS_RETRIEVAL_MODEL = 'docs-retrieval'
  */
 const CACHED_ANSWER_MODEL = 'assist-cache'
 
+/**
+ * The sentinel a CLOSEST-PAGES answer is metered under (AGL-2486) — a
+ * keyless deployment offering docs links because it has no model to escalate
+ * to. Its own id for the reason in `DocsOnlyArgs.servedBy`: this is the one
+ * zero-cost path that represents a MISSING capability rather than a saved
+ * call, and an operator reading the signals needs to see it as such — a rising
+ * count here means questions are going unanswered, which is the opposite of
+ * what a rising `docs-retrieval` count means. Priced at zero in
+ * `ASSIST_MODEL_RATES_USD` for the same reason the other two are: an unknown
+ * id inherits the DEAREST tier.
+ */
+const DOCS_LINKS_MODEL = 'docs-links'
+
 interface DocsOnlyArgs {
   firestore: FirebaseFirestore.Firestore
   orgId: string
@@ -477,13 +492,20 @@ interface DocsOnlyArgs {
   tier: 'free' | 'entitled'
   rate: ReturnType<typeof checkRateLimit>
   /**
-   * Which zero-cost path served this — `docs` (retrieval answered outright)
-   * or `cache` (an identical question already answered this workspace).
-   * Reported on the response header and, through `model`, in the meters, so
-   * the two are countable apart: they are saved differently and a change in
-   * their ratio means different things.
+   * Which zero-cost path served this — `docs` (retrieval answered outright),
+   * `cache` (an identical question already answered this workspace) or
+   * `docs-links` (nothing was confident enough to answer and no model was
+   * available, so the closest pages were offered instead). Reported on the
+   * response header and, through `model`, in the meters, so the three are
+   * countable apart: they are saved differently and a change in their ratio
+   * means different things.
+   *
+   * ⚠️ `docs-links` is NOT a saving and must never be counted as one. A
+   * deflection is a model call we chose not to make; a links answer is a
+   * model call we could not make. Rolling them together would report a
+   * keyless deployment as having the best deflection rate on the platform.
    */
-  servedBy?: 'docs' | 'cache'
+  servedBy?: 'docs' | 'cache' | 'docs-links'
 }
 
 /**
@@ -519,7 +541,12 @@ async function docsOnlyResponse(args: DocsOnlyArgs): Promise<Response> {
       answer: args.answer.slice(0, MAX_STORED_ANSWER_CHARS),
       route: args.route,
       hostId: args.hostId,
-      model: servedBy === 'cache' ? CACHED_ANSWER_MODEL : DOCS_RETRIEVAL_MODEL,
+      model:
+        servedBy === 'cache'
+          ? CACHED_ANSWER_MODEL
+          : servedBy === 'docs-links'
+            ? DOCS_LINKS_MODEL
+            : DOCS_RETRIEVAL_MODEL,
       tier: args.tier,
       usage: {
         inputTokens: 0,
@@ -706,28 +733,73 @@ async function handler(request: Request): Promise<Response> {
     // very top of this handler until deflection existed, and moving it here
     // is the point rather than a tidy-up: a deployment holding its key still
     // answers every question the documentation answers, and only says it is
-    // unconfigured for the ones that genuinely need a model. The refusal is
-    // byte-identical to the old one, so the panel's existing 501 handling is
-    // unchanged.
+    // unconfigured for the ones that genuinely need a model.
+    //
+    // ── The keyless degrade ───────────────────────────────────────────────
+    //
+    // It used to refuse outright from here, and that was the second half of
+    // what Zach hit: one answered question, then "Assist is not configured on
+    // this deployment" for everything after it. The self-host charter asks
+    // every Aglyn-operated dependency to degrade CLEANLY, and a deployment
+    // holding its key is the ordinary case — every self-hosted install on day
+    // one, and this platform's own production right now.
+    //
+    // So a keyless deployment falls back to what it still has: the closest
+    // pages retrieval found, with an honest sentence saying it could not work
+    // the question through. Only when retrieval found NOTHING at all is there
+    // no fallback to give, and that is the one case that still refuses.
     //
     // THE DEPLOYMENT BRAND IS RIGHT HERE, and stays (AGL-2352) — it names an
     // env var the deployment's operator sets, which is a fact about the
-    // deployment rather than about the workspace that happened to ask.
+    // deployment rather than about the workspace that happened to ask. The
+    // panel does not print this string; it has its own plain-English line for
+    // a 501, because the person reading it is not the person who sets the var.
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) {
-      return Response.json(
-        {
-          error: `${PLATFORM_BRAND_NAME} Assist is not configured (ANTHROPIC_API_KEY).`,
-        },
-        { status: 501 },
-      )
+      const closest = composeDocsLinksAnswer(scored.map(({ section }) => section))
+      if (!closest) {
+        return Response.json(
+          {
+            error: `${PLATFORM_BRAND_NAME} Assist is not configured (ANTHROPIC_API_KEY).`,
+          },
+          { status: 501 },
+        )
+      }
+      // No reservation, for the same reason the docs path takes none: nothing
+      // was spent. Metered under its own sentinel so this never reads as a
+      // deflection — see `DOCS_LINKS_MODEL`.
+      return docsOnlyResponse({
+        firestore,
+        orgId: body.orgId,
+        uid: decoded.uid,
+        question: body.question,
+        answer: closest,
+        docs,
+        docsPaths,
+        route: body.context?.route ?? '',
+        hostId: body.context?.hostId || null,
+        tier: entitled ? 'entitled' : 'free',
+        rate,
+        servedBy: 'docs-links',
+      })
     }
 
     // ── The answer cache (AGL-2486) ───────────────────────────────────────
-    // Only reached by an ESCALATION, and only when the question stands alone:
-    // a turn with history is answered against a conversation this key cannot
-    // describe, and caching on the question alone would serve the reply to
-    // somebody else's thread. Same reason deflection refuses a follow-up.
+    // Only reached by an ESCALATION, and only on a FIRST turn: a turn with
+    // history is answered against a conversation this key cannot describe,
+    // and caching on the question alone would serve the reply to somebody
+    // else's thread.
+    //
+    // ⚠️ THIS STAYS `body.history.length`, and did not move when deflection
+    // learned to answer a standalone follow-up. The two gates look alike and
+    // are not the same test. A deflected answer is composed from the docs
+    // sections THIS question retrieved and is a pure function of the question
+    // — two users asking it get the same paragraphs whatever their threads
+    // said, so answering it mid-thread carries nothing across. A model answer
+    // is a function of the whole transcript, so a key that omits the
+    // transcript cannot identify it, and a mid-thread hit would be one user's
+    // conversation replayed into another's. Widening this to match the
+    // deflection rule would be exactly that bug.
     //
     // The key carries the tier, the route, the model and the brand as well as
     // the question — see `assistAnswerCacheKey`. Cheap to get wrong and

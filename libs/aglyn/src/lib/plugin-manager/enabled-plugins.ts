@@ -43,7 +43,105 @@ export interface FirstPartyPlugin {
    * staff. Always-on plugins carry no flag.
    */
   releaseFlag?: string
+  /**
+   * OFF for a site until that site turns it on (AGL-2486) — the inversion of
+   * this switchboard's default, and the only field here that changes what an
+   * absent host doc means.
+   *
+   * The per-host field is a DENY-list: a site records what it switches off,
+   * which makes "absent means on" the default for all twelve other bundles.
+   * That is right for a capability whose worst case is an unused nav tab, and
+   * wrong for one whose worst case is a PAGE — `/signin`, `/signup`,
+   * `/recover` were served by every published site on the platform,
+   * including marketing sites whose real sign-in is somewhere else entirely.
+   * A sign-in-shaped page on a brand's own domain that is not that brand's
+   * sign-in is a credential-confusion hazard, so this one defaults closed.
+   *
+   * A site un-defaults it by listing the id in `host.enabledPlugins`. That
+   * list is scoped to default-off ids and cannot widen anything else, so the
+   * AGL-1014 invariant survives intact: a site still can never reach past
+   * what its org enables.
+   */
+  defaultOffPerSite?: boolean
+  /**
+   * Plugin ids this one cannot function without (AGL-2486) — DECLARED, never
+   * inferred.
+   *
+   * The switchboard has always let a workspace turn off a plugin another one
+   * is built on, and said nothing. `accounts` is the case that proves it: the
+   * Members blocks and every `membership/*` API handler ship inside the
+   * COMMERCE bundle, so switching Commerce off leaves a site advertising
+   * `/signin` while nothing can answer the login POST.
+   *
+   * Declared rather than derived on purpose. The couplings that matter are
+   * exactly the ones no static read can see — which bundle happens to
+   * register whose components — so a graph inferred from imports or from the
+   * registry would miss the real edges while looking authoritative. An
+   * incomplete warning that presents itself as complete is worse than none,
+   * so this list is the contract, and {@link resolveDisableCascade} is honest
+   * about covering only what is on it.
+   */
+  requires?: readonly string[]
 }
+
+/**
+ * What a DISABLE does to a site that is already published (AGL-2486).
+ *
+ * The cascade dialog has to state a consequence, and there are two very
+ * different ones. "These blocks will no longer be offered" is a different
+ * decision from "parts of your live pages go blank", and one generic sentence
+ * for both would be a lie in one direction or the other.
+ *
+ * - `elements` — the plugin registers site components. The tenant loads only
+ *   the site's enabled bundles, so elements ALREADY PLACED on published pages
+ *   stop rendering. Pre-existing AGL-1014 behaviour.
+ * - `routes`   — the plugin registers no components, but a published site
+ *   stops serving something: `accounts` gates `/signin`, `/signup`,
+ *   `/recover`; `redirects` stops applying its rules; `workflows` stops
+ *   answering its hooks.
+ * - `console-only` — nothing a visitor can reach changes; the plugin leaves
+ *   navigation and the editor.
+ */
+export type PublishedSiteImpact = 'elements' | 'routes' | 'console-only'
+
+/**
+ * Every catalog id classified. Kept beside the catalog rather than inside it
+ * because the `elements` verdict is a fact about `plugins.config.json`
+ * (`register.site`), and a spec cross-checks the two so a new
+ * site-registering bundle cannot be added without declaring its consequence.
+ */
+export const PUBLISHED_SITE_IMPACT: Readonly<
+  Record<string, PublishedSiteImpact>
+> = {
+  mui: 'elements',
+  accounts: 'routes',
+  bookings: 'elements',
+  commerce: 'elements',
+  marketplace: 'console-only',
+  contacts: 'console-only',
+  data: 'console-only',
+  email: 'elements',
+  'events-calendar': 'elements',
+  inbox: 'console-only',
+  logic: 'console-only',
+  marketing: 'elements',
+  redirects: 'routes',
+  workflows: 'routes',
+}
+
+/**
+ * The user-accounts capability (AGL-2486): visitor sign-in, sign-up and
+ * password recovery on a published site.
+ *
+ * It carries no loader manifest entry, and that is deliberate rather than an
+ * oversight. The member blocks and the `membership/*` API handlers already
+ * ship inside the commerce bundle, so there is no separate package to load;
+ * what this id contributes is the SWITCH — the thing the tenant route gate,
+ * the console card and the sitemap all ask. Several catalog ids already have
+ * no tenant bundle (`contacts`, `data`, `logic`), so a manifest-less entry is
+ * the existing shape, not a new one.
+ */
+export const ACCOUNTS_PLUGIN_ID = 'accounts'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   {
@@ -51,6 +149,19 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     label: 'Components',
     alwaysOn: true,
     description: 'The base component and theme library every site builds on.',
+  },
+  {
+    id: ACCOUNTS_PLUGIN_ID,
+    label: 'User Accounts',
+    description:
+      'Visitor accounts on the site: the /signin, /signup and /recover ' +
+      'pages, and the Members blocks. Off for a site until you turn it on.',
+    releaseFlag: 'release_member_accounts',
+    defaultOffPerSite: true,
+    // The Members blocks and the `membership/*` handlers are registered by
+    // the COMMERCE bundle (`plugins.config.json` gives commerce the
+    // `membership` api prefix). Commerce off = member pages with no server.
+    requires: ['commerce'],
   },
   { id: 'bookings', label: 'Bookings', description: 'Services, open slots, and paid bookings.', releaseFlag: 'release_bookings' },
   { id: 'commerce', label: 'Commerce', description: 'Products, carts, checkout, orders, POS.', releaseFlag: 'release_commerce_v2' },
@@ -77,6 +188,43 @@ const ALWAYS_ON: readonly string[] = FIRST_PARTY_PLUGINS.filter(
 const FIRST_PARTY_IDS: ReadonlySet<string> = new Set(
   FIRST_PARTY_PLUGINS.map((plugin) => plugin.id),
 )
+
+/**
+ * Ids a SITE does not get until it asks (AGL-2486). See
+ * {@link FirstPartyPlugin.defaultOffPerSite} for why this inversion exists.
+ */
+export const DEFAULT_OFF_PER_SITE_PLUGIN_IDS: ReadonlySet<string> = new Set(
+  FIRST_PARTY_PLUGINS.filter((plugin) => plugin.defaultOffPerSite).map(
+    (plugin) => plugin.id,
+  ),
+)
+
+/** Whether a plugin id is off for a site until that site opts in. */
+export function isDefaultOffPerSite(pluginId: string): boolean {
+  return DEFAULT_OFF_PER_SITE_PLUGIN_IDS.has(pluginId)
+}
+
+/**
+ * Applies a host's `enabledPlugins` OPT-IN list (AGL-2486): subtracts every
+ * default-off id the host has not explicitly asked for.
+ *
+ * Narrow-only, like its deny-list sibling. The list can only ever REMOVE the
+ * default-off subtraction for an id the org already enables — listing an
+ * ordinary id buys nothing, and listing one the org switched off buys
+ * nothing either, because this runs against the org's resolved set.
+ */
+export function applyDefaultOffOptIn(
+  pluginIds: readonly string[],
+  optedIn?: readonly string[] | null,
+): string[] {
+  if (!DEFAULT_OFF_PER_SITE_PLUGIN_IDS.size) return [...pluginIds]
+  const asked = new Set(
+    Array.isArray(optedIn) ? optedIn.map(String) : [],
+  )
+  return pluginIds.filter(
+    (id) => !DEFAULT_OFF_PER_SITE_PLUGIN_IDS.has(id) || asked.has(id),
+  )
+}
 
 /**
  * Whether an `enabledPlugins` id is a first-party BUNDLE (vs a marketplace
@@ -152,15 +300,34 @@ export function subtractDisabledPlugins(
  * OFF, so it can never widen beyond what the org enables, and an absent
  * field means every org-enabled plugin runs (newly installed plugins
  * default to enabled per site until a host admin disables them).
+ *
+ * ONE class of id reads the other way (AGL-2486): a `defaultOffPerSite`
+ * plugin is subtracted unless the host names it in `enabledPlugins`. That
+ * list un-defaults; it does not grant. Both fields are still bounded by the
+ * org's set, and an explicit deny still beats an explicit opt-in — the two
+ * are applied in that order below, so the safe reading wins whenever a
+ * hand-edited or stale doc sets both.
  */
 export function resolveHostEnabledPlugins(
   org?: { enabledPlugins?: string[] } | null,
-  host?: { disabledPlugins?: string[] } | null,
+  host?: { disabledPlugins?: string[]; enabledPlugins?: string[] } | null,
 ): string[] {
   return subtractDisabledPlugins(
-    resolveEnabledPlugins(org),
+    applyDefaultOffOptIn(resolveEnabledPlugins(org), host?.enabledPlugins),
     host?.disabledPlugins,
   )
+}
+
+/**
+ * Whether ONE plugin runs on this site — the host-aware counterpart of
+ * {@link isPluginEnabled}, and the form every route gate wants.
+ */
+export function isHostPluginEnabled(
+  org: { enabledPlugins?: string[] } | null | undefined,
+  host: { disabledPlugins?: string[]; enabledPlugins?: string[] } | null | undefined,
+  pluginId: string,
+): boolean {
+  return resolveHostEnabledPlugins(org, host).includes(pluginId)
 }
 
 export function isPluginEnabled(
@@ -169,6 +336,88 @@ export function isPluginEnabled(
 ): boolean {
   return resolveEnabledPlugins(org).includes(pluginId)
 }
+
+/**
+ * Everything that must ALSO be switched off when `pluginId` is (AGL-2486) —
+ * the transitive closure over reverse `requires` edges, restricted to what is
+ * currently on.
+ *
+ * Pure and surface-agnostic: the org switchboard and the per-site card both
+ * call it with their own "currently enabled" set, so the same graph answers
+ * both, and the org's wider blast radius comes from the set it passes, not
+ * from a second implementation.
+ *
+ * `extraRequirements` is how a marketplace listing joins the graph. Third-party
+ * ids ride the same `enabledPlugins` field, so a listing whose manifest
+ * declares `requires` is cascaded exactly like a bundle. It EXTENDS the
+ * catalog graph and cannot shrink it — a listing cannot declare away a
+ * first-party edge.
+ *
+ * ⚠️ The result is only ever as complete as what has been DECLARED. A
+ * marketplace plugin that uses first-party components without saying so in its
+ * manifest will not appear here, and callers must not present the list as
+ * exhaustive. See `PLUGIN_CASCADE_IS_DECLARED_ONLY`.
+ */
+export function resolveDisableCascade(
+  pluginId: string,
+  enabledIds: readonly string[],
+  extraRequirements?: Readonly<Record<string, readonly string[]>>,
+): string[] {
+  const enabled = new Set(enabledIds.map(String))
+  // Reverse index: required id -> ids that depend on it.
+  const dependents = new Map<string, string[]>()
+  const addEdge = (dependent: string, required: string) => {
+    const list = dependents.get(required)
+    if (list) list.push(dependent)
+    else dependents.set(required, [dependent])
+  }
+  for (const plugin of FIRST_PARTY_PLUGINS)
+    for (const required of plugin.requires ?? []) addEdge(plugin.id, required)
+  for (const [dependent, required] of Object.entries(extraRequirements ?? {}))
+    for (const one of required ?? []) addEdge(dependent, String(one))
+
+  // Breadth-first over reverse edges. `seen` is seeded with the origin so a
+  // cycle back to it terminates and the plugin being disabled is never listed
+  // among its own dependents.
+  const seen = new Set<string>([pluginId])
+  const cascade: string[] = []
+  const queue: string[] = [pluginId]
+  while (queue.length) {
+    const current = queue.shift() as string
+    for (const dependent of dependents.get(current) ?? []) {
+      if (seen.has(dependent)) continue
+      seen.add(dependent)
+      // Walk THROUGH an already-off dependent — something may depend on it in
+      // turn — but do not claim it is being turned off.
+      if (enabled.has(dependent)) cascade.push(dependent)
+      queue.push(dependent)
+    }
+  }
+  return cascade
+}
+
+/**
+ * Why the cascade list must never be presented as exhaustive (AGL-2486).
+ *
+ * Exported as copy rather than left to each caller to paraphrase: the whole
+ * value of the warning rests on it being honest about its own limits, and two
+ * surfaces wording that differently is how one of them ends up overclaiming.
+ *
+ * It says built-in ONLY, and that is the current truth rather than a hedge.
+ * `PluginManifest` carries no `requires` field, so a publisher cannot declare
+ * a dependency even if they want to, and `extraRequirements` above — the seam
+ * that would carry them — is supplied by nothing outside tests. An earlier
+ * draft said "a plugin that uses this one WITHOUT declaring it cannot be
+ * detected", which quietly implied declaring was possible and would have made
+ * this the exact overclaiming warning it exists to avoid. Adding the manifest
+ * field is a separate change: it needs a publish form, validation and a line
+ * on the install screen, or it is a field written by nobody and read by
+ * nothing. Update this sentence in the same change, not before.
+ */
+export const PLUGIN_CASCADE_IS_DECLARED_ONLY =
+  'This covers built-in plugins only. A marketplace plugin has no way to ' +
+  'declare that it depends on another one yet, so none are listed here — ' +
+  'check any third-party plugins you rely on before continuing.'
 
 /** Reverse lookup: which first-party plugin a release flag gates, if any. */
 export function pluginForReleaseFlag(

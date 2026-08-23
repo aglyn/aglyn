@@ -15,16 +15,27 @@
  * limitations under the License.
  */
 
+import type { BoxSpacingValue } from './spacing-value'
+
+/**
+ * A side's value is `string | number`, NOT the `CSSStyleDeclaration` string
+ * these types used to borrow (AGL-2486).
+ *
+ * The narrower type was not merely inconvenient — it was the bug. A theme
+ * spacing step is stored as a NUMBER so MUI resolves it through
+ * `theme.spacing`, and a string-only type meant the styler could neither
+ * read one an author already had nor ever write a new one.
+ */
 export type PaddingMeasurements = Partial<
-  Pick<
-    CSSStyleDeclaration,
-    'paddingTop' | 'paddingRight' | 'paddingBottom' | 'paddingLeft'
+  Record<
+    'paddingTop' | 'paddingRight' | 'paddingBottom' | 'paddingLeft',
+    BoxSpacingValue
   >
 >
 export type MarginMeasurements = Partial<
-  Pick<
-    CSSStyleDeclaration,
-    'marginTop' | 'marginRight' | 'marginBottom' | 'marginLeft'
+  Record<
+    'marginTop' | 'marginRight' | 'marginBottom' | 'marginLeft',
+    BoxSpacingValue
   >
 >
 export type Measurements = PaddingMeasurements & MarginMeasurements

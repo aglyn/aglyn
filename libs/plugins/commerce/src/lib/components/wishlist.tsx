@@ -213,6 +213,9 @@ const Wishlist = forwardRef<HTMLDivElement, WishlistProps>((props, ref) => {
                     image={item.imageUrl}
                     alt={item.name}
                     sx={{ height: 120, objectFit: 'cover' }}
+                    // Deferred (AGL-2486), same reasoning as the product
+                    // grid: one image per saved item, none of them the lead.
+                    {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
                   />
                 ) : (
                   <Box sx={{ height: 120, bgcolor: 'action.hover' }} />
@@ -247,6 +250,7 @@ export const schema: Aglyn.ComponentSchema<WishlistProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Wishlist',
+  description: 'Products a visitor saved, linking back to their pages.',
   category: Aglyn.ComponentCategory.COMMERCE,
   icon: { path: mdiHeartOutline.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

@@ -86,16 +86,31 @@ describe('api-keys (pure helpers)', () => {
       ])
     })
 
+    it('admits orders:write, now that an endpoint enforces it (AGL-2461)', () => {
+      // This case used to be the absentee guard below, pointed at
+      // `orders:write` — with a note saying to re-point it if the scope ever
+      // shipped. AGL-2461 shipped it: `PATCH /v1/sites/{id}/orders/{id}`
+      // records a shipment and calls `requireScope(ctx, 'orders:write')`
+      // (`apps/console/utils/api-v1-resources.ts`), in the same change that
+      // added the scope, which is what AGL-899 asked for. The absentee guard
+      // moved to `products:write` rather than being deleted.
+      expect(isApiScope('orders:write')).toBe(true)
+      expect(normalizeScopes(['orders:write', 'orders:read'])).toEqual([
+        'orders:read',
+        'orders:write',
+      ])
+    })
+
     it('still refuses a scope no endpoint enforces (the AGL-899 rule)', () => {
-      // The guard AGL-899 installed, kept alive against a real absentee: the
-      // orders resource is read-only over /v1, no handler asks for
-      // `orders:write`, so nobody may mint it. Re-point this at another
-      // genuine absentee if `orders:write` ever ships — do not delete it. A
+      // The guard AGL-899 installed, kept alive against a real absentee:
+      // products are read-only over /v1, no handler asks for
+      // `products:write`, so nobody may mint it. Re-point this at another
+      // genuine absentee if `products:write` ever ships — do not delete it. A
       // mintable scope that grants nothing reads to a customer as a
       // permission they have and cannot use.
-      expect(isApiScope('orders:write')).toBe(false)
-      expect(normalizeScopes(['orders:read', 'orders:write'])).toEqual([
-        'orders:read',
+      expect(isApiScope('products:write')).toBe(false)
+      expect(normalizeScopes(['products:read', 'products:write'])).toEqual([
+        'products:read',
       ])
     })
   })

@@ -12,6 +12,7 @@
 #   tools/gate.sh --root /private/tmp/g7   # a specific gate root
 #   tools/gate.sh --keep                   # leave the worktree for triage
 #   tools/gate.sh --affected               # THE FAST PATH — see below
+#   tools/gate.sh --no-install             # refuse on lockfile drift, never install
 #
 # ---------------------------------------------------------------------------
 # TWO PATHS, AND THE ONE THAT RAN IS ALWAYS NAMED (AGL-2486)
@@ -134,6 +135,17 @@ MAX_WORKERS="${GATE_MAX_WORKERS:-auto}"
 PHASES="typecheck,lint,guards,test,build"
 AFFECTED=0
 AFFECTED_BASE=""
+# Installing is the default. --no-install turns the "lockfile moved" case from
+# an install into a REFUSAL, for an offline box — never into a silent clone.
+ALLOW_INSTALL=1
+PROVISION_NOTE=""
+
+# The parse loop consumes "$@", and the self-snapshot below has to re-exec with
+# exactly what the caller passed. Saved before anything eats it.
+GATE_ORIG_ARGS=("$@")
+# Absolute, and resolved now: the snapshot copies this file, and by the time it
+# runs the script may have chdir'd into the worktree.
+SELF_PATH=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -151,13 +163,18 @@ while [ $# -gt 0 ]; do
     --fresh-cache)  FRESH_CACHE=1; shift ;;
     --self-test)    SELF_TEST=1; shift ;;
     --affected)     AFFECTED=1; shift ;;
+    --no-install)   ALLOW_INSTALL=0; shift ;;
     --base)         AFFECTED_BASE="$2"; shift 2 ;;
     -h|--help)      sed -n '2,80p' "$0"; exit 0 ;;
     *) echo "gate: unknown argument '$1'" >&2; exit 64 ;;
   esac
 done
 
-SOURCE_REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+# Normally derived from this file's location. After the self-snapshot below the
+# script runs from inside the gate root, where that derivation would resolve to
+# the wrong tree entirely — so the real value is handed down through the
+# environment and this line is only ever used by the FIRST invocation.
+SOURCE_REPO="${GATE_SOURCE_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
 # --- adaptive parallelism --------------------------------------------------
 # The gate was pinned at `--parallel 3 --maxWorkers 2`. That pin is CORRECT and
@@ -264,17 +281,147 @@ choose_parallelism() {
   [ "$from_w" = "auto" ] || PARALLELISM_NOTE="$PARALLELISM_NOTE (maxWorkers PINNED to $from_w)"
 }
 
-clone_modules() { # clone_modules <relative path>
-  local rel="$1"
-  local src="$SOURCE_REPO/$rel"
-  local dest="$WT/$rel"
-  [ -d "$src" ] || { echo "gate: $src missing — run npm ci there first" >&2; return 1; }
+# ---------------------------------------------------------------------------
+# TRAP 6 — CLONING node_modules DOES NOT INSTALL THEM (AGL-2486)
+# ---------------------------------------------------------------------------
+# This script clones the SOURCE CHECKOUT's node_modules. That is correct only
+# while the gated ref wants the same packages the source checkout has. Gate a
+# ref whose package-lock.json differs — every dependency bump, every dependabot
+# batch — and the whole run compiles, lints, tests and BUILDS against the old
+# packages, then prints exit 0. Measured on a merged dependabot branch:
+#
+#     cypress                  cloned 15.20.1   branch lockfile 15.21.0
+#     vitest                          4.1.10                    4.1.11
+#     @swc/core                       1.16.0                    1.16.1
+#     eslint-plugin-storybook         10.5.8                    10.5.9
+#
+# That is a green that means nothing, on the one class of change where the
+# packages ARE the change.
+#
+# It got worse with the reuse stamp: the stamp recorded the GATED REF's lock
+# hash while the modules had come from the source checkout, so a second run at
+# the same ref reported `provision: REUSED` for a tree that had never matched
+# it. The stamp was recording provenance it did not have.
+#
+# So provisioning is now decided per tree, by comparing what the gated ref
+# WANTS against what the candidate source HAS:
+#
+#   want == source checkout's lock  ->  clone from the source checkout (fast)
+#   a cached tree exists for want   ->  clone from that cache (fast)
+#   otherwise                       ->  npm ci, then cache it under want
+#   install refused/failed          ->  FAIL LOUDLY. Never exit 0.
+#
+# The cache is keyed by the lockfile blob hash, so the second gate of a
+# dependency change is as fast as any other gate and only the first pays.
+#
+# Why INSTALL rather than simply refuse: .npmrc sets `legacy-peer-deps=true`,
+# so npm installs a broken peer graph SILENTLY. A real case — mobx 7 against
+# mobx-state-tree@7.3.2, which peers mobx ^6.3.0 — produced no install error at
+# all and failed only at runtime inside makeObservable (`Cannot read properties
+# of undefined (reading 'make_')`). Nothing but running the tests against the
+# real tree catches that, which is precisely what a gate is for. Refusing would
+# be honest; installing is honest AND useful.
+
+# The npm cache is STABLE and gate-owned, for two reasons. Speed across runs is
+# the small one. The real one: `npm ci` against the user's ~/.npm/_cacache
+# fails with EACCES on root-owned entries left by some past sudo install, and
+# the fix for that must never be `sudo chown` on somebody's home directory.
+NPM_CACHE_HOME="${GATE_NPM_CACHE:-/private/tmp/aglyn-gate/npm-cache}"
+MODULES_CACHE="${GATE_MODULES_CACHE:-/private/tmp/aglyn-gate/modules}"
+
+clone_tree() { # clone_tree <src dir> <dest dir>
+  local src="$1" dest="$2"
+  [ -d "$src" ] || { echo "gate: $src missing" >&2; return 1; }
   # TRAP 3(a): the destination MUST NOT exist, or the copy nests inside it.
   rm -rf "$dest"
   mkdir -p "$(dirname "$dest")"
   # TRAP 2 / 3(b): a real directory (never a symlink), copy-on-write (never
   # hard links, which would let the gate write back into the shared checkout).
   cp -Rc "$src" "$dest" 2>/dev/null || cp -R "$src" "$dest"
+}
+
+# provision_plan <want> <have_src> <cache_hit 0|1> <install_allowed 0|1>
+#   -> one of: source | cache | install | refuse
+#
+# Pure, so --self-test can exercise every branch including the ones that need
+# a network and ten minutes to reach for real. `refuse` is a verdict, not an
+# error path: a gate that cannot honestly verify a dependency change has to say
+# so instead of printing a green, the same rule as `build: NO app affected`.
+provision_plan() {
+  local want="$1" have="$2" cache_hit="$3" install_ok="$4"
+  # An unresolvable lockfile means we cannot reason about the tree at all.
+  # That is a refusal, never a shrug that falls through to cloning.
+  case "$want" in ''|unknown) echo refuse; return ;; esac
+  if [ "$want" = "$have" ]; then echo source
+  elif [ "$cache_hit" = 1 ]; then echo cache
+  elif [ "$install_ok" = 1 ]; then echo install
+  else echo refuse
+  fi
+}
+
+# provision_tree <slug> <lock rel path> <node_modules rel path>
+provision_tree() {
+  local slug="$1" lockrel="$2" modrel="$3"
+  local want have plan cache_dir hit=0
+  want=$(git -C "$WT" rev-parse "HEAD:$lockrel" 2>/dev/null || echo unknown)
+  have=$(git hash-object "$SOURCE_REPO/$lockrel" 2>/dev/null || echo none)
+  cache_dir="$MODULES_CACHE/$slug/$want"
+  [ -d "$cache_dir/node_modules" ] && hit=1
+  plan=$(provision_plan "$want" "$have" "$hit" "$ALLOW_INSTALL")
+
+  echo "tree=$slug want=$want source=$have plan=$plan"
+  PROVISION_NOTE="$PROVISION_NOTE $slug=$plan"
+
+  case "$plan" in
+    source)
+      clone_tree "$SOURCE_REPO/$modrel" "$WT/$modrel" || return 1
+      ;;
+    cache)
+      clone_tree "$cache_dir/node_modules" "$WT/$modrel" || return 1
+      ;;
+    install)
+      echo "gate: $lockrel differs from the source checkout — INSTALLING $slug."
+      echo "      cloning would compile against the wrong packages (trap 6)."
+      # A stale tree must not survive the install: npm ci removes node_modules
+      # itself, but only the one it is pointed at.
+      rm -rf "$WT/$modrel"
+      local prefix_args=""
+      [ "$modrel" = "node_modules" ] || prefix_args="--prefix ${modrel%/node_modules}"
+      # shellcheck disable=SC2086
+      ( cd "$WT" && npm ci $prefix_args ) || {
+        echo "gate: npm ci FAILED for $slug. This gate cannot verify $lockrel."
+        return 1
+      }
+      [ -d "$WT/$modrel" ] || { echo "gate: npm ci left no $modrel"; return 1; }
+      mkdir -p "$cache_dir"
+      clone_tree "$WT/$modrel" "$cache_dir/node_modules" || return 1
+      echo "gate: cached $slug under $want"
+      ;;
+    refuse)
+      echo "gate: REFUSING to provision $slug."
+      echo "      $lockrel at the gated ref ($want) differs from this checkout"
+      echo "      ($have), no cached tree exists for it, and installing is off."
+      echo "      Cloning would gate the WRONG PACKAGES and report success."
+      echo "      Re-run without --no-install, or install that lockfile by hand."
+      return 1
+      ;;
+  esac
+  printf '%s\n' "$want" > "$GATE_ROOT/.provisioned-$slug"
+  return 0
+}
+
+# provision_reusable <slug> <lock rel path> <node_modules rel path>
+# True only when the tree already in the worktree was provisioned FOR THIS
+# lockfile. The old stamp compared against the gated ref while the modules came
+# from somewhere else entirely, which is how a mismatched tree reported REUSED.
+provision_reusable() {
+  local slug="$1" lockrel="$2" modrel="$3" want stamp
+  want=$(git -C "$WT" rev-parse "HEAD:$lockrel" 2>/dev/null || echo unknown)
+  case "$want" in ''|unknown) return 1 ;; esac
+  stamp=$(cat "$GATE_ROOT/.provisioned-$slug" 2>/dev/null || echo none)
+  [ "$stamp" = "$want" ] || return 1
+  [ -d "$WT/$modrel" ] || return 1
+  return 0
 }
 
 verify_modules() {
@@ -421,6 +568,72 @@ self_test() {
   _assert "an explicit --parallel/--max-workers is NOT overridden" "3/1" "$PARALLEL/$MAX_WORKERS"
   unset -f cpu_count load_1m
 
+  # TRAP 7 — the self-snapshot. Editing this file while a run is in flight
+  # corrupts that run, because bash reads a script lazily by byte offset. It
+  # cost two real runs on 2026-08-22, one of them another agent's. Asserted
+  # against this file's own text: the claim is only true while the lines that
+  # implement it are present.
+  for _need in 'GATE_SNAPSHOT' 'exec bash "\$GATE_SNAPSHOT_PATH"' 'GATE_SOURCE_REPO'; do
+    if grep -q "$_need" "$0"; then
+      echo "ok   self-snapshot: $_need present"; pass=$((pass + 1))
+    else
+      echo "FAIL self-snapshot: $_need MISSING — runs are editable mid-flight"; fail=$((fail + 1))
+    fi
+  done
+  # SOURCE_REPO must prefer the inherited value, or the re-exec'd copy resolves
+  # the repo root to the gate root and every path after it is wrong.
+  if grep -q 'SOURCE_REPO="\${GATE_SOURCE_REPO:-' "$0"; then
+    echo "ok   the snapshot inherits SOURCE_REPO rather than deriving it"; pass=$((pass + 1))
+  else
+    echo "FAIL the snapshot would derive SOURCE_REPO from its own location"; fail=$((fail + 1))
+  fi
+
+  # TRAP 6 — PROVISIONING PLAN. The gate clones node_modules and never
+  # installed, so gating any lockfile change compiled against the OLD packages
+  # and printed exit 0. Every branch asserted here, including the two that
+  # would otherwise need a network and several minutes to reach.
+  _assert "matching lockfiles clone from the source checkout" "source" \
+    "$(provision_plan aaa aaa 0 1)"
+  _assert "a drifted lockfile with a cached tree uses the cache" "cache" \
+    "$(provision_plan aaa bbb 1 1)"
+  _assert "a drifted lockfile with no cache INSTALLS" "install" \
+    "$(provision_plan aaa bbb 0 1)"
+  _assert "a drifted lockfile REFUSES when installing is off" "refuse" \
+    "$(provision_plan aaa bbb 0 0)"
+  # The bug in its exact shape: differing hashes must never yield `source`.
+  # This is the assertion that would have failed before the fix.
+  _assert "a drifted lockfile NEVER clones the stale tree" "install" \
+    "$(provision_plan 15211ac 15201de 0 1)"
+  # An unresolvable lockfile is a refusal, not a shrug that falls through.
+  _assert "an unresolvable lockfile refuses" "refuse" "$(provision_plan unknown aaa 1 1)"
+  _assert "an empty lockfile hash refuses" "refuse" "$(provision_plan '' aaa 1 1)"
+  # --no-install must not be able to produce a clone of the wrong tree; the
+  # only two outcomes it permits on drift are a keyed cache hit or a refusal.
+  for _h in 0 1; do
+    case "$(provision_plan aaa bbb $_h 0)" in
+      source|install) echo "FAIL --no-install produced a wrong plan (cache_hit=$_h)"; fail=$((fail + 1)) ;;
+      *) pass=$((pass + 1)) ;;
+    esac
+  done
+  echo "ok   --no-install never clones a mismatched tree (both cache states)"
+  # The npm cache must be gate-owned. `npm ci` against ~/.npm/_cacache fails
+  # EACCES on root-owned entries left by a past sudo install, and the fix for
+  # that must never be chown on somebody's home directory.
+  case "$NPM_CACHE_HOME" in
+    "$HOME"/*) echo "FAIL the npm cache points into \$HOME ($NPM_CACHE_HOME)"; fail=$((fail + 1)) ;;
+    /*) echo "ok   the npm cache is gate-owned ($NPM_CACHE_HOME)"; pass=$((pass + 1)) ;;
+    *) echo "FAIL the npm cache path is not absolute"; fail=$((fail + 1)) ;;
+  esac
+  # All three trees have a lockfile to reason about. A tree whose lockfile this
+  # script names wrongly would silently take the `unknown` -> refuse path.
+  for _l in package-lock.json apps/docs/package-lock.json cloud/functions/package-lock.json; do
+    if [ -f "$SOURCE_REPO/$_l" ] && grep -q "$_l" "$0"; then
+      echo "ok   $_l exists and is named by the gate"; pass=$((pass + 1))
+    else
+      echo "FAIL $_l missing or not named by the gate"; fail=$((fail + 1))
+    fi
+  done
+
   # PROJECT-LIST PARSING. `nx show projects` prints a JSON array into a pipe
   # and one name per line on a TTY. Getting this wrong made a one-file change
   # under apps/tenant report "NO app affected" and skip the tenant production
@@ -526,6 +739,43 @@ EXITS="$GATE_ROOT/exit"
 SUMMARY="$GATE_ROOT/summary.txt"
 
 mkdir -p "$LOGS" "$EXITS"
+
+# --- self-snapshot ---------------------------------------------------------
+# TRAP 7 — bash reads a script LAZILY, BY BYTE OFFSET, as it executes it.
+#
+# Edit tools/gate.sh while a run is in flight and the running shell resumes at
+# the byte offset it had reached, now pointing into different text. The symptom
+# is a syntax error on a line number that has nothing wrong with it:
+#
+#     tools/gate.sh: line 713: —: command not found
+#
+# ...on a run that had already passed typecheck cleanly. It happened twice on
+# 2026-08-22 — once to this author's own measurement run, once to another
+# agent's — and it costs whatever the run had completed. A corrupted run is not
+# a red anyone can interpret; it is noise wearing a verdict's exit code, which
+# is the single failure mode this whole script exists to prevent.
+#
+# Five or more agents share this checkout and several of them run gates, so
+# "just do not edit it" is not a property anyone can hold. Telling every caller
+# to copy the script first works and puts the burden in the wrong place. The
+# gate snapshots ITSELF into its own gate root and re-execs the copy: from that
+# moment the run is immune to any edit of the source file, and no caller has to
+# know the hazard exists.
+#
+# GATE_SNAPSHOT stops the recursion; GATE_SOURCE_REPO carries the real repo
+# path, which the copy could not otherwise derive from its own location.
+if [ -z "${GATE_SNAPSHOT:-}" ]; then
+  GATE_SNAPSHOT_PATH="$GATE_ROOT/gate.snapshot.sh"
+  if cp "$SELF_PATH" "$GATE_SNAPSHOT_PATH" 2>/dev/null; then
+    export GATE_SNAPSHOT=1
+    export GATE_SOURCE_REPO="$SOURCE_REPO"
+    exec bash "$GATE_SNAPSHOT_PATH" "${GATE_ORIG_ARGS[@]}"
+  fi
+  # A failed copy is not fatal — it just means this run keeps the old hazard.
+  # Say so, rather than pretending the protection is in place.
+  echo "gate: WARNING could not snapshot to $GATE_SNAPSHOT_PATH;" >&2
+  echo "      this run is NOT protected against edits to tools/gate.sh." >&2
+fi
 : > "$SUMMARY"
 
 log() { printf '%s\n' "$*" | tee -a "$SUMMARY"; }
@@ -589,19 +839,23 @@ log "worktree at : $WT ($(git -C "$WT" rev-parse HEAD))$([ "$REUSED_WT" = 1 ] &&
 # moved. The stamp is the lock file's BLOB HASH, not its mtime: a reused
 # worktree gets a fresh checkout of the lock file on every run, so mtime always
 # looks new and would defeat the reuse entirely.
-LOCK_STAMP="$GATE_ROOT/.provisioned-lock"
-LOCK_NOW=$(git -C "$WT" rev-parse HEAD:package-lock.json 2>/dev/null || echo unknown)
-if [ "$REUSED_WT" = 1 ] && [ -f "$LOCK_STAMP" ] && [ "$(cat "$LOCK_STAMP")" = "$LOCK_NOW" ] \
-   && [ -d "$WT/node_modules" ] && [ -d "$WT/apps/docs/node_modules" ] \
-   && [ -d "$WT/cloud/functions/node_modules" ]; then
-  log "provision   : REUSED (package-lock.json unchanged at $LOCK_NOW)"
-else
-  [ "$REUSED_WT" = 1 ] && log "provision   : re-cloning (lock $LOCK_NOW, stamp $(cat "$LOCK_STAMP" 2>/dev/null || echo none))"
-  run "provision:root"      clone_modules node_modules
-  run "provision:docs"      clone_modules apps/docs/node_modules
-  run "provision:functions" clone_modules cloud/functions/node_modules
-  printf '%s\n' "$LOCK_NOW" > "$LOCK_STAMP"
-fi
+# Per tree, and per LOCKFILE. Each of the three has its own lockfile and its
+# own answer: a root dependency bump must not force apps/docs to reinstall.
+export NPM_CONFIG_CACHE="$NPM_CACHE_HOME"
+mkdir -p "$NPM_CACHE_HOME" "$MODULES_CACHE"
+
+provision_one() { # provision_one <slug> <lockrel> <modrel>
+  if [ "$REUSED_WT" = 1 ] && provision_reusable "$1" "$2" "$3"; then
+    log "provision   : $1 REUSED (installed for this exact $2)"
+    PROVISION_NOTE="$PROVISION_NOTE $1=reused"
+    return 0
+  fi
+  run "provision:$1" provision_tree "$1" "$2" "$3"
+}
+
+provision_one root      package-lock.json                     node_modules
+provision_one docs      apps/docs/package-lock.json           apps/docs/node_modules
+provision_one functions cloud/functions/package-lock.json     cloud/functions/node_modules
 
 # verify_modules runs on EVERY path, reused or freshly cloned. It is the guard
 # that stands between a mis-provisioned worktree and a result that reads like a
@@ -632,7 +886,8 @@ run "provision:verify"    verify_modules
 NX_CACHE_HOME="${GATE_NX_CACHE:-/private/tmp/aglyn-gate/nx-cache}"
 export NX_CACHE_DIRECTORY="$NX_CACHE_HOME"
 export NX_DAEMON=false
-export NPM_CONFIG_CACHE="$GATE_ROOT/npm-cache"
+# NPM_CONFIG_CACHE is exported at provisioning time (it has to be set before
+# any `npm ci` runs) and points at the stable, gate-owned cache.
 export NODE_OPTIONS="--max-old-space-size=8192"
 export CI=true
 # --fresh-cache gets a PRIVATE cache directory; it never deletes the shared one.
@@ -817,6 +1072,26 @@ while [ $i -lt ${#PHASE_NAMES[@]} ]; do
   i=$((i + 1))
 done
 log "=== $FAILED failing phase(s); gated $GATE_SHA ==="
+
+# HOW THE PACKAGES GOT HERE. Never left implicit: cloning the source
+# checkout's node_modules is only honest while the gated ref wants the same
+# packages, and the one class of change where that is false is the one class
+# where the packages ARE the change (trap 6).
+log ""
+log "provisioning:${PROVISION_NOTE:- (none)}"
+case "$PROVISION_NOTE" in
+  *install*)
+    log "  one or more trees were INSTALLED from the gated ref's lockfile —"
+    log "  this run verified a dependency change against the real packages." ;;
+esac
+case "$PROVISION_NOTE" in
+  *refuse*)
+    log "  REFUSED: --no-install was passed, and a lockfile at the gated ref"
+    log "  differs from this checkout with no cached tree for it. NOTHING in this"
+    log "  run proves anything about that dependency change."
+    log "  REMEDY: re-run WITHOUT --no-install and the gate will \`npm ci\` that"
+    log "  lockfile, cache it, and gate the packages the ref actually asks for." ;;
+esac
 
 # WHICH GATE RAN. Never left to be inferred from the presence of an
 # `(affected)` suffix on two rows — the two paths make different claims and the

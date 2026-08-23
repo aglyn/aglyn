@@ -48,7 +48,9 @@ import {
   useHostVersionApi,
   useUser,
 } from '@aglyn/tenant-feature-instance'
-import { Chip, Tooltip } from '@mui/material'
+import { Chip, Stack, Tooltip } from '@mui/material'
+import DocumentPresenceChips from '../document-presence-chips.component'
+import usePresenceSummary from '../../hooks/use-presence-summary'
 import {
   collection,
   doc,
@@ -519,6 +521,20 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
   )
 
   // Matches the layouts and screens column/action shape (AGL-694).
+  /**
+   * Who is already in each template, beside its name (AGL-2486).
+   *
+   * ONE request for the whole list. The RTDB rules admit a client to exactly
+   * one room at a time, so a chip per row would mean a subscription per row —
+   * and the presence tree is sparse enough (2 occupied rooms against a largest
+   * host of 69 documents) that ~97% of them would report an empty room.
+   *
+   * Rolled up across VERSIONS, because a row names a document and not a
+   * version. The chip's own copy carries that caveat so the count cannot be
+   * read as "already in the one you are about to open".
+   */
+  const { peopleIn } = usePresenceSummary(hostId)
+
   const columns: GridColDef[] = [
     {
       field: 'displayName',
@@ -526,17 +542,22 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
       minWidth: 220,
       type: 'string',
       renderCell: ({ row }: any) => (
-        <AppLink
-          href={buildRoute(Route.TEMPLATE_DETAILS, {
-            orgSlug,
-            host,
-            templateId: row.template.$id,
-          })}
-        >
-          {row.pages.length > 1
-            ? `${row.displayName} (${row.pages.length} pages)`
-            : row.displayName}
-        </AppLink>
+        <Stack direction="row" sx={{ alignItems: 'center', gap: 0.5 }}>
+          <AppLink
+            href={buildRoute(Route.TEMPLATE_DETAILS, {
+              orgSlug,
+              host,
+              templateId: row.template.$id,
+            })}
+          >
+            {row.pages.length > 1
+              ? `${row.displayName} (${row.pages.length} pages)`
+              : row.displayName}
+          </AppLink>
+          <DocumentPresenceChips
+            people={peopleIn('template', row.template.$id)}
+          />
+        </Stack>
       ),
     },
     {

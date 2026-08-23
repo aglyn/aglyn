@@ -37,6 +37,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
+  classifyRulesState,
   compareRules,
   describeDirection,
   normalizeRulesText,
@@ -952,6 +953,97 @@ describe('the checker is wired (workflow + package.json)', () => {
     const source = readFileSync(cliPath, 'utf8')
     assert.match(source, /from '\.\/lib\/rules-drift\.mjs'/)
     assert.match(source, /from '\.\/lib\/firebase-rules-api\.mjs'/)
-    assert.match(source, /compareRules\(/)
+    assert.match(source, /classifyRulesState\(/)
+  })
+})
+
+describe('deployed-ahead-of-promotion is not drift, and cannot launder one', () => {
+  // The state this exists for: two rules commits landed on `main` on
+  // 2026-08-23 and were deployed before the promotion, so live matched `main`
+  // and not `origin/production`. The daily scheduled check went red and would
+  // have stayed red for the whole promotion window — the muted-alarm failure
+  // this module's own header argues against.
+  const PROMOTED = 'service cloud.firestore {\n  // promoted\n}\n'
+  const AHEAD = 'service cloud.firestore {\n  // promoted\n  // and one more\n}\n'
+  const HOTFIX = 'service cloud.firestore {\n  // typed into the console\n}\n'
+
+  it('live matching the baseline is a plain match, ancestry irrelevant', () => {
+    for (const headIsAhead of [true, false]) {
+      const verdict = classifyRulesState({
+        liveText: PROMOTED,
+        baselineText: PROMOTED,
+        headText: AHEAD,
+        headIsAhead,
+      })
+      assert.equal(verdict.state, 'match')
+    }
+  })
+
+  it('live matching a HEAD that is ahead of the baseline is AHEAD, not drift', () => {
+    const verdict = classifyRulesState({
+      liveText: AHEAD,
+      baselineText: PROMOTED,
+      headText: AHEAD,
+      headIsAhead: true,
+      baselineLabel: 'origin/production',
+    })
+    assert.equal(verdict.state, 'ahead-of-promotion')
+    assert.equal(verdict.drift, false)
+  })
+
+  it('the ancestry flag is load-bearing: without it the same texts are DRIFT', () => {
+    // Otherwise `--baseline` could be pointed at any unrelated ref and every
+    // live ruleset would be explained away by whatever is checked out.
+    const verdict = classifyRulesState({
+      liveText: AHEAD,
+      baselineText: PROMOTED,
+      headText: AHEAD,
+      headIsAhead: false,
+    })
+    assert.equal(verdict.state, 'drift')
+  })
+
+  it('a console hot-fix matches no commit and stays DRIFT', () => {
+    const verdict = classifyRulesState({
+      liveText: HOTFIX,
+      baselineText: PROMOTED,
+      headText: AHEAD,
+      headIsAhead: true,
+    })
+    assert.equal(verdict.state, 'drift')
+    assert.equal(verdict.direction, 'diverged')
+  })
+
+  it('a skipped deploy leaves live behind BOTH refs and stays DRIFT', () => {
+    const OLDER = 'service cloud.firestore {\n}\n'
+    const verdict = classifyRulesState({
+      liveText: OLDER,
+      baselineText: PROMOTED,
+      headText: AHEAD,
+      headIsAhead: true,
+    })
+    assert.equal(verdict.state, 'drift')
+    assert.equal(verdict.direction, 'head-ahead')
+  })
+
+  it('with no headText there is no third world to check', () => {
+    const verdict = classifyRulesState({
+      liveText: AHEAD,
+      baselineText: PROMOTED,
+      headIsAhead: true,
+    })
+    assert.equal(verdict.state, 'drift')
+  })
+
+  it('RTDB reserialization is still formatting-only against HEAD', () => {
+    const verdict = classifyRulesState({
+      liveText: '{"rules":{"a":true}}',
+      baselineText: '{"rules":{}}',
+      headText: '{\n  "rules": {\n    "a": true\n  }\n}\n',
+      headIsAhead: true,
+      jsonAware: true,
+    })
+    assert.equal(verdict.state, 'ahead-of-promotion')
+    assert.equal(verdict.formattingOnly, true)
   })
 })

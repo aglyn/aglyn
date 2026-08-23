@@ -16,7 +16,7 @@
  */
 
 import type { Icon, IconId } from '@aglyn/shared-data-mdi'
-import { Fuse } from '@aglyn/shared-util-vendor'
+import { Fuse } from '@aglyn/shared-util-vendor/fuse'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ApplyFilterFn, ClearFilterFn } from '../../types'
 import { useMdiIcons } from './use-mdi-icons'

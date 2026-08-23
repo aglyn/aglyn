@@ -105,6 +105,25 @@ Every link must hold before a byte executes:
    and the install API warns at pin time. Bumping the ABI is a breaking
    platform change: ship it with a migration window where publishers
    rebuild against the new host object.
+
+   **What does and does not require a bump** (AGL-2486) — the ABI names the
+   shape of the INJECTED HOST OBJECT (`{ version, React, jsxRuntime, aglyn }`
+   on `globalThis.__AGLYN_PLUGIN_HOST__`), not the shape of every type
+   reachable through it. So:
+
+   - **No bump** for adding an OPTIONAL field to a type a bundle consumes
+     through `aglyn` — `ComponentSchema`, `PresetSchema`, `AttributeSchema`.
+     A bundle compiled against the older type simply does not set it, and
+     the host reads `undefined`, which is what an optional field means.
+     `ComponentSchema` has carried a long tail of optional fields this way
+     with the ABI at `1` throughout.
+   - **Bump** when the host object gains, loses or changes a slot; when an
+     existing field changes meaning or type; and — the one that actually
+     breaks sites — when a field becomes REQUIRED, because every bundle
+     built before it now omits something the host insists on.
+
+   The rule is about who breaks: an addition nobody has to notice is not a
+   break, and bumping for one costs every publisher a rebuild for nothing.
 5. **Host ABI, no imports** — bundles are built with
    `tools/plugin-loader/realm/rollup.config.mjs`: `react`,
    `react/jsx-runtime`, and `@aglyn/aglyn` compile to lookups on

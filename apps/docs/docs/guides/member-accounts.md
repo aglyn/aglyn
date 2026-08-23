@@ -26,15 +26,48 @@ Members sign in on your published site only, with a per-site session — they
 never see the console.
 :::
 
-## 1. The built-in sign-in and sign-up pages
+## 1. Turn User Accounts on for the site
 
-Every published site serves two ready-made routes — no design work needed:
+**Member accounts are off by default, on every site.** Until you switch them
+on, `/signin`, `/signup` and `/recover` do not exist on that site — they
+return a genuine **404**, the same as any address you have not published.
+
+Turn them on at **Sites → your site → Admin → Plugins**, on the **Site
+plugins** card: flip **User Accounts** and press *Save site plugins*. It is
+a per-site switch, exactly like the other plugin toggles there, so one site
+in a workspace can have member accounts while another does not.
+
+:::caution Why it defaults to off
+Most sites are marketing sites, and a sign-in page on a marketing domain is
+worse than a missing one: it looks like the place to type a password, while
+the real sign-in usually lives somewhere else entirely — a separate app
+domain, or your identity provider. Aglyn's own site is the example. Serving
+`/signin` there would invite people to enter console credentials on a page
+that is not the console. So the pages appear only when you say the site has
+members.
+:::
+
+Switching User Accounts **off** again does not delete anything. Existing
+members, their profiles and their order history stay exactly where they are
+in **Users**; only the public pages stop being served. Switch it back on and
+everything is reachable again.
+
+Sites that were already using member accounts when this switch arrived keep
+them — the switch was turned on for any site with members, a designated auth
+screen, or a members-only page.
+
+## 2. The built-in sign-in and sign-up pages
+
+Once User Accounts is on, the site serves three ready-made routes — no design
+work needed:
 
 - **`/signup`** — "Create your account": name, email, and password (8
   characters minimum). Submitting creates the member, signs them straight in,
   and returns them to your home page.
 - **`/signin`** — "Welcome back": email and password. The two pages
   cross-link ("New here? Create an account" / "Already a member? Sign in").
+- **`/recover`** — "Reset your password": a member enters their email and
+  gets a reset link, then sets a new password at the same address.
 
 ![The built-in sign-up page on a published site with name, email, and password fields](/img/guides/members-signup.png)
 
@@ -47,12 +80,13 @@ New members automatically flow into your
 fire so you can trigger welcome actions.
 
 :::note Passwords
-Member sessions are per-site, cookie-based, and last 30 days. There is
-currently no self-service password reset for members — if a member is locked
-out, they can sign up support via your site's contact channels.
+Member sessions are per-site, cookie-based, and last 30 days. A locked-out
+member can reset their own password at **`/recover`**; you can also send them
+a reset email from the member drawer (see
+[Password help](#password-help) below).
 :::
 
-## 2. Design an account page
+## 3. Design an account page
 
 For a richer home for members, add the **Customer account** block (found in
 the **Commerce** group of the element picker) to a screen — conventionally at
@@ -72,7 +106,7 @@ Give the account page the same chrome as the rest of your site by binding a
 layout** — the appbar/footer are then maintained once for every bound screen
 (see [screens & layouts](../building-sites/screens-and-layouts/overview.md)).
 
-## 3. Gate screens to members
+## 4. Gate screens to members
 
 To restrict a screen: open its version view, and in the **Page Access** card
 set **Visibility** to **Members only**, then publish. Anonymous visitors get a
@@ -86,7 +120,7 @@ For one-off protection without accounts, use a
 [per-screen password](../building-sites/site-protection/password-a-screen.md)
 instead.
 
-## 4. Manage members from the console
+## 5. Manage members from the console
 
 The site's **Users** page has two cards: **Site users** (your members — this
 guide) and **Users** (console collaborators). The Site users card is

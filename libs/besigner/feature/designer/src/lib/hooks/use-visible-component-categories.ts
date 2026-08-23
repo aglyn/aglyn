@@ -56,10 +56,13 @@ export function useVisibleComponentCategories() {
     return Aglyn.components.schemasBySortedCategories
       .map((category) => ({
         ...category,
-        items: category.items?.filter(
-          (item) =>
-            isEmailComponent(item) && Aglyn.isFromEnabledPlugin(item, enabled),
-        ),
+        items: Aglyn.isCategoryCapabilityEnabled(category.label, enabled)
+          ? category.items?.filter(
+              (item) =>
+                isEmailComponent(item) &&
+                Aglyn.isFromEnabledPlugin(item, enabled),
+            )
+          : [],
       }))
       .filter((category) => category.items?.length)
   }
@@ -68,15 +71,21 @@ export function useVisibleComponentCategories() {
   return Aglyn.components.schemasBySortedCategories
     .map((category) => ({
       ...category,
-      items: category.items?.filter(
-        (item) =>
-          // A plugin this site has switched off offers nothing.
-          Aglyn.isFromEnabledPlugin(item, enabled) &&
-          // Email blocks never appear outside an email document.
-          !isEmailComponent(item) &&
-          // The LayoutSlot outlet is layout-only.
-          (isLayout || !isLayoutOnlyPreset(item as Aglyn.PresetSchema)),
-      ),
+      // A category whose CAPABILITY is off contributes nothing, heading
+      // included (AGL-2486) — an empty "Members" heading still advertises a
+      // capability the site does not have. Emptying it here rather than
+      // filtering item by item is what makes the final `.filter` drop it.
+      items: !Aglyn.isCategoryCapabilityEnabled(category.label, enabled)
+        ? []
+        : category.items?.filter(
+            (item) =>
+              // A plugin this site has switched off offers nothing.
+              Aglyn.isFromEnabledPlugin(item, enabled) &&
+              // Email blocks never appear outside an email document.
+              !isEmailComponent(item) &&
+              // The LayoutSlot outlet is layout-only.
+              (isLayout || !isLayoutOnlyPreset(item as Aglyn.PresetSchema)),
+          ),
     }))
     .filter((category) => category.items?.length)
 }

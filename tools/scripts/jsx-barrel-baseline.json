@@ -15,7 +15,6 @@
     "./lib/components/mui-shadow-dom",
     "./lib/components/shadow-dom",
     "./lib/components/sr-only",
-    "./lib/components/zoomable-panning-component",
     "./lib/const/svg-icons",
     "./lib/contexts/confirmation.context",
     "./lib/contexts/loading.context",
@@ -23,7 +22,6 @@
     "./lib/hocs/with-hoc",
     "./lib/hooks/mdi-icon/use-mdi-icon",
     "./lib/hooks/mdi-icon/use-mdi-icons",
-    "./lib/hooks/mdi-icon/use-mdi-icons-fuzzy",
     "./lib/hooks/router-events",
     "./lib/hooks/use-async-effect",
     "./lib/hooks/use-callback-param-ref",
@@ -43,7 +41,6 @@
     "./lib/hooks/use-node-property",
     "./lib/hooks/use-observer-intersection",
     "./lib/hooks/use-observer-mutation",
-    "./lib/hooks/use-observer-resize",
     "./lib/hooks/use-on-mouse-enter",
     "./lib/hooks/use-on-mouse-over",
     "./lib/hooks/use-subscribable",
@@ -68,7 +65,6 @@
     "deep-equal",
     "deepmerge-ts",
     "flat",
-    "fuse.js",
     "hoist-non-react-statics",
     "js-cookie",
     "jss",
@@ -82,13 +78,10 @@
     "nanoid-dictionary",
     "next",
     "php-serialize",
-    "platform",
     "react",
     "react-dom",
     "react-is",
     "react-use",
-    "resize-observer-polyfill",
-    "use-debounce",
-    "warning"
+    "use-debounce"
   ]
 }

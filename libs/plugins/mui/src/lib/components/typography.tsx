@@ -62,6 +62,7 @@ export const schema: Aglyn.ComponentSchema = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Typography',
+  description: "A block of text in one of the theme's type styles.",
   category: Aglyn.ComponentCategory.TEXT,
   icon: {
     path: mdiAlphabetical.path,

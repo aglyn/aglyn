@@ -46,6 +46,8 @@ export const schema: Aglyn.ComponentSchema<AppBarProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'App Bar',
+  description:
+    'The bar across the top of the site — put a Toolbar Content inside it.',
   category: Aglyn.ComponentCategory.NAVIGATION,
   icon: {
     path: mdiPageLayoutHeader.path,

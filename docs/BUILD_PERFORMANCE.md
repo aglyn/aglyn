@@ -258,3 +258,94 @@ Specifically, browser sourcemap generation is **not** the cause, and is worth ru
 it looks like a plausible lead: there is no `productionBrowserSourceMaps` or `serverSourceMaps`
 setting anywhere in the repo, and Turbopack ignores that config regardless. There is no knob
 here to turn down. Treat the cache as regenerable and let the prune do its job.
+
+## Measuring the PUBLISHED page, and two traps in doing it (AGL-2486)
+
+Everything above is about how long a build takes. This section is about measuring what a
+visitor to a customer's published site actually gets, which is a different exercise with
+its own instruments — and two ways to get a confidently wrong answer.
+
+### `curl` cannot measure a published site at all
+
+The tenant hosts sit behind Vercel bot mitigation. A plain `curl` gets
+
+```
+HTTP/2 429
+x-vercel-mitigated: challenge
+```
+
+— a challenge page, not the site, and its body is a perfectly plausible ~33 KB of HTML. Any
+byte count, header check, or `grep` of that response is measuring the challenge. **Every
+runtime number has to come from a real browser.** (This is the same firewall behaviour
+recorded in AGL-2439: our own callers get the checkpoint.)
+
+### An audit id that no longer exists reads as a reassuring zero
+
+Lighthouse renamed several audits when it moved to the "insight" set. `legacy-javascript` is
+one of them; the current id is **`legacy-javascript-insight`**. The trap is the failure mode:
+
+```js
+const savings = lhr.audits['legacy-javascript'].details.overallSavingsBytes  // throws
+const savings = lhr.audits['legacy-javascript']?.details?.overallSavingsBytes ?? 0  // 0 KB
+```
+
+The optional-chained form is the one people write, and a missing audit then serialises into
+the report as a confident `0 KB` — indistinguishable from "we ship no legacy JavaScript".
+It was not zero. **Assert the audit exists before reading it**, or enumerate
+`Object.keys(lhr.audits)` and check your ids against the Lighthouse version in use. The same
+applies to `cache-insight`, `forced-reflow-insight`, `image-delivery-insight`,
+`cls-culprits-insight` and `third-parties-insight`.
+
+### A warm cache makes every variant agree with itself
+
+Comparing `srcset` / `sizes` behaviour across variants in one browser session
+produces unanimous, confident, wrong results. Chrome prefers a candidate it has
+**already cached**: with the page's real image warm, `sizes="100vw"`,
+`sizes="auto"` and an explicit `sizes="158px"` all "selected" the same 1280w
+candidate, which reads as "sizes makes no difference". Re-run with a fresh
+document, `Network.setCacheDisabled`, and `Network.clearBrowserCache` per case
+and the three separate cleanly.
+
+The general shape: **a measurement where every arm agrees is evidence about the
+harness, not about the thing being measured.** Same class as a test that passes
+for the wrong reason — check that the setup can produce a difference at all
+before believing it did not.
+
+### A `fetchpriority` hint aimed at the wrong element is worse than none
+
+Recorded because it is counter-intuitive and still open. The Image component
+marks the first image in document order `loading="eager"` +
+`fetchpriority="high"` on the reasoning that the first image is almost always
+the LCP element. On a text-hero page it is not: on `northwind-coffee` Lighthouse
+names the `<h1>` as LCP, and the heuristic was promoting a 357 KB PNG to high
+priority ahead of what the real LCP needed. A priority hint does not merely fail
+to help when it is aimed wrong — it **competes**. If the heuristic is revisited,
+it needs to consider whether a text element outranks the first image, not just
+which image comes first.
+
+### What attribution you can and cannot trust in this stack
+
+The tenant builds with **Turbopack** (`"webpack": false` on the production configuration in
+`apps/tenant/project.json`), which rules out most of the usual tooling:
+
+- The **webpack bundle analyser reports nothing meaningful** about a Turbopack build.
+- **Turbopack production chunks use numeric module ids**, not path-shaped ones, so reading
+  the chunk's own module registry does not attribute it either.
+- **Sourcemap-based attribution is unreliable** — Turbopack ignores the browser sourcemap
+  settings, so there is nothing dependable to map against.
+- **Grepping a chunk for a package name is not attribution** and has produced wrong answers
+  here before.
+
+What does work:
+
+| Question | Instrument |
+| --- | --- |
+| What did the page really download, compressed? | Lighthouse `network-requests`; `transferSize` is real over-the-wire bytes |
+| How much of it ran? | Lighthouse `unused-javascript` — real Chrome coverage, not a heuristic |
+| Which chunk cost the main thread? | Lighthouse `bootup-time` + `long-tasks`, per script URL |
+| What IS a given chunk? | Fetch it **through the browser** and read its head — the first few hundred bytes usually identify the framework |
+| What does the eager first-load graph contain? | `npm run check:jsx-barrel` / `check:aglyn-barrel` — computed from source, reported in **gzipped** bytes |
+| Is a change worth landing before it ships? | Lighthouse `blockedUrlPatterns` against the live page isolates one resource without a deploy |
+
+Always quote **gzipped** figures. Raw byte counts on this codebase run 3–4× the transferred
+size and are not what anyone waits for.

@@ -155,6 +155,7 @@ export const schema: Aglyn.ComponentSchema<MemberSigninProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Member sign-in',
+  description: 'An email and password sign-in form for site members.',
   category: Aglyn.ComponentCategory.MEMBERS,
   icon: { path: mdiLoginVariant.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

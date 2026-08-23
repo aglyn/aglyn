@@ -177,6 +177,79 @@ export function compareRules({
 }
 
 /**
+ * Live-versus-baseline, with the one benign explanation checked before drift
+ * is declared (AGL-2486).
+ *
+ * `compareRules` answers "does live match the promoted ruleset". When it does
+ * not, there are three possible worlds and only two of them are faults:
+ *
+ *   1. live is BEHIND — a rules deploy was skipped at promotion (AGL-1489).
+ *   2. live was EDITED OUTSIDE THE REPO — a Firebase console hot-fix, which
+ *      matches no commit anywhere.
+ *   3. live is exactly a commit this checkout carries and the baseline does
+ *      not — someone deployed rules ahead of the promotion.
+ *
+ * The third is the mirror image of the PENDING DEPLOY ledger the checker
+ * already prints as information, and it stays red for the WHOLE promotion
+ * window — days, on a daily schedule. This file's own header says why that
+ * matters: "a check that goes red on every rules commit for the whole
+ * promotion window is one people mute, and a muted alarm misses the real
+ * drift". It went red on `main` for exactly this reason after two rules
+ * commits landed on 2026-08-23 and were deployed before promoting.
+ *
+ * So it is reported, loudly and by name, and it is not a failure. The
+ * narrowing is deliberate and cannot launder case 2: live must byte-match
+ * HEAD *and* HEAD must descend from the baseline. A console hot-fix matches
+ * no commit, so it is still drift; a deploy that was skipped leaves live
+ * behind both refs, so it is still drift.
+ *
+ * @param {object} input
+ * @param {string} input.liveText the live ruleset source.
+ * @param {string} input.baselineText `git show <baseline>:cloud/…`.
+ * @param {string} [input.headText] `git show HEAD:cloud/…`. Omit when the
+ *   baseline IS head — there is no third world to check.
+ * @param {boolean} [input.headIsAhead] whether HEAD carries commits the
+ *   baseline does not, on shared history. Passing `false` (or omitting it)
+ *   disables case 3, so an unrelated ref can never be used to explain live
+ *   away. The caller computes it; see check-rules-drift.mjs for why the
+ *   obvious `--is-ancestor <baseline> HEAD` is the WRONG direction under a
+ *   merge-commit promotion flow.
+ * @param {boolean} [input.jsonAware]
+ * @param {string} [input.baselineLabel]
+ * @returns {{state: 'match'|'ahead-of-promotion'|'drift'} & ReturnType<typeof compareRules>}
+ */
+export function classifyRulesState({
+  liveText,
+  baselineText,
+  headText,
+  headIsAhead = false,
+  jsonAware = false,
+  baselineLabel = 'HEAD',
+}) {
+  const againstBaseline = compareRules({
+    liveText,
+    headText: baselineText,
+    jsonAware,
+    baselineLabel,
+  })
+  if (!againstBaseline.drift) return { state: 'match', ...againstBaseline }
+
+  if (typeof headText === 'string' && headIsAhead) {
+    const againstHead = compareRules({
+      liveText,
+      headText,
+      jsonAware,
+      baselineLabel: 'HEAD',
+    })
+    if (!againstHead.drift) {
+      return { state: 'ahead-of-promotion', ...againstHead }
+    }
+  }
+
+  return { state: 'drift', ...againstBaseline }
+}
+
+/**
  * A unified diff of live → baseline, via `git diff --no-index` on temp files
  * (git is a given both locally and in CI; hand-rolling a diff is the kind of
  * second implementation this tool exists to avoid). `+` lines exist only in

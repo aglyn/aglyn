@@ -48,7 +48,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { StorefrontPaymentElementFallback } from './storefront-payment-element'
+import { StorefrontPaymentElementFallback } from './storefront-payment-element-fallback'
 
 /**
  * The Payment Element (AGL-1944), lazily. Stripe.js and its React wrapper are
@@ -386,6 +386,10 @@ function CartLines(props: {
                 objectFit: 'cover',
                 borderRadius: 1,
               }}
+              // Deferred (AGL-2486). A 48px cart-line thumbnail is the
+              // clearest case of the set: it can never be the LCP, and a
+              // cart is usually below the fold or inside a panel.
+              {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
             />
           ) : (
             <Box
@@ -679,6 +683,8 @@ export const schema: Aglyn.ComponentSchema<CartProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Cart',
+  description:
+    'The shopping cart — a badge icon with a slide-out drawer, or the full cart page.',
   category: Aglyn.ComponentCategory.COMMERCE,
   icon: { path: mdiCartOutline.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

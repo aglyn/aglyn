@@ -51,19 +51,15 @@ export type BesignerDraftRestoreBlock =
   /**
    * Someone else SAVED this document after the draft was taken, so the draft
    * predates work that is now in the stored document.
-   */
-  | 'saved-since'
-  /**
-   * The live co-edit mirror has already applied another session's changes to
-   * this canvas, so a whole-map replace would roll them back — and publish
-   * the rollback to whoever is still in the room.
    *
-   * "Another session", not "another person": the mirror stamps a session id,
-   * so the replayed work may equally be this author's own earlier window,
-   * which the mirror restores on join. That case wants the same answer —
-   * the work is already back, and an older copy over the top only loses it.
+   * The only remaining verdict, and it applies only when this editor is
+   * ALONE in the room: every shared case now withholds the whole prompt
+   * rather than a button (see `roomIsShared`). A `'live-session'` member
+   * used to sit beside this one and became unreachable the moment the
+   * signal that produced it also suppressed the offer — so it is gone
+   * rather than left as a branch nothing can enter.
    */
-  | 'live-session'
+  'saved-since'
 
 export interface BesignerDraftState {
   /**
@@ -100,6 +96,34 @@ const EMPTY_STATE: BesignerDraftState = {
   discard: () => undefined,
 }
 
+/**
+ * How many OTHER editing sessions are in this room, from the point of view
+ * of the recovery prompt — or null while that is not yet known (AGL-2486).
+ *
+ * Presence is the input, but its statuses do not map onto "am I alone" one
+ * for one, and the difference decides whether a person who crashed gets
+ * their work back:
+ *
+ * * `live` — the room is known. However many sessions it holds is the
+ *   answer, zero included.
+ * * `idle` / `connecting` — NOT known yet. Null, so the prompt waits rather
+ *   than offering a Discard for the second before presence lands.
+ * * `unauthorized` / `error` / `unconfigured` — presence cannot answer and
+ *   never will on this load. Zero, deliberately: a deployment with no
+ *   Realtime Database has no co-edit mirror either, so there is nothing to
+ *   have already restored the work, and withholding recovery there would
+ *   break the crash net for every self-host that never configured presence
+ *   (`project_self_host_docker_byo_firebase`).
+ */
+export function recoverableRoomSessions(
+  status: string,
+  otherSessions: number,
+): number | null {
+  if (status === 'live') return otherSessions
+  if (status === 'idle' || status === 'connecting') return null
+  return 0
+}
+
 export interface UseBesignerDraftOptions {
   /** Omit to disable drafts for this document. */
   ids?: BesignerDraftIds
@@ -114,6 +138,16 @@ export interface UseBesignerDraftOptions {
   dirty: boolean
   /** Current stored-document stamp, in `Aglyn.versionStamp` form. */
   storedStamp: string | null
+  /**
+   * Other live editing sessions in this room, or null while unknown — see
+   * {@link recoverableRoomSessions}, which is how a caller with a presence
+   * state derives it (AGL-2486).
+   *
+   * Omitted means ZERO, not unknown: an editor with no presence at all (the
+   * system-email besigner has no honest orgId for a room) is a single-player
+   * session by construction, and must keep its crash net.
+   */
+  roomSessions?: number | null
 }
 
 /**
@@ -145,15 +179,28 @@ export interface UseBesignerDraftOptions {
  *   case where nothing else survived.
  *
  * They are not merged and this one is not made shareable — the mirror
- * already is that, per node, without a merge of two whole maps. What
- * changed in AGL-2486 is that the private snapshot may no longer be put
- * back over a canvas the author does not solely own; see
- * {@link BesignerDraftState.restoreBlockedBy}.
+ * already is that, per node, without a merge of two whole maps.
+ *
+ * What changed in AGL-2486 is that the private snapshot is not OFFERED at
+ * all while the room is shared. An earlier pass withheld only Restore and
+ * re-worded the banner; Zach, looking at the result, asked the sharper
+ * question — why is there a prompt here at all, when a Discard is the one
+ * button left and it stands over work several people are still doing? The
+ * answer is that there is not. Recovery is a crash story, a crash means
+ * nothing else survived, and a live room is proof that something did. See
+ * `roomIsShared` in the body for the two signals that decide it, and
+ * {@link BesignerDraftState.restoreBlockedBy} for the narrower verdicts that
+ * still apply when this editor is alone.
  */
 export function useBesignerDraft(
   options: UseBesignerDraftOptions,
 ): BesignerDraftState {
   const { ids, loaded, dirty, storedStamp } = options
+  // `??` would fold null into 0 and lose the distinction the whole rule
+  // rests on: null is "presence has not answered yet", 0 is "it answered,
+  // and you are alone".
+  const roomSessions =
+    options.roomSessions === undefined ? 0 : options.roomSessions
   const key = ids ? besignerDraftKey(ids) : null
 
   /** The draft being offered, held in memory for the life of the offer. */
@@ -281,11 +328,46 @@ export function useBesignerDraft(
    * What they would lose by the other choice is someone else's work.
    */
   const restoreBlockedBy: BesignerDraftRestoreBlock | null =
-    staleAgainstDocument
-      ? 'saved-since'
-      : canvasHasRemoteEdits
-        ? 'live-session'
-        : null
+    staleAgainstDocument ? 'saved-since' : null
+
+  /**
+   * Whether this room is somebody else's too, i.e. whether the mirror
+   * already has the work this prompt is about (AGL-2486).
+   *
+   * Zach, opening a third tab on a document two other tabs were editing
+   * unsaved: *"should we even show them that alert, that could remove the
+   * work numerous people are currently working on, it would make sense if
+   * there were no presence sessions and we just lost connection or browser
+   * quit etc."* That names the rule exactly. The recovery prompt exists for
+   * a CRASH, and a crash is the case where nothing else survived — so when
+   * something else demonstrably did, there is no recovery to offer and both
+   * buttons can only do harm.
+   *
+   * TWO signals, OR'd, because they cover different halves of "the mirror
+   * already has this" and neither implies the other:
+   *
+   * * **Presence membership.** Another session is in the room right now. It
+   *   may not have published anything since this tab joined — a colleague
+   *   who is reading rather than typing publishes nothing — but the mirror
+   *   is live and their unsaved work is in it, so a whole-map replace from
+   *   an older private snapshot would still be a replace of shared state.
+   * * **Mirror-entry presence** (`canvas.hasRemoteEdits`). The mirror has
+   *   already replayed another session's unsaved work ONTO this canvas.
+   *   This is the half that catches the room whose other sessions have since
+   *   closed: their work came back on join, and it is on screen now.
+   *
+   * Presence alone would miss the second; `hasRemoteEdits` alone would miss
+   * the first, which is precisely the tab Zach opened before anyone typed
+   * again. Unknown (null) counts as shared until presence says otherwise —
+   * the cost of waiting a second is a delayed offer, the cost of guessing
+   * wrong is a Discard button over other people's work.
+   *
+   * What is NOT withheld: a person alone in the room after a browser quit
+   * gets the full offer, Restore included. That case is the entire reason
+   * the feature exists, and nothing here narrows it.
+   */
+  const roomIsShared =
+    roomSessions === null || roomSessions > 0 || canvasHasRemoteEdits
 
   const restore = useCallback(() => {
     const draft = offer
@@ -293,14 +375,14 @@ export function useBesignerDraft(
     // The action agrees with the offer. A component that renders Restore
     // without consulting `restoreBlockedBy` still cannot roll a colleague
     // back through this path.
-    if (restoreBlockedBy) return
+    if (restoreBlockedBy || roomIsShared) return
     // `applyNodes` snapshots history first, so restoring is undoable and
     // leaves the canvas dirty. Dirty matters beyond the save button: it is
     // what keeps "Save the canvas before creating a version" firing, so a
     // restored draft can never be swept into a version snapshot.
     Aglyn.canvas.applyNodes(draft.nodes)
     setOffer(null)
-  }, [offer, restoreBlockedBy])
+  }, [offer, restoreBlockedBy, roomIsShared])
 
   const discard = useCallback(() => {
     const currentIds = idsRef.current
@@ -310,6 +392,11 @@ export function useBesignerDraft(
 
   return useMemo(() => {
     if (!key || !offer) return EMPTY_STATE
+    // No prompt at all in a shared room — not a re-worded one. The draft is
+    // deliberately LEFT ON DISK: nothing about the room makes this browser's
+    // snapshot wrong, only unofferable, and reaping it here would take away
+    // the crash net of the very tab that is still holding the work.
+    if (roomIsShared) return EMPTY_STATE
     return {
       available: true,
       takenAt: offer.updatedAt ?? null,
@@ -318,7 +405,15 @@ export function useBesignerDraft(
       restore,
       discard,
     }
-  }, [key, offer, staleAgainstDocument, restoreBlockedBy, restore, discard])
+  }, [
+    key,
+    offer,
+    roomIsShared,
+    staleAgainstDocument,
+    restoreBlockedBy,
+    restore,
+    discard,
+  ])
 }
 
 export default useBesignerDraft

@@ -21,6 +21,8 @@ export enum FieldComponentType {
   BUTTON = 'button',
   CHECKBOX = 'checkbox',
   COLOR_PICKER = 'color-picker',
+  /** Thickness + line style for a border shorthand; one string (AGL-2486). */
+  CSS_BORDER = 'css-border',
   /** Number + unit editor for a CSS length; persists one string (AGL-1219). */
   CSS_DIMENSION = 'css-dimension',
   /** Fill type + angle + colour stops; persists one CSS string (AGL-1331). */
@@ -32,6 +34,8 @@ export enum FieldComponentType {
   INPUT_ADDON_BUTTON_GROUP = 'input-addon-button-group',
   INPUT_ADDON_GROUP = 'input-addon-group',
   PLAIN_TEXT = 'plain-text',
+  /** Named presets with a raw escape hatch (AGL-2486). */
+  PRESET_CHOICE = 'preset-choice',
   RADIO = 'radio',
   SELECT = 'select',
   SLIDER = 'slider',
@@ -65,5 +69,5 @@ export enum FieldDataType {
   FLOAT = 'float',
   INTEGER = 'integer',
   NUMBER = 'number',
-  STRING = 'string'
+  STRING = 'string',
 }
