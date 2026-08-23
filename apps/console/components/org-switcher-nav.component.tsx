@@ -46,6 +46,7 @@ import useCurrentOrg from '../hooks/use-current-org'
 import { useOrgPlans } from '../hooks/use-org-plans'
 import { useOrgScope } from '../hooks/use-org-scope'
 import { resolveNavSection, urlNamesOrg } from '../hooks/use-secondary-nav'
+import { useUrlNamedOrg } from '../hooks/use-url-names-org'
 import CreateOrgDialog from './create-org-dialog.component'
 import SwitcherSearchField from './switcher-search-field.component'
 
@@ -80,6 +81,9 @@ export function OrgSwitcherNav() {
   const { orgs, currentOrg, orgSlug, hasMoreOrgs, loadMoreOrgs } = useOrgScope()
   const pathname = usePathname()
   // The full current-org doc carries the logo (AGL-363) and plan for the badge.
+  // The workspace the URL actually names, when that is the one that
+  // resolved — the switcher may name THAT and nothing else (AGL-2486).
+  const urlNamedOrg = useUrlNamedOrg()
   const { org, ready: orgReady } = useCurrentOrg()
   const logoUrl = (org as any)?.logoUrl as string | undefined
   const plan = (org as any)?.plan as string | undefined
@@ -190,6 +194,27 @@ export function OrgSwitcherNav() {
   if (!urlNamesOrg(section, orgSlug)) return null
 
   if (!currentOrg) return null
+
+  /**
+   * Whether the URL names a workspace but not THIS one (AGL-2486).
+   *
+   * Zach: "even though the url has a different org in it, it still chose to
+   * use a different org in the switcher" — `/aglyn-org/…` in the address bar,
+   * "Sale Test · Free" here. The gate above had already passed, because it
+   * asks whether the route is about SOME workspace; it was the NAME that was
+   * wrong, taken from a scope that had fallen through to a remembered
+   * selection.
+   *
+   * Naming nothing at all is not the answer here the way it is on the picker:
+   * this route IS about a workspace, and whoever is on it is most likely
+   * looking at a 404 they need to escape, so removing their switcher strands
+   * them. The control stays and stops ASSERTING instead — no name, no plan
+   * badge, no Upgrade CTA for a workspace the page has nothing to do with,
+   * which was the whole of AGL-1130's complaint — while still opening the
+   * menu below. That is exactly the "pick a workspace to get back on track"
+   * the not-found body advises.
+   */
+  const unclaimed = !urlNamedOrg
   // The pill is the BILLING TIER. Falling back to the member's role meant a
   // free org — which carries no `plan` field — showed "Owner", a role badge
   // masquerading as a plan (AGL-646). No plan means free — but only once the
@@ -197,16 +222,25 @@ export function OrgSwitcherNav() {
   // Business org as "Free". No answer yet = no badge.
   // A custom-priced enterprise deal reads as "Enterprise" even though its base
   // plan (usually agency) is what drives entitlements (AGL-1110).
-  const currentBadge = orgReady
-    ? isEnterpriseOrg(org as never)
-      ? ENTERPRISE_PLAN_LABEL
-      : titleCase(plan ?? 'free')
-    : undefined
+  // An unclaimed route gets NO badge: a plan pill is a statement about a
+  // specific workspace, and there isn't one to make it about (AGL-2486).
+  const currentBadge =
+    orgReady && !unclaimed
+      ? isEnterpriseOrg(org as never)
+        ? ENTERPRISE_PLAN_LABEL
+        : titleCase(plan ?? 'free')
+      : undefined
 
   // One label for the button text, the tooltip and the aria-label — the
   // tooltip used to skip the slug fallback, so a slug-only org was "Workspace:
   // org_abc123" on hover while the button read the slug (AGL-1414).
-  const orgLabel = currentOrg.orgName ?? currentOrg.slug ?? currentOrg.$id
+  // On an unclaimed route the control names the ACTION instead of a
+  // workspace, and the tooltip/aria-label follow it rather than asserting a
+  // "Workspace: …" that isn't true (AGL-2486).
+  const orgLabel = unclaimed
+    ? 'Choose a workspace'
+    : currentOrg.orgName ?? currentOrg.slug ?? currentOrg.$id
+  const controlLabel = unclaimed ? orgLabel : `Workspace: ${orgLabel}`
 
   const orgAvatar = (url?: string) =>
     url ? (
@@ -232,20 +266,20 @@ export function OrgSwitcherNav() {
 
   return (
     <>
-      <Tooltip title={`Workspace: ${orgLabel}`}>
+      <Tooltip title={controlLabel}>
         <Button
           size="small"
           variant="text"
           color="inherit"
           onClick={(event) => setAnchor(event.currentTarget)}
-          startIcon={orgAvatar(logoUrl)}
+          startIcon={orgAvatar(unclaimed ? undefined : logoUrl)}
           endIcon={
             <MdiIcon path={ICON_VARIANT_MENU_DOWN.path} fontSize="small" />
           }
           // The visible name is hidden on phones (below), so the control must
           // carry its own accessible name rather than borrow one from text
           // that is no longer rendered (AGL-1414).
-          aria-label={`Workspace: ${orgLabel}`}
+          aria-label={controlLabel}
           sx={{
             maxWidth: 280,
             // This button is the element that YIELDS when the top bar runs
@@ -327,7 +361,9 @@ export function OrgSwitcherNav() {
             </Typography>
           ) : (
             filtered.map((item) => {
-              const isCurrent = item.$id === currentOrg.$id
+              // Nothing is 'current' on a route whose workspace we did
+              // not resolve — a check mark is a claim too (AGL-2486).
+              const isCurrent = !unclaimed && item.$id === currentOrg.$id
               // Billing tier, like the button — the current org's plan is
               // known immediately, others resolve as the reads land. Same
               // AGL-887 guard: no resolved doc, no tier.

@@ -21,6 +21,8 @@ import { AppLink, Container } from '@aglyn/shared-ui-jsx'
 import { Button, Stack } from '@mui/material'
 import EmptyState from './empty-state.component'
 import { CONTENT_MAX_WIDTH } from '../constants/shared'
+import { buildRoute, Route } from '../constants/route-links'
+import { useUrlNamedOrg } from '../hooks/use-url-names-org'
 
 /**
  * The console's designed not-found body (AGL-625). Rendered inside the main
@@ -30,6 +32,30 @@ import { CONTENT_MAX_WIDTH } from '../constants/shared'
  * safe destination is the org jump page at `/`, which re-picks a workspace.
  */
 export function NotFoundContent() {
+  /**
+   * The workspace the URL names, when the signed-in user can actually open it
+   * (AGL-2486).
+   *
+   * The single description below blamed three unrelated things at once — a
+   * stale link, a workspace you can't open, a site you can't open — and on the
+   * commonest 404 of all it blamed the wrong one. Zach's
+   * `/aglyn-org/hosts/aglyn-marketing/screens/pegb_4s5wV` names a workspace he
+   * owns and a site that exists; the only thing wrong with it is that
+   * `/screens/[screenId]` is not a route (the editor lives at
+   * `…/screens/[screenId]/versions/[versionId]/…`). Telling him the workspace
+   * might not be his sends him hunting for a permissions problem that isn't
+   * there.
+   *
+   * Resolving to a membership is exactly the distinction worth drawing, and it
+   * is now cheap: a hit means the URL's workspace is real AND reachable, so
+   * the address is the only suspect. A miss stays deliberately vague, because
+   * a miss genuinely does conflate "no such workspace", "not yours" and "not
+   * read yet" — and the honest move there is the wording that already covers
+   * all three rather than a guess that reads as a verdict.
+   */
+  const namedOrg = useUrlNamedOrg()
+  const orgName = namedOrg?.orgName ?? namedOrg?.slug
+
   return (
     <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
       <EmptyState
@@ -40,13 +66,31 @@ export function NotFoundContent() {
         iconPath={ICON_VARIANT_SEARCH.path}
         title={'This page isn’t here'}
         description={
-          'The link may be out of date, or the workspace or site it points to ' +
-          'isn’t one you can open. Pick a workspace to get back on track.'
+          namedOrg
+            ? `That address isn’t a page in ${orgName}. The link may be out ` +
+              'of date, or a page that has since moved or been deleted.'
+            : 'The link may be out of date, or the workspace or site it ' +
+              'points to isn’t one you can open. Pick a workspace to get ' +
+              'back on track.'
         }
         action={
           <Stack direction="row" spacing={1.5}>
+            {/* When the workspace IS openable, the useful way out is back
+                into it — the workspaces list is a detour through a choice the
+                URL already made correctly. */}
+            {namedOrg?.slug ? (
+              <Button
+                variant="contained"
+                color="primary"
+                component={AppLink as any}
+                {...({ componentVariant: 'naked', nativeButton: false } as any)}
+                href={buildRoute(Route.HOST_LIST, { orgSlug: namedOrg.slug })}
+              >
+                {`Back to ${orgName}`}
+              </Button>
+            ) : null}
             <Button
-              variant="contained"
+              variant={namedOrg ? 'outlined' : 'contained'}
               color="primary"
               component={AppLink as any}
               {...({ componentVariant: 'naked', nativeButton: false } as any)}

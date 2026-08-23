@@ -21,7 +21,7 @@ import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { IconButton, Tooltip } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useHostId, useHostReady } from '../host-id-provider'
-import { useOrgScope } from '../../hooks/use-org-scope'
+import { useUrlNamedOrg } from '../../hooks/use-url-names-org'
 import GlobalSearchDialogComponent from './global-search-dialog.component'
 import { resolveGlobalSearchScope } from './global-search-scope'
 
@@ -40,7 +40,14 @@ import { resolveGlobalSearchScope } from './global-search-scope'
  * size, and hiding it is cheaper than explaining it.
  */
 export function GlobalSearchTriggerComponent() {
-  const { currentOrg } = useOrgScope()
+  // The workspace the URL NAMES (AGL-2486). Reading `currentOrg` here made
+  // the "renders NOTHING on the workspace picker" promise above untrue: the
+  // scope never resolves to null off an org route, it falls back to a
+  // remembered selection, so the button DID render on `/`, `/manage/*` and
+  // `/admin/*` — and opened a field labelled "Search this workspace" over
+  // whichever org the fallback happened to land on. On the picker that is a
+  // page whose entire purpose is that you have not chosen one yet.
+  const currentOrg = useUrlNamedOrg()
   const hostId = useHostId()
   const hostReady = useHostReady()
   const [open, setOpen] = useState(false)
