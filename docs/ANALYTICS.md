@@ -1807,16 +1807,27 @@ there is the merchant's to make, not one we can make for them.
    > running lambda actually has. Ask the deployment, and always diff against an
    > older one as a negative control.
 
-   #### Still genuinely missing: `DOCS_GA_TRACKING_ID`
+   #### `DOCS_GA_TRACKING_ID` — set 2026-08-23, not yet deployed
 
-   Verified the same way, 2026-08-19: the live `aglyn-docs` production
-   deployment (`dpl_DEMJtAphsh…`) carries `GA4_API_SECRET` and
-   `GA4_MEASUREMENT_ID` but **not** `DOCS_GA_TRACKING_ID`. Since AGL-2124 the
-   docs gtag preset is `docsGaTrackingId ? {…} : undefined`
-   (`apps/docs/docusaurus.config.ts:218-220`), so **docs.aglyn.com currently
-   loads no GA tag at all**. The AGL-1857 `content_group` head snippet still
-   pushes to `dataLayer`, but nothing consumes it. This is an ops action of the
-   same class as items 1–2 above, and it is not on the AGL-1637 click-list.
+   Verified 2026-08-19: the live `aglyn-docs` production deployment
+   (`dpl_DEMJtAphsh…`) carried `GA4_API_SECRET` and `GA4_MEASUREMENT_ID` but
+   **not** `DOCS_GA_TRACKING_ID`. Since AGL-2124 the docs gtag preset is
+   `docsGaTrackingId ? {…} : undefined`, so docs.aglyn.com loaded no GA tag at
+   all.
+
+   Zach set it to `G-YW5PG16YTM` on **2026-08-23**. Docusaurus bakes env vars
+   into the static build, so it changes nothing until `aglyn-docs` next
+   deploys.
+
+   ⚠️ **That deploy was, until AGL-1597's second pass, going to publish an
+   ungated tag.** The consent-mode default was present in the head but emitted
+   AFTER the gtag preset's `config`, which makes it a no-op — proven on the
+   wire: the first `page_view` carried no `gcs` parameter and set `_ga`. It was
+   invisible precisely because the id was unset: with no preset output, our
+   snippet was the only thing in the head and appeared first. Setting the id is
+   what exposed it. Fixed by moving the bootstrap into `ssrTemplate`, which is
+   the only lever that lands ahead of a preset plugin's tags; the same pageview
+   now carries `gcs=G101`.
 
 3. 🚨 **The published privacy policy says we run no third-party analytics.**
    `apps/console/constants/legal/v4/privacy.txt`, under _"Sale"/"sharing" under
@@ -1875,7 +1886,7 @@ there is the merchant's to make, not one we can make for them.
 | ------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `GA4_MEASUREMENT_ID`                  | Vercel production                | Target property for server-side `purchase`, `refund`, `subscription_cancelled` and `site_published`; value is `G-YW5PG16YTM` | ✅ **present on `aglyn-console`, `aglyn-tenant` and `aglyn-docs`** since 2026-08-17 12:15 UTC                     |
 | `GA4_API_SECRET`                      | Vercel production, **sensitive** | Measurement Protocol auth                                                                                                    | ✅ **present on all three** since 2026-08-17 12:15 UTC (was a shared variable linked to zero projects until then) |
-| `DOCS_GA_TRACKING_ID`                 | Vercel production (`aglyn-docs`) | Loads the docs gtag at all — `undefined` means **no tag** (AGL-2124)                                                         | ❌ **absent** — docs.aglyn.com reports nothing to GA4                                                             |
+| `DOCS_GA_TRACKING_ID`                 | Vercel production (`aglyn-docs`) | Loads the docs gtag at all — `undefined` means **no tag** (AGL-2124)                                                         | ⏳ **set 2026-08-23** to `G-YW5PG16YTM`; takes effect on the next `aglyn-docs` deploy (Docusaurus bakes it in)     |
 | `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` | already set                      | Console's client-side GA + `client_id` capture                                                                               | ✅ set, `G-YW5PG16YTM`                                                                                            |
 
 > The dated 2026-08-14 verdict earlier in this file describes the **pre-flip**
