@@ -250,6 +250,7 @@ function ComponentBesignerPage(props) {
     hostId,
     docType: 'component',
     docId: componentId,
+    versionId,
     selectedNodeId,
     broadcastCursor: true,
     getCanvasRoot,

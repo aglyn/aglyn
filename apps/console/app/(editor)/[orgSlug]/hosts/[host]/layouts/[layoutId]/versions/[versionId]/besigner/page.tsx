@@ -215,6 +215,7 @@ function LayoutBesignerPage(props) {
     hostId,
     docType: 'layout',
     docId: layoutId,
+    versionId,
     selectedNodeId,
     broadcastCursor: true,
     getCanvasRoot,

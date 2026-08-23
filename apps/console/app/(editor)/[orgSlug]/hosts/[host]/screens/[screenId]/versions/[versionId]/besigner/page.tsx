@@ -193,6 +193,7 @@ function BesignerPage(props) {
     hostId,
     docType: 'screen',
     docId: screenId,
+    versionId,
     selectedNodeId,
     broadcastCursor: true,
     getCanvasRoot,

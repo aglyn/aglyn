@@ -247,6 +247,7 @@ function TemplateBesignerPage(props) {
     hostId,
     docType: 'template',
     docId: templateId,
+    versionId: undefined,
     selectedNodeId,
     broadcastCursor: true,
     getCanvasRoot,

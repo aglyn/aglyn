@@ -392,6 +392,21 @@ function RoomAvatars({ entries }: { entries: PresenceEntry[] }) {
  * window is described as what it is: another session, treated the same. The
  * badge still says which one is yours.
  */
+/**
+ * WHAT MAKES THIS COPY TRUE is the room being VERSION-scoped (AGL-2486).
+ *
+ * "Edits merge live, element by element" is a promise about the co-edit
+ * mirror, and the mirror is keyed per version
+ * (`coedit/…/{docId}/{versionId}/nodes`). While presence was keyed per
+ * DOCUMENT, anyone editing a different version of the same document appeared
+ * in this stack and got told their edits would merge — they would not, and
+ * nothing on screen said so.
+ *
+ * Presence is now keyed to the same scope as the mirror, so everyone this
+ * sentence is said about really is somewhere their edits reach. Widen the room
+ * again and the sentence goes back to being false, so revisit it here if that
+ * ever happens.
+ */
 export function describe(entry: PresenceEntry): string {
   if (entry.isSelf) {
     return (

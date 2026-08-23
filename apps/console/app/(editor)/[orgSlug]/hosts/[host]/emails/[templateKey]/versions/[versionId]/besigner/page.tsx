@@ -242,6 +242,7 @@ function HostEmailBesignerPage() {
     hostId,
     docType: 'email',
     docId: templateKey,
+    versionId,
     selectedNodeId,
     broadcastCursor: true,
     getCanvasRoot,

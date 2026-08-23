@@ -407,6 +407,46 @@ export function pointerIsOnCanvas(
   return false
 }
 
+/**
+ * The version segment when a document has no versions of its own.
+ *
+ * MUST stay identical to the mirror's, which builds
+ * `coedit/{org}/{host}/{docType}/{docId}/${versionId ?? 'current'}/nodes`. The
+ * template editor passes `versionId: undefined`, so this sentinel is the only
+ * thing putting its presence room and its mirror room in the same scope — get
+ * it wrong and templates rejoin the exact disagreement this exists to end.
+ * `presence-version-scope.spec.ts` reads both files and fails if they drift.
+ */
+export const PRESENCE_CURRENT_VERSION = 'current'
+
+/**
+ * The room a session belongs in — PER VERSION, not per document (AGL-2486).
+ *
+ * Zach's call, after seeing the trade-off: you should only see people editing
+ * the version you are editing. Presence used to be keyed per document while
+ * the co-edit mirror was keyed per version, so two people on different
+ * versions of one screen appeared to each other as collaborators while not one
+ * of their edits reached the other — an avatar promising a collaboration that
+ * could not happen, which is the same family of lie as a phantom cursor.
+ *
+ * The `v` segment is a literal, and it is what makes the transition safe: it
+ * sits beside the LEGACY `$uid` wildcard in the rules rather than replacing
+ * it, so document-scoped rooms stay both readable and writable while old
+ * clients are still live. RTDB permits one wildcard per level, so without the
+ * literal a version id and a uid would occupy the same slot and no rule could
+ * tell them apart.
+ */
+export function presenceRoomPath(
+  orgId: string,
+  docType: string,
+  docId: string,
+  versionId: string | undefined,
+): string {
+  return `presence/${orgId}/${docType}/${docId}/v/${
+    versionId || PRESENCE_CURRENT_VERSION
+  }`
+}
+
 /** Secondary Firebase app holding the presence-scoped session. */
 const PRESENCE_APP_NAME = 'AGLYN_PRESENCE'
 
@@ -837,6 +877,13 @@ export function usePresence(options: {
   hostId: string | undefined
   docType: 'screen' | 'layout' | 'component' | 'template' | 'email'
   docId: string | undefined
+  /**
+   * The version being edited. Part of the ROOM KEY, so two people on
+   * different versions of one document are correctly in different rooms.
+   * `undefined` is meaningful, not missing — the template editor has no
+   * versions and shares the mirror's `'current'` sentinel.
+   */
+  versionId: string | undefined
   /** Currently selected node, broadcast so others can see where you are. */
   selectedNodeId?: string
   /**
@@ -857,6 +904,7 @@ export function usePresence(options: {
     hostId,
     docType,
     docId,
+    versionId,
     selectedNodeId,
     broadcastCursor,
     getCanvasRoot,
@@ -923,8 +971,8 @@ export function usePresence(options: {
    * time somebody opened a different screen on the same site. A ref gives the
    * sweep the CURRENT room without buying a token exchange per navigation.
    */
-  const roomRef = useRef({ docType, docId })
-  roomRef.current = { docType, docId }
+  const roomRef = useRef({ docType, docId, versionId })
+  roomRef.current = { docType, docId, versionId }
   /** This tab's node while it is announced; null between rooms. */
   const meRefHolder = useRef<ReturnType<typeof ref> | null>(null)
   /** Latest root resolver, so the pointer listener is not re-bound per render. */
@@ -991,6 +1039,7 @@ export function usePresence(options: {
             hostId,
             docType: roomRef.current.docType,
             docId: roomRef.current.docId,
+            versionId: roomRef.current.versionId,
           }),
         })
         // A bare `if (!response.ok) return` sat here and logged NOTHING. It
@@ -1164,7 +1213,12 @@ export function usePresence(options: {
     if (!session || !uid || !docId) return
     const database = session.database
 
-    const roomPath = `presence/${session.orgId}/${docType}/${docId}`
+    const roomPath = presenceRoomPath(
+      session.orgId,
+      docType,
+      docId,
+      versionId,
+    )
     // One node per TAB, nested under the uid so the write rule is unchanged.
     const meRef = ref(database, `${roomPath}/${uid}/${TAB_SESSION_ID}`)
 
@@ -1380,7 +1434,10 @@ export function usePresence(options: {
     // click, and tearing the room down to re-announce would unsubscribe,
     // delete and rewrite this tab's entry each time. The effect below pushes
     // it as a field update instead.
-  }, [session, uid, docType, docId, displayName, photoURL])
+    // `versionId` is in the list because it is part of the ROOM KEY: moving
+    // between versions of one document must leave the old room and join the
+    // new one, exactly as moving between documents does.
+  }, [session, uid, docType, docId, versionId, displayName, photoURL])
 
   // 3. Broadcast where we are looking, without disturbing the subscription.
   useEffect(() => {
