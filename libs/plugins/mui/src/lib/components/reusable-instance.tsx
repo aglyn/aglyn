@@ -33,6 +33,13 @@ export interface ReusableInstanceProps extends BoxProps {
    * Never rendered on production surfaces, where the graft fills the box.
    */
   name?: string
+  /**
+   * This instance's declared-prop overrides (AGL-1247). Addressed to the
+   * GRAFT, which reads it off the stored node to substitute `{{prop.*}}`
+   * inside its private copy of the definition — the wrapper element itself
+   * has no use for it, and it is stripped below rather than spread.
+   */
+  propValues?: Record<string, unknown>
 }
 
 /**
@@ -46,7 +53,25 @@ export interface ReusableInstanceProps extends BoxProps {
  */
 const ReusableInstance = forwardRef<any, ReusableInstanceProps>(
   (props, ref) => {
-    const { refId: _refId, name, children, sx, ...rest } = props
+    const {
+      refId: _refId,
+      name,
+      // Instance-scoped directives, not element attributes. `refId` and
+      // `name` were always stripped; `propValues` was not, so the author's
+      // overrides spread onto the Box and reached the DOM — React logs
+      // "does not recognize the `propValues` prop" on the canvas, and a
+      // published page serialised the same copy a second time as
+      // `propvalues="[object Object]"` on the wrapper (AGL-2486).
+      //
+      // Stripped HERE rather than in the graft because the canvas renders
+      // an instance the graft has not touched (definitions are not grafted
+      // into the editable canvas), so a strip upstream would fix the
+      // published page and leave the editor warning on every render.
+      [Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY]: _propValues,
+      children,
+      sx,
+      ...rest
+    } = props
     return (
       <Box
         ref={ref}
