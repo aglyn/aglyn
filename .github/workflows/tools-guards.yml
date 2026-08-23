@@ -443,6 +443,12 @@ jobs:
       # eight call sites for weeks. This is the only place that list is read.
       - run: npm run test:react-remove-properties
 
+      # AGL-2486. The workspace version may not go backwards. An unrelated
+      # commit carried package.json from 1.0.0-beta.7 down to 1.0.0-beta.6 on
+      # 2026-08-20 and it stood for three days, with v1.0.0-beta.7 tagged and
+      # every build — production included — reporting beta.6.
+      - run: npm run test:version-monotonic
+
       # Brand-literal ratchet (AGL-2170), the same shape and the same sweep
       # roots as the colour one above. AGL-2153 made the platform brand
       # configuration so a self-host operator can rename the product without

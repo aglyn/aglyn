@@ -1,7 +1,7 @@
 {
   "name": "aglyn",
   "description": "",
-  "version": "1.0.0-beta.6",
+  "version": "1.0.0-beta.8",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": "github:aglyn/aglyn",
@@ -149,6 +149,7 @@
     "release:prepare": "node tools/scripts/release-prepare.mjs",
     "release:tag": "node tools/scripts/release-tag.mjs",
     "test:release-version": "node --test tools/scripts/lib/release-version.test.mjs",
+    "test:version-monotonic": "node --test tools/scripts/lib/version-monotonic.test.mjs",
     "check:retired-colours": "node tools/scripts/check-retired-colours.mjs",
     "audit:retired-colours-data": "node tools/scripts/audit-retired-colours-data.mjs",
     "audit:marketing-containers": "node tools/scripts/audit-marketing-containers.mjs",
