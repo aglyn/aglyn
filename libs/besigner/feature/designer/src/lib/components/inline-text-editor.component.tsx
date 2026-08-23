@@ -19,6 +19,8 @@ import * as Aglyn from '@aglyn/aglyn'
 import { mdiCodeBraces } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { Box, Button, IconButton, Paper } from '@mui/material'
+import type { Theme } from '@mui/material/styles'
+import type { SystemStyleObject } from '@mui/system'
 import isEqual from 'lodash-es/isEqual'
 import { toJS } from 'mobx'
 import { observer } from 'mobx-react-lite'
@@ -32,6 +34,15 @@ import {
 } from 'react'
 import { clampToViewport, useAnchoredRect } from '../hooks/use-anchored-rect'
 import useInsertTokenOptions from '../hooks/use-insert-token-options'
+import {
+  type AnchorTextStyle,
+  findAnchorTextElement,
+  readAnchorTextStyle,
+} from '../utils/anchor-text-style'
+import {
+  createInlineEditLayoutGhost,
+  type InlineEditLayoutGhost,
+} from '../utils/inline-edit-layout-ghost'
 import { inlineTextEdit } from '../utils/inline-text-edit.store'
 import {
   richTextToPlain,
@@ -66,6 +77,45 @@ const RICH_COMMANDS: Array<{ command: string; label: string; title: string }> =
 
 /** Stands in while no edit is open, so the anchor hook can run every render. */
 const EMPTY_RECT = { left: 0, top: 0, width: 0, height: 0 }
+
+/**
+ * In-place editing (AGL-2486). Zach: *"Can we also make it so we are not
+ * seeing a text box we are editing it in? We see/edit it exactly how it
+ * appears"*.
+ *
+ * Everything that made the surface look like a form control is gone: no
+ * background, no border, no shadow, no radius. What is left is a dashed
+ * outline, because the author still has to be able to tell that editing has
+ * begun and where the run ends — and an outline is drawn OUTSIDE the box,
+ * so unlike a border it moves no text. The element's own type is layered on
+ * top of this by {@link readAnchorTextStyle}.
+ */
+const IN_PLACE_SURFACE_SX = {
+  bgcolor: 'transparent',
+  border: 0,
+  borderRadius: 0,
+  boxShadow: 'none',
+  outlineWidth: '1px',
+  outlineStyle: 'dashed',
+  outlineColor: 'tertiary.main',
+  outlineOffset: '2px',
+}
+
+/**
+ * The pre-AGL-2486 box, kept as the fallback for when the element's
+ * rendered type cannot be read — an editor opened with no anchor, or an
+ * anchor already detached. A legible box beats text painted in a guess.
+ */
+const BOXED_SURFACE_SX = {
+  p: 0.5,
+  bgcolor: 'background.paper',
+  color: 'text.primary',
+  border: '2px solid',
+  borderColor: 'tertiary.main',
+  borderRadius: 0.5,
+  outline: 'none',
+  boxShadow: 4,
+}
 
 function escapeHtml(text: string): string {
   return text
@@ -111,7 +161,16 @@ export const InlineTextEditorComponent = observer(
     // Follows the element as the canvas scrolls or resizes (AGL-1644). Called
     // unconditionally, above the `!node || !rect` bail-out further down, so the
     // hook order is stable whether or not an edit is open.
-    const live = useAnchoredRect(inlineTextEdit.anchor, rect ?? EMPTY_RECT)
+    const anchor = inlineTextEdit.anchor
+    const live = useAnchoredRect(anchor, rect ?? EMPTY_RECT)
+    /**
+     * The element's RENDERED typography, read once per edit (AGL-2486).
+     * `undefined` means it could not be read, and the surface falls back to
+     * the old box rather than painting the author's text in a guess.
+     */
+    const [anchorStyle, setAnchorStyle] = useState<
+      AnchorTextStyle | undefined
+    >(undefined)
     const overlayRef = useRef<HTMLElement>(null)
     const plainRef = useRef<HTMLDivElement>(null)
     const richRef = useRef<HTMLDivElement>(null)
@@ -136,6 +195,8 @@ export const InlineTextEditorComponent = observer(
      * no caret and no typing.
      */
     const seededRef = useRef(false)
+    /** Sizes the document to the live text — see createInlineEditLayoutGhost. */
+    const ghostRef = useRef<InlineEditLayoutGhost | undefined>(undefined)
     // The insert picker / pill popover take focus (portal + autofocus
     // search) — commit-on-blur must stand down while one is open, or the
     // editor would commit and close under the open menu (AGL-586).
@@ -349,6 +410,67 @@ export const InlineTextEditorComponent = observer(
     // re-register on every render just to stay current.
     const commitRef = useRef(commit)
     commitRef.current = commit
+
+    useEffect(() => {
+      setAnchorStyle(node ? readAnchorTextStyle(anchor) : undefined)
+    }, [node, anchor])
+
+    /**
+     * The surface wears the element's type, so the element must not also
+     * paint its own text underneath it (AGL-2486) — two copies of the same
+     * words, one of them stale, is worse than the box this replaced.
+     *
+     * `visibility`, not `display`: the element keeps its box, so the layout
+     * around it does not jump when editing starts or ends. `<aglyn-text>` is
+     * hidden in preference to the leaf so an icon or adornment beside the
+     * text stays visible. Set outside React and restored on close; React
+     * only removes style properties it set itself, so a re-render mid-edit
+     * leaves this alone.
+     */
+    useEffect(() => {
+      if (!node) return
+      // Preferred: a hidden stand-in carrying the live text, so the card,
+      // the row and the siblings re-flow as it is typed (AGL-2486).
+      const ghost = createInlineEditLayoutGhost(anchor)
+      ghostRef.current = ghost
+      if (ghost) {
+        return () => {
+          ghost.dispose()
+          ghostRef.current = undefined
+        }
+      }
+      // Rich text renders through `dangerouslySetInnerHTML` and has no
+      // `<aglyn-text>` to stand in for, so it keeps the plain hide: the text
+      // is not painted twice, and the layout still catches up on commit.
+      const textElement = findAnchorTextElement(anchor)
+      if (!textElement) return
+      const previous = textElement.style.getPropertyValue('visibility')
+      const priority = textElement.style.getPropertyPriority('visibility')
+      textElement.style.setProperty('visibility', 'hidden', 'important')
+      return () => {
+        if (previous) {
+          textElement.style.setProperty('visibility', previous, priority)
+        } else {
+          textElement.style.removeProperty('visibility')
+        }
+      }
+    }, [node, anchor])
+
+    /**
+     * Every keystroke re-sizes the document, and NOTHING else (AGL-2486).
+     *
+     * Reflow and commit are deliberately different events. This writes only
+     * to a hidden DOM stand-in, so the co-editing mirror — a mobx autorun
+     * over the serialized node map — sees nothing, undo records nothing, and
+     * no keystroke is broadcast. The single `updateNodeProps` at commit
+     * remains the only thing that reaches the store.
+     */
+    const handleSurfaceInput = useCallback(
+      (event: { currentTarget: HTMLElement }) => {
+        ghostRef.current?.update(event.currentTarget.textContent ?? '')
+      },
+      [],
+    )
 
     /**
      * Click-away commits, because on this canvas blur never arrives
@@ -604,7 +726,39 @@ export const InlineTextEditorComponent = observer(
       typeof window === 'undefined' ? Infinity : window.innerWidth
     const viewportHeight =
       typeof window === 'undefined' ? Infinity : window.innerHeight
-    const minWidth = Math.max(live.width, 120)
+    // In place, the surface takes the element's EXACT width: text-align and
+    // every wrap point are decided by it, and 120px of slack would re-flow
+    // the very line the author is looking at (AGL-2486).
+    // Built as plain records and cast ONCE, the way `tokenPillContainerSx`
+    // is: MUI's `sx` union cannot absorb a computed spread of arbitrary CSS
+    // longhands and reports every neighbouring key as the error instead.
+    const surfaceSx: Record<string, unknown> = anchorStyle
+      ? { ...IN_PLACE_SURFACE_SX, ...anchorStyle }
+      : BOXED_SURFACE_SX
+    const richSurfaceSx = {
+      width: '100%',
+      minHeight: live.height,
+      boxSizing: 'border-box',
+      font: 'inherit',
+      ...surfaceSx,
+      '& a': { pointerEvents: 'none' },
+      ...tokenPillContainerSx,
+    } as SystemStyleObject<Theme>
+    const plainSurfaceSx = {
+      width: '100%',
+      minHeight: live.height,
+      boxSizing: 'border-box',
+      font: 'inherit',
+      ...surfaceSx,
+      // After the anchor's type, never from it: `pre-wrap` is what makes a
+      // Shift+Enter newline visible while typing.
+      whiteSpace: 'pre-wrap',
+      wordBreak: 'break-word',
+      ...tokenPillContainerSx,
+    } as SystemStyleObject<Theme>
+    const minWidth = anchorStyle
+      ? Math.max(live.width, 24)
+      : Math.max(live.width, 120)
     const TOOLBAR_CLEARANCE = 48
     const KEEP_VISIBLE = 80
 
@@ -622,7 +776,9 @@ export const InlineTextEditorComponent = observer(
             TOOLBAR_CLEARANCE,
           ),
           minWidth,
-          maxWidth: '90vw',
+          ...(anchorStyle
+            ? { width: live.width, maxWidth: 'none' }
+            : { maxWidth: '90vw' }),
           zIndex: (theme) => theme.zIndex.modal,
         }}
       >
@@ -688,24 +844,11 @@ export const InlineTextEditorComponent = observer(
               role="textbox"
               aria-label="Edit rich text"
               onKeyDown={handleRichKeyDown}
+              onInput={handleSurfaceInput}
               onBlur={handleEditableBlur}
               onClick={handleEditableClick}
               onMouseDown={handleEditableMouseDown}
-              sx={{
-                width: '100%',
-                minHeight: rect.height,
-                font: 'inherit',
-                p: 0.5,
-                bgcolor: 'background.paper',
-                color: 'text.primary',
-                border: '2px solid',
-                borderColor: 'tertiary.main',
-                borderRadius: 0.5,
-                outline: 'none',
-                boxShadow: 4,
-                '& a': { pointerEvents: 'none' },
-                ...tokenPillContainerSx,
-              }}
+              sx={richSurfaceSx}
             />
           </>
         ) : (
@@ -742,25 +885,11 @@ export const InlineTextEditorComponent = observer(
               role="textbox"
               aria-label="Edit text"
               onKeyDown={handleKeyDown}
+              onInput={handleSurfaceInput}
               onBlur={handleEditableBlur}
               onClick={handleEditableClick}
               onMouseDown={handleEditableMouseDown}
-              sx={{
-                width: '100%',
-                minHeight: rect.height,
-                font: 'inherit',
-                p: 0.5,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-                bgcolor: 'background.paper',
-                color: 'text.primary',
-                border: '2px solid',
-                borderRadius: 0.5,
-                borderColor: 'tertiary.main',
-                outline: 'none',
-                boxShadow: 4,
-                ...tokenPillContainerSx,
-              }}
+              sx={plainSurfaceSx}
             />
           </>
         )}
