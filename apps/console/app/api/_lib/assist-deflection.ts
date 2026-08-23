@@ -452,11 +452,16 @@ export function deflectToDocs(
  * not. Everything else is carried by NEWLINES, which `pre-wrap` renders,
  * rather than by markup, which it does not.
  *
- * The link has to live in the TEXT. The `done` event also carries a `docs`
- * array, and it is tempting to treat that as the structural home for the
- * citation — but the panel never renders it (it feeds the `grounded`
- * analytics flag and nothing else), so a citation moved there would reach
- * no reader at all.
+ * The link has to live in the TEXT, and that is still true now that the
+ * `docs` array on the `done` event IS rendered (AGL-2486, `AssistSources`).
+ * It was tempting to treat that array as the structural home for the citation
+ * even when nothing rendered it; it is still the wrong home, for a different
+ * reason. `docs` carries every section RETRIEVED, whereas this template
+ * quotes only the sections it actually used — so the array is a superset, and
+ * a citation moved there would credit pages this answer never drew a word
+ * from. `AssistSources` drops any url already linked in the text, which means
+ * a deflected answer renders exactly as it does below and gains no duplicate
+ * list underneath.
  *
  * Three specs in `assist-deflection.spec.ts` hold the line — no emphasis
  * markers, no heading markers, and a link still present.
