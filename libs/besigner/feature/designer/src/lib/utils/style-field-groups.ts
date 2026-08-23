@@ -119,6 +119,43 @@ function withFieldClear(group: StyleFieldGroup): StyleFieldGroup {
   }
 }
 
+/**
+ * Makes every field hold its value the way the DOCUMENT holds it
+ * (AGL-2486, items 9 and 10 together).
+ *
+ * Item 10 made a purely numeric value store as a NUMBER, which is what
+ * gives `gap: 2` its meaning of 16px. But a form control hands back
+ * whatever its own input produces — text from a box, the option's own
+ * value from a preset menu — so the form's copy of a stored `2` was
+ * sometimes `'2'` and sometimes `2`. react-final-form's definition of
+ * DIRTY is exactly that inequality, and item 9's re-seed spares dirty
+ * fields so it cannot eat characters mid-word. A numeric field was
+ * therefore permanently dirty and permanently spared: the canvas rolled
+ * back on an undo and the panel did not. Two fixes, each right on its own,
+ * cancelling.
+ *
+ * `parse` runs on the way IN, before the value reaches form state, so the
+ * form and the document agree by construction and "dirty" means what it
+ * says — for every control, including ones added later. It is the same
+ * function the merge writes through, so there is exactly one answer in the
+ * panel to "what type is this value", rather than one per control.
+ *
+ * Applied to the whole group for the same reason `clearable` is: a field
+ * added later cannot arrive with the old behaviour.
+ */
+function withStoredValueParse(group: StyleFieldGroup): StyleFieldGroup {
+  return {
+    ...group,
+    fields: group.fields.map((field) => ({
+      ...field,
+      FieldProps: {
+        ...((field['FieldProps'] as Record<string, unknown>) ?? {}),
+        parse: normalizeStyleValue,
+      },
+    })),
+  }
+}
+
 /** Attaches {@link STYLE_FIELD_HELP} to a group's fields, each with a
  * deep link into the responsive-styling docs. */
 function withStyleFieldHelp(group: StyleFieldGroup): StyleFieldGroup {
@@ -435,6 +472,7 @@ export function buildStyleFieldGroups(
   return styleFieldGroups(presetColors, options)
     .map(withStyleFieldHelp)
     .map(withFieldClear)
+    .map(withStoredValueParse)
 }
 
 function styleFieldGroups(
@@ -817,7 +855,7 @@ function styleFieldGroups(
  * that nothing had to be dropped to stop saying it twice.
  */
 export function buildFlexGridGroup(): StyleFieldGroup {
-  return withFieldClear(
+  const group = withFieldClear(
     withStyleFieldHelp({
       $id: 'flex-grid',
       label: 'Flexbox & Grid',
@@ -875,6 +913,7 @@ export function buildFlexGridGroup(): StyleFieldGroup {
       ],
     }),
   )
+  return withStoredValueParse(group)
 }
 
 /** Field names owned by a group — the only keys its save may touch. */

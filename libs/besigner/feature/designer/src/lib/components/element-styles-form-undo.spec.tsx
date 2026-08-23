@@ -217,6 +217,147 @@ describe('styles panel undo/redo re-sync (AGL-2486)', () => {
     expect(borderThickness().value).toBe('3')
   })
 
+  /**
+   * The half the first pass could not see (AGL-2486, items 9 + 10 together).
+   *
+   * Every test above uses values carrying a unit — `4px`, `12px` — and they
+   * pass. Give the same fields a BARE NUMBER and the undo stops arriving,
+   * because the two fixes for this issue landed three minutes apart and
+   * cancel:
+   *
+   * - item 10 stores a purely numeric value as a NUMBER, which is what
+   *   makes `gap: 2` mean 16px;
+   * - a form control can only ever hand back a STRING, so the form's `'2'`
+   *   never again equals its initial `2`;
+   * - react-final-form's definition of dirty is exactly that inequality, so
+   *   every numeric field is permanently dirty;
+   * - and `keepDirtyOnReinitialize` — item 9's guard against a re-seed
+   *   eating characters mid-word — then correctly declines to re-seed it.
+   *
+   * Nothing was wrong with either half. The seed simply has to be stated in
+   * the domain the controls speak, so that a field nobody has touched really
+   * is pristine. Swept across the control TYPES rather than one field,
+   * because each one holds its own draft state and could re-introduce the
+   * dirtiness on its own.
+   */
+  describe('a value stored as a NUMBER', () => {
+    it('rolls a free-text field back', async () => {
+      // Gap: bare number × the theme spacing unit.
+      const node = seedNode({ gap: 2 })
+      render(panel(node))
+      await open('Flexbox & Grid')
+      expect(box('Gap').value).toBe('2')
+
+      type('Gap', '4')
+      settle()
+      expect(live().sx).toEqual({ gap: 4 })
+
+      await undo()
+      expect(live().sx).toEqual({ gap: 2 })
+      expect(box('Gap').value).toBe('2')
+    })
+
+    it('rolls a theme-scale field back', async () => {
+      // The theme-scale control is an Autocomplete, and typing in one opens
+      // a listbox that its own label also names — so the query has to say
+      // it means the INPUT, or it goes ambiguous the moment the field is
+      // used.
+      const zIndex = () =>
+        screen
+          .getAllByLabelText('Z-Index')
+          .find((node) => node.tagName === 'INPUT') as HTMLInputElement
+      const node = seedNode({ zIndex: 3 })
+      render(panel(node))
+      await open('Position & Overflow')
+      expect(zIndex().value).toBe('3')
+
+      fireEvent.change(zIndex(), { target: { value: '9' } })
+      settle()
+      expect(live().sx).toEqual({ zIndex: 9 })
+
+      await undo()
+      expect(live().sx).toEqual({ zIndex: 3 })
+      expect(zIndex().value).toBe('3')
+    })
+
+    it('rolls the border editor back', async () => {
+      // And the value here is ZERO, which is the shape most likely to be
+      // lost on the way: it is falsy, `strictNullChecks` is off repo-wide,
+      // and `border: 0` is a real authored value — the way you cancel a
+      // border a theme put there.
+      const node = seedNode({ border: 0 })
+      render(panel(node))
+      await open('Borders & Shadows')
+      expect(borderThickness().value).toBe('0')
+
+      setBorderThickness('2')
+      settle()
+
+      await undo()
+      expect(live().sx).toEqual({ border: 0 })
+      // Not empty. An emptied box reads as "no border set" and is a
+      // different document from `border: 0`.
+      expect(borderThickness().value).toBe('0')
+    })
+
+    it('rolls a preset picker back', async () => {
+      const node = seedNode({ borderRadius: 2 })
+      render(panel(node))
+      await open('Borders & Shadows')
+      const radius = () => screen.getByLabelText('Corner Radius')
+      expect(radius().textContent).toContain('Rounded')
+
+      act(() => {
+        fireEvent.mouseDown(radius())
+      })
+      act(() => {
+        fireEvent.click(
+          within(screen.getByRole('listbox')).getByText('More rounded'),
+        )
+      })
+      settle()
+      expect(live().sx).toEqual({ borderRadius: 3 })
+
+      await undo()
+      expect(live().sx).toEqual({ borderRadius: 2 })
+      expect(radius().textContent).toContain('Rounded')
+      expect(radius().textContent).not.toContain('More rounded')
+    })
+
+    it('rolls BACK TO zero, which is not the same as back to empty', async () => {
+      const node = seedNode({ opacity: 0 })
+      render(panel(node))
+      await open('Position & Overflow')
+      expect(box('Opacity').value).toBe('0')
+
+      type('Opacity', '1')
+      settle()
+      expect(live().sx).toEqual({ opacity: 1 })
+
+      await undo()
+      expect(live().sx).toEqual({ opacity: 0 })
+      expect(box('Opacity').value).toBe('0')
+    })
+
+    it('still keeps an in-progress edit on a numeric field', async () => {
+      // The guard the seed must not have traded away: a field the author IS
+      // typing in stays theirs, even though it now starts pristine.
+      const node = seedNode({ gap: 2, rowGap: 1 })
+      render(panel(node))
+      await open('Flexbox & Grid')
+
+      type('Gap', '4')
+      act(() => {
+        Aglyn.canvas.transact(() => {
+          live().sx = { ...(live().sx as object), rowGap: 5 } as any
+        })
+      })
+      await act(async () => undefined)
+      expect(box('Gap').value).toBe('4')
+      expect(box('Row Gap').value).toBe('5')
+    })
+  })
+
   it('keeps an in-progress edit while the document changes underneath', async () => {
     // The other half: re-syncing from the node on every document change
     // would discard whatever is half-typed. Here the commit for this
