@@ -394,6 +394,48 @@ export function visitorConsentStorageKey(hostId: string): string {
 export const ANALYTICS_COOKIE_PREFIXES: readonly string[] = ['_ga', '_gid']
 
 /**
+ * Cookie-name PREFIXES the ADVERTISING grant is answerable for (AGL-2486).
+ *
+ * These are Google's, and they are separate from the analytics list above for
+ * a reason that is not tidiness: an advertising-only withdrawal must sweep
+ * them while analytics keeps running. Folding them into
+ * {@link ANALYTICS_COOKIE_PREFIXES} would have swept them on ANALYTICS
+ * withdrawal and still not on the case that motivates this — leaving the same
+ * hole, narrower — besides filing a conversion-linker cookie under a category
+ * it does not belong to.
+ *
+ * `_gcl_*` is the conversion linker, written by gtag once `ad_storage` is
+ * granted, and it is the one that started this: it does not begin with `_ga`,
+ * so nothing swept it, on any path.
+ *
+ * ONE PREFIX, deliberately. `_gac_*` (Google Ads linking) was in this list
+ * briefly and is not, because it is written under the ANALYTICS grant and is
+ * already swept by the `_ga` prefix. Listing it here made every
+ * analytics-only GRANT delete it — on a site that never asks the advertising
+ * question `stored.advertising` is always false, so the sweep ran on the way
+ * IN — which broke "cleanup is the withdrawal path only" (AGL-1606). Sweeping
+ * wider is not free when a category nobody was asked about owns the trigger.
+ *
+ * PRECISION MATTERS, because {@link clearCookiesWithPrefixes} is `startsWith`.
+ * `_gcl` cannot reach `_ga`, `_ga_<id>`, `_gac_<id>` or `_gid` — those are
+ * analytics and MUST survive an advertising-only withdrawal.
+ */
+export const ADVERTISING_COOKIE_PREFIXES: readonly string[] = ['_gcl']
+
+/**
+ * Expire the advertising identifiers, on the same domain ladder as the
+ * analytics sweep (AGL-2486).
+ *
+ * Deleting a cookie that was never set is a no-op; failing to delete one that
+ * was is the defect — so this runs on every non-granting store rather than
+ * only on a transition observed to be a withdrawal, which the record cannot
+ * reliably tell us anyway.
+ */
+export function clearAdvertisingCookies(hostname?: string | null): string[] {
+  return clearCookiesWithPrefixes(ADVERTISING_COOKIE_PREFIXES, hostname)
+}
+
+/**
  * Multi-label public suffixes: names under which registrations happen, so the
  * label to their left is the registrable one. A short list rather than the
  * Public Suffix List — the same trade `console-domains.ts` makes, and the
@@ -946,6 +988,22 @@ export function storeVisitorConsent(
     setResidentAnalyticsTags(stored.analytics, stored.advertising === true)
     if (!stored.analytics) {
       clearAnalyticsCookies()
+    }
+    // The advertising half, and it belongs HERE rather than only in
+    // `revokeAdvertisingTags` (AGL-2486). That function sweeps a vendor whose
+    // marked script elements are in the document, and it is installed only on
+    // our own marketing host — so on a CUSTOMER site, where the advertising
+    // question is equally available, withdrawing advertising ran no sweep at
+    // all. `_gcl_au` is written by the GA tag `site-analytics.tsx` mounts, not
+    // by a script this module marked, so no element-scoped teardown was ever
+    // going to reach it on any surface.
+    //
+    // This path is the one every site shares: it is where a decision becomes a
+    // record. Unconditional on the grant being absent, for the reason in
+    // `clearAdvertisingCookies` — a delete of something never set costs
+    // nothing, a missed delete is the defect.
+    if (!stored.advertising) {
+      clearAdvertisingCookies()
     }
     try {
       window.dispatchEvent(new CustomEvent(VISITOR_CONSENT_CHANGED_EVENT))

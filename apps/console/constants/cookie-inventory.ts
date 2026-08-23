@@ -59,11 +59,22 @@ import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
  * whose tag sets cookies from a script we do not author. That is most of them.
  *
  * So `THIRD_PARTY_COOKIES` is now checked in BOTH directions for advertising:
- * the existing "still loaded" direction, plus a new one keyed on
- * `ADVERTISING_VENDORS` — every vendor the gate can load must have an entry
- * covering every prefix it declares. The vendor registry is the right key
- * precisely because it is written for teardown, so it cannot be complete
- * enough to revoke a vendor while being too incomplete to disclose it.
+ * the "still loaded" direction lives in `cookie-inventory.spec.ts` beside the
+ * writer scan, and the coverage direction — every vendor the gate can load has
+ * an entry naming every prefix it declares — lives in
+ * `apps/tenant/specs/advertising-tag-gate.spec.tsx` as case (g). The vendor
+ * registry is the right key precisely because it is written for teardown, so
+ * it cannot be complete enough to revoke a vendor while being too incomplete
+ * to disclose it.
+ *
+ * That check is in the TENANT spec rather than here for a reason worth not
+ * re-litigating: it was written here first and turned case (f) of that same
+ * file red, because `apps/console` importing `app-utils/advertising-tags` is
+ * exactly the DPA §3.2 boundary (f) defends — no ad-vendor machinery in the
+ * app where customers' own data lives. The guard was right. So the check moved
+ * to the side that may legitimately hold the registry and reads THIS file as
+ * source text, which is how (f) reads console files too: no import, and no
+ * dependency edge in either direction.
  */
 
 /** One first-party cookie, as the Cookie Policy has to describe it. */
