@@ -400,9 +400,9 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
   },
   {
     file: 'tools/scripts/lib/firewall-posture.mjs',
-    count: 5,
+    count: 1,
     reason:
-      "The `serves` and `gap` labels naming which Aglyn-operated Vercel project each posture row is about — 'docs.aglyn.com', 'app.aglyn.com — sign-in, billing, and the staff surfaces'. Internal ops tool: it asserts the WAF configuration of Aglyn's OWN four Vercel projects through the Vercel API, so a self-hoster has nothing for it to check and never runs it. The hostnames are report text for a human reading the output, not inputs to any behaviour (AGL-2483).",
+      "One `serves` label — 'every customer site on *.aglyn.app and their custom domains' — naming which Aglyn-operated Vercel project a posture row is about. Internal ops tool: it asserts the WAF configuration of Aglyn's OWN Vercel projects through the Vercel API, so a self-hoster has nothing for it to check and never runs it. The hostname is report text for a human reading the output, not an input to any behaviour. RATCHETED 5 -> 1 on 2026-08-23 (AGL-2486): the AGL-2483 pass moved the other four into prose that `stripComments` removes. The ratchet compares EXACTLY, so a decrease fails too — deliberately, because an allowance nobody tightens stops describing the file it guards (AGL-2483).",
   },
   {
     file: 'tools/scripts/lib/stripe-webhook-health.mjs',
