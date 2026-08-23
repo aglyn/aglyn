@@ -79,6 +79,10 @@ import {
 } from '@mui/material'
 import { useEffect, useMemo, useState } from 'react'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
+import {
+  CompositionBar,
+  RankedBars,
+} from '../../../../components/revenue-charts.component'
 import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
@@ -684,6 +688,19 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                 have one without the other, and that is usually the interesting
                 row rather than an error.
               </Typography>
+              {attributionRows.length > 0 ? (
+                <Box sx={{ mb: 3 }}>
+                  <RankedBars
+                    rows={attributionRows.map((row) => ({
+                      key: String(row.orgId),
+                      label: String(row.name),
+                      sublabel: ORG_STATE_LABELS[String(row.state)],
+                      cents: Number(row.settledCents ?? 0),
+                    }))}
+                    emptyMessage="No org settled cash in this period."
+                  />
+                </Box>
+              ) : null}
               {attributionRows.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">
                   No org contributed to either base in this period. That is a
@@ -802,6 +819,19 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
               <Typography variant="overline" color="text.secondary">
                 Marketplace commission by listing
               </Typography>
+              <Box sx={{ mb: 2 }}>
+                <RankedBars
+                  rows={(payload?.attributionByListing?.rows ?? []).map(
+                    (row) => ({
+                      key: String(row.key),
+                      label: String(row.name),
+                      sublabel: row.detail ? String(row.detail) : undefined,
+                      cents: Number(row.gainCents ?? 0),
+                    }),
+                  )}
+                  emptyMessage="No plugin earned a commission in this period — nothing to plot yet."
+                />
+              </Box>
               <SourceTable
                 table={payload?.attributionByListing}
                 unit="Listing"
@@ -824,6 +854,17 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
               <Typography variant="overline" color="text.secondary">
                 Storefront take by host
               </Typography>
+              <Box sx={{ mb: 2 }}>
+                <RankedBars
+                  rows={(payload?.attributionByHost?.rows ?? []).map((row) => ({
+                    key: String(row.key),
+                    label: String(row.name),
+                    sublabel: row.detail ? String(row.detail) : undefined,
+                    cents: Number(row.gainCents ?? 0),
+                  }))}
+                  emptyMessage="No storefront earned a take in this period — nothing to plot yet."
+                />
+              </Box>
               <SourceTable
                 table={payload?.attributionByHost}
                 unit="Storefront"
@@ -854,6 +895,16 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
               contentGutterX
               contentGutterY
             >
+              <Box sx={{ mb: 3 }}>
+                <CompositionBar
+                  slices={earned.map((line) => ({
+                    key: line.id,
+                    label: line.label,
+                    cents: line.cents,
+                  }))}
+                  emptyMessage={`Nothing settled in this period, so there is no total to divide. The chart appears as soon as ${PLATFORM_BRAND_NAME} earns something — it is waiting for data, not failing to load.`}
+                />
+              </Box>
               <Table size="small">
                 <TableHead>
                   <TableRow>

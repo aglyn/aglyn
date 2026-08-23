@@ -479,9 +479,14 @@ describe('every figure is traceable to the org behind it', () => {
       json: async () => withAttribution,
     })) as never
     render(<AdminRevenue />)
-    await waitFor(() => expect(screen.getByText('Test Org')).toBeTruthy())
+    // TWICE by design: once as a labelled bar in the chart, once as a row in
+    // the table beneath it. Asserting both is what stops the chart being
+    // wired to a different source than the table it sits above.
+    await waitFor(() =>
+      expect(screen.getAllByText('Test Org').length).toBe(2),
+    )
     // "Comped / staff override: 5" is useless until it names them.
-    expect(screen.getByText('Aglyn LLC')).toBeTruthy()
+    expect(screen.getAllByText('Aglyn LLC').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Comped \/ staff override/i).length).toBeGreaterThan(0)
   })
 
@@ -574,9 +579,12 @@ describe('every source is attributed on its own dimension', () => {
       json: async () => withSources,
     })) as never
     render(<AdminRevenue />)
-    await waitFor(() => expect(screen.getByText('Office Hours')).toBeTruthy())
-    expect(screen.getByText('Northwind Coffee')).toBeTruthy()
-    expect(screen.getByText('northwind-coffee')).toBeTruthy()
+    // Chart label and table row, for each dimension.
+    await waitFor(() =>
+      expect(screen.getAllByText('Office Hours').length).toBe(2),
+    )
+    expect(screen.getAllByText('Northwind Coffee').length).toBe(2)
+    expect(screen.getAllByText(/northwind-coffee/).length).toBeGreaterThan(0)
     expect(screen.getByText(/Marketplace commission by publisher/i)).toBeTruthy()
   })
 
@@ -587,7 +595,9 @@ describe('every source is attributed on its own dimension', () => {
       json: async () => withSources,
     })) as never
     render(<AdminRevenue />)
-    await waitFor(() => expect(screen.getByText('Office Hours')).toBeTruthy())
+    await waitFor(() =>
+      expect(screen.getAllByText('Office Hours').length).toBeGreaterThan(0),
+    )
     expect(screen.getAllByText('−$9.00').length).toBeGreaterThan(0)
   })
 
