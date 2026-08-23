@@ -68,6 +68,16 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 }))
 jest.mock('../components/host-id-provider', () => ({
   useHostDisabledPlugins: () => [] as string[],
+  // Added by a9306382c and left out of this mock, which made the whole suite
+  // throw rather than fail: the gate reads the host's default-off OPT-IN list
+  // alongside the deny-list. Empty is the off-a-host-route value, which is
+  // what every case here is.
+  useHostEnabledPlugins: () => [] as string[],
+  // Every case in this suite is a route that names no SITE — the workspace
+  // picker, /manage, /admin, a workspace subdomain — so the provider's own
+  // off-host-route value is the faithful one. A non-null id here would make
+  // the gate answer a host question these pages never ask.
+  useHostId: () => null as string | null,
 }))
 jest.mock('../components/boot-splash.component', () => ({
   __esModule: true,
