@@ -426,6 +426,12 @@ const config: Config = {
           ],
         },
       ],
+      // The attribution names two MARKS and their OWNER, not the product, so
+      // it stays literal (AGL-2486): the branch that emits it is the one where
+      // nothing has been renamed, and a build that set DOCS_ORGANIZATION_NAME
+      // emits no attribution at all rather than claiming its own name as a
+      // mark of ours. `apps/docs` also cannot import `libs/` (AGL-1595), so
+      // the shared `TRADEMARK_NOTICE` is out of reach here by construction.
       copyright: `Copyright © ${new Date().getFullYear()} ${
         env('DOCS_ORGANIZATION_NAME') ?? 'Aglyn LLC'
       }.${

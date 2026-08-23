@@ -91,6 +91,7 @@ import { docsHelp } from '../../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 import { hasEntitlement } from '../../../../../../constants/entitlements'
+import useBranding from '../../../../../../hooks/use-branding'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import {
   CONTENT_MAX_WIDTH,
@@ -196,6 +197,9 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
   const firestore = useFirestore()
+  // Help copy on this page names the product, and a white-label org must see
+  // its own name rather than ours (AGL-2153).
+  const { branding } = useBranding()
   // Entry creation is server-owned since AGL-2266 (the cap); every other
   // entry write on this page stays client-direct.
   const createResource = useHostResourceApi()
@@ -1468,7 +1472,8 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                                     href={docsHelp('buildABlog').href}
                                     excerpt={
                                       'Leave either on the built-in themed ' +
-                                      'page and Aglyn renders it for you. To ' +
+                                      `page and ${branding.productName} ` +
+                                      'renders it for you. To ' +
                                       'design your own: the list screen needs ' +
                                       'a Collection Entries block, and the ' +
                                       'entry screen can use {{entry.title}}, ' +

@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -207,7 +208,7 @@ export default function StaffOrgRefundCard({
         '. ' +
         feeLine +
         `Reason: ${REFUND_REASON_LABELS[validated.reason]}. ` +
-        'This cannot be undone from Aglyn, and it is audited.',
+        `This cannot be undone from ${PLATFORM_BRAND_NAME}, and it is audited.`,
       confirmationText: `Refund ${money(askedCents, selected.currency)}`,
       confirmationButtonProps: { color: 'error' },
     })
@@ -283,14 +284,14 @@ export default function StaffOrgRefundCard({
       help={docsHelp('billing', {
         anchor: '#payments',
         excerpt:
-          "Refund one of the organization's Stripe charges, in full or in part, without leaving Aglyn. Requires a reason and is audited.",
+          `Refund one of the organization's Stripe charges, in full or in part, without leaving ${PLATFORM_BRAND_NAME}. Requires a reason and is audited.`,
       })}
       contentGutterX
       contentGutterY
     >
       <Stack spacing={1.5}>
         <Alert severity="warning">
-          {'A refund moves real money and cannot be undone from Aglyn. ' +
+          {`A refund moves real money and cannot be undone from ${PLATFORM_BRAND_NAME}. ` +
             'Stripe does not return its processing fee on a refund, and a ' +
             'disputed charge costs more still — a refund is a loss, not a ' +
             'reversal. Audited to adminAudit with the reason you pick.'}

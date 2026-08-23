@@ -24,6 +24,8 @@
  * that does not have to mount React to run.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
+
 /** The shape `/api/admin/revenue` answers with, as the page receives it. */
 export interface RevenuePayload {
   period?: string
@@ -151,7 +153,8 @@ export function earnedLines(payload: RevenuePayload | null): EarnedLine[] {
       label: 'Subscriptions, add-ons and metered usage',
       cents: Number(subscriptions.netOfReversalsCents ?? 0),
       note:
-        'Paid invoices on Aglyn’s own account, net of sales tax and net of every ' +
+        `Paid invoices on ${PLATFORM_BRAND_NAME}’s own account, net of sales ` +
+        'tax and net of every ' +
         'refund and lost dispute. Add-ons and metered usage bill as lines on ' +
         'these same invoices, so they are already inside this figure — counting ' +
         'the usage rollup beside it would double them.',
@@ -164,7 +167,7 @@ export function earnedLines(payload: RevenuePayload | null): EarnedLine[] {
         'The platform’s cut of plugin sales, at the rate resolved from the ' +
         'seller’s entitlements when each sale settled, net of refunds. The ' +
         'buyer’s gross and the publisher’s transfer are excluded — that money ' +
-        'is the publisher’s, not Aglyn’s.',
+        `is the publisher’s, not ${PLATFORM_BRAND_NAME}’s.`,
     },
     {
       id: 'commerce',

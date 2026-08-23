@@ -217,6 +217,22 @@ jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ org: { plan: 'business' }, ready: true }),
 }))
+/**
+ * The page names the product in its Template-screens help copy and reads that
+ * name from the org's resolved brand (AGL-2486), so a white-label org sees its
+ * own. Mocked here rather than left real because the hook reaches
+ * `use-secondary-nav` -> `console-plugins-gate` -> `createPluginLoader`, and
+ * `@aglyn/aglyn` is already a stub in this file; a non-Aglyn name also keeps
+ * the substitution visible if the copy is ever asserted.
+ */
+jest.mock('../hooks/use-branding', () => ({
+  __esModule: true,
+  default: () => ({
+    branding: { productName: 'Northwind' },
+    whiteLabel: true,
+    ready: true,
+  }),
+}))
 jest.mock('../hooks/use-host-activity-logger', () => ({
   __esModule: true,
   default: () => jest.fn(),

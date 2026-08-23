@@ -55,6 +55,7 @@
  * or to Stripe.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -289,7 +290,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                       <Figure
                         label={`Settled & earned (${payload?.period ?? period})`}
                         value={`$${dollars(settled?.totalEarnedCents)}`}
-                        caption="Money Stripe actually collected in the period and Aglyn actually kept: subscriptions, marketplace commission and storefront take — net of sales tax, seller payouts, card processing, refunds and disputes."
+                        caption={`Money Stripe actually collected in the period and ${PLATFORM_BRAND_NAME} actually kept: subscriptions, marketplace commission and storefront take — net of sales tax, seller payouts, card processing, refunds and disputes.`}
                       />
                     ),
                   },
@@ -533,8 +534,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                       <strong>${dollars(settled?.totalEarnedCents)}</strong>
                     </TableCell>
                     <TableCell>
-                      Net throughout. There is no gross figure here that means
-                      “Aglyn’s money” — see the gross-versus-net table below.
+                      {`Net throughout. There is no gross figure here that means “${PLATFORM_BRAND_NAME}’s money” — see the gross-versus-net table below.`}
                     </TableCell>
                   </TableRow>
                 </TableBody>
@@ -547,7 +547,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
               help={docsHelp('revenue', {
                 anchor: '#gross-versus-net',
                 excerpt:
-                  'Every deduction between the money that moved through Stripe and the money Aglyn kept, named and quantified.',
+                  `Every deduction between the money that moved through Stripe and the money ${PLATFORM_BRAND_NAME} kept, named and quantified.`,
               })}
               contentGutterX
               contentGutterY
@@ -569,7 +569,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                       ${dollars(subscriptions.grossCents)}
                     </TableCell>
                     <TableCell>
-                      Aglyn’s, apart from the tax below.{' '}
+                      {`${PLATFORM_BRAND_NAME}’s, apart from the tax below.`}{' '}
                       {subscriptions.transactionCount ?? 0} invoices.
                     </TableCell>
                   </TableRow>
@@ -603,7 +603,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                       ${dollars(marketplace.grossCents)}
                     </TableCell>
                     <TableCell>
-                      Mostly the publisher’s. Aglyn keeps only the commission.
+                      {`Mostly the publisher’s. ${PLATFORM_BRAND_NAME} keeps only the commission.`}
                     </TableCell>
                   </TableRow>
                   <TableRow>
@@ -629,7 +629,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                       ${dollars(commerce.applicationFeeCents)}
                     </TableCell>
                     <TableCell>
-                      Not all Aglyn’s — see the next line.
+                      {`Not all ${PLATFORM_BRAND_NAME}’s — see the next line.`}
                     </TableCell>
                   </TableRow>
                   <TableRow>
@@ -640,11 +640,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                       −${dollars(commerce.processingPassThroughCents)}
                     </TableCell>
                     <TableCell>
-                      Stripe’s. On a destination charge Stripe debits Aglyn’s
-                      balance for processing, and this half of the fee recovers
-                      exactly that. It is a recovery, not earnings, and
-                      reporting it as revenue would overstate every storefront
-                      sale.
+                      {`Stripe’s. On a destination charge Stripe debits ${PLATFORM_BRAND_NAME}’s balance for processing, and this half of the fee recovers exactly that. It is a recovery, not earnings, and reporting it as revenue would overstate every storefront sale.`}
                     </TableCell>
                   </TableRow>
                 </TableBody>
@@ -662,7 +658,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                       variant="outlined"
                       label={`$${dollars(
                         subscriptions.internalTrafficCents,
-                      )} of this is Aglyn’s own tagged purchases — real cash, excluded from GA`}
+                      )} of this is ${PLATFORM_BRAND_NAME}’s own tagged purchases — real cash, excluded from GA`}
                     />
                   ) : null}
                   {Number(marketplace.estimatedProcessingCostCents ?? 0) > 0 ? (
@@ -680,7 +676,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                       size="small"
                       variant="outlined"
                       color="warning"
-                      label={`${commerce.subscriptionOrders} storefront subscription renewals recover no card cost — Aglyn absorbs it`}
+                      label={`${commerce.subscriptionOrders} storefront subscription renewals recover no card cost — ${PLATFORM_BRAND_NAME} absorbs it`}
                     />
                   ) : null}
                 </Stack>

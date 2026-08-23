@@ -38,6 +38,8 @@
  * staff what was claimed. Three copies of these strings would drift, and a
  * drifted attestation is one nobody can be held to.
  */
+import { PLATFORM_BRAND_NAME } from './platform-brand'
+
 export interface PublisherAttestationItem {
   id: string
   /** First person — the publisher is the one saying it. */
@@ -109,9 +111,9 @@ export const PUBLISHER_ATTESTATION: readonly PublisherAttestationItem[] = [
   {
     id: 'listing-conduct',
     label:
-      'The listing does not disparage Aglyn, quote what its plans cost, or sell a way around one',
+      `The listing does not disparage ${PLATFORM_BRAND_NAME}, quote what its plans cost, or sell a way around one`,
     detail:
-      'Saying which Aglyn plans or features your plugin needs, or works with, is fine and useful. Editorialising about Aglyn’s prices or quotas, stating or implying what a plan contains, or pitching this version as a way to avoid a plan or an upgrade is not — the listing renders inside the customer’s own console.',
+      `Saying which ${PLATFORM_BRAND_NAME} plans or features your plugin needs, or works with, is fine and useful. Editorialising about ${PLATFORM_BRAND_NAME}’s prices or quotas, stating or implying what a plan contains, or pitching this version as a way to avoid a plan or an upgrade is not — the listing renders inside the customer’s own console.`,
   },
   {
     id: 'changelog',

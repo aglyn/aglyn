@@ -50,9 +50,18 @@ interface PlatformBrandEnv {
   NEXT_PUBLIC_PLATFORM_BRAND_LEGAL_NAME?: string
 }
 
+/**
+ * The name this software answers to when nothing has renamed it. Stated ONCE,
+ * as the doc above promises, and read back by `TRADEMARK_NOTICE` rather than
+ * spelled a second time — a second copy is how the two drift apart, and the
+ * one that drifts is the one deciding whether a rebranded build claims our
+ * marks.
+ */
+const DEFAULT_PLATFORM_BRAND_NAME = 'Aglyn'
+
 const PLATFORM_BRAND_NAME =
   (process.env as PlatformBrandEnv).NEXT_PUBLIC_PLATFORM_BRAND_NAME?.trim() ||
-  'Aglyn'
+  DEFAULT_PLATFORM_BRAND_NAME
 
 export const BRAND = {
   ORG_NAME: PLATFORM_BRAND_NAME,
@@ -71,8 +80,26 @@ export const PRODUCT_NAME = {
  *
  * A self-hosted deployment running its own name must NOT claim Aglyn's marks —
  * the source is Apache-2.0 and yours to run, the names are not. See NOTICE.
+ *
+ * ## Why the marks are spelled out rather than interpolated (AGL-2486)
+ *
+ * This sentence is not product copy, so `PLATFORM_BRAND_NAME` is the wrong
+ * substitution even though it holds the same characters on this branch. It is
+ * an assertion about who owns two specific marks, and every name in it is
+ * fixed:
+ *
+ *  - `Aglyn\u2122` is the mark itself. A build that renamed the product emits
+ *    nothing here at all — that is what the ternary is for — so there is no
+ *    branch on which a configured name belongs in its place.
+ *  - `Aglyn LLC` is the OWNER, and must not become `BRAND.ORG_NAME_LEGAL`.
+ *    That value falls back to `${PLATFORM_BRAND_NAME} LLC` but is separately
+ *    settable, so a reseller who sets only `..._LEGAL_NAME` would publish
+ *    "trademarks of Contoso Inc." — a false statement of ownership, produced
+ *    by us, on their site.
+ *
+ * The brand-literal ratchet baselines these two occurrences for that reason.
  */
 export const TRADEMARK_NOTICE =
-  PLATFORM_BRAND_NAME === 'Aglyn'
+  PLATFORM_BRAND_NAME === DEFAULT_PLATFORM_BRAND_NAME
     ? `Aglyn\u2122 and ${PRODUCT_NAME.BESIGNER}\u2122 are trademarks of Aglyn LLC.`
     : ''
