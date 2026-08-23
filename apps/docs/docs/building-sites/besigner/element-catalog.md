@@ -39,6 +39,8 @@ their description or keywords. So typing `grid` puts **Grid** at the top rather 
 burying it under everything whose description happens to mention a grid. Clearing the
 box brings the curated categories back.
 
+<!-- screenshot: besigner/element-search-best-matches.png per SCREENSHOT_PLAN.md -->
+
 ### What an element says about itself {#element-detail}
 
 Point at an element and a detail view explains it before you commit to it:

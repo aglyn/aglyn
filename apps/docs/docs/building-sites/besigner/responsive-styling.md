@@ -42,6 +42,8 @@ hover styles. Change the background, and you have said "this button is
 darker when you point at it". Pick **Default** again to go back to the
 resting styles.
 
+<!-- screenshot: besigner/state-chips-row.png per SCREENSHOT_PLAN.md -->
+
 - **Hover** — while the pointer is over the element.
 - **Active** — while it is being pressed or clicked.
 - **Focus** — while it has **keyboard** focus (see the note below).
@@ -108,6 +110,8 @@ a browser actually builds it: **margin** on the outside, then the
 **border**, then **padding**, and the **content** in the middle. Each
 region is shaded and labelled, and every side shows the value it is
 currently set to.
+
+<!-- screenshot: besigner/box-styler-diagram.png per SCREENSHOT_PLAN.md -->
 
 - Pick the fan-out with **Side / Axis / All**: one side at a time, the
   vertical or horizontal pair together, or all four sides at once.

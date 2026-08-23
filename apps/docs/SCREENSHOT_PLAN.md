@@ -692,3 +692,86 @@ terminal is worse than the code block it would replace.
   IA; the image should be confirmed against it rather than assumed. Re-capture only
   if the panel no longer matches the caption — an unchanged image needs no churn.
 - **Frame:** unchanged from the original.
+
+---
+
+# 2026-08-23 additions (AGL-2486)
+
+The canvas work of the August 23 release. Same conventions as above: 1440×900,
+light scheme, seeded emulator stack, component-level crops, `static/img/besigner/`.
+
+**Two of these need a document state the seed does not have** (a formatted text
+element, a wrapped inline heading). Add the state in the shot's `actions` rather
+than seeding it, so the capture also proves the feature works — a shot that has to
+be hand-staged is a shot that silently rots.
+
+### N1. `static/img/besigner/state-chips-row.png`
+
+- **Docs page:** `building-sites/besigner/responsive-styling.md` → `#interaction-states`
+- **Capture:** besigner → select a **Button** → **Styles** panel. The breakpoint chip
+  row and the state chip row must both be in frame, with **Hover** selected so the
+  canvas hold banner is showing and Hover's chip carries its **×**.
+- **Frame:** from the breakpoint chip down to the first style group heading. Crop out
+  the canvas.
+- **Alt text:** The Styles panel with the breakpoint chips above a row of state chips
+  — Default, Hover, Active, Focus, Disabled — with Hover selected.
+- **Note:** pick an element that already has a hover style, so at least one *other*
+  chip shows the **•** that marks a state with styles. All-empty chips do not show
+  what the dot means, and the dot is the only way to tell at a glance where styling
+  already exists.
+
+### N2. `static/img/besigner/box-styler-diagram.png`
+
+- **Docs page:** `building-sites/besigner/responsive-styling.md` → `#box-stylers`
+- **Capture:** besigner → select an element with **padding and margin already set**
+  (northwind-coffee's Business Home hero works) → **Styles** → the spacing diagram,
+  with **one side selected** so its editor is open beneath and the selected region
+  carries its tint.
+- **Frame:** the diagram, its legend, and the open side editor showing the **Apply
+  to** toggle and the step select. Crop at the next style group.
+- **Alt text:** The box model diagram with margin, border, padding and contents
+  regions labelled, one side selected, and its spacing editor open below.
+- **Note:** capture in **light** per the convention, but check the dark scheme
+  renders too — the figure has no mode branch and is meant to re-resolve on the class
+  swap, so a dark capture is the cheapest proof that still holds. Sides with values
+  must show the resolved amount (`80px`), not the step number.
+
+### N3. `static/img/besigner/inline-text-editing.png`
+
+- **Docs page:** `building-sites/besigner/text-editing.md` → `#edit-inline`
+- **Capture:** double-click a **Typography** heading on the canvas so the in-place
+  editor is open, with the floating toolbar above it and the caret in the text.
+- **Frame:** the heading and its toolbar, plus enough of the surrounding page to show
+  the text sitting **on the page** rather than in a box. The point of the shot is the
+  absence of chrome, so do not crop so tight that there is nothing to be absent.
+- **Alt text:** A heading being edited directly on the canvas, with a small floating
+  toolbar above it and no selection outline around it.
+
+### N4. `static/img/besigner/text-field-read-only.png`
+
+- **Docs page:** `building-sites/besigner/text-editing.md` → `#text-field-read-only`
+- **Capture:** on a Typography element, bold a word in place first so it carries
+  formatting, then click away and look at the **Attributes** panel.
+- **Frame:** the **Remove formatting** button, the read-only **Text** field, and its
+  helper line ("This text is formatted — double-click the element on the canvas to
+  edit it. Remove formatting to edit it here."). The helper text is the content of
+  this shot and must be legible.
+- **Alt text:** The Attributes panel showing a read-only Text field explaining that
+  the text is formatted, with a Remove formatting button above it.
+- **Annotate:** call out the **Remove formatting** button — it is the affordance the
+  section is about, and it is the smallest thing in frame.
+
+### N5. `static/img/besigner/element-search-best-matches.png`
+
+- **Docs page:** `building-sites/besigner/element-catalog.md` → `#element-search`
+- **Capture:** the **Elements** panel → type `space` into **Search elements**.
+- **Frame:** the search field and the flattened **Best matches** list beneath it.
+- **Alt text:** The Elements panel searched for "space", showing a single Best matches
+  list instead of the usual categories.
+- **Note:** `space` is chosen deliberately — it matches Stack on its **description**,
+  not its name, which is the behaviour the section documents. A query that matches a
+  title would illustrate nothing the reader could not already assume.
+- **Do NOT capture the element detail view yet.** Its placement changed twice during
+  the August 23 release and is the least settled surface in the editor; a capture now
+  would be wrong within the hour. The prose deliberately describes what the detail
+  *says* and not where it appears, for the same reason.
