@@ -67,7 +67,25 @@ export interface MemberAvatarProps extends Omit<AvatarProps, 'src' | 'alt'> {
   /** The member's stored photo, when the roster has one. */
   photoURL?: string | null
   email?: string | null
-  displayName?: string | null
+  /**
+   * The person's name.
+   *
+   * NOT `displayName`, and that is not a style preference (AGL-2486). A JSX
+   * prop literally named `displayName` is STRIPPED by this app's compiler:
+   * measured in the browser by passing the identical value under both names
+   * on one element, `name: entry.displayName || 'Someone'` was emitted into
+   * the chunk while the other spelling was absent from it AND from the props
+   * the component received. Every call site here had been passing a prop that
+   * never arrived, so this component fell back to the email — or, where no
+   * email was passed, rendered `?` — from the day it was written.
+   *
+   * The jest suite never caught it because jest compiles with a different
+   * transform that keeps the prop, so `member-avatar.component.spec.tsx`
+   * asserted two-letter initials from that spelling and went green against a
+   * browser build in which the prop does not exist.
+   * `no-displayname-jsx-prop.spec.ts` is the guard that now fails instead.
+   */
+  name?: string | null
   /** Rendered pixel size. */
   size?: number
 }
@@ -122,7 +140,7 @@ export function MemberAvatar(props: MemberAvatarProps) {
   const {
     photoURL,
     email,
-    displayName,
+    name,
     colour,
     colourSeed,
     size = 32,
@@ -134,8 +152,8 @@ export function MemberAvatar(props: MemberAvatarProps) {
     return stored || undefined
   }, [photoURL])
 
-  const label = String(displayName || email || '?')
-  const initials = memberInitials(displayName, email)
+  const label = String(name || email || '?')
+  const initials = memberInitials(name, email)
   return (
     <Avatar
       src={src}

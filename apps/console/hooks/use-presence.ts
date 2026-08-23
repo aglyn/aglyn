@@ -585,22 +585,26 @@ export const CURSOR_MIN_DELTA = 0.002
 export const PRESENCE_HEARTBEAT_MS = 20_000
 
 /**
- * How stale an entry may be before the room stops drawing it.
+ * How stale an entry may be before the room stops DRAWING it.
  *
- * Three missed heartbeats. `onDisconnect().remove()` is the primary cleanup
- * and it is not reliable enough to be the only one — measured on production
- * RTDB on 2026-08-22, a presence entry whose tab was long gone was still
- * sitting in the room 73 minutes later, counted as a live session. That ghost
- * was merely a wrong badge before; now that a session draws an avatar, a
- * cursor and a selection box, it would be a phantom colleague fighting you
- * over an element nobody has selected.
+ * Was three beats (60 s), which was too tight the moment the heartbeat
+ * stopped skipping hidden tabs: a browser throttles a background tab's
+ * timers to about one tick a minute, so a genuinely open tab can be 60 s
+ * stale while perfectly alive, and a 60 s window would have flapped it in
+ * and out of every other room. 150 s is comfortably past one throttled beat
+ * and still short enough that a row whose tab really died stops being drawn
+ * within a couple of minutes.
+ *
+ * This is the DISPLAY rule. `PRESENCE_REAP_AFTER_MS` is the deletion rule and
+ * is deliberately an order of magnitude longer — being wrong here hides
+ * someone for a moment, being wrong there deletes them.
  *
  * Reaped on READ, never written back. Cursors and selections are disposable
  * and must not acquire the durability the co-edit mirror has: nothing here
  * replays, nothing here is retained, and nothing here reaches the saved
  * document.
  */
-export const PRESENCE_STALE_MS = 3 * PRESENCE_HEARTBEAT_MS
+export const PRESENCE_STALE_MS = 150_000
 
 /** `initializeAppCheck` throws if it runs twice for one app. */
 let presenceAppCheckStarted = false
@@ -802,6 +806,16 @@ export function usePresence(options: {
   /** Latest selection, read by the announce effect without depending on it. */
   const selectedNodeIdRef = useRef(selectedNodeId)
   selectedNodeIdRef.current = selectedNodeId
+  /**
+   * The room, for the broker's sweep — read through a ref for the same reason
+   * everything else in this file is (AGL-2486). The mint effect depends on
+   * `[hostId, uid, authPersistence]` and must keep doing so: adding the
+   * document to that list would re-mint a token and re-run a sign-in every
+   * time somebody opened a different screen on the same site. A ref gives the
+   * sweep the CURRENT room without buying a token exchange per navigation.
+   */
+  const roomRef = useRef({ docType, docId })
+  roomRef.current = { docType, docId }
   /** This tab's node while it is announced; null between rooms. */
   const meRefHolder = useRef<ReturnType<typeof ref> | null>(null)
   /** Latest root resolver, so the pointer listener is not re-bound per render. */
@@ -860,7 +874,15 @@ export function usePresence(options: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${idToken}`,
           },
-          body: JSON.stringify({ hostId }),
+          // `docType`/`docId` name the room, which is what lets the broker
+          // sweep it of dead rows while it has admin credentials in hand
+          // (AGL-2486). Optional on the wire: an older client that sends
+          // neither still gets its token, it just tidies nothing.
+          body: JSON.stringify({
+            hostId,
+            docType: roomRef.current.docType,
+            docId: roomRef.current.docId,
+          }),
         })
         // A bare `if (!response.ok) return` sat here and logged NOTHING. It
         // is the most likely thing to fire in the field — a non-member, a
@@ -1037,33 +1059,88 @@ export function usePresence(options: {
     // One node per TAB, nested under the uid so the write rule is unchanged.
     const meRef = ref(database, `${roomPath}/${uid}/${TAB_SESSION_ID}`)
 
-    void set(meRef, {
-      displayName,
-      lastSeenAt: Date.now(),
-      colour: colourFor(`${uid}:${TAB_SESSION_ID}`),
-      ...(photoURL ? { photoURL: String(photoURL).slice(0, 512) } : {}),
-      ...(selectedNodeIdRef.current
-        ? { selectedNodeId: selectedNodeIdRef.current }
-        : {}),
-    }).catch((error) =>
-      report(setStatus, setFault, 'error', {
-        kind: String((error as { code?: string })?.code ?? '')
-          .toUpperCase()
-          .includes('PERMISSION')
-          ? 'not-allowed'
-          : 'broken',
-        stage: 'announce',
-        code: String((error as { code?: string })?.code ?? 'unknown'),
-        message: String((error as { message?: string })?.message ?? error).slice(
-          0,
-          200,
-        ),
-      }),
+    /**
+     * Arm the disconnect handler, THEN write the row — and do both again on
+     * every reconnection (AGL-2486).
+     *
+     * ## `onDisconnect` is a ONE-SHOT, which is the whole leak
+     *
+     * This used to `set()` the row and register `onDisconnect().remove()`
+     * once, unsequenced, at mount. Read in the SDK
+     * (`@firebase/database/dist/index.node.cjs.js`):
+     * `repoRunOnDisconnectEvents` applies the pending tree when the socket
+     * drops and then does `repo.onDisconnect_ = newSparseSnapshotTree()`,
+     * while `restoreState_` on reconnect only replays
+     * `onDisconnectRequestQueue_` — the requests queued WHILE disconnected.
+     * A registration that was already delivered and then consumed is never
+     * re-sent.
+     *
+     * So the very first blip — a sleeping laptop, a dropped wifi packet, a
+     * frozen background tab — spent the handler. Two things followed, and
+     * they are the two bugs Zach reported as separate complaints:
+     *
+     *  - the server removed the row while the tab was still open, and nothing
+     *    re-announced it, so presence "went away" and never came back;
+     *  - the NEXT close had no handler at all, so the row leaked. Measured on
+     *    production 2026-08-22: ~20 dead rows, the oldest four hours old.
+     *
+     * ## Why `.info/connected`
+     *
+     * It is the only event that fires on every (re)connection, including the
+     * first. Re-announcing there makes the session self-healing: whatever
+     * removed the row — a consumed handler, a reconnect, or the server-side
+     * reaper being too eager — the next connection puts it back. That is also
+     * what makes the reaper safe to run at all.
+     *
+     * `.info` is readable regardless of the security rules, so this costs no
+     * rules change and cannot be refused.
+     *
+     * ## Why the handler is armed FIRST
+     *
+     * `onDisconnect().remove()` resolves when the SERVER has recorded it.
+     * Writing the row first left a window in which the row existed and its
+     * cleanup did not — close the tab inside that window and it leaks. The
+     * write is chained onto the arm so the ordering is a fact, not a race.
+     */
+    const announce = () =>
+      onDisconnect(meRef)
+        .remove()
+        .then(() =>
+          set(meRef, {
+            displayName,
+            lastSeenAt: Date.now(),
+            colour: colourFor(`${uid}:${TAB_SESSION_ID}`),
+            ...(photoURL ? { photoURL: String(photoURL).slice(0, 512) } : {}),
+            ...(selectedNodeIdRef.current
+              ? { selectedNodeId: selectedNodeIdRef.current }
+              : {}),
+          }),
+        )
+        .catch((error) =>
+          report(setStatus, setFault, 'error', {
+            kind: String((error as { code?: string })?.code ?? '')
+              .toUpperCase()
+              .includes('PERMISSION')
+              ? 'not-allowed'
+              : 'broken',
+            stage: 'announce',
+            code: String((error as { code?: string })?.code ?? 'unknown'),
+            message: String(
+              (error as { message?: string })?.message ?? error,
+            ).slice(0, 200),
+          }),
+        )
+
+    // Fires `true` on the first connection and on every reconnection after
+    // one, which is exactly the set of moments the row and its handler have
+    // to be re-established. A `false` needs no action: the server is already
+    // applying the handler we armed.
+    const unsubscribeConnected = onValue(
+      ref(database, '.info/connected'),
+      (snapshot) => {
+        if (snapshot.val() === true) void announce()
+      },
     )
-    // Server-side cleanup: a closed tab or a slept laptop leaves no ghost.
-    // Scoped to this tab's node, so one tab closing no longer evicts the
-    // other tabs of the same person.
-    void onDisconnect(meRef).remove().catch(() => undefined)
 
     // The last room snapshot, re-projected on a timer as well as on change.
     // Staleness is a function of the CLOCK, not of RTDB traffic: a ghost
@@ -1149,17 +1226,38 @@ export function usePresence(options: {
       },
     )
 
-    // Liveness, so age-based reaping cannot evict someone who is simply
-    // reading. Cheap: one numeric field every 20 s per open document, and
-    // only while the tab is visible — a backgrounded tab is allowed to go
-    // stale and drop out of the room, which is the honest answer.
-    //
-    // The same tick re-projects, so a peer who stops heartbeating fades from
-    // the room within one interval of going stale.
+    /**
+     * Liveness — and it must be UNCONDITIONAL now that a server reaper reads
+     * it (AGL-2486).
+     *
+     * This used to skip the write whenever `document.hidden`, on the
+     * reasoning that a backgrounded tab may honestly drop out of the room.
+     * That is a defensible DISPLAY rule and a fatal LIVENESS rule: it makes
+     * `lastSeenAt` mean "last looked at" rather than "still open", and a
+     * reaper cannot safely delete anything measured that way. A background
+     * tab is still open, still connected, and will still receive edits.
+     *
+     * Browsers throttle a hidden tab's timers to roughly one tick a minute,
+     * so the effective beat there is ~60 s rather than 20 s. Every staleness
+     * threshold downstream is sized against the throttled figure, not this
+     * one.
+     *
+     * `displayName` rides along, which is what makes the beat SELF-HEALING:
+     * the rules require a session node to carry `displayName` and
+     * `lastSeenAt`, so an `update` of `lastSeenAt` alone was silently
+     * REJECTED whenever the row had been removed underneath us — a tab whose
+     * row was reaped could never write itself back. With both fields the
+     * next beat recreates it, so no reaper and no consumed handler can evict
+     * a live session for longer than one interval.
+     *
+     * The same tick re-projects, so a peer who really stopped beating fades
+     * from the room within one staleness window.
+     */
     const heartbeat = setInterval(() => {
       project()
-      if (typeof document !== 'undefined' && document.hidden) return
-      void update(meRef, { lastSeenAt: Date.now() }).catch(() => undefined)
+      void update(meRef, { displayName, lastSeenAt: Date.now() }).catch(
+        () => undefined,
+      )
     }, PRESENCE_HEARTBEAT_MS)
 
     meRefHolder.current = meRef

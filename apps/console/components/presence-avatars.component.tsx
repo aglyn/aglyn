@@ -252,7 +252,12 @@ function RoomAvatars({ entries }: { entries: PresenceEntry[] }) {
         <Tooltip key={entry.key} title={describe(entry)}>
           <Box sx={{ position: 'relative', display: 'inline-flex' }}>
             <MemberAvatar
-              displayName={entry.displayName}
+              // `|| 'Someone'` belt-and-braces with the `projectRoom` guard
+              // that already drops nameless rows (AGL-2486). A chip is the one
+              // place a missing name is unrecoverable — `memberInitials`
+              // renders `?`, which reads as a broken avatar rather than as a
+              // person — so the last defence lives at the point of use.
+              name={entry.displayName || 'Someone'}
               photoURL={entry.photoURL}
               colour={entry.colour}
               size={28}

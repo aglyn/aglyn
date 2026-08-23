@@ -213,7 +213,7 @@ export function UserMenu() {
               for no profile picture let's do the same". Seeded on the email
               rather than the display name so the colour survives a rename. */}
           <MemberAvatar
-            displayName={name}
+            name={name}
             email={email}
             photoURL={userPhotoUrl}
             size={30}
@@ -253,7 +253,7 @@ export function UserMenu() {
           }}
         >
           <MemberAvatar
-            displayName={name}
+            name={name}
             email={email}
             photoURL={userPhotoUrl}
             size={36}

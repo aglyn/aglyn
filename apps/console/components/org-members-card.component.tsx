@@ -455,7 +455,7 @@ export function OrgMembersCard() {
                     <MemberAvatar
                       photoURL={member.photoURL}
                       email={member.email}
-                      displayName={member.displayName}
+                      name={member.displayName}
                     />
                     <Box sx={{ minWidth: 0 }}>
                       {/* Member detail page (AGL-364). */}

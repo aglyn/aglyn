@@ -16,6 +16,7 @@
  */
 
 import { hostRoleCanWrite, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { deadSessionKeys } from '../../_lib/presence-reaper'
 import {
   authForPool,
   emailUnverifiedResponse,
@@ -151,6 +152,33 @@ async function handler(request: Request): Promise<Response> {
       presenceOrg: orgId,
       ...(canEdit ? { coeditHost: hostId } : {}),
     })
+
+    // TIDY THE ROOM WE ARE ABOUT TO LET SOMEBODY INTO (AGL-2486).
+    //
+    // The durable half of presence cleanup — see `presence-reaper.ts` for why
+    // it lives on the join rather than on a schedule, and why the threshold
+    // cannot evict a live session.
+    //
+    // Deliberately AFTER everything the caller depends on and wrapped so it
+    // can never fail the request: a caller must always get their token, even
+    // if the sweep throws, and housekeeping must never be able to break the
+    // feature it is housekeeping for.
+    const docType = String(body?.docType ?? '')
+    const docId = String(body?.docId ?? '')
+    if (docType && docId && /^[A-Za-z0-9_-]{1,64}$/.test(docId)) {
+      try {
+        const roomRef = firebaseAdmin
+          .database()
+          .ref(`presence/${orgId}/${docType}/${docId}`)
+        const room = (await roomRef.get()).val()
+        const dead = deadSessionKeys(room, Date.now())
+        await Promise.all(
+          dead.map((key) => roomRef.child(key).remove()),
+        )
+      } catch (sweepError) {
+        console.warn('[presence/token] room sweep skipped:', sweepError)
+      }
+    }
 
     // The client must put its presence auth instance in the same tenant
     // before exchanging this, or the token is rejected as cross-pool.

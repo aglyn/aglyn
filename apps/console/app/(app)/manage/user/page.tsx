@@ -748,7 +748,7 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
             // shows — one grey letter here, two coloured initials everywhere
             // else. A preview that does not match is worse than none.
             photoURL={photoUrl.trim() || resolvedPhotoUrl || undefined}
-            displayName={user?.displayName}
+            name={user?.displayName}
             email={user?.email}
             size={72}
             sx={{ border: '1px solid', borderColor: 'divider' }}

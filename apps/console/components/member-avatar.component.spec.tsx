@@ -59,14 +59,14 @@ const isRemote = (url: string) => /^(https?:)?\/\//i.test(url)
 describe('MemberAvatar (AGL-1683)', () => {
   it('makes no request at all for a member with only an email', () => {
     const { container } = render(
-      <MemberAvatar email="ada@example.com" displayName="Ada Lovelace" />,
+      <MemberAvatar email="ada@example.com" name="Ada Lovelace" />,
     )
     expect(fetchedUrls(container)).toEqual([])
   })
 
   it('never puts the email — or a hash of it — anywhere in the markup', () => {
     const { container } = render(
-      <MemberAvatar email="ada@example.com" displayName="Ada Lovelace" />,
+      <MemberAvatar email="ada@example.com" name="Ada Lovelace" />,
     )
     const markup = container.innerHTML
     expect(markup).not.toContain('gravatar')
@@ -79,7 +79,7 @@ describe('MemberAvatar (AGL-1683)', () => {
 
   it('draws the member initials instead', () => {
     const { container } = render(
-      <MemberAvatar email="ada@example.com" displayName="Ada Lovelace" />,
+      <MemberAvatar email="ada@example.com" name="Ada Lovelace" />,
     )
     expect(container.textContent).toBe('AL')
   })
@@ -98,7 +98,7 @@ describe('MemberAvatar (AGL-1683)', () => {
       <MemberAvatar
         photoURL={photo}
         email="ada@example.com"
-        displayName="Ada Lovelace"
+        name="Ada Lovelace"
       />,
     )
     const fetched = fetchedUrls(container)
