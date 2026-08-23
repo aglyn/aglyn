@@ -180,10 +180,20 @@ merely succeeds proves only half of that.
 
 ### Protecting the console broke the plugin loader
 
-Two days after the console was closed, the plugin sandbox was found broken on
-every site using a **verified custom domain** — and nothing had noticed,
-because the failure surfaces as a blank iframe with the reason only in a
-browser console log.
+Two days after the console was closed, sandbox-tier plugin rendering was found
+broken on every site using a **verified custom domain** — and nothing had
+noticed, because the failure surfaces as a blank iframe with the reason only in
+a browser console log.
+
+**It was latent, not an active outage**, and the distinction is worth keeping
+straight. Checked on 2026-08-23: every *code* plugin with a live install (the
+versions carrying `hostAbi`) is `trust: "realm"`, and realm bundles run in the
+app realm — they never touch this iframe or its CSP. No published version
+declares a `capabilities.network` origin either. So both consequences were
+loaded and pointed, with nothing yet standing in front of them: the first
+sandbox-tier install on a custom domain, or the first plugin to declare a
+network origin, would have hit it — and would have looked like a plugin bug,
+not a firewall one.
 
 `tools/plugin-loader/origin/api/load.mjs` builds the sandbox document's CSP
 from two **public, unauthenticated, read-only** console endpoints, fetched

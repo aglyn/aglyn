@@ -261,6 +261,15 @@ export const EXPECTED_POSTURE = Object.freeze([
         // and a host id with no custom domain still gains nothing, so the
         // difference is the lookup succeeding rather than a blanket widening.
         //
+        // The break was LATENT, not an active outage — worth keeping straight
+        // so nobody re-derives a panic from this comment. Every code plugin
+        // with a live install is `trust: 'realm'`, and realm bundles run in
+        // the app realm, never through this iframe; no published version
+        // declares a network origin either. Both consequences were loaded and
+        // pointed with nothing yet in front of them: the first sandbox-tier
+        // install on a custom domain, or the first declared network origin,
+        // would have hit it — and would have read as a plugin bug.
+        //
         // Scope: both endpoints are public by design and read-only. The
         // publisher view of listing-versions (`?scope=publisher`) verifies its
         // own Firebase ID token and 401s without one, so this bypasses the bot
