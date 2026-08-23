@@ -30,7 +30,6 @@ import {
   DialogContent,
   Divider,
   DialogProps,
-  Grid,
   IconButton,
   Slide,
   Toolbar,
@@ -58,6 +57,41 @@ const Transition = forwardRef(function Transition(
 })
 
 type PickerOption = Aglyn.ComponentSchema<any> | Aglyn.PresetSchema<any>
+
+/**
+ * How the two panes share the dialog above the stacking breakpoint
+ * (AGL-2486).
+ *
+ * An even split, because the preview is sized by the pane and nothing else:
+ * `ElementPreview` composes at a fixed 1280px stage and scales by
+ * `paneWidth / 1280`, so the pane's width IS the preview's size. A 420px
+ * pane rendered at 0.30; half of a 1536px dialog renders at 0.57, which is
+ * the "make the preview bigger" ask answered by arithmetic rather than by a
+ * bigger `previewHeight` cap on the same small stage.
+ *
+ * The grid does not pay for it. At an even split the tiles keep their full
+ * `MIN_TILE_WIDTH` — a 1944px screen runs four 166px tiles where the fixed
+ * pane ran six 161px ones. Fewer columns, no narrower tiles.
+ */
+const PANE_SPLIT = '1 1 50%'
+
+/**
+ * Narrowest a tile may be before its label stops fitting, in px (AGL-2486).
+ *
+ * The grid used to size its tiles off the VIEWPORT breakpoint (`sm` → 3/12 →
+ * four columns) which is the wrong question to ask: the tiles live in a pane
+ * whose width is the dialog minus the detail pane, and a viewport breakpoint
+ * cannot see the pane. So the detail pane came out of the tiles — four
+ * columns in 448px, 94px each, with `Announcement Bar` painting outside its
+ * own card. `auto-fill` asks the pane instead, so the two panes stop trading:
+ * widening the dialog adds columns, and the detail pane costs columns rather
+ * than shrinking every tile.
+ *
+ * 150px is measured, not chosen: the widest single word in the catalogue
+ * (`Announcement`) needs ~100px at `subtitle2`, and the tiles that survive
+ * on one line at 150 are the ones that wrapped at 94.
+ */
+const MIN_TILE_WIDTH = 150
 
 export interface ComponentPickerProps extends DialogProps {
   onSelectItem?: (e: SyntheticEvent, item?: { option: PickerOption }) => void
@@ -112,8 +146,18 @@ export const ComponentPicker = observer(
         ref={forwardRef}
         onClose={handleClose}
         open={open}
-        maxWidth="md"
-        slotProps={{ paper: { sx: { width: '100%' } } }}
+        // Picking one of ~110 elements is a browsing task, not a confirm box
+        // (AGL-2486). At `md` the paper was 900px on a 1944px screen and the
+        // detail pane took 420 of it, leaving the grid narrower than the
+        // whole dialog had been before the pane existed.
+        //
+        // `fullWidth` rather than the `width: '100%'` this carried before:
+        // `100%` ignores the paper's own 32px margins, so the paper overflows
+        // the viewport at any width below its cap. That was invisible while
+        // the cap was 900 and would be a horizontal scrollbar on every laptop
+        // at this one.
+        maxWidth="xl"
+        fullWidth
         slots={{ transition: Transition }}
         {...rest}
       >
@@ -183,11 +227,35 @@ export const ComponentPicker = observer(
           sx={{
             p: 0,
             display: 'flex',
+            // `md` is where an even split stops paying for itself, and the
+            // number is derived rather than picked: at a 900px viewport the
+            // paper is 836px, so each pane is 418. That is the LAST width at
+            // which the grid still runs two full-width tiles (2×150 + a 24
+            // gap + 32 of padding = 356) and the preview still composes at
+            // the 0.30 scale it had in the old fixed 420px pane. Below it,
+            // sharing a row makes both panes worse than stacking, where each
+            // gets the dialog's whole width — so the preview gets BIGGER on
+            // a tablet, not smaller.
+            //
+            // Stacking also keeps Confirm reachable. The pane used to be
+            // `display: none` under `sm` and Confirm lives inside it, so the
+            // dialog could be browsed and never used on a phone.
+            flexDirection: { xs: 'column', md: 'row' },
             alignItems: 'stretch',
             minHeight: '60vh',
           }}
         >
-          <Box sx={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
+          <Box
+            sx={{
+              flex: { xs: '1 1 auto', md: PANE_SPLIT },
+              // Without this the tiles' intrinsic width becomes the pane's
+              // floor and the split silently stops being even.
+              minWidth: 0,
+              // Stacked, the panes scroll together as one column; side by
+              // side, the grid scrolls under a detail pane that stays put.
+              overflowY: { xs: 'visible', md: 'auto' },
+            }}
+          >
             {!items?.length ? (
               <EmptyResults sx={{ minHeight: '40vh', height: 1 }} />
             ) : (
@@ -210,10 +278,18 @@ export const ComponentPicker = observer(
                   <Observer>
                     {() => (
                       <Box>
-                        <Grid
-                          spacing={3}
-                          container
-                          sx={{ overflowX: 'hidden' }}
+                        {/* A CSS grid, not a 12-column one: the column count
+                            has to come from the pane's own width. See
+                            MIN_TILE_WIDTH. `1fr` as the max so the last
+                            column is not a ragged remainder. */}
+                        <Box
+                          data-testid="picker-element-grid"
+                          sx={{
+                            display: 'grid',
+                            gridTemplateColumns: `repeat(auto-fill, minmax(${MIN_TILE_WIDTH}px, 1fr))`,
+                            gap: 3,
+                            minWidth: 0,
+                          }}
                         >
                           {item?.items?.map(
                             (
@@ -222,28 +298,21 @@ export const ComponentPicker = observer(
                             ) => (
                               <Observer key={node?.$id ?? index}>
                                 {() => (
-                                  <Grid
-                                    size={{
-                                      xs: 4,
-                                      sm: 3,
-                                    }}
-                                  >
-                                    <NodeCard
-                                      sx={[
-                                        { cursor: 'pointer' },
-                                        selected?.$id === node?.$id
-                                          ? { borderColor: 'primary.main' }
-                                          : null,
-                                      ]}
-                                      node={node as any}
-                                      onClick={(e) => handleItemClick(e, node)}
-                                    />
-                                  </Grid>
+                                  <NodeCard
+                                    sx={[
+                                      { cursor: 'pointer' },
+                                      selected?.$id === node?.$id
+                                        ? { borderColor: 'primary.main' }
+                                        : null,
+                                    ]}
+                                    node={node as any}
+                                    onClick={(e) => handleItemClick(e, node)}
+                                  />
                                 )}
                               </Observer>
                             ),
                           )}
-                        </Grid>
+                        </Box>
                       </Box>
                     )}
                   </Observer>
@@ -253,11 +322,15 @@ export const ComponentPicker = observer(
           </Box>
           <Box
             sx={{
-              flex: '0 0 auto',
-              width: 420,
-              display: { xs: 'none', sm: 'flex' },
+              flex: { xs: '0 0 auto', md: PANE_SPLIT },
+              width: { xs: 1, md: 'auto' },
+              minWidth: 0,
+              display: 'flex',
               flexDirection: 'column',
-              borderLeft: 1,
+              // Stacked, the divider that separates the panes is above it,
+              // not beside it.
+              borderLeft: { xs: 0, md: 1 },
+              borderTop: { xs: 1, md: 0 },
               borderColor: 'divider',
               backgroundColor: 'surface.main',
             }}

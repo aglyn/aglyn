@@ -281,4 +281,138 @@ describe('element detail in both picker surfaces (AGL-2486)', () => {
       expect(previews().length).toBe(1)
     })
   })
+
+  /**
+   * jsdom has no layout, so none of this can be measured here — the column
+   * count and the wrapping were measured in a real browser. What these guard
+   * is the input to that layout: the rules the browser is handed. Each one
+   * fails against the code as it stood when Zach reported the dialog.
+   */
+  describe('the dialog gives the grid room instead of taking it (AGL-2486)', () => {
+    /**
+     * Every CSS rule that mentions one of this element's own classes.
+     *
+     * Read out of `document.styleSheets` rather than the `<style>` tags:
+     * emotion inserts through the CSSOM, which leaves the tag's
+     * `textContent` empty. A `cssFor` that read the tags returned `''` for
+     * every element, so every `toContain` on it passed vacuously and every
+     * `not.toContain` passed for the wrong reason.
+     */
+    const cssFor = (el: Element) => {
+      const own = (el.getAttribute('class') || '')
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((c) => '.' + c)
+      const out: string[] = []
+      const walk = (rules: CSSRuleList) => {
+        Array.from(rules || []).forEach((rule: any) => {
+          if (rule.selectorText) {
+            if (own.some((c) => rule.selectorText.includes(c))) {
+              out.push(rule.cssText)
+            }
+            return
+          }
+          if (rule.cssRules?.length) walk(rule.cssRules)
+        })
+      }
+      Array.from(document.styleSheets).forEach((sheet) => {
+        try {
+          walk(sheet.cssRules)
+        } catch {
+          /* cross-origin sheet — nothing of ours lives there */
+        }
+      })
+      // Runs of whitespace collapsed to one space, and every assertion
+      // below written with `\s*`, so none of them turns on how a serialiser
+      // chose to space a value.
+      return out.join('\n').replace(/[^\S\n]+/g, ' ')
+    }
+
+    const openPicker = () =>
+      render(
+        <ThemeProvider theme={theme}>
+          <ComponentPicker open />
+        </ThemeProvider>,
+      )
+
+    it('is the widest paper the theme offers, not a confirm box', () => {
+      openPicker()
+      const paper = document.querySelector('.MuiDialog-paper')
+      // `md` (900px) minus a 420px detail pane left the grid 448px — less
+      // than the whole dialog had before the pane existed.
+      expect(paper.className).toContain('MuiDialog-paperWidthXl')
+      // And `fullWidth`, not `width: 100%`: `100%` ignores the paper's own
+      // 32px margins, so it overflows the viewport below its cap.
+      expect(paper.className).toContain('MuiDialog-paperFullWidth')
+    })
+
+    it('sizes the tiles off the pane they are in, not the viewport', () => {
+      openPicker()
+      const grid = document.querySelector('[data-testid="picker-element-grid"]')
+      expect(grid).toBeTruthy()
+
+      // The whole point: `auto-fill` asks the container how much room there
+      // is. A 12-column `size={{ xs: 4, sm: 3 }}` asks the VIEWPORT, which
+      // cannot see the detail pane, so the pane came out of the tiles.
+      const css = cssFor(grid)
+      expect(css).toMatch(/display:\s*grid/)
+      const track = css.match(
+        /grid-template-columns:\s*repeat\(\s*auto-fill\s*,\s*minmax\(\s*(\d+)px\s*,\s*1fr\s*\)\s*\)/,
+      )
+      expect(track).toBeTruthy()
+      // The tile floor is what Zach lost twice — once to the detail pane,
+      // once to the even split. Pinned so neither can quietly take it again.
+      expect(Number(track[1])).toBeGreaterThanOrEqual(150)
+
+      // And the tiles are the grid's own children — a `Grid` item wrapper
+      // around each card would reintroduce the fixed 12-column track and
+      // make the rule above decorative.
+      const cards = Array.from(document.querySelectorAll('.MuiCard-root'))
+      expect(cards.length).toBeGreaterThan(0)
+      cards.forEach((card) => {
+        expect(card.closest('.MuiGrid-root')).toBeNull()
+      })
+    })
+
+    it('splits the width evenly, and neither pane is a fixed number', () => {
+      openPicker()
+      fireEvent.click(cardFor('Surfaces Plain'))
+      const content = document.querySelector('.MuiDialogContent-root')
+      const [gridPane, detailPane] = Array.from(content.children)
+
+      // The preview is sized by its pane and nothing else — the stage
+      // composes at 1280 and scales by `paneWidth / 1280` — so an even
+      // split IS the "bigger preview". A fixed px pane cannot deliver it:
+      // it hands every pixel the dialog gains to the grid.
+      ;[gridPane, detailPane].forEach((pane) => {
+        expect(cssFor(pane)).toMatch(/flex:\s*1\s+1\s+50%/)
+      })
+      expect(cssFor(detailPane)).not.toMatch(/width:\s*\d+px/)
+    })
+
+    it('never hides the pane that holds Confirm', () => {
+      openPicker()
+      fireEvent.click(cardFor('Surfaces Plain'))
+      const confirm = screen.getByText('Confirm')
+      const pane = confirm.closest('.MuiDialogContent-root > *')
+      expect(pane).toBeTruthy()
+
+      // The pane used to be `display: { xs: 'none', sm: 'flex' }`, and
+      // Confirm lives inside it — so below `sm` the dialog could be browsed
+      // and never used. It stacks under the grid now instead of vanishing.
+      const css = cssFor(pane)
+      expect(css).not.toMatch(/display:\s*none/)
+      expect(css).toMatch(/width:\s*100%/)
+    })
+
+    it('stacks the panes rather than squeezing both, below the pane width', () => {
+      openPicker()
+      const content = document.querySelector('.MuiDialogContent-root')
+      const css = cssFor(content)
+      // Two panes side by side need more width than a laptop in a split
+      // view has. Column below `md`, row above it.
+      expect(css).toMatch(/flex-direction:\s*column/)
+      expect(css).toMatch(/flex-direction:\s*row/)
+    })
+  })
 })
