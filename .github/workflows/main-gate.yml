@@ -33,7 +33,7 @@ name: Main Gate
 # ---------------------------------------------------------------------------
 # WHY TWO JOBS
 # ---------------------------------------------------------------------------
-# `fast` is typecheck + docs:typecheck + the 54 guards. It finishes in minutes,
+# `fast` is typecheck + docs:typecheck + every derived guard. It finishes in minutes,
 # so it runs every 15. `full` adds the test sweep and the PRODUCTION builds and
 # runs hourly, because it cannot finish in 15 minutes and pretending otherwise
 # just queues runs behind each other.
@@ -79,6 +79,13 @@ env:
 
 permissions:
   contents: read
+  # The `moved` step asks the Actions API for the last completed run's head_sha
+  # so a quiet weekend does not re-gate the same commit 96 times a day. That
+  # read needs `actions: read` — without it `gh api` 403s. The step degrades
+  # safely (it falls back to running the gate rather than skipping it), so the
+  # failure mode is wasted minutes, not a missed verdict; granting it makes the
+  # skip actually work.
+  actions: read
   issues: write
 
 jobs:
@@ -133,7 +140,7 @@ jobs:
       - if: steps.moved.outputs.skip != 'true'
         run: npx nx run docs:typecheck
 
-      # All 54, concurrently. The list is DERIVED from nx-ci.yml and
+      # All of them, concurrently. The list is DERIVED from nx-ci.yml and
       # tools-guards.yml by the script itself, so a guard added to either is
       # gated here without anyone editing this file — and deriving zero is a
       # hard failure rather than an empty green phase.
