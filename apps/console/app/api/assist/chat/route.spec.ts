@@ -397,14 +397,27 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks())
 
 describe('the gate ladder — every guard forced red once', () => {
-  it('501 without ANTHROPIC_API_KEY — for a question needing a model', async () => {
+  it('501 without ANTHROPIC_API_KEY — and only when the docs offer NOTHING', async () => {
     // Below the membership check since AGL-2486, not above it: the key gate
     // now guards the ESCALATION, so it is only reached by a caller who got
     // through everything else and asked something the docs cannot answer.
+    //
+    // Narrower still since the keyless degrade: a question retrieval can put
+    // ANY page against is answered with those pages (see the degrade tests),
+    // so 501 now means the literal thing it says — no model, and nothing in
+    // the corpus either. The question here retrieves zero sections.
     seedOrgs()
     delete process.env.ANTHROPIC_API_KEY
-    const response = await POST(post(QUESTION_BODY(FREE_ORG)))
+    const response = await POST(
+      post({
+        ...QUESTION_BODY(FREE_ORG),
+        question: 'quokka marsupial husbandry rota zzz',
+      }),
+    )
     expect(response.status).toBe(501)
+    // The operator's half of the message lives HERE, in the API body, and
+    // nowhere the customer reads: the panel prints its own plain-English line
+    // for a 501 because the person seeing it does not set env vars.
     await expect(response.json()).resolves.toMatchObject({
       error: expect.stringContaining('ANTHROPIC_API_KEY'),
     })
@@ -662,16 +675,38 @@ describe('a docs-answerable question costs nothing', () => {
     expect(rollup['messages'] ?? 0).toBe(0)
   })
 
-  it('a FOLLOW-UP on the same question escalates — history is the missing half', async () => {
+  const THREAD = [
+    { role: 'user', text: 'how do domains work' },
+    { role: 'assistant', text: 'you connect one in settings' },
+  ]
+
+  it('a STANDALONE follow-up is answered from the docs too (AGL-2486)', async () => {
+    // This escalated until AGL-2486's second pass, and on a deployment with
+    // no key that meant one answer per thread and then a capability refusal —
+    // what Zach hit. A question that stands on its own words and retrieves
+    // emphatically is the same question whenever it is asked.
+    seedOrgs()
+    const response = await POST(
+      post({ ...docsBody(FREE_ORG), history: THREAD }),
+    )
+    expect(response.status).toBe(200)
+    expect(response.headers.get('X-Assist-Served-By')).toBe('docs')
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('a follow-up that LEANS on the thread still escalates', async () => {
+    // "that custom domain" — which one? Only the transcript knows, and
+    // retrieval cannot tell: `that` is a stop word, so this scores exactly as
+    // well as the unambiguous question and clears every evidence gate. The
+    // stands-alone check is the only thing between it and an answer about
+    // whichever domain page wins, which is why this is the question here.
     seedOrgs()
     armUpstream()
     const response = await POST(
       post({
         ...docsBody(FREE_ORG),
-        history: [
-          { role: 'user', text: 'how do domains work' },
-          { role: 'assistant', text: 'you connect one in settings' },
-        ],
+        question: 'how do I connect that custom domain to my site',
+        history: THREAD,
       }),
     )
     await response.text()
@@ -696,6 +731,122 @@ describe('a docs-answerable question costs nothing', () => {
     })
     const response = await POST(post(docsBody(FREE_ORG)))
     expect(response.status).toBe(423)
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * The keyless degrade (AGL-2486) — what a deployment with no key does with
+ * the questions retrieval could not answer.
+ *
+ * Every self-hosted install on its first day is this deployment, and so is
+ * Aglyn's own production today. It used to refuse them all with a bare
+ * capability error, which is what Zach read as the product being broken. The
+ * self-host charter's "degrade cleanly" has a floor: the whole documentation
+ * corpus and an index over it are still there, so the answer is the closest
+ * pages, never nothing.
+ */
+describe('with no key at all, a question still gets the closest pages', () => {
+  const keyless = () => {
+    seedOrgs()
+    delete process.env.ANTHROPIC_API_KEY
+  }
+
+  it('answers with docs links rather than a capability refusal', async () => {
+    keyless()
+    // A diagnostic: it escalates by design, so with no key it is exactly the
+    // question that used to hit the wall.
+    const response = await POST(post(QUESTION_BODY(FREE_ORG)))
+    expect(response.status).toBe(200)
+    expect(response.headers.get('X-Assist-Served-By')).toBe('docs-links')
+    expect(mockFetch).not.toHaveBeenCalled()
+    const text = (await readEvents(response))
+      .filter((event) => event.type === 'delta')
+      .map((event) => String(event.text))
+      .join('')
+    expect(text).toMatch(/\]\(https?:\/\/[^)]+\)/)
+  })
+
+  it('says why in plain English, and never in operator vocabulary', async () => {
+    keyless()
+    const response = await POST(post(QUESTION_BODY(FREE_ORG)))
+    const text = (await readEvents(response))
+      .filter((event) => event.type === 'delta')
+      .map((event) => String(event.text))
+      .join('')
+    expect(text).not.toMatch(/ANTHROPIC|API[_ ]KEY|501/i)
+    expect(text).toMatch(/closest/i)
+  })
+
+  it('is NOT counted as a deflection — it is a question that went unanswered', async () => {
+    // A deflection is a model call we chose not to make; this is one we could
+    // not make. One sentinel for both would report a keyless deployment as
+    // the most efficient on the platform.
+    keyless()
+    const response = await POST(post(QUESTION_BODY(FREE_ORG)))
+    const done = (await readEvents(response)).find((event) => event.type === 'done')
+    expect(
+      mockDocs.get(`orgs/${FREE_ORG}/assistSignals/${done?.exchangeId}`),
+    ).toMatchObject({ model: 'docs-links', estCostUsd: 0 })
+  })
+
+  it('spends no message — nothing was reserved because nothing was spent', async () => {
+    // Asserted from an EMPTY counter, not from one already at the cap. At the
+    // cap a reservation is refused, so the counter does not move either way
+    // and the test passes with the reservation put back in — which is exactly
+    // the mutation it is here to catch.
+    keyless()
+    const response = await POST(post(QUESTION_BODY(FREE_ORG)))
+    expect(response.status).toBe(200)
+    expect(
+      (
+        (mockDocs.get(`orgs/${FREE_ORG}/counters/assistMessagesDaily`) as Record<
+          string,
+          number
+        >) ?? {}
+      )[TODAY] ?? 0,
+    ).toBe(0)
+  })
+
+  it('is not bound by the daily cap either — a cap on spend, and none was spent', async () => {
+    keyless()
+    mockDocs.set(`orgs/${FREE_ORG}/counters/assistMessagesDaily`, { [TODAY]: 10 })
+    const response = await POST(post(QUESTION_BODY(FREE_ORG)))
+    expect(response.status).toBe(200)
+    expect(response.headers.get('X-Assist-Served-By')).toBe('docs-links')
+  })
+
+  it("THE REPORTED BUG: a keyless thread does not fall off a cliff", async () => {
+    // Zach's session, in order: a docs question answered in full, then a
+    // second question in the same thread. It came back "Aglyn Assist is not
+    // configured on this deployment". Both turns must now be answerable, and
+    // NEITHER may be a refusal.
+    keyless()
+    const first = await POST(
+      post({
+        ...QUESTION_BODY(FREE_ORG),
+        question: 'How do I publish my first screen?',
+      }),
+    )
+    expect(first.status).toBe(200)
+    expect(first.headers.get('X-Assist-Served-By')).toBe('docs')
+
+    const second = await POST(
+      post({
+        ...QUESTION_BODY(FREE_ORG),
+        question: 'how do I add an element to my page',
+        history: [
+          { role: 'user', text: 'how do I publish my first screen' },
+          { role: 'assistant', text: 'open the screen and press Publish' },
+        ],
+      }),
+    )
+    expect(second.status).toBe(200)
+    const text = (await readEvents(second))
+      .filter((event) => event.type === 'delta')
+      .map((event) => String(event.text))
+      .join('')
+    expect(text).toMatch(/\]\(https?:\/\/[^)]+\)/)
     expect(mockFetch).not.toHaveBeenCalled()
   })
 })
@@ -763,6 +914,29 @@ describe('an identical question does not buy a second completion', () => {
     expect(
       mockDocs.get(`orgs/${FREE_ORG}/assistSignals/${done?.exchangeId}`),
     ).toMatchObject({ model: 'assist-cache', deflected: true, estCostUsd: 0 })
+  })
+
+  it('NEVER SERVES a cached answer into a thread (AGL-2486, second pass)', async () => {
+    // The read side of the same rule, asserted because deflection learned to
+    // answer a standalone follow-up and the two gates are easy to confuse. A
+    // deflected answer is a pure function of the question, so serving it
+    // mid-thread carries nothing across; a CACHED answer is a model reply
+    // composed against somebody else's conversation, and the key cannot see
+    // that conversation. Widening the cache to match the deflection rule
+    // would hand one user's thread to another.
+    seedOrgs()
+    armUpstream()
+    await (await POST(post(QUESTION_BODY(FREE_ORG)))).text()
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    const followUp = await POST(
+      post({
+        ...QUESTION_BODY(FREE_ORG),
+        history: [{ role: 'user', text: 'what about the other one' }],
+      }),
+    )
+    await followUp.text()
+    expect(followUp.headers.get('X-Assist-Served-By')).toBeNull()
+    expect(mockFetch).toHaveBeenCalledTimes(2)
   })
 
   it('NEVER caches a refusal — a bad turn must not become a bad week', async () => {

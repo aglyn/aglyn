@@ -327,3 +327,44 @@ describe('the gate is a scope check, not a kill switch (AGL-1934)', () => {
     expect(container.innerHTML).toBe('')
   })
 })
+
+/**
+ * What a person reads when the server can go no further (AGL-2486).
+ *
+ * The old line — "Aglyn Assist is not configured on this deployment" — names
+ * a deployment the reader does not administer and a configuration they cannot
+ * see. Zach met it in a besigner drawer, on the second question of a thread
+ * whose first question had just been answered, and read it as the product
+ * being broken.
+ *
+ * The server now hands back the closest docs pages whenever it has any, so a
+ * 501 reaching this branch at all is rare — which makes the words it prints
+ * more important, not less: it is the one message left with nothing else to
+ * offer.
+ */
+describe('a refusal is written for the person reading it', () => {
+  const armRefusal = (status: number, error: string) => {
+    chatResponse = {
+      ok: false,
+      status,
+      body: null,
+      json: async () => ({ error }),
+    }
+  }
+
+  it('turns a 501 into plain English, not deployment vocabulary', async () => {
+    armRefusal(501, 'Aglyn Assist is not configured (ANTHROPIC_API_KEY).')
+    render(<AssistPanelComponent />)
+    await ask('How do I publish my first screen?')
+    const notice = await screen.findByText(/could not find anything/i)
+    const text = notice.textContent ?? ''
+    // The operator's half of the message must not be relayed to the user —
+    // it is in the API body for an operator, who reads logs, not drawers.
+    expect(text).not.toMatch(/ANTHROPIC|API[_ ]KEY/i)
+    expect(text).not.toMatch(/not configured|deployment/i)
+    // …and it must still say what to do next and who can fix it, which is
+    // what the old line never did.
+    expect(text).toMatch(/different words/i)
+    expect(text).toMatch(/set up this workspace|enabling the assistant/i)
+  })
+})

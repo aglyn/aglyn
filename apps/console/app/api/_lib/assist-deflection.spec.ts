@@ -18,7 +18,9 @@
 import { ASSIST_DOCS_INDEX } from '../../../constants/assist-docs-index.generated'
 import {
   composeDocsAnswer,
+  composeDocsLinksAnswer,
   deflectToDocs,
+  questionStandsAlone,
   sectionUrl,
   trimToSentence,
 } from './assist-deflection'
@@ -167,6 +169,17 @@ const MUST_ESCALATE: readonly string[] = [
  */
 const DEFLECTION_FLOOR = 0.7
 
+/**
+ * The same floor for the same questions asked as a FOLLOW-UP (AGL-2486).
+ *
+ * Set below the 48.5% the set currently reports, and re-derived rather than
+ * nudged when the `FOLLOW_UP_*` constants move. It is a floor on a number
+ * that was 0 before this change: every follow-up escalated, which on a
+ * deployment with no key meant one answer per thread and a capability refusal
+ * for everything after it.
+ */
+const FOLLOW_UP_DEFLECTION_FLOOR = 0.4
+
 function verdictFor(question: string, hasHistory = false) {
   return deflectToDocs(question, retrieveDocsSections(question), hasHistory)
 }
@@ -197,6 +210,58 @@ describe('the measurement — what fraction needs no model at all', () => {
   it('NEVER answers one it should have escalated', () => {
     const wrong = MUST_ESCALATE.filter((question) => verdictFor(question).answered).map(
       (question) => `${question} → ${verdictFor(question).page}`,
+    )
+    expect(wrong).toEqual([])
+  })
+
+  /**
+   * The same set asked as the SECOND question of a thread (AGL-2486).
+   *
+   * Two numbers rather than one, because they answer different questions and
+   * a single blended figure would hide the one that matters. The first-turn
+   * rate is the business case. This one is the product case: what a user gets
+   * when they keep talking. It was ZERO — every follow-up escalated by
+   * construction — which is how a keyless deployment came to answer exactly
+   * one question per thread and then refuse.
+   *
+   * It is deliberately lower than the first-turn rate and must stay that way:
+   * the follow-up bar is higher on purpose (see `FOLLOW_UP_*`). A change that
+   * lifted this to match would mean the bar had been flattened, not that
+   * retrieval got better.
+   */
+  it('answers a good share of the same questions asked SECOND', () => {
+    const answered = ANSWERABLE.filter(
+      (question) => verdictFor(question, true).answered,
+    )
+    const rate = answered.length / ANSWERABLE.length
+    console.log(
+      `[AGL-2486] follow-up deflection rate ${(rate * 100).toFixed(1)}% ` +
+        `(${answered.length}/${ANSWERABLE.length}) vs ${(
+          (ANSWERABLE.filter((q) => verdictFor(q).answered).length /
+            ANSWERABLE.length) *
+          100
+        ).toFixed(1)}% on a first turn`,
+    )
+    expect(rate).toBeGreaterThanOrEqual(FOLLOW_UP_DEFLECTION_FLOOR)
+    expect(rate).toBeLessThan(DEFLECTION_FLOOR)
+  })
+
+  it('NEVER answers a must-escalate question just because it came second', () => {
+    // The negative set is the half that must not move at all. A follow-up is
+    // held to a HIGHER bar, so anything that escalates on turn one and
+    // deflects on turn two is a hole in the ordering, not a new capability.
+    //
+    // ⚠️ HONEST NOTE ON WHAT THIS PROVES TODAY: nothing the first-turn test
+    // above does not. It survives every mutation of the follow-up path —
+    // stands-alone forced true, the raised thresholds flattened, the intent
+    // gate skipped for follow-ups — because against THIS corpus the negatives
+    // are stopped by coverage and dominance long before intent. It is kept as
+    // a divergence guard, not as evidence: the moment a docs page is written
+    // that matches a diagnostic emphatically, the intent gate becomes the
+    // only thing holding it, and that gate is the one a future "follow-ups
+    // are special" change is most likely to route around.
+    const wrong = MUST_ESCALATE.filter(
+      (question) => verdictFor(question, true).answered,
     )
     expect(wrong).toEqual([])
   })
@@ -329,12 +394,96 @@ describe('the answer is composed for the surface that renders it', () => {
 })
 
 describe('the gates, each forced on its own', () => {
-  it('a follow-up turn always escalates, however well it retrieves', () => {
+  /**
+   * The follow-up gate (AGL-2486, second pass).
+   *
+   * It used to be `if (hasHistory) return refuse('follow-up')` and this spec
+   * used to assert exactly that. The rule was too strong and the failure was
+   * user-visible: Zach's thread answered its first question from the docs and
+   * then, on "how do I add an element to my page" — a question the docs
+   * plainly answer, from a page the FIRST answer had just quoted — escalated
+   * to a model this deployment has no key for, and printed a capability
+   * refusal. One answer per thread, then a wall.
+   *
+   * The replacement is two independent tests, and both halves are asserted
+   * here because either alone is a bug: a question that stands on its own
+   * words AND retrieves emphatically is answered; anything leaning on the
+   * transcript still escalates.
+   */
+  it('a follow-up that stands on its own IS answered from the docs', () => {
     const question = 'how do I connect a custom domain to my site'
     expect(verdictFor(question, false).answered).toBe(true)
     const followUp = verdictFor(question, true)
+    expect(followUp.answered).toBe(true)
+    expect(followUp.refusal).toBeNull()
+    // The same answer as turn one — a deflected answer is a pure function of
+    // the question, which is the property that makes answering it mid-thread
+    // safe at all.
+    expect(followUp.answer).toBe(verdictFor(question, false).answer)
+  })
+
+  it('a follow-up leaning on the conversation still escalates', () => {
+    for (const question of [
+      // FIRST because it is the one that proves the gate rather than merely
+      // agreeing with it. "that custom domain" — WHICH one? Only the thread
+      // knows. Retrieval does not care: `that` is a stop word, so this scores
+      // 13.3 with a 3.4x margin and full coverage, exactly like the
+      // unambiguous version, and clears every evidence gate. Delete the
+      // stands-alone check and this question is answered about whatever
+      // domain page happens to win. The rest below are caught twice over.
+      'how do I connect that custom domain to my site',
+      'does that work on the free plan',
+      'what about the other one',
+      'is it included in the free plan',
+      'and the second one',
+      'can I do the same for a blog post',
+      'how about the mobile view',
+    ]) {
+      const verdict = verdictFor(question, true)
+      expect([question, verdict.answered]).toEqual([question, false])
+      expect([question, verdict.refusal]).toEqual([question, 'follow-up'])
+      // …and each of them names something a docs page is genuinely about, so
+      // retrieval alone would have been happy to answer.
+      expect(retrieveDocsSections(question).length).toBeGreaterThan(0)
+    }
+  })
+
+  it('a follow-up that only NAMES a topic is a fragment, not a question', () => {
+    // Mid-thread these are modifiers of a question in the previous turn.
+    for (const fragment of ['the free plan', 'on mobile', 'custom domains']) {
+      expect(questionStandsAlone(fragment)).toBe(false)
+      expect(verdictFor(fragment, true).refusal).toBe('follow-up')
+    }
+    // The same words with a verb in front stand alone again.
+    expect(questionStandsAlone('what is on the free plan')).toBe(true)
+  })
+
+  it('a follow-up standing alone but retrieving weakly ALSO escalates', () => {
+    // Zach's own second question, and the reason the follow-up bar is raised
+    // rather than removed. It stands on its own words, and retrieval still
+    // does not know the answer: the page that wins is a coming-soon LAUNCH
+    // GUIDE, ahead of an animations page by well under 2x, because the guide
+    // says "add", "element" and "page". Answered as a first question (the bar
+    // there is 5 and 1.3x); escalated mid-thread, where a weak match is also
+    // evidence that the missing half is in the transcript.
+    const question = 'how do I add an element to my page'
+    expect(questionStandsAlone(question)).toBe(true)
+    const first = verdictFor(question, false)
+    expect(first.answered).toBe(true)
+    expect(first.topScore).toBeLessThan(8)
+    expect(first.pageMargin).toBeLessThan(2)
+    expect(verdictFor(question, true).answered).toBe(false)
+  })
+
+  it('the relaxed coverage floor is a FIRST-TURN allowance', () => {
+    // Wins its page by ~40x and covers 0.69 — inside `RELAXED_COVERAGE` on a
+    // first turn, refused on a follow-up, because mid-thread the part of the
+    // question the page ignored may be the part the conversation supplied.
+    const question = 'what are webhooks used for in workflows'
+    expect(verdictFor(question, false).answered).toBe(true)
+    const followUp = verdictFor(question, true)
     expect(followUp.answered).toBe(false)
-    expect(followUp.refusal).toBe('follow-up')
+    expect(followUp.refusal).toBe('low-coverage')
   })
 
   it('a generative request escalates even when docs match', () => {
@@ -403,6 +552,55 @@ describe('the gates, each forced on its own', () => {
     )
     expect(verdict.answered).toBe(false)
     expect(verdict.refusal).toBe('low-coverage')
+  })
+})
+
+describe('the keyless degrade — the closest pages, honestly labelled', () => {
+  const sections = () =>
+    retrieveDocsSections('how do I add an element to my page').map(
+      ({ section }) => section,
+    )
+
+  it('offers the retrieved pages as links, and only real ones', () => {
+    const answer = composeDocsLinksAnswer(sections())
+    const known = new Set(ASSIST_DOCS_INDEX.map((section) => sectionUrl(section)))
+    const urls = [...answer.matchAll(/\]\((https?:\/\/[^)]+)\)/g)].map((m) => m[1])
+    expect(urls.length).toBeGreaterThan(0)
+    for (const url of urls) expect(known.has(url)).toBe(true)
+  })
+
+  it('does NOT claim the pages answer the question', () => {
+    // These pages failed the confidence bar — that is why this path ran. The
+    // text may say they are the closest, which is true by construction, and
+    // must not say they are the answer.
+    const answer = composeDocsLinksAnswer(sections())
+    expect(answer).toContain('closest')
+    expect(answer).not.toMatch(/straight from the documentation/)
+    expect(answer).not.toMatch(/\bhere is (the|your) answer\b/i)
+  })
+
+  it('says nothing an operator would say — no env var, no status code', () => {
+    // The reader is a user in a besigner drawer, not the person who sets the
+    // deployment's variables. Zach's standing note: the console must not talk
+    // to a non-technical user in operator vocabulary.
+    const answer = composeDocsLinksAnswer(sections())
+    expect(answer).not.toMatch(/ANTHROPIC|API[_ ]KEY|env|501|deployment is/i)
+    // …but it must still be honest that something is switched off, rather
+    // than implying the documentation is all there ever is.
+    expect(answer).toMatch(/switched on|set(ting)? it up/i)
+  })
+
+  it('renders as the panel renders — links only, no other markup', () => {
+    const answer = composeDocsLinksAnswer(sections())
+    expect(answer).not.toMatch(/\*\*/)
+    expect(answer).not.toMatch(/^\s*#{1,6}\s/m)
+    expect(answer).toMatch(/\[[^\]]+\]\(https?:\/\/[^)]+\)/)
+  })
+
+  it('returns nothing at all when retrieval found nothing', () => {
+    // The one case that still refuses outright: there is no honest fallback
+    // to compose. The route turns this into the 501.
+    expect(composeDocsLinksAnswer([])).toBe('')
   })
 })
 

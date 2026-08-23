@@ -531,8 +531,24 @@ export function AssistPanelComponent() {
         if (locked) {
           failAnswer(lockdownRefusalText(locked))
         } else if (response.status === 501) {
+          // 501 now means the narrow thing it says: no model is available AND
+          // the documentation had nothing to offer for this question either
+          // — the server hands back the closest pages whenever it has any
+          // (AGL-2486), so reaching here means it had none.
+          //
+          // Written for the person who is actually reading it. The old line
+          // was "is not configured on this deployment", which names a
+          // deployment the reader does not administer and a configuration
+          // they cannot see; Zach met it mid-thread, after a working answer,
+          // and read it as the product being broken. What a user needs here
+          // is what happened, what to try, and who can fix it — in that
+          // order, in words that assume no idea what an API key is. The
+          // operator's half (the env var) stays in the API error body, where
+          // an operator looks and a customer does not.
           failAnswer(
-            `${branding.productName} Assist is not configured on this deployment.`,
+            `I could not find anything in the documentation about that, and I cannot work it through with you myself yet — ` +
+              `${branding.productName} Assist has not been fully switched on here. ` +
+              `Try asking in different words, or ask whoever set up this workspace to finish enabling the assistant.`,
           )
         } else if (response.status === 429 && payload?.reason === 'quota') {
           if (payload.quota) setQuota(payload.quota as AssistQuotaInfo)

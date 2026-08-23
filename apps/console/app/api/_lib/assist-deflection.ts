@@ -59,11 +59,25 @@ import {
  * because a hedged wrong answer is still a wrong answer and it has already
  * cost the user the click.
  *
- *   1. **No prior turn.** A follow-up is not self-contained: "does that work
- *      on the free plan?" retrieves the billing pages beautifully and answers
- *      a question nobody asked. The conversation is the missing half and only
- *      the model has it. This is the single biggest restriction here and it is
- *      deliberate — see the hit-rate note below.
+ *   1. **The question stands on its own.** A follow-up is usually not
+ *      self-contained: "does that work on the free plan?" retrieves the
+ *      billing pages beautifully and answers a question nobody asked. The
+ *      conversation is the missing half and only the model has it.
+ *
+ *      This gate USED TO BE "no prior turn", full stop, and that was wrong in
+ *      a way nobody saw until Zach hit it (AGL-2486). Not every follow-up
+ *      leans on the transcript: the second question in a thread is very often
+ *      a fresh, complete question that happens to be asked second. Refusing
+ *      all of them meant a thread answered its first question from the docs
+ *      and then escalated forever — and on a deployment with no
+ *      `ANTHROPIC_API_KEY` that reads as "Aglyn Assist is not configured",
+ *      one question in, to a user who just watched it work. A product that
+ *      answers exactly once per thread is worse than one that never answers,
+ *      because the second refusal looks like a fault rather than a limit.
+ *
+ *      So the gate now asks whether THIS question stands alone, and holds a
+ *      raised bar when it does — see {@link questionStandsAlone} and the
+ *      `FOLLOW_UP_*` constants.
  *   2. **Enough question.** At least {@link MIN_QUESTION_TOKENS} distinct
  *      content tokens after stop-word removal. Below that there is not enough
  *      of a question to be confident ABOUT.
@@ -189,6 +203,76 @@ const RELAXED_COVERAGE = 0.6
 
 /** The margin that buys {@link RELAXED_COVERAGE}. */
 const STRONG_PAGE_MARGIN = 3
+
+/**
+ * ── The follow-up bar (AGL-2486) ──────────────────────────────────────────
+ *
+ * A question asked mid-thread is held to a HIGHER standard than the same
+ * question asked first, and the asymmetry is the whole idea rather than
+ * timidity about a new path.
+ *
+ * On turn one, a mediocre match costs a mediocre answer to the question that
+ * was actually asked, and the closing line invites the user to ask again.
+ * Mid-thread, a mediocre match means something else as well: it is EVIDENCE
+ * that the words in front of us are not the whole question. A thread is where
+ * ellipsis lives, so "retrieval is unsure" and "the missing half is in the
+ * transcript" are the same observation seen twice. Only an emphatic match —
+ * one where the page is right whatever came before — may be answered without
+ * reading the conversation.
+ *
+ * The calibration case is Zach's own second question, "how do I add an
+ * element to my page": top score 7.9, and the winning page beats its rival by
+ * 1.80 with a coming-soon LAUNCH GUIDE, because that guide happens to say
+ * "add", "element" and "page". As a first question that is retrieval doing
+ * its honest best. As a follow-up it is a coin flip that also ignores the
+ * conversation, and it escalates.
+ */
+const FOLLOW_UP_MIN_TOP_SCORE = 8
+
+/** @see FOLLOW_UP_MIN_TOP_SCORE — 1.3x is a lead; 2x is not arguable. */
+const FOLLOW_UP_MIN_PAGE_MARGIN = 2
+
+/**
+ * A follow-up must ASK something, not merely name a topic.
+ *
+ * Mid-thread, a bare fragment — "the free plan?", "on mobile" — is the shape
+ * ellipsis takes: the verb it belongs to was in the previous turn, and the
+ * fragment is a modifier of a question we cannot see. A first turn cannot be
+ * elliptical in that way, which is why this cue is required only when
+ * something precedes it.
+ *
+ * The count of tokens was tried here first and thrown away: it excluded "how
+ * do I install a plugin" and "how do I create a site" — two content tokens
+ * each, and both complete questions that a user asks second as readily as
+ * first. Length is not what separates a question from a fragment; a verb is.
+ */
+const QUESTION_CUES =
+  /\b(how|what|what'?s|where|when|which|who|whose|whom|can|could|do|does|did|is|are|am|was|were|will|would|should|must|may|explain|show|tell|list|need|want)\b/i
+
+/**
+ * Words and shapes that make a question depend on what came before it.
+ *
+ * Deliberately BROAD, and the asymmetry of the costs is why: a false positive
+ * here escalates a question that could have been answered from the docs — the
+ * behaviour that existed for every follow-up until this change, so the worst
+ * case is the status quo. A false negative answers a question nobody asked,
+ * with a citation under it, in a thread where the user can see we had the
+ * context and ignored it. These patterns are only ever consulted for a turn
+ * WITH history; a first question may say "that" as much as it likes.
+ */
+const CONTEXT_DEPENDENT_PATTERNS: readonly RegExp[] = [
+  // Pronouns and demonstratives standing in for a noun in the transcript.
+  // "does IT work on mobile", "how do I move THOSE".
+  /\b(it|its|it'?s|they|them|their|theirs|he|him|his|she|her|hers)\b/i,
+  /\b(that|this|these|those)\b/i,
+  // Naming an item of the previous answer by its position in it.
+  /\b(the|either|any|another|each)\s+(other|first|second|third|last|next|same|previous|latter|former)\b/i,
+  /\b(other|another|either)\s+one\b/i,
+  // Opening by attaching to the previous turn rather than starting a question.
+  /^\s*(and|but|so|or|then|also|plus|what about|how about|ok(ay)?|yes|no|yeah|nope|thanks?)\b/i,
+  // Elliptical follow-ups that carry the previous turn's verb phrase over.
+  /\b(why not|instead|as well|again|neither|both)\b/i,
+]
 
 /** Minimum characters of section text before a section counts as an answer. */
 const MIN_SECTION_CHARS = 200
@@ -342,26 +426,55 @@ export function questionIsAnswerableFromDocs(question: string): DeflectionRefusa
 }
 
 /**
+ * Whether a question can be read WITHOUT the conversation it was asked in.
+ *
+ * Only consulted for a turn that has history — see
+ * {@link CONTEXT_DEPENDENT_PATTERNS} for why the test errs towards "no", and
+ * the class docstring for why the gate is no longer simply "did anything
+ * precede this".
+ *
+ * Purely lexical, and that is a real limit worth naming: "how do I do the
+ * same for a blog post" is caught by `the same`, while "how do I change the
+ * colour" after a paragraph about buttons is not — nothing in those words
+ * says which colour. What saves that case is not this function but the raised
+ * evidence bar behind it, which such a question does not clear. The two gates
+ * are one argument in two halves: this one reads the question, that one reads
+ * the retrieval, and a follow-up must pass both.
+ */
+export function questionStandsAlone(question: string): boolean {
+  if (!QUESTION_CUES.test(question)) return false
+  for (const pattern of CONTEXT_DEPENDENT_PATTERNS) {
+    if (pattern.test(question)) return false
+  }
+  return true
+}
+
+/**
  * Decide whether the retrieved sections answer the question on their own, and
  * compose the answer when they do.
  *
  * `hasHistory` is passed rather than derived because the caller holds the
  * clamped history and this module must not grow an opinion about how history
- * is budgeted. It is a hard gate: a conversation in progress always escalates.
+ * is budgeted. It is not a hard gate any more (AGL-2486): a turn with history
+ * must additionally stand on its own words and clear the raised `FOLLOW_UP_*`
+ * bar, and escalates when it does not.
  */
 export function deflectToDocs(
   question: string,
   scored: readonly ScoredSection[],
   hasHistory: boolean,
 ): DeflectionVerdict {
-  if (hasHistory) return refuse('follow-up')
+  if (hasHistory && !questionStandsAlone(question)) return refuse('follow-up')
   const intent = questionIsAnswerableFromDocs(question)
   if (intent) return refuse(intent)
   if (!scored.length) return refuse('low-score')
 
+  const minTopScore = hasHistory ? FOLLOW_UP_MIN_TOP_SCORE : MIN_TOP_SCORE
+  const minPageMargin = hasHistory ? FOLLOW_UP_MIN_PAGE_MARGIN : MIN_PAGE_MARGIN
+
   const top = scored[0]
   const topScore = top.score
-  if (!(topScore >= MIN_TOP_SCORE)) return refuse('low-score', topScore)
+  if (!(topScore >= minTopScore)) return refuse('low-score', topScore)
 
   // Score by PAGE. Sections of one page agreeing is the signal; treating them
   // as rivals is how a strong, unambiguous match reads as a tie.
@@ -388,7 +501,7 @@ export function deflectToDocs(
   // nothing else. `Infinity` would be honest but propagates badly through the
   // telemetry, so a lone winner reports its own score as the margin.
   const pageMargin = rivalScore > 0 ? winnerScore / rivalScore : winnerScore
-  if (!(pageMargin >= MIN_PAGE_MARGIN)) return refuse('ambiguous', topScore, pageMargin)
+  if (!(pageMargin >= minPageMargin)) return refuse('ambiguous', topScore, pageMargin)
 
   const pageSections = scored.filter((entry) => entry.section.path === winner)
   const pageTokens = new Set<string>()
@@ -406,9 +519,15 @@ export function deflectToDocs(
     if (pageTokens.has(token)) covered += weight
   }
   const coverage = wanted > 0 ? covered / wanted : 0
+  // The relaxed floor is a FIRST-TURN allowance. It exists because coverage
+  // and dominance are evidence about the same thing, so an emphatic winner
+  // may carry a coverage miss — but mid-thread a coverage miss has a second
+  // reading: the part of the question the page ignored may be the part the
+  // conversation supplied. Turn one cannot mean that; a follow-up can, so it
+  // pays full coverage.
   const coveredEnough =
     coverage >= MIN_COVERAGE ||
-    (coverage >= RELAXED_COVERAGE && pageMargin >= STRONG_PAGE_MARGIN)
+    (!hasHistory && coverage >= RELAXED_COVERAGE && pageMargin >= STRONG_PAGE_MARGIN)
   if (!coveredEnough) {
     return refuse('low-coverage', topScore, pageMargin, coverage)
   }
@@ -484,4 +603,56 @@ export function composeDocsAnswer(sections: readonly AssistDocsSection[]): strin
     'That is straight from the documentation — the headings above link to the full page. If it did not cover what you meant, ask again with more detail and I will work through it with you.',
   )
   return parts.join('\n\n')
+}
+
+/** Closest-pages links offered when nothing could be answered outright. */
+const MAX_LINKED_SECTIONS = 4
+
+/**
+ * The graceful degrade: the closest pages we found, and an honest sentence
+ * saying why that is all there is (AGL-2486).
+ *
+ * ## Why this exists
+ *
+ * A deployment with no `ANTHROPIC_API_KEY` — which includes every self-hosted
+ * one on the day it comes up, and Aglyn's own production today — can answer
+ * only what retrieval is confident about. Everything else used to return a
+ * bare 501, which the panel printed as "Assist is not configured on this
+ * deployment". Zach met that on the SECOND question of a thread whose first
+ * question had just been answered in full, and read it as the product being
+ * broken. He was not wrong to: a capability refusal arriving after a working
+ * answer looks like a fault, not a limit.
+ *
+ * The self-host charter says every Aglyn-operated dependency must be
+ * configurable AND degrade cleanly. "Degrades cleanly" cannot mean "answers
+ * one question per thread and then refuses" — a keyless deployment still has
+ * the entire documentation corpus and a retrieval index over it, so the floor
+ * is the best pages we found, not nothing.
+ *
+ * ## What it may and may not say
+ *
+ * The no-fabrication rule applies here exactly as it does to a deflected
+ * answer, and is tighter in one respect: these pages did NOT clear the
+ * confidence bar, so this text must not claim they answer the question. It
+ * says they are the closest, which is true by construction — they are the
+ * top of the retrieval ranking — and every word around them is a fixed
+ * template plus a real section label and URL.
+ *
+ * It also must not name an env var. A user who wanted to read `501` would
+ * have opened the network tab; the operator-facing detail stays in the API
+ * error body, where an operator looks. This is the plain-English half.
+ */
+export function composeDocsLinksAnswer(
+  sections: readonly AssistDocsSection[],
+): string {
+  const links = sections
+    .slice(0, MAX_LINKED_SECTIONS)
+    .map((section) => `[${sectionLabel(section)}](${sectionUrl(section)})`)
+  if (!links.length) return ''
+  return [
+    'I could not find one page in the documentation that clearly answers that, and the part of me that talks a question through with you is not switched on for this deployment yet — an administrator has to finish setting it up.',
+    'These are the closest pages I found:',
+    links.join('\n'),
+    'If none of them cover it, asking again in different words often lands somewhere better.',
+  ].join('\n\n')
 }
