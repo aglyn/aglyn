@@ -561,3 +561,146 @@ describe('Markdown images resolve a media reference (AGL-1686)', () => {
     expect(container.querySelector('img')).toBeNull()
   })
 })
+
+/**
+ * The sidebar list ran past the bottom of the window (AGL-2486).
+ *
+ * The card an author wraps this in is `position: sticky`, and a sticky box
+ * taller than the viewport never scrolls into view — it pins and the rest is
+ * simply gone. Measured on the live Marketplace Publisher Agreement (14 `h2`s)
+ * in a 1100x480 window: the card stood 502px tall at `top: 96px`, overhanging
+ * the fold by 118px; entry 11 was sliced through its text at the window edge
+ * and 12, 13 and 14 could not be reached by any scroll — `ol.scrollTop` stayed
+ * 0 because the list was not a scroll box at all. Nothing said so.
+ *
+ * These assert the CSS the element emits, because jsdom has no layout: the
+ * heights above came from a real browser, and re-deriving them is a browser's
+ * job, not this file's. What this file can hold onto is that the rules exist,
+ * that they are a MAX height and not a height, and that they stay off the
+ * narrow layout.
+ */
+describe('the table of contents scrolls rather than clipping (AGL-2486)', () => {
+  /**
+   * Every CSS rule this render produced, as text. Emotion inserts through
+   * `CSSOM.insertRule` under jest, so the `<style>` tags are EMPTY and only
+   * `document.styleSheets` has the rules — a `textContent` reading returns
+   * "" and every `not.toContain` below it passes for the wrong reason.
+   */
+  const allCss = (): string[] => {
+    const rules: string[] = []
+    for (const sheet of [...(document.styleSheets as any)]) {
+      try {
+        for (const rule of [...(sheet.cssRules as any)]) {
+          rules.push(rule.cssText)
+        }
+      } catch {
+        /* a sheet jsdom cannot read has nothing to say */
+      }
+    }
+    return rules
+  }
+
+  const squash = (text: string) => text.replace(/\s+/g, '')
+
+  const emotionClass = (el: Element) =>
+    [...el.classList].find((name) => /^(css|mui)-/.test(name)) as string
+
+  /** The rule with no `@` around it: what EVERY viewport gets. */
+  const baseRule = (cls: string) =>
+    squash(allCss().find((rule) => rule.startsWith(`.${cls} {`)) ?? '')
+
+  /** The `@media (min-width:…)` block: what only the sidebar layout gets. */
+  const mediaRule = (cls: string) =>
+    squash(
+      allCss().find(
+        (rule) => rule.startsWith('@media') && rule.includes(`.${cls} `),
+      ) ?? '',
+    )
+
+  const renderToc = () => {
+    fillCanvas([{ $id: 'doc1', props: { content: DOC } }])
+    const { container } = render(<TableOfContents />)
+    const list = container.querySelector('ol') as HTMLElement
+    return { list, cls: emotionClass(list) }
+  }
+
+  it('bounds the list to the WINDOW and lets it scroll', () => {
+    const { cls } = renderToc()
+    const media = mediaRule(cls)
+    expect(media).toContain('overflow-y:auto')
+    // Viewport-relative, so it holds at any window size and at any zoom — a
+    // pixel bound would be wrong on the next screen it met.
+    expect(media).toMatch(/max-height:calc\(100vh-\d+px\)/)
+    // `dvh` where the browser has it: `vh` is the LARGEST viewport, so a
+    // window showing a toolbar would get a bound taller than its own space.
+    expect(media).toMatch(
+      /@supports\(height:100dvh\)\{[^}]*max-height:calc\(100dvh-\d+px\)/,
+    )
+    // Reaching the end of the list must not throw the page down a screen.
+    expect(media).toContain('overscroll-behavior:contain')
+  })
+
+  it('a short list gains NOTHING: no fixed height, no permanent gutter', () => {
+    // The four-entry TOCs (/legal/dmca, /legal/subprocessors) must look
+    // exactly as they did. `max-height` is inert until the content exceeds
+    // it and `auto` draws no scrollbar until there is something to scroll; a
+    // `height`, or `overflow: scroll`, would take dead space from every short
+    // document to fix the long ones.
+    const { cls } = renderToc()
+    const media = mediaRule(cls)
+    // Positive control first: an empty string would pass every line below.
+    expect(media).toContain('max-height:')
+    expect(media).not.toMatch(/[;{]height:/)
+    expect(media).not.toContain('overflow-y:scroll')
+    expect(media).not.toContain('scrollbar-gutter')
+  })
+
+  it('says that it scrolls — a drawn thumb and a fade at the cut', () => {
+    // The defect Zach reported was not the missing pixels, it was that the
+    // cut read as the end of the document. So the box opts out of the
+    // invisible-until-you-scroll overlay scrollbar, and its bottom edge fades
+    // instead of slicing a word in half.
+    const { cls } = renderToc()
+    const media = mediaRule(cls)
+    expect(media).toContain('scrollbar-width:thin')
+    expect(media).toMatch(/scrollbar-color:[^;]+transparent/)
+    expect(media).toContain('::-webkit-scrollbar-thumb')
+    // The fade rides a scroll-driven animation because a `scroll()` timeline
+    // on a box with nothing to scroll is INACTIVE and applies no styles —
+    // which is how "only when it overflows" is said in CSS, with no
+    // measuring and no JavaScript.
+    expect(media).toMatch(
+      /@supports\(animation-timeline:scroll\(\)\)\{[^}]*scroll\(selfblock\)/,
+    )
+    const keyframes = squash(
+      allCss().find((rule) =>
+        rule.startsWith('@keyframes aglyn-toc-overflow-fade'),
+      ) ?? '',
+    )
+    expect(keyframes).toContain(
+      'mask-image:linear-gradient(tobottom,#000calc(100%-28px),transparent)',
+    )
+    // …and it lets go before the end, so the LAST entry is never the one the
+    // affordance obscures.
+    expect(keyframes).toMatch(/100%\{[^}]*mask-image:none/)
+  })
+
+  it('leaves the stacked narrow layout alone', () => {
+    // Below `md` the TOC is a full-width block in the page flow, which has no
+    // clipping problem — bounding it there would plant a scroll trap in the
+    // middle of an article.
+    const { cls } = renderToc()
+    const base = baseRule(cls)
+    expect(base).toContain('list-style:none')
+    expect(base).not.toContain('max-height')
+    expect(base).not.toContain('overflow')
+    expect(base).not.toContain('animation')
+    // The bound exists, and it exists ONLY inside a min-width query.
+    expect(mediaRule(cls)).toMatch(/^@media\(min-width:\d+px\)/)
+    for (const rule of allCss()) {
+      if (rule.includes('max-height') && rule.includes(`.${cls} `)) {
+        expect(rule.startsWith('@media')).toBe(true)
+      }
+    }
+  })
+})

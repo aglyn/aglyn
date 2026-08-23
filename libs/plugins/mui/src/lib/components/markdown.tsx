@@ -20,6 +20,7 @@ import { mdiLanguageMarkdown, mdiTableOfContents } from '@aglyn/shared-data-mdi'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import Box, { type BoxProps } from '@mui/material/Box'
 import MuiLink from '@mui/material/Link'
+import type { Theme } from '@mui/material/styles'
 import Typography from '@mui/material/Typography'
 import { observer } from 'mobx-react-lite'
 import type { MouseEvent, ReactNode } from 'react'
@@ -485,6 +486,120 @@ export function scrollToHeading(anchor: Element, slug: string): boolean {
 }
 
 /**
+ * What the sidebar's chrome costs, above and below the list (AGL-2486).
+ *
+ * The list's bound is `100dvh` MINUS this, so it is a function of the window
+ * rather than a height somebody picked. Measured on the live
+ * `/legal/marketplace-publisher-agreement` sidebar, which is the shape every
+ * legal page uses: the card is `position: sticky; top: 96px` under the app
+ * bar, then 24px of card padding and 31px of "ON THIS PAGE" label sit above
+ * the list and 31px of padding below it — 182px of chrome. 200 leaves the
+ * card's bottom BORDER inside the window rather than flush against it, so
+ * the card reads as a card and not as a page that ran out.
+ *
+ * It is an allowance, not a contract: this component renders inside whatever
+ * the author built around it, and it cannot read that card's `top` offset.
+ * Being a MAX height, an allowance a little too generous only means a few
+ * pixels of the card sit below the fold; one a little too tight only means
+ * the scroll box starts a line sooner. Both are recoverable, which is the
+ * whole reason this is a `max-height` and not a `height`.
+ */
+const TOC_VIEWPORT_ALLOWANCE = '200px'
+
+/**
+ * The list is its own scroll box once it outgrows the window (AGL-2486).
+ *
+ * The bug: nothing here was bounded, and the card the author wraps this in is
+ * `position: sticky`. A sticky box taller than the viewport does not scroll
+ * into view — it pins at its `top` offset and everything past the window's
+ * bottom edge is simply unreachable. Measured on the Marketplace Publisher
+ * Agreement (14 `h2`s) in a 1100x480 window: the card stood 502px tall from
+ * `top: 96px` and overhung the fold by 118px, entry 11 was cut through the
+ * middle of its own text at the window edge, and 12 to 14 could not be
+ * reached by any scroll — `ol.scrollTop` stayed 0, because the list was not a
+ * scroll box at all. Which row gets cut moves with the window height and the
+ * browser zoom; the reported sighting was entry 8. Either way it did not read
+ * as "there is more", it read as a document with fewer sections than it has.
+ *
+ * Three things this deliberately is NOT:
+ *
+ * - NOT a `height`. A `max-height` is inert until the content exceeds it, so
+ *   the four-item TOCs (`/legal/dmca`, `/legal/subprocessors`) keep their
+ *   exact present box: no scroll region, no reserved gutter, no dead space.
+ *   That is also why `overflow-y` is `auto` and never `scroll`.
+ *
+ * - NOT applied below `md`. The bound only makes sense for a sidebar. In the
+ *   stacked narrow layout the TOC is a full-width block in the page flow, and
+ *   bounding it there would plant a scroll trap in the middle of an article
+ *   to solve a clipping problem that layout does not have.
+ *
+ * - NOT silent, and the FADE is the part that carries that. A scroll box a
+ *   reader cannot see is the same bug wearing a scrollbar: measured in Chrome
+ *   on macOS, `offsetWidth - clientWidth` on this list is 0 even with
+ *   `scrollbar-color` set — the platform draws an OVERLAY scrollbar, which is
+ *   invisible until you have already guessed to scroll. So the thumb styling
+ *   is the secondary cue, for the platforms that draw one at rest, and the
+ *   primary cue is a bottom fade: the cut stops being a slice through the
+ *   middle of a word and becomes an edge that visibly continues.
+ *
+ * The fade rides a scroll-driven animation on purpose: a `scroll()` timeline
+ * on a box with nothing to scroll is INACTIVE, so its animation applies no
+ * styles at all. That is the only way to say "fade only when overflowing" in
+ * CSS with no measuring and no JavaScript, and it degrades to plain
+ * unfaded-but-scrollable in a browser that lacks it. Verified both ways at
+ * 1100x480: the 14-entry list fades and scrolls, the 4-entry
+ * `/legal/subprocessors` list computes `mask-image: none` and does not.
+ *
+ * NO new attribute goes with this, deliberately. The three the element has —
+ * `forNodeId`, `heading`, `depth` — all answer "which headings does this
+ * list", and a "list height" field would hand the author back the very
+ * decision this bug is made of. The right answer is "as much of the window as
+ * there is", which is a thing CSS can work out and an author cannot type.
+ */
+const TABLE_OF_CONTENTS_LIST_SX = (theme: Theme) => ({
+  listStyle: 'none',
+  m: 0,
+  p: 0,
+  [theme.breakpoints.up('md')]: {
+    maxHeight: `calc(100vh - ${TOC_VIEWPORT_ALLOWANCE})`,
+    // `dvh` over `vh` where it exists: `vh` is the LARGEST viewport, so a
+    // window with a visible toolbar gets a bound taller than the space it
+    // has — which is the bug again, in miniature.
+    '@supports (height: 100dvh)': {
+      maxHeight: `calc(100dvh - ${TOC_VIEWPORT_ALLOWANCE})`,
+    },
+    overflowY: 'auto',
+    // Reaching the end of the list must not then throw the page down a
+    // screen — the reader was navigating the sidebar, not the document.
+    overscrollBehavior: 'contain',
+    scrollbarWidth: 'thin',
+    // `text.disabled`, not `divider`: a 12%-black thumb is one you have to
+    // already know is there. `3px` is QUOTED because a bare 3 is a theme
+    // radius STEP and lands as 12px on a 6px-wide thumb.
+    scrollbarColor: `${theme.palette.text.disabled} transparent`,
+    '&::-webkit-scrollbar': { width: 6 },
+    '&::-webkit-scrollbar-thumb': {
+      backgroundColor: theme.palette.text.disabled,
+      borderRadius: '3px',
+    },
+    '@supports (animation-timeline: scroll())': {
+      animation: 'aglyn-toc-overflow-fade linear',
+      animationTimeline: 'scroll(self block)',
+    },
+  },
+  // Held at the fade until the list is all but scrolled out, then dropped, so
+  // the final entry is never the one the affordance obscures. `none` does not
+  // interpolate with a gradient, so that last step is a clean switch.
+  '@keyframes aglyn-toc-overflow-fade': {
+    '0%, 92%': {
+      maskImage:
+        'linear-gradient(to bottom, #000 calc(100% - 28px), transparent)',
+    },
+    '100%': { maskImage: 'none' },
+  },
+})
+
+/**
  * "On this page" (AGL-1162) — the headings of a Markdown element on the same
  * screen, as working anchor links.
  *
@@ -575,7 +690,7 @@ const TableOfContents = observer(
             {title}
           </Typography>
         ) : null}
-        <Box component="ol" sx={{ listStyle: 'none', m: 0, p: 0 }}>
+        <Box component="ol" sx={TABLE_OF_CONTENTS_LIST_SX}>
           {entries.map((entry) => (
             <Box component="li" key={entry.slug} sx={{ mb: 0.75 }}>
               <MuiLink
