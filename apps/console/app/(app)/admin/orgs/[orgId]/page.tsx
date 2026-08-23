@@ -72,6 +72,7 @@ import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import StaffHostFormCountersChips from '../../../../../components/staff-host-form-counters.component'
 import StaffOrgActions from '../../../../../components/staff-org-actions.component'
+import StaffOrgRefundCard from '../../../../../components/staff-org-refund-card.component'
 import { useImpersonationReason } from '../../../../../components/staff-impersonation-dialog.component'
 import StaffOrgUsageTable, {
   type StaffOrgUsageMonth,
@@ -283,6 +284,11 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     stripeError?: string
   } | null>(null)
   const [billingError, setBillingError] = useState<string | null>(null)
+  // Bumped by the refund card (AGL-2486): a settled refund changes the
+  // invoice history beside it, and a panel still showing the pre-refund
+  // figures is exactly the readout an operator would use to decide whether
+  // to refund again.
+  const [billingNonce, setBillingNonce] = useState(0)
   useEffect(() => {
     if (!isStaff || !orgId || !user) return
     let active = true
@@ -311,7 +317,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     return () => {
       active = false
     }
-  }, [isStaff, orgId, user])
+  }, [isStaff, orgId, user, billingNonce])
 
   // Metered usage (AGL-939): the last 12 monthly rollups from
   // /api/admin/org-usage — the endpoint the list page's Usage dialog already
@@ -1565,6 +1571,19 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                         </Stack>
                       )}
                     </CardDisplay>
+                  ),
+                },
+                {
+                  children: (
+                    // Refunds from the org page (AGL-2486). Sits directly
+                    // after the invoice history on purpose: the charge an
+                    // operator is about to refund is the one they were just
+                    // reading about, and until now the next step was to leave
+                    // for the Stripe dashboard — where nothing recorded why.
+                    <StaffOrgRefundCard
+                      orgId={orgId}
+                      onRefunded={() => setBillingNonce((nonce) => nonce + 1)}
+                    />
                   ),
                 },
                 {
