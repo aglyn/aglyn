@@ -123,6 +123,7 @@ export * from './screen-route'
 export * from './host-naming'
 export * from './marketplace-verification'
 export * from './name-search'
+export * from './name-match'
 export * from './api-plugins'
 export * from './plugin-api-rate-limit'
 // The same-origin gate on visitor-facing plugin writes (AGL-1880). After

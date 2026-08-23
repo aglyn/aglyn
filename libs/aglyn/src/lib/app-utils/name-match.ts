@@ -16,8 +16,15 @@
  */
 
 /**
- * How console search decides a row matches, and how it orders what matched
- * (AGL-2486).
+ * How a name is matched against what somebody typed, and how matches are
+ * ordered (AGL-2486).
+ *
+ * Shared by console global search AND by `useSwitcherCollection`, which backs
+ * the site and screen switchers. It lives here rather than in the console
+ * because those switchers are in `libs/tenant/feature/instance` and had the
+ * SAME defect: both surfaces matched by a Firestore prefix range, so both
+ * failed the "Main Layout" case, and both silently omitted any document
+ * missing the field they ordered by. One matcher means fixing it once.
  *
  * ## The defect this closes
  *

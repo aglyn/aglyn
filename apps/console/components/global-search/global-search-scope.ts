@@ -52,7 +52,7 @@
  * today, which is the measure of how far that path was ever taken.
  *
  * So: `useGlobalSearch` reads a capped window per collection, ONCE per page
- * mount, and `global-search-match.ts` matches over all of it. That fixes the
+ * mount, and `name-match.ts` matches over all of it. That fixes the
  * disappearing "Home", and it is what lets `layout` find "Main Layout".
  *
  * ## Read cost is a design input here, not an afterthought

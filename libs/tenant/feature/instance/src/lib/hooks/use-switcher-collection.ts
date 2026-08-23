@@ -16,9 +16,10 @@
  */
 'use client'
 
-import { nameSearchKey } from '@aglyn/aglyn'
+import { compareScored, nameSearchKey, scoreMatch } from '@aglyn/aglyn'
 import {
   collection,
+  documentId,
   endAt,
   type DocumentData,
   type Firestore,
@@ -67,6 +68,21 @@ export interface UseSwitcherCollectionOptions<T> {
   idleLimit?: number
   /** Result cap for the name-prefix search (default 20). */
   searchLimit?: number
+  /**
+   * The field holding the human-readable name, matched client-side.
+   *
+   * Both switchers store it as `displayName`, which is the default; a caller
+   * whose rows name themselves differently passes its own.
+   */
+  nameField?: string
+  /**
+   * How many documents the client-side pass reads (default 50).
+   *
+   * Fetched ONCE per scope and cached for the life of the mount, so typing
+   * costs nothing after the first character — see the search-mode note on the
+   * hook itself.
+   */
+  searchWindow?: number
   /** Field written with the doc id (default `$id`). */
   idField?: string
   /** Client post-filter, e.g. drop soft-deleted or email screens. */
@@ -151,6 +167,8 @@ export function useSwitcherCollection<T = DocumentData>(
     query: rawQuery,
     idleLimit = 10,
     searchLimit = 20,
+    nameField = 'displayName',
+    searchWindow = 50,
     idField = '$id',
     filter,
     deps,
@@ -166,6 +184,16 @@ export function useSwitcherCollection<T = DocumentData>(
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const requestRef = useRef(0)
+  /**
+   * The client-side search window, cached for the life of this SCOPE.
+   *
+   * A ref rather than state: filling it must not itself cause a render, and
+   * the render that matters is the one `setItems` already causes. Cleared by
+   * the scope effect below, which is the same place the rows are cleared —
+   * keeping the two together is what stops site A's window being matched
+   * against while standing on site B.
+   */
+  const windowRef = useRef<{ rows: any[]; fromCache?: boolean } | null>(null)
 
   // Clear on a genuine scope change (host A → host B) so the previous scope's
   // rows never bleed into the new one; a query change keeps the prior rows so
@@ -175,6 +203,7 @@ export function useSwitcherCollection<T = DocumentData>(
     setItems([])
     setLoading(true)
     setError(false)
+    windowRef.current = null
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
 
@@ -188,26 +217,122 @@ export function useSwitcherCollection<T = DocumentData>(
       setItems([])
       setLoading(true)
       setError(false)
+      // A hold means the scope is not trustworthy yet, so anything already
+      // read under it must not survive into the scope that unblocks.
+      windowRef.current = null
       return
     }
     setLoading(true)
     const ref = collection(firestore, path[0], ...path.slice(1))
-    const constraints = [
-      ...(whereClause
-        ? [where(whereClause[0], whereClause[1], whereClause[2])]
-        : []),
-      ...(hasQuery
-        ? [orderBy('nameLower'), startAt(key), endAt(key + '\uf8ff'), limit(searchLimit)]
-        : [orderBy('updatedAt', 'desc'), limit(idleLimit)]),
-    ]
-    getDocs(query(ref, ...constraints))
-      .then((snapshot) => {
-        if (requestRef.current !== requestId) return // superseded
-        const rows = snapshot.docs.map((docSnap) => {
-          const value = { ...docSnap.data() } as Record<string, unknown>
-          if (idField) value[idField] = docSnap.id
-          return value as T
+    const scopeFilter = whereClause
+      ? [where(whereClause[0], whereClause[1], whereClause[2])]
+      : []
+    const toRows = (snapshot: { docs: any[] }) =>
+      snapshot.docs.map((docSnap) => {
+        const value = { ...docSnap.data() } as Record<string, unknown>
+        if (idField) value[idField] = docSnap.id
+        return value as T
+      })
+
+    /**
+     * SEARCH MODE (AGL-2486) — a client-side window first, the prefix range
+     * only when the window cannot have held everything.
+     *
+     * This used to be the prefix range alone, and that had two defects which
+     * look like one from the outside.
+     *
+     * **It hid documents.** `orderBy('nameLower')` makes Firestore OMIT every
+     * document that does not carry the field — and `nameLower` is optional,
+     * stamped by three write paths for one resource kind. A document written
+     * any other way stayed visible in the idle list and vanished the instant
+     * you typed. Measured against the seeded emulator: a screen named "Home"
+     * listed, and `home` returned nothing. Production happens to be clean
+     * today (68/68 live screens and 10/10 membership rows carry it, checked
+     * with the Admin SDK), so this is a LATENT defect rather than a firing
+     * one — but it is armed for the next write path that forgets, and nothing
+     * would fail when it does. Ordering the window by `documentId()`, which no
+     * document can be missing, disarms it permanently: correctness stops
+     * depending on a field staying in step across write paths.
+     *
+     * **And it could not match the way people type.** A prefix over the whole
+     * stored name means somebody looking for "Main Layout" who types `layout`
+     * gets nothing. That one IS firing, on every surface, today.
+     *
+     * The window is read ONCE per scope and cached for the life of the mount,
+     * so the common case — a site whose collection fits inside it — costs one
+     * read burst and then nothing at all per keystroke, which is CHEAPER than
+     * the query it replaces. The prefix range is kept and issued only when the
+     * window came back full, because that is the case AGL-838 built it for: a
+     * host with hundreds of screens must still find one that is not in the
+     * window. Dropping it to simplify would have regressed exactly the
+     * property the switcher exists to provide.
+     */
+    const searchRead = async () => {
+      let windowRows = windowRef.current
+      if (!windowRows) {
+        const windowSnapshot = await getDocs(
+          query(ref, ...scopeFilter, orderBy(documentId()), limit(searchWindow)),
+        )
+        windowRows = {
+          rows: toRows(windowSnapshot),
+          fromCache: windowSnapshot.metadata?.fromCache,
+        }
+        windowRef.current = windowRows
+      }
+      const scored = windowRows.rows
+        .map((row: any) => {
+          const label = String(row?.[nameField] ?? '')
+          const score = scoreMatch({ name: label }, debounced)
+          return score === null ? null : { row, score, label }
         })
+        .filter(Boolean) as Array<{ row: T; score: number; label: string }>
+
+      // Only reach past the window when the window could not have held the
+      // whole collection. A partial window is proof there is nothing beyond it.
+      let beyond: T[] = []
+      let beyondFromCache: boolean | undefined
+      if (windowRows.rows.length >= searchWindow) {
+        const prefixSnapshot = await getDocs(
+          query(
+            ref,
+            ...scopeFilter,
+            orderBy('nameLower'),
+            startAt(key),
+            endAt(key + '\uf8ff'),
+            limit(searchLimit),
+          ),
+        )
+        beyondFromCache = prefixSnapshot.metadata?.fromCache
+        beyond = toRows(prefixSnapshot)
+      }
+
+      const seen = new Set(scored.map((hit) => (hit.row as any)?.[idField]))
+      const merged = [
+        ...scored
+          .sort((a, b) => compareScored(a, b))
+          .map((hit) => hit.row),
+        ...beyond.filter((row: any) => !seen.has(row?.[idField])),
+      ]
+      return {
+        rows: merged.slice(0, searchLimit),
+        fromCache: windowRows.fromCache === false ? false : beyondFromCache,
+      }
+    }
+
+    const read = hasQuery
+      ? searchRead()
+      : getDocs(
+          query(ref, ...scopeFilter, orderBy('updatedAt', 'desc'), limit(idleLimit)),
+        ).then((snapshot) => ({
+          rows: toRows(snapshot),
+          fromCache: snapshot.metadata?.fromCache,
+        }))
+
+    read
+      .then((result) => {
+        if (requestRef.current !== requestId) return // superseded
+        const snapshot = { metadata: { fromCache: result.fromCache } }
+        const rows = result.rows
         setItems(filter ? rows.filter(filter) : rows)
         setError(false)
         setLoading(false)

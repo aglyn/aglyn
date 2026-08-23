@@ -45,7 +45,7 @@ import {
   resolveGlobalSearchScope,
 } from './global-search-scope'
 import useGlobalSearch, { SEARCH_WINDOW } from './use-global-search'
-import { MIN_QUERY_LENGTH } from './global-search-match'
+import { MIN_QUERY_LENGTH } from '@aglyn/aglyn'
 
 export interface GlobalSearchDialogProps {
   open: boolean

@@ -33,7 +33,7 @@ import {
   MIN_QUERY_LENGTH,
   scoreMatch,
   searchWords,
-} from './global-search-match'
+} from './name-match'
 
 const score = (name: string, query: string, extra?: string[]) =>
   scoreMatch({ name, extra }, query)

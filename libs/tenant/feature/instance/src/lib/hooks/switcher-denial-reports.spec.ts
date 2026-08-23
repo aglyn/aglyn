@@ -45,6 +45,7 @@ import {
 const mockGetDocs = jest.fn()
 jest.mock('firebase/firestore', () => ({
   collection: (...path: unknown[]) => ({ path }),
+  documentId: () => '__name__',
   endAt: () => ({}),
   getDocs: (...args: unknown[]) => mockGetDocs(...args),
   limit: () => ({}),
@@ -54,8 +55,15 @@ jest.mock('firebase/firestore', () => ({
   where: () => ({}),
 }))
 
+// The search path of the hook also reaches for the shared matcher (AGL-2486).
+// These tests only exercise the idle path today, so the additions are
+// insurance: without them a future search case here fails as
+// "scoreMatch is not a function", which names the mock rather than the defect.
 jest.mock('@aglyn/aglyn', () => ({
   nameSearchKey: (value: string) => value.toLowerCase(),
+  scoreMatch: ({ name }: { name: string }, query: string) =>
+    name.toLowerCase().includes(query.toLowerCase()) ? 1 : null,
+  compareScored: () => 0,
 }))
 
 const onDenied = jest.fn()

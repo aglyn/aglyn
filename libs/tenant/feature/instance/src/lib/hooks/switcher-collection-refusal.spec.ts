@@ -43,6 +43,11 @@ jest.mock('firebase/firestore', () => ({
   }),
   query: (ref: unknown) => ref,
   where: () => ({ kind: 'where' }),
+  // The search path windows by document id (AGL-2486). Absent from this
+  // double the hook calls `undefined()`, which lands in its own catch and
+  // reports a REFUSAL — so the suite would blame a permission failure for a
+  // gap in the mock.
+  documentId: () => '__name__',
   orderBy: () => ({ kind: 'orderBy' }),
   startAt: () => ({ kind: 'startAt' }),
   endAt: () => ({ kind: 'endAt' }),

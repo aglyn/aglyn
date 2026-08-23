@@ -27,11 +27,7 @@ import {
   type Firestore,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  compareScored,
-  isSearchableQuery,
-  scoreMatch,
-} from './global-search-match'
+import { compareScored, isSearchableQuery, scoreMatch } from '@aglyn/aglyn'
 import type {
   GlobalSearchEntity,
   GlobalSearchEntityDef,
