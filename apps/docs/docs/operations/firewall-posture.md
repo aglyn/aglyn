@@ -58,6 +58,31 @@ and it will send you off rewriting a value that was correct all along.
 Custom rules use the same PATCH surface (`rules.insert`, `rules.update`,
 `rules.remove`), so there is never a reason to reach for `PUT`.
 
+### That same error also means "your description is too long"
+
+`value.description` is capped at **256 characters**, and exceeding it produces
+the *identical* ``Invalid request: `action` should be equal to constant`` — no
+mention of `description`, and no mention of a length. Measured 2026-08-23: 250
+characters validates, 260 does not.
+
+This is very likely why `rules.insert` was written off as "also fails this way"
+when the console rules first went in, and why a `PUT` was reached for instead.
+`rules.insert` works fine; the description was just too long.
+
+### Validating a rule body without writing anything
+
+Send it as `rules.update` against an id that does not exist. The schema is
+checked **before** the lookup:
+
+| Response | Meaning |
+| --- | --- |
+| `404 Rule not found: …` | the body shape is **valid** |
+| ``400 `action` should be equal to constant`` | the body shape is **invalid** |
+
+That is a dry run against the real validator with no chance of leaving a
+half-built rule behind — better than inserting a probe rule and deleting it,
+because the delete can fail.
+
 ## Running the check
 
 ```bash
@@ -119,14 +144,14 @@ repo are world-readable.
 
 ## Current posture
 
-Measured 2026-08-21, after the console was closed (see below).
+Measured 2026-08-23.
 
 | Project | Serves | Posture |
 | --- | --- | --- |
 | `aglyn-tenant` | every customer site on `*.aglyn.app` + custom domains | ✅ protected — challenge, 2 scoped bypass rules |
 | `aglyn-docs` | `docs.aglyn.com` | ✅ protected — challenge, 1 scoped bypass rule |
-| `aglyn-console` | `app.aglyn.com` — sign-in, billing, staff surfaces | ✅ protected — challenge, 2 scoped bypass rules |
-| `aglyn-plugins` | `plugins.aglyn.com` — plugin loader origin | ⚠️ **no WAF config, and never has had one** |
+| `aglyn-console` | `app.aglyn.com` — sign-in, billing, staff surfaces | ✅ protected — challenge, 3 scoped bypass rules |
+| `aglyn-plugins` | `plugins.aglyn.com` — plugin loader origin | ⚠️ **no WAF config** — reviewed, deliberate |
 
 ### How the console was closed, and why the order mattered
 
@@ -153,26 +178,101 @@ refused **401** (the challenge was bypassed, authentication was not), and an
 ordinary console route answered the same client **429**. A single request that
 merely succeeds proves only half of that.
 
-### The remaining gap: `aglyn-plugins`
+### Protecting the console broke the plugin loader
+
+Two days after the console was closed, the plugin sandbox was found broken on
+every site using a **verified custom domain** — and nothing had noticed,
+because the failure surfaces as a blank iframe with the reason only in a
+browser console log.
+
+`tools/plugin-loader/origin/api/load.mjs` builds the sandbox document's CSP
+from two **public, unauthenticated, read-only** console endpoints, fetched
+**server-side from inside its own serverless function**:
+
+| Endpoint | Feeds |
+| --- | --- |
+| `/api/marketplace/listing-versions` | the plugin's declared `connect-src` origins |
+| `/api/plugin-host-origins/{hostId}` | the framing site's verified custom domain, for `frame-ancestors` |
+
+A function's `fetch` has no browser to solve a challenge, and it must not be
+given the probe token — that token is scoped to *our own scripts*, and
+production infrastructure should not borrow it. So both calls got a **429
+checkpoint**, the loader folded them to `null`, and took its fail-strict path.
+
+Failing closed is the right design, but the second consequence is an **outage,
+not a degradation**: with no extra ancestor, `frame-ancestors` omits the
+customer's own domain and the browser refuses the iframe outright.
+
+Repaired on 2026-08-23 with a third bypass rule, `Plugin loader control plane
+bypass` — one `path eq /api/marketplace/listing-versions` group and one
+`path pre /api/plugin-host-origins` group. `eq` on the first is deliberate:
+`pre` would also admit `/api/marketplace/listing-versions-*`. Both endpoints
+are public and read-only, and the publisher view (`?scope=publisher`) verifies
+its own Firebase ID token and **401s** without one — so this bypasses the bot
+challenge and nothing else.
+
+Measured before and after on host `DXnRbPH4CQ` (cname `aglyn.com`):
+
+```text
+before  frame-ancestors https://app.aglyn.com https://*.aglyn.app
+after   frame-ancestors https://app.aglyn.com https://*.aglyn.app https://aglyn.com
+```
+
+…and a host id with **no** custom domain still gains nothing, so the difference
+is the lookup succeeding rather than a blanket widening. Both directions were
+checked: `/api/marketplace/publish`, `/api/marketplace/listing-versions-x` and
+an ordinary console route all still answer **429**.
+
+**The general lesson:** when you enable bot protection, enumerate the callers
+that are *your own server-side code fetching your own public endpoints*. They
+look like third-party bots to the WAF, they cannot solve a challenge, and their
+failure is silent.
+
+### The remaining gap: `aglyn-plugins` — reviewed, and deliberately open
 
 `GET /v1/security/firewall/config/active` still answers **404** for it, and a
 404 means *no config has ever been created* — **not** "a default posture
 applies". `GET /v1/security/firewall/config` returns
 `{"active":null,"draft":null,"versions":[]}`: zero versions, ever.
 
-It is deliberately still open. `plugins.aglyn.com` is the plugin loader origin,
-fetched by **customer sites and by the plugin iframe itself** — traffic Aglyn
-does not control and cannot hand a bypass header to. A challenge there has to
-be reconciled with that first.
+Reviewed on 2026-08-23. **This is not a confidentiality or integrity exposure.**
+The origin serves exactly two things, and `/` is a 404:
 
-It is declared in the posture table as `expect: 'unprotected'` with a written
+- `GET /load` — the sandbox HTML shell plus a per-request CSP. No secrets, no
+  user data, no auth, no session; its whole content ships in this repo.
+- `GET /artifacts/*` — an edge rewrite to the console's
+  `/api/plugin-artifacts/*`, streaming content-addressed plugin bundles.
+
+| Risk | Verdict |
+| --- | --- |
+| **Confidentiality** | Nothing to leak. Bundles are deliberately public code; a URL needs the exact sha256, and anyone entitled to the listing already has it. |
+| **Integrity** | Not a WAF's job here. Every loader re-hashes the bundle against the pinned sha256 before executing a byte, realm bundles carry a platform Ed25519 signature, the iframe owns its own sandbox attribute, and the CSP is per-manifest. The real integrity risk is a malicious plugin being **published**, which review answers. |
+| **Cost / availability** | **The real exposure.** `/load` is `Cache-Control: private, no-store`, so every request is a function invocation plus up to two console calls — an unauthenticated, uncacheable ~3× amplifier. That is a bill, not a breach. |
+
+**A challenge is ruled out on the merits, not deferred.** `/load` is fetched by
+visitors to customer sites and by the plugin iframe itself — traffic Aglyn
+neither controls nor can hand a bypass header. A challenge there breaks live
+customer sites, which is far worse than the gap.
+
+If abuse ever appears, in order of proportionality:
+
+1. **Make `/load` cacheable.** It is a pure function of its query string; an
+   `s-maxage` would let the CDN absorb a flood for free. Bigger win than any
+   firewall rule, and the only one that also cuts steady-state cost.
+2. A Vercel **rate-limit** custom rule on `/load` keyed by IP, generous enough
+   that a real visitor never meets it.
+3. Managed bot protection with action **`log`**, for visibility only.
+
+Never `challenge`, never `deny`.
+
+It stays declared in the posture table as `expect: 'unprotected'` with that
 rationale, so it is reported as a loud `GAP` on every run and fails under
 `--strict`. It is still asserted: if it quietly *gains* a config, the run
 **fails**, so the table can never silently describe a fiction.
 
 ## Guarding the guard
 
-`npm run test:firewall-posture` runs 42 cases, each damaging exactly one thing
+`npm run test:firewall-posture` runs 48 cases, each damaging exactly one thing
 in a known-good config and asserting the **specific** finding — not merely that
 the result is false. A test that only checks `ok === false` passes just as
 happily when the detector has collapsed into `return false`.

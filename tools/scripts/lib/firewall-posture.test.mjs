@@ -95,9 +95,10 @@ function healthyTenantConfig() {
 }
 
 /**
- * The console as it was actually deployed on 2026-08-21: the probe rule, plus
- * ONE machine-traffic rule that is a single hole with twelve mouths — eleven
- * exact paths and one `/api/health` prefix.
+ * The console as actually deployed: the probe rule; ONE machine-traffic rule
+ * that is a single hole with twelve mouths (eleven exact paths and one
+ * `/api/health` prefix); and, since 2026-08-23, the plugin loader control
+ * plane bypass — one exact path plus one prefix.
  */
 function healthyConsoleConfig() {
   const paths = [
@@ -138,6 +139,17 @@ function healthyConsoleConfig() {
         conditionGroup: [
           { conditions: [{ op: 'pre', type: 'path', value: '/api/health' }] },
           ...paths.map((value) => ({ conditions: [{ op: 'eq', type: 'path', value }] })),
+        ],
+      },
+      {
+        name: 'Plugin loader control plane bypass',
+        id: 'rule_loader_console',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [
+          { conditions: [{ op: 'eq', type: 'path', value: '/api/marketplace/listing-versions' }] },
+          { conditions: [{ op: 'pre', type: 'path', value: '/api/plugin-host-origins' }] },
         ],
       },
     ],
@@ -368,6 +380,81 @@ test('losing the machine-traffic rule fails — billing and every cron would be 
   assert.match(result.findings.join('\n'), /"Machine traffic bypass" is MISSING/)
 })
 
+// ── The plugin loader control plane bypass (AGL-2483, 2026-08-23) ──────────
+//
+// This rule exists because challenging these two endpoints does not degrade
+// the plugin sandbox, it BREAKS it: with the host-origins lookup blocked, the
+// loader omits the customer's own domain from `frame-ancestors` and the
+// browser refuses the iframe. So the failure direction of losing this rule is
+// a customer-visible outage, and each decay below has to be caught by name.
+
+const LOADER_RULE = 'Plugin loader control plane bypass'
+
+test('losing the loader bypass fails — custom-domain sites could not frame a plugin', () => {
+  const config = healthyConsoleConfig()
+  config.rules = config.rules.filter((r) => r.name !== LOADER_RULE)
+  const result = evalConsole(config)
+  assert.equal(result.ok, false)
+  assert.match(result.findings.join('\n'), /"Plugin loader control plane bypass" is MISSING/)
+})
+
+test('the loader bypass deactivated fails', () => {
+  const config = healthyConsoleConfig()
+  ruleNamed(config, LOADER_RULE).active = false
+  const result = evalConsole(config)
+  assert.equal(result.ok, false)
+  assert.match(result.findings.join('\n'), /Plugin loader control plane bypass" is present but INACTIVE/)
+})
+
+test('listing-versions widened from `eq` to `pre` fails — it would admit listing-versions-*', () => {
+  // The sharp one. `pre` looks like a harmless generalisation and reads
+  // identically in the Vercel UI, but it opens every sibling route whose path
+  // merely STARTS with the declared one.
+  const config = healthyConsoleConfig()
+  const group = ruleNamed(config, LOADER_RULE).conditionGroup.find((g) =>
+    g.conditions.some((c) => c.value === '/api/marketplace/listing-versions'),
+  )
+  group.conditions[0].op = 'pre'
+  const result = evalConsole(config)
+  assert.equal(result.ok, false)
+  assert.match(result.findings.join('\n'), /NO LONGER REQUIRES path eq "\/api\/marketplace\/listing-versions"/)
+})
+
+test('a THIRD group on the loader bypass, for an undeclared path, fails', () => {
+  // Groups are OR'd, so a rule can be re-opened without touching either
+  // existing group. Appending `/api/admin` here would hand the whole staff
+  // surface a bot-protection bypass while both declared groups still read
+  // exactly right.
+  const config = healthyConsoleConfig()
+  ruleNamed(config, LOADER_RULE).conditionGroup.push({
+    conditions: [{ op: 'pre', type: 'path', value: '/api/admin' }],
+  })
+  const result = evalConsole(config)
+  assert.equal(result.ok, false)
+  assert.match(result.findings.join('\n'), /condition group 3 of 3/)
+})
+
+test('the host-origins prefix retargeted to another route fails', () => {
+  const config = healthyConsoleConfig()
+  const group = ruleNamed(config, LOADER_RULE).conditionGroup.find((g) =>
+    g.conditions.some((c) => c.value === '/api/plugin-host-origins'),
+  )
+  group.conditions[0].value = '/api/plugin'
+  const result = evalConsole(config)
+  assert.equal(result.ok, false)
+  // Named specifically: `/api/plugin` also prefixes `/api/plugins/run-jobs`,
+  // so this widening would hand the job runner a second, undeclared bypass.
+  assert.match(result.findings.join('\n'), /NO LONGER REQUIRES path eq "\/api\/marketplace\/listing-versions"/)
+})
+
+test('the loader bypass mitigating with something other than bypass fails', () => {
+  const config = healthyConsoleConfig()
+  ruleNamed(config, LOADER_RULE).action = bypass('challenge')
+  const result = evalConsole(config)
+  assert.equal(result.ok, false)
+  assert.match(result.findings.join('\n'), /no longer mitigates with "bypass"/)
+})
+
 // ── Aggregate + strict mode ────────────────────────────────────────────────
 
 function configsMatchingLiveToday() {
@@ -385,7 +472,7 @@ function docsConfig() {
   return config
 }
 
-test('the posture measured live on 2026-08-21, after the console was protected, passes', () => {
+test('the posture measured live on 2026-08-23, after the loader bypass went in, passes', () => {
   const result = evaluatePosture({ configs: configsMatchingLiveToday() })
   assert.equal(result.ok, true)
   assert.equal(result.failedCount, 0)

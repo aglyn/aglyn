@@ -59,6 +59,28 @@
 //
 // ⛔ Do not "simplify" any tooling here into a PUT. The 200 is the danger.
 //
+// ## That same error message also means "your description is too long"
+//
+// `value.description` is capped at **256 characters**, and exceeding it
+// produces the identical ``Invalid request: `action` should be equal to
+// constant`` — no mention of `description`, no mention of a length. Measured
+// 2026-08-23: 250 chars validates, 260 does not. This is very likely why
+// `rules.insert` was written off as "also failed this way" when the console
+// rules first went in, and why a PUT was reached for instead. `rules.insert`
+// works fine; the description was just too long.
+//
+// ## Validating a rule body WITHOUT writing anything
+//
+// Send it as `rules.update` against an id that does not exist. The schema is
+// checked BEFORE the lookup, so:
+//
+//   HTTP 404 "Rule not found: …"                      → the shape is VALID
+//   HTTP 400 "`action` should be equal to constant"   → the shape is INVALID
+//
+// That gives a dry run against the real validator with no chance of leaving a
+// half-built rule behind — which beats inserting a probe rule and deleting it,
+// because the delete can fail.
+//
 // ═══════════════════════════════════════════════════════════════════════════
 //
 // ## Why a bypass rule needs its SCOPE asserted, not just its presence
@@ -207,6 +229,53 @@ export const EXPECTED_POSTURE = Object.freeze([
           Object.freeze({ type: 'path', op: 'pre', value: '/api/health' }),
         ]),
       }),
+      Object.freeze({
+        name: 'Plugin loader control plane bypass',
+        why: 'plugins.aglyn.com/load fetches both of these SERVER-SIDE and can carry no bypass header; challenged, a site on a verified custom domain cannot frame a plugin at all',
+        // ADDED 2026-08-23 (AGL-2483), repairing a live break that the console
+        // enablement two days earlier had introduced and nothing had noticed.
+        //
+        // `tools/plugin-loader/origin/api/load.mjs` fetches two PUBLIC,
+        // unauthenticated, read-only console endpoints from inside its own
+        // serverless function, to build the sandbox document's CSP:
+        //
+        //   /api/marketplace/listing-versions  → the plugin's declared
+        //       `connect-src` origins
+        //   /api/plugin-host-origins/{hostId}  → the framing site's VERIFIED
+        //       custom domain, for `frame-ancestors`
+        //
+        // A function's `fetch` has no browser to solve a challenge and cannot
+        // be given the probe token — that token is scoped to our own scripts,
+        // and production infrastructure must not borrow it. So both calls got
+        // a 429 checkpoint, `fetchJson` folded them to null, and the loader
+        // took its fail-strict path. Failing CLOSED is the right design, but
+        // the SECOND consequence is a hard outage rather than a degradation:
+        // with no extra ancestor, `frame-ancestors` omits the customer's own
+        // domain and the browser blocks the iframe outright — a blank plugin
+        // on every custom-domain site, with the reason only in a console log.
+        //
+        // MEASURED on 2026-08-23, before and after, on host `DXnRbPH4CQ`
+        // (cname aglyn.com):
+        //   before  frame-ancestors app.aglyn.com *.aglyn.app
+        //   after   frame-ancestors app.aglyn.com *.aglyn.app https://aglyn.com
+        // and a host id with no custom domain still gains nothing, so the
+        // difference is the lookup succeeding rather than a blanket widening.
+        //
+        // Scope: both endpoints are public by design and read-only. The
+        // publisher view of listing-versions (`?scope=publisher`) verifies its
+        // own Firebase ID token and 401s without one, so this bypasses the bot
+        // challenge and nothing else. `eq` on listing-versions is deliberate —
+        // `pre` would also admit `/api/marketplace/listing-versions-*`.
+        conditions: Object.freeze([
+          Object.freeze({ type: 'path', op: 'eq', value: '/api/marketplace/listing-versions' }),
+        ]),
+        // The host-origins lookup carries the id as a path segment, so it can
+        // only be matched by prefix. Declared as an alternate group shape for
+        // the same reason `/api/health` is above.
+        alsoAllowsGroups: Object.freeze([
+          Object.freeze({ type: 'path', op: 'pre', value: '/api/plugin-host-origins' }),
+        ]),
+      }),
     ]),
   }),
   Object.freeze({
@@ -214,7 +283,55 @@ export const EXPECTED_POSTURE = Object.freeze([
     label: 'plugins',
     expect: 'unprotected',
     serves: 'plugins.aglyn.com — the plugin loader origin',
-    gap: 'No config has ever existed, and plugins.aglyn.com answers a bot User-Agent with an origin 404 rather than a challenge. The console was the other half of this finding and was closed on 2026-08-21; this one was NOT, because the loader is fetched by customer sites and by the plugin iframe itself, so a challenge here would have to be reconciled with traffic we do not control and cannot give a bypass header to. Deliberately still open. AGL-2483.',
+    // ── REVIEWED 2026-08-23 (AGL-2483). Verdict: NOT a confidentiality or
+    //    integrity exposure. Left unprotected ON PURPOSE, with the reasoning
+    //    written down so the next person does not have to re-derive it.
+    //
+    // This origin serves exactly two things, and nothing else (`/` is a 404):
+    //
+    //   GET /load          the sandbox HTML shell plus a per-request CSP.
+    //                      No secrets, no user data, no auth, no session. Its
+    //                      whole content ships in this repo.
+    //   GET /artifacts/*   an edge rewrite to the console's
+    //                      /api/plugin-artifacts/*, which streams
+    //                      content-addressed plugin bundles.
+    //
+    // CONFIDENTIALITY — nothing to leak. Bundles are deliberately public
+    // code: the marketplace lists them, and the serving route says so in as
+    // many words. A URL needs the exact sha256, and anyone entitled to the
+    // listing already has it. A WAF would gate a read that is public by
+    // design.
+    //
+    // INTEGRITY — a WAF in front of our own origin cannot change which bytes
+    // we serve, and every property that matters is already enforced by the
+    // consumer, not the edge: every loader re-hashes the bundle against the
+    // pinned sha256 before executing a byte, realm bundles additionally carry
+    // a platform Ed25519 signature, the iframe owns its own sandbox attribute
+    // (4e4192b6f), and the served CSP is per-manifest. The real integrity
+    // risk is a malicious plugin getting PUBLISHED, which review answers and
+    // a firewall does not touch.
+    //
+    // WHAT IS ACTUALLY EXPOSED — cost and availability. `/load` answers
+    // `Cache-Control: private, no-store`, so every request is a function
+    // invocation, and each one makes up to TWO further calls to the console.
+    // That is an unauthenticated, uncacheable ~3x amplifier. Someone hammering
+    // it runs up a bill; they do not get data and they do not get code
+    // execution. A bill is not a breach, and the proportionate answer is not
+    // a WAF.
+    //
+    // WHY NOT A CHALLENGE, EVER: `/load` is fetched by visitors to customer
+    // sites and by the plugin iframe itself — traffic we neither control nor
+    // can hand a bypass header. A challenge here breaks live customer sites.
+    // Ruled out on the merits, not deferred.
+    //
+    // IF ABUSE EVER APPEARS, in order of proportionality: (1) make `/load`
+    // cacheable — it is a pure function of its query string, and an s-maxage
+    // would let the CDN absorb a flood for free, which is a bigger win than
+    // any rule here; (2) a Vercel rate-limit custom rule on `/load` keyed by
+    // IP, generous enough that a real visitor never meets it; (3) managed bot
+    // protection in `log` action for visibility only. Never `challenge`,
+    // never `deny`.
+    gap: 'No config has ever existed. REVIEWED 2026-08-23 and deliberately left open: this origin serves only a secrets-free sandbox HTML shell and content-addressed plugin bundles that are public by design and hash-verified (realm: signature-verified) by every consumer before execution, so there is no confidentiality or integrity exposure for a WAF to close. The real exposure is cost/availability — /load is no-store, so every request is a function invocation plus up to two console calls. A challenge is ruled out on the merits: /load is fetched by customer-site visitors and by the plugin iframe, traffic we cannot give a bypass header to. See the comment above this entry for the proportionate controls if abuse ever appears. AGL-2483.',
   }),
 ])
 
