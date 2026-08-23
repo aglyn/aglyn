@@ -52,6 +52,44 @@ export const NOT_A_SECTION = new Set([
   'product-grid',
 ])
 
+/**
+ * The repeater whose children are cloned once per published entry
+ * (`collectionEntries`). It is named here because it is what turns ONE
+ * authored node into a finding the reader meets ten times (AGL-2366).
+ */
+export const ENTRIES_COMPONENT_ID = 'collectionEntries'
+
+/**
+ * The nearest Container ANCESTOR of `nodeId`, walking `parentId` up, or
+ * `null` (AGL-2366).
+ *
+ * A Container inside a Container takes a second set of 24px gutters, so its
+ * content starts 24px right of every other section on the page. That is not
+ * a width the width census could see: both nodes are stock `xl`, both pass
+ * every rule this file had, and the page is still misaligned — the defect is
+ * the RELATIONSHIP, not either node's attribute.
+ *
+ * Walks parents rather than recursing down like {@link containerDepth},
+ * because the question is "does an ancestor already gutter me?" and the
+ * answer has to name the ancestor. `seen` guards a `parentId` cycle: this
+ * reads authored data, and a corrupt map must not hang the audit.
+ */
+export function containerAncestor(nodeId, nodes) {
+  const seen = new Set([nodeId])
+  const through = []
+  let parentId = nodes[nodeId]?.parentId
+  while (parentId && nodes[parentId] && !seen.has(parentId)) {
+    seen.add(parentId)
+    const parent = nodes[parentId]
+    if (parent.componentId === CONTAINER_COMPONENT_ID) {
+      return { ancestorId: parentId, through: through.reverse() }
+    }
+    through.push(parent.componentId)
+    parentId = parent.parentId
+  }
+  return null
+}
+
 /** The nearest Container in a band's subtree, by depth, or `null`. */
 export function containerDepth(node, nodes, depth = 0) {
   if (!node) return null
@@ -72,6 +110,12 @@ export function containerDepth(node, nodes, depth = 0) {
  * non-stock `props.maxWidth` cannot come from the attribute dropdown at all —
  * it means an import, an API write or a pasted node map got there instead.
  *
+ * `nested` is the third, and it is invisible to the other two (AGL-2366). Both
+ * nodes are stock `xl`; the misalignment comes from one sitting INSIDE the
+ * other and taking a second set of gutters. A census that only ever looked at
+ * one node at a time reported the changelog and newsroom lists clean while
+ * every entry on them rendered 24px right of the heading above it.
+ *
  * @param {Record<string, any>} nodes decoded node map
  * @param {Record<string, unknown>} where context merged into every finding
  */
@@ -79,6 +123,7 @@ export function auditContainerNodes(nodes, where = {}) {
   const widths = {}
   const bespoke = []
   const nonStock = []
+  const nested = []
   const uncontained = []
   let sections = 0
 
@@ -98,6 +143,20 @@ export function auditContainerNodes(nodes, where = {}) {
     // one of the six is.
     if (width !== undefined && !STOCK_MAX_WIDTHS.has(width)) {
       nonStock.push({ ...where, nodeId, props: width })
+    }
+    // Double gutters (AGL-2366). Reported with the path between the two, so
+    // the finding says WHERE to unwrap — and with `repeats` when a
+    // `collectionEntries` is on that path, because then the one authored node
+    // is rendered once per published entry and the inset walks down the page.
+    const outer = containerAncestor(nodeId, nodes)
+    if (outer) {
+      nested.push({
+        ...where,
+        nodeId,
+        ancestorId: outer.ancestorId,
+        through: outer.through,
+        repeats: outer.through.includes(ENTRIES_COMPONENT_ID),
+      })
     }
   }
 
@@ -121,5 +180,5 @@ export function auditContainerNodes(nodes, where = {}) {
     }
   }
 
-  return { widths, bespoke, nonStock, uncontained, sections }
+  return { widths, bespoke, nonStock, nested, uncontained, sections }
 }
