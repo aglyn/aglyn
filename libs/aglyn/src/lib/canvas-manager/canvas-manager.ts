@@ -629,6 +629,18 @@ export class CanvasManager {
    *
    * A peer that adds a child republishes the parent's child list, so the
    * parent is marked too and its list survives with the child.
+   *
+   * ## Both directions, and why redo is not the special case it looks like
+   *
+   * This serves {@link redo} as well as {@link undo}, and the stamp is what
+   * makes that work rather than a second rule (AGL-2486). A `future` entry
+   * replays a state from before the undo, so the intuition is that it must
+   * predate any later peer change and roll it back. It does not:
+   * `HistoryManager.undo` captures the present and stamps it with the epoch
+   * AT THE TIME OF THE UNDO, so a peer change that lands between the undo
+   * and the redo is strictly newer than `snapshot.epoch` and is kept here —
+   * including a node the peer CREATED in that gap, which the `future` entry
+   * has no key for at all and a bare replace would broadcast as a delete.
    */
   private restoreSnapshot(
     snapshot: HistorySnapshot<NodeId, NodeSchema<any>>,
@@ -718,8 +730,22 @@ export class CanvasManager {
       coalesceKey === undefined ? undefined : { key: coalesceKey, at: now }
     return mutate()
   }
+  /**
+   * Drops BOTH history stacks and any open {@link transact} burst.
+   *
+   * Both, deliberately (AGL-2486). This used to clear `past` alone, which
+   * left a caller that had just "cleared history" holding a live redo stack
+   * — `canRedo` still true, still offering a snapshot of the state before
+   * the clear. `reset` was the only caller and compensated for it a line
+   * later, which is exactly how the next caller inherits the trap.
+   *
+   * A stale redo is worse than a stale undo in a co-editing session: redo
+   * replays a WHOLE-DOCUMENT snapshot, and the restored map is diffed
+   * against the co-editing shadow and published, so every node the snapshot
+   * does not have goes out as a delete under this session's id.
+   */
   public clearHistory() {
-    this._history.clearPast()
+    this._history.clearHistory()
     this._coalescing = undefined
   }
   public createNodeId(): NodeId {
@@ -755,7 +781,6 @@ export class CanvasManager {
     // preserve node ids that mean something else here (AGL-1958).
     this._foreignAt.clear()
     this._epoch = 0
-    this._history.clearFuture()
     return this
   }
   /**

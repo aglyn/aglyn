@@ -914,6 +914,33 @@ describe('Aglyn: Screen Manager', () => {
       })
     })
 
+    /**
+     * `clearHistory` has to mean BOTH stacks (AGL-2486).
+     *
+     * It cleared `past` only, so a caller that cleared history to start a
+     * document clean kept a live redo stack pointing at the state before the
+     * clear — and `canRedo` stayed true to offer it. `reset` happened to be
+     * the only caller and papered over it by calling `_history.clearFuture()`
+     * a line later, which is the tell: the compensation belongs at the source,
+     * or the next caller inherits the trap. It matters most here because a
+     * redo replays a whole-document snapshot, and in a co-editing session
+     * that snapshot is diffed against the mirror and published to everyone.
+     */
+    it('clearHistory drops the redo stack as well as the undo stack', () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(nodes)
+      canvas.transact(() => {
+        canvas.nodes.get('child1').props.title = 'edited'
+      })
+      canvas.undo()
+      expect(canvas.canRedo).toBe(true)
+
+      canvas.clearHistory()
+
+      expect(canvas.canUndo).toBe(false)
+      expect(canvas.canRedo).toBe(false)
+    })
+
     it('clears the redo stack when a new raw-json edit is applied', () => {
       const canvas = new CanvasManager(undefined as any)
       canvas.setNodes(nodes)

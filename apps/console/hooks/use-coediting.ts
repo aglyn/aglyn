@@ -83,9 +83,29 @@ import { TAB_SESSION_ID, type PresenceSession } from './use-presence'
  * honest in both directions: it rewinds *your* edits and leaves theirs
  * alone.
  *
- * Operation-based collaborative undo is still future work (AGL-1958): undo
- * remains whole-document snapshots plus this overlay, so there is still no
- * per-user redo across a session. What is closed is the data loss.
+ * **Redo is protected by the same overlay, not left out of it** (AGL-2486).
+ * That is worth stating because the shape invites the opposite guess: a
+ * `future` entry replays a state that existed BEFORE the undo, so it looks
+ * like it must predate a peer's later change and roll it back. It does not.
+ * `HistoryManager.undo` pushes a live capture of the present stamped with
+ * the epoch AT THE TIME OF THE UNDO, so a peer change landing afterwards is
+ * strictly newer than that stamp and `withForeignNodes` keeps it — exactly
+ * as on the undo side.
+ *
+ * Measured on the running editor, two sessions on one screen (2026-08-23):
+ * across an interleaved run of two undos and two redos, with the peer
+ * editing, creating and deleting nodes in the gaps, the only node id the
+ * undoing tab ever wrote to RTDB was its own. No value revert, no tombstone,
+ * and the peer's canvas never moved. See the `redo against a co-editor`
+ * specs, which fail if the overlay is taken off the redo path.
+ *
+ * What is still future work (AGL-1958) is narrower than "redo": a node the
+ * peer has taken over SINCE your undo resolves to them, so redoing your own
+ * edit to that one node is a no-op — the step is consumed and nothing is
+ * published. That is the same per-node last-writer-wins rule as everywhere
+ * else (AGL-677), so nothing is destroyed; re-applying your operation on top
+ * of theirs is what an operation-based history would buy, and this one is
+ * still whole-document snapshots plus this overlay.
  */
 
 /** How long to coalesce local edits before publishing them. */
