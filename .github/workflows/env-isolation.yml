@@ -52,11 +52,24 @@ name: Env isolation
 
 on:
   schedule:
-    # Daily, 08:47 UTC — after firewall-drift (08:29) and pricing-drift (08:29)
-    # so the drift jobs do not contend. (GitHub schedules are best-effort and
-    # pause on 60-day-quiet repos; a green history is not proof of continuous
-    # coverage.)
-    - cron: '47 8 * * *'
+    # WEEKLY, Mondays 08:47 UTC — not daily, and the reason is about attention
+    # rather than cost (Zach, 2026-08-23).
+    #
+    # This check is red today and will stay red until the 25 shared secrets in
+    # docs/SECRET_ROTATION.md are split. A workflow that fails every morning
+    # for a known reason stops being read, and then the FIRST REAL failure
+    # arrives on a board everyone has learned to ignore — which is the exact
+    # failure mode that let /api/health/crons sit at 503 for 51 hours while
+    # the uptime probe stayed green.
+    #
+    # Weekly keeps the finding in front of a human without training anyone to
+    # skip past it. Still after firewall-drift and pricing-drift (08:29) so the
+    # drift jobs do not contend. (GitHub schedules are best-effort and pause on
+    # 60-day-quiet repos; a green history is not proof of continuous coverage.)
+    #
+    # Make this daily again once the count reaches zero — at that point a red
+    # means something changed, which is worth waking up to.
+    - cron: '47 8 * * 1'
   workflow_dispatch:
   # Scoped to the checker itself, so a change to the guard is exercised by the
   # change that makes it — the thing that would otherwise only be discovered
