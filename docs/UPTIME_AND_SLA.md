@@ -151,6 +151,18 @@ Console: https://console.cloud.google.com/monitoring/uptime?project=aglyn-main
 | Cloud Functions | `execution_count{status != ok}` | > 2 failures in 5 min | metric |
 | Cloud Scheduler | job attempt logged at `severity >= ERROR` | any | log match |
 
+:::danger Read this table with two corrections
+**Four of these checks have been at 0% since 2026-08-21** — every one of them
+on a host our own bot protection challenges. See
+[Four of these checks have been red](#four-checks-red).
+**`scheduled-jobs` has never been created at all**, and it is the check that
+would have caught the fifty-one-hour cron outage. See
+[Creating the missing check](#creating-the-missing-scheduled-jobs-check).
+A table of what is *meant* to be watched is not a list of what *is*; verify it
+with [the read-only commands below](#verifying-the-monitor-yourself) before
+quoting it.
+:::
+
 Notes that keep these honest:
 
 - `rate-limiter`'s check and policy were created 2026-08-17 (`rate-limits
@@ -325,17 +337,260 @@ Notes that keep these honest:
   weekly, 90 min for the frequent sweeps): GitHub delays scheduled workflows
   routinely, and a row that reds on ordinary lateness is one people mute.
   **Clearing event:** the next invocation of that job; nothing latches.
-  **Owed:** the uptime check in the table above is not created yet — this
-  lands read-only against production, so somebody has to add it by hand in
-  Monitoring. Until then the endpoint is watched by the staff Health page
-  (Staff → Health, `Scheduled jobs`) and by anything that curls it, and it
-  answers the same 200/503 either way.
+  **⚠️ STILL OWED, AND IT HAS NOW COST SOMETHING.** The `scheduled-jobs` row
+  in the table above has never been created in Monitoring. Verified against
+  the live project on 2026-08-23: `gcloud monitoring uptime list-configs
+  --project=aglyn-main` returns **eleven** checks and this is not one of them,
+  and no alert policy names it either. The table listed it as watched while
+  this note recorded it as owed, twelve paragraphs further down — and the
+  table is what people read.
+  **What that bought:** `/api/health/crons` answered 503 with
+  `campaigns-process-scheduled: job-silent` for **fifty-one hours** and
+  nothing said a word. The `Uptime probe` workflow was green every fifteen
+  minutes throughout, because it read only `/api/health` — which aggregates
+  exactly one check — and GCP was not reading this endpoint at all. Two
+  independent gaps, and each one on its own was enough.
+  The probe half is fixed (it now reads all seven subsystem endpoints, so a
+  `job-silent` verdict fails a run every fifteen minutes). **The GCP half is
+  a console action nobody has taken — see
+  [Creating the missing `scheduled-jobs` check](#creating-the-missing-scheduled-jobs-check).**
+  Until it exists, the endpoint is watched by the staff Health page
+  (Staff → Health, `Scheduled jobs`), by the GitHub probe, and by anything
+  that curls it; it answers the same 200/503 either way.
 - `customer-site` asserts on the demo site's own content. If someone renames
   the demo site's title away from "Aglyn Demo", this check goes red — update
   the content matcher, don't delete the check.
 - Incident emails carry a runbook snippet pointing back at this file. Alert
   fires after ~10 minutes of sustained failure (2+ probe regions), so a single
   blip does not page.
+
+### ⚠️ Four of these checks have been red since 2026-08-21 {#four-checks-red}
+
+**Our own bot protection is failing our own monitors, again — this time the
+one that matters.** Measured against the live project on 2026-08-23, pass rate
+over the trailing six hours:
+
+| Check | Host | Pass rate |
+| --- | --- | --- |
+| `console-health`, `console-imaging`, `backup-state`, `signup-volume`, `rate-limiter`, `billing-webhook`, `beacon-heartbeat console` | `app.aglyn.com` | **100%** |
+| `tenant-health` | `aglyn.com/api/health` | **0%** |
+| `beacon-heartbeat tenant` | `aglyn.com/api/health/error-beacon` | **0%** |
+| `marketing-home` | `aglyn.com/` | **0%** |
+| `customer-site` | `demo.aglyn.app/` | **0%** |
+
+`tenant-health` ran at 100% through 2026-08-20, 3.9% on 08-21, and 0% since.
+Every one of the four red hosts is served by `aglyn-tenant`, and every one of
+them answers **429 Vercel Security Checkpoint** to an anonymous automated
+client:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -A 'Monitor/1.0' https://aglyn.com/api/health   # 429
+curl -s -o /dev/null -w '%{http_code}\n' -A 'Monitor/1.0' https://app.aglyn.com/api/health # 200
+```
+
+**The cause is known and half-fixed already.** Vercel Bot Protection is set to
+*Challenge* on `aglyn-tenant` and `aglyn-docs`. That was found on 2026-08-20
+and fixed **for the GitHub probe only**, by sending `x-aglyn-probe` against a
+Bypass rule (`withProbeHeaders`, AGL-1611). The GCP uptime checks send no such
+header and cannot be given one without storing a shared secret in a second
+system — so the same root cause has had four of the eleven external checks red
+for three days, with their alert policies enabled the whole time.
+
+**This is worse than it looks, and worse than the missing `scheduled-jobs`
+check.** A board with four permanently-red rows is a board people stop reading,
+and this file already records what that costs: AGL-1843's permanently-red
+backup check was "actively teaching the one person who receives it that a
+backup page is noise". Alert fatigue here is not a hypothetical — it is the
+condition under which a real `/api/health/crons` outage went unnoticed for
+fifty-one hours.
+
+#### What to do, in preference order
+
+1. **Bypass bot protection on the health PATHS of `aglyn-tenant`.** Best
+   option, and it is the one that makes AGL-1148 actually deliverable: those
+   endpoints are already public, unauthenticated and free of secrets — they
+   are designed to be read by anything — so challenging them protects nothing
+   and breaks the only thing watching them. It also fixes the endpoints for
+   **any** monitor chosen later, not just GCP's, and needs no shared secret.
+   Vercel → `aglyn-tenant` → Firewall → add a **Bypass** rule matching
+   `Request Path` starts with `/api/health`.
+2. **For `marketing-home` and `customer-site`, allowlist Google's uptime
+   checkers by IP.** Those two probe real pages, not health endpoints, so a
+   path rule does not reach them. The list is
+   `gcloud monitoring uptime list-ips` — 54 addresses at time of writing, and
+   Google does change it, so this option carries maintenance the first one
+   does not.
+3. **Last resort: put `x-aglyn-probe` in each GCP check's custom headers.**
+   It works, but it copies a shared secret into a second system and fixes only
+   the monitor that holds it. `probe-headers.mjs` says not to hand this header
+   to third parties for a reason.
+
+:::danger Do not "fix" this with a firewall PUT
+Editing Vercel firewall config with a `PUT` **wipes bot protection entirely**.
+Use `PATCH`, or the dashboard. Turning the challenge off wholesale would make
+every check green and would be the wrong fix — the challenge is doing real work
+on the pages that are not health endpoints.
+:::
+
+**How to know it worked:** the `curl` above returns 200 from an anonymous
+client, and the four checks return to 100% within two check periods (10
+minutes). Re-run the pass-rate query in
+[Verifying the monitor yourself](#verifying-the-monitor-yourself).
+
+### Verifying the monitor yourself {#verifying-the-monitor-yourself}
+
+The lesson of the fifty-one hours is that a documented monitor is not a
+monitor. **Confirm the sink exists before trusting the report.** Both of these
+are read-only and need only an authenticated `gcloud` session:
+
+```bash
+# Which checks actually exist? Compare against the table above.
+gcloud monitoring uptime list-configs --project=aglyn-main \
+  --format='table(displayName,monitoredResource.labels.host,httpCheck.path,period)'
+
+# Which alert policies exist, are enabled, and have somewhere to send?
+# A policy with zero notification channels is a check nobody reads.
+curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  'https://monitoring.googleapis.com/v3/projects/aglyn-main/alertPolicies?fields=alertPolicies(displayName,enabled,notificationChannels)'
+```
+
+And the one that answers "is any of this actually passing", which neither of
+the above can tell you — pass rate per check over the last six hours:
+
+```bash
+gcloud monitoring time-series list \
+  --project=aglyn-main \
+  --filter='metric.type="monitoring.googleapis.com/uptime_check/check_passed"' \
+  --format='value(metric.labels.check_id)' | sort -u
+```
+
+A check listed in this file but absent from the first command is a monitor that
+does not exist. A check present in all three but sitting at 0% is a monitor
+nobody is reading any more.
+
+### Creating the missing `scheduled-jobs` check {#creating-the-missing-scheduled-jobs-check}
+
+**This is the one open item in AGL-1148's "wire an external monitor" step.**
+Everything else in the table above exists; this does not, and it is the check
+that would have caught the fifty-one hours.
+
+It needs an authenticated `gcloud` session against `aglyn-main`, which is why
+it has never been done from a PR — a build agent cannot hold that credential
+and should not. It is two commands, or five minutes of clicking.
+
+The endpoint is already correct and already answers 200/503 with
+`$.status`, so nothing in the app has to change first. Confirm it before and
+after:
+
+```bash
+curl -si https://app.aglyn.com/api/health/crons | head -20
+```
+
+#### Option A — two commands
+
+Modelled exactly on the existing `backup-state` check and its policy, so the
+new one behaves identically to the eleven that already work.
+
+```bash
+# 1. The check. 900s to match the other subsystem checks; the endpoint
+#    memoises for 5 minutes, so anything tighter reads the same memo twice.
+gcloud monitoring uptime create \
+  'scheduled-jobs — app.aglyn.com/api/health/crons status=ok' \
+  --project=aglyn-main \
+  --resource-type=uptime-url \
+  --resource-labels=host=app.aglyn.com,project_id=aglyn-main \
+  --path=/api/health/crons \
+  --port=443 --protocol=https --request-method=get \
+  --status-classes=2xx \
+  --matcher-type=matches-json-path \
+  --json-path='$.status' --json-path-matcher-type=exact-match \
+  --matcher-content='"ok"' \
+  --period=15 --timeout=10
+
+# 2. Read back the generated check id — the alert policy filters on it, and
+#    it is generated from the display name plus a random suffix, so it
+#    CANNOT be predicted and must not be guessed.
+gcloud monitoring uptime list-configs --project=aglyn-main \
+  --filter='displayName~scheduled-jobs' --format='value(name)'
+```
+
+Then create the policy, substituting the id from step 2 (the part after
+`uptimeCheckConfigs/`):
+
+```bash
+CHECK_ID='<paste the id from step 2>'
+cat > /tmp/scheduled-jobs-policy.json <<JSON
+{
+  "displayName": "Uptime failure: scheduled-jobs (app.aglyn.com/api/health/crons)",
+  "combiner": "OR",
+  "conditions": [{
+    "displayName": "Scheduled-jobs check failing",
+    "conditionThreshold": {
+      "filter": "metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND metric.label.check_id=\"${CHECK_ID}\" AND resource.type=\"uptime_url\"",
+      "comparison": "COMPARISON_GT",
+      "thresholdValue": 1,
+      "duration": "600s",
+      "trigger": { "count": 1 },
+      "aggregations": [{
+        "alignmentPeriod": "1800s",
+        "perSeriesAligner": "ALIGN_NEXT_OLDER",
+        "crossSeriesReducer": "REDUCE_COUNT_FALSE",
+        "groupByFields": ["resource.label.*"]
+      }]
+    }
+  }],
+  "documentation": {
+    "content": "A scheduled job has stopped being scheduled: it did not run when its own cron said it should (job-silent), has never run since we started watching (job-never-reported), or its marks could not be read (beats-unavailable). Downstream of these jobs are metered billing, GDPR erasures, the audit archive and scheduled publishing. Open https://app.aglyn.com/api/health/crons and read which job is named. Runbook: docs/UPTIME_AND_SLA.md.",
+    "mimeType": "text/markdown"
+  },
+  "notificationChannels": [
+    "projects/aglyn-main/notificationChannels/7043898327231541746"
+  ],
+  "enabled": true
+}
+JSON
+
+curl -s -X POST \
+  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  -H 'Content-Type: application/json' \
+  -d @/tmp/scheduled-jobs-policy.json \
+  'https://monitoring.googleapis.com/v3/projects/aglyn-main/alertPolicies'
+```
+
+#### Option B — the console, by clicking
+
+1. https://console.cloud.google.com/monitoring/uptime?project=aglyn-main →
+   **Create uptime check**.
+2. Protocol **HTTPS**, Resource type **URL**, Hostname `app.aglyn.com`,
+   Path `/api/health/crons`. **Next.**
+3. Response validation: check timeout **10s**; **Content matching** on →
+   Response content type **JSON**, matcher **Matches JSON path**,
+   JSON path `$.status`, JSON path matcher **Exact match**,
+   Content `"ok"` (with the quotes). Accepted status codes: **2xx**. **Next.**
+4. Alert & notification: create an alert, name it
+   `Uptime failure: scheduled-jobs (app.aglyn.com/api/health/crons)`,
+   duration **10 minutes**, notification channel the existing
+   **zach@aglyn.com** email channel. **Next.**
+5. Title `scheduled-jobs — app.aglyn.com/api/health/crons status=ok`,
+   frequency **15 minutes**. **Test** — it should come back green — then
+   **Create**.
+
+#### Prove it can go red before trusting it
+
+A check that has never been seen to fail is a check nobody has verified. The
+cheapest honest test does not require breaking a real job: delete the
+bootstrap document and the endpoint reports every job as never having
+reported.
+
+```bash
+# Re-opens the watch window: `platformCronBeats/<watch doc>` is a plain
+# document, not a reserved id, and the next request recreates it.
+# Expect a 503 within one probe TTL (5 min), an email within ~10 more.
+```
+
+Recreate it by hitting the endpoint once, and the next probe clears. **Name
+the clearing event before running any forced-failure test**, and unwind it the
+same day — a check left red is a check about to be muted.
 
 ### What is deliberately NOT watched (the honest list)
 

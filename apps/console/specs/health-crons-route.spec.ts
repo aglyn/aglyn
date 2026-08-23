@@ -223,10 +223,53 @@ describe('/api/health/crons', () => {
     expect(Object.keys(mockStore).length).toBe(before)
   })
 
-  it('HEAD is cheap and touches nothing', async () => {
+  it('HEAD answers 200 with no body when every job reported', async () => {
+    mockStore = healthyStore(Date.now())
     const { HEAD } = await freshRoute()
     const response = await HEAD()
     expect(response.status).toBe(200)
-    expect(mockWrites).toEqual([])
+    expect(await response.text()).toBe('')
+  })
+
+  /**
+   * THE MONITOR-FACING HALF OF THE RED PATH (AGL-1148).
+   *
+   * HEAD used to be a hardcoded 200 with the comment "cheap liveness ...
+   * touches nothing", and touching nothing is exactly the defect: several
+   * uptime providers issue HEAD by default, and one pointed here would have
+   * agreed with the green board for the whole fifty-one hours this endpoint
+   * spent at 503. A health check that cannot go red is the failure this
+   * endpoint exists to prevent, reproduced one method over.
+   */
+  it('HEAD goes RED with GET — the defect that made a HEAD monitor useless', async () => {
+    const now = Date.now()
+    mockStore = healthyStore(now)
+    mockStore['report-usage'] = { jobId: 'report-usage', atMs: now - 3 * DAY }
+
+    const { GET, HEAD } = await freshRoute()
+    // Asserted against GET in the same test rather than against a literal:
+    // the contract is that the two AGREE, and a HEAD hardcoded to 503 would
+    // be just as broken in the other direction.
+    expect((await GET()).status).toBe(503)
+    const head = await HEAD()
+    expect(head.status).toBe(503)
+    expect(await head.text()).toBe('')
+    // And the headers a monitor reads survive the body being dropped — a
+    // HEAD that was cacheable while its GET was not is the same lie one
+    // layer down.
+    expect(head.headers.get('cache-control')).toContain('no-store')
+    expect(head.headers.get('retry-after')).toBe('30')
+  })
+
+  it('HEAD costs no extra reads — it shares GET\'s memo', async () => {
+    mockStore = healthyStore(Date.now())
+    const { GET, HEAD } = await freshRoute()
+    await GET()
+    const writesAfterGet = mockWrites.length
+    // The bootstrap document is written once by the first probe; HEAD must
+    // not re-read the collection or write anything of its own.
+    mockStore['report-usage'] = { jobId: 'report-usage', atMs: 0 }
+    expect((await HEAD()).status).toBe(200)
+    expect(mockWrites.length).toBe(writesAfterGet)
   })
 })

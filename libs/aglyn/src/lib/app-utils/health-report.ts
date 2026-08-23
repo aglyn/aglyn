@@ -114,6 +114,49 @@ export function healthHttpStatus(status: 'ok' | 'degraded'): number {
 }
 
 /**
+ * A HEAD response for a health endpoint: the SAME status and headers its GET
+ * would return, with no body (AGL-1148).
+ *
+ * ## Why this exists
+ *
+ * Every health route used to answer HEAD with a hardcoded `200` and the
+ * comment "cheap liveness for monitors that only issue HEAD. Touches
+ * nothing." Touching nothing is precisely the problem: **a HEAD that knows
+ * nothing is a health check that cannot go red.** A monitor configured with
+ * HEAD — which several uptime providers use by default — would have reported
+ * green through any outage that left the function able to boot, which is most
+ * of them. `/api/health/crons` sat at 503 for fifty-one hours; a HEAD monitor
+ * pointed at it would have agreed with the green board the whole time.
+ *
+ * It also violated the contract this file opens with. "The status code is the
+ * contract" cannot hold for one method and not another, and HTTP requires a
+ * HEAD response to carry the same status and headers its GET would.
+ *
+ * ## The cost argument, which is why this is safe
+ *
+ * Delegating to GET means HEAD runs the dependency probe. Every route
+ * memoises that probe (`memoizeWithTtl`, 15s on the root and 5 minutes on the
+ * subsystems) explicitly so a public unauthenticated endpoint cannot be made
+ * to read in a loop — the same bound that already lets a fifteen-minute probe
+ * hit seven endpoints for nearly nothing. HEAD now costs exactly what GET
+ * costs, which is a memo lookup between refreshes, and it serializes no body.
+ *
+ * Headers are carried over rather than rebuilt so `Cache-Control: no-store`,
+ * the open CORS origin and `Retry-After` reach a HEAD client identically — a
+ * HEAD response that was cacheable while its GET was not would be the same
+ * lie one layer down.
+ */
+export async function healthHeadOf(
+  get: () => Promise<Response>,
+): Promise<Response> {
+  const response = await get()
+  return new Response(null, {
+    status: response.status,
+    headers: response.headers,
+  })
+}
+
+/**
  * Firestore backup state, reduced to a health verdict (AGL-1490, AGL-1502).
  *
  * The 2026-08-02 backup sat at `NOT_AVAILABLE` for eleven days and nothing

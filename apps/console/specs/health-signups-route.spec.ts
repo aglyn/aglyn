@@ -234,12 +234,41 @@ describe('AGL-1536 · /api/health/signups', () => {
     expect(queries).toHaveLength(1)
   })
 
-  it('HEAD is liveness only: 200, touches nothing', async () => {
+  it('HEAD is 200 with no body on a quiet hour', async () => {
+    // The healthy fixture has to be set now that HEAD actually READS. Before
+    // AGL-1148 this test passed with no fixture at all, because HEAD looked
+    // at nothing — it was green in a state where GET answers 503.
+    mockCountGet.mockImplementation(countOf(1))
+    mockRefusalGet.mockImplementation(refusalsOf())
     const route = await freshRoute()
     const response = await route.HEAD()
     expect(response.status).toBe(200)
-    expect(queries).toHaveLength(0)
-    expect(refusalQueries).toHaveLength(0)
+    expect(await response.text()).toBe('')
+  })
+
+  /**
+   * HEAD used to be a hardcoded 200 that read nothing (AGL-1148) — a check
+   * that could not go red, for exactly the monitors most likely to use it.
+   * This spec asserted the defect as if it were the design.
+   */
+  it('HEAD goes RED with GET, which is the whole point of watching it', async () => {
+    mockCountGet.mockRejectedValue(new Error('7 PERMISSION_DENIED: nope'))
+    const route = await freshRoute()
+    expect((await route.GET()).status).toBe(503)
+    const head = await route.HEAD()
+    expect(head.status).toBe(503)
+    expect(await head.text()).toBe('')
+    expect(head.headers.get('cache-control')).toContain('no-store')
+  })
+
+  it('HEAD adds no query of its own — it shares the probe memo', async () => {
+    mockCountGet.mockImplementation(countOf(1))
+    mockRefusalGet.mockImplementation(refusalsOf())
+    const route = await freshRoute()
+    await route.GET()
+    const afterGet = queries.length + refusalQueries.length
+    await route.HEAD()
+    expect(queries.length + refusalQueries.length).toBe(afterGet)
   })
 })
 
