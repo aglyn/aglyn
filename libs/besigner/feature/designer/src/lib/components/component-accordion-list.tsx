@@ -110,11 +110,13 @@ export const ComponentAccordionList = observer(
             onScroll={detail.dismiss}
           >
             <AccordionListComponent
-              // `defaultExpanded` is read once per mount, so the results group
-              // would arrive collapsed without a fresh mount when the list flips
-              // between grouped and flat. Keyed on the SHAPE, not the filter text,
-              // so typing does not remount per press.
-              key={filter ? 'results' : 'categories'}
+              // No `key` remount to force the results group open (AGL-2486).
+              // Keying on the filter flipped one render too EARLY — the query
+              // changes synchronously, the results group only exists after
+              // fuse.js loads — so the remount reseeded from the categories
+              // and the group that arrived next was collapsed. The list now
+              // opens a group when it first appears, which is the same render
+              // the group actually exists in.
               items={items}
               defaultExpanded={items.map((i) => i.$id)}
               getItemId={(item) => item?.$id}

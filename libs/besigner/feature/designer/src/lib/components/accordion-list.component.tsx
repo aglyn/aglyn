@@ -96,6 +96,20 @@ export const Accordion = forwardRef<any, AccordionProps>((props, ref) => {
   // render — seeding with an omitted (undefined) prop rendered it
   // uncontrolled until the first toggle flipped it controlled (AGL-590).
   const [expanded, setExpanded] = useState(Boolean(expandedProp))
+
+  // ...and it has to keep FOLLOWING the prop, not just start from it
+  // (AGL-2486). Seeding once made this a write-only prop: a parent that
+  // opened a group after mount changed `expandedProp` and nothing moved,
+  // which is how a search whose results group is created asynchronously
+  // rendered shut and showed an empty panel. Adjusted during render rather
+  // than in an effect so the open state never commits a frame behind the
+  // prop — an effect would paint the group shut first and animate it open.
+  const [lastExpandedProp, setLastExpandedProp] = useState(expandedProp)
+  if (expandedProp !== lastExpandedProp) {
+    setLastExpandedProp(expandedProp)
+    setExpanded(Boolean(expandedProp))
+  }
+
   const handleToggle = useCallback(
     (e, expanded: boolean) => {
       setExpanded(Boolean(expanded))
@@ -175,6 +189,34 @@ export const AccordionListComponent = observer(
     const [expanded, setExpanded] = useState<JSX.Key[]>(() => [
       ...(defaultExpanded || []),
     ])
+
+    /**
+     * A group that appears AFTER mount opens (AGL-2486).
+     *
+     * `defaultExpanded` used to be read once, in the initialiser, so a list
+     * whose groups arrive later got none of them — the element pickers build
+     * their "Best matches" group after an await (fuse.js loads dynamically),
+     * so it was always a late arrival and always rendered shut. The callers
+     * papered over it with a `key` that remounted the whole list, which
+     * cannot work: the remount happens when the QUERY changes, one render
+     * before the results group exists.
+     *
+     * Seeded ids are remembered so this only ever opens a group the first
+     * time it is seen. Re-deriving from `defaultExpanded` every render would
+     * instead re-open every group the user deliberately closed, on the next
+     * unrelated render.
+     */
+    const [seeded, setSeeded] = useState<JSX.Key[]>(() => [
+      ...(defaultExpanded || []),
+    ])
+    const arrived = (defaultExpanded || []).filter(
+      (id) => !seeded.some((seen) => seen === id),
+    )
+    if (arrived.length) {
+      setSeeded((prev) => [...prev, ...arrived])
+      setExpanded((prev) => [...prev, ...arrived])
+    }
+
     const handleToggle = useCallback(
       (id: JSX.Key) => (e, expanded: boolean) => {
         setExpanded((prev) => {

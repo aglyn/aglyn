@@ -153,47 +153,128 @@ const TreeView = styled(MuiList)<MuiListProps>(({ theme }) => ({
 TreeView.displayName = 'TreeView'
 
 /**
- * Per-level alpha of the hierarchy's depth tint, and how many levels paint
- * one at all (AGL-2486).
+ * The hierarchy's depth cue (AGL-2486).
  *
- * The tint COMPOSITES: every ancestor of the selection paints its own, so
- * the row at depth n sits on n stacked overlays. The previous ramp
- * (`0.2 - 1 / (1 << depth)`) had no level cap, so light mode walked all the
- * way toward the dark ink — measured against the console theme it crossed
- * WCAG AA at the seventh level (3.85:1) and reached 1.33:1 by the twelfth,
- * which is the "unreadable at depth" report. Dark mode was never affected:
- * the same darkening moves AWAY from light text, which is why it looked
- * right and why the tint is still drawn in the same direction in both
- * schemes — it is the CAP, not the direction, that was missing.
+ * What this replaces was a per-level background tint, and every tint of that
+ * shape has the same fault: it COMPOSITES. Each ancestor of the selection
+ * painted its own overlay, so the row at depth n sat under n of them and its
+ * background walked one step further toward the ink for every level. Against
+ * the console's light palette the previous ramp crossed WCAG AA at the
+ * seventh level (3.85:1) and reached 1.33:1 by the twelfth — the label and
+ * the row had met. Dark mode looked right for the arithmetic reason that the
+ * same darkening moves AWAY from light text, which is exactly why no single
+ * tint direction can serve both schemes.
  *
- * Bounded at `1 - (1 - STEP) ** MAX_LEVELS`, no matter how deep the tree
- * goes. `hierarchy-depth-contrast.spec.ts` measures what that leaves.
+ * Capping the ramp was tried and is not a fix either. A cap only decides
+ * WHERE the cue stops working: past the cap every level paints the same
+ * background, so depth 6 and depth 16 are indistinguishable, and the issue
+ * asks for a cue that reads at depth 8 as clearly as at depth 1.
+ *
+ * So the cue is POSITIONAL rather than tonal. Each nesting level draws one
+ * vertical guide in the row's indent gutter — depth is read by counting
+ * lines, the way a tree view is read everywhere else. Guides are a fixed
+ * colour and a fixed alpha at every level, and they live in the gutter, so
+ * nothing is painted behind the label at all: the row's background is
+ * `background.paper` at depth 1 and at depth 40, in both schemes, and the
+ * text-vs-background contrast ratio is therefore a constant rather than a
+ * function of depth. `hierarchy-depth-contrast.spec.ts` measures it.
+ *
+ * The branch containing the selection is still marked — that is what the old
+ * tint was for — by colouring THAT row's guides with the accent instead. One
+ * row, one element, no stacking possible.
  */
-export const HIERARCHY_DEPTH_TINT_STEP = 0.05
-export const HIERARCHY_DEPTH_TINT_MAX_LEVELS = 5
 
-/** Alpha this one nesting level contributes; 0 once the ramp is capped. */
-export function hierarchyDepthTintAlpha(depth: number): number {
+/** Horizontal indent one nesting level adds, in px. */
+export const HIERARCHY_INDENT_STEP = 23
+
+/** Width of one guide line, in px. */
+export const HIERARCHY_GUIDE_WIDTH = 1
+
+/**
+ * Alpha of a guide, over the ink colour of whichever scheme is active.
+ *
+ * Drawn from `text.primary` rather than `divider` so the one value serves
+ * both schemes: the ink is dark on light and light on dark, so the guide
+ * always moves AWAY from the surface it sits on instead of toward the label
+ * — the failure mode of a fixed-direction tint, in miniature.
+ *
+ * 0.45 clears WCAG 1.4.11 (3:1 for a non-text cue) in the WORST of the four
+ * surface/scheme pairings, and is not a number picked by eye: the measured
+ * ratios are 3.35 and 3.32 in light, 3.89 and 4.19 in dark. `divider`, at
+ * 0.12, measures 1.31 — legible as a hairline between panels, invisible as
+ * the thing you are being asked to count. `hierarchy-depth-contrast.spec.ts`
+ * re-derives all four.
+ */
+export const HIERARCHY_GUIDE_ALPHA = 0.45
+
+/**
+ * Guides a row at `depth` draws, and how wide a gutter they occupy.
+ *
+ * Deliberately unbounded and deliberately linear: the count IS the depth, so
+ * the cue keeps saying something new at every level. It can afford to,
+ * because nothing here is cumulative — a guide is drawn beside the label,
+ * never behind it.
+ */
+export function hierarchyGuideCount(depth: number): number {
   // `strictNullChecks` is off repo-wide, so compare rather than truth-test.
-  if (!(depth >= 1)) return 0
-  return depth <= HIERARCHY_DEPTH_TINT_MAX_LEVELS
-    ? HIERARCHY_DEPTH_TINT_STEP
-    : 0
+  return depth >= 2 ? depth - 1 : 0
+}
+
+export function hierarchyGutterWidth(depth: number): number {
+  return hierarchyGuideCount(depth) * HIERARCHY_INDENT_STEP
+}
+
+/**
+ * The depth-dependent CSS a tree row gets, as a plain object.
+ *
+ * Exported so the contrast spec can read the STYLES rather than a
+ * description of them: the check that no key here is a background COLOUR is
+ * what makes "the depth cue never accumulates toward the text" a property of
+ * the code instead of a claim in a comment.
+ */
+export function hierarchyDepthStyles(
+  depth: number,
+  colors: { guide: string; activeGuide: string },
+) {
+  const gutter = hierarchyGutterWidth(depth)
+  if (!(gutter > 0)) return {}
+  const gutterFor = (color: string) => ({
+    // A gradient rather than n nested borders: the rows are siblings that
+    // pad themselves (see the button's `paddingLeft`), not physically
+    // nested boxes, so there is no element per level to hang a border on.
+    backgroundImage: `repeating-linear-gradient(to right, ${color} 0 ${HIERARCHY_GUIDE_WIDTH}px, transparent ${HIERARCHY_GUIDE_WIDTH}px ${HIERARCHY_INDENT_STEP}px)`,
+    backgroundRepeat: 'no-repeat',
+    // Clipped to the indent gutter, so the guides stop where the label
+    // starts and no line is ever drawn behind text.
+    backgroundSize: `${gutter}px 100%`,
+    backgroundPosition: 'left top',
+  })
+  const row = `> .${classKey.treeListItem} > .${listItemButtonClasses.root}`
+  return {
+    [row]: gutterFor(colors.guide),
+    // The row whose subtree holds the selection. Applied to the row's own
+    // button — one element per row, never an ancestor box wrapping its
+    // descendants — so however many ancestors match, none of them can
+    // stack on top of another.
+    [`&:has(.${classKey.subTreeView}):has(.${classKey.itemSelected}) ${row}`]:
+      gutterFor(colors.activeGuide),
+  }
 }
 
 const TreeItem = styled(MuiListItem, {
   shouldForwardProp(propName) {
     return propName !== 'depth'
   },
-})<MuiListItemProps & { depth: number }>((styles) => {
-  const { depth = 1 } = styles
-  const depthOpacity = hierarchyDepthTintAlpha(depth)
-  if (!(depthOpacity > 0)) return {}
-  return {
-    [`&:has(.${classKey.subTreeView}):has(.${classKey.itemSelected})`]: {
-      backgroundColor: `rgba(0 0 0 / ${depthOpacity})`,
-    },
-  }
+})<MuiListItemProps & { depth: number }>(({ theme, depth = 1 }) => {
+  const tv = (theme as any).vars || theme
+  return hierarchyDepthStyles(depth, {
+    guide: `rgba(${tv.palette.text.primaryChannel} / ${HIERARCHY_GUIDE_ALPHA})`,
+    // Full strength, and the same accent the selected row already uses. A
+    // hairline is a small target for a hue cue, and `#e040fb` measures 3.34
+    // against the lightest surface and 3.78 against the darkest — dropping
+    // its alpha to soften it would spend the whole margin.
+    activeGuide: tv.palette.secondary.main,
+  })
 })
 TreeItem.displayName = 'TreeItem'
 
@@ -340,9 +421,10 @@ const NodeTreeItem = observer(
           )}
           <MuiListItemButton
             sx={{
-              paddingLeft: `${
-                depth <= 1 ? (depth < 1 ? 0 : 0) : (depth - 1) * 23
-              }px`,
+              // The gutter the depth guides are drawn in — one source for
+              // both, or the lines would stop landing on the level
+              // boundaries they mark.
+              paddingLeft: `${hierarchyGutterWidth(depth)}px`,
             }}
             onClick={(e) => onItemSelect(e, nodeId)}
             onMouseOver={(e) => onItemHover(e, nodeId)}

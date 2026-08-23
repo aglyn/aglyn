@@ -260,11 +260,9 @@ export const ComponentPicker = observer(
               <EmptyResults sx={{ minHeight: '40vh', height: 1 }} />
             ) : (
               <AccordionListComponent
-                // `defaultExpanded` is read once per mount, so the results
-                // group would arrive collapsed without a fresh mount when the
-                // list flips between grouped and flat. Keyed on the SHAPE,
-                // not the filter text, so typing does not remount per press.
-                key={filter ? 'results' : 'categories'}
+                // No `key` remount to force the results group open
+                // (AGL-2486) — see the Elements panel for why that could not
+                // work. The list opens a group when it first appears.
                 items={items}
                 defaultExpanded={items.map((i) => i.$id)}
                 getItemId={(item) => item?.$id}
