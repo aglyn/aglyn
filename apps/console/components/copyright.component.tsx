@@ -23,8 +23,23 @@ export interface CopyrightProps extends TypographyProps<any, any> {}
 
 const CopyrightComponent = forwardRef<any, CopyrightProps>((props, ref) => {
   const { children, ...rest } = props
+  /*
+   * `body2`, not `subtitle2` (AGL-2486). Zach: "We probably don't need to
+   * make this copyright text so bold." `subtitle2` is a 500-weight,
+   * heading-ish role, which gave a legal footnote more visual weight than the
+   * links beside it and the version beneath it. It is boilerplate: it has to
+   * be present and legible, not prominent.
+   *
+   * Both the variant and the colour are still overridable through `rest`, so
+   * a surface that genuinely wants it louder can say so at the call site.
+   */
   return (
-    <Typography ref={ref} variant="subtitle2" {...rest}>
+    <Typography
+      ref={ref}
+      variant="body2"
+      color="text.secondary"
+      {...rest}
+    >
       {/*
        * `© 2026 Aglyn LLC. All rights reserved.` — the conventional order,
        * with the sentence actually closed (AGL-2486).
