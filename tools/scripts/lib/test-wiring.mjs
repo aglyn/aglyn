@@ -61,9 +61,10 @@
  *
  * This is a statement of what is NOT covered, not permission to add more —
  * every entry is a library whose source is imported by real code and whose
- * behaviour nothing asserts. Adding a sixth line is a decision someone should
+ * behaviour nothing asserts. Adding a fifth line is a decision someone should
  * have to argue for in review, which is the only reason this list is a list
- * rather than a rule.
+ * rather than a rule. The count is asserted in the sibling test, so REMOVING
+ * one (as AGL-2486 found `shared-util-dom` had been) is equally deliberate.
  *
  * @type {ReadonlyArray<{project: string, dir: string, why: string}>}
  */

@@ -211,8 +211,15 @@ describe('the exemption list cannot rot in either direction', () => {
 })
 
 describe('the shipped exemption list', () => {
-  it('names five projects, each with a reason', () => {
-    assert.equal(UNTESTED_PROJECTS.length, 5)
+  // The number is the point. It is not a fact about the list — it is a
+  // TRIPWIRE, so that shrinking or growing the exemption set is an edit
+  // someone made on purpose rather than a line that slid in with unrelated
+  // work. `099964c57` removed `shared-util-dom` (it got tests, which is the
+  // good direction) and left this at five, so `Main Gate` ran red on `main`
+  // for every scheduled sweep until AGL-2486. Moving the number IS the
+  // review; do not replace it with `UNTESTED_PROJECTS.length`.
+  it('names four projects, each with a reason', () => {
+    assert.equal(UNTESTED_PROJECTS.length, 4)
     for (const entry of UNTESTED_PROJECTS) {
       assert.ok(entry.project, 'every entry needs a project name')
       assert.ok(entry.dir.startsWith('libs/'), `${entry.project} needs a dir`)
