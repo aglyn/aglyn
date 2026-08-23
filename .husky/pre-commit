@@ -1,0 +1,11 @@
+# The docs registries may not be committed stale (AGL-2486).
+#
+# Fast pre-filter: skip node entirely for the overwhelming majority of
+# commits, which touch neither apps/docs nor a generated registry. This
+# pattern is deliberately BROADER than the guard's own trigger list —
+# matching too much costs a few hundred milliseconds, matching too little
+# would silently skip the guard. The authoritative list lives in the script.
+if git diff --cached --name-only --diff-filter=ACMRD |
+  grep -qE '^apps/docs/|^tools/scripts/generate-|\.generated\.ts$'; then
+  node tools/scripts/check-staged-docs-registries.mjs || exit 1
+fi
