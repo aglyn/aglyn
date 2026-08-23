@@ -120,7 +120,7 @@ const ANSWERABLE: readonly string[] = [
   'what are marketing overlays',
   'how do I see analytics for my site',
   'how do I drag an element into a container',
-  'how do I contact support or the community',
+  'how do I contact support',
   'how do I manage my account details',
   'how do I sign in and manage my sessions',
 ]

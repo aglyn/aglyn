@@ -46,9 +46,11 @@ describe('a numeric value in the token editor (AGL-2486)', () => {
         tokenValue={value as never}
         onTokenValueChange={onChange}
         multiline={false}
-        labelContextRef={
-          { current: {} } as never
-        }
+        labelContextRef={{ current: {} } as never}
+        // Required by the component's props, and irrelevant to this bug: the
+        // loop was in the value coercion, which runs before either is read.
+        handleRef={createRef() as never}
+        onPillClick={jest.fn()}
       />,
     )
     return { view, onChange }

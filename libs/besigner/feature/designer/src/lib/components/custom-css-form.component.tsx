@@ -205,7 +205,7 @@ const draftKey = (
   nodeId: string,
   overrideKey: string,
   mode: 'css' | 'json',
-): string => [nodeId, overrideKey, mode].join(' ')
+): string => [nodeId, overrideKey, mode].join('\x00')
 
 /** Drops every pending draft — test seam, and a hard reset for the canvas. */
 export function resetPendingCustomCssDrafts(): void {
