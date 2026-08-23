@@ -358,16 +358,31 @@ export interface LegalDocumentManifestEntry {
  * `©` line. NOT `canonicalizeLegal` — that breaks on block elements and joins
  * inline runs, which yields the same words with different line boundaries and
  * therefore a different sha. Prove the method on an UNCHANGED pinned document
- * before trusting a new pin; terms reproduces 35966 bytes byte-for-byte and is
- * that control here.
+ * before trusting a new pin.
+ *
+ * ⚠️ The control ROTATES — it is whichever pinned document this pass did not
+ * touch, never a fixed name. On the pass that first wrote this paragraph terms
+ * was untouched and served as the control at 35966 bytes; on 2026-08-22 terms
+ * itself changed (§12.1 and §12.2 gained the Apache-2.0 sentences, AGL-2484)
+ * and PRIVACY was the control, reproducing 15286 bytes / `42ea82…`
+ * byte-for-byte both before and after publication. Naming terms permanently
+ * here would have pointed the next capture at the one document it cannot
+ * prove anything with.
+ *
+ * ⚠️ The slice boundary is NOT uniform across the codebase. This manifest
+ * EXCLUDES the closing `©` line; the parallel publisher-agreement pin in
+ * `libs/aglyn/src/lib/app-utils/publisher-agreement.ts` INCLUDES it, as its
+ * own docstring says. Two conventions, both load-bearing, both verified
+ * against their live pages — read the target's docstring before capturing,
+ * because either method produces a plausible file under the other's rule.
  */
 export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
   {
     key: 'terms',
     url: LEGAL_URLS.TERMS,
     sha256:
-      '391b3460c01461651ab0ac4921f1d879a95a2b4223c1e1f01889ece2359980d4',
-    bytes: 35966,
+      'd3329d47541b1ad862d2254d3b2788490136c6d97639c9106e4af9c62b3f5bad',
+    bytes: 36704,
   },
   {
     key: 'privacy',

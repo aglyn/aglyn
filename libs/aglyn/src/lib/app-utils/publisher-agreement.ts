@@ -66,6 +66,24 @@ import { LEGAL_ORIGIN, isPublishedLegalUrl } from './published-legal-pages'
  * pin below asserting a hash for text nobody is shown any more — a FALSE
  * RECORD, which is the exact failure the pin exists to detect. The choice is
  * therefore between a bump and a broken pin, not between a bump and nothing.
+ *
+ * ## 2026-08-22 — the page changed and this string DELIBERATELY did not
+ *
+ * Three clauses were added on 2026-08-22 (§3(h) listing conduct, §8.6 sales
+ * through the Marketplace, §13.6 marks) and the pin below moved with them, but
+ * `2026-08-18.1` stayed. That is not the third option the paragraph above says
+ * does not exist — it is the same choice with one input changed. A bump exists
+ * to re-ask publishers who accepted the OLD text; production holds exactly one
+ * acceptance record and it is Zach's own, so there is nobody to re-ask and the
+ * bump would buy nothing. Zach's decision, 2026-08-22.
+ *
+ * The pin still had to move, for precisely the reason given above: the served
+ * bytes changed, so leaving the old hash here would assert a document nobody
+ * is shown. Version unchanged + pin re-captured is coherent ONLY while the
+ * acceptance set is empty. The first real publisher acceptance ends that, and
+ * from then on any body-text change costs a bump — see the same rule in
+ * `apps/console/constants/legal-documents.ts`, where the clickwrap snapshots
+ * collapsed back to `v1` on the identical argument.
  */
 export const PUBLISHER_AGREEMENT_VERSION = '2026-08-18.1'
 
@@ -106,10 +124,10 @@ export const PUBLISHER_AGREEMENT_TITLE = 'Marketplace Publisher Agreement'
  * snapshot of unpublished text is a false record.
  */
 export const PUBLISHER_AGREEMENT_SHA256 =
-  '66b77a737f49c36a2befafb999659ba41f05249ff8134d3834a5c32ffaf57cf4'
+  '37357a79f32e652e900ee9b87705751d7840e40e193afbee042abd7641ab8dfb'
 
 /** Byte length of the same snapshot — a cheap second check on the content. */
-export const PUBLISHER_AGREEMENT_BYTES = 12073
+export const PUBLISHER_AGREEMENT_BYTES = 13732
 
 /**
  * Canonical document, on the operator's legal origin beside the other terms.

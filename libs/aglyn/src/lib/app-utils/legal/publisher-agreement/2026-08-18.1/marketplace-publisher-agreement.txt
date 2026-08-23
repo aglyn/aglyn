@@ -71,6 +71,8 @@ The Artifact's documentation accurately describes what data it reads, stores, or
 The Artifact and its listing comply with applicable law, the Acceptable Use Policy, and applicable export-control and sanctions requirements.
 (g) Data protection.
 If the Artifact processes personal data of an installing organization's end users, you do so only as described in your documentation, and you are independently responsible for your own compliance obligations as a controller or processor of that data.
+(h) Listing conduct.
+Neither the Artifact nor its listing disparages Aglyn or the Services; makes comparative claims about Aglyn's plans, prices, quotas, or entitlements; states or implies what an Aglyn plan costs or contains; or is named, presented, or marketed on the basis of avoiding, replacing, or discouraging an Aglyn subscription, plan, or upgrade. Accurately describing what your own Artifact does, and stating factually which Aglyn plans or features it requires or is compatible with, is permitted.
 These warranties are made per version.
 Publishing a new version restates all of them for that version's bytes.
 4. Pre-Submission Statements
@@ -127,6 +129,8 @@ You remain responsible for every other tax arising from your Marketplace income
 You are responsible for refunds, chargebacks, and disputes on your sales. Aglyn may reverse or withhold amounts corresponding to refunded, disputed, or fraudulent transactions.
 8.5 Support.
 You are responsible for supporting your own Artifacts. Aglyn provides no support for third-party Artifacts and may direct installers to you.
+8.6 Sales through the Marketplace.
+Where an Artifact, or any capability, tier, feature, licence key, or period of use of it, is offered to installing organizations for a fee, that transaction must be processed through the Marketplace. You may not use a free listing, an in-Artifact prompt, a licence-key mechanism, an external checkout, or any other off-platform channel to collect payment for capability delivered through an Artifact distributed by the Marketplace. An Artifact that is genuinely free to installing organizations - including one that connects to a separate service the organization already buys from you - is not restricted by this Section.
 9. Indemnity
 You will
 defend, indemnify, and hold harmless
@@ -167,6 +171,8 @@ Williamson County, Texas
 You may not assign this Agreement without Aglyn's prior written consent, except to a successor to all or substantially all of your business that assumes it in full. Aglyn may assign freely.
 13.5 Entire agreement.
 This Agreement, together with the Terms of Service and the documents incorporated into it, is the entire agreement between the parties regarding the Marketplace.
+13.6 Marks.
+You may use Aglyn's names, logos, and marks only to identify compatibility - for example, "works with Aglyn" - and only in a way that is accurate and does not suggest sponsorship, endorsement, or affiliation. You may not use them in your Artifact's name, your listing title, your publisher name, or your branding; present an Artifact as an Aglyn product, as official, or as a substitute for an Aglyn plan; or adopt, register, or use any confusingly similar name, mark, or domain.
 14. Contact
 Aglyn LLC
 (a Texas limited liability company)
