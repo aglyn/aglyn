@@ -83,6 +83,7 @@ import BillingMeteredEstimateComponent from '../../../../components/billing/bill
 import BillingUsageHistoryComponent from '../../../../components/billing/billing-usage-history.component'
 import { RetentionFunnelDialog } from '../../../../components/billing/retention-funnel.dialog'
 import BillingUsageComponent from '../../../../components/billing/billing-usage.component'
+import CardColumns from '../../../../components/card-columns.component'
 import EmbeddedCheckoutDialogComponent from '../../../../components/embedded-checkout-dialog.component'
 import LockdownNotice from '../../../../components/lockdown-notice.component'
 import { useReleaseFlag } from '../../../../hooks/use-release-flags'
@@ -1046,310 +1047,338 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
               ),
             },
             {
+              // The narrow cards read two-abreast (AGL-2486). Zach: "Many of
+              // these full width cards could share a half width or something
+              // with others." Each of these declared `size: { xs: 12 }`, and a
+              // full-width item is its own band in `GridItems masonry` — so
+              // seven cards holding one sentence or an empty state each took a
+              // full page width, one under the next. `Billing history` was the
+              // same waste in the other direction: `md: 8` alone in its band
+              // left a third of the row dead.
+              //
+              // Not `GridItems masonry` again, which is what wraps this whole
+              // page: within a band it groups items by their `size`, so the
+              // seven of them declaring one width would share ONE column and
+              // leave the other half of the page empty — the staff org page
+              // hit exactly that. `CardColumns` lets the browser place the
+              // breaks instead, which is the mechanism that BALANCES.
+              //
+              // The plan grid, the Enterprise row and the top band stay
+              // outside: those earn their width.
               size: { xs: 12 },
               children: (
-                // The trend beside the at-a-glance number (AGL-1530). The
-                // card above answers "what is this period costing"; this one
-                // answers "is that unusual", off the same monthly rollups
-                // `report-usage` already writes — one bounded read, no new
-                // aggregation and no second estimator to disagree with the
-                // invoice.
-                <CardDisplay
-                  header={'Usage history'}
-                  help={docsHelp('billing', {
-                    anchor: '#usage-meters',
-                    excerpt:
-                      'How your metered usage has moved over the last ' +
-                      'twelve months, from your monthly billing rollups.',
-                  })}
-                  contentGutterX
-                  contentGutterY
-                >
-                  <BillingUsageHistoryComponent org={org} />
-                </CardDisplay>
-              ),
-            },
-            {
-              size: { xs: 12 },
-              children: (
-                // The customer's OPTIONAL storage cap (AGL-1957, for AGL-1886;
-                // inverted 2026-08-18). Storage past the included band bills
-                // by default and `usage-alerts` warns before and at the band —
-                // this card is only for a customer who would rather uploads
-                // stopped than be billed. Directly under the meters that show
-                // the usage it governs.
-                <Box id="storage-overage">
-                  <CardDisplay
-                    header={'Storage cap'}
-                    subheader={
-                      'Extra storage past your included allowance is billed ' +
-                      'on your monthly invoice. Set a cap if you would ' +
-                      'rather uploads stopped instead.'
-                    }
-                    help={docsHelp('billing', {
-                      anchor: '#storage-overage',
-                      excerpt:
-                        'Uploads past your included storage are refused ' +
-                        'unless you turn on metered storage, which carries a ' +
-                        'monthly spend limit you set.',
-                    })}
-                    contentGutterX
-                    contentGutterY
-                  >
-                    <BillingStorageOverageCardComponent
-                      orgId={orgId}
-                      canManage={can('billing.manage')}
-                    />
-                  </CardDisplay>
-                </Box>
-              ),
-            },
-            {
-              size: { xs: 12 },
-              children: (
-                // The customer's MONTHLY USAGE BUDGET (AGL-1528) — Zach's
-                // "budgets for usage alerts, similar to how google cloud
-                // charges". Deliberately BELOW the storage cap and visibly
-                // separate from it: the cap refuses uploads, the budget
-                // refuses nothing and only warns. A card that blurred the two
-                // would sell a heads-up as a brake.
-                <Box id="usage-budget">
-                  <CardDisplay
-                    header={'Monthly usage budget'}
-                    subheader={
-                      'Get alerted as your metered usage passes each ' +
-                      'percentage of an amount you choose. A budget warns ' +
-                      'you — it never stops anything.'
-                    }
-                    help={docsHelp('billing', {
-                      anchor: '#usage-budget',
-                      excerpt:
-                        'Set a monthly usage budget and the percentages you ' +
-                        'want to hear about; alerts arrive in the console ' +
-                        'and by email.',
-                    })}
-                    contentGutterX
-                    contentGutterY
-                  >
-                    <BillingUsageBudgetCardComponent
-                      orgId={orgId}
-                      canManage={can('billing.manage')}
-                    />
-                  </CardDisplay>
-                </Box>
-              ),
-            },
-            {
-              size: { xs: 12, md: 8 },
-              children: (
-                <CardDisplay
-                  header={'Billing history'}
-                  help={docsHelp('billing', {
-                    anchor: '#payments',
-                    excerpt:
-                      'Invoices from Stripe with status and amounts, plus ' +
-                      'links to the hosted invoice, PDF, and receipt.',
-                  })}
-                  contentGutterX
-                  contentGutterY
-                >
-                  {invoices === null ? (
-                    <Typography variant="body2" color="text.secondary">
-                      {'Invoices appear here once billing is configured.'}
-                    </Typography>
-                  ) : invoices.length === 0 ? (
-                    <Typography variant="body2" color="text.secondary">
-                      {'No invoices yet.'}
-                    </Typography>
-                  ) : (
-                    <>
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>{'Invoice'}</TableCell>
-                            <TableCell>{'Date'}</TableCell>
-                            <TableCell>{'Status'}</TableCell>
-                            <TableCell>{'Amount'}</TableCell>
-                            <TableCell align="right">{'Documents'}</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {invoices.map((invoice) => (
-                            <TableRow key={invoice.id}>
-                              <TableCell>
-                                {invoice.number ?? invoice.id}
-                              </TableCell>
-                              <TableCell>
-                                {invoice.created
-                                  ? new Date(
-                                      invoice.created,
-                                    ).toLocaleDateString()
-                                  : '—'}
-                              </TableCell>
-                              <TableCell>
-                                <Chip
-                                  label={invoice.status ?? '—'}
-                                  size="small"
-                                  variant="outlined"
-                                  color={
-                                    invoice.status === 'paid'
-                                      ? 'success'
-                                      : invoice.status === 'open'
-                                        ? 'warning'
-                                        : 'default'
-                                  }
-                                />
-                              </TableCell>
-                              <TableCell>
-                                {`$${(invoice.totalCents / 100).toFixed(2)} ${invoice.currency.toUpperCase()}`}
-                              </TableCell>
-                              <TableCell align="right">
-                                <Stack
-                                  direction="row"
-                                  spacing={1.5}
-                                  sx={{ justifyContent: 'flex-end' }}
-                                >
-                                  {invoice.hostedInvoiceUrl ? (
-                                    <Link
-                                      href={invoice.hostedInvoiceUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      variant="body2"
-                                    >
-                                      {'View'}
-                                    </Link>
-                                  ) : null}
-                                  {invoice.invoicePdf ? (
-                                    <Link
-                                      href={invoice.invoicePdf}
-                                      variant="body2"
-                                    >
-                                      {'PDF'}
-                                    </Link>
-                                  ) : null}
-                                  {invoice.receiptUrl ? (
-                                    <Link
-                                      href={invoice.receiptUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      variant="body2"
-                                    >
-                                      {'Receipt'}
-                                    </Link>
-                                  ) : null}
-                                </Stack>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                      {invoicesHasMore ? (
-                        <Box sx={{ textAlign: 'center', mt: 1 }}>
-                          <Button
-                            size="small"
-                            color="primary"
-                            disabled={invoicesLoading}
-                            onClick={() => void fetchInvoices(invoiceCursor)}
+                <CardColumns
+                  spacing={3}
+                  items={[
+                    {
+                      key: 'usage-history',
+                      children: (
+                        // The trend beside the at-a-glance number (AGL-1530). The
+                        // card above answers "what is this period costing"; this one
+                        // answers "is that unusual", off the same monthly rollups
+                        // `report-usage` already writes — one bounded read, no new
+                        // aggregation and no second estimator to disagree with the
+                        // invoice.
+                        <CardDisplay
+                          header={'Usage history'}
+                          help={docsHelp('billing', {
+                            anchor: '#usage-meters',
+                            excerpt:
+                              'How your metered usage has moved over the last ' +
+                              'twelve months, from your monthly billing rollups.',
+                          })}
+                          contentGutterX
+                          contentGutterY
+                        >
+                          <BillingUsageHistoryComponent org={org} />
+                        </CardDisplay>
+                      ),
+                    },
+                    {
+                      key: 'storage-cap',
+                      children: (
+                        // The customer's OPTIONAL storage cap (AGL-1957, for AGL-1886;
+                        // inverted 2026-08-18). Storage past the included band bills
+                        // by default and `usage-alerts` warns before and at the band —
+                        // this card is only for a customer who would rather uploads
+                        // stopped than be billed. Directly under the meters that show
+                        // the usage it governs.
+                        <Box id="storage-overage">
+                          <CardDisplay
+                            header={'Storage cap'}
+                            subheader={
+                              'Extra storage past your included allowance is billed ' +
+                              'on your monthly invoice. Set a cap if you would ' +
+                              'rather uploads stopped instead.'
+                            }
+                            help={docsHelp('billing', {
+                              anchor: '#storage-overage',
+                              excerpt:
+                                'Uploads past your included storage are refused ' +
+                                'unless you turn on metered storage, which carries a ' +
+                                'monthly spend limit you set.',
+                            })}
+                            contentGutterX
+                            contentGutterY
                           >
-                            {invoicesLoading
-                              ? 'Loading…'
-                              : 'Load older invoices'}
-                          </Button>
+                            <BillingStorageOverageCardComponent
+                              orgId={orgId}
+                              canManage={can('billing.manage')}
+                            />
+                          </CardDisplay>
                         </Box>
-                      ) : null}
-                    </>
-                  )}
-                </CardDisplay>
+                      ),
+                    },
+                    {
+                      key: 'usage-budget',
+                      children: (
+                        // The customer's MONTHLY USAGE BUDGET (AGL-1528) — Zach's
+                        // "budgets for usage alerts, similar to how google cloud
+                        // charges". Deliberately BELOW the storage cap and visibly
+                        // separate from it: the cap refuses uploads, the budget
+                        // refuses nothing and only warns. A card that blurred the two
+                        // would sell a heads-up as a brake.
+                        <Box id="usage-budget">
+                          <CardDisplay
+                            header={'Monthly usage budget'}
+                            subheader={
+                              'Get alerted as your metered usage passes each ' +
+                              'percentage of an amount you choose. A budget warns ' +
+                              'you — it never stops anything.'
+                            }
+                            help={docsHelp('billing', {
+                              anchor: '#usage-budget',
+                              excerpt:
+                                'Set a monthly usage budget and the percentages you ' +
+                                'want to hear about; alerts arrive in the console ' +
+                                'and by email.',
+                            })}
+                            contentGutterX
+                            contentGutterY
+                          >
+                            <BillingUsageBudgetCardComponent
+                              orgId={orgId}
+                              canManage={can('billing.manage')}
+                            />
+                          </CardDisplay>
+                        </Box>
+                      ),
+                    },
+                    {
+                      key: 'billing-history',
+                      children: (
+                        <CardDisplay
+                          header={'Billing history'}
+                          help={docsHelp('billing', {
+                            anchor: '#payments',
+                            excerpt:
+                              'Invoices from Stripe with status and amounts, plus ' +
+                              'links to the hosted invoice, PDF, and receipt.',
+                          })}
+                          contentGutterX
+                          contentGutterY
+                        >
+                          {invoices === null ? (
+                            <Typography variant="body2" color="text.secondary">
+                              {'Invoices appear here once billing is configured.'}
+                            </Typography>
+                          ) : invoices.length === 0 ? (
+                            <Typography variant="body2" color="text.secondary">
+                              {'No invoices yet.'}
+                            </Typography>
+                          ) : (
+                            <>
+                              <Table size="small">
+                                <TableHead>
+                                  <TableRow>
+                                    <TableCell>{'Invoice'}</TableCell>
+                                    <TableCell>{'Date'}</TableCell>
+                                    <TableCell>{'Status'}</TableCell>
+                                    <TableCell>{'Amount'}</TableCell>
+                                    <TableCell align="right">{'Documents'}</TableCell>
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {invoices.map((invoice) => (
+                                    <TableRow key={invoice.id}>
+                                      <TableCell>
+                                        {invoice.number ?? invoice.id}
+                                      </TableCell>
+                                      <TableCell>
+                                        {invoice.created
+                                          ? new Date(
+                                              invoice.created,
+                                            ).toLocaleDateString()
+                                          : '—'}
+                                      </TableCell>
+                                      <TableCell>
+                                        <Chip
+                                          label={invoice.status ?? '—'}
+                                          size="small"
+                                          variant="outlined"
+                                          color={
+                                            invoice.status === 'paid'
+                                              ? 'success'
+                                              : invoice.status === 'open'
+                                                ? 'warning'
+                                                : 'default'
+                                          }
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        {`$${(invoice.totalCents / 100).toFixed(2)} ${invoice.currency.toUpperCase()}`}
+                                      </TableCell>
+                                      <TableCell align="right">
+                                        <Stack
+                                          direction="row"
+                                          spacing={1.5}
+                                          sx={{ justifyContent: 'flex-end' }}
+                                        >
+                                          {invoice.hostedInvoiceUrl ? (
+                                            <Link
+                                              href={invoice.hostedInvoiceUrl}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                              variant="body2"
+                                            >
+                                              {'View'}
+                                            </Link>
+                                          ) : null}
+                                          {invoice.invoicePdf ? (
+                                            <Link
+                                              href={invoice.invoicePdf}
+                                              variant="body2"
+                                            >
+                                              {'PDF'}
+                                            </Link>
+                                          ) : null}
+                                          {invoice.receiptUrl ? (
+                                            <Link
+                                              href={invoice.receiptUrl}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                              variant="body2"
+                                            >
+                                              {'Receipt'}
+                                            </Link>
+                                          ) : null}
+                                        </Stack>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                              {invoicesHasMore ? (
+                                <Box sx={{ textAlign: 'center', mt: 1 }}>
+                                  <Button
+                                    size="small"
+                                    color="primary"
+                                    disabled={invoicesLoading}
+                                    onClick={() => void fetchInvoices(invoiceCursor)}
+                                  >
+                                    {invoicesLoading
+                                      ? 'Loading…'
+                                      : 'Load older invoices'}
+                                  </Button>
+                                </Box>
+                              ) : null}
+                            </>
+                          )}
+                        </CardDisplay>
+                      ),
+                    },
+                    ...(addonStore.visible
+                      ? [{
+                          key: 'plan-addons',
+                          children: (
+                            // Self-serve add-ons (AGL-529); #addons anchors the
+                            // point-of-need upsell links (AGL-530).
+                            <Box id="addons">
+                              <CardDisplay
+                                header={'Plan add-ons'}
+                                help={docsHelp('addOns', {
+                                  anchor: '#what-you-can-add',
+                                })}
+                                contentGutterX
+                                contentGutterY
+                              >
+                                <BillingAddonsCardComponent
+                                  orgId={orgId}
+                                  canManage={can('billing.manage')}
+                                />
+                              </CardDisplay>
+                            </Box>
+                          ),
+                        },
+                        {
+                          key: 'register-seats',
+                          children: (
+                            // Where purchased register seats get DEPLOYED (AGL-1947).
+                            // Buying the add-on above is only half the transaction:
+                            // `posRegisters` is an org-level pool since AGL-1775, and
+                            // until this card existed a merchant could pay $89/mo for
+                            // a seat with nowhere to put it. Directly beneath the
+                            // add-on that sells it, and under the same `#addons`
+                            // region the registers card and the route's own 409 both
+                            // point at ("Billing → Add-ons").
+                            <Box id="register-seats">
+                              <CardDisplay
+                                header={'POS register seats'}
+                                subheader={
+                                  'Each purchased seat lets one site run one more ' +
+                                  'register. Move seats between sites at any time.'
+                                }
+                                help={docsHelp('addOns', {
+                                  anchor: '#assigning-register-seats',
+                                })}
+                                contentGutterX
+                                contentGutterY
+                              >
+                                <BillingRegisterAllocationsCardComponent
+                                  orgId={orgId}
+                                  canManage={can('billing.manage')}
+                                />
+                              </CardDisplay>
+                            </Box>
+                          ),
+                        },
+                        {
+                          key: 'collaborator-seats',
+                          children: (
+                            // Where purchased COLLABORATOR seats get deployed
+                            // (AGL-2439) — the register card's twin, on the key that
+                            // never got the AGL-1775 fix. `seatAddons.members` is an
+                            // org-level pool now, so buying the add-on above is again
+                            // only half the transaction. Shipped in the SAME pass as
+                            // the pool for exactly the reason AGL-1947 exists: a pool
+                            // whose seats have nowhere to go is money taken for
+                            // capacity the product gives no way to use.
+                            <Box id="collaborator-seats">
+                              <CardDisplay
+                                header={'Site collaborator seats'}
+                                subheader={
+                                  'Each purchased seat lets one site have one more ' +
+                                  'collaborator. Move seats between sites at any time.'
+                                }
+                                help={docsHelp('addOns', {
+                                  anchor: '#assigning-collaborator-seats',
+                                })}
+                                contentGutterX
+                                contentGutterY
+                              >
+                                <BillingCollaboratorAllocationsCardComponent
+                                  orgId={orgId}
+                                  canManage={can('billing.manage')}
+                                />
+                              </CardDisplay>
+                            </Box>
+                          ),
+                        }]
+                      : []),
+                  ]}
+                />
               ),
             },
-            ...(addonStore.visible
-              ? [{
-                  size: { xs: 12 },
-                  children: (
-                    // Self-serve add-ons (AGL-529); #addons anchors the
-                    // point-of-need upsell links (AGL-530).
-                    <Box id="addons">
-                      <CardDisplay
-                        header={'Plan add-ons'}
-                        help={docsHelp('addOns', {
-                          anchor: '#what-you-can-add',
-                        })}
-                        contentGutterX
-                        contentGutterY
-                      >
-                        <BillingAddonsCardComponent
-                          orgId={orgId}
-                          canManage={can('billing.manage')}
-                        />
-                      </CardDisplay>
-                    </Box>
-                  ),
-                },
-                {
-                  size: { xs: 12 },
-                  children: (
-                    // Where purchased register seats get DEPLOYED (AGL-1947).
-                    // Buying the add-on above is only half the transaction:
-                    // `posRegisters` is an org-level pool since AGL-1775, and
-                    // until this card existed a merchant could pay $89/mo for
-                    // a seat with nowhere to put it. Directly beneath the
-                    // add-on that sells it, and under the same `#addons`
-                    // region the registers card and the route's own 409 both
-                    // point at ("Billing → Add-ons").
-                    <Box id="register-seats">
-                      <CardDisplay
-                        header={'POS register seats'}
-                        subheader={
-                          'Each purchased seat lets one site run one more ' +
-                          'register. Move seats between sites at any time.'
-                        }
-                        help={docsHelp('addOns', {
-                          anchor: '#assigning-register-seats',
-                        })}
-                        contentGutterX
-                        contentGutterY
-                      >
-                        <BillingRegisterAllocationsCardComponent
-                          orgId={orgId}
-                          canManage={can('billing.manage')}
-                        />
-                      </CardDisplay>
-                    </Box>
-                  ),
-                },
-                {
-                  size: { xs: 12 },
-                  children: (
-                    // Where purchased COLLABORATOR seats get deployed
-                    // (AGL-2439) — the register card's twin, on the key that
-                    // never got the AGL-1775 fix. `seatAddons.members` is an
-                    // org-level pool now, so buying the add-on above is again
-                    // only half the transaction. Shipped in the SAME pass as
-                    // the pool for exactly the reason AGL-1947 exists: a pool
-                    // whose seats have nowhere to go is money taken for
-                    // capacity the product gives no way to use.
-                    <Box id="collaborator-seats">
-                      <CardDisplay
-                        header={'Site collaborator seats'}
-                        subheader={
-                          'Each purchased seat lets one site have one more ' +
-                          'collaborator. Move seats between sites at any time.'
-                        }
-                        help={docsHelp('addOns', {
-                          anchor: '#assigning-collaborator-seats',
-                        })}
-                        contentGutterX
-                        contentGutterY
-                      >
-                        <BillingCollaboratorAllocationsCardComponent
-                          orgId={orgId}
-                          canManage={can('billing.manage')}
-                        />
-                      </CardDisplay>
-                    </Box>
-                  ),
-                }]
-              : []),
             {
               size: { xs: 12 },
               children: (

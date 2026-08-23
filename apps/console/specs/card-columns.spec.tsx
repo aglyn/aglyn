@@ -33,7 +33,7 @@
 import { render } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import StaffCardColumns from '../components/staff-card-columns.component'
+import CardColumns from '../components/card-columns.component'
 
 /** Every rule emotion emitted for the rendered tree, as text. */
 const stylesheet = () =>
@@ -54,7 +54,7 @@ const rulesFor = (className: string) =>
 
 function mount(props?: { columns?: number; spacing?: number }) {
   const { container } = render(
-    <StaffCardColumns
+    <CardColumns
       {...props}
       items={[
         { key: 'a', children: <div>{'card a'}</div> },
@@ -72,7 +72,7 @@ function mount(props?: { columns?: number; spacing?: number }) {
   return { root, rules: rulesFor(generated as string) }
 }
 
-describe('StaffCardColumns', () => {
+describe('CardColumns', () => {
   it('emits a two-column flow that the browser BALANCES', () => {
     const { rules } = mount()
     const text = rules.join('\n')
@@ -146,7 +146,7 @@ describe('the org detail page uses it', () => {
   it('no longer pins the cards into rigid rows of two', () => {
     // `size={{ xs: 12, md: 6 }}` on twelve cards IS the bug: it is what makes
     // a row, and a row is what stretches its shorter card.
-    expect(source).toContain('StaffCardColumns')
+    expect(source).toContain('CardColumns')
     expect(source).not.toMatch(/size:\s*\{\s*xs:\s*12,\s*md:\s*6\s*\}/)
   })
 
@@ -155,5 +155,55 @@ describe('the org detail page uses it', () => {
     // are one bucket and therefore one half-width column with the other half
     // of the page empty. Pinned because it is the obvious wrong fix.
     expect(source).not.toContain('GridItems')
+  })
+})
+
+describe('the billing page pairs its narrow cards (AGL-2486)', () => {
+  const source = readFileSync(
+    join(__dirname, '..', 'app/(app)/[orgSlug]/billing/page.tsx'),
+    'utf8',
+  )
+
+  it('reads a real file', () => {
+    expect(source.length).toBeGreaterThan(10000)
+  })
+
+  it('routes the narrow cards through CardColumns', () => {
+    expect(source).toContain('<CardColumns')
+  })
+
+  it('keeps GridItems masonry for the band whose cards differ in width', () => {
+    // The two are used TOGETHER here, and that is the point: the top band is
+    // `md: 4` beside `md: 8`, which is masonry's actual case. Deleting it in
+    // favour of one layout would flatten Current plan / Usage / Metered
+    // estimate into equal columns and lose the emphasis.
+    expect(source).toContain('masonry')
+    expect(source).toMatch(/size:\s*\{\s*xs:\s*12,\s*md:\s*8\s*\}/)
+  })
+
+  it('no longer gives a one-sentence card the full page width', () => {
+    // Every one of these declared `size: { xs: 12 }`, and a full-width item
+    // is its own band — one card per page width, seven deep. They are keyed
+    // items inside CardColumns now, so the presence of the key with no
+    // sibling `size` is what says the card is in the balanced flow.
+    for (const key of [
+      'usage-history',
+      'storage-cap',
+      'usage-budget',
+      'billing-history',
+      'plan-addons',
+      'register-seats',
+      'collaborator-seats',
+    ]) {
+      expect(source).toContain(`key: '${key}'`)
+    }
+  })
+
+  it('leaves the plan comparison grid at full width', () => {
+    // The win is the narrow cards pairing up. The plan grid is twelve
+    // columns of tier comparison and the Enterprise row spans it — pairing
+    // those would be a regression, so the full-width items must survive.
+    expect(source).toMatch(/size:\s*\{\s*xs:\s*12\s*\}/)
+    expect(source).toContain('<BillingPlanCardsComponent')
   })
 })

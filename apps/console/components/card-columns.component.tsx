@@ -19,7 +19,7 @@
 import { Box } from '@mui/material'
 import type { ReactNode } from 'react'
 
-export interface StaffCardColumnsProps {
+export interface CardColumnsProps {
   /** The cards, in reading order. */
   items: Array<{ key?: string; children: ReactNode }>
   /** Columns at the wide breakpoint. Always one below `md`. */
@@ -29,11 +29,11 @@ export interface StaffCardColumnsProps {
 }
 
 /**
- * A BALANCED multi-column card flow for the staff detail screens (AGL-2486).
+ * A BALANCED multi-column card flow for a page of cards (AGL-2486).
  *
- * ## The bug
+ * ## The bug it was built for
  *
- * The org detail page laid twelve cards out as six rigid rows of two. Every
+ * The staff org detail page laid twelve cards out as six rigid rows of two. Every
  * item in a flex row is as tall as the tallest one in it, so `Effective
  * entitlements` — a long table — made its whole row entitlements-tall and
  * left the area beside it dead. On a real org the hole was most of a screen,
@@ -42,14 +42,17 @@ export interface StaffCardColumnsProps {
  *
  * ## Why not `GridItems masonry`
  *
- * `GridItems` already carries a `masonry` mode built for exactly this, and it
- * is the right answer on billing and on the marketplace listing — but it
- * buckets items into columns BY THEIR `size`, and every card here declares
- * the same `{ xs: 12, md: 6 }`. One bucket is one column, so turning the flag
- * on would have collapsed all twelve cards into a single half-width column
- * with the other half of the page empty: a worse layout than the one being
- * fixed, arrived at by using the fix. The mode needs items of differing
- * widths to have anything to arrange.
+ * `GridItems` already carries a `masonry` mode, and it is the right answer
+ * when a page's cards declare DIFFERENT widths — the billing page's top band
+ * (`md: 4` beside `md: 8`) is exactly its case, and still uses it. But within
+ * a band it groups items by their `size`: one width is one column. A run of
+ * cards that all declare the same width therefore collapses into a single
+ * column with the rest of the page empty — a worse layout than the one being
+ * fixed, arrived at by using the fix.
+ *
+ * That is why this exists alongside it rather than replacing it, and why the
+ * two are used together on `/[orgSlug]/billing`: masonry for the band whose
+ * cards differ, this for the run whose cards do not.
  *
  * ## What this does instead
  *
@@ -73,11 +76,11 @@ export interface StaffCardColumnsProps {
  * table in half. Below `md` the count drops to one and the cards read in
  * their authored order, which is the same collapse the flex grid had.
  */
-export default function StaffCardColumns({
+export default function CardColumns({
   items,
   columns = 2,
   spacing = 3,
-}: StaffCardColumnsProps) {
+}: CardColumnsProps) {
   return (
     <Box
       sx={{

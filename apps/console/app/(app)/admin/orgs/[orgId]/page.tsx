@@ -61,7 +61,7 @@ import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth, useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
-import StaffCardColumns from '../../../../../components/staff-card-columns.component'
+import CardColumns from '../../../../../components/card-columns.component'
 import StaffOnly from '../../../../../components/staff-only.component'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import PluginWidgetSlot from '../../../../../components/plugin-widget-slot.component'
@@ -1019,7 +1019,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
             {/* Balanced columns, not six rigid rows of two (AGL-2486):
                 `Effective entitlements` is a long table and used to leave the
                 whole area beside it dead. */}
-            <StaffCardColumns
+            <CardColumns
               items={[
                 {
                   children: (
