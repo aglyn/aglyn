@@ -212,15 +212,24 @@ choose_parallelism() {
   load10=$(printf '%.0f' "$(echo "$load * 10" | bc -l 2>/dev/null || echo "${load%.*}0")")
   cores10=$((cores * 10))
 
+  # p = nx tasks in flight, w = jest workers per task, g = concurrent guard
+  # processes, t = concurrent `tsc` processes. The last two are separate
+  # numbers rather than a multiple of `p` — a guard and a tsc are much lighter
+  # than a jest worker, but deriving them as `p * 2` made the LOADED band pick
+  # 4, which is more than the guard runner would have chosen for itself (2) and
+  # more than the old hardcoded typecheck pool. A budget that gets less
+  # conservative under load than the thing it overrides is not a budget.
   if [ "$load10" -le $((cores10 * 3 / 10)) ]; then
-    band="idle"; p=6; w=4
+    band="idle"; p=6; w=4; g=8; t=8
   elif [ "$load10" -le $((cores10 * 7 / 10)) ]; then
-    band="light"; p=4; w=3
+    band="light"; p=4; w=3; g=6; t=6
   elif [ "$load10" -le "$cores10" ]; then
-    band="busy"; p=3; w=2
+    band="busy"; p=3; w=2; g=4; t=4
   else
-    band="loaded"; p=2; w=2
+    band="loaded"; p=2; w=2; g=2; t=2
   fi
+  GUARD_CONCURRENCY="$g"
+  export TYPECHECK_CONCURRENCY="$t"
 
   # Never more nx tasks than cores, whatever the band says.
   [ "$p" -gt "$cores" ] && p=$cores
@@ -370,6 +379,15 @@ self_test() {
     echo "$PARALLEL/$MAX_WORKERS"
   }
   _assert "a loaded box (10 cores, load 245) falls to the old pin or below" "2/2" "$(_band 10 245)"
+  # The derived budgets must fall WITH the band. Deriving them as `p * 2` made
+  # the loaded band pick 4 guards and 4 tsc — more than run-guards.mjs would
+  # choose for itself and more than the old hardcoded typecheck pool, so the
+  # gate got LESS conservative under load than the thing it was overriding.
+  _budgets() { PARALLEL=auto; MAX_WORKERS=auto
+    eval "cpu_count() { echo $1; }"; eval "load_1m() { echo $2; }"
+    choose_parallelism; echo "$GUARD_CONCURRENCY/$TYPECHECK_CONCURRENCY"; }
+  _assert "a loaded box gets the SMALLEST guard and tsc budgets" "2/2" "$(_budgets 10 245)"
+  _assert "an idle box gets the LARGEST guard and tsc budgets"   "8/8" "$(_budgets 10 0.5)"
   _assert "tonight's box (10 cores, load 21) falls to the old pin or below"  "2/2" "$(_band 10 21)"
   _assert "a busy box (10 cores, load 9) gets the old pin"                   "3/2" "$(_band 10 9)"
   _assert "an idle box (10 cores, load 0.5) uses the machine"                "6/4" "$(_band 10 0.5)"
@@ -574,15 +592,12 @@ SHARED_NX_BEFORE=$(find "$SOURCE_REPO/.nx/cache" -type f 2>/dev/null | wc -l | t
 # --- parallelism -----------------------------------------------------------
 choose_parallelism
 log "parallelism : $PARALLELISM_NOTE"
-# The guards are node scripts rather than nx tasks, so they get their own
-# budget: lighter than a jest worker, bounded by cores. run-guards.mjs would
-# read the load itself, but then each phase would adapt to a DIFFERENT reading
-# taken at a different moment; one reading for the whole gate is the point.
-GUARD_CONCURRENCY=$((PARALLEL * 2))
-[ "$GUARD_CONCURRENCY" -gt 8 ] && GUARD_CONCURRENCY=8
-# The typecheck driver runs its own pool of `tsc` processes; same reasoning.
-export TYPECHECK_CONCURRENCY=$((PARALLEL * 2))
-[ "$TYPECHECK_CONCURRENCY" -gt 8 ] && TYPECHECK_CONCURRENCY=8
+# GUARD_CONCURRENCY and TYPECHECK_CONCURRENCY come out of choose_parallelism
+# above, off the SAME load reading as --parallel. Both scripts can read the
+# load themselves; letting them would have each phase adapt to a different
+# reading taken at a different moment, and the gate would have no single
+# answer to "how busy did this run think the box was".
+log "budgets     : guards=$GUARD_CONCURRENCY tsc=$TYPECHECK_CONCURRENCY"
 
 # --- affected scope --------------------------------------------------------
 # Resolved ONCE, here, so every phase narrows against the same answer and the
