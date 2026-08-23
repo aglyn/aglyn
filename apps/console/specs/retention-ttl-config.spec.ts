@@ -145,6 +145,16 @@ const POLICIES: Array<{
     writers: ['apps/console/app/api/billing/retention/route.ts'],
     stamp: 'expiresAt: churnSurveyDetailExpiry()',
   },
+  // The cross-origin edit-token handoff (the admin bar's connect flow). Two
+  // stamps in the one writer, because the document's lifetime CHANGES as it
+  // moves: a `pending` handoff expires fast, and authorizing it re-stamps
+  // with the longer window. Both are `new Date(...)` on the same field, so
+  // the policy is one row and the writer is one file.
+  {
+    collectionGroup: 'authHandoffs',
+    writers: ['libs/tenant/data/admin/src/lib/server/auth-handoff.ts'],
+    stamp: 'expiresAt: new Date(',
+  },
   // AGL-1978: REST/POS/marketplace replay keys, which store the original
   // response body — for the REST API, a copy of the created record. TWO
   // writers: the shared claim and commerce's local copy.
