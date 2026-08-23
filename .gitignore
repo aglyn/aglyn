@@ -6,7 +6,6 @@ tools/plugin-loader/realm/*/dist
 /tmp
 /out-tsc
 /.firebase
-/.migrations.json
 *.tsbuildinfo
 .rollup.cache
 
@@ -74,6 +73,14 @@ vite.config.*.timestamp*
 # `nx graph --file` dumps: point-in-time artifacts with no reader in the
 # repo; a committed one rots into a stale project list (AGL-1834).
 /project-graph.json
+
+# `nx migrate` writes this, then `nx migrate --run-migrations` consumes and
+# discards it. It is generated, never source. It was committed from 2021
+# (600beb395) through 33 nx upgrades because the ignore rule read
+# `/.migrations.json` — a leading dot nx never writes, so the rule never
+# matched. A committed one is worse than stale: `--run-migrations` defaults
+# to this path, so it re-applies migrations already applied (AGL-2486).
+/migrations.json
 
 # Transient scratch dir written while uploading to the DAM; never source.
 .dam-upload-tmp/
