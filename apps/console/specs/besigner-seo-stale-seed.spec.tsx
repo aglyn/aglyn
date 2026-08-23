@@ -188,6 +188,10 @@ jest.mock('@aglyn/besigner', () => ({
 jest.mock('@aglyn/besigner-ui', () => ({
   BesignerConflictAlertComponent: () => null,
   BesignerDraftAlertComponent: () => null,
+  // The page derives it from presence to decide whether the crash-recovery
+  // prompt may be offered at all (AGL-2486); this spec is about what Save
+  // writes, and an alone room is the neutral answer.
+  recoverableRoomSessions: () => 0,
   LayoutChromeContext: {
     Provider: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   },

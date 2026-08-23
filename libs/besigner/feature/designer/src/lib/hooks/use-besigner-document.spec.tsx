@@ -227,6 +227,10 @@ describe('useBesignerDocument', () => {
 
     it('adopts the echo of our own write instead of flagging it', async () => {
       setCanvasDirty(true)
+      // The canvas holds what the save will write, because that content is
+      // now how the echo is RECOGNISED (AGL-2486) rather than it merely
+      // being the next snapshot to arrive.
+      mockCanvas.toJSON.mockReturnValue({ nodes: NODES })
 
       const { result, rerender } = setup({ updatedAt: stamp(1) })
 
@@ -239,6 +243,91 @@ describe('useBesignerDocument', () => {
       })
 
       expect(result.current.remoteChanged).toBe(false)
+    })
+
+    /**
+     * Two tabs of ONE account, which is the case Zach lives in — he keeps
+     * four open (AGL-2486).
+     *
+     * The console runs `persistentMultipleTabManager`, so tabs share a cache
+     * and their snapshots coalesce: this session's save can be answered by a
+     * single snapshot that already carries a LATER write from another
+     * session. A guard that adopts "the next snapshot after my save" takes
+     * that one, reports no conflict, and — the damaging half — advances the
+     * baseline to their content, which then satisfies the AGL-1301
+     * transaction as well. Their work is overwritten with no warning at
+     * either layer.
+     *
+     * Nothing about that needs two different people. It needs two different
+     * SESSIONS, which is what the guard now keys on.
+     */
+    it('flags another session’s write that lands in place of our echo', async () => {
+      setCanvasDirty(true)
+      const OURS = { root: { $id: 'root', componentId: 'div' } } as never
+      const THEIRS = {
+        root: { $id: 'root', componentId: 'div', sx: { p: 4 } },
+      } as never
+      mockCanvas.toJSON.mockReturnValue({ nodes: OURS })
+
+      const { result, save, notify, rerender } = setup({ updatedAt: stamp(1) })
+
+      await act(async () => {
+        await result.current.handleSave()
+      })
+      expect(save).toHaveBeenCalledTimes(1)
+
+      // One snapshot arrives, and it is NOT what we sent.
+      act(() => {
+        rerender({ updatedAt: stamp(2), nodes: THEIRS } as never)
+      })
+
+      expect(result.current.remoteChanged).toBe(true)
+
+      // And the baseline did not walk forward onto their write, so the next
+      // save is refused rather than silently overwriting them.
+      await act(async () => {
+        await result.current.handleSave()
+      })
+      expect(save).toHaveBeenCalledTimes(1)
+      expect(notify).toHaveBeenCalledWith(
+        new Aglyn.ConcurrentEditError().message,
+        expect.objectContaining({ variant: 'warning' }),
+      )
+    })
+
+    /**
+     * The other half of the same rule: once another session's write has been
+     * reported, a late echo of our own must not un-report it by advancing
+     * the baseline behind the warning.
+     */
+    it('does not let a late echo walk the baseline past a reported conflict', async () => {
+      setCanvasDirty(true)
+      const OURS = { root: { $id: 'root', componentId: 'div' } } as never
+      const THEIRS = {
+        root: { $id: 'root', componentId: 'div', sx: { p: 4 } },
+      } as never
+      mockCanvas.toJSON.mockReturnValue({ nodes: OURS })
+
+      const { result, save, rerender } = setup({ updatedAt: stamp(1) })
+
+      await act(async () => {
+        await result.current.handleSave()
+      })
+      act(() => {
+        rerender({ updatedAt: stamp(2), nodes: THEIRS } as never)
+      })
+      expect(result.current.remoteChanged).toBe(true)
+
+      // Our own write now surfaces, later than theirs.
+      act(() => {
+        rerender({ updatedAt: stamp(3), nodes: OURS } as never)
+      })
+
+      expect(result.current.remoteChanged).toBe(true)
+      await act(async () => {
+        await result.current.handleSave()
+      })
+      expect(save).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -327,6 +416,9 @@ describe('useBesignerDocument', () => {
 
     it('moves the content baseline with the echo of our own save', async () => {
       setCanvasDirty(true)
+      // The canvas holds the content this save writes, so the echo carrying
+      // it back is recognisable as ours (AGL-2486).
+      mockCanvas.toJSON.mockReturnValue({ nodes: MOVED_NODES })
       const { result, rerender } = setup({ updatedAt: stamp(1) })
 
       await act(async () => {
@@ -342,6 +434,30 @@ describe('useBesignerDocument', () => {
       // baseline, so it still reads as somebody else.
       act(() => {
         rerender({ updatedAt: stamp(2), nodes: NODES } as never)
+      })
+      expect(result.current.remoteChanged).toBe(true)
+    })
+
+    /**
+     * `markOwnWrite` announces a write to OTHER fields of the same document
+     * — component properties (AGL-1247). Its echo therefore moves the stamp
+     * and leaves `nodes` where the baseline has them, and that is what is
+     * expected: an announcement must not be a blanket amnesty for whatever
+     * snapshot happens to arrive next (AGL-2486).
+     */
+    it('adopts a property write’s echo but not a colleague’s node write', () => {
+      setCanvasDirty(true)
+      const { result, rerender } = setup({ updatedAt: stamp(1) })
+
+      act(() => result.current.markOwnWrite())
+      act(() => {
+        rerender({ updatedAt: stamp(2) } as never)
+      })
+      expect(result.current.remoteChanged).toBe(false)
+
+      act(() => result.current.markOwnWrite())
+      act(() => {
+        rerender({ updatedAt: stamp(3), nodes: MOVED_NODES } as never)
       })
       expect(result.current.remoteChanged).toBe(true)
     })

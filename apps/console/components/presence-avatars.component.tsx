@@ -353,25 +353,54 @@ function RoomAvatars({ entries }: { entries: PresenceEntry[] }) {
 }
 
 /**
- * What the tooltip says about ONE session, and why your own reads as a
- * hazard rather than as company.
+ * What the tooltip says about ONE session (AGL-2486).
  *
- * Two windows of your own account are two independent `CanvasManager`s, so
- * the second save quietly replaces the first and the concurrent-edit guard
- * does NOT fire — the stamp moved on *your* write (AGL-674). They also share
- * one local draft key (AGL-1256), last writer wins. A colleague at least
- * trips the guard; you do not, which is why the wording is sharper for you
- * than for them.
+ * ## Why this no longer says "saves are not merged"
+ *
+ * Zach: *"Why are saves not merged? Isn't this the point of being able to
+ * collaborate together and build a page alongside someone at the same
+ * time"* — and he is right, because the old copy described the STORAGE and
+ * presented it as the experience. The durable write is whole-document, but
+ * the unit of live collaboration is a NODE (`use-coediting`, AGL-677): two
+ * people editing different elements both keep their work, and by the time
+ * either presses Save the mirror has usually converged both canvases, so
+ * the write being whole-document costs nothing. "Your work will fight" was
+ * simply the wrong prediction for the common case.
+ *
+ * ## What it still has to admit
+ *
+ * Two limits, neither softened, because a tooltip that oversells merging is
+ * how somebody loses an afternoon:
+ *
+ * * The same element edited at the same time is last-writer-wins.
+ *   Co-editing shares a node; it does not merge two versions of one.
+ * * A save by another session pauses saving here until reload — the
+ *   AGL-674 / AGL-1301 guard, which refuses rather than merging two whole
+ *   maps, and refuses again server-side inside the transaction.
+ *
+ * ## Your own second window is no longer the sharp case
+ *
+ * This used to say the guard would not fire "because both are you". That
+ * was never how the guard worked — it reads the document's stamp and
+ * content and has never consulted a uid — and the one route by which
+ * another session's write could slip past it is closed (see
+ * `expectOwnWriteRef` in `use-besigner-document`, AGL-2486). So your own
+ * window is described as what it is: another session, protected the same
+ * way. The badge still says which one is yours.
  */
 export function describe(entry: PresenceEntry): string {
   if (entry.isSelf) {
     return (
-      'This is YOU, in another window or tab. Nothing merges between them: ' +
-      'whichever one saves last wins, and it will not warn you, because ' +
-      'both are you.'
+      'This is YOU, in another window or tab. It counts as a separate ' +
+      'session: edits merge live between them, element by element, and a ' +
+      'save in one pauses saving in the other until you reload.'
     )
   }
-  return `${entry.displayName} has this open too \u2014 saves are not merged.`
+  return (
+    `${entry.displayName} has this open too. Edits merge live, element by ` +
+    'element \u2014 the same element at the same time keeps the last ' +
+    'change. If they save, saving pauses here until you reload.'
+  )
 }
 
 PresenceAvatars.displayName = 'PresenceAvatars'

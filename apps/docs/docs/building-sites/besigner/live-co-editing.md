@@ -24,16 +24,20 @@ this feature.
 ## Who's here
 
 When someone else has the document open, their **avatar** appears in the besigner
-toolbar (up to four; photo or initial, on their assigned color). Hovering explains
-exactly what presence means here: *"«Name» is editing this too — saves are not
-merged"* — and *"(in 2 places)"* when they have it open twice.
+toolbar (photo or initial, on their assigned color). Hovering says what to expect of
+working alongside them: *"«Name» has this open too. Edits merge live, element by
+element — the same element at the same time keeps the last change. If they save,
+saving pauses here until you reload."*
 
 <!-- screenshot: besigner/presence-avatar-stack.png per SCREENSHOT_PLAN.md -->
 
 If **your own account** has the document open somewhere else — another tab, or your
-account signed in on another machine — an amber badge appears beside the avatars
-warning that nothing merges between your own sessions either: whichever one saves
-last wins, and it won't warn you, because both are you.
+account signed in on another machine — that window gets its own avatar too, marked
+with a small badge so you can tell it is yours. It is treated as a separate session
+in every respect: edits merge between your windows the same way, and a save in one
+pauses saving in the other until you reload. The conflict guard has never keyed on
+*who* wrote, only on whether the stored document moved, so two windows of one
+account are protected exactly as two people are.
 
 On the canvas, each collaborator shows up as:
 
@@ -67,9 +71,12 @@ presses **Save**, and a successful save is what makes the shared state durable.
 
 ## When saves collide
 
-Co-editing shares unsaved edits, but **saves are still whole-document and are not
-merged**. If someone else saves the document while you're editing, the besigner tells
-you immediately — not twenty minutes later when you press Save:
+Live edits merge per element, but a **save writes the whole document**. Most of the
+time that costs nothing — the mirror has already brought both canvases together, so
+the map being written is the one you can both see. It matters when a session has
+drifted: if someone saves while your editor is holding a version of the document
+from before their work arrived, the besigner tells you immediately — not twenty
+minutes later when you press Save:
 
 > Someone else saved this screen while you were editing. Saving is paused so their
 > work is not overwritten — reload to pick up their changes. Nothing you have done
@@ -86,6 +93,10 @@ Pressing **Save** while the banner is up answers with the same message rather th
 saving. The guard also runs server-side inside a transaction, so even a save racing
 the conflict by milliseconds is refused, never silently applied.
 
+The guard identifies the other writer as a **different editing session**, not as a
+different person — so it fires for a second window of your own account just as it
+does for a colleague.
+
 ## Local draft recovery
 
 The besigner continuously keeps a **local draft** of your unsaved work in the
@@ -101,10 +112,18 @@ back:
 
 - **Restore** puts the draft back on the canvas — unsaved and undoable, so you can
   inspect before committing to it.
-- **Discard** deletes the draft and keeps the saved document.
+- **Discard** deletes the draft from this browser and keeps the saved document. It
+  changes nothing on the canvas and nothing for anyone else.
 - Nothing is ever restored automatically; the besigner always asks.
-- If a teammate saved while your draft was stranded, the offer says so and restoring
-  will not overwrite their work — you'll be asked to reload before you can save.
+- If someone saved while your draft was stranded, restoring it would roll their work
+  back, so it is not offered — the banner says so and points you at **Reload**.
+
+**The offer only appears when you are alone in the document.** Recovery is for a
+crash: a lost connection, a browser quit, a tab closed on unsaved work. If anyone
+else has the document open — including another of your own windows — live co-editing
+has already put the unsaved work back on the canvas, so there is nothing to recover
+and no prompt is shown. Your draft is still kept; it simply is not offered over the
+top of work other people are in the middle of.
 
 Drafts live in **this browser only** (they don't follow you across machines), are
 kept for up to **7 days**, and are deleted the moment a save succeeds. They're a

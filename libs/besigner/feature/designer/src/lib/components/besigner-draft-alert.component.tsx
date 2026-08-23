@@ -79,19 +79,6 @@ export function describeDraftOffer(
         'but they pre-date their save: putting them back would roll it ' +
         'back, so they are not offered.'
       )
-    case 'live-session':
-      // Deliberately not "someone else is editing this right now": the mirror
-      // stamps a SESSION, not a person, so entries replayed onto this canvas
-      // may be a colleague's or this author's own previous window. Both are
-      // true of "the live editing session", and both are reasons not to drop
-      // an older whole-document copy over the top.
-      return (
-        found +
-        'The live editing session has already put unsaved changes back on ' +
-        'this canvas — yours, and those of anyone else in it now. Restoring ' +
-        `this older copy of the ${noun} would undo them, so it is not ` +
-        'offered.'
-      )
     default:
       return (
         found +
@@ -114,14 +101,24 @@ export function describeDraftOffer(
  * the author is the only one who knows whether the version they are looking
  * at is the one they meant to be in.
  *
- * When the canvas is shared — a colleague has saved, or is editing it right
- * now — the ask goes away rather than being re-worded. Restoring is a
- * whole-map replace that the co-edit mirror publishes verbatim, so the
- * previous "restoring will not overwrite their work" was not true from the
- * colleague's side of the screen: their unsaved node was deleted on their
- * own canvas, and a stale restore survived the reload this banner asks for.
- * Discard stays, because dropping a snapshot of your own work is yours to
- * decide.
+ * When the room is SHARED this banner does not render at all — `draft
+ * .available` is false and there is nothing here to word (AGL-2486). Zach,
+ * on the version that kept Discard: *"should we even show them that alert,
+ * that could remove the work numerous people are currently working on"*.
+ * Discard is in fact local — it deletes this browser's snapshot and touches
+ * neither the canvas nor anyone else, which is why it looked to him like it
+ * did nothing — but a prompt whose only remaining button is a delete, over a
+ * document several people are mid-edit in, is a question that should not be
+ * asked. See `roomIsShared` in `use-besigner-draft`.
+ *
+ * What is left here is the case where this editor is alone and something
+ * still stands in the way of a restore: a colleague SAVED while the draft
+ * was stranded, or the mirror replayed work onto the canvas while presence
+ * could not report the room. Restoring is a whole-map replace that the
+ * co-edit mirror publishes verbatim, so the older "restoring will not
+ * overwrite their work" was not true from the colleague's side of the
+ * screen: their unsaved node was deleted on their own canvas, and a stale
+ * restore survived the reload this banner asks for.
  */
 export function BesignerDraftAlertComponent(props: BesignerDraftAlertProps) {
   const { draft, noun, remoteChanged = false } = props
