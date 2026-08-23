@@ -789,6 +789,92 @@ export function beaconHealth(
 }
 
 /**
+ * A tenant page render, reduced to a health verdict (AGL-2486).
+ *
+ * ## The gap this closes
+ *
+ * `marketing-home` (`aglyn.com/`) and `customer-site` (`demo.aglyn.app/`) are
+ * the only two external checks that watched a REAL PAGE rather than a health
+ * endpoint. Both sat at 0% from 2026-08-21, because bot protection answered
+ * Google's checkers with a 429 checkpoint. The health-path firewall bypass
+ * that recovered `tenant-health` and `beacon-heartbeat tenant` cannot reach
+ * them: they fetch `/`, not `/api/health/*`.
+ *
+ * The alternative was allowlisting Google's 54 checker IPs — rejected because
+ * an IP-valued bypass rule is one the drift checker cannot meaningfully
+ * assert, and Google rotates the list. So the render moves to where the
+ * bypass already is: an endpoint under `/api/health` that renders the page
+ * server-side and grades the result.
+ *
+ * ## Why this is not "200 because the route exists"
+ *
+ * The caller runs the SAME loader the catch-all page route runs, against the
+ * SAME host, and this grades what came back. A page that resolves no host,
+ * 404s, redirects away, or composes an EMPTY node tree is a failure — and
+ * those are the shapes an outage actually takes. A canary that cannot go red
+ * for a broken page is worse than the dark check it replaces, because it
+ * reports a confidence it has not earned.
+ *
+ * ## What is deliberately NOT asserted
+ *
+ * Never a string from the page. The marker is STRUCTURAL — a host resolved
+ * and a non-empty composed node tree. Asserting copy would page whoever is
+ * on call for an ordinary content edit, and this endpoint is public, so
+ * customer content must not appear in its body either. `nodeCount` is a
+ * count, which is enough to tell "rendered nothing" from "rendered" without
+ * disclosing what was rendered.
+ */
+export type RenderOutcome =
+  /** The loader returned props. `nodeCount` is the composed node total. */
+  | { kind: 'rendered'; hostResolved: boolean; nodeCount: number }
+  /** The loader chose the not-found branch. */
+  | { kind: 'not-found' }
+  /** The loader chose to redirect — a home page should never do this. */
+  | { kind: 'redirect' }
+  /** The loader threw, or could not be reached at all. */
+  | { kind: 'unavailable' }
+
+export interface RenderCheck extends HealthCheck {
+  /**
+   * Composed nodes the page produced. A COUNT, never the nodes: this endpoint
+   * is public and the nodes are the customer's page. Zero is the failure.
+   */
+  nodeCount: number
+  /** Which tenant host was rendered — our own hosts only, never a visitor's. */
+  host: string
+}
+
+export function renderHealth(
+  outcome: RenderOutcome,
+  host: string,
+  ms: number,
+): RenderCheck {
+  const base = { ms, host }
+  switch (outcome.kind) {
+    case 'rendered':
+      // Both halves are load-bearing. A host that resolved but composed
+      // nothing is a blank page served with a 200 — the exact outage a
+      // reachability ping calls healthy.
+      if (!outcome.hostResolved) {
+        return { ...base, ok: false, code: 'host-unresolved', nodeCount: outcome.nodeCount }
+      }
+      if (outcome.nodeCount <= 0) {
+        return { ...base, ok: false, code: 'rendered-empty', nodeCount: 0 }
+      }
+      return { ...base, ok: true, nodeCount: outcome.nodeCount }
+    case 'not-found':
+      return { ...base, ok: false, code: 'not-found', nodeCount: 0 }
+    case 'redirect':
+      return { ...base, ok: false, code: 'redirected', nodeCount: 0 }
+    case 'unavailable':
+    default:
+      // Same rule as `beaconHealth`: "we could not determine whether the page
+      // renders" is a failure, never calm.
+      return { ...base, ok: false, code: 'render-unavailable', nodeCount: 0 }
+  }
+}
+
+/**
  * Billing webhook delivery, reduced to a health verdict (AGL-1924).
  *
  * ## The gap this closes
