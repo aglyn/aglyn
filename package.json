@@ -334,7 +334,7 @@
     "eslint-plugin-mobx": "^0.0.14",
     "eslint-plugin-react": "7.37.5",
     "eslint-plugin-react-hooks": "7.1.1",
-    "eslint-plugin-storybook": "^10.5.8",
+    "eslint-plugin-storybook": "^10.5.9",
     "eslint-plugin-tsdoc": "^0.5.2",
     "gts": "^7.0.0",
     "husky": "^9.1.7",
