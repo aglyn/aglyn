@@ -812,6 +812,15 @@ Two honesty rules the panel follows, and you should read it by:
    it reads at that moment. It does not prove that any route returned it, and
    other server processes converge within about 15 seconds, so a lock armed
    seconds ago may not yet be enforced everywhere.
+
+   **A customer's public site takes longer than that, and the 15 seconds is
+   not the number to quote them.** A site page is gated in the tenant
+   middleware, which memoizes its verdict for a further 30 seconds. Measured
+   2026-08-23 (AGL-1621): an `org` or `host` lock reaches an already-warm
+   isolate in **~30s**, and a `platform` or `domain` lock in **~45s** —
+   the two caches are in series. A lift takes the same time, in the same
+   direction. A cold isolate refuses on its first request, so a refresh that
+   lands on one shows the lock instantly; that is luck, not the bound.
 2. **A scope you leave blank is not evaluated.** "Not refused" for a bare uid
    says nothing about that person's workspace. The panel lists exactly which
    scopes the answer covers, and a workspace or site id that matches nothing is
