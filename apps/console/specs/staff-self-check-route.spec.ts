@@ -54,6 +54,15 @@ const mockPoolApi = (users: Map<string, any>) => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  // Models the REAL predicate, byte for byte with
+  // `firebase-admin.ts:370` — `typeof decoded['impersonatedBy'] === 'string'`.
+  // An impersonation session is exempt from the email-verification gate
+  // (AGL-480) because staff have already authenticated and the act is audited.
+  // A double that always returned false would make the two unverified cases
+  // below pass for the wrong reason, and one keyed on an invented claim name
+  // would silently never fire.
+  isImpersonationSession: (decoded: Record<string, unknown>) =>
+    typeof decoded?.['impersonatedBy'] === 'string',
   firebaseAdmin: {
     app: () => ({
       auth: () => ({
@@ -99,7 +108,7 @@ describe('authentication', () => {
 
 describe('it diagnoses the caller, and only the caller', () => {
   it('tells an SSO staff member their claim is present and names the pool', async () => {
-    mockTokens.set('t', {
+    mockTokens.set('t', { email_verified: true,
       uid: 'sso-uid',
       email: 'zach@aglyn.com',
       staff: true,
@@ -131,7 +140,7 @@ describe('it diagnoses the caller, and only the caller', () => {
   it('tells a user whose OWN address holds staff in another pool which one', async () => {
     // The shape that cost two investigations: signed in as the wrong one of
     // your own identities.
-    mockTokens.set('t', {
+    mockTokens.set('t', { email_verified: true,
       uid: 'proj-uid',
       email: 'someone@example.com',
       firebase: {},
@@ -155,7 +164,7 @@ describe('it diagnoses the caller, and only the caller', () => {
   it('gives a plain non-staff answer with NO hint when no identity holds staff', async () => {
     // The stranger case. They learn they are not staff — which the 404
     // already told them — and nothing else.
-    mockTokens.set('t', {
+    mockTokens.set('t', { email_verified: true,
       uid: 'nobody',
       email: 'stranger@example.com',
       firebase: {},
@@ -176,7 +185,7 @@ describe('it diagnoses the caller, and only the caller', () => {
   })
 
   it('does not leak another address even when the caller asks about theirs', async () => {
-    mockTokens.set('t', { uid: 'u', email: 'a@example.com', firebase: {} })
+    mockTokens.set('t', { email_verified: true, uid: 'u', email: 'a@example.com', firebase: {} })
     mockProjectUsers.set('u', mockUserRecord('u', 'a@example.com', {}))
     mockProjectUsers.set('other', mockUserRecord('other', 'b@example.com', { staff: true }))
     const body = await (await call('t')).json()
@@ -184,10 +193,100 @@ describe('it diagnoses the caller, and only the caller', () => {
     expect(body.hint).toBeNull()
   })
 
+  /**
+   * AGL-1881. The docblock promised the cross-pool disclosure was "limited to
+   * identities sharing THEIR OWN verified address"; nothing enforced the word
+   * "verified", and — the part worth recording — EVERY fixture in this file
+   * was an unverified token until this test was written. The suite was
+   * exercising the vulnerable path exclusively and passing, which is why the
+   * `email_verified: true` above had to be added to five cases at the same
+   * time as this one was added below.
+   *
+   * Firebase allows one address per pool, so the project pool blocks an
+   * attacker from claiming an address it already holds. An address that lives
+   * only in a GCIP tenant — every SSO-only enterprise user — is claimable by
+   * ordinary self-signup, and the sweep then reported which tenants hold it
+   * and whether it carries staff.
+   */
+  it('discloses no other pool to a caller whose address is unverified', async () => {
+    mockTokens.set('t', {
+      uid: 'squatter',
+      email: 'zach@aglyn.com',
+      email_verified: false,
+      firebase: {},
+    })
+    mockProjectUsers.set(
+      'squatter',
+      mockUserRecord('squatter', 'zach@aglyn.com', {}),
+    )
+    mockTenantUsers.set(
+      AGLYN_TENANT,
+      new Map([
+        [
+          'zach',
+          mockUserRecord('zach', 'zach@aglyn.com', {
+            staff: true,
+            staffRole: 'super',
+          }),
+        ],
+      ]),
+    )
+    const body = await (await call('t')).json()
+    // The sweep does not run at all, so the SSO-only staff record stays dark.
+    expect(body.identities).toEqual([])
+    expect(body.hint).toBeNull()
+    expect(JSON.stringify(body)).not.toContain(AGLYN_TENANT)
+    // The route still does its actual job: answering "am I staff".
+    expect(body.staff).toBe(false)
+  })
+
+  it('still answers "am I staff" from the token when the address is unverified', async () => {
+    // The gate is on the FAN-OUT, not the route. A staff member who has not
+    // verified must not be locked out of their own answer.
+    mockTokens.set('t', {
+      uid: 'u',
+      email: 'a@example.com',
+      email_verified: false,
+      staff: true,
+      firebase: {},
+    })
+    const body = await (await call('t')).json()
+    expect(body.staff).toBe(true)
+    expect(body.staffRole).toBe('support')
+  })
+
+  it('an impersonation session keeps the sweep, unverified or not', async () => {
+    // AGL-480: staff have already authenticated and the act is audited, so
+    // the impersonated account's own verification state is not the gate.
+    // Without this case the fix would silently break support's diagnosis of
+    // exactly the accounts they are called in to diagnose.
+    mockTokens.set('t', {
+      uid: 'zach',
+      email: 'zach@aglyn.com',
+      email_verified: false,
+      impersonatedBy: 'staff-uid',
+      firebase: {},
+    })
+    mockTenantUsers.set(
+      AGLYN_TENANT,
+      new Map([
+        [
+          'zach',
+          mockUserRecord('zach', 'zach@aglyn.com', {
+            staff: true,
+            staffRole: 'super',
+          }),
+        ],
+      ]),
+    )
+    const body = await (await call('t')).json()
+    expect(body.identities).toHaveLength(1)
+  })
+
   it('a missing staffRole on a staff token reads as support, not super', async () => {
     // Mirrors AGL-495: the routes fail closed to the least-privileged role,
     // and a self-check that guessed `super` would contradict them.
-    mockTokens.set('t', { uid: 'u', email: 'a@example.com', staff: true, firebase: {} })
+    mockTokens.set('t', { email_verified: true, uid: 'u', email: 'a@example.com', staff: true, firebase: {} })
     mockProjectUsers.set('u', mockUserRecord('u', 'a@example.com', { staff: true }))
     const body = await (await call('t')).json()
     expect(body.staffRole).toBe('support')

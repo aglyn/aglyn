@@ -25,6 +25,7 @@ import {
 // shadow the real heartbeat here, which reads as `at: 0` and quietly disables
 // the AGL-697 idle-logout control (AGL-1259 fixed the session route only).
 import { readCookie, requestIsHttps } from '../read-cookie'
+import { sameOriginRefusal } from '../../_lib/same-origin'
 
 // lockdown-423: exempt — account-scoped read of the caller's own auth activity; no org
 // context. The session mint/exchange carry the lockdown gate for auth.
@@ -77,12 +78,29 @@ function activityCookie(request: Request, valueMs: number): string {
 
 async function handler(request: Request): Promise<Response> {
   if (request.method === 'POST') {
-    // The activity cookie only ever extends the caller's OWN idle window, so
-    // recording a heartbeat is self-scoped and needs no auth check — an
-    // unauthenticated beat sets a cookie that governs nothing (the idle hook
-    // is armed only while signed in). Keeping it authless also means dev,
-    // where the cross-subdomain `__session` cookie is never minted, behaves
-    // the same as the real deployment.
+    // SELF-SCOPED IS NOT THE SAME AS SAFE (AGL-1881).
+    //
+    // This stayed authless on the reasoning that "an unauthenticated beat sets
+    // a cookie that governs nothing", which is true of the CALLER's session
+    // and false of the VICTIM's. A cross-site auto-submitting form POST is a
+    // top-level navigation to our origin, so the `Set-Cookie` below lands in
+    // the victim's browser as a first-party cookie for the whole parent
+    // domain — and this cookie is the only input to the AGL-697 idle-logout
+    // decision (`use-idle-logout` reads it, `isSessionIdle` compares against
+    // it). One visit to an attacker's page therefore holds a signed-in
+    // victim's idle window open, which is precisely the unattended-machine
+    // threat the control exists for.
+    //
+    // Auth is still the wrong gate here, for the reason the original note
+    // gives: in dev the cross-subdomain `__session` cookie is never minted.
+    // The right gate is the one that distinguishes our own page from a
+    // foreign one, and it already existed — `sameOriginRefusal`, fail-closed
+    // on a missing `Origin`, wired until now to exactly one route. The
+    // heartbeat is a same-origin `fetch`, which always sends `Origin` on a
+    // POST, so nothing legitimate is refused.
+    const refused = sameOriginRefusal(request)
+    if (refused) return refused
+
     const now = Date.now()
     const response = Response.json({ ok: true, at: now }, { status: 200 })
     response.headers.set('Set-Cookie', activityCookie(request, now))
