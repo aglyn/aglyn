@@ -276,12 +276,17 @@ function RoomAvatars({ entries }: { entries: PresenceEntry[] }) {
               size={28}
               data-aglyn-presence-session={entry.key}
               data-aglyn-presence-self={entry.isSelf ? '' : undefined}
-              // NO self-specific ring (AGL-2486). Every session's ring is
-              // its own colour, drawn the same way, and the monitor badge
-              // below is the only thing that says "this one is me". Zach
-              // raised the dashed border three times — first orange, then in
-              // the session colour — and the answer each time was that the
-              // badge already carries that meaning.
+              // DASHED for your own other sessions, in that session's own
+              // colour, to match the canvas (AGL-2486). Zach: "go ahead and
+              // go back to the dashed border on the avatars when it is you in
+              // the other tabs so it matches what appears in the canvas."
+              //
+              // `collaborator-overlays` draws the selection outline for the
+              // same session dashed, from the same `entry.colour`, so the
+              // chip and the outline are now one visual statement about one
+              // session. Making this solid did not remove a redundant signal;
+              // it made two surfaces disagree.
+              ringStyle={entry.isSelf ? 'dashed' : 'solid'}
             />
             {entry.isSelf ? (
               <Box

@@ -92,6 +92,16 @@ export interface MemberAvatarProps extends Omit<AvatarProps, 'src' | 'alt'> {
    * prop did not exist.
    */
   name?: string | null
+  /**
+   * How the identity ring is DRAWN, always in the session's own colour.
+   *
+   * `dashed` marks one of your own other sessions, matching the dashed
+   * outline the canvas draws around what that session has selected
+   * (`collaborator-overlays`). Solid is everyone else. This is a FORM
+   * difference only — see the ring block below for why it cannot become a
+   * colour difference, and why it must not change the chip's size.
+   */
+  ringStyle?: 'solid' | 'dashed'
   /** Rendered pixel size. */
   size?: number
 }
@@ -149,6 +159,7 @@ export function MemberAvatar(props: MemberAvatarProps) {
     name,
     colour,
     colourSeed,
+    ringStyle = 'solid',
     size = 32,
     sx,
     ...rest
@@ -239,17 +250,34 @@ export function MemberAvatar(props: MemberAvatarProps) {
               // symptom is painted extent, and a test that compares boxes is
               // green on the broken build.
               //
-              // ONE ring style, one meaning (AGL-2486). The ring says "this
-              // is the colour of my cursor" and nothing else.
+              // The ring's COLOUR is always the session's; only its FORM
+              // varies, and dashed means "one of your own other sessions"
+              // (AGL-2486).
               //
-              // It went through two wrong answers first: a dashed ring in the
-              // WARNING colour, then a dashed ring in the session's own
-              // colour. Zach objected three times and was right each time —
-              // dashing was a second visual language for "this one is me",
-              // which the monitor badge in the corner already carries by
-              // itself. Two indicators for one fact is how a chip ends up
-              // looking unlike its neighbours for no reason a reader can name.
-              outline: '2px solid',
+              // This settled after three rounds of getting it wrong, and the
+              // history is worth keeping because each step removed a real
+              // defect. It began dashed in the WARNING colour, which said
+              // "you" in a second colour that competed with the identity
+              // colour. It became dashed in the session colour. Then solid
+              // everywhere, on the reasoning that the monitor badge already
+              // says "this is you" and a second signal was noise.
+              //
+              // That last step was the one mistake. Zach: "go ahead and go
+              // back to the dashed border on the avatars when it is you in
+              // the other tabs so it matches what appears in the canvas."
+              // The canvas draws a DASHED outline around what your other
+              // session has selected, so making the chip solid did not remove
+              // a redundant signal — it made two surfaces disagree about how
+              // the same session looks. The redundancy is the point: the chip
+              // and the outline are the same person, and they now say so the
+              // same way.
+              //
+              // SIZE PARITY IS UNAFFECTED, deliberately. Dashed and solid are
+              // both `2px`, and `outline` does not participate in layout
+              // anyway, so a dashed chip paints exactly the same 32px extent
+              // as a solid one. The whole-row assertion covers dashed chips
+              // rather than exempting them.
+              outline: `2px ${ringStyle}`,
               outlineColor: colour,
               // Flush with the circle, so the chips can overlap without the
               // ring being clipped by its neighbour (AGL-2486).

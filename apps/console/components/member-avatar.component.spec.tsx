@@ -291,18 +291,26 @@ describe('memberInitials', () => {
 })
 
 /**
- * ONE ring style, and the badge is what says "this is you" (AGL-2486).
+ * TWO signals mark your own session, and that is deliberate (AGL-2486).
  *
- * Zach objected to the self chip's dashed border three times: first when it
- * was dashed and warning-orange, then when it was dashed in the session's own
- * colour. Both were the same mistake — a second visual language for something
- * the monitor badge in the corner already carries by itself, and the only
- * thing making one chip look unlike its neighbours.
+ * A self chip carries BOTH a dashed ring in its session colour AND the monitor
+ * badge in the corner. That looks like redundancy to remove, and it was
+ * removed once — this docblock exists so the next person does not remove it
+ * again.
  *
- * The property worth pinning is not "the ring is solid" for its own sake; it
- * is that a self chip is still DISTINGUISHABLE. That job moved to the badge,
- * so the badge is what these assert. A future change that drops the badge and
- * leans on the ring again fails here.
+ * The ring is dashed because the CANVAS is. `collaborator-overlays` draws a
+ * dashed outline around whatever your other session has selected, from the
+ * same `entry.colour`. Zach: "go ahead and go back to the dashed border on the
+ * avatars when it is you in the other tabs so it matches what appears in the
+ * canvas." So the two signals are not redundant with each other — they are one
+ * statement made consistently across two SURFACES. Making the chip solid did
+ * not delete a duplicate; it made the app contradict itself.
+ *
+ * The badge stays because the ring cannot always be read: on an initials chip
+ * the ring is the same colour as the fill, so dashed-versus-solid is not
+ * legible there and the badge is the only signal left.
+ *
+ * Both are therefore asserted. Dropping either one fails here.
  */
 describe('a presence chip distinguishes your own session (AGL-2486)', () => {
   const entry = (over: Partial<PresenceEntry> = {}): PresenceEntry =>
@@ -356,7 +364,11 @@ describe('a presence chip distinguishes your own session (AGL-2486)', () => {
         sessionId: `s${index}`,
         key: `u${index}:s${index}`,
         colour: index % 2 ? '#188038' : '#9334e6',
-        // A mixed row: some sessions have a picture, some do not.
+        // A mixed row: some sessions have a picture, some do not — and some
+        // are YOURS, so they ring dashed. Dashed is included here rather than
+        // exempted, because the form must not change the painted extent: both
+        // are 2px, and `outline` takes no layout room either way.
+        isSelf: index % 4 === 0,
         photoURL: index % 3 === 0 ? 'https://lh3.googleusercontent.com/a/x' : undefined,
       }),
     )
@@ -374,10 +386,10 @@ describe('a presence chip distinguishes your own session (AGL-2486)', () => {
     expect([...sizes][0]).toBeGreaterThan(0)
   })
 
-  it('draws NO dashed ring on any chip, your own included', () => {
-    // The literal thing Zach kept seeing, asserted against the CSSOM — the
-    // markup carries only the generated class name, so an `innerHTML` check
-    // passes against a build that is still drawing it.
+  it('draws your own session DASHED, matching the canvas outline', () => {
+    // Asserted against the CSSOM — the markup carries only the generated
+    // class name, so an `innerHTML` check passes against a build that is
+    // drawing something else entirely.
     const { container } = render(
       <PresenceAvatars
         presence={state([
@@ -385,7 +397,29 @@ describe('a presence chip distinguishes your own session (AGL-2486)', () => {
         ])}
       />,
     )
+    expect(cssFor(container)).toMatch(/outline:\s*2px dashed/)
+  })
+
+  it('draws a colleague SOLID, so dashed keeps meaning one thing', () => {
+    const { container } = render(
+      <PresenceAvatars
+        presence={state([
+          entry({ isSelf: false, key: 'u2:s2', photoURL: 'https://x/z.png' }),
+        ])}
+      />,
+    )
     expect(cssFor(container)).toMatch(/outline:\s*2px solid/)
     expect(cssFor(container)).not.toMatch(/dashed/)
+  })
+
+  it('keeps the ring in the SESSION colour, dashed or solid', () => {
+    // The form varies; the colour never does. A dashed ring in some other
+    // colour is the first version of this that Zach rejected.
+    const mine = render(
+      <PresenceAvatars
+        presence={state([entry({ isSelf: true, colour: '#9334e6' })])}
+      />,
+    )
+    expect(cssFor(mine.container)).toMatch(/outline-color:\s*#9334e6/)
   })
 })

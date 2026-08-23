@@ -20,6 +20,7 @@ import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn'
 import { useRenderedCanvasElements } from '@aglyn/besigner-ui'
 import { Box } from '@mui/material'
 import { useEffect, useRef, useState } from 'react'
+import { avatarColourFor } from './member-avatar.component'
 import type { PresenceEntry } from '../hooks/use-presence'
 
 /** Where one collaborator's marks should be painted, in viewport pixels. */
@@ -115,7 +116,14 @@ export function CollaboratorOverlays({
           // your own second window, is exactly the confusion the flag
           // exists to prevent (AGL-2486).
           displayName: entry.isSelf ? 'You, in another tab' : entry.displayName,
-          colour: entry.colour ?? '#1a73e8',
+          // The SAME fallback the avatar chip uses, not a hardcoded blue
+          // (AGL-2486). Both surfaces read `entry.colour` from one room-wide
+          // allocation, so in practice they always agree — but they used to
+          // disagree about what to do if it were ever missing, and the whole
+          // point of the dashed chip matching the dashed outline is that the
+          // two cannot drift. One fallback, seeded from the session key, so
+          // they land on the same colour even in the case neither expects.
+          colour: entry.colour ?? avatarColourFor(entry.key),
           isSelf: entry.isSelf,
         }
         if (
