@@ -25,7 +25,23 @@ const CopyrightComponent = forwardRef<any, CopyrightProps>((props, ref) => {
   const { children, ...rest } = props
   return (
     <Typography ref={ref} variant="subtitle2" {...rest}>
-      {CURRENT_YEAR} &copy; {BRAND.ORG_NAME_LEGAL}
+      {/*
+       * `© 2026 Aglyn LLC. All rights reserved.` — the conventional order,
+       * with the sentence actually closed (AGL-2486).
+       *
+       * This read `2026 © Aglyn LLC Aglyn™ and Besigner™ are trademarks of
+       * Aglyn LLC.`: the year ahead of the symbol, and no full stop, so the
+       * legal name ran straight into the trademark sentence as one
+       * ungrammatical line. Zach, comparing it against the footer he had
+       * authored on a published page and the docs site's own: "we have some
+       * differences here, probably should be the same."
+       *
+       * The legal name and the trademark sentence both still come from the
+       * brand configuration, so a self-host or white-label build says its own
+       * name here and drops the marks entirely — see TRADEMARK_NOTICE, which
+       * is empty unless the deployment is actually ours.
+       */}
+      &copy; {CURRENT_YEAR} {BRAND.ORG_NAME_LEGAL}. All rights reserved.
       {TRADEMARK_NOTICE && ` ${TRADEMARK_NOTICE}`}
       {children}
     </Typography>
