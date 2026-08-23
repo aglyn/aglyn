@@ -36,11 +36,19 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { summarizeUserAgent } from '../_lib/security-alerts'
 import {
+  deflectToDocs,
+  sectionLabel,
+  sectionUrl,
+  trimToSentence,
+} from '../_lib/assist-deflection'
+import { retrieveDocsSections } from '../_lib/assist-retrieval'
+import {
   buildReportBody,
   createLinearIssue,
   isReportKind,
   linearConfigFromEnv,
-  MAX_DESCRIPTION,
+  normalizeAnswers,
+  reportFieldsForKind,
   reportTitle,
 } from '../_lib/linear-issues'
 
@@ -84,11 +92,17 @@ import {
  *
  * ## Trust boundary
  *
- * Six values arrive from the client — `kind`, `summary`, `description`,
+ * Six values arrive from the client — `kind`, `summary`, an `answers` bag,
  * `route`, a viewport coerced to integers, and two ids (`orgId`, `hostId`)
  * that are HINTS, not assertions: both are re-resolved against this session's
  * own access before anything is recorded, so naming an org or a site the
  * reporter cannot reach yields no org and no site rather than someone else's.
+ *
+ * `answers` is normalised against `REPORT_FIELDS` for the stated kind, which
+ * is the same schema the dialog renders — unknown ids are dropped rather than
+ * recorded, and a single-choice field accepts only its own choices, so no
+ * hand-made payload can add a section to an issue body or write free text
+ * into a field the console shows as four fixed options.
  *
  * Everything else the issue records is derived server-side: the reporter from
  * the verified token, the org, plan and role from the membership read, the
@@ -238,6 +252,77 @@ export async function POST(request: Request): Promise<Response> {
       }
     }
 
+    const payload = (await request.json().catch(() => null)) as Record<
+      string,
+      unknown
+    > | null
+    const kind = payload?.['kind']
+    const summary = String(payload?.['summary'] ?? '').trim()
+    if (!isReportKind(kind)) {
+      return Response.json(
+        { error: 'Pick what kind of report this is.' },
+        { status: 400 },
+      )
+    }
+    if (!summary) {
+      return Response.json(
+        { error: 'Add a short summary.' },
+        { status: 400 },
+      )
+    }
+
+    // Validated against the SAME schema the dialog renders from, so a field
+    // the customer was asked for is a field that is actually enforced — and
+    // one nobody was asked for cannot be smuggled into the issue body.
+    const { answers, missing } = normalizeAnswers(kind, payload?.['answers'])
+    if (missing.length) {
+      const fields = reportFieldsForKind(kind)
+      const labels = missing.map(
+        (id) => fields.find((field) => field.id === id)?.label ?? id,
+      )
+      return Response.json(
+        { error: `Please answer: ${labels.join(' · ')}`, missing },
+        { status: 400 },
+      )
+    }
+
+    // A question the documentation already answers must never become a Linear
+    // issue (AGL-2486). Retrieval runs BEFORE the filing path and before the
+    // configuration check: it costs a map lookup and a string join, needs no
+    // provider key and no `release_assist`, so even a deployment that files
+    // nowhere still answers what its own docs answer.
+    //
+    // Deliberately NOT routed through `/api/assist/chat`, which 404s for a
+    // non-staff caller whenever `release_assist` is off — its shipped default.
+    // Borrowing that route would put the reporter behind a flag that is dark
+    // for every customer, which is the opposite of the point.
+    if (kind === 'question' && payload?.['skipDeflection'] !== true) {
+      const question = `${summary}\n${answers['question'] ?? ''}`.trim()
+      const scored = retrieveDocsSections(question)
+      const deflection = deflectToDocs(question, scored, false)
+      if (deflection.answered) {
+        console.info('[issue-reports] deflected to docs', {
+          correlationId,
+          page: deflection.page,
+          uid: decoded.uid,
+        })
+        return Response.json(
+          {
+            deflected: true,
+            // Verbatim docs text and the page it came from — never a
+            // paraphrase. `assist-deflection` owns that guarantee and its
+            // spec asserts it by reconstruction.
+            sections: deflection.quoted.slice(0, 3).map((section) => ({
+              title: sectionLabel(section),
+              url: sectionUrl(section),
+              text: trimToSentence(section.text, 700),
+            })),
+          },
+          { status: 200 },
+        )
+      }
+    }
+
     // Degrades cleanly rather than pretending: a self-host operator has no
     // Aglyn Linear workspace, and their reports must never be pointed at ours.
     const config = linearConfigFromEnv()
@@ -249,26 +334,6 @@ export async function POST(request: Request): Promise<Response> {
             '(LINEAR_API_KEY, LINEAR_CUSTOMER_REPORTS_TEAM_ID).',
         },
         { status: 501 },
-      )
-    }
-
-    const payload = (await request.json().catch(() => null)) as Record<
-      string,
-      unknown
-    > | null
-    const kind = payload?.['kind']
-    const summary = String(payload?.['summary'] ?? '').trim()
-    const description = String(payload?.['description'] ?? '').trim()
-    if (!isReportKind(kind)) {
-      return Response.json(
-        { error: 'Pick what kind of report this is.' },
-        { status: 400 },
-      )
-    }
-    if (!summary || !description) {
-      return Response.json(
-        { error: 'Add a short summary and a description.' },
-        { status: 400 },
       )
     }
 
@@ -287,7 +352,7 @@ export async function POST(request: Request): Promise<Response> {
     ])
 
     const title = reportTitle(kind, summary)
-    const body = buildReportBody(description.slice(0, MAX_DESCRIPTION), {
+    const body = buildReportBody(answers, {
       kind,
       route: payload?.['route'],
       viewportWidth: payload?.['viewportWidth'],

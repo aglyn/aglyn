@@ -81,6 +81,221 @@ export const isReportKind = (value: unknown): value is ReportKind =>
 export const MAX_SUMMARY = 120
 export const MAX_DESCRIPTION = 5000
 
+/** One choice in a {@link ReportField} rendered as a select. */
+export interface ReportFieldChoice {
+  value: string
+  label: string
+}
+
+/**
+ * One question the reporter is asked, for one kind of report.
+ *
+ * The schema lives HERE, next to the body composer and the validator, rather
+ * than in the dialog — the dialog renders it, the route enforces it, and the
+ * issue body is composed from it. Three copies of "what does a bug report
+ * need" is how a field ends up rendered but never validated, or collected but
+ * never printed: the shape this repo has already been bitten by as "written
+ * but never read".
+ */
+export interface ReportField {
+  /** Stable key. Appears in the payload and nowhere a customer sees. */
+  id: string
+  /** The question, as asked. */
+  label: string
+  placeholder?: string
+  helper?: string
+  /**
+   * Required fields are the ones whose absence makes the report USELESS —
+   * not merely thinner. Each `true` below carries its own justification,
+   * because a wall of required boxes stops genuine reports exactly as well
+   * as it stops spurious ones.
+   */
+  required: boolean
+  multiline: boolean
+  minRows?: number
+  maxLength: number
+  /** Present for a single-choice field; then the value must be one of these. */
+  choices?: readonly ReportFieldChoice[]
+}
+
+/**
+ * What each kind of report asks for (AGL-2486).
+ *
+ * Zach, 2026-08-22: "provide more fields to the issue report to really
+ * encourage greater detail and this way it will naturally moderate/limit how
+ * many we get". The friction is deliberate — but it is aimed, not sprayed.
+ * Nothing here asks for a fact the server can observe for itself: the route,
+ * org, host, role, plan, app version, build id, browser, viewport and release
+ * flags are all attached automatically and are more reliable than what
+ * somebody would type. These are only the things ONLY the human knows.
+ */
+export const REPORT_FIELDS: Readonly<
+  Record<ReportKind, readonly ReportField[]>
+> = {
+  /**
+   * A bug is the one kind where the report is worthless without the
+   * reproduction. "It's broken" costs a maintainer a round-trip that the
+   * reporter has usually stopped answering by the time it arrives, so all
+   * four are required — and the reproduction box is deliberately the
+   * biggest thing in the dialog.
+   */
+  bug: [
+    {
+      id: 'steps',
+      label: 'What were you doing when it broke?',
+      placeholder:
+        'Step by step, so we can follow along:\n1. Opened Media\n2. Chose a folder\n3. Clicked Upload',
+      helper:
+        'The single most useful thing you can tell us. Steps we can follow are what turns a report into a fix.',
+      required: true,
+      multiline: true,
+      minRows: 5,
+      maxLength: 2000,
+    },
+    {
+      id: 'expected',
+      label: 'What did you expect to happen?',
+      placeholder: 'The file would upload into the folder I picked.',
+      required: true,
+      multiline: true,
+      minRows: 2,
+      maxLength: 600,
+    },
+    {
+      id: 'actual',
+      label: 'What happened instead?',
+      placeholder:
+        'It uploaded to the top level instead, and the folder went back to All media.',
+      helper: 'Quote any error message exactly if you saw one.',
+      required: true,
+      multiline: true,
+      minRows: 3,
+      maxLength: 1000,
+    },
+    {
+      /**
+       * Required, and cheap: one click. It changes what a maintainer does
+       * first — "every time" is reproduced locally, "once" is hunted in the
+       * logs — so a missing answer sends the fix down the wrong path.
+       */
+      id: 'frequency',
+      label: 'Does it happen every time?',
+      required: true,
+      multiline: false,
+      maxLength: 40,
+      choices: [
+        { value: 'always', label: 'Every time I try' },
+        { value: 'sometimes', label: 'Sometimes — it comes and goes' },
+        { value: 'once', label: 'It happened once' },
+        { value: 'unknown', label: "I haven't tried again" },
+      ],
+    },
+  ],
+  /**
+   * An idea asks for the PROBLEM, not the feature. "Add a button that does
+   * X" describes one solution to a problem we cannot see, and it is usually
+   * not the best one; "I can't do X without doing Y twice" is buildable, and
+   * often has an answer that already ships. So the problem is the required
+   * field and the proposed solution is the optional one — the inversion is
+   * the whole point.
+   */
+  idea: [
+    {
+      id: 'problem',
+      label: "What are you trying to do that you can't?",
+      placeholder:
+        'I publish the same header to nine sites and have to edit each one by hand.',
+      helper:
+        'Tell us the problem rather than the feature — there may already be a way, and if there is not, knowing the goal gets you a better answer than a spec would.',
+      required: true,
+      multiline: true,
+      minRows: 5,
+      maxLength: 2000,
+    },
+    {
+      id: 'workaround',
+      label: 'How do you handle it today?',
+      placeholder: 'I keep a copy in a doc and paste it in each time.',
+      required: false,
+      multiline: true,
+      minRows: 2,
+      maxLength: 1000,
+    },
+    {
+      id: 'proposal',
+      label: 'If you already have something in mind (optional)',
+      required: false,
+      multiline: true,
+      minRows: 2,
+      maxLength: 1000,
+    },
+  ],
+  /**
+   * A question is the kind most likely to be already answered in the docs,
+   * which is why the route runs it past retrieval before it becomes an issue
+   * at all. Only one field is required, because the deflection check needs a
+   * question and nothing else.
+   */
+  question: [
+    {
+      id: 'question',
+      label: 'What do you need to know?',
+      placeholder: 'How do I point a domain I bought elsewhere at my site?',
+      required: true,
+      multiline: true,
+      minRows: 4,
+      maxLength: 2000,
+    },
+    {
+      id: 'tried',
+      label: 'What have you already tried or read? (optional)',
+      helper: 'Saves us sending you back to a page you have already read.',
+      required: false,
+      multiline: true,
+      minRows: 2,
+      maxLength: 1000,
+    },
+  ],
+}
+
+/** The field definitions for a kind, or `[]` for anything that is not one. */
+export function reportFieldsForKind(kind: unknown): readonly ReportField[] {
+  return isReportKind(kind) ? REPORT_FIELDS[kind] : []
+}
+
+/**
+ * The reporter's answers, cleaned against the schema for their kind.
+ *
+ * Returns the accepted answers plus the ids of any REQUIRED field left
+ * empty, so the route can refuse with a message naming what is missing
+ * rather than a generic 400. Unknown ids are dropped rather than recorded: a
+ * payload may carry anything, and an extra key must not become an extra
+ * section in an issue body.
+ */
+export function normalizeAnswers(
+  kind: ReportKind,
+  raw: unknown,
+): { answers: Record<string, string>; missing: string[] } {
+  const source = (raw ?? {}) as Record<string, unknown>
+  const answers: Record<string, string> = {}
+  const missing: string[] = []
+  for (const field of REPORT_FIELDS[kind]) {
+    const value = String(source[field.id] ?? '')
+      .trim()
+      .slice(0, field.maxLength)
+    // A select may only carry one of its own choices. Anything else is
+    // discarded outright rather than recorded, so a hand-made payload cannot
+    // write free text into a field the dialog renders as four fixed options.
+    const accepted =
+      field.choices && !field.choices.some((choice) => choice.value === value)
+        ? ''
+        : value
+    if (accepted) answers[field.id] = accepted
+    else if (field.required) missing.push(field.id)
+  }
+  return { answers, missing }
+}
+
 export interface LinearConfig {
   apiKey: string
   teamId: string
@@ -287,14 +502,35 @@ export function reportTitle(kind: ReportKind, summary: string): string {
 
 /**
  * The issue description: a metadata table a triager can act on without asking
- * a single follow-up question, then the reporter's own words, fenced.
+ * a single follow-up question, then the reporter's own answers, fenced.
+ *
+ * Each answer becomes its own headed section rather than one undifferentiated
+ * blob (AGL-2486), so "what happened instead" is findable without reading a
+ * paragraph to locate it — and an optional field left blank prints nothing at
+ * all rather than an empty heading a maintainer has to scroll past.
+ *
+ * Single-choice answers go in the TABLE, not into a section: a one-word value
+ * under its own heading is a heading tax, and reproducibility belongs beside
+ * the other at-a-glance facts a triager sorts on.
  */
 export function buildReportBody(
-  description: string,
+  answers: Record<string, string>,
   context: ReportContext,
 ): string {
+  const fields = REPORT_FIELDS[context.kind] ?? []
   const viewport = safeViewport(context.viewportWidth, context.viewportHeight)
+  const choiceRows: [string, string][] = fields
+    .filter((field) => field.choices && answers[field.id])
+    .map((field) => [
+      field.label.replace(/\?$/, ''),
+      inlineSafe(
+        field.choices?.find((choice) => choice.value === answers[field.id])
+          ?.label ?? answers[field.id],
+        80,
+      ),
+    ])
   const rows: [string, string][] = [
+    ...choiceRows,
     ['Reporter', inlineSafe(context.reporterEmail) || '—'],
     ['User id', inlineSafe(context.reporterUid, 64)],
     [
@@ -341,14 +577,28 @@ export function buildReportBody(
     ],
   ]
 
+  // Free-text answers, in the order the reporter was asked for them, each
+  // under the question it answers. A blank optional field contributes
+  // nothing.
+  const sections: string[] = []
+  let remaining = MAX_DESCRIPTION
+  for (const field of fields) {
+    if (field.choices) continue
+    const value = String(answers[field.id] ?? '').trim()
+    if (!value || remaining <= 0) continue
+    const clipped = value.slice(0, remaining)
+    remaining -= clipped.length
+    sections.push('', `### ${field.label}`, '', fencedBlock(clipped))
+  }
+  if (!sections.length) {
+    sections.push('', '### What they reported', '', fencedBlock(''))
+  }
+
   return [
     '| | |',
     '| --- | --- |',
     ...rows.map(([label, value]) => `| ${label} | ${value} |`),
-    '',
-    '### What they reported',
-    '',
-    fencedBlock(String(description ?? '').slice(0, MAX_DESCRIPTION)),
+    ...sections,
     '',
     '---',
     '',
