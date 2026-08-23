@@ -89,6 +89,48 @@ const cssFor = (container: HTMLElement, selector = '.MuiAvatar-root'): string =>
   return rules.join(' ')
 }
 
+/**
+ * How much room a chip actually OCCUPIES on screen, in px across.
+ *
+ * `width` plus the ring on both sides. Derived from the CSSOM rather than from
+ * `getBoundingClientRect`, and that is the whole point: `outline` does NOT
+ * participate in layout, so a ringed and an unringed chip have IDENTICAL
+ * bounding boxes — measured in the browser, 28x28 for both while one painted
+ * 32px and the other 28px. A test that compared boxes would have been green on
+ * the build Zach was looking at when he said they were different sizes.
+ */
+/** `paintedExtent` for one already-selected chip, for whole-row assertions. */
+function paintedExtentOf(chip: HTMLElement): number {
+  const classes = [...chip.classList]
+  const rules: string[] = []
+  for (const sheet of [...document.styleSheets]) {
+    let list: CSSRuleList
+    try {
+      list = sheet.cssRules
+    } catch {
+      continue
+    }
+    for (const rule of [...(list as any)] as CSSStyleRule[]) {
+      if (classes.some((c) => rule.selectorText?.includes(`.${c}`))) {
+        rules.push(rule.cssText)
+      }
+    }
+  }
+  const css = rules.join(' ')
+  const width = /[;{\s]width:\s*(\d+(?:\.\d+)?)px/.exec(css)
+  const ring = /[;{\s]outline:\s*(\d+(?:\.\d+)?)px\s+([a-z]+)/.exec(css)
+  const ringWidth = ring && ring[2] !== 'none' ? Number(ring[1]) : 0
+  return Number(width?.[1] ?? 0) + 2 * ringWidth
+}
+
+function paintedExtent(container: HTMLElement, selector = '.MuiAvatar-root'): number {
+  const css = cssFor(container, selector)
+  const width = /[;{\s]width:\s*(\d+(?:\.\d+)?)px/.exec(css)
+  const ring = /[;{\s]outline:\s*(\d+(?:\.\d+)?)px\s+([a-z]+)/.exec(css)
+  const ringWidth = ring && ring[2] !== 'none' ? Number(ring[1]) : 0
+  return Number(width?.[1] ?? 0) + 2 * ringWidth
+}
+
 describe('MemberAvatar (AGL-1683)', () => {
   it('makes no request at all for a member with only an email', () => {
     const { container } = render(
@@ -167,13 +209,39 @@ describe('MemberAvatar (AGL-1683)', () => {
     expect(css).toMatch(/outline/)
   })
 
-  it('leaves an INITIALS avatar unringed — the background already says it', () => {
-    // Two indicators of one fact is noise, and the ring is drawn outside the
-    // circle where it costs layout room in an overlapping stack.
+  it('rings an INITIALS avatar too, so the row is not lumpy (AGL-2486)', () => {
+    // This REPLACES an earlier assertion that an initials chip is left
+    // unringed. That reasoning — the background already carries the colour, so
+    // a same-colour ring adds no information — was correct and incomplete.
+    // Zach: "I know we are using the background color on the avatars with no
+    // picture, but it should still have a border, because now they are
+    // different sizes." A ring is geometry as well as information.
     const { container } = render(
       <MemberAvatar colour="#9334e6" name="Ada Lovelace" />,
     )
-    expect(cssFor(container)).not.toMatch(/outline-color/)
+    expect(cssFor(container)).toMatch(/outline-color/)
+  })
+
+  it('gives a photo chip and an initials chip the SAME painted size', () => {
+    // Zach's acceptance test, stated as he stated it: every chip in the stack
+    // occupies the same space. Asserted on painted extent, because the
+    // bounding boxes are equal either way — see `paintedExtent`.
+    const photo = render(
+      <MemberAvatar
+        photoURL="https://lh3.googleusercontent.com/a/ada"
+        colour="#9334e6"
+        name="Ada Lovelace"
+      />,
+    )
+    const initials = render(
+      <MemberAvatar colour="#188038" name="Grace Hopper" />,
+    )
+    expect(paintedExtent(initials.container)).toBe(
+      paintedExtent(photo.container),
+    )
+    // And neither is zero, or the assertion above would hold vacuously if the
+    // stylesheet were never read.
+    expect(paintedExtent(photo.container)).toBeGreaterThan(0)
   })
 
   it('does not ring a photo whose colour was only SEEDED', () => {
@@ -274,6 +342,36 @@ describe('a presence chip distinguishes your own session (AGL-2486)', () => {
     expect(
       container.querySelectorAll('[data-aglyn-presence-self-badge]'),
     ).toHaveLength(0)
+  })
+
+  it('gives EVERY chip in a stack the same painted size, overflow included', () => {
+    // Zach's acceptance test in his own terms: "they are different sizes".
+    // Over the whole rendered row, not one component in isolation — the `+N`
+    // overflow chip is not a `MemberAvatar`, so fixing that component left it
+    // 4px smaller than everything beside it. That gap was found by measuring
+    // the live stack, and this is what would have found it here.
+    const many = Array.from({ length: 9 }, (unused, index) =>
+      entry({
+        uid: `u${index}`,
+        sessionId: `s${index}`,
+        key: `u${index}:s${index}`,
+        colour: index % 2 ? '#188038' : '#9334e6',
+        // A mixed row: some sessions have a picture, some do not.
+        photoURL: index % 3 === 0 ? 'https://lh3.googleusercontent.com/a/x' : undefined,
+      }),
+    )
+    const { container } = render(<PresenceAvatars presence={state(many)} />)
+    const chips = [...container.querySelectorAll('.MuiAvatar-root')]
+    // The row must actually have overflowed, or this asserts nothing.
+    expect(
+      container.querySelectorAll('[data-aglyn-presence-overflow]'),
+    ).toHaveLength(1)
+    expect(chips.length).toBeGreaterThan(2)
+    const sizes = new Set(
+      chips.map((chip) => paintedExtentOf(chip as HTMLElement)),
+    )
+    expect([...sizes]).toHaveLength(1)
+    expect([...sizes][0]).toBeGreaterThan(0)
   })
 
   it('draws NO dashed ring on any chip, your own included', () => {

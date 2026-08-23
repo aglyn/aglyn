@@ -323,6 +323,20 @@ function RoomAvatars({ entries }: { entries: PresenceEntry[] }) {
               fontWeight: 600,
               bgcolor: 'action.selected',
               color: 'text.secondary',
+              // The overflow chip is in the row too, so it has to be the same
+              // SIZE as the row (AGL-2486). A ring paints 2px outside the
+              // circle, so without one this chip sat 4px smaller than every
+              // session beside it — the same unevenness Zach reported, on the
+              // one chip that is not a `MemberAvatar` and so was not fixed by
+              // fixing that component. Found by measuring the live stack; the
+              // unit test for the avatar could not have seen it.
+              //
+              // In its OWN background colour, because it represents no session
+              // and has no identity colour to show. It reads as a plain disc,
+              // just one the same size as its neighbours.
+              outline: '2px solid',
+              outlineColor: (theme) => theme.palette.action.selected,
+              outlineOffset: 0,
             }}
           >
             {`+${overflow}`}

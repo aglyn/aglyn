@@ -205,16 +205,39 @@ export function MemberAvatar(props: MemberAvatarProps) {
         // session's own colour, matching the cursor. A member list seeds its
         // colour off an email purely so two rows differ, and ringing those
         // would assert a correspondence to something that is not on screen.
-        ...(colour && src
+        ...(colour
           ? {
-              // Outside the circle, like the self ring beside it, so the face
-              // is not cropped by its own indicator.
+              // Outside the circle, so the face is not cropped by its own
+              // indicator.
               //
-              // Still only when there is a PHOTO. An initials avatar's
-              // background already IS the identity colour, so a ring in that
-              // same colour is invisible on it — briefly tried and reverted,
-              // because it bought nothing and contradicted the tested
-              // decision this condition encodes.
+              // ON EVERY COLOURED CHIP, INCLUDING INITIALS ONES — and that
+              // reverses an earlier decision of mine, deliberately (AGL-2486).
+              //
+              // The old reasoning was that an initials chip's background
+              // already IS the identity colour, so a same-colour ring carries
+              // no new information. That was true and it was beside the point.
+              // Zach: "I know we are using the background color on the avatars
+              // with no picture, but it should still have a border, because
+              // now they are different sizes." The ring is not only
+              // information, it is GEOMETRY: it paints 2px outside the circle,
+              // so in a mixed stack the photo chips read 4px wider than the
+              // initials chips beside them and the row looks uneven.
+              //
+              // So the session colour, on both, and on an initials chip it
+              // simply reads as a slightly larger disc of the one colour. The
+              // alternative — a ring in the toolbar's background colour on
+              // initials chips only — would equalise the size too, and was
+              // rejected because it puts a second meaning on the ring
+              // depending on whether a picture loaded. That is the exact
+              // inconsistency Zach objected to twice over the dashed border.
+              // Adjacent chips are guaranteed different colours by the
+              // room-wide allocation, so the overlap still has a colour edge.
+              //
+              // NOTE for anyone measuring this: `outline` does not participate
+              // in layout, so `getBoundingClientRect` is IDENTICAL for a
+              // ringed and an unringed chip (measured: 28x28 for both). The
+              // symptom is painted extent, and a test that compares boxes is
+              // green on the broken build.
               //
               // ONE ring style, one meaning (AGL-2486). The ring says "this
               // is the colour of my cursor" and nothing else.
