@@ -447,6 +447,15 @@ jobs:
       - run: npm run test:jsx-barrel
       - run: npm run check:jsx-barrel
 
+      # The same rule for the OTHER barrel a published page imports statically
+      # (AGL-2486). `catch-all-client.tsx` opens with `import * as Aglyn from
+      # '@aglyn/aglyn'`, and nothing watched that entry — which is how
+      # `firebase/auth` and `acorn` each came to ship to anonymous visitors of
+      # every customer site, for -48,643 B and -39,035 B gzipped respectively.
+      # Its forced reds live in the same test file and replay exactly those two
+      # regressions, so the gate is known to catch the thing it was built for.
+      - run: npm run check:aglyn-barrel
+
       # NEXT_PUBLIC access form (AGL-2037, AGL-2172). Next substitutes only the
       # dot form, so a bracket read in a client-reachable module is `undefined`
       # in the browser and the value silently falls back to Aglyn's default —

@@ -81,6 +81,29 @@ import {
 export const BARREL = 'libs/shared/ui/jsx/src/index.ts'
 
 /**
+ * The OTHER barrel a published customer page imports statically (AGL-2486).
+ *
+ * `apps/tenant/app/[host]/[[...slug]]/catch-all-client.tsx` opens with
+ * `import * as Aglyn from '@aglyn/aglyn'`, so this entry bills the same way
+ * `BARREL` does — and until AGL-2486 nothing watched it. Two heavy packages
+ * had walked in through it and nothing went red:
+ *
+ *   `firebase/auth` — `merge-node-sx`, a styling helper on the node-render
+ *     path, imported one function through the `@aglyn/shared-data-enums`
+ *     barrel, which re-exports a module that imports `AuthErrorCodes` from
+ *     `firebase/auth` as a VALUE. Removing that edge: -48,643 B GZIPPED.
+ *   `acorn` — `app-utils/server.ts` re-exported `plugin-bundle-checks`, so a
+ *     JavaScript parser for inspecting untrusted marketplace bundles shipped
+ *     to anonymous visitors. Moving it behind the `/server` entry:
+ *     -39,035 B GZIPPED.
+ *
+ * Both are one-line mistakes that compile, lint, typecheck and test green.
+ * That is precisely the class this detector already exists for, so it guards
+ * this entry with the same two pins rather than a second mechanism.
+ */
+export const AGLYN_BARREL = 'libs/aglyn/src/index.ts'
+
+/**
  * A bare specifier reduced to the package that bills for it.
  *
  * Deliberately coarser than the specifier: `@mui/material/styles` and
@@ -167,10 +190,15 @@ export function collectBarrelGraph({ entry, read, resolve }) {
   }
 }
 
-/** Convenience wrapper over `collectBarrelGraph` for the real repo. */
-export function measureBarrel(root, read) {
+/**
+ * Convenience wrapper over `collectBarrelGraph` for the real repo.
+ *
+ * `barrel` defaults to `BARREL` so every existing caller is unchanged; pass
+ * `AGLYN_BARREL` for the other entry a published page imports statically.
+ */
+export function measureBarrel(root, read, barrel = BARREL) {
   const resolve = createResolver(root)
-  const entry = `${root}/${BARREL}`
+  const entry = `${root}/${barrel}`
   const graph = collectBarrelGraph({ entry, read, resolve })
   return {
     specifiers: readBarrelSpecifiers(read(entry)),
@@ -230,3 +258,22 @@ export const WHY =
   "'@aglyn/shared-ui-jsx/components/<file>', which already resolves. " +
   'Measured: re-exporting data-table.component costs +162,866 B GZIPPED and ' +
   'grid-list +20,386 B, on every page of every customer site.'
+
+/**
+ * The same sentence for `AGLYN_BARREL`, whose fix is a different one
+ * (AGL-2486) — a subpath or the `/server` entry, not "drop the export".
+ */
+export const WHY_AGLYN =
+  'Everything reachable from `libs/aglyn/src/index.ts` ships eagerly on ' +
+  'EVERY published customer page: `catch-all-client.tsx` opens with ' +
+  "`import * as Aglyn from '@aglyn/aglyn'`, and a module with a top-level " +
+  'singleton (`lib/aglyn.ts` builds one) is not something a bundler will ' +
+  'shake. A package appearing here means some module in the graph grew a ' +
+  'value import of it — usually through ANOTHER barrel, which is how ' +
+  '`firebase/auth` and `acorn` both got in. The fix is almost never to ' +
+  'delete the code: import the file you actually want by subpath ' +
+  "('@aglyn/shared-data-enums/styles'), or, if it is server-only, hang it " +
+  "off '@aglyn/aglyn/server' the way `api-adapter` (node:stream), " +
+  '`api-idempotency` (node:crypto) and `plugin-bundle-checks` (acorn) all ' +
+  'do. Measured on a Turbopack production build: those two edges were ' +
+  '-48,643 B and -39,035 B GZIPPED on the published-page route.'

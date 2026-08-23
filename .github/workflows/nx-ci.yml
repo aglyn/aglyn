@@ -278,4 +278,9 @@ jobs:
       # ~1s.
       - run: npm run check:jsx-barrel
 
+      # The @aglyn/aglyn barrel allowlist (AGL-2486). Same class, second
+      # entry point: `catch-all-client.tsx` imports it statically, so a heavy
+      # package reaching it lands on every published customer page. ~1s.
+      - run: npm run check:aglyn-barrel
+
       - run: npx nx affected -t lint test build --parallel=3

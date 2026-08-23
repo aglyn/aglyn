@@ -1,0 +1,30 @@
+{
+  "$comment": "AGL-2486. The allowlist for libs/aglyn/src/index.ts. `apps/tenant/app/[host]/[[...slug]]/catch-all-client.tsx` opens with `import * as Aglyn from '@aglyn/aglyn'`, so everything reachable from this entry ships eagerly on EVERY published customer page — and `lib/aglyn.ts` builds a module-scope singleton, so no bundler will shake it. `specifiers` is what the barrel names directly; `packages` is every third-party package its transitive graph reaches. Two got in unnoticed before this file existed: `firebase/auth` (through the @aglyn/shared-data-enums barrel, -48,643 B gz to remove) and `acorn` (through app-utils/server.ts re-exporting plugin-bundle-checks, -39,035 B gz). Move either list only with `npm run check:aglyn-barrel -- --write`, in the same commit as the import that moved it. See tools/scripts/lib/jsx-barrel.mjs.",
+  "specifiers": [
+    "./lib/aglyn",
+    "./lib/app-utils",
+    "./lib/foundation"
+  ],
+  "packages": [
+    "@msgpack/msgpack",
+    "change-case",
+    "deep-equal",
+    "deepmerge-ts",
+    "eventemitter2",
+    "flat",
+    "fuse.js",
+    "hoist-non-react-statics",
+    "lodash-es",
+    "mitt",
+    "mobx",
+    "mobx-state-tree",
+    "mobx-utils",
+    "mout",
+    "nanoid",
+    "nanoid-dictionary",
+    "php-serialize",
+    "platform",
+    "react",
+    "use-debounce"
+  ]
+}

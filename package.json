@@ -131,6 +131,7 @@
     "check:next-public-access": "node tools/scripts/check-next-public-access.mjs",
     "check:hardcoded-colours": "node tools/scripts/check-hardcoded-colours.mjs",
     "check:jsx-barrel": "node tools/scripts/check-jsx-barrel.mjs",
+    "check:aglyn-barrel": "node tools/scripts/check-aglyn-barrel.mjs",
     "generate:docs-help": "node tools/scripts/generate-docs-help.mjs",
     "generate:docs-help:check": "node tools/scripts/generate-docs-help.mjs --check",
     "generate:plugin-manifests": "node tools/scripts/generate-plugin-manifests.mjs",
