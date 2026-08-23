@@ -36,7 +36,6 @@ import { clampToViewport, useAnchoredRect } from '../hooks/use-anchored-rect'
 import useInsertTokenOptions from '../hooks/use-insert-token-options'
 import {
   type AnchorTextStyle,
-  findAnchorTextElement,
   readAnchorTextStyle,
 } from '../utils/anchor-text-style'
 import {
@@ -171,6 +170,15 @@ export const InlineTextEditorComponent = observer(
     const [anchorStyle, setAnchorStyle] = useState<
       AnchorTextStyle | undefined
     >(undefined)
+    /**
+     * Whether the document is actually RESERVING space for what is being
+     * typed (AGL-2486). It gates the in-place look, because transparency is
+     * only honest when the layout tracks: a see-through surface that grows
+     * past a box the document never grew draws the author's text over its
+     * neighbour, which is worse than the box it replaced. Transparent if and
+     * only if reserved.
+     */
+    const [spaceIsReserved, setSpaceIsReserved] = useState(false)
     const overlayRef = useRef<HTMLElement>(null)
     const plainRef = useRef<HTMLDivElement>(null)
     const richRef = useRef<HTMLDivElement>(null)
@@ -416,43 +424,32 @@ export const InlineTextEditorComponent = observer(
     }, [node, anchor])
 
     /**
-     * The surface wears the element's type, so the element must not also
-     * paint its own text underneath it (AGL-2486) — two copies of the same
-     * words, one of them stale, is worse than the box this replaced.
+     * Takes the element's own text out of the layout and puts a live-sized
+     * stand-in in its place, so the document re-flows AS the author types
+     * (AGL-2486) — and decides, by whether that succeeded, whether this
+     * editor is allowed to be transparent at all.
      *
-     * `visibility`, not `display`: the element keeps its box, so the layout
-     * around it does not jump when editing starts or ends. `<aglyn-text>` is
-     * hidden in preference to the leaf so an icon or adornment beside the
-     * text stays visible. Set outside React and restored on close; React
-     * only removes style properties it set itself, so a re-render mid-edit
-     * leaves this alone.
+     * The two are one decision on purpose. A see-through surface over a
+     * layout that does not move is how `presence.` ended up drawn across the
+     * sibling `One canvas.`: the surface gained a line, the reserved box did
+     * not, and both texts were visible in the same pixels. Boxed-and-opaque
+     * covers what it replaces; transparent blends with it. Only the second
+     * needs the document to keep up, so only the second is offered when it
+     * does.
      */
     useEffect(() => {
       if (!node) return
-      // Preferred: a hidden stand-in carrying the live text, so the card,
-      // the row and the siblings re-flow as it is typed (AGL-2486).
+      // A hidden stand-in carrying the live text, so the card, the row and
+      // the siblings re-flow as it is typed. When one cannot be made — an
+      // inline run, or an element already gone — the editor stays BOXED
+      // rather than going transparent over a layout that will not move.
       const ghost = createInlineEditLayoutGhost(anchor)
       ghostRef.current = ghost
-      if (ghost) {
-        return () => {
-          ghost.dispose()
-          ghostRef.current = undefined
-        }
-      }
-      // Rich text renders through `dangerouslySetInnerHTML` and has no
-      // `<aglyn-text>` to stand in for, so it keeps the plain hide: the text
-      // is not painted twice, and the layout still catches up on commit.
-      const textElement = findAnchorTextElement(anchor)
-      if (!textElement) return
-      const previous = textElement.style.getPropertyValue('visibility')
-      const priority = textElement.style.getPropertyPriority('visibility')
-      textElement.style.setProperty('visibility', 'hidden', 'important')
+      setSpaceIsReserved(Boolean(ghost))
       return () => {
-        if (previous) {
-          textElement.style.setProperty('visibility', previous, priority)
-        } else {
-          textElement.style.removeProperty('visibility')
-        }
+        ghost?.dispose()
+        ghostRef.current = undefined
+        setSpaceIsReserved(false)
       }
     }, [node, anchor])
 
@@ -467,7 +464,7 @@ export const InlineTextEditorComponent = observer(
      */
     const handleSurfaceInput = useCallback(
       (event: { currentTarget: HTMLElement }) => {
-        ghostRef.current?.update(event.currentTarget.textContent ?? '')
+        ghostRef.current?.update(event.currentTarget)
       },
       [],
     )
@@ -732,7 +729,8 @@ export const InlineTextEditorComponent = observer(
     // Built as plain records and cast ONCE, the way `tokenPillContainerSx`
     // is: MUI's `sx` union cannot absorb a computed spread of arbitrary CSS
     // longhands and reports every neighbouring key as the error instead.
-    const surfaceSx: Record<string, unknown> = anchorStyle
+    const inPlace = Boolean(anchorStyle) && spaceIsReserved
+    const surfaceSx: Record<string, unknown> = inPlace
       ? { ...IN_PLACE_SURFACE_SX, ...anchorStyle }
       : BOXED_SURFACE_SX
     const richSurfaceSx = {
@@ -756,7 +754,7 @@ export const InlineTextEditorComponent = observer(
       wordBreak: 'break-word',
       ...tokenPillContainerSx,
     } as SystemStyleObject<Theme>
-    const minWidth = anchorStyle
+    const minWidth = inPlace
       ? Math.max(live.width, 24)
       : Math.max(live.width, 120)
     const TOOLBAR_CLEARANCE = 48
@@ -776,7 +774,7 @@ export const InlineTextEditorComponent = observer(
             TOOLBAR_CLEARANCE,
           ),
           minWidth,
-          ...(anchorStyle
+          ...(inPlace
             ? { width: live.width, maxWidth: 'none' }
             : { maxWidth: '90vw' }),
           zIndex: (theme) => theme.zIndex.modal,

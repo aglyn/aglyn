@@ -22,6 +22,12 @@ export * from './lib/hoist-non-react-statics'
 export * from './lib/mitt-emitter'
 export * from './lib/object-deep-merge'
 export * from './lib/object-flatten'
-export * from './lib/platform-identification'
+// platform-identification is NOT re-exported (AGL-2486). Nothing in the repo
+// imports it — not the apps, not a plugin, not a tool — so its only effect
+// was that every file taking anything at all from this index (and there are
+// ten in the published page's eager graph alone, mostly for
+// `hoistNonReactStatics`) also pulled in the `platform` UA-parsing package.
+// Measured at -4.7 KB gz off the eager barrel graph. Still importable as
+// `@aglyn/shared-util-vendor/platform-identification`.
 export * from './lib/unique-identification'
 export * from './lib/use-debounce'

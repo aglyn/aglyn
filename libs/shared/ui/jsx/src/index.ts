@@ -117,7 +117,14 @@ export * from './lib/hooks/use-observer-mutation'
 export * from './lib/hooks/use-node-property'
 export * from './lib/hooks/use-on-mouse-enter'
 export * from './lib/hooks/use-on-mouse-over'
-export * from './lib/hooks/use-observer-resize'
+// use-observer-resize is NOT re-exported (AGL-2486). It has no consumers at
+// all — not in the apps, not in any plugin — so nothing can call it, and a
+// React hook cannot be reached except by importing it. Its only cost was
+// dragging `resize-observer-polyfill` into the eager graph of every
+// published customer page, for an API that has been baseline in every
+// browser since 2020. Measured at -2.3 KB gz off the barrel's transitive
+// graph. Importable by subpath if a caller ever appears — at which point
+// it should use the native ResizeObserver rather than the polyfill.
 export * from './lib/hooks/use-subscribable'
 export * from './lib/hooks/use-tag-name'
 export * from './lib/hooks/use-timeout'

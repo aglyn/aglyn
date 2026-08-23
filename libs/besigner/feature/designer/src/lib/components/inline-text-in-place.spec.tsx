@@ -259,17 +259,161 @@ describe('the inline text editor edits in place (AGL-2486)', () => {
     })
 
     /**
-     * Rich text renders through `dangerouslySetInnerHTML` straight onto the
-     * leaf, so there is no `<aglyn-text>` to stand in for and a ghost would
-     * have to duplicate markup React owns. It keeps the plain hide.
+     * Rich text renders through `dangerouslySetInnerHTML`, so React does not
+     * track those children individually — it re-sets `innerHTML` wholesale
+     * when the html prop changes and otherwise leaves the subtree alone.
+     * Parking them is therefore safe here in a way it would never be for
+     * children React created, and the reserved space tracks for rich text
+     * too.
      */
-    it('falls back to hiding the leaf when there is no text child', async () => {
-      const leaf = displayHeading()
-      leaf.querySelector('aglyn-text')?.remove()
-      await openOn(leaf)
+    describe('rich text, whose content came from an html prop', () => {
+      const richLeaf = () => {
+        const leaf = displayHeading()
+        leaf.querySelector('aglyn-text')?.remove()
+        // The exact stored markup from yFjgqiG2wm / C3rodYc1Gd.
+        leaf.innerHTML = 'Your entire web <div>presence. </div>'
+        return leaf
+      }
 
-      expect(leaf.style.visibility).toBe('hidden')
-      expect(ghostOf(leaf)).toBeNull()
+      it('reserves space for it as well', async () => {
+        const leaf = richLeaf()
+        await openOn(leaf)
+        expect(ghostOf(leaf)).toBeTruthy()
+      })
+
+      /**
+       * MARKUP, not text: the breaks live in the markup, and a plain-text
+       * stand-in would measure a two-line heading as one — understating
+       * exactly the height that matters.
+       */
+      it('stands in with the markup, so a break still costs a line', async () => {
+        const leaf = richLeaf()
+        await openOn(leaf)
+        expect(ghostOf(leaf)?.innerHTML).toContain('<div>')
+      })
+
+      it('parks the original out of the layout rather than deleting it', async () => {
+        const leaf = richLeaf()
+        await openOn(leaf)
+        const parked = leaf.querySelector(
+          '[data-aglyn-layout-parked]',
+        ) as HTMLElement
+        expect(parked).toBeTruthy()
+        expect(parked.style.display).toBe('none')
+        expect(parked.innerHTML).toBe('Your entire web <div>presence. </div>')
+      })
+
+      it('gives the original back on close', async () => {
+        const leaf = richLeaf()
+        await openOn(leaf)
+
+        act(() => inlineTextEdit.close())
+
+        expect(leaf.innerHTML).toBe('Your entire web <div>presence. </div>')
+        expect(ghostOf(leaf)).toBeNull()
+        expect(leaf.querySelector('[data-aglyn-layout-parked]')).toBeNull()
+      })
+    })
+  })
+
+  /**
+   * Zach, on the second attempt: *"The reserved space is still not updating
+   * as we are editing text live"* — with the edited run and its sibling
+   * drawn over each other, an overflowing `presence.` sharing pixels with
+   * `One canvas.`
+   *
+   * The node was a `Span`-component Typography nested inside another
+   * Typography, with a sibling beneath it in the same parent. The overlay is
+   * positioned and sized from `getBoundingClientRect()`, and for an inline
+   * run on one line that rect is the width of the TEXT, not the width
+   * available to it — so the surface wraps as soon as typing exceeds the
+   * run's current width, while the real text, which wraps at the parent's
+   * width, has not wrapped at all. The surface gains a line the reserved box
+   * has not, and it lands on the neighbour.
+   *
+   * No ghost can fix that: the mismatch is in the OVERLAY's geometry, not
+   * the document's. So inline keeps the opaque box, which covers what it
+   * replaces instead of blending with it. The invariant is the point —
+   * transparent if and only if reserved.
+   */
+  describe('an inline run keeps the opaque box (AGL-2486)', () => {
+    const inlineRun = () => {
+      const parent = document.createElement('div')
+      const span = document.createElement('span')
+      span.setAttribute('data-aglyn', 'leaf:agl2486-inplace')
+      span.style.fontSize = '96px'
+      const text = document.createElement('aglyn-text')
+      text.textContent = 'One canvas.'
+      span.appendChild(text)
+      const sibling = document.createElement('span')
+      sibling.textContent = 'Your entire web presence.'
+      parent.append(span, sibling)
+      document.body.appendChild(parent)
+      span.getBoundingClientRect = () =>
+        ({
+          left: 480, top: 300, width: 300, height: 104,
+          right: 780, bottom: 404, x: 480, y: 300, toJSON: () => ({}),
+        }) as DOMRect
+      return span
+    }
+
+    it('does not reserve space it cannot reserve correctly', async () => {
+      const span = inlineRun()
+      await openOn(span)
+      expect(
+        span.querySelector('[data-aglyn-layout-ghost]'),
+      ).toBeNull()
+    })
+
+    it('stays opaque, so two texts are never drawn over each other', async () => {
+      const span = inlineRun()
+      const surface = await openOn(span)
+      const style = window.getComputedStyle(surface)
+
+      expect(['transparent', 'rgba(0, 0, 0, 0)']).not.toContain(
+        style.backgroundColor,
+      )
+      expect(style.borderWidth).toBe('2px')
+    })
+
+    it('leaves the element\u2019s own text exactly as it was', async () => {
+      const span = inlineRun()
+      await openOn(span)
+      const text = span.querySelector('aglyn-text') as HTMLElement
+
+      expect(text.style.display).toBe('')
+      expect(text.style.visibility).toBe('')
+      expect(span.textContent).toBe('One canvas.')
+    })
+  })
+
+  /**
+   * The invariant both of the above are instances of. Transparency is only
+   * honest when the layout tracks; a see-through surface that grows past a
+   * box the document never grew draws the author's text over its neighbour,
+   * which is worse than the box it replaced.
+   */
+  describe('transparent if and only if reserved', () => {
+    it('is transparent exactly when a stand-in is holding the space', async () => {
+      const leaf = displayHeading()
+      const surface = await openOn(leaf)
+      const transparent = ['transparent', 'rgba(0, 0, 0, 0)'].includes(
+        window.getComputedStyle(surface).backgroundColor,
+      )
+      const reserved = Boolean(
+        leaf.querySelector('[data-aglyn-layout-ghost]'),
+      )
+      expect(transparent).toBe(reserved)
+      expect(reserved).toBe(true)
+    })
+
+    it('is opaque exactly when nothing is holding it', async () => {
+      const surface = await openOn(undefined)
+      const transparent = ['transparent', 'rgba(0, 0, 0, 0)'].includes(
+        window.getComputedStyle(surface).backgroundColor,
+      )
+      expect(transparent).toBe(false)
+      expect(document.querySelectorAll('[data-aglyn-layout-ghost]').length).toBe(0)
     })
   })
 
