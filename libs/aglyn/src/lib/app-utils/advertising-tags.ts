@@ -281,7 +281,14 @@ export const META_PIXEL_VENDOR: AdvertisingVendor = {
  * could not either — that function acts on marked script ELEMENTS, and there
  * has never been one for Google. The cookie therefore survived every
  * withdrawal on every surface. See {@link ADVERTISING_COOKIE_PREFIXES} for why
- * the prefixes are `_gcl`/`_gac` and cannot reach `_ga`/`_gid`.
+ * the prefix is `_gcl` ALONE and cannot reach `_ga`/`_gid`.
+ *
+ * ⚠️ `_gac` is NOT in that list and must not be added back. It is written
+ * under the analytics loader, sits in the `Google Analytics` row of
+ * `apps/console/constants/cookie-inventory.ts`, and is already swept by the
+ * `_ga` prefix; `advertising-cookie-sweep.spec.ts` pins it as analytics-owned.
+ * An earlier version of this comment named it here, and a published Cookie
+ * Policy line describing `_gac` as advertising-gated traces to exactly that.
  *
  * The prefixes are IMPORTED rather than restated. They are consumed in two
  * places — the universal sweep in `storeVisitorConsent` and the element-scoped
