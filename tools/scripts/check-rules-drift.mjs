@@ -45,6 +45,17 @@
 // rules file are listed as PENDING DEPLOY. That is information, never a
 // failure: it is the ledger of what is owed at the next promotion.
 //
+// AHEAD is the mirror of that ledger (AGL-2486). A surface whose LIVE ruleset
+// byte-matches `HEAD` rather than the baseline was deployed before the
+// promotion — neither a skipped deploy nor an edit made outside the repo, and
+// it converges on its own when the baseline advances. Reported by name and
+// not a failure, because the alternative is a daily check that is red for the
+// entire promotion window, which is the muted alarm this file argues against
+// two paragraphs up. It cannot launder a real drift: live must byte-match
+// HEAD *and* HEAD must carry commits the baseline does not, on shared
+// history — see `headIsAheadOfBaseline` for why the obvious ancestry test is
+// backwards under a merge-commit promotion flow.
+//
 // Auth: the deploy scripts' exact pattern, shared via lib/firebase-rules-api
 // — service account from the root .env (FIREBASE_PROJECT_ID,
 // FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY; self-loaded, already-set env
@@ -77,7 +88,7 @@ import {
   resolveDatabaseUrl,
   resolveStorageBucket,
 } from './lib/firebase-rules-api.mjs'
-import { compareRules, renderUnifiedDiff } from './lib/rules-drift.mjs'
+import { classifyRulesState, renderUnifiedDiff } from './lib/rules-drift.mjs'
 
 loadLocalEnv()
 
@@ -199,6 +210,40 @@ if (!baselineIsHead) {
   )
 }
 
+/**
+ * Is HEAD AHEAD of the baseline — carrying rules commits the promoted SHA
+ * does not?
+ *
+ * NOT `merge-base --is-ancestor <baseline> HEAD`. That reads as the obvious
+ * test and is always FALSE here: promotion is a PR from `main` into
+ * `production` merged with a merge commit, so `origin/production` carries
+ * commits `main` has never seen and never contains `production`'s tip. Asking
+ * "does main contain production" answers no on a perfectly healthy repo.
+ *
+ * The question that actually matters is the other direction: HEAD is not an
+ * ancestor of the baseline (so live is not simply stale) and the two share
+ * history (so an unrelated ref cannot be used to explain live away).
+ *
+ * `--is-ancestor` exits 1 for "no", which execFileSync throws on, so a catch
+ * is an answer here rather than an error.
+ */
+const headIsAheadOfBaseline = (() => {
+  if (baselineIsHead) return false
+  try {
+    // No common ancestor at all: an unrelated ref, which must never be able to
+    // explain a live ruleset away.
+    if (git(['merge-base', baselineSha, 'HEAD']).trim().length === 0) return false
+  } catch {
+    return false
+  }
+  try {
+    git(['merge-base', '--is-ancestor', 'HEAD', baselineSha])
+    return false // HEAD is contained in the baseline: it carries nothing new.
+  } catch {
+    return true
+  }
+})()
+
 const projectId = process.env.FIREBASE_PROJECT_ID
 const serviceAccount = readServiceAccount()
 const tokenOverride = process.env.RULES_CHECK_ACCESS_TOKEN
@@ -238,6 +283,7 @@ function baselineContent(file) {
 }
 
 let sawDrift = false
+let sawAhead = false
 let sawCannotCheck = false
 
 for (const name of selected) {
@@ -262,20 +308,53 @@ for (const name of selected) {
     sawCannotCheck = true
     continue
   }
-  const verdict = compareRules({
+  // `git show HEAD:` only when there is a third world to check — see
+  // classifyRulesState. A failure here is not fatal: it just means the
+  // benign explanation cannot be offered, so the verdict falls back to drift.
+  let headOfCheckout
+  if (headIsAheadOfBaseline) {
+    try {
+      headOfCheckout = git(['show', `HEAD:${surface.file}`])
+    } catch {
+      headOfCheckout = undefined
+    }
+  }
+  const verdict = classifyRulesState({
     liveText: live.content,
-    headText: head,
+    baselineText: head,
+    headText: headOfCheckout,
+    headIsAhead: headIsAheadOfBaseline,
     jsonAware: surface.jsonAware,
     baselineLabel: baselineRef,
   })
   const liveId = live.rulesetName ? ` [live ${live.rulesetName}]` : ''
-  if (!verdict.drift) {
+  if (verdict.state === 'match') {
     const note = verdict.formattingOnly
       ? ' (JSON formatting differs, content identical)'
       : ''
     console.log(
       `OK ${name}: live matches ${baselineRef}:${surface.file}${note}${liveId}`,
     )
+    continue
+  }
+  if (verdict.state === 'ahead-of-promotion') {
+    sawAhead = true
+    console.log(
+      `AHEAD ${name}: live matches HEAD:${surface.file}, which is ahead of ${baselineRef}${liveId}`,
+    )
+    console.log(
+      '  Deployed before the promotion. Not drift — live byte-matches a commit',
+    )
+    console.log(
+      `  this checkout carries, so it is neither a skipped deploy nor an edit`,
+    )
+    console.log(
+      `  made outside the repo. It converges when ${baselineRef} advances.`,
+    )
+    console.log(
+      '  Worth knowing all the same: the live rules are now ahead of the code',
+    )
+    console.log('  that is deployed against them.')
     continue
   }
   sawDrift = true
@@ -351,4 +430,8 @@ if (sawCannotCheck) {
   console.error('\nAt least one surface could not be checked — exiting 2, not 0.')
   process.exit(2)
 }
-console.log(`All checked surfaces match ${baselineRef}.`)
+console.log(
+  sawAhead
+    ? `All checked surfaces match ${baselineRef} or HEAD ahead of it (see AHEAD above).`
+    : `All checked surfaces match ${baselineRef}.`,
+)
