@@ -86,6 +86,7 @@ import usePresence from '../../../../../../../../../../hooks/use-presence'
 import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
+import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
 
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
@@ -129,6 +130,9 @@ function LayoutBesignerPage(props) {
   const listUrl = buildRoute(Route.HOST_LAYOUTS, { orgSlug,  host })
   const { doc: hostResult } = useHost({ hostId })
   const { doc: layoutResult } = useLayout({ hostId, layoutId })
+  // The browser tab names THIS document, not just its site (AGL-2486).
+  // The server put the id in the title; this swaps in the loaded name.
+  useDeclareDocumentSubject(layoutId, layoutResult?.data?.displayName)
   const { data: user } = useUser()
   const layoutPublishedVersionId = layoutResult?.data?.versionId
   // Id-based screen links: a layout's appbar is exactly where by-id links
@@ -485,11 +489,15 @@ function LayoutBesignerPage(props) {
               onSave={handleSave}
               saveAvailable={saveAvailable}
             />
-            <BesignerDraftAlertComponent draft={draft} noun="layout" />
+            <BesignerDraftAlertComponent
+              draft={draft}
+              noun="layout"
+              remoteChanged={remoteChanged}
+            />
             {/* Shown as soon as their save lands, not on Save — finding out
                 after twenty more minutes of editing is the bad version of
                 this (AGL-674). */}
-            {remoteChanged ? (
+            {remoteChanged && !draft.available ? (
               <BesignerConflictAlertComponent noun="layout" />
             ) : null}
             <WorkspaceEditorComponent>

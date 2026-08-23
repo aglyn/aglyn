@@ -92,6 +92,7 @@ import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
 import useHostRole from '../../../../../../../../../../hooks/use-host-role'
+import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
 
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
@@ -142,6 +143,9 @@ function ComponentBesignerPage(props) {
   const listUrl = buildRoute(Route.HOST_COMPONENTS, { orgSlug,  host })
   const { doc: hostResult } = useHost({ hostId })
   const { doc: componentResult } = useComponent({ hostId, componentId })
+  // The browser tab names THIS document, not just its site (AGL-2486).
+  // The server put the id in the title; this swaps in the loaded name.
+  useDeclareDocumentSubject(componentId, componentResult?.data?.displayName)
   const { data: user } = useUser()
   const publishedVersionId = componentResult?.data?.versionId
   // Id-based screen links: a component can contain a link, so the canvas needs the routing map to resolve hrefs and the
@@ -680,11 +684,15 @@ function ComponentBesignerPage(props) {
               onSave={handleSave}
               saveAvailable={saveAvailable}
             />
-            <BesignerDraftAlertComponent draft={draft} noun="component" />
+            <BesignerDraftAlertComponent
+              draft={draft}
+              noun="component"
+              remoteChanged={remoteChanged}
+            />
             {/* Shown as soon as their save lands, not on Save — finding out
                 after twenty more minutes of editing is the bad version of
                 this (AGL-674). */}
-            {remoteChanged ? (
+            {remoteChanged && !draft.available ? (
               <BesignerConflictAlertComponent noun="component" />
             ) : null}
             <WorkspaceEditorComponent>

@@ -20,6 +20,9 @@ import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { darken, lighten } from '@mui/material/styles'
 import { useEffect } from 'react'
 import useBranding from '../hooks/use-branding'
+import { renameTitleSubject } from '../app/entity-page-title'
+import { stripUnreadBadge } from '../utils/notification-alerts'
+import { useDocumentSubject } from './document-subject'
 
 /**
  * Applies the current org's white-label brand to the three console-chrome
@@ -38,6 +41,12 @@ export function ConsoleBrandingEffects(): null {
   const primaryColor = whiteLabel ? branding.primaryColor : null
   const faviconUrl = whiteLabel ? branding.faviconUrl : null
   const productName = whiteLabel ? branding.productName : null
+  // WHICH entity the route is about (AGL-2486), published by the page. Read
+  // HERE, rather than written by the page, because this component owns
+  // `document.title` — see the tab-title effect below.
+  const subject = useDocumentSubject()
+  const subjectId = subject?.id ?? null
+  const subjectName = subject?.name ?? null
 
   // Primary color: the console theme is a static CSS-var theme, so a per-org
   // color is applied by overriding the MUI primary custom properties inline on
@@ -113,10 +122,49 @@ export function ConsoleBrandingEffects(): null {
   // observer's re-entry is a no-op. The `applied` check is the belt to that
   // braces — it also makes an org whose productName happens to contain the
   // platform name terminate rather than grow.
+  //
+  // AGL-2486 added the SECOND rewrite this effect performs — swapping the
+  // entity id the server put at the front of the title for the display name
+  // the client has loaded — and it lands here, in the existing observer,
+  // rather than in a component of its own. That is the entire design
+  // constraint: two writers both re-asserting a title against a
+  // MutationObserver is not a race that can be won, it is a loop. There is
+  // ONE owner, and it applies BOTH transforms in one pass, so the tab never
+  // shows a half-transformed state.
+  //
+  // Order matters and is fixed: subject first, brand second. The subject
+  // rewrite is anchored to the START of the title and the brand rewrite acts
+  // on the END, so they do not overlap; doing the brand first would still be
+  // correct but would rewrite a longer string for no reason.
   useEffect(() => {
     // Renaming to the name it already has is not a rename, and attempting it
     // would make every replacement a fixed point we cannot tell from a loop.
-    if (!productName || productName === PLATFORM_BRAND_NAME) return
+    const rebranding = !!productName && productName !== PLATFORM_BRAND_NAME
+    const naming = !!subjectId && !!subjectName
+    if (!rebranding && !naming) return
+    /** Both rewrites, composed. Idempotent — see the note on termination. */
+    const transform = (title: string) => {
+      // The unread badge is stripped off the FRONT before the subject is
+      // matched, and put back after. `notifications-menu.component.tsx`
+      // prepends `(3) ` to the tab under its own MutationObserver, so the
+      // served title reaching us is `(3) 4L_o499p_p · Screen besigner · …`
+      // and a subject rewrite anchored at position 0 silently matches
+      // nothing. That is not hypothetical: it is what this did on localhost
+      // before the strip was added, with every tab stuck on the id.
+      //
+      // Through the shared `stripUnreadBadge` — the same inverse the badge
+      // writer and the GA4 title builder use — rather than a third copy of
+      // the pattern, for the reason AGL-2060 records: a drifted copy starts
+      // leaking silently.
+      const base = naming ? stripUnreadBadge(title) : title
+      const badge = naming ? title.slice(0, title.length - base.length) : ''
+      const named = naming
+        ? badge + renameTitleSubject(base, subjectId, subjectName)
+        : title
+      return rebranding && named.includes(PLATFORM_BRAND_NAME)
+        ? named.split(PLATFORM_BRAND_NAME).join(productName)
+        : named
+    }
     /** The last value WE wrote — so an unrelated title change is not ours. */
     let applied: string | null = null
     /** What it read before we wrote, so cleanup restores rather than guesses. */
@@ -124,10 +172,13 @@ export function ConsoleBrandingEffects(): null {
     const apply = () => {
       const current = document.title
       if (applied !== null && current === applied) return
-      if (!current.includes(PLATFORM_BRAND_NAME)) return
+      const next = transform(current)
+      // Nothing to do is the common case — most titles carry no subject id,
+      // and a non-white-label org reaches here only for the subject rewrite.
+      if (next === current) return
       original = current
-      applied = current.split(PLATFORM_BRAND_NAME).join(productName)
-      document.title = applied
+      applied = next
+      document.title = next
     }
     apply()
     const observer = new MutationObserver(apply)
@@ -144,7 +195,7 @@ export function ConsoleBrandingEffects(): null {
         document.title = original
       }
     }
-  }, [productName])
+  }, [productName, subjectId, subjectName])
 
   return null
 }

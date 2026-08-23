@@ -118,6 +118,7 @@ import useFirestoreCollection from '../../../../../../../../../../hooks/use-fire
 import useFirestoreDoc from '../../../../../../../../../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../../../../../../../../../hooks/use-host-activity-logger'
 import useHostRole from '../../../../../../../../../../hooks/use-host-role'
+import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
 
 const whiteSpace = '--'
 
@@ -312,6 +313,9 @@ function ScreenDetails() {
   // it must not be reported as an absent screen (AGL-1066).
   const displayName =
     screen?.displayName || (status === 'success' ? 'Not Found' : 'Loading…')
+  // The browser tab names THIS document, not just its site (AGL-2486).
+  // The server put the id in the title; this swaps in the loaded name.
+  useDeclareDocumentSubject(screenId, screen?.displayName)
   const schedule =
     screen?.publishSchedule?.status === 'pending'
       ? screen.publishSchedule

@@ -62,6 +62,7 @@ import { useOrgSlug } from '../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../../../../../../hooks/use-firestore-doc'
 import UsedByCard from '../../../../../../../components/used-by-card.component'
+import { useDeclareDocumentSubject } from '../../../../../../../components/document-subject'
 
 /**
  * Component detail (AGL-693).
@@ -88,6 +89,9 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
     [firestore, hostId, componentId],
     { idField: '$id' },
   )
+  // The browser tab names THIS document, not just its site (AGL-2486).
+  // The server put the id in the title; this swaps in the loaded name.
+  useDeclareDocumentSubject(componentId, definition?.displayName)
   // Three states, not two (AGL-706): a document that is still loading and one
   // that does not exist both arrive as `undefined`, and rendering an empty
   // editable form for the second made a mistyped id look like data loss.

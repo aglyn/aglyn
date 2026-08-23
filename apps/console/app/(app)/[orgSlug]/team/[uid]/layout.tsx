@@ -16,12 +16,20 @@
  */
 
 import type { Metadata } from 'next'
+import { entityPageTitle } from '../../../../entity-page-title'
 import type { ReactNode } from 'react'
 
 // Title-only shell (AGL-1059): the page is a client component, and a client
 // component cannot export `metadata` — so its title lives here, in the
 // nearest server layout. The suffix comes from the root title template.
-export const metadata: Metadata = { title: 'Team member' }
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ uid: string }>
+}): Promise<Metadata> {
+  const { uid } = await params
+  return { title: entityPageTitle({ subject: uid, noun: 'Team member' }) }
+}
 
 export default function TeamMemberTitleLayout({
   children,

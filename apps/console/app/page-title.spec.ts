@@ -134,6 +134,159 @@ function walkRoutes(
 }
 
 /**
+ * Dynamic segments that name a SCOPE rather than the thing on the page.
+ *
+ * A title's job in a tab strip is to tell one open tab from another, and the
+ * segments below are shared by every tab a user has open at once — putting
+ * them in the title costs characters and distinguishes nothing:
+ *
+ * - `orgSlug` — the org is the whole console session. Every tab is in it, and
+ *   for a white-label org the tab's brand suffix already carries it.
+ * - `host` — deliberately IN most of these titles as a trailing scope, but it
+ *   is not the identity: four tabs on the same site is the reported bug.
+ * - `versionId` — an opaque id for a revision of the entity named beside it.
+ *   A user picks between "Home" and "Checkout", never between two versions of
+ *   Home in two tabs; a version that needs distinguishing would be a label,
+ *   which nothing records.
+ * - `pluginSlug` — resolved to a DISPLAY name by `pluginPageTitle`, which is
+ *   the same rule this guard is asking for, applied one indirection away.
+ *
+ * Everything else is an ENTITY: the URL names a specific screen, component,
+ * layout, template, listing, person or org, and the tab must say which one.
+ * Adding a segment here is how you exempt a route — deliberately, in review,
+ * with a reason — rather than by quietly shipping a title that omits it.
+ */
+const SCOPE_SEGMENTS = new Set(['orgSlug', 'host', 'versionId', 'pluginSlug'])
+
+/**
+ * Whether a route only ever REDIRECTS, and so never paints a tab.
+ *
+ * `screens/[screenId]/versions/[versionId]/page.tsx` is nine lines of
+ * `permanentRedirect` to the view route. It has no document, no `<head>` and
+ * no title to get wrong, and demanding one would mean adding a layout that
+ * exists solely to satisfy this test. Detected on the source rather than
+ * listed by path so the next redirect shim is exempt without an edit here.
+ */
+function isRedirectOnly(route: string): boolean {
+  const page = join(APP_DIR, route, 'page.tsx')
+  const code = strip(readFileSync(page, 'utf8'), `${route}/page.tsx`, 0)
+  return /\b(permanentRedirect|redirect)\s*\(/.test(code)
+}
+
+/** `[screenId]` -> `screenId`; anything else -> null. */
+function dynamicParam(segment: string): string | null {
+  const match = /^\[\.{0,3}(.+)\]$/.exec(segment)
+  return match ? match[1] : null
+}
+
+/** The entity params a route's URL names, outermost first. */
+function entityParams(route: string): string[] {
+  return route
+    .split('/')
+    .map(dynamicParam)
+    .filter((param): param is string => !!param && !SCOPE_SEGMENTS.has(param))
+}
+
+/** The balanced `{…}` beginning at or after `from`, as source. */
+function balancedFrom(code: string, from: number): string {
+  const open = code.indexOf('{', from)
+  if (open < 0) return ''
+  let depth = 0
+  for (let i = open; i < code.length; i += 1) {
+    if (code[i] === '{') depth += 1
+    else if (code[i] === '}') {
+      depth -= 1
+      if (depth === 0) return code.slice(open, i + 1)
+    }
+  }
+  return code.slice(open)
+}
+
+/**
+ * The BODY of a function declared at `start` — skipping its parameter list.
+ *
+ * Naively taking the first balanced `{…}` takes the DESTRUCTURED PARAMETER
+ * instead: every one of these reads `generateMetadata({ params }: …)`, so the
+ * first brace group is `{ params }` and the body is never examined. That is
+ * not a near miss — it made this guard report `marketplace/[listingId]` and
+ * `publisher/[handle]` as anonymous when both name their entity correctly,
+ * and a guard whose failures include correct routes is one people learn to
+ * edit around. So the parameter list is matched and stepped over first.
+ */
+function functionBody(code: string, start: number): string {
+  const paren = code.indexOf('(', start)
+  if (paren < 0) return ''
+  let depth = 0
+  for (let i = paren; i < code.length; i += 1) {
+    if (code[i] === '(') depth += 1
+    else if (code[i] === ')') {
+      depth -= 1
+      if (depth === 0) return balancedFrom(code, i + 1)
+    }
+  }
+  return ''
+}
+
+/**
+ * ONLY the source Next actually reads a title from: the `metadata` export and
+ * the `generateMetadata` export, and nothing else in the file.
+ *
+ * Scoping this was not tidiness — the loose version passed two of the exact
+ * routes this test was written to catch. `screens/[screenId]/…/view/page.tsx`
+ * is a `'use client'` page: it exports NO metadata at all, so Next reads none
+ * of it, but it is 700 lines of screen editor that says `screenId` constantly.
+ * Reading the whole file therefore answered "does this route know its own id"
+ * — which every route does — instead of "does its TITLE say it".
+ *
+ * The same trap in the other direction is why a `page.tsx` is still eligible:
+ * a SERVER page may legitimately export metadata, and skipping pages outright
+ * would exempt it.
+ */
+function metadataRegions(code: string): string {
+  const regions: string[] = []
+  const constant = /export const metadata[^=]*=\s*\{/.exec(code)
+  if (constant) regions.push(balancedFrom(code, constant.index))
+  const generated = /export\s+(?:async\s+)?function\s+generateMetadata\b/.exec(
+    code,
+  )
+  if (generated) regions.push(functionBody(code, generated.index))
+  return regions.join('\n')
+}
+
+/**
+ * The metadata source of every titling file at or above `route`, joined.
+ *
+ * Next resolves a route's title from the DEEPEST segment that sets one, but a
+ * shallower layout may legitimately be the one that names the entity, so this
+ * asks the weaker question: does anything on the resolution path so much as
+ * mention the param? A guard that demanded the deepest file specifically
+ * would fail routes that are correct.
+ */
+function titleSourceFor(
+  route: string,
+  dir: string,
+  rel = '',
+  acc: string[] = [],
+): string[] {
+  for (const entry of readdirSync(dir)) {
+    const abs = join(dir, entry)
+    const here = rel ? `${rel}/${entry}` : entry
+    if (statSync(abs).isDirectory()) {
+      // Only descend the branch the route actually lies on.
+      const next = rel ? `${rel}/${entry}` : entry
+      if (route === next || route.startsWith(`${next}/`)) {
+        titleSourceFor(route, abs, next, acc)
+      }
+      continue
+    }
+    if (!METADATA_FILES.has(entry)) continue
+    const region = metadataRegions(strip(readFileSync(abs, 'utf8'), here, 0))
+    if (region) acc.push(region)
+  }
+  return acc
+}
+
+/**
  * Every LITERAL title in the route tree, with the file that declares it.
  *
  * Both spellings the console actually uses: `title: segmentTitle('X')`, which
@@ -299,6 +452,63 @@ describe('console tab titles keep the brand (AGL-1059)', () => {
     // test above exists to catch. Rename so a human reading the GA4 Pages
     // report can tell the two apart.
     expect(shared).toEqual([])
+  })
+
+  /*
+   * AGL-2486. The invariant the three tests above cannot state: a title that
+   * IDENTIFIES the thing on the page.
+   *
+   * Every check before this one is satisfied by a title that is merely
+   * PRESENT, BRANDED and textually distinct from other ROUTES' titles. None of
+   * them can see the defect that was reported: four browser tabs, open on four
+   * different screens of one site, all reading "Screen besigner · demo". That
+   * is one route, so "no two routes share a title" has nothing to say about
+   * it; the title is present and branded, so the other two are satisfied too.
+   * The guard went green while every screen in the product shared a tab.
+   *
+   * The rule is on the URL, because the URL is where the promise is made: if a
+   * route needs `[screenId]` to know what to render, its title needs it to say
+   * what it rendered. `SCOPE_SEGMENTS` is the exemption list, and adding to it
+   * is a decision someone makes in review rather than an omission nobody sees.
+   *
+   * Mentioning the param is a weak check on purpose — it cannot know that
+   * `screenId` reached the STRING rather than a log line. What it can do is
+   * make the omission impossible to ship silently, which is the failure this
+   * had. The rendered titles themselves are pinned by
+   * `entity-page-title.spec.ts`.
+   */
+  it('names the entity in the title of every route whose URL names one (AGL-2486)', () => {
+    const routes = walkRoutes(APP_DIR).pages
+    const entityRoutes = routes.filter(
+      (route) => entityParams(route).length && !isRedirectOnly(route),
+    )
+
+    // The corpus must be real. A classifier that stopped recognising dynamic
+    // segments — a rename of the bracket convention, a regex slip — would
+    // leave this passing forever over an empty list, which is the exact way
+    // the previous three guards were satisfied by nothing.
+    expect(entityRoutes.length).toBeGreaterThan(10)
+    expect(
+      entityRoutes.some((route) => route.includes('[screenId]')),
+    ).toBe(true)
+    // And the exemption list must stay an exemption list, not a way out.
+    expect(SCOPE_SEGMENTS.size).toBeLessThan(6)
+
+    const anonymous: string[] = []
+    for (const route of entityRoutes) {
+      const source = titleSourceFor(route, APP_DIR).join('\n')
+      const missing = entityParams(route).filter(
+        (param) => !new RegExp(`\\b${param}\\b`).test(source),
+      )
+      if (missing.length) anonymous.push(`${route} — omits ${missing.join(', ')}`)
+    }
+
+    // Fix by naming the entity: `generateMetadata` reads the id from `params`
+    // and builds the title through `entityPageTitle`, whose subject the
+    // client then upgrades from the id to the loaded name. Do NOT fix by
+    // widening `SCOPE_SEGMENTS` unless the segment genuinely names a scope
+    // every open tab shares.
+    expect(anonymous.sort()).toEqual([])
   })
 
   it('uses one brand template, defined once', () => {

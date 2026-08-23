@@ -16,12 +16,18 @@
  */
 
 import type { Metadata } from 'next'
-import { entityPageTitle } from '../../../../../../../../../entity-page-title'
 import type { ReactNode } from 'react'
+import { entityPageTitle } from '../../../../../../../../../entity-page-title'
 
-// Title-only shell (AGL-1059): the page is a client component, and a client
-// component cannot export `metadata` — so its title lives here, in the
-// nearest server layout. The suffix comes from the root title template.
+// Title-only shell. This route had NO metadata export of ANY kind until
+// AGL-2486, so it inherited `Besigner · {host}` from the host layout six
+// segments up — the same string the besigner tab beside it showed, on a
+// different document. Three preview routes did this, which is why the tab
+// strip could not distinguish a preview from the editor that opened it.
+//
+// The existing "every route has a title" guard could not see it: an ancestor
+// title counts as a title, and one did exist. Only the entity check added in
+// `page-title.spec.ts` for this issue reaches it.
 export async function generateMetadata({
   params,
 }: {
@@ -29,14 +35,10 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { host, componentId } = await params
   return {
-    title: entityPageTitle({ subject: componentId, noun: 'Component besigner', scope: host }),
+    title: entityPageTitle({ subject: componentId, noun: 'Component preview', scope: host }),
   }
 }
 
-export default function ComponentBesignerTitleLayout({
-  children,
-}: {
-  children: ReactNode
-}) {
+export default function ComponentPreviewTitleLayout({ children }: { children: ReactNode }) {
   return <>{children}</>
 }

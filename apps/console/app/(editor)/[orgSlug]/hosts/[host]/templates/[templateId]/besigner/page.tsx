@@ -84,6 +84,7 @@ import usePresence from '../../../../../../../../hooks/use-presence'
 import useCoEditing from '../../../../../../../../hooks/use-coediting'
 import PresenceAvatars from '../../../../../../../../components/presence-avatars.component'
 import CollaboratorOverlays from '../../../../../../../../components/collaborator-overlays.component'
+import { useDeclareDocumentSubject } from '../../../../../../../../components/document-subject'
 
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
@@ -165,6 +166,9 @@ function TemplateBesignerPage(props) {
   })
   const templateRef = useHostTemplateRef({ hostId, templateId })
   const { data, status, error, hasPendingWrites } = result
+  // The browser tab names THIS document, not just its site (AGL-2486).
+  // The server put the id in the title; this swaps in the loaded name.
+  useDeclareDocumentSubject(templateId, data?.displayName)
   const nodes = data?.nodes
 
   // Deliberately NO viewType override: a component edits like screen
@@ -392,7 +396,11 @@ function TemplateBesignerPage(props) {
         actionsPrefix={
           <>
             <BesignerFunctionsButton hostId={hostId} />
-            <BesignerDraftAlertComponent draft={draft} noun="template" />
+            <BesignerDraftAlertComponent
+              draft={draft}
+              noun="template"
+              remoteChanged={remoteChanged}
+            />
             {/* No version switcher here, on purpose (AGL-688). Templates
                 have versions but no publish step, so TEMPLATE_BESIGNER
                 carries no versionId segment — there is no per-version URL
@@ -510,7 +518,7 @@ function TemplateBesignerPage(props) {
             {/* Shown as soon as their save lands, not on Save — finding out
                 after twenty more minutes of editing is the bad version of
                 this (AGL-674). */}
-            {remoteChanged ? (
+            {remoteChanged && !draft.available ? (
               <BesignerConflictAlertComponent noun="template" />
             ) : null}
             <WorkspaceEditorComponent>

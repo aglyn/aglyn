@@ -15,13 +15,33 @@
  * limitations under the License.
  */
 
+import { getSystemEmailTemplate } from '@aglyn/shared-util-email'
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
+import { entityPageTitle } from '../../../../../../../entity-page-title'
 
 // Title-only shell (AGL-1059): the page is a client component, and a client
 // component cannot export `metadata` — so its title lives here, in the
 // nearest server layout. The suffix comes from the root title template.
-export const metadata: Metadata = { title: 'Staff email besigner' }
+//
+// Named from the STATIC platform catalog (AGL-2486), for the same reason the
+// tenant email besigner is: `getSystemEmailTemplate` is an array lookup over
+// product data, so the real name is free on the server and no client upgrade
+// is needed. Staff had every system email sharing one tab — worse than the
+// tenant case, because staff routinely open several at once to compare copy.
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ templateKey: string }>
+}): Promise<Metadata> {
+  const { templateKey } = await params
+  return {
+    title: entityPageTitle({
+      subject: getSystemEmailTemplate(templateKey)?.name || templateKey,
+      noun: 'Staff email besigner',
+    }),
+  }
+}
 
 export default function AdminEmailBesignerTitleLayout({
   children,
