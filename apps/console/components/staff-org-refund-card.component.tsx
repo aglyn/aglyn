@@ -281,8 +281,14 @@ export default function StaffOrgRefundCard({
   return (
     <CardDisplay
       header={'Refund a charge'}
-      help={docsHelp('billing', {
-        anchor: '#payments',
+      // The STAFF refunds runbook, not the customer billing page (AGL-2486).
+      // `billing` is what a workspace owner reads about their own invoices;
+      // it can never explain the super-only bar, the disputed-charge refusal
+      // or the audit row, because none of those are customer-facing. Sending
+      // an operator there for guidance on a money-moving action they are
+      // about to take was the wrong destination, not merely a vague one.
+      help={docsHelp('refunds', {
+        anchor: '#issuing-a-refund',
         excerpt:
           `Refund one of the organization's Stripe charges, in full or in part, without leaving ${PLATFORM_BRAND_NAME}. Requires a reason and is audited.`,
       })}
