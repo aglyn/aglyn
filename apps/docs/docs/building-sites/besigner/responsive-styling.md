@@ -33,8 +33,9 @@ mode.
 ## Style hover, focus and other states {#interaction-states}
 
 Under the breakpoint chip is a second row of chips: **Default**, **Hover**,
-**Active**, **Focus** and **Disabled**. They answer the same question the
-breakpoint chip does — *which version of this element am I editing?*
+**Active**, **Focus (keyboard)** and **Disabled**. They answer the same
+question the breakpoint chip does — *which version of this element am I
+editing?*
 
 Pick **Hover** and every field in the panel switches to that element's
 hover styles. Change the background, and you have said "this button is
@@ -43,7 +44,7 @@ resting styles.
 
 - **Hover** — while the pointer is over the element.
 - **Active** — while it is being pressed or clicked.
-- **Focus** — while it has keyboard focus (see the note below).
+- **Focus (keyboard)** — while it has keyboard focus (see the note below).
 - **Disabled** — while a form control is disabled.
 
 A chip with a **•** already has styles for that state. Selecting a state
@@ -76,10 +77,12 @@ The two chips work together. Choose *MD – Laptop* **and** *Hover* and you
 are editing "the hover style, on laptops and up" — phones keep whatever
 the smaller breakpoints say. The same goes for the dark-scheme scope.
 
-### About Focus {#focus-state}
+### About Focus (keyboard) {#focus-state}
 
-**Focus** is `:focus-visible` — it applies when someone reaches the element
-with the **keyboard**, and not on an ordinary mouse click.
+The chip says *(keyboard)* because that is exactly what it means. **Focus
+(keyboard)** is `:focus-visible` — it applies when someone reaches the
+element with the **keyboard**, and not on an ordinary mouse click. There is
+deliberately no chip for plain `:focus`.
 
 That is deliberate. The focus ring is how keyboard and screen-reader
 visitors know where they are on your page, and a control that removed it on
@@ -109,13 +112,46 @@ currently set to.
 
 - Pick the fan-out with **Side / Axis / All**: one side at a time, the
   vertical or horizontal pair together, or all four sides at once.
-- Click any side of the diagram to open its editor.
+- Click any side of the diagram to open its editor. Clicking the same
+  side again closes it.
 - Every side takes either a **spacing step** from your theme or a
   [custom amount](#spacing-units) with a unit you choose.
 - The **border** ring is shown so the diagram matches what the browser
   draws. Border width, style and colour are edited under **Borders &
   Shadows**, not here — there is one place for each.
 - Everything respects the active breakpoint scope.
+
+### The sides are named, not abbreviated {#spacing-side-names}
+
+You do not have to know that `mt` means margin-top. Each side announces
+itself in words — **Space outside — top** on the margin, **Space inside
+— top** on the padding — in its tooltip, in its heading when you open
+it, and to a screen reader. A side with nothing set on it simply reads
+*Top*, *Right*, *Bottom* or *Left*; once it has a value, the side shows
+the value instead (`24px`, `0px`, `auto`), so the diagram doubles as the
+readout.
+
+The legend beneath the diagram says what each region *does*, in the
+terms that actually matter when you are deciding which one to reach for:
+
+| Region | What it is |
+| --- | --- |
+| Margin | Space **outside** the element, pushing its neighbours away |
+| Border | The line drawn around the element — set under **Borders & Shadows** |
+| Padding | Space **inside** the element, between its border and its content |
+| Contents | The element's own text or children |
+
+The whole diagram is keyboard-reachable: Tab moves between the sides,
+Enter or Space opens the one you are on, and focusing a side shows its
+tooltip just as hovering does.
+
+:::tip Margin or padding?
+If you want to move an element **away from its neighbours**, that is
+margin. If you want to give its own content **room to breathe inside**
+it — the gap between a card's edge and the text in it — that is padding.
+A background colour fills the padding and stops at the margin, which is
+usually the quickest way to see which one you actually changed.
+:::
 
 ## Spacing steps & units {#spacing-units}
 
@@ -124,19 +160,55 @@ looks.
 
 ### Spacing steps (recommended) {#spacing-steps}
 
-A **step** is a rung on your site theme's own spacing ladder — *None*,
-*Tiny*, *Small*, *Medium*, *Large*, and so on. The styler shows what
-each one comes to today (*Medium — 16px*), but it stores the **step**,
-not the 16px.
+A **step** is a rung on your site theme's own spacing ladder. The styler
+shows what each rung comes to on your theme today, but it stores the
+**step**, not the pixels.
+
+| Step | On a default theme |
+| --- | --- |
+| None | 0px |
+| Hairline | 4px |
+| Extra small | 8px |
+| Small | 16px |
+| Medium | 24px |
+| Large | 32px |
+| Extra large | 48px |
+| Huge | 64px |
+| Giant | 96px |
+
+Those pixel figures are what a **default** theme resolves to, and they
+are shown beside each rung in the menu so you never have to guess. A
+site whose theme uses a different spacing unit gets a different column
+of numbers against the same names — which is the point.
 
 That is the whole point. If you later retune your theme's spacing, or a
 different theme is applied, everything set to *Medium* moves with it.
-An element set to a fixed `16px` stays at 16px forever and slowly falls
+An element set to a fixed `24px` stays at 24px forever and slowly falls
 out of step with the rest of the site.
+
+Two entries in the menu are easy to confuse and mean opposite things:
+
+- **Not set** removes the property altogether, so the element goes back
+  to inheriting whatever it would have had.
+- **None** is a real value of zero — an instruction to have no space
+  here, which will override an inherited one.
+
+If an element already carries a step that is not on the ladder — set in
+the JSS tab, or by a template — the menu keeps it rather than silently
+rounding it, shown as *"10× the spacing unit"* with its resolved size.
 
 Reach for a custom amount when you need an exact figure — a hairline
 offset, a value that has to match a specific image — and for everything
 else use a step.
+
+:::note Under the hood
+A step is stored as the number MUI's `theme.spacing()` takes, so
+`marginTop: 3` is what lands in the document and `theme.spacing(3)`
+resolves it at render time. Nothing rewrites stored values when a theme
+changes; they simply resolve differently. That is also why a step
+survives being exported and re-imported into a site with a different
+spacing unit.
+:::
 
 ### Custom amounts {#spacing-custom-amounts}
 
