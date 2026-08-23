@@ -251,7 +251,7 @@ export const ComponentPicker = observer(
               <Box
                 sx={{ flex: 1, minWidth: 0, maxHeight: 168, overflowY: 'auto' }}
               >
-                <ElementDetailView detail={describeElement(selected)} />
+                <ElementDetailView detail={describeElement(selected)} node={selected} />
               </Box>
               <Button onClick={handleConfirm} sx={{ flex: '0 0 auto' }}>
                 {'Confirm'}

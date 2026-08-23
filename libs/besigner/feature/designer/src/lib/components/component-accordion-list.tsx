@@ -198,7 +198,11 @@ export const ComponentAccordionList = observer(
               overflowY: 'auto',
             }}
           >
-            <ElementDetailView detail={describeElement(detailFor)} dense />
+            <ElementDetailView
+              detail={describeElement(detailFor)}
+              node={detailFor}
+              dense
+            />
           </Box>
         ) : null}
       </Stack>

@@ -73,6 +73,9 @@ const cardFor = (name: string) =>
 const details = () =>
   Array.from(document.querySelectorAll('[data-testid="element-detail"]'))
 
+const previews = () =>
+  Array.from(document.querySelectorAll('[data-testid="element-preview"]'))
+
 const renderPanel = () =>
   render(
     <ThemeProvider theme={theme}>
@@ -184,6 +187,28 @@ describe('element detail in both picker surfaces (AGL-2486)', () => {
       fireEvent.click(cardFor('Surfaces Holder').parentElement)
       fireEvent.mouseLeave(cardFor('Surfaces Holder').parentElement)
       expect(details().length).toBe(0)
+    })
+  })
+  describe('the rendered preview', () => {
+    it('appears in the dialog on selecting, and only for the selection', () => {
+      render(
+        <ThemeProvider theme={theme}>
+          <ComponentPicker open />
+        </ThemeProvider>,
+      )
+      expect(previews().length).toBe(0)
+      fireEvent.click(cardFor('Surfaces Holder'))
+      expect(previews().length).toBe(1)
+    })
+
+    it('appears in the panel on hover, one at a time across several', () => {
+      renderPanel()
+      fireEvent.mouseEnter(cardFor('Surfaces Holder').parentElement)
+      fireEvent.mouseEnter(cardFor('Surfaces Plain').parentElement)
+      fireEvent.mouseEnter(cardFor('Surfaces Only Child').parentElement)
+      // Every preview builds its own CanvasManager and mounts a shadow root;
+      // several at once would be the expensive version of the tooltip bug.
+      expect(previews().length).toBe(1)
     })
   })
 })

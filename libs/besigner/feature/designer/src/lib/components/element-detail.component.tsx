@@ -17,6 +17,7 @@
 
 import { Box, Chip, Link, Stack, Typography } from '@mui/material'
 import type { ElementDetail } from '../utils/describe-element'
+import ElementPreview from './element-preview.component'
 import { besignerDocsUrl, type BesignerDocsAnchor } from '../utils/docs-help'
 
 /**
@@ -49,6 +50,12 @@ export interface ElementDetailViewProps {
    * differently, rather than there being two detail views to keep in step.
    */
   dense?: boolean
+  /**
+   * The picker item itself, when the surface wants a rendered preview above
+   * the text. Only ever the one selected or hovered element — the detail
+   * region is single-tenant by construction, so the preview is too.
+   */
+  node?: any
 }
 
 /**
@@ -65,7 +72,7 @@ export interface ElementDetailViewProps {
  * go stale and third-party elements get it for free.
  */
 export function ElementDetailView(props: ElementDetailViewProps) {
-  const { detail, dense } = props
+  const { detail, dense, node } = props
   if (!detail) return null
 
   return (
@@ -75,6 +82,8 @@ export function ElementDetailView(props: ElementDetailViewProps) {
       aria-live="polite"
       data-testid="element-detail"
     >
+      {node ? <ElementPreview node={node} height={dense ? 116 : 168} /> : null}
+
       <Stack
         direction="row"
         spacing={1}
