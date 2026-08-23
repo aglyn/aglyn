@@ -87,6 +87,13 @@ jest.mock('@aglyn/aglyn/server', () => ({
   linkableScreenRoutes: jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/screen-route',
   ).linkableScreenRoutes,
+  // The REAL layout/screen origin test (AGL-1871). A stub here would be the
+  // bug: the whole point of the predicate is that it disagrees with
+  // `Boolean(nodes)`, and any hand-written double would have to encode that
+  // disagreement itself — i.e. manufacture the verdict it is meant to check.
+  hasScreenAuthoredNodes: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/compose-layout-nodes',
+  ).hasScreenAuthoredNodes,
   SCREEN_ROOT_PATH: '/',
   COLLECTION_LIST_PAGE_SIZE: 10,
   HostScreenVisibility: { AUTHENTICATED: 'authenticated' },
@@ -189,6 +196,38 @@ const HOST_WITH_PUBLISHED_404 = {
   $id: 'host-1',
   subdomain: 'acme',
   screens: { home: '/', about: 'about', notFoundScreen: '404' },
+}
+
+/**
+ * What `aglyn.com` actually composed on 2026-08-23 (AGL-1871).
+ *
+ * The *"Not found (404)"* screen was routed at `404`, published, and EMPTY —
+ * so the compose answered with 297 nodes of which not one came from the
+ * screen: layout chrome, the nav grafted onto it, and a `layoutSlot` holding
+ * an empty child list. Ids are the real ones off the served payload, because
+ * the shape of the id is the only thing that carries the origin.
+ *
+ * `Boolean(nodes)` is TRUE here. That is the defect in one line: the boundary
+ * took this for a designed page, declined its own fallback, and every
+ * unmatched URL on the site served a header and a footer around nothing.
+ */
+const LAYOUT_CHROME_ONLY_NODES = {
+  '_@_': {
+    $id: '_@_',
+    componentId: 'div',
+    nodes: ['layout__52Ef-3t6yd', 'layout__XwUE-u-uqi', 'layout__eGo9QQ-Aj-'],
+  },
+  'layout__52Ef-3t6yd': { $id: 'layout__52Ef-3t6yd', componentId: 'muiBox' },
+  'layout__XwUE-u-uqi': {
+    $id: 'layout__XwUE-u-uqi',
+    componentId: 'layoutSlot',
+    nodes: [],
+  },
+  'layout__eGo9QQ-Aj-': { $id: 'layout__eGo9QQ-Aj-', componentId: 'muiBox' },
+  'cmp__layout__52Ef-3t6yd___R91yATrXH': {
+    $id: 'cmp__layout__52Ef-3t6yd___R91yATrXH',
+    componentId: 'muiNavMenu',
+  },
 }
 
 /** A site that has designed no error page at all — the fallback's whole job. */
@@ -338,6 +377,62 @@ describe('half 2 — a host with no 404 screen keeps the platform fallback', () 
     mockCompose.mockResolvedValue(null)
 
     await expect(loadNotFoundScreen('acme')).resolves.toBeNull()
+  })
+
+  it('answers null when the screen composes to LAYOUT CHROME ONLY (AGL-1871)', async () => {
+    mockGetHost.mockResolvedValue({
+      host: HOST_WITH_PUBLISHED_404,
+      error: null,
+    })
+    mockCompose.mockResolvedValue(LAYOUT_CHROME_ONLY_NODES)
+
+    // The premise, asserted rather than assumed: the compose DID answer, and
+    // it answered with a populated map. A null-ish `nodes` here would make the
+    // expectation below pass for the old reason.
+    expect(Object.keys(LAYOUT_CHROME_ONLY_NODES).length).toBeGreaterThan(1)
+    await expect(loadNotFoundScreen('acme')).resolves.toBeNull()
+  })
+
+  it('serves 404 from the API for that screen, so the boundary falls back', async () => {
+    mockGetHost.mockResolvedValue({
+      host: HOST_WITH_PUBLISHED_404,
+      error: null,
+    })
+    mockCompose.mockResolvedValue(LAYOUT_CHROME_ONLY_NODES)
+
+    const response = await notFoundScreenRoute(
+      new Request('https://acme.example/api/screen/not-found?host=acme'),
+    )
+
+    expect(response.status).toBe(404)
+  })
+
+  it('still serves a screen whose OWN nodes sit inside the layout slot', async () => {
+    // The guard must key on the node's ORIGIN, not on the tree being small or
+    // the slot being the parent — a real designed 404 composes to chrome plus
+    // its own nodes, and this is the case that must survive.
+    mockGetHost.mockResolvedValue({
+      host: HOST_WITH_PUBLISHED_404,
+      error: null,
+    })
+    mockCompose.mockResolvedValue({
+      ...LAYOUT_CHROME_ONLY_NODES,
+      'layout__XwUE-u-uqi': {
+        $id: 'layout__XwUE-u-uqi',
+        componentId: 'layoutSlot',
+        nodes: ['QBq3zyK1EV'],
+      },
+      QBq3zyK1EV: {
+        $id: 'QBq3zyK1EV',
+        componentId: 'muiTypography',
+        parentId: 'layout__XwUE-u-uqi',
+        props: { text: 'We can’t find that page' },
+      },
+    })
+
+    const props = await loadNotFoundScreen('acme')
+
+    expect(props?.nodes).toHaveProperty('QBq3zyK1EV')
   })
 
   it('answers null when the host itself cannot be resolved', async () => {

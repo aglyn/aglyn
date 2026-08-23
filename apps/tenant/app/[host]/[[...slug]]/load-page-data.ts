@@ -1124,7 +1124,25 @@ export async function loadNotFoundScreen(
       screenId: screenId as Aglyn.ScreenUid,
       screen: screenRes.screen,
     })
-    if (!nodes) return null
+    /*
+     * A DESIGNED 404 THAT CONTRIBUTES NOTHING IS NOT A DESIGNED 404
+     * (AGL-1871).
+     *
+     * `composeScreenNodes` answers with the LAYOUT chrome whether or not the
+     * screen put anything in the slot, so `nodes` is truthy for a screen that
+     * is routed, published and empty. Measured on `aglyn.com` 2026-08-23: this
+     * function returned 297 nodes for the published *"Not found (404)"* screen,
+     * every one of them `layout__`-namespaced, with the `layoutSlot` holding an
+     * empty child list. The boundary took that for a designed page, declined
+     * `SiteStatusScreen`, and every unmatched URL on the site rendered the
+     * site's header and footer around a blank middle — no heading, no sentence,
+     * no way back.
+     *
+     * `null` is the answer that puts the floor back under it. The fallback is
+     * not a worse outcome than an empty designed screen; it is the only
+     * outcome that is a page at all.
+     */
+    if (!Aglyn.hasScreenAuthoredNodes(nodes)) return null
     // The designed 404 carries the site's own header and footer, so its links
     // resolve through the same corrected map every other page uses (AGL-1998)
     // — a nav pointing at the blog must not send a visitor who already hit one
