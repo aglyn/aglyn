@@ -359,47 +359,51 @@ function RoomAvatars({ entries }: { entries: PresenceEntry[] }) {
  *
  * Zach: *"Why are saves not merged? Isn't this the point of being able to
  * collaborate together and build a page alongside someone at the same
- * time"* — and he is right, because the old copy described the STORAGE and
- * presented it as the experience. The durable write is whole-document, but
- * the unit of live collaboration is a NODE (`use-coediting`, AGL-677): two
- * people editing different elements both keep their work, and by the time
- * either presses Save the mirror has usually converged both canvases, so
- * the write being whole-document costs nothing. "Your work will fight" was
- * simply the wrong prediction for the common case.
+ * time"* — and again, on the guard that stopped him: *"any user
+ * collaborating should be able to save as they all go along and make
+ * changes... there should be no problem with this"*.
+ *
+ * The old copy described the STORAGE and presented it as the experience.
+ * The unit of live collaboration is a node (`use-coediting`, AGL-677), so
+ * two people on different elements both keep their work; and the save guard
+ * now asks whether this document INCORPORATES what is stored rather than
+ * whether the stored version moved, so in a converged room either of you
+ * can save, in any order, as often as you like.
  *
  * ## What it still has to admit
  *
- * Two limits, neither softened, because a tooltip that oversells merging is
- * how somebody loses an afternoon:
+ * The same element changed at the same time is last-writer-wins. Co-editing
+ * shares a node; it does not merge two versions of one. That limit is real
+ * and stated — a tooltip that oversells merging is how somebody loses an
+ * afternoon — and it is also the one thing the guard still refuses, so it
+ * earns its place in the sentence twice over.
  *
- * * The same element edited at the same time is last-writer-wins.
- *   Co-editing shares a node; it does not merge two versions of one.
- * * A save by another session pauses saving here until reload — the
- *   AGL-674 / AGL-1301 guard, which refuses rather than merging two whole
- *   maps, and refuses again server-side inside the transaction.
+ * What is NOT in the copy, deliberately: the refusal that remains. A
+ * session whose mirror has fallen behind is still stopped, but that is a
+ * fault condition with its own banner, and describing it here would put the
+ * exception in front of the rule for every reader who will never meet it.
  *
- * ## Your own second window is no longer the sharp case
+ * ## Your own second window is not the sharp case
  *
- * This used to say the guard would not fire "because both are you". That
- * was never how the guard worked — it reads the document's stamp and
- * content and has never consulted a uid — and the one route by which
- * another session's write could slip past it is closed (see
- * `expectOwnWriteRef` in `use-besigner-document`, AGL-2486). So your own
- * window is described as what it is: another session, protected the same
- * way. The badge still says which one is yours.
+ * This used to say the guard would not fire "because both are you". It
+ * never worked that way — it reads the document's content, not a uid — and
+ * the one route by which another session's write could slip past it is
+ * closed (`expectOwnWriteRef` in `use-besigner-document`). So your own
+ * window is described as what it is: another session, treated the same. The
+ * badge still says which one is yours.
  */
 export function describe(entry: PresenceEntry): string {
   if (entry.isSelf) {
     return (
       'This is YOU, in another window or tab. It counts as a separate ' +
-      'session: edits merge live between them, element by element, and a ' +
-      'save in one pauses saving in the other until you reload.'
+      'session: edits merge live between them, element by element, and ' +
+      'either window can save.'
     )
   }
   return (
     `${entry.displayName} has this open too. Edits merge live, element by ` +
-    'element \u2014 the same element at the same time keeps the last ' +
-    'change. If they save, saving pauses here until you reload.'
+    'element, and either of you can save at any time \u2014 if you both ' +
+    'change the same element, the last change wins.'
   )
 }
 

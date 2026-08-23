@@ -130,12 +130,12 @@ seeded emulator stack). Use two accounts with distinct names/photos.
 
 - **Docs page:** `building-sites/besigner/live-co-editing.md` → `#whos-here`
 - **Capture:** besigner with a second account editing the same screen. Hover the
-  collaborator's avatar so the tooltip "«Name» is editing this too — saves are not
-  merged" is visible.
+  collaborator's avatar so the tooltip "«Name» has this open too. Edits merge live,
+  element by element, and either of you can save at any time…" is visible.
 - **Frame:** the toolbar's right half — avatar stack + tooltip + the Live/Preview/
   Save controls for context. Component-level crop, not the whole editor.
 - **Alt text:** A collaborator's avatar in the besigner toolbar, with its tooltip
-  explaining that saves are not merged.
+  explaining that edits merge live and either of you can save.
 
 ### 10. `static/img/besigner/remote-cursor-and-selection.png`
 
@@ -151,7 +151,7 @@ seeded emulator stack). Use two accounts with distinct names/photos.
 
 ### 11. `static/img/besigner/concurrent-save-banner.png`
 
-- **Docs page:** `building-sites/besigner/live-co-editing.md` → `#when-saves-collide`
+- **Docs page:** `building-sites/besigner/live-co-editing.md` → `#when-a-save-is-refused`
 - **Capture:** both sessions edit; session B saves. Session A immediately shows the
   warning banner under the toolbar: "Someone else saved this screen while you were
   editing. Saving is paused so their work is not overwritten — reload to pick up

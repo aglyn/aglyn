@@ -61,7 +61,7 @@ for the how-to.
   **together**: presence avatars in the toolbar, each collaborator's cursor and
   selection on the canvas in their own color, and element-level live changes that
   never disturb your undo history.
-- **[Concurrent-save protection](building-sites/besigner/live-co-editing.md#when-saves-collide)** —
+- **[Concurrent-save protection](building-sites/besigner/live-co-editing.md#when-a-save-is-refused)** —
   if someone else saves the document you're editing, the besigner pauses saving and
   tells you **the moment it happens**, keeping everything on your canvas until you
   reload. No silent overwrites, in either direction.

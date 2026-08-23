@@ -59,12 +59,16 @@ describe('presence chip copy (AGL-2486)', () => {
       expect(text).not.toContain('not merged')
     })
 
-    it('still admits the two real limits', () => {
-      // Same element at once is last-writer-wins…
-      expect(text).toContain('the same element at the same time')
-      expect(text.toLowerCase()).toContain('last change')
-      // …and a save by them stops this editor rather than merging.
-      expect(text.toLowerCase()).toContain('reload')
+    it('says either of you can save, which is the point of the guard fix', () => {
+      expect(text.toLowerCase()).toContain('either of you can save')
+      // The old promise was the opposite, and it is the sentence Zach was
+      // reading while the editor refused his save.
+      expect(text.toLowerCase()).not.toContain('pauses')
+    })
+
+    it('still admits the one limit co-editing cannot merge', () => {
+      expect(text.toLowerCase()).toContain('the same element')
+      expect(text.toLowerCase()).toContain('last change wins')
     })
   })
 
@@ -82,9 +86,9 @@ describe('presence chip copy (AGL-2486)', () => {
      * and is now false in the one way it could have been: another session's
      * write can no longer be swallowed as this session's echo.
      */
-    it('promises the same protection as any other session, not the absence of it', () => {
+    it('treats it as a separate session that can save, not as a hazard', () => {
       expect(text).toContain('separate session')
-      expect(text.toLowerCase()).toContain('pauses saving in the other')
+      expect(text.toLowerCase()).toContain('either window can save')
       expect(text).not.toContain('will not warn you')
       expect(text).not.toContain('saves last wins')
     })

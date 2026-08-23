@@ -207,9 +207,23 @@ describe('useBesignerDocument', () => {
       setCanvasDirty(true)
 
       const { result, save, notify, rerender } = setup({ updatedAt: stamp(1) })
-      // A snapshot from somebody else's write arrives.
+      // A snapshot from somebody else's write arrives, carrying a node this
+      // canvas has never seen. The CONTENT is what makes it a conflict, not
+      // the stamp: a stamp that moves while the node map does not means
+      // nobody changed the map, and a save into that cannot lose anything
+      // (AGL-2486).
       act(() => {
-        rerender({ updatedAt: stamp(2) } as never)
+        rerender({
+          updatedAt: stamp(2),
+          nodes: {
+            root: { $id: 'root', componentId: 'div', nodes: ['theirs'] },
+            theirs: {
+              $id: 'theirs',
+              componentId: 'muiTypography',
+              parentId: 'root',
+            },
+          },
+        } as never)
       })
 
       expect(result.current.remoteChanged).toBe(true)
@@ -318,9 +332,16 @@ describe('useBesignerDocument', () => {
       })
       expect(result.current.remoteChanged).toBe(true)
 
-      // Our own write now surfaces, later than theirs.
+      // Another snapshot arrives — still carrying work this canvas does not
+      // hold, so the refusal stands and the baseline has not moved onto it.
       act(() => {
-        rerender({ updatedAt: stamp(3), nodes: OURS } as never)
+        rerender({
+          updatedAt: stamp(3),
+          nodes: {
+            ...(THEIRS as never as Record<string, unknown>),
+            more: { $id: 'more', componentId: 'muiButton', parentId: 'root' },
+          },
+        } as never)
       })
 
       expect(result.current.remoteChanged).toBe(true)
@@ -460,6 +481,181 @@ describe('useBesignerDocument', () => {
         rerender({ updatedAt: stamp(3), nodes: MOVED_NODES } as never)
       })
       expect(result.current.remoteChanged).toBe(true)
+    })
+  })
+
+  /**
+   * Two people building a page together must both be able to save
+   * (AGL-2486).
+   *
+   * Zach: *"I made an edit in the top browser, saved it in the bottom
+   * browser, then the alert appeared in the top browser for someone else
+   * saved, the save button is still offered rather than up to date now. But
+   * any user collaborating should be able to save as they all go along and
+   * make changes."*
+   *
+   * The guard used to ask "did the stored document move", which is the wrong
+   * question once the co-edit mirror has already delivered their work to
+   * this canvas: this session's write is then a superset of what they
+   * stored, and refusing it protects nothing. It now asks whether this
+   * document INCORPORATES what is stored — and these cases are written in
+   * pairs so the relaxation cannot quietly become "always allow": every
+   * permissive case has a stale or conflicting twin that must still refuse.
+   */
+  describe('saving in a converged room (AGL-2486)', () => {
+    /** What the colleague saved, and what the mirror already replayed here. */
+    const THEIRS = {
+      root: { $id: 'root', componentId: 'div', nodes: ['a'] },
+      a: { $id: 'a', componentId: 'muiTypography', parentId: 'root' },
+    } as never
+    /** THEIRS, plus work of our own the store has never seen. */
+    const THEIRS_PLUS_OURS = {
+      ...(THEIRS as never as Record<string, unknown>),
+      b: { $id: 'b', componentId: 'muiButton', parentId: 'root' },
+    } as never
+
+    beforeEach(() => {
+      jest.spyOn(Aglyn, 'measureNodeMap').mockReturnValue({
+        bytes: 100,
+        tooLarge: false,
+        nearLimit: false,
+        largest: [],
+      } as never)
+    })
+
+    it('lets us save after a colleague saved work we already hold', async () => {
+      setCanvasDirty(true)
+      mockCanvas.toJSON.mockReturnValue({ nodes: THEIRS_PLUS_OURS })
+      const { result, save, notify, rerender } = setup({ updatedAt: stamp(1) })
+
+      // Their save lands. Everything in it is already on this canvas.
+      act(() => {
+        rerender({ updatedAt: stamp(2), nodes: THEIRS } as never)
+      })
+
+      expect(result.current.remoteChanged).toBe(false)
+
+      await act(async () => {
+        await result.current.handleSave()
+      })
+
+      expect(save).toHaveBeenCalledTimes(1)
+      expect(notify).not.toHaveBeenCalledWith(
+        new Aglyn.ConcurrentEditError().message,
+        expect.anything(),
+      )
+      // The baseline handed to the store is THEIR write, so the transaction
+      // still refuses anything that lands between here and the commit.
+      expect(save).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ baseNodes: THEIRS }),
+      )
+    })
+
+    it('still refuses a session that never received their work', async () => {
+      setCanvasDirty(true)
+      // The mirror never delivered node `a`: this tab has been offline, or
+      // its entries were reaped. The canvas is the document as loaded.
+      mockCanvas.toJSON.mockReturnValue({ nodes: NODES })
+      const { result, save, notify, rerender } = setup({ updatedAt: stamp(1) })
+
+      act(() => {
+        rerender({ updatedAt: stamp(2), nodes: THEIRS } as never)
+      })
+
+      expect(result.current.remoteChanged).toBe(true)
+
+      await act(async () => {
+        await result.current.handleSave()
+      })
+
+      expect(save).not.toHaveBeenCalled()
+      expect(notify).toHaveBeenCalledWith(
+        new Aglyn.ConcurrentEditError().message,
+        expect.objectContaining({ variant: 'warning' }),
+      )
+    })
+
+    it('still refuses when we hold our own version of a node they saved', async () => {
+      setCanvasDirty(true)
+      // The same-element simultaneous edit — the one case co-editing cannot
+      // merge. Relaxing it would be exactly the silent last-writer-wins the
+      // guard exists to prevent.
+      mockCanvas.toJSON.mockReturnValue({
+        nodes: {
+          root: { $id: 'root', componentId: 'div', nodes: ['a'] },
+          a: {
+            $id: 'a',
+            componentId: 'muiTypography',
+            parentId: 'root',
+            props: { children: 'ours' },
+          },
+        },
+      })
+      const { result, save, rerender } = setup({ updatedAt: stamp(1) })
+
+      act(() => {
+        rerender({ updatedAt: stamp(2), nodes: THEIRS } as never)
+      })
+
+      expect(result.current.remoteChanged).toBe(true)
+      await act(async () => {
+        await result.current.handleSave()
+      })
+      expect(save).not.toHaveBeenCalled()
+    })
+
+    it('still refuses a node they DELETED that we never dropped', async () => {
+      setCanvasDirty(true)
+      const WITHOUT_A = {
+        root: { $id: 'root', componentId: 'div', nodes: [] },
+      } as never
+      // We kept `a`, so our write would resurrect a node they removed.
+      mockCanvas.toJSON.mockReturnValue({ nodes: THEIRS })
+      const { result, save, rerender } = setup({
+        updatedAt: stamp(1),
+        nodes: THEIRS,
+      })
+
+      act(() => {
+        rerender({ updatedAt: stamp(2), nodes: WITHOUT_A } as never)
+      })
+
+      expect(result.current.remoteChanged).toBe(true)
+      await act(async () => {
+        await result.current.handleSave()
+      })
+      expect(save).not.toHaveBeenCalled()
+    })
+
+    it('reads UP TO DATE once the canvas holds exactly what was stored', () => {
+      setCanvasDirty(true)
+      mockCanvas.toJSON.mockReturnValue({ nodes: THEIRS })
+      const { rerender } = setup({ updatedAt: stamp(1) })
+      mockCanvas.updateInitialNodes.mockClear()
+
+      act(() => {
+        rerender({ updatedAt: stamp(2), nodes: THEIRS } as never)
+      })
+
+      // No argument: the canvas as it stands IS the stored document, so it
+      // becomes the saved baseline. The dirty flag was measuring a baseline
+      // their save made stale, not work anybody still has to write.
+      expect(mockCanvas.updateInitialNodes).toHaveBeenCalledWith()
+    })
+
+    it('does not call the document saved while we still hold unsaved work', () => {
+      setCanvasDirty(true)
+      mockCanvas.toJSON.mockReturnValue({ nodes: THEIRS_PLUS_OURS })
+      const { rerender } = setup({ updatedAt: stamp(1) })
+      mockCanvas.updateInitialNodes.mockClear()
+
+      act(() => {
+        rerender({ updatedAt: stamp(2), nodes: THEIRS } as never)
+      })
+
+      // Node `b` is ours and unstored — the editor must stay savable.
+      expect(mockCanvas.updateInitialNodes).not.toHaveBeenCalled()
     })
   })
 
@@ -777,8 +973,20 @@ describe('useBesignerDocument', () => {
         draft: DRAFT,
         updatedAt: stamp(1),
       })
+      // A real concurrent write: their node is stored and is not on this
+      // canvas, which is what a refusal now requires (AGL-2486).
       act(() => {
-        rerender({ updatedAt: stamp(2) } as never)
+        rerender({
+          updatedAt: stamp(2),
+          nodes: {
+            root: { $id: 'root', componentId: 'div', nodes: ['theirs'] },
+            theirs: {
+              $id: 'theirs',
+              componentId: 'muiTypography',
+              parentId: 'root',
+            },
+          },
+        } as never)
       })
       expect(result.current.remoteChanged).toBe(true)
 

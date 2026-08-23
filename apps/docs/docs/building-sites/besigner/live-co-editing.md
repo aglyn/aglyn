@@ -26,17 +26,16 @@ this feature.
 When someone else has the document open, their **avatar** appears in the besigner
 toolbar (photo or initial, on their assigned color). Hovering says what to expect of
 working alongside them: *"«Name» has this open too. Edits merge live, element by
-element — the same element at the same time keeps the last change. If they save,
-saving pauses here until you reload."*
+element, and either of you can save at any time — if you both change the same
+element, the last change wins."*
 
 <!-- screenshot: besigner/presence-avatar-stack.png per SCREENSHOT_PLAN.md -->
 
 If **your own account** has the document open somewhere else — another tab, or your
 account signed in on another machine — that window gets its own avatar too, marked
 with a small badge so you can tell it is yours. It is treated as a separate session
-in every respect: edits merge between your windows the same way, and a save in one
-pauses saving in the other until you reload. The conflict guard has never keyed on
-*who* wrote, only on whether the stored document moved, so two windows of one
+in every respect: edits merge between your windows the same way, and either window
+can save. The conflict guard has never keyed on *who* wrote, so two windows of one
 account are protected exactly as two people are.
 
 On the canvas, each collaborator shows up as:
@@ -69,14 +68,30 @@ the door.
 Live edits are working state, not saves — the document still saves when someone
 presses **Save**, and a successful save is what makes the shared state durable.
 
-## When saves collide
+## Saving together
 
-Live edits merge per element, but a **save writes the whole document**. Most of the
-time that costs nothing — the mirror has already brought both canvases together, so
-the map being written is the one you can both see. It matters when a session has
-drifted: if someone saves while your editor is holding a version of the document
-from before their work arrived, the besigner tells you immediately — not twenty
-minutes later when you press Save:
+**Everyone can save, in any order, as often as they like.** One of you saves, the
+other carries on and saves a minute later — that is the normal rhythm and nothing
+interrupts it. It works because co-editing has already done the merging: your
+teammate's changes reached your canvas element by element *before* they pressed
+Save, so what you write next contains their work rather than overwriting it.
+
+The besigner checks that rather than assuming it. Before letting a save through it
+confirms your document actually **incorporates** what is stored — every element the
+other save changed is on your canvas with the stored value, deletions included. Two
+people in step both pass, always.
+
+## When a save is refused
+
+Two situations do not pass that check, and both are real:
+
+- **Your session has fallen behind.** A tab that lost its connection never received
+  those elements, so it would write over work it has never seen.
+- **You have both changed the same element.** That is the one case co-editing cannot
+  merge, and letting it through is exactly how the last writer silently wins.
+
+Either way the besigner tells you immediately — not twenty minutes later when you
+press Save:
 
 > Someone else saved this screen while you were editing. Saving is paused so their
 > work is not overwritten — reload to pick up their changes. Nothing you have done
@@ -94,8 +109,8 @@ saving. The guard also runs server-side inside a transaction, so even a save rac
 the conflict by milliseconds is refused, never silently applied.
 
 The guard identifies the other writer as a **different editing session**, not as a
-different person — so it fires for a second window of your own account just as it
-does for a colleague.
+different person — so it applies to a second window of your own account just as it
+does to a colleague.
 
 ## Local draft recovery
 
@@ -133,7 +148,9 @@ crash net, not version history — for named, durable snapshots use
 ## The Save button always answers
 
 The toolbar's save control reads **Save** when there's work to save and **Up to
-date** when there isn't — and clicking always produces an answer (saving, "Already
+date** when there isn't — including after a teammate saves work you already have,
+where the document is now stored exactly as your canvas holds it and there is
+nothing left to write — and clicking always produces an answer (saving, "Already
 saved", or the conflict warning), never silence.
 
 ## Related

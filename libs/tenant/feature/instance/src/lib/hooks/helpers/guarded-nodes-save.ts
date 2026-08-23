@@ -70,6 +70,20 @@ export interface NodesSaveBaseline {
  * Trade-off, accepted: a transaction requires the backend, so this save no
  * longer queues offline. A conflict guard that consults a local cache would
  * be theatre — the AGL-674 refusal already implies "the server has spoken".
+ *
+ * ## Why this did NOT change when the client relaxed (AGL-2486)
+ *
+ * The client no longer refuses merely because the stored version moved: with
+ * the co-edit mirror running it usually already holds what the other writer
+ * stored, so its own write is a superset (`incorporatesStoredNodes`). What
+ * it does with that evidence is advance its BASELINE onto the write it has
+ * incorporated — and this precondition is what makes that safe. It is
+ * unchanged and strictly stricter: the baseline the client presents must
+ * still match what is actually stored when the transaction reads it, so
+ * anything that lands between the client's decision and this commit moves
+ * `nodes` away from it and aborts. The docs' promise that "even a save
+ * racing the conflict by milliseconds is refused" therefore holds exactly as
+ * before; the client simply stopped refusing saves this would have accepted.
  */
 export async function saveNodesGuarded<T>(
   ref: DocumentReference<T>,

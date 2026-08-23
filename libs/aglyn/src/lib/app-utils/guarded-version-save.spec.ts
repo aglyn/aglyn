@@ -16,6 +16,7 @@
  */
 import {
   hasConcurrentWrite,
+  incorporatesStoredNodes,
   versionStamp,
 } from './guarded-version-save'
 
@@ -78,5 +79,78 @@ describe('hasConcurrentWrite (AGL-674)', () => {
   it('treats any difference as a conflict, in either direction', () => {
     expect(hasConcurrentWrite('ms:5', 'ms:2')).toBe(true)
     expect(hasConcurrentWrite('ms:2', 'ms:5')).toBe(true)
+  })
+})
+
+/**
+ * The predicate that lets two people in a converged room both save
+ * (AGL-2486).
+ *
+ * Every permissive case here has a restrictive twin, deliberately: the
+ * failure mode of getting this wrong is not a blocked save, it is silent
+ * data loss, and a test suite that only proves "it says yes" would report a
+ * function that always says yes as perfect.
+ */
+describe('incorporatesStoredNodes (AGL-2486)', () => {
+  const base = {
+    root: { $id: 'root', nodes: ['a'] },
+    a: { $id: 'a', text: 'one' },
+  }
+  /** Their save: `a` edited, `b` added. */
+  const stored = {
+    root: { $id: 'root', nodes: ['a', 'b'] },
+    a: { $id: 'a', text: 'two' },
+    b: { $id: 'b', text: 'new' },
+  }
+
+  it('accepts a map that already holds everything they stored', () => {
+    expect(incorporatesStoredNodes(base, stored, { ...stored })).toBe(true)
+  })
+
+  it('accepts it with unsaved work of our own on top', () => {
+    const ours = { ...stored, c: { $id: 'c', text: 'ours' } }
+    expect(incorporatesStoredNodes(base, stored, ours)).toBe(true)
+  })
+
+  it('ignores nodes they never touched, however we changed them', () => {
+    // `root` and `a` are theirs; our own edit to a node outside their write
+    // must not make us look stale.
+    const ours = { ...stored, a: { $id: 'a', text: 'two' }, d: { $id: 'd' } }
+    expect(incorporatesStoredNodes(base, stored, ours)).toBe(true)
+  })
+
+  it('refuses a session that never received one of their nodes', () => {
+    const stale = { ...stored } as Record<string, unknown>
+    delete stale.b
+    expect(incorporatesStoredNodes(base, stored, stale)).toBe(false)
+  })
+
+  it('refuses a session still holding the baseline value they changed', () => {
+    const stale = { ...stored, a: base.a }
+    expect(incorporatesStoredNodes(base, stored, stale)).toBe(false)
+  })
+
+  it('refuses when we hold our own version of a node they saved', () => {
+    const ours = { ...stored, a: { $id: 'a', text: 'mine' } }
+    expect(incorporatesStoredNodes(base, stored, ours)).toBe(false)
+  })
+
+  it('treats a deletion as something to be incorporated too', () => {
+    const withoutA = { root: { $id: 'root', nodes: [] as string[] } }
+    expect(incorporatesStoredNodes(base, withoutA, { ...withoutA })).toBe(true)
+    // Still holding the node they removed would resurrect it.
+    expect(
+      incorporatesStoredNodes(base, withoutA, { ...withoutA, a: base.a }),
+    ).toBe(false)
+  })
+
+  it('answers false on missing evidence, unlike hasConcurrentWrite', () => {
+    // The two defaults face the same way: that one decides whether to
+    // REFUSE, this one whether to relax a refusal. Neither guesses in the
+    // direction that loses work.
+    expect(incorporatesStoredNodes(undefined, stored, stored)).toBe(false)
+    expect(incorporatesStoredNodes(base, undefined, stored)).toBe(false)
+    expect(incorporatesStoredNodes(base, stored, undefined)).toBe(false)
+    expect(incorporatesStoredNodes(base, stored, 'not a map')).toBe(false)
   })
 })
