@@ -22,7 +22,11 @@
  */
 
 import { INERT_CSS_URL } from './author-css'
-import { decodeCharacterReferences, sanitizeAuthorHtml } from './author-html'
+import {
+  type AuthorHtmlRemoval,
+  decodeCharacterReferences,
+  sanitizeAuthorHtml,
+} from './author-html'
 
 describe('sanitizeAuthorHtml (AGL-1901)', () => {
   it('runs with no DOM at all', () => {
@@ -283,5 +287,66 @@ describe('sanitizeAuthorHtml (AGL-1901)', () => {
       expect(decodeCharacterReferences('a&#xD800;b')).toBe('ab')
       expect(decodeCharacterReferences('a&#0;b')).toBe('ab')
     })
+  })
+})
+
+/**
+ * The author-facing half (AGL-2486).
+ *
+ * The runtime sanitizes for a VISITOR and can only drop what it refuses in
+ * silence, so the editor has to be able to say what will be lost. These pin
+ * the two properties that make that safe: the collector never changes the
+ * OUTPUT, and it reports from the sanitizer's own decision points rather
+ * than from a second set of rules that could drift.
+ */
+describe('removal reporting (AGL-2486)', () => {
+  const removalsFor = (html: string) => {
+    const removals: AuthorHtmlRemoval[] = []
+    sanitizeAuthorHtml(html, removals)
+    return removals
+  }
+
+  it.each([
+    ['<script>alert(1)</script><p>hi</p>', 'element', '<script>'],
+    ['<form><input name="p"></form>', 'element', '<form>'],
+    ['<p onclick="alert(1)">hi</p>', 'attribute', 'onclick'],
+    ['<p style="@import url(https://e.example/x.css)">hi</p>', 'style', 'style attribute'],
+    ['<p style="background:url(http://e.example/x.png)">hi</p>', 'url', 'url()'],
+    ['<a href="javascript:alert(1)">hi</a>', 'url', 'href'],
+  ])('reports %s as a %s removal', (html, kind, needle) => {
+    const removals = removalsFor(html)
+    expect(removals.length).toBeGreaterThan(0)
+    expect(removals.some((entry) => entry.kind === kind)).toBe(true)
+    expect(removals.map((entry) => entry.message).join(' ')).toContain(needle)
+  })
+
+  it('reports nothing for markup that survives whole', () => {
+    expect(
+      removalsFor('<p style="color:#333"><strong>hi</strong> <a href="https://x.example">l</a></p>'),
+    ).toEqual([])
+  })
+
+  it('dedupes a repeated refusal so the author reads it once', () => {
+    const removals = removalsFor('<script>a</script><script>b</script><script>c</script>')
+    expect(removals).toHaveLength(1)
+  })
+
+  /**
+   * The property the render path depends on. Every existing caller
+   * (`typography.tsx`, `custom-html.tsx`, `site-runtime.tsx`) calls the
+   * one-argument form; if collecting could perturb the output, passing an
+   * array would become a hydration mismatch waiting to happen.
+   */
+  it('emits byte-identical output whether or not removals are collected', () => {
+    for (const html of [
+      '<p style="color:#333">hi</p>',
+      '<script>alert(1)</script><p>hi</p>',
+      '<form><input name="p"></form><p onclick="x()">t</p>',
+      '<p style="background:url(http://e.example/x.png)">hi</p>',
+      '<table><tr><td>a</td></tr></table>',
+      '<a href="javascript:alert(1)">hi</a><img srcset="http://e.example/a.png 1x">',
+    ]) {
+      expect(sanitizeAuthorHtml(html, [])).toBe(sanitizeAuthorHtml(html))
+    }
   })
 })

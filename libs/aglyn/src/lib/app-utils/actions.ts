@@ -16,6 +16,7 @@
  */
 
 import { resolveAuthoredEventName } from './analytics-events'
+import { type AuthorHtmlRemoval, sanitizeAuthorHtml } from './author-html'
 import { HOST_EVENT_TYPES } from './workflows'
 
 /**
@@ -637,8 +638,25 @@ export function validateHostAction(action: HostAction): string | null {
         return `${label}: dismiss options are escape and outsideClick`
       }
     }
-    if (step.type === 'showHtml' && !step.html?.trim()) {
-      return `${label}: enter the HTML`
+    if (step.type === 'showHtml') {
+      if (!step.html?.trim()) return `${label}: enter the HTML`
+      // AGL-2486: the author-facing half of the runtime sanitizer, exactly as
+      // the reserved analytics name below is the author-facing half of the
+      // runtime refusal. `site-runtime.tsx` runs this HTML through
+      // `sanitizeAuthorHtml` for a VISITOR, where the only thing it can do
+      // with markup it refuses is drop it and say nothing — so an author who
+      // pastes an embed snippet gets a step that runs, reports success, and
+      // shows nothing. The refusal is reported HERE, where the person who
+      // can fix it is looking, and it is the SAME function that will run at
+      // render rather than a second description of its rules.
+      const removals: AuthorHtmlRemoval[] = []
+      const safe = sanitizeAuthorHtml(step.html, removals)
+      if (!safe.trim()) {
+        return `${label}: none of this HTML can be shown on a published page — ${removals[0]?.message ?? 'it is removed by the sanitizer.'}`
+      }
+      if (removals.length) {
+        return `${label}: ${removals[0].message}${removals.length > 1 ? ` (+${removals.length - 1} more)` : ''}`
+      }
     }
     if (step.type === 'runJs' && !step.code?.trim()) {
       return `${label}: enter the JavaScript`

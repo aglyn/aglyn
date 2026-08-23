@@ -21,7 +21,6 @@ import {
   trackAuthoredEvent,
   trackEvent,
 } from '@aglyn/aglyn/app-utils/analytics-events'
-import DOMPurify from 'dompurify'
 import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import type { SiteRuntimeProps } from '@aglyn/aglyn'
 import * as MarketingModel from '../model'
@@ -301,12 +300,42 @@ function AutomationsEngine(props: {
             // Sanitize (AGL-504): unlike runJs, showHtml is NOT dropped by the
             // JS entitlement gate, so raw innerHTML would let any automations-
             // tier author execute event-handler attributes (<img onerror>).
-            container.innerHTML = DOMPurify.sanitize(step.html, {
-              USE_PROFILES: { html: true },
-              FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'base'],
-              FORBID_ATTR: ['srcdoc', 'formaction'],
-              ALLOW_DATA_ATTR: false,
-            })
+            //
+            // ONE policy for the surface (AGL-2486). AGL-1901 moved rich text
+            // and Custom HTML onto `sanitizeAuthorHtml`; this call was the
+            // last raw DOMPurify left on a published page, and two sanitizers
+            // with different rules on one surface is worse than the weaker of
+            // them — a reviewer reads the strict one and assumes it covers
+            // both. It did not: DOMPurify filters NO CSS, so every `style`
+            // attribute arriving here reached the visitor unexamined while
+            // the Custom HTML block beside it went through `sanitizeAuthorCss`.
+            //
+            // Nothing this used to refuse is now allowed. `sanitizeAuthorHtml`
+            // is a strict SUBSET of the DOMPurify config it replaces, and that
+            // is measured rather than asserted: `rich-text-hydration.spec.tsx`
+            // holds this exact former config as `referenceShowHtmlPurify` and
+            // runs the shared corpus through both. So the change is only in
+            // what it ADDITIONALLY refuses:
+            //
+            //  - `style` now gets the CSS rule — `http:` and unknown-scheme
+            //    `url()` neutered to `about:invalid`, and `@import`,
+            //    `expression()`, `behavior:` and `-moz-binding` dropping the
+            //    declaration whole. Character references are decoded BEFORE
+            //    the scheme is judged, which the old config did not do: it
+            //    emitted `url(&#104;ttp://…)` as a literal `http://`.
+            //  - `<form>` stops being an element. The former FORBID_TAGS here
+            //    listed `script, iframe, object, embed, base` and omitted
+            //    `form` — alone among this repo's author-HTML configs, both of
+            //    which forbade it — so a password field on the owner's live
+            //    page was one paste away.
+            //
+            // What is deliberately NOT refused, on either side of the change:
+            // a third-party `https:` `url()`, and `position:fixed` / `z-index`.
+            // The first is AGL-1725's actor analysis (the site owner chooses
+            // recipients for their own visitors); the second is a capability
+            // the Styles panel already gives the same author as a first-class
+            // field, so refusing it only here would move nothing.
+            container.innerHTML = Aglyn.sanitizeAuthorHtml(step.html)
             document.body.appendChild(container)
           } else if (step.type === 'runJs') {
             // Business-gated server-side (dropped from props otherwise);
