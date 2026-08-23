@@ -94,8 +94,94 @@ import {
   revenuePeriodOptions,
   usdDollars,
   usdMoney,
+  type SourceAttributionView,
   type RevenuePayload,
 } from '../../../../utils/revenue-view'
+
+/**
+ * One attributed source table — listing, publisher or host (AGL-2486).
+ *
+ * GAIN and LOSS sit side by side in every one of them. A refund or chargeback
+ * with no name on it is the row someone most needs to chase, so a reversal is
+ * never netted silently into the earnings column.
+ */
+function SourceTable({
+  table,
+  unit,
+  countLabel,
+  empty,
+}: {
+  table: SourceAttributionView | undefined
+  unit: string
+  countLabel: string
+  empty: string
+}) {
+  const rows = table?.rows ?? []
+  if (rows.length === 0) {
+    return (
+      <Typography variant="body2" color="text.secondary">
+        {empty}
+      </Typography>
+    )
+  }
+  return (
+    <>
+      <Box sx={{ overflowX: 'auto' }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>{unit}</TableCell>
+              <TableCell align="right">Earned</TableCell>
+              <TableCell align="right">Returned</TableCell>
+              <TableCell align="right">{countLabel}</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rows.map((row) => (
+              <TableRow key={row.key}>
+                <TableCell>
+                  {row.name}
+                  {row.detail ? (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: 'block' }}
+                    >
+                      {row.detail}
+                    </Typography>
+                  ) : null}
+                </TableCell>
+                <TableCell align="right">{money(row.gainCents)}</TableCell>
+                <TableCell align="right">
+                  {Number(row.lossCents ?? 0) > 0 ? (
+                    <Typography variant="body2" color="error.main">
+                      −{money(row.lossCents)}
+                    </Typography>
+                  ) : (
+                    money(0)
+                  )}
+                </TableCell>
+                <TableCell align="right">{row.count}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
+      {Number(table?.omittedRows ?? 0) > 0 ? (
+        <Alert severity="info" sx={{ mt: 2 }}>
+          <AlertTitle>
+            {table?.omittedRows} more not listed
+          </AlertTitle>
+          The table shows the largest contributors. The rest account for{' '}
+          {money(table?.omittedGainCents)} earned and{' '}
+          {money(table?.omittedLossCents)} returned between them, so these rows
+          plus this line still add up to the total above — a shortened list,
+          never a partial accounting.
+        </Alert>
+      ) : null}
+    </>
+  )
+}
 
 /** A large figure with its basis stated directly beneath it, never beside. */
 function Figure({
@@ -614,6 +700,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                         <TableCell>Plan</TableCell>
                         <TableCell align="right">Contracted / mo</TableCell>
                         <TableCell align="right">Settled in period</TableCell>
+                        <TableCell align="right">Unbilled meter</TableCell>
                         <TableCell align="right">Invoices</TableCell>
                       </TableRow>
                     </TableHead>
@@ -655,6 +742,15 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                               </Typography>
                             ) : null}
                           </TableCell>
+                          <TableCell align="right">
+                            {Number(row.unbilledMeteredCents ?? 0) > 0 ? (
+                              <Typography variant="body2" color="error.main">
+                                −{money(row.unbilledMeteredCents)}
+                              </Typography>
+                            ) : (
+                              money(0)
+                            )}
+                          </TableCell>
                           <TableCell align="right">{row.invoices}</TableCell>
                         </TableRow>
                       ))}
@@ -682,6 +778,69 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                   neither the table nor the totals.
                 </Alert>
               ) : null}
+            </CardDisplay>
+
+            {/* ---- Marketplace and storefront attribution ---- */}
+            <CardDisplay
+              header="Which plugin, and which storefront"
+              help={docsHelp('revenue', {
+                anchor: '#where-the-money-came-from',
+                excerpt:
+                  'Marketplace commission attributed by listing and by publisher; storefront take attributed by host. Each table sums to its line in "Where the money came from".',
+              })}
+              contentGutterX
+              contentGutterY
+            >
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Each source is attributed on the dimension it is actually
+                measured in — commission by the plugin that earned it, take by
+                the storefront that generated it. Every table sums to its own
+                line in “Where the money came from”; a plugin table that did
+                not would be worse than no plugin table.
+              </Typography>
+
+              <Typography variant="overline" color="text.secondary">
+                Marketplace commission by listing
+              </Typography>
+              <SourceTable
+                table={payload?.attributionByListing}
+                unit="Listing"
+                countLabel="Sales"
+                empty={`No marketplace sale settled in this period. ${PLATFORM_BRAND_NAME}'s commission is a share of each sale, so no sales means no commission — not a failed read.`}
+              />
+
+              <Divider sx={{ my: 3 }} />
+              <Typography variant="overline" color="text.secondary">
+                Marketplace commission by publisher
+              </Typography>
+              <SourceTable
+                table={payload?.attributionByPublisher}
+                unit="Publisher"
+                countLabel="Sales"
+                empty={`No publisher earned ${PLATFORM_BRAND_NAME} a commission in this period.`}
+              />
+
+              <Divider sx={{ my: 3 }} />
+              <Typography variant="overline" color="text.secondary">
+                Storefront take by host
+              </Typography>
+              <SourceTable
+                table={payload?.attributionByHost}
+                unit="Storefront"
+                countLabel="Orders"
+                empty={`No storefront order settled in this period. Note this is ${PLATFORM_BRAND_NAME}'s take only — the shopper's spend is the merchant's money and is never counted here.`}
+              />
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mt: 2 }}
+              >
+                Storefront figures above are the advertised take with
+                Stripe&apos;s processing cost already subtracted, on the basis
+                stated in “Gross versus net” below. Attribution is by host
+                rather than by org because one org can run several storefronts,
+                and rolling them up destroys the question.
+              </Typography>
             </CardDisplay>
 
             {/* ---- Where the earned money came from ---- */}

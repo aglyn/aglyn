@@ -56,6 +56,8 @@ const mockVerifyIdToken = jest.fn()
 let mockSources: Record<string, Array<Record<string, unknown>> | Error> = {}
 /** Every `where` the route issued, by source — so a field can be asserted. */
 let mockFilters: Record<string, Array<[string, string, unknown]>> = {}
+/** Every document id fetched via `getAll`, so the read BUDGET is assertable. */
+let mockGetAllIds: string[] = []
 
 function mockDoc(data: Record<string, unknown>, index: number) {
   const id = String(data['$id'] ?? `doc-${index}`)
@@ -67,7 +69,7 @@ function mockDoc(data: Record<string, unknown>, index: number) {
       // The revenue route reaches `org.ref.collection('usage').doc(month)`
       // for the unbilled-meter read, so an org document has to carry it.
       collection: () => ({ doc: () => ({ id: `${id}/usage` }) }),
-      parent: { parent: { id } },
+      parent: { parent: { id: String(data['$parentId'] ?? id) } },
     },
     data: () => data,
     get: (field: string) => data[field],
@@ -122,6 +124,9 @@ function mockQuery(
     startAfter(doc: unknown) {
       return mockQuery(key, { ...state, after: doc })
     },
+    doc(id: string) {
+      return { id, __collection: key }
+    },
     async get() {
       const source = mockSources[key]
       if (source instanceof Error) throw source
@@ -168,7 +173,20 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         // shortcut here would have let the unbounded read survive the test.
         collection: (name: string) => mockQuery(name),
         collectionGroup: (name: string) => mockQuery(name),
-        getAll: async () => [],
+        getAll: async (...refs: any[]) => {
+          mockGetAllIds.push(...refs.map((ref) => String(ref?.id ?? '')))
+          return refs.map((ref) => {
+            const source = mockSources[String(ref?.__collection ?? '')]
+            const rows = Array.isArray(source) ? source : []
+            const data = rows.find((row) => String(row['$id']) === ref?.id)
+            return {
+              id: ref?.id,
+              exists: Boolean(data),
+              data: () => data,
+              get: (field: string) => (data as any)?.[field],
+            }
+          })
+        },
       }),
     }),
   },
@@ -232,6 +250,7 @@ async function call(period = '2026-08'): Promise<any> {
 beforeEach(() => {
   mockSources = { orgs: [], billing: [], platformRevenue: [] }
   mockFilters = {}
+  mockGetAllIds = []
   mockVerifyIdToken.mockReset()
   mockVerifyIdToken.mockResolvedValue({
     uid: 'staff-1',
@@ -388,5 +407,82 @@ describe('a period the settled mirror cannot answer says so', () => {
     const body = await call()
     expect(body.settledMirrorEmpty).toBe(true)
     expect(body.settledCoverageStart).toBeNull()
+  })
+})
+
+describe('attribution is bounded, and keyed on the right dimension', () => {
+  it('attributes a storefront order to the host in its PATH', async () => {
+    mockSources['orders'] = [
+      {
+        $id: 'order-1',
+        $parentId: 'host-a',
+        createdAtMs: AUGUST_START + 60_000,
+        amountCents: 20_000,
+        feeCents: 2_000,
+      },
+    ]
+    mockSources['hosts'] = [
+      { $id: 'host-a', displayName: 'Northwind Coffee', subdomain: 'northwind' },
+    ]
+    const body = await call()
+
+    const rows = body.attributionByHost.rows
+    expect(rows).toHaveLength(1)
+    expect(rows[0].key).toBe('host-a')
+    // Decorated from the hosts collection, not left as a raw id.
+    expect(rows[0].name).toBe('Northwind Coffee')
+    // And it reconciles to the storefront line above it.
+    expect(rows[0].gainCents).toBe(body.settled.commerce.commissionNetCents)
+  })
+
+  it('reads names for the rows it will SHOW, not for every row it folded', async () => {
+    // The read-budget guard. Attributing by listing means touching a
+    // collection this page did not previously read, and the lookup has to be
+    // bounded by the display cap or it is an unbounded read arriving from a
+    // new direction.
+    mockSources['marketplacePurchases'] = Array.from(
+      { length: 260 },
+      (_, index) => ({
+        $id: `cs_${index}`,
+        listingId: `listing-${index}`,
+        sellerOrgId: 'pub-1',
+        createdAt: AUGUST_START + index,
+        amountCents: 10_000,
+        feeCents: 1_500,
+      }),
+    )
+    const body = await call()
+
+    const listingLookups = mockGetAllIds.filter((id) =>
+      id.startsWith('listing-'),
+    )
+    expect(body.attributionByListing.rows).toHaveLength(100)
+    expect(listingLookups).toHaveLength(100)
+    // 260 sales folded, 100 names read — the budget follows the table, not
+    // the data.
+    expect(body.settled.marketplace.transactionCount).toBe(260)
+    // And the remainder is carried as figures so the table still adds up.
+    const shown = body.attributionByListing.rows.reduce(
+      (sum: number, row: any) => sum + row.gainCents,
+      0,
+    )
+    expect(shown + body.attributionByListing.omittedGainCents).toBe(
+      body.settled.marketplace.commissionNetCents,
+    )
+  })
+
+  it('names a deleted entity rather than rendering a blank cell', async () => {
+    mockSources['orders'] = [
+      {
+        $id: 'order-1',
+        $parentId: 'host-gone',
+        createdAtMs: AUGUST_START + 1,
+        amountCents: 20_000,
+        feeCents: 2_000,
+      },
+    ]
+    mockSources['hosts'] = []
+    const body = await call()
+    expect(body.attributionByHost.rows[0].name).toBe('host-gone (deleted)')
   })
 })

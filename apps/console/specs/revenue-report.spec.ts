@@ -23,7 +23,10 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   commerceSettledSummary,
+  commerceHostAttribution,
   contractedSummary,
+  marketplaceListingAttribution,
+  marketplacePublisherAttribution,
   orgAttribution,
   marketplaceSettledSummary,
   revenueGap,
@@ -526,5 +529,115 @@ describe('orgAttribution', () => {
     )
     // And it kept the LARGEST contributors, not an arbitrary two.
     expect(attribution.rows[0].settledCents).toBe(500)
+  })
+})
+
+/**
+ * Attribution by listing, publisher and host (AGL-2486).
+ *
+ * The reconciliation assertions are the point: "a plugin table that does not
+ * sum to the marketplace line is worse than no plugin table".
+ */
+describe('attribution by source', () => {
+  const sale = (
+    listingId: string,
+    sellerOrgId: string,
+    amountCents: number,
+    feeCents: number,
+    refundedCents = 0,
+  ) => ({
+    id: `cs_${listingId}_${amountCents}`,
+    listingId,
+    sellerOrgId,
+    amountCents,
+    taxCents: 0,
+    feeCents,
+    transferCents: amountCents - feeCents,
+    refundedCents,
+  })
+  const order = (
+    hostId: string,
+    amountCents: number,
+    feeCents: number,
+    refundedCents = 0,
+  ) => ({
+    id: `o_${hostId}_${amountCents}`,
+    hostId,
+    amountCents,
+    feeCents,
+    refundedCents,
+  })
+
+  it('sums listing rows to the marketplace commission line exactly', () => {
+    const rows = [
+      sale('office-hours', 'pub1', 10_000, 1_500),
+      sale('office-hours', 'pub1', 4_000, 600),
+      sale('promo-countdown', 'pub2', 8_000, 1_200, 8_000),
+    ]
+    const total = marketplaceSettledSummary(rows)
+    const byListing = marketplaceListingAttribution(rows)
+    const summed = byListing.rows.reduce((s, r) => s + r.gainCents, 0)
+
+    expect(summed).toBe(total.commissionNetCents)
+    expect(byListing.rows).toHaveLength(2)
+    // Losses carry a name too — the fully refunded sale is attributable.
+    const refundRow = byListing.rows.find((r) => r.key === 'promo-countdown')
+    expect(refundRow?.lossCents).toBe(1_200)
+    expect(refundRow?.gainCents).toBe(0)
+  })
+
+  it('sums publisher rows to the same marketplace line', () => {
+    const rows = [
+      sale('a', 'pub1', 10_000, 1_500),
+      sale('b', 'pub2', 4_000, 600),
+    ]
+    const total = marketplaceSettledSummary(rows)
+    const byPublisher = marketplacePublisherAttribution(rows)
+    expect(byPublisher.rows.reduce((s, r) => s + r.gainCents, 0)).toBe(
+      total.commissionNetCents,
+    )
+    // Two groupings of the SAME money must agree with each other.
+    const byListing = marketplaceListingAttribution(rows)
+    expect(byPublisher.rows.reduce((s, r) => s + r.gainCents, 0)).toBe(
+      byListing.rows.reduce((s, r) => s + r.gainCents, 0),
+    )
+  })
+
+  it('sums host rows to the storefront commission line exactly', () => {
+    const rows = [
+      order('host-a', 20_000, 2_000),
+      order('host-a', 5_000, 700),
+      order('host-b', 9_000, 1_100, 9_000),
+      // A zero-fee order: counted, but there is no take to attribute.
+      order('host-c', 3_000, 0),
+    ]
+    const total = commerceSettledSummary(rows)
+    const byHost = commerceHostAttribution(rows)
+    expect(byHost.rows.reduce((s, r) => s + r.gainCents, 0)).toBe(
+      total.commissionNetCents,
+    )
+    expect(byHost.rows.find((r) => r.key === 'host-c')?.gainCents).toBe(0)
+  })
+
+  it('keeps a row whose entity id is missing rather than dropping the money', () => {
+    // Dropping it would make the rows sum BELOW the total — the exact fault
+    // these tables exist to avoid.
+    const rows = [{ id: 'x', amountCents: 10_000, feeCents: 1_500 }]
+    const total = marketplaceSettledSummary(rows)
+    const byListing = marketplaceListingAttribution(rows)
+    expect(byListing.rows).toHaveLength(1)
+    expect(byListing.rows[0].key).toBe('Listing not recorded')
+    expect(byListing.rows[0].gainCents).toBe(total.commissionNetCents)
+  })
+
+  it('carries the omitted remainder as figures when capped', () => {
+    const rows = Array.from({ length: 4 }, (_, index) =>
+      sale(`l${index}`, 'pub', (index + 1) * 10_000, (index + 1) * 1_000),
+    )
+    const total = marketplaceSettledSummary(rows)
+    const capped = marketplaceListingAttribution(rows, 2)
+    const shown = capped.rows.reduce((s, r) => s + r.gainCents, 0)
+    expect(capped.omittedRows).toBe(2)
+    expect(shown + capped.omittedGainCents).toBe(total.commissionNetCents)
   })
 })

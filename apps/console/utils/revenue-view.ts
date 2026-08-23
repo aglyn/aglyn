@@ -83,12 +83,31 @@ export interface RevenuePayload {
       settledCents?: number
       invoices?: number
       refundedCents?: number
+      unbilledMeteredCents?: number
     }[]
     omittedOrgs?: number
     omittedMrrUsd?: number
     omittedSettledCents?: number
     totalOrgs?: number
   }
+  attributionByListing?: SourceAttributionView
+  attributionByPublisher?: SourceAttributionView
+  attributionByHost?: SourceAttributionView
+}
+
+/** One attributed source table, as the page receives it. */
+export interface SourceAttributionView {
+  rows?: {
+    key?: string
+    name?: string
+    detail?: string
+    gainCents?: number
+    lossCents?: number
+    count?: number
+  }[]
+  omittedRows?: number
+  omittedGainCents?: number
+  omittedLossCents?: number
 }
 
 /**

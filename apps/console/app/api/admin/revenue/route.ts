@@ -24,7 +24,10 @@ import {
 import { taxPeriodRange } from '../../../../utils/server/tx-return'
 import {
   commerceSettledSummary,
+  commerceHostAttribution,
   contractedSummary,
+  marketplaceListingAttribution,
+  marketplacePublisherAttribution,
   orgAttribution,
   marketplaceSettledSummary,
   revenueGap,
@@ -315,7 +318,15 @@ async function handler(request: Request): Promise<Response> {
       }))
     const commerceRows: CommerceOrderRowInput[] = (
       ordersInPeriod?.docs ?? []
-    ).map((doc) => ({ id: doc.id, ...(doc.data() as object) }))
+    ).map((doc) => ({
+      id: doc.id,
+      // Orders live at `hosts/{hostId}/orders/{orderId}`, so the storefront
+      // that earned the take is in the PATH. Lifted from there rather than
+      // read from a field: it costs no extra read and cannot disagree with
+      // where the document actually is.
+      hostId: doc.ref.parent.parent?.id ?? '',
+      ...(doc.data() as object),
+    }))
 
     const subscriptions = subscriptionSettledSummary(subscriptionRows)
     const marketplaceSettled = marketplaceSettledSummary(marketplaceRows)
@@ -353,9 +364,13 @@ async function handler(request: Request): Promise<Response> {
     let unbilledMeteredCents = 0
     let unbilledMeteredApplies = false
     let unbilledMeteredFailed = false
+    // Per ORG as well as in total: an unbilled meter is a revenue LOSS and a
+    // loss with no name on it is the one nobody chases (AGL-2486).
+    const unbilledMeteredByOrg = new Map<string, number>()
     if (/^\d{4}-\d{2}$/.test(period.trim())) {
       unbilledMeteredApplies = true
       const month = period.trim()
+      const usageOrgIds = orgsSnapshot.docs.map((org) => org.id)
       const usageRefs = orgsSnapshot.docs.map((org) =>
         org.ref.collection('usage').doc(month),
       )
@@ -367,12 +382,16 @@ async function handler(request: Request): Promise<Response> {
           const chunk = usageRefs.slice(index, index + 300)
           if (chunk.length === 0) continue
           const docs = await firestore.getAll(...chunk)
-          for (const doc of docs) {
+          docs.forEach((doc, offset) => {
             const value = Number(doc.get('meterUnbilledCents') ?? 0)
             if (Number.isFinite(value) && value > 0) {
               unbilledMeteredCents += value
+              // `getAll` answers in the order asked, so the org id is the one
+              // at the same position in the ref list.
+              const orgId = usageOrgIds[index + offset]
+              if (orgId) unbilledMeteredByOrg.set(orgId, value)
             }
-          }
+          })
         }
       } catch {
         // Reported, never silently zeroed — see above.
@@ -381,13 +400,88 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
-    // WHO produced the numbers. Built from the same rows the totals folded,
-    // so the table reconciles to the figures above it by construction.
+    // WHO produced the numbers, on the dimension each source is actually
+    // measured in. All four are built from the same rows the totals folded,
+    // so every table reconciles to the figure above it by construction.
     const attribution = orgAttribution(
       contractedInput,
       subscriptionRows,
       ATTRIBUTION_ROW_LIMIT,
+      unbilledMeteredByOrg,
     )
+    const byListing = marketplaceListingAttribution(
+      marketplaceRows,
+      ATTRIBUTION_ROW_LIMIT,
+    )
+    const byPublisher = marketplacePublisherAttribution(
+      marketplaceRows,
+      ATTRIBUTION_ROW_LIMIT,
+    )
+    const byHost = commerceHostAttribution(commerceRows, ATTRIBUTION_ROW_LIMIT)
+
+    // Names, read AFTER the fold has capped the rows (AGL-2486).
+    //
+    // Listings and hosts are collections this page did not previously touch,
+    // and the ordering is the whole point: the lookup is bounded by what will
+    // be DISPLAYED (at most `ATTRIBUTION_ROW_LIMIT` per table), not by how
+    // many sales the period holds. Reading a name per row before capping
+    // would have reintroduced an unbounded read from a new direction, one
+    // commit after removing the last of them.
+    //
+    // Publisher names need no read at all: every org is already in
+    // `orgNames`, folded from the org sweep above.
+    const orgNames = new Map<string, string>()
+    for (const doc of orgsSnapshot.docs) {
+      const name = String(doc.get('name') ?? '').trim()
+      if (name) orgNames.set(doc.id, name)
+    }
+    async function decorate(
+      table: { rows: { key: string; name: string; detail: string }[] },
+      collection: string,
+      nameField: string,
+      detailField: string,
+    ): Promise<void> {
+      const ids = table.rows
+        .map((row) => row.key)
+        .filter((key) => key && !key.includes(' '))
+      if (ids.length === 0) return
+      const docs: FirebaseFirestore.DocumentSnapshot[] = []
+      for (let index = 0; index < ids.length; index += 300) {
+        const chunk = ids
+          .slice(index, index + 300)
+          .map((id) => firestore.collection(collection).doc(id))
+        docs.push(...(await firestore.getAll(...chunk)))
+      }
+      const found = new Map(docs.map((doc) => [doc.id, doc]))
+      for (const row of table.rows) {
+        const doc = found.get(row.key)
+        // A row whose entity is GONE keeps its id and says so, rather than
+        // rendering a blank cell that reads as a loading bug.
+        if (!doc?.exists) {
+          if (!row.name || row.name === row.key) {
+            row.name = `${row.key} (deleted)`
+          }
+          continue
+        }
+        const name = String(doc.get(nameField) ?? '').trim()
+        if (name) row.name = name
+        const detail = String(doc.get(detailField) ?? '').trim()
+        if (detail) row.detail = detail
+      }
+    }
+    await Promise.all([
+      decorate(byListing, 'marketplaceListings', 'displayName', 'pluginId'),
+      decorate(byHost, 'hosts', 'displayName', 'subdomain'),
+    ])
+    // Publisher rows resolve from the org sweep — no read.
+    for (const row of byPublisher.rows) {
+      const name = orgNames.get(row.key)
+      if (name) row.name = name
+    }
+    for (const row of byListing.rows) {
+      const publisher = orgNames.get(row.detail)
+      if (publisher) row.detail = publisher
+    }
 
     const settled = {
       subscriptions,
@@ -460,6 +554,9 @@ async function handler(request: Request): Promise<Response> {
         earliestPaidAt !== null && range.start < earliestPaidAt,
       settledMirrorEmpty: earliestPaidAt === null,
       attribution,
+      attributionByListing: byListing,
+      attributionByPublisher: byPublisher,
+      attributionByHost: byHost,
       /**
        * Whether the period has already ended (AGL-2486).
        *

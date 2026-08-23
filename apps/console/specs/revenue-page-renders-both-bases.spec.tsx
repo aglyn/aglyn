@@ -517,3 +517,90 @@ describe('every figure is traceable to the org behind it', () => {
     expect(screen.getByText(/\$12\.34 of\s+settled cash/i)).toBeTruthy()
   })
 })
+
+describe('every source is attributed on its own dimension', () => {
+  const withSources = {
+    ...payload,
+    attributionByListing: {
+      rows: [
+        {
+          key: 'ChiOYRKDeI',
+          name: 'Office Hours',
+          detail: 'Aglyn LLC',
+          gainCents: 4_100,
+          lossCents: 900,
+          count: 3,
+        },
+      ],
+      omittedRows: 0,
+      omittedGainCents: 0,
+      omittedLossCents: 0,
+    },
+    attributionByPublisher: {
+      rows: [
+        {
+          key: 'jWmGooWE3L',
+          name: 'Aglyn LLC',
+          detail: '',
+          gainCents: 4_100,
+          lossCents: 900,
+          count: 3,
+        },
+      ],
+      omittedRows: 0,
+      omittedGainCents: 0,
+      omittedLossCents: 0,
+    },
+    attributionByHost: {
+      rows: [
+        {
+          key: '4uYCmrbU5t',
+          name: 'Northwind Coffee',
+          detail: 'northwind-coffee',
+          gainCents: 2_600,
+          lossCents: 0,
+          count: 5,
+        },
+      ],
+      omittedRows: 0,
+      omittedGainCents: 0,
+      omittedLossCents: 0,
+    },
+  }
+
+  it('names the plugin, the publisher and the storefront', async () => {
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => withSources,
+    })) as never
+    render(<AdminRevenue />)
+    await waitFor(() => expect(screen.getByText('Office Hours')).toBeTruthy())
+    expect(screen.getByText('Northwind Coffee')).toBeTruthy()
+    expect(screen.getByText('northwind-coffee')).toBeTruthy()
+    expect(screen.getByText(/Marketplace commission by publisher/i)).toBeTruthy()
+  })
+
+  it('shows a LOSS beside the gain rather than netting it away', async () => {
+    // "A loss with no name on it is the one you most need to chase."
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => withSources,
+    })) as never
+    render(<AdminRevenue />)
+    await waitFor(() => expect(screen.getByText('Office Hours')).toBeTruthy())
+    expect(screen.getAllByText('−$9.00').length).toBeGreaterThan(0)
+  })
+
+  it('says an empty source table is a real answer, not a failed read', async () => {
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({ ...payload, attributionByListing: { rows: [] } }),
+    })) as never
+    render(<AdminRevenue />)
+    await waitFor(() =>
+      expect(
+        screen.getByText(/no sales means no commission — not a failed read/i),
+      ).toBeTruthy(),
+    )
+  })
+})

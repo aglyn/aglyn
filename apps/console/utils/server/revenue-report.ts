@@ -247,6 +247,10 @@ export interface MarketplaceRevenueRowInput {
   refundedCents?: unknown
   /** Set by the PARTIAL-refund path, which never writes `refundedCents`. */
   partialRefundedCents?: unknown
+  /** WHICH listing (plugin) was sold — the marketplace attribution key. */
+  listingId?: unknown
+  /** The publishing org that receives the transfer. */
+  sellerOrgId?: unknown
   createdAt?: unknown
 }
 
@@ -268,6 +272,14 @@ export interface CommerceOrderRowInput {
   subscriptionId?: unknown
   /** Merchant refunds AND chargebacks both land here (`commerce/refund.ts`). */
   refundedCents?: unknown
+  /**
+   * WHICH storefront the order belongs to — the commerce attribution key.
+   *
+   * Orders live at `hosts/{hostId}/orders/{orderId}`, so this is lifted from
+   * the document PATH by the route rather than read from a field. It costs no
+   * extra read and cannot disagree with where the document actually is.
+   */
+  hostId?: unknown
   createdAt?: unknown
 }
 
@@ -447,45 +459,71 @@ export function marketplaceSettledSummary(
     estimatedProcessingCostCents: 0,
   }
   for (const row of rows ?? []) {
-    const gross = cents(row?.amountCents)
-    const tax = cents(row?.taxCents)
-    const transfer = cents(row?.transferCents)
-    const stored = cents(row?.feeCents)
-    // Never below zero: a transfer larger than the net is a data fault, and a
-    // negative commission here would quietly eat a neighbouring sale's take.
-    const commission =
-      stored > 0 ? stored : Math.max(0, gross - tax - transfer)
-    // The larger of the two reversal shapes, not their sum: a sale refunded
-    // partially and then fully carries BOTH fields, and adding them would
-    // reverse more than the sale ever collected.
-    const refunded = Math.min(
-      gross,
-      Math.max(
-        0,
-        cents(row?.refundedCents),
-        cents(row?.partialRefundedCents),
-      ),
-    )
-    // Pro-rata by the row's own gross, so a fully refunded sale returns
-    // exactly the commission it earned and a partial returns its share.
-    const commissionRefunded =
-      gross > 0 ? Math.round((refunded * commission) / gross) : 0
+    const split = marketplaceCommissionCents(row)
     out.transactionCount += 1
-    out.grossCents += gross
-    out.taxCents += tax
-    out.sellerTransferCents += transfer
-    out.commissionCents += commission
-    out.commissionRefundedCents += commissionRefunded
-    out.commissionNetCents += commission - commissionRefunded
-    // Aglyn's own uncovered cost on this destination charge. The same helper
-    // the storefront path recovers with, so the two cannot drift apart.
-    if (gross > refunded) {
-      out.estimatedProcessingCostCents += storefrontProcessingCostCents(
-        gross - refunded,
-      )
-    }
+    out.grossCents += split.gross
+    out.taxCents += split.tax
+    out.sellerTransferCents += split.transfer
+    out.commissionCents += split.commission
+    out.commissionRefundedCents += split.commissionRefunded
+    out.commissionNetCents += split.commissionNet
+    out.estimatedProcessingCostCents += split.processingCost
   }
   return out
+}
+
+/**
+ * One marketplace sale's commission split, in ONE place (AGL-2486).
+ *
+ * Shared with the per-listing and per-publisher attribution so a plugin table
+ * cannot sum to something other than the marketplace line above it.
+ *
+ * The commission is the STORED `feeCents` — what the rate resolved at
+ * checkout actually charged — with `gross − tax − transfer` as the fallback
+ * for rows written before that field existed. Never below zero: a transfer
+ * larger than the net is a data fault, and a negative commission would
+ * quietly eat a neighbouring sale's take.
+ *
+ * Both reversal shapes are read, and the LARGER is taken rather than their
+ * sum: a sale refunded partially and then fully carries both fields, and
+ * adding them would reverse more than the sale ever collected.
+ */
+export function marketplaceCommissionCents(
+  row: MarketplaceRevenueRowInput | null,
+): {
+  gross: number
+  tax: number
+  transfer: number
+  commission: number
+  commissionRefunded: number
+  commissionNet: number
+  processingCost: number
+} {
+  const gross = cents(row?.amountCents)
+  const tax = cents(row?.taxCents)
+  const transfer = cents(row?.transferCents)
+  const stored = cents(row?.feeCents)
+  const commission = stored > 0 ? stored : Math.max(0, gross - tax - transfer)
+  const refunded = Math.min(
+    gross,
+    Math.max(0, cents(row?.refundedCents), cents(row?.partialRefundedCents)),
+  )
+  // Pro-rata by the row's own gross, so a fully refunded sale returns exactly
+  // the commission it earned and a partial returns its share.
+  const commissionRefunded =
+    gross > 0 ? Math.round((refunded * commission) / gross) : 0
+  return {
+    gross,
+    tax,
+    transfer,
+    commission,
+    commissionRefunded,
+    commissionNet: commission - commissionRefunded,
+    // Aglyn's own uncovered cost on this destination charge. The same helper
+    // the storefront path recovers with, so the two cannot drift apart.
+    processingCost:
+      gross > refunded ? storefrontProcessingCostCents(gross - refunded) : 0,
+  }
 }
 
 /**
@@ -545,31 +583,75 @@ export function commerceSettledSummary(
     truncated: truncated === true,
   }
   for (const row of rows ?? []) {
-    const gross = cents(row?.amountCents)
-    const fee = Math.max(0, cents(row?.feeCents))
-    const isSubscriptionOrder =
-      typeof row?.subscriptionId === 'string' && row.subscriptionId.length > 0
+    const split = commerceOrderTake(row)
     out.transactionCount += 1
-    out.grossCents += gross
-    out.applicationFeeCents += fee
-    if (isSubscriptionOrder) out.subscriptionOrders += 1
-    if (fee <= 0) continue
-    // A one-time sale's fee bundles the recovery; a renewal's does not.
-    // Clamped to the fee itself: the recomputed cost can exceed a fee charged
-    // under an older rate, and a negative take would subtract from another
-    // order's real margin.
-    const passThrough = isSubscriptionOrder
-      ? 0
-      : Math.min(fee, storefrontProcessingCostCents(gross))
-    const take = fee - passThrough
-    const refunded = Math.min(gross, Math.max(0, cents(row?.refundedCents)))
-    const takeRefunded = gross > 0 ? Math.round((refunded * take) / gross) : 0
-    out.processingPassThroughCents += passThrough
-    out.commissionCents += take
-    out.commissionRefundedCents += takeRefunded
-    out.commissionNetCents += take - takeRefunded
+    out.grossCents += split.gross
+    out.applicationFeeCents += split.fee
+    if (split.isSubscriptionOrder) out.subscriptionOrders += 1
+    out.processingPassThroughCents += split.passThrough
+    out.commissionCents += split.take
+    out.commissionRefundedCents += split.takeRefunded
+    out.commissionNetCents += split.takeNet
   }
   return out
+}
+
+/**
+ * One storefront order's take, in ONE place (AGL-2486).
+ *
+ * Shared with the per-host attribution so a host table cannot sum to
+ * something other than the storefront line above it.
+ *
+ * A zero-fee order contributes its gross and its count and nothing else —
+ * there is no take to attribute, and inventing one from the gross would
+ * report a merchant's money as Aglyn's.
+ *
+ * See `commerceSettledSummary` for why the pass-through is subtracted on a
+ * one-time sale and NOT on a subscription renewal.
+ */
+export function commerceOrderTake(row: CommerceOrderRowInput | null): {
+  gross: number
+  fee: number
+  isSubscriptionOrder: boolean
+  passThrough: number
+  take: number
+  takeRefunded: number
+  takeNet: number
+} {
+  const gross = cents(row?.amountCents)
+  const fee = Math.max(0, cents(row?.feeCents))
+  const isSubscriptionOrder =
+    typeof row?.subscriptionId === 'string' && row.subscriptionId.length > 0
+  if (fee <= 0) {
+    return {
+      gross,
+      fee,
+      isSubscriptionOrder,
+      passThrough: 0,
+      take: 0,
+      takeRefunded: 0,
+      takeNet: 0,
+    }
+  }
+  // A one-time sale's fee bundles the recovery; a renewal's does not. Clamped
+  // to the fee itself: the recomputed cost can exceed a fee charged under an
+  // older rate, and a negative take would subtract from another order's real
+  // margin.
+  const passThrough = isSubscriptionOrder
+    ? 0
+    : Math.min(fee, storefrontProcessingCostCents(gross))
+  const take = fee - passThrough
+  const refunded = Math.min(gross, Math.max(0, cents(row?.refundedCents)))
+  const takeRefunded = gross > 0 ? Math.round((refunded * take) / gross) : 0
+  return {
+    gross,
+    fee,
+    isSubscriptionOrder,
+    passThrough,
+    take,
+    takeRefunded,
+    takeNet: take - takeRefunded,
+  }
 }
 
 /** The two bases beside each other, and the gap spelled out. */
@@ -736,6 +818,14 @@ export interface OrgAttributionRow {
   invoices: number
   /** Money handed back in the period. Already deducted from `settledCents`. */
   refundedCents: number
+  /**
+   * Metered usage this org's month MEASURED and never invoiced (AGL-1878).
+   *
+   * A named loss, kept SEPARATE from `refundedCents` rather than summed into
+   * one "loss" column: a refund is money returned and unbilled usage is money
+   * never asked for, and they are chased in completely different places.
+   */
+  unbilledMeteredCents: number
 }
 
 export interface OrgAttribution {
@@ -783,6 +873,7 @@ export function orgAttribution(
   orgs: readonly ContractedOrgInput[],
   settledRows: readonly PlatformRevenueRowInput[],
   limit = 100,
+  unbilledMeteredByOrg: ReadonlyMap<string, number> = new Map(),
 ): OrgAttribution {
   const settledByOrg = new Map<
     string,
@@ -813,9 +904,10 @@ export function orgAttribution(
     const settled = settledByOrg.get(orgId)
     settledByOrg.delete(orgId)
     const mrrUsd = billingOrg ? orgMonthlyRevenueUsd(billing) : 0
-    // Nothing to attribute: no live subscription, no cash this period, and
-    // not a comp anyone needs to see named.
-    if (state === 'inactive' && !settled) continue
+    const unbilled = Math.max(0, unbilledMeteredByOrg.get(orgId) ?? 0)
+    // Nothing to attribute: no live subscription, no cash this period, no
+    // unbilled meter, and not a comp anyone needs to see named.
+    if (state === 'inactive' && !settled && unbilled === 0) continue
     rows.push({
       orgId,
       name: String(billing?.name ?? '').trim() || orgId,
@@ -826,6 +918,7 @@ export function orgAttribution(
       settledCents: settled?.settledCents ?? 0,
       invoices: settled?.invoices ?? 0,
       refundedCents: settled?.refundedCents ?? 0,
+      unbilledMeteredCents: unbilled,
     })
   }
 
@@ -844,6 +937,7 @@ export function orgAttribution(
       settledCents: settled.settledCents,
       invoices: settled.invoices,
       refundedCents: settled.refundedCents,
+      unbilledMeteredCents: 0,
     })
   }
 
@@ -867,4 +961,176 @@ export function orgAttribution(
     ),
     totalOrgs: (orgs ?? []).length,
   }
+}
+
+/*==========================================
+ *
+ * MARK - Attribution by source (AGL-2486)
+ *
+ * Zach: *"We need to see the source of all breakdowns including which org and
+ * which plugin and which host etc contributed to what revenue gain or revenue
+ * loss."*
+ *
+ * The right DIMENSION differs per source, which is why this is three groupings
+ * and not one table with a spare column:
+ *
+ *  - subscriptions, add-ons and metered usage attribute by **org** — the
+ *    customer is the billing entity;
+ *  - marketplace commission attributes by **listing** (which plugin earned it)
+ *    and by **publisher** (whose plugin it was) — a question only this page
+ *    can answer;
+ *  - storefront commission attributes by **host**, because one org can run
+ *    several storefronts and the take is per store.
+ *
+ * GAIN AND LOSS, always together. A refund or a chargeback with no name on it
+ * is the row you most need to chase, so every grouping carries the reversal
+ * beside the earnings rather than netting it away silently.
+ *
+ * Every figure comes from the same per-row helpers the headline totals fold
+ * (`invoiceEarnedCents`, `marketplaceCommissionCents`, `commerceOrderTake`),
+ * so a table that does not sum to the line above it is a bug these functions
+ * cannot express.
+ *
+ *=========================================*/
+
+/** One attributed source. `name` is decorated by the route; the fold has ids. */
+export interface SourceAttributionRow {
+  key: string
+  /** Display name, filled in by a BOUNDED lookup in the route. */
+  name: string
+  /** Secondary identity — plugin id, publisher org, subdomain. */
+  detail: string
+  /** Revenue earned, net of its own reversals. */
+  gainCents: number
+  /** Money handed back. Already deducted from `gainCents`. */
+  lossCents: number
+  count: number
+}
+
+export interface SourceAttribution {
+  rows: SourceAttributionRow[]
+  omittedRows: number
+  omittedGainCents: number
+  omittedLossCents: number
+}
+
+interface AttributionEntry {
+  key: string
+  detail: string
+  gain: number
+  loss: number
+}
+
+/**
+ * Group, sort and cap — the shared half of every attribution above.
+ *
+ * A row whose key is missing is NOT dropped. It is grouped under an explicit
+ * "unattributed" key, because a sale we cannot attribute still happened and
+ * dropping it would make the rows sum below the total — which is the one
+ * property that makes any of these tables worth reading.
+ *
+ * The cap carries its remainder as FIGURES rather than a count, so the table
+ * stays a complete accounting even when it is not a complete list.
+ */
+function groupAttribution(
+  entries: readonly AttributionEntry[],
+  limit: number,
+  unattributedLabel: string,
+): SourceAttribution {
+  const byKey = new Map<string, SourceAttributionRow>()
+  for (const entry of entries ?? []) {
+    const key = entry.key || unattributedLabel
+    const row = byKey.get(key) ?? {
+      key,
+      name: key === unattributedLabel ? unattributedLabel : key,
+      detail: entry.detail ?? '',
+      gainCents: 0,
+      lossCents: 0,
+      count: 0,
+    }
+    row.gainCents += entry.gain
+    row.lossCents += entry.loss
+    row.count += 1
+    if (!row.detail && entry.detail) row.detail = entry.detail
+    byKey.set(key, row)
+  }
+  const rows = [...byKey.values()].sort(
+    (a, b) =>
+      b.gainCents - a.gainCents ||
+      b.lossCents - a.lossCents ||
+      a.key.localeCompare(b.key),
+  )
+  const kept = rows.slice(0, Math.max(0, limit))
+  const dropped = rows.slice(Math.max(0, limit))
+  return {
+    rows: kept,
+    omittedRows: dropped.length,
+    omittedGainCents: dropped.reduce((sum, row) => sum + row.gainCents, 0),
+    omittedLossCents: dropped.reduce((sum, row) => sum + row.lossCents, 0),
+  }
+}
+
+/** Marketplace commission by LISTING — "which plugin earned us what". */
+export function marketplaceListingAttribution(
+  rows: readonly MarketplaceRevenueRowInput[],
+  limit = 100,
+): SourceAttribution {
+  return groupAttribution(
+    (rows ?? []).map((row) => {
+      const split = marketplaceCommissionCents(row)
+      return {
+        key: String((row as any)?.listingId ?? ''),
+        detail: String((row as any)?.sellerOrgId ?? ''),
+        gain: split.commissionNet,
+        loss: split.commissionRefunded,
+      }
+    }),
+    limit,
+    'Listing not recorded',
+  )
+}
+
+/** Marketplace commission by PUBLISHER — whose plugins earn Aglyn its take. */
+export function marketplacePublisherAttribution(
+  rows: readonly MarketplaceRevenueRowInput[],
+  limit = 100,
+): SourceAttribution {
+  return groupAttribution(
+    (rows ?? []).map((row) => {
+      const split = marketplaceCommissionCents(row)
+      return {
+        key: String((row as any)?.sellerOrgId ?? ''),
+        detail: '',
+        gain: split.commissionNet,
+        loss: split.commissionRefunded,
+      }
+    }),
+    limit,
+    'Publisher not recorded',
+  )
+}
+
+/**
+ * Storefront take by HOST.
+ *
+ * By host and not by org on purpose: one org can run several storefronts, and
+ * "which store earns" is the question a per-org roll-up destroys.
+ */
+export function commerceHostAttribution(
+  rows: readonly CommerceOrderRowInput[],
+  limit = 100,
+): SourceAttribution {
+  return groupAttribution(
+    (rows ?? []).map((row) => {
+      const split = commerceOrderTake(row)
+      return {
+        key: String((row as any)?.hostId ?? ''),
+        detail: '',
+        gain: split.takeNet,
+        loss: split.takeRefunded,
+      }
+    }),
+    limit,
+    'Host not recorded',
+  )
 }
