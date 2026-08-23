@@ -50,7 +50,7 @@ const mockVerifyIdToken = jest.fn()
 const mockGetOrgForUser = jest.fn()
 const mockResolveOrgIdForHost = jest.fn()
 const mockGetServerReleaseFlagValues = jest.fn()
-const mockGetOrgReleaseFlagOverrides = jest.fn()
+const mockGetOrgReleaseFlagTargeting = jest.fn()
 
 /**
  * Firestore double for the host-verification reads (AGL-2185).
@@ -126,8 +126,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   resolveOrgIdForHost: (...args: unknown[]) => mockResolveOrgIdForHost(...args),
   getServerReleaseFlagValues: (...args: unknown[]) =>
     mockGetServerReleaseFlagValues(...args),
-  getOrgReleaseFlagOverrides: (...args: unknown[]) =>
-    mockGetOrgReleaseFlagOverrides(...args),
+  getOrgReleaseFlagTargeting: (...args: unknown[]) =>
+    mockGetOrgReleaseFlagTargeting(...args),
   isImpersonationSession: () => false,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
@@ -217,7 +217,14 @@ beforeEach(() => {
     ),
     release_contacts: { enabled: true },
   })
-  mockGetOrgReleaseFlagOverrides.mockResolvedValue({})
+  // Overrides and the org's tier from one read (AGL-2486). A known tier,
+  // not null: the route is asked what this org can reach, and a null here
+  // would make every plan-targeted flag read OFF for a reason that has
+  // nothing to do with what the flag says.
+  mockGetOrgReleaseFlagTargeting.mockResolvedValue({
+    overrides: {},
+    plan: 'starter',
+  })
 })
 
 afterAll(() => {

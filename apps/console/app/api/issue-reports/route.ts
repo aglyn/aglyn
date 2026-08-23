@@ -29,7 +29,7 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   getOrgForUser,
-  getOrgReleaseFlagOverrides,
+  getOrgReleaseFlagTargeting,
   getServerReleaseFlagValues,
   isImpersonationSession,
   resolveOrgIdForHost,
@@ -187,9 +187,14 @@ async function releaseFlagsOnForOrg(
   orgId: string | null,
 ): Promise<string[] | null> {
   try {
-    const [values, overrides] = await Promise.all([
+    // Overrides AND the org's tier from ONE document read (AGL-2486). The
+    // report is meant to say what this org can actually reach, so it has to
+    // apply the same tier filter the product surfaces do — reading a
+    // `plans`-targeted flag as OFF here would put a triager onto a phantom
+    // bug for a feature the customer plainly has.
+    const [values, targeting] = await Promise.all([
       getServerReleaseFlagValues(),
-      getOrgReleaseFlagOverrides(orgId),
+      getOrgReleaseFlagTargeting(orgId),
     ])
     return RELEASE_FLAGS.filter((definition) =>
       isReleaseFlagOnForOrg(
@@ -200,7 +205,8 @@ async function releaseFlagsOnForOrg(
         // The registry default is what the gate itself falls back to.
         values?.[definition.key] ?? { enabled: definition.defaultEnabled },
         orgId,
-        overrides,
+        targeting.overrides,
+        targeting.plan,
       ),
     ).map((definition) => definition.key)
   } catch {

@@ -531,13 +531,26 @@ export function isReleaseFlagOnForOrg(
   subjectId: string | null | undefined,
   overrides: OrgReleaseFlagOverrides | null | undefined,
   /**
-   * The org's plan, for tier targeting (AGL-2486). Optional, and checked
-   * only AFTER the override: a staff grant is a decision about one named
-   * customer and outranks the tier filter exactly as it already outranks the
-   * rollout bucket. That ordering is what lets a Free org preview a
+   * The org's plan, for tier targeting (AGL-2486). Checked only AFTER the
+   * override: a staff grant is a decision about one named customer and
+   * outranks the tier filter exactly as it already outranks the rollout
+   * bucket. That ordering is what lets a Free org preview a
    * Business-targeted flag without widening the flag for every Free org.
+   *
+   * REQUIRED, and `null` has to be typed out. It was optional for one
+   * release and that cost a silent revenue bug: `report-usage` held the org
+   * document, dropped the argument, and every `plans`-declaring flag read
+   * OFF — so the contacts overage went uninvoiced for exactly the orgs
+   * entitled to reach the feature, with nothing thrown and nothing logged.
+   * An unknown tier still refuses, which is the correct conservatism; what
+   * cannot be allowed is a caller MANUFACTURING an unknown out of a tier it
+   * already has in hand. Spelling `null` makes that a statement rather than
+   * an omission, and makes the next call site that forgets fail to compile
+   * instead of failing to bill. `getOrgReleaseFlagTargeting` returns the
+   * plan beside the overrides from ONE document read precisely so that
+   * passing it costs nothing.
    */
-  plan?: OrgPlan | null,
+  plan: OrgPlan | null,
 ): boolean {
   const override = overrides?.[flagKey]
   if (typeof override === 'boolean') return override
