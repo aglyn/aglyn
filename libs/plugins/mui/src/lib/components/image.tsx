@@ -254,33 +254,33 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
               .join(', ')
           : undefined
       }
-      // `100vw` is the honest answer only for an image that really is full
-      // bleed, and almost none are. Measured on the live published page
-      // (AGL-2486): the hero sits in a 158px slot, `sizes="100vw"` made the
-      // browser select the largest candidate, and because the source is only
-      // 499px wide there is no WebP variant at that width — so it fell back
-      // to the 366 KB ORIGINAL. One lie about the slot cost both the right
-      // size and the right format.
+      // `sizes` is NOT only a delivery hint, and treating it as one broke every
+      // fluid image (AGL-2486). With `w` descriptors the browser derives the
+      // image's density-corrected INTRINSIC size from `sizes`, so `sizes` is
+      // what a CSS `width: 100%` resolves against whenever the containing block
+      // is content-sized — shrink-to-fit, inline-block, a flex item sized on its
+      // content. Measured in Chrome at a 1200px viewport with the author CSS
+      // `width:100%;height:auto;display:block`:
       //
-      // Three cases, in order:
+      //   parent                        sizes=100vw   sizes=auto
+      //   inline-block (shrink-to-fit)     1184px        300px
+      //   block / fixed-width flex          900px        900px
       //
-      // 1. A pinned pixel width describes the slot exactly. Best answer.
-      // 2. Otherwise, `sizes="auto"` hands the decision to the browser, which
-      //    resolves it against the element's REAL laid-out width — the only
-      //    correct answer for a width that cannot be read statically (`100%`,
-      //    `calc()`, or unset). In the same 158px slot this selects `?w=320`,
-      //    a variant that exists, instead of the original.
-      // 3. ...but `auto` is only defined for `loading="lazy"`. Verified in
-      //    Chrome: an EAGER image with `sizes="auto"` fell back to the bare
-      //    original exactly as `100vw` did. The LCP image is deliberately
-      //    eager, so it keeps `100vw` — overfetching, but never underfetching,
-      //    which is the wrong way to be wrong for the image the reader is
-      //    waiting on. Telling it its true slot needs the intrinsic size the
-      //    media reference deliberately does not carry.
+      // 300px is the spec's default object size, used because resolving `auto`
+      // against a content-sized parent is circular. So `sizes="auto"` — which
+      // genuinely does pick a better candidate, `?w=320` instead of a 357 KB
+      // original in a 158px slot — rendered those images tiny and centred in
+      // their box, on the canvas, in _preview and on published sites alike.
       //
-      // A browser without `auto` treats it as an invalid `sizes` and falls
-      // back to `100vw`, i.e. exactly today's behaviour.
-      sizes={isCdnUrl ? (pinnedWidth ?? (eager ? '100vw' : 'auto')) : undefined}
+      // A delivery win may not be paid for in layout, so this is back to
+      // `100vw`: it overfetches, but it is the value every published document
+      // was authored against. A pinned pixel width is still the better answer
+      // where the author gave one, because it is a definite length and cannot
+      // be circular. Getting image delivery right for fluid images needs the
+      // media pipeline (a WebP variant at source width) or real intrinsic
+      // `width`/`height` attributes from media metadata — neither of which
+      // perturbs layout the way `sizes` does.
+      sizes={isCdnUrl ? (pinnedWidth ?? '100vw') : undefined}
       // Unset alt keeps rendering `alt=""` exactly as it always has —
       // existing documents must not change output (AGL-1305). Decorative
       // ON forces `alt=""` over any alt text and suppresses the tooltip,

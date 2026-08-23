@@ -327,16 +327,27 @@ describe('Image sizes (AGL-2486)', () => {
     expect(container.querySelector('img')!.getAttribute('sizes')).toBe('320px')
   })
 
-  it('lets the browser measure a fluid slot on a lazy image', () => {
-    // `sizes="auto"` resolves to the element's REAL laid-out width, which is
-    // the only correct answer for a width we cannot read statically. Measured
-    // against the live CDN in a 158px slot at DPR 1.75: `100vw` selected the
-    // bare original (366 KB, no WebP variant at that width), `auto` selected
-    // `?w=320` — the variant that actually exists.
+  it('keeps 100vw for a fluid width, because sizes decides LAYOUT too', () => {
+    // REGRESSION (AGL-2486). `sizes` is not only a delivery hint: with `w`
+    // descriptors the browser derives the image's density-corrected INTRINSIC
+    // size from it, so `sizes` is what `width: 100%` resolves against whenever
+    // the containing block is content-sized (shrink-to-fit, inline-block, a
+    // flex item on its content size). Measured in Chrome, 1200px viewport,
+    // author CSS `width:100%;height:auto;display:block`:
+    //
+    //   parent                     sizes=100vw   sizes=auto
+    //   inline-block (shrink-fit)     1184px        300px   <-- broken
+    //   block / fixed-width flex       900px        900px
+    //
+    // 300px is the spec's default object size, used because `auto` against a
+    // content-sized parent is circular. That rendered every such image tiny
+    // and centred in its box on the besigner canvas, in _preview and on
+    // published sites — which is what `sizes="auto"` shipped and had to be
+    // reverted. A delivery win may not be paid for in layout.
     for (const width of [undefined, '100%', '50vw', 'calc(100% - 2rem)']) {
       const { container } = render(<Image src={CDN} alt="fluid" width={width} />)
       expect(container.querySelector('img')!.getAttribute('loading')).toBe('lazy')
-      expect(container.querySelector('img')!.getAttribute('sizes')).toBe('auto')
+      expect(container.querySelector('img')!.getAttribute('sizes')).toBe('100vw')
     }
   })
 
