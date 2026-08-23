@@ -17,9 +17,9 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { consoleThemeCssVar, ThemeProvider } from '@aglyn/shared-ui-theme'
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, render, waitFor } from '@testing-library/react'
 
-import ElementPreview from './element-preview.component'
+import ElementPreview, { subtreeHasInk } from './element-preview.component'
 
 const theme = consoleThemeCssVar
 
@@ -54,6 +54,17 @@ const CONTENTFUL_PRESET = {
   },
 }
 
+/** Renders a real but EMPTY element — the shape of `Toolbar Content`. */
+const HOLLOW_COMPONENT_ID = 'preview-spec-hollow'
+
+const HOLLOW_PRESET = {
+  $id: 'preview-spec-hollow-preset',
+  type: Aglyn.NodeType.PRESET,
+  displayName: 'Hollow',
+  category: Aglyn.ComponentCategory.NAVIGATION,
+  data: { $id: null, componentId: HOLLOW_COMPONENT_ID, props: {} },
+}
+
 const renderPreview = (node: any = PRESET) =>
   render(
     <ThemeProvider theme={theme}>
@@ -70,6 +81,15 @@ describe('ElementPreview (AGL-2486)', () => {
         pluginId: 'mui',
         displayName: 'Banner',
         category: Aglyn.ComponentCategory.LAYOUT,
+      } as Aglyn.ComponentSchema,
+    )
+    Aglyn.components.registerComponent(
+      (() => <div style={{ minHeight: 64 }} />) as any,
+      {
+        $id: HOLLOW_COMPONENT_ID,
+        pluginId: 'mui',
+        displayName: 'Hollow',
+        category: Aglyn.ComponentCategory.NAVIGATION,
       } as Aglyn.ComponentSchema,
     )
     Aglyn.components.registerComponent((() => null) as any, {
@@ -148,6 +168,66 @@ describe('ElementPreview (AGL-2486)', () => {
   it('renders nothing at all for an item with no nodes to draw', () => {
     const { container } = renderPreview({ $id: 'no-data', displayName: 'X' })
     expect(container.querySelector('[data-testid="element-preview"]')).toBeNull()
+  })
+
+  it('says so when the element renders but draws nothing visible', async () => {
+    // `Toolbar Content` composes a real 64px transparent row with no
+    // children. It renders CORRECTLY and looks exactly like the bug where
+    // nothing rendered — so the frame has to say which it is.
+    const { container } = renderPreview(HOLLOW_PRESET)
+    await waitFor(() => {
+      expect(
+        container.querySelector('[data-testid="element-preview-empty"]'),
+      ).toBeTruthy()
+    })
+    const note = container.querySelector(
+      '[data-testid="element-preview-empty"]',
+    )
+    expect(note.textContent.toLowerCase()).toContain(
+      'nothing to show on its own',
+    )
+  })
+
+  describe('the ink rule itself', () => {
+    const withShadow = (fill: (root: ShadowRoot) => void) => {
+      const host = document.createElement('div')
+      document.body.appendChild(host)
+      fill(host.attachShadow({ mode: 'open' }))
+      return host
+    }
+
+    it('does not count the shadow cache CSS as content', () => {
+      // Emotion inserts through `insertRule` under jest, so its style tags
+      // are EMPTY here while carrying real CSS in a browser. Driven directly
+      // rather than through a render, because a render cannot reproduce the
+      // browser's style text — which is precisely how the first version of
+      // this check shipped green and then failed in the app.
+      const host = withShadow((root) => {
+        const style = document.createElement('style')
+        style.textContent = '@media (min-width:600px){.x{color:red}}'
+        root.appendChild(style)
+        root.appendChild(document.createElement('div'))
+      })
+      expect((host.shadowRoot.textContent || '').trim()).not.toBe('')
+      expect(subtreeHasInk(host)).toBe(false)
+    })
+
+    it('counts real text, and media, as content', () => {
+      expect(
+        subtreeHasInk(
+          withShadow((root) => {
+            const el = document.createElement('div')
+            el.textContent = 'Your Brand'
+            root.appendChild(el)
+          }),
+        ),
+      ).toBe(true)
+      expect(
+        subtreeHasInk(
+          withShadow((root) => root.appendChild(document.createElement('img'))),
+        ),
+      ).toBe(true)
+    })
   })
 })
 

@@ -53,6 +53,15 @@ export interface ElementDetail {
   attributes: string[]
   /** Set only for components a plugin contributed. */
   pluginId?: string
+  /**
+   * Parents this element must sit inside, when its schema limits them.
+   *
+   * Derived from the same `restrictParent` the facts read. A preview uses it
+   * to explain itself: an element that only renders in context often draws
+   * nothing on its own, and an unexplained blank frame reads as a broken
+   * preview rather than as an honest one.
+   */
+  requiredParents: string[]
 }
 
 /** The mui bundle is the built-in set — not worth calling out as a plugin. */
@@ -224,6 +233,7 @@ export function describeElement(item: any): ElementDetail | null {
     description: item?.description || schema?.description || undefined,
     facts,
     attributes,
+    requiredParents: onlyParents,
     pluginId: pluginId && !BUILT_IN_PLUGIN_IDS.has(pluginId) ? pluginId : undefined,
   }
 }
