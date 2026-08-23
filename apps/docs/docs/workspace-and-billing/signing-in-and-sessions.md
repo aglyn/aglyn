@@ -31,6 +31,14 @@ profile, same workspaces, no duplicate account. Manage them under
 Your last remaining sign-in method can never be removed, so there's no way to lock
 yourself out.
 
+### Signing in with any of your addresses
+
+If you keep more than one [email address](manage-account.md#email-addresses) on your
+account, you can type **any confirmed one** on the sign-in page with your usual
+password — you don't have to remember which address the account was opened with.
+Unconfirmed addresses don't work here, and neither does an address on somebody else's
+account.
+
 **Single sign-on accounts are the exception.** If your company signs you in through
 its own identity provider, no other method can be linked — see
 [Manage Account](manage-account.md#sign-in-methods) for why, and for what happens

@@ -661,7 +661,7 @@ export type DocsHelpTopicKey = keyof typeof DOCS_HELP_TOPICS
 // headings appear; a topic absent here has no linkable anchors.
 export const DOCS_HELP_ANCHORS = {
   abuseReports: ['#where-reports-come-from', '#triage-by-severity', '#csam', '#which-lever', '#statuses', '#disclosure', '#dmca', '#counter-notices', '#counter-notice-clock', '#counter-notice-steps', '#repeat-infringers', '#repeat-infringer-threshold', '#known-gaps', '#related'],
-  account: ['#google-sign-in', '#sign-in-methods', '#resetting-your-password', '#one-session-across-workspaces', '#automatic-sign-out-after-inactivity', '#recent-sign-ins', '#when-we-do-not-email-you', '#signing-a-device-out', '#downloading-your-data', '#downloading-a-whole-workspace', '#closing-your-account'],
+  account: ['#google-sign-in', '#sign-in-methods', '#signing-in-with-any-of-your-addresses', '#resetting-your-password', '#one-session-across-workspaces', '#automatic-sign-out-after-inactivity', '#recent-sign-ins', '#when-we-do-not-email-you', '#signing-a-device-out', '#downloading-your-data', '#downloading-a-whole-workspace', '#closing-your-account'],
   actionsBuilder: ['#create-an-action', '#triggers', '#only-run-when-a-field-matches', '#chain-multiple-conditions-andor', '#steps', '#run-history', '#what-is-and-isnt-recorded', '#interactions-from-the-besigner', '#when-to-use-which', '#related'],
   addALocale: ['#steps', '#tips', '#related'],
   addOns: ['#what-you-can-add', '#assigning-register-seats', '#assigning-collaborator-seats', '#how-changes-bill', '#plan-switches-and-cancellation', '#related'],
@@ -726,7 +726,7 @@ export const DOCS_HELP_ANCHORS = {
   longFormMarkdown: ['#the-markdown-element', '#what-the-markdown-supports', '#the-table-of-contents-element', '#how-it-finds-the-markdown', '#heading-links', '#related'],
   maintenance: ['#is-the-job-still-running', '#running-a-job-by-hand', '#the-jobs', '#audit-archive', '#plugin-artifact-reaper', '#plugin-verdict-re-verification', '#jobs-that-live-elsewhere', '#related'],
   maintenanceMode: ['#turn-it-on', '#tips', '#related'],
-  manageAccount: ['#account', '#sign-in-methods', '#profile-image', '#basic-info', '#contact-details', '#security', '#related'],
+  manageAccount: ['#account', '#sign-in-methods', '#email-addresses', '#what-each-address-does', '#removing-an-address', '#if-your-organization-uses-single-sign-on', '#profile-image', '#basic-info', '#contact-details', '#security', '#related'],
   manifestAndEnvs: ['#plugin-manifest-published-with-every-version', '#listing--version-documents', '#review--trust-lifecycle', '#environment-variables', '#pluginsconfigjson-first-party-contributors'],
   marketingOverlays: ['#announcement-bar', '#promotional-popups', '#frequency', '#popup-v2', '#multiple-overlays-scheduling--page-targeting', '#engagement-stats', '#related'],
   media: ['#organize', '#tags', '#upload', '#size-and-plan-limits', '#edit-images', '#download-file', '#deliver-over-cdn', '#urls-are-stable', '#page-elements-point-at-the-asset-not-at-a-link', '#delivery-line', '#who-an-asset-is-shared-with', '#private-files', '#reference', '#variant-widths', '#tag-limits', '#over-the-api', '#components', '#related'],

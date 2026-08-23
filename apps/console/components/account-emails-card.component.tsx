@@ -181,7 +181,13 @@ export function AccountEmailsCard() {
   return (
     <CardDisplay
       header="Email addresses"
-      help={docsHelp('account', {
+      // `manageAccount#email-addresses`, not the sign-in page: this card's
+      // own documentation is a section, and the anchor is type-checked
+      // against that page's real headings, so a docs restructure breaks the
+      // build rather than the link (AGL-602).
+      help={docsHelp('manageAccount', {
+        anchor: '#email-addresses',
+        title: 'Email addresses',
         excerpt:
           'Add more than one address to your account. Any confirmed address ' +
           'can be used to sign in; your primary address receives receipts ' +
