@@ -645,8 +645,10 @@ export function consentModeSignals(grants: {
  * 1. The host asks about advertising at all. A record that says yes is
  *    ignored on a site that never turned the category on — which covers a
  *    host switching it back off, and covers a stale record generally.
- * 2. The record's status can carry a grant (an explicit accept, never an
- *    implied default).
+ * 2. The record's status can carry a grant — an explicit accept, or an
+ *    `implied` default, which AGL-2402 widened to qualify because such a
+ *    record can only ever be written in the OPT-OUT posture (see
+ *    {@link advertisingGrantedByStatus}). Every refusal status still refuses.
  * 3. The record actually says yes to this category.
  *
  * Absent, unreadable or legacy records all answer `false`, which is the same
