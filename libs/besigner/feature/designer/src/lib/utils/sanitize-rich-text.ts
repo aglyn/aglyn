@@ -78,10 +78,65 @@ function escapeAttribute(value: string): string {
   return escapeText(value).replace(/"/g, '&quot;')
 }
 
-/** Plain-text projection of markup, for the `children` fallback prop. */
+/**
+ * Tags that end the line they are on. `br` is the explicit one; the rest are
+ * the block-level members of {@link ALLOWED_TAGS}, which a contentEditable
+ * produces on its own — pressing Enter in the rich surface forks the DOM
+ * into `div`s, and that fork IS the author's line break.
+ */
+const LINE_BREAKING_TAGS = new Set(['BR', 'DIV', 'P', 'LI', 'UL', 'OL'])
+
+/**
+ * Plain-text projection of markup, for the `children` fallback prop.
+ *
+ * Line breaks SURVIVE (AGL-2486). Zach: *"I also still do not see the line
+ * break in the text field in the attributes panel"* — and he was right, on
+ * a node that really does carry one. Measured on `yFjgqiG2wm`, node
+ * `C3rodYc1Gd` stores `html: "Your entire web <div>presence. </div>"` beside
+ * `children: "Your entire web presence. "`. The canvas renders `html` and
+ * shows two lines; the Attributes panel renders `children` and showed one.
+ * They disagreed because this function was `template.content.textContent`,
+ * and `textContent` concatenates across every element boundary — a `<div>`
+ * fork and a `<br>` both vanish into nothing.
+ *
+ * So the panel was not lying about a soft wrap, as the earlier `h3` report
+ * genuinely was; it was displaying a projection that had silently dropped
+ * the break. `children` is not a display detail either: it is what every
+ * plain renderer, the SSR fallback and the panel field all read, so the
+ * break was being lost to all three.
+ *
+ * Only the trailing newline is trimmed — a block element closes at the end
+ * of the string and that boundary separates nothing.
+ */
 export function richTextToPlain(html: string): string {
   if (typeof document === 'undefined') return html
   const template = document.createElement('template')
   template.innerHTML = html
-  return template.content.textContent ?? ''
+  const parts: string[] = []
+  const endsOpen = () =>
+    parts.length > 0 && !parts[parts.length - 1]!.endsWith('\n')
+
+  const walk = (parent: Node): void => {
+    for (const child of Array.from(parent.childNodes)) {
+      if (child.nodeType === 3 /* TEXT_NODE */) {
+        parts.push(child.nodeValue ?? '')
+        continue
+      }
+      if (child.nodeType !== 1 /* ELEMENT_NODE */) continue
+      const element = child as Element
+      if (element.tagName === 'BR') {
+        parts.push('\n')
+        continue
+      }
+      const breaks = LINE_BREAKING_TAGS.has(element.tagName)
+      // A block that FOLLOWS content starts its own line; one that opens the
+      // string, or already sits after a break, does not add an empty one.
+      if (breaks && endsOpen()) parts.push('\n')
+      walk(element)
+      if (breaks && endsOpen()) parts.push('\n')
+    }
+  }
+
+  walk(template.content)
+  return parts.join('').replace(/\n+$/, '')
 }

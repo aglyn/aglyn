@@ -61,3 +61,55 @@ describe('richTextToPlain', () => {
     )
   })
 })
+
+/**
+ * AGL-2486 — the break the Attributes panel could not see.
+ *
+ * Zach: *"I also still do not see the line break in the text field in the
+ * attributes panel"*. Measured on `yFjgqiG2wm`, node `C3rodYc1Gd` stores
+ * `html: "Your entire web <div>presence. </div>"` beside
+ * `children: "Your entire web presence. "`. The canvas renders `html` and
+ * shows two lines; the panel renders `children` and showed one. The two
+ * disagreed because this projection was `textContent`, which concatenates
+ * across every element boundary — the `<div>` a contentEditable forks on
+ * Enter, and a `<br>`, both vanish into nothing.
+ *
+ * `children` is what every plain renderer, the SSR fallback and the panel
+ * field read, so the break was lost to all three, not just the display.
+ */
+describe('richTextToPlain keeps the author’s line breaks (AGL-2486)', () => {
+  it('keeps the break a contentEditable forks into a div', () => {
+    // The exact stored markup from yFjgqiG2wm / C3rodYc1Gd.
+    expect(richTextToPlain('Your entire web <div>presence. </div>')).toBe(
+      'Your entire web \npresence. ',
+    )
+  })
+
+  it('keeps an explicit br', () => {
+    expect(richTextToPlain('one<br>two')).toBe('one\ntwo')
+  })
+
+  it('separates consecutive blocks with exactly one newline', () => {
+    expect(richTextToPlain('<div>one</div><div>two</div>')).toBe('one\ntwo')
+  })
+
+  it('does not open the string with an empty line', () => {
+    expect(richTextToPlain('<p>only</p>')).toBe('only')
+  })
+
+  it('keeps list items on their own lines', () => {
+    expect(richTextToPlain('<ul><li>one</li><li>two</li></ul>')).toBe(
+      'one\ntwo',
+    )
+  })
+
+  it('leaves inline formatting joined, because it does not break a line', () => {
+    expect(richTextToPlain('a <strong>bold</strong> word')).toBe(
+      'a bold word',
+    )
+  })
+
+  it('is unchanged for markup that never breaks', () => {
+    expect(richTextToPlain('plain text')).toBe('plain text')
+  })
+})
