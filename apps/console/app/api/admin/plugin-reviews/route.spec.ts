@@ -793,6 +793,16 @@ describe('the element-metadata criterion gates the customer-facing verdicts', ()
     expect(item?.detail).toMatch(/picker/i)
   })
 
+  it('covers the fields that RANK, not only the ones that render', () => {
+    const item = mockChecklist.PLUGIN_REVIEW_CHECKLIST.find(
+      (entry: { id: string }) => entry.id === 'element-metadata',
+    )
+    // Search terms decide which element a customer is shown and never appear
+    // on screen, so an item written around "read the description" sends a
+    // reviewer looking at the half of the copy that is hardest to abuse.
+    expect(item?.detail).toMatch(/search|keyword|rank/i)
+  })
+
   it('refuses to APPROVE a version when only element-metadata is outstanding', async () => {
     seedListing()
     seedVersionWithout('element-metadata')

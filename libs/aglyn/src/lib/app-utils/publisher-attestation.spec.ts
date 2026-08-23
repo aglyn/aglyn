@@ -94,6 +94,19 @@ describe('publisher attestation (AGL-969)', () => {
       expect(`${item?.label} ${item?.detail}`).toMatch(/element/i)
     })
 
+    /**
+     * The element fields that never render (AGL-2486).
+     *
+     * `tags` and `keywords` are searched by the picker's ranking, so they
+     * decide which element a customer is SHOWN without ever appearing on
+     * screen. A sentence about what an element "says about itself" does not
+     * obviously reach a competitor's name stuffed into a search term, and a
+     * publisher can only be held to what they were asked.
+     */
+    it('reaches text that RANKS as well as text that renders', () => {
+      expect(`${item?.label} ${item?.detail}`).toMatch(/rank|search/i)
+    })
+
     it('still keeps its id, so attestations already stored still count', () => {
       // The id is what a stored tick is keyed by (see `attestationsForBytes`).
       // Renaming it to something truer to the widened wording would silently

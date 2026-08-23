@@ -66,15 +66,14 @@ interface VersionEntry {
   capabilities: { network?: string[]; events?: string[] }
   /**
    * Canvas elements this version declares (AGL-1031) — publisher-authored
-   * copy the besigner renders in the element picker, and the subject of the
-   * `element-metadata` criterion (AGL-2486).
+   * text the besigner renders in the element picker AND ranks its search on,
+   * and the subject of the `element-metadata` criterion (AGL-2486).
+   *
+   * Deliberately untyped past the entry itself. The page prints whatever the
+   * manifest holds rather than the fields it knew about when it was written,
+   * so a reviewer keeps seeing everything the publisher wrote.
    */
-  elements?: Array<{
-    id: string
-    displayName?: string
-    description?: string
-    category?: string
-  }>
+  elements?: Array<Record<string, unknown>>
   publishedAt: string | null
   signed: boolean
   reviewState: string
@@ -378,6 +377,42 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
       'https://console.cloud.google.com/storage/browser/_details/' +
       `${detail.artifactsBucket}/${object}`
     )
+  }
+
+  /**
+   * Every string a publisher wrote on one declared element (AGL-2486).
+   *
+   * Derived by WALKING the entry rather than by reading named fields, so text
+   * added to the manifest later — the way `tags` and `keywords` became
+   * searched after `description` became rendered — shows up here without
+   * anyone remembering this page. The criterion asks a reviewer to check the
+   * publisher's text, so the page has to show all of it, including the search
+   * terms that rank without ever rendering.
+   */
+  const publisherTextOf = (element: Record<string, unknown>): string[] => {
+    const lines: string[] = []
+    const walk = (value: unknown, path: string) => {
+      if (lines.length >= 40) return
+      if (typeof value === 'string') {
+        if (value.trim()) lines.push(`${path}: ${value}`)
+        return
+      }
+      if (Array.isArray(value)) {
+        value.forEach((entry, index) => walk(entry, `${path}[${index}]`))
+        return
+      }
+      if (value && typeof value === 'object') {
+        for (const [key, entry] of Object.entries(value)) {
+          walk(entry, `${path}.${key}`)
+        }
+      }
+    }
+    for (const [key, value] of Object.entries(element ?? {})) {
+      // The icon is an mdi NAME looked up in our own set, not publisher prose.
+      if (key === 'id' || key === 'icon') continue
+      walk(value, key)
+    }
+    return lines
   }
 
   const checklistLink = (
@@ -773,21 +808,33 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                     <Typography variant="body2" color="text.secondary">
                       {`Declared elements: ${
                         reviewVersionEntry?.elements?.length ?? 0
-                      } — this text renders in the element picker, not on the listing.`}
+                      } — publisher text the picker renders and ranks its search on, none of it on the listing page.`}
                     </Typography>
                     {(reviewVersionEntry?.elements ?? []).map((element) => (
-                      <Typography
-                        key={element.id}
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ pl: 1 }}
-                      >
-                        {`${element.displayName || element.id}${
-                          element.category ? ` · ${element.category}` : ''
-                        }${
-                          element.description ? ` — ${element.description}` : ''
-                        }`}
-                      </Typography>
+                      <Stack key={String(element['id'])} sx={{ pl: 1 }}>
+                        <Typography variant="caption" color="text.secondary">
+                          {`${String(element['displayName'] || element['id'])}${
+                            element['category']
+                              ? ` · ${String(element['category'])}`
+                              : ''
+                          }`}
+                        </Typography>
+                        {publisherTextOf(element).map((line) => (
+                          <Typography
+                            key={line}
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{
+                              pl: 1,
+                              fontFamily: 'monospace',
+                              fontSize: 11,
+                              wordBreak: 'break-word',
+                            }}
+                          >
+                            {line}
+                          </Typography>
+                        ))}
+                      </Stack>
                     ))}
                   </Stack>
                   {/* "No findings" and "never checked" must not look the

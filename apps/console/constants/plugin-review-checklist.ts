@@ -106,13 +106,21 @@ export const PLUGIN_REVIEW_CHECKLIST: readonly ReviewChecklistItem[] = [
   /**
    * The publisher copy the listing page never shows (AGL-2486).
    *
-   * A plugin declares canvas elements in its manifest (AGL-1031), each with a
-   * display name and a description the besigner renders in the element
-   * picker. That text is publisher-authored, it ships inside the bundle
-   * rather than in the listing, and it lands closer to the customer's own
-   * work than the listing ever does. `positioning` above is written as "read
-   * the listing the way a customer would" — worked exactly as written, it
-   * finishes without this copy ever having been read.
+   * A plugin declares canvas elements in its manifest (AGL-1031), each
+   * carrying publisher-authored text the besigner uses: a display name and
+   * description it renders in the picker, and search terms the picker RANKS
+   * on. That text ships inside the bundle rather than in the listing, and it
+   * lands closer to the customer's own work than the listing ever does.
+   * `positioning` above is written as "read the listing the way a customer
+   * would" — worked exactly as written, it finishes without this copy ever
+   * having been read.
+   *
+   * Scoped to the capability — text that renders in, or ranks within, the
+   * console — rather than to today's field names, which have already changed
+   * once: `tags` and `keywords` became searched days after `description`
+   * became rendered. Ranked-but-unrendered text is the half a reviewer will
+   * not think to look for, and the half where a competitor's name or a plan
+   * name does its work unseen.
    *
    * Its own item rather than a sentence bolted onto `positioning`, because it
    * is a different ACTION in a different place. Folded into one tick, "I read
@@ -121,9 +129,9 @@ export const PLUGIN_REVIEW_CHECKLIST: readonly ReviewChecklistItem[] = [
    */
   {
     id: 'element-metadata',
-    label: 'Declared element names and descriptions read in the picker',
+    label: 'Publisher text on declared elements read in the picker',
     detail:
-      `Element copy is not on the listing page — it ships in the manifest's \`elements\` array (shown in Security above) and renders in the besigner element picker. Read it where a customer meets it: on the throwaway install from the item above, open the besigner and the element picker, and read every entry this plugin contributes. Same bar as the listing — saying what the element does is fine, quoting what a ${PLATFORM_BRAND_NAME} plan costs or pitching it as a way to skip an upgrade is not. If the version declares no elements, confirm that from Security rather than assuming it.`,
+      `None of this is on the listing page — it ships in the manifest's \`elements\` array, printed in full under Security above, and reaches the customer in the besigner element picker. Read all of it, not only the description: names, tags and search keywords are RANKED, so a competitor's name or a plan name buried in a search term steers what a customer is shown without ever appearing on screen. Then read it where a customer meets it — on the throwaway install from the item above, open the element picker and search the terms it declares. Same bar as the listing: saying what the element does is fine, quoting what a ${PLATFORM_BRAND_NAME} plan costs or pitching it as a way to skip an upgrade is not. If the version declares no elements, confirm that from Security rather than assuming it.`,
     required: true,
   },
   {
