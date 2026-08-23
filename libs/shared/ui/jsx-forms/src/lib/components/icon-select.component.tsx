@@ -15,12 +15,19 @@
  * limitations under the License.
  */
 
-import { DEFAULT_ICON, type Icon, mdiChevronDown, mdiChevronUp } from '@aglyn/shared-data-mdi'
+import {
+  DEFAULT_ICON,
+  type Icon,
+  mdiCheck,
+  mdiChevronDown,
+  mdiChevronUp,
+} from '@aglyn/shared-data-mdi'
 import { CardListItem, MdiIcon, useMdiIconsFuzzy } from '@aglyn/shared-ui-jsx'
 import { GridList } from '@aglyn/shared-ui-jsx/components/grid-list'
 import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
 import { useDebouncedCallback } from '@aglyn/shared-util-vendor'
 import {
+  Box,
   Button,
   ButtonBase,
   Collapse,
@@ -35,6 +42,7 @@ import {
   forwardRef,
   type HTMLAttributes,
   useCallback,
+  useEffect,
   useMemo,
   useState,
 } from 'react'
@@ -128,7 +136,21 @@ export const IconSelectControl = forwardRef<any, IconSelectControlProps>(
     } = props
     const [open, setOpen] = useState(false)
     const [icons, allIcons, applyFilter, clearFilter] = useMdiIconsFuzzy()
-    const [selected, setSelected] = useState(() => currentValue)
+    /**
+     * The DRAFT pick (AGL-2486). Picking is two steps: clicking an icon only
+     * moves this, and `Choose` is the one thing that reaches `onChange` and
+     * therefore the canvas.
+     */
+    const [selected, setSelected] = useState(currentValue)
+    /**
+     * Re-seeded from the live value whenever the panel opens or the value
+     * changes underneath. Without this an abandoned pick survived the panel
+     * being closed, so the NEXT `Choose` applied an icon the author had
+     * already walked away from.
+     */
+    useEffect(() => {
+      setSelected(currentValue)
+    }, [currentValue, open])
 
     // Rendering all ~6,600 icons at once froze the panel (AGL-340): cap the
     // grid and let search narrow the rest.
@@ -151,10 +173,20 @@ export const IconSelectControl = forwardRef<any, IconSelectControlProps>(
     const handleButtonClick = useCallback(() => {
       setOpen((prev) => !prev)
     }, [setOpen])
+    /** Nothing to confirm until the draft differs from what is applied. */
+    const hasPendingPick = selected !== currentValue
+    const handleCancelButtonClick = useCallback(() => {
+      // Closing re-seeds the draft (the effect above), so this only has to
+      // close — but it says so explicitly, because "cancel leaves the canvas
+      // alone" is the guarantee, not an emergent property of an effect.
+      setSelected(currentValue)
+      setOpen(false)
+    }, [currentValue])
     const handleChooseButtonClick = useCallback(() => {
+      if (selected === currentValue) return
       onChange?.(selected)
-      setOpen((prev) => !prev)
-    }, [onChange, selected])
+      setOpen(false)
+    }, [onChange, selected, currentValue])
     const updateFilter = useDebouncedCallback((value?: string) => {
       if (value) {
         applyFilter(value)
@@ -182,6 +214,7 @@ export const IconSelectControl = forwardRef<any, IconSelectControlProps>(
 
     const renderItemContent = useCallback(
       function RenderItemContent(item: Icon, key: number) {
+        const isSelected = Boolean(selected) && selected === item.id
         return (
           <Tooltip
             key={item.id ?? key}
@@ -192,12 +225,36 @@ export const IconSelectControl = forwardRef<any, IconSelectControlProps>(
           >
             <CardListItem
               item={item}
-              selected={selected && selected === item.id}
+              selected={isSelected}
+              // A real toggle, so the pick is announced and not only
+              // painted (AGL-2486).
+              role="button"
+              aria-pressed={isSelected}
               onClick={(e) => handleItemClick(e, item)}
             >
               <div>
                 <MdiIcon fontSize="medium" path={item.path} />
               </div>
+              {isSelected ? (
+                // Belt and braces on the fill: a tick reads as "picked"
+                // even where the tint is subtle, and gives the state
+                // something to assert against.
+                <Box
+                  data-aglyn-icon-selected=""
+                  sx={{
+                    position: 'absolute',
+                    top: 2,
+                    right: 2,
+                    lineHeight: 0,
+                    fontSize: 14,
+                    borderRadius: '50%',
+                    bgcolor: 'primary.contrastText',
+                    color: 'primary.main',
+                  }}
+                >
+                  <MdiIcon fontSize="inherit" path={mdiCheck.path} />
+                </Box>
+              ) : null}
             </CardListItem>
           </Tooltip>
         )
@@ -266,10 +323,25 @@ export const IconSelectControl = forwardRef<any, IconSelectControlProps>(
                 <Typography component="div" variant="body2">
                   Selected icon: <b>{selectedIcon.name}</b>
                 </Typography>
+                <Typography
+                  component="div"
+                  variant="caption"
+                  color="text.secondary"
+                >
+                  {hasPendingPick
+                    ? `Not applied yet — press Choose to replace ${currentIcon.name}.`
+                    : 'Pick an icon, then press Choose to apply it.'}
+                </Typography>
+              </Grid>
+              <Grid>
+                <Button color="inherit" onClick={handleCancelButtonClick}>
+                  Cancel
+                </Button>
               </Grid>
               <Grid>
                 <Button
                   color="primary"
+                  disabled={!hasPendingPick}
                   onClick={handleChooseButtonClick}
                   variant="contained"
                 >

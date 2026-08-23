@@ -238,15 +238,28 @@ export function toggleNodeExpansion(node: Aglyn.NodeSchema<any>) {
   return expandNode(node)
 }
 
+/**
+ * What a click on a node means, in the hierarchy and on the canvas alike.
+ *
+ * Toggling belongs to Cmd/Ctrl-click — which is exactly what
+ * `multiSelection` means at both call sites, and what both of their comments
+ * already claimed. A PLAIN click always selects (AGL-2486): it used to
+ * toggle, so clicking the row of a node that was already selected DESELECTED
+ * it, and since the hierarchy's expansion is derived from the selection
+ * (`allExpanded`), the tree then collapsed to the document root and the row
+ * vanished from under the pointer. Every way of putting a new element on the
+ * canvas leaves it selected, so "add an element, then click it in the
+ * hierarchy" hit this every time.
+ */
 export function handleNodeSelection(
   node: Aglyn.NodeSchema<any>,
   multiSelection = false,
 ) {
-  if (isNodeSelected(node)) {
+  if (multiSelection && isNodeSelected(node)) {
     deselectNode(node, multiSelection)
-  } else {
-    setSelectedNode(node, multiSelection)
+    return
   }
+  setSelectedNode(node, multiSelection)
 }
 
 export function deselectNode(
@@ -268,7 +281,13 @@ export function setSelectedNode(
   node: Aglyn.NodeSchema<any>,
   multiSelection = false,
 ) {
-  if (isNodeSelected(node)) return
+  // Already the sole selection, or already a member of a multi-selection
+  // being added to: nothing to do. A plain (single) select of a node that is
+  // one of SEVERAL still has work — it collapses the selection down to that
+  // node — so it deliberately falls through.
+  if (isNodeSelected(node) && (multiSelection || state.selected.length === 1)) {
+    return
+  }
   runInAction(() => {
     if (multiSelection) state.selected.push(node)
     else state.selected = [node]

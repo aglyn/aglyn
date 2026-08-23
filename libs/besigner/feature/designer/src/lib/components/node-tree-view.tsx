@@ -152,16 +152,46 @@ const TreeView = styled(MuiList)<MuiListProps>(({ theme }) => ({
 }))
 TreeView.displayName = 'TreeView'
 
+/**
+ * Per-level alpha of the hierarchy's depth tint, and how many levels paint
+ * one at all (AGL-2486).
+ *
+ * The tint COMPOSITES: every ancestor of the selection paints its own, so
+ * the row at depth n sits on n stacked overlays. The previous ramp
+ * (`0.2 - 1 / (1 << depth)`) had no level cap, so light mode walked all the
+ * way toward the dark ink — measured against the console theme it crossed
+ * WCAG AA at the seventh level (3.85:1) and reached 1.33:1 by the twelfth,
+ * which is the "unreadable at depth" report. Dark mode was never affected:
+ * the same darkening moves AWAY from light text, which is why it looked
+ * right and why the tint is still drawn in the same direction in both
+ * schemes — it is the CAP, not the direction, that was missing.
+ *
+ * Bounded at `1 - (1 - STEP) ** MAX_LEVELS`, no matter how deep the tree
+ * goes. `hierarchy-depth-contrast.spec.ts` measures what that leaves.
+ */
+export const HIERARCHY_DEPTH_TINT_STEP = 0.05
+export const HIERARCHY_DEPTH_TINT_MAX_LEVELS = 5
+
+/** Alpha this one nesting level contributes; 0 once the ramp is capped. */
+export function hierarchyDepthTintAlpha(depth: number): number {
+  // `strictNullChecks` is off repo-wide, so compare rather than truth-test.
+  if (!(depth >= 1)) return 0
+  return depth <= HIERARCHY_DEPTH_TINT_MAX_LEVELS
+    ? HIERARCHY_DEPTH_TINT_STEP
+    : 0
+}
+
 const TreeItem = styled(MuiListItem, {
   shouldForwardProp(propName) {
     return propName !== 'depth'
   },
 })<MuiListItemProps & { depth: number }>((styles) => {
-  const { theme, depth = 1 } = styles
-  const depthOpacity = 0.2 - 1 / (1 << depth)
+  const { depth = 1 } = styles
+  const depthOpacity = hierarchyDepthTintAlpha(depth)
+  if (!(depthOpacity > 0)) return {}
   return {
     [`&:has(.${classKey.subTreeView}):has(.${classKey.itemSelected})`]: {
-      backgroundColor: `rgba(0 0 0 / ${depthOpacity < 0 ? 0 : depthOpacity})`,
+      backgroundColor: `rgba(0 0 0 / ${depthOpacity})`,
     },
   }
 })
