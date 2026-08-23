@@ -77,6 +77,14 @@ export interface LockdownWriteOptions {
    * that has never heard of it stays correct.
    */
   mode?: 'full' | 'read-only'
+  /**
+   * What happens if the carrier cannot be READ (AGL-1621). Written to
+   * `suspendedEnforcement` ONLY for `takedown`; a standard lock deletes the
+   * key, so its carrier is identical to one written before this field
+   * existed and absent keeps meaning fail-open — the shipped behaviour and
+   * the safe default.
+   */
+  enforcement?: 'standard' | 'takedown'
 }
 
 /**
@@ -185,6 +193,9 @@ export async function applyOrgLockdown(options: {
         ...(options.lock?.mode === 'read-only'
           ? { suspendedMode: 'read-only' }
           : { suspendedMode: FieldValue.delete() }),
+        ...(options.lock?.enforcement === 'takedown'
+          ? { suspendedEnforcement: 'takedown' }
+          : { suspendedEnforcement: FieldValue.delete() }),
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },
@@ -198,6 +209,7 @@ export async function applyOrgLockdown(options: {
         suspendedMessage: FieldValue.delete(),
         suspendedUntilMs: FieldValue.delete(),
         suspendedMode: FieldValue.delete(),
+        suspendedEnforcement: FieldValue.delete(),
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },
@@ -321,6 +333,9 @@ export async function applyHostLockdown(options: {
         ...(options.lock?.mode === 'read-only'
           ? { suspendedMode: 'read-only' }
           : { suspendedMode: FieldValue.delete() }),
+        ...(options.lock?.enforcement === 'takedown'
+          ? { suspendedEnforcement: 'takedown' }
+          : { suspendedEnforcement: FieldValue.delete() }),
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },
@@ -333,6 +348,7 @@ export async function applyHostLockdown(options: {
         suspendedMessage: FieldValue.delete(),
         suspendedUntilMs: FieldValue.delete(),
         suspendedMode: FieldValue.delete(),
+        suspendedEnforcement: FieldValue.delete(),
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },

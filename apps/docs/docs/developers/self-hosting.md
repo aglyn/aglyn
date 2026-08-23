@@ -433,14 +433,33 @@ readers to us and told them our uptime was yours, which is a false all-clear
 during your own outage.
 
 `DOCS_STATUS_TARGETS` is a comma-separated list of
-`name|label|origin|description` entries. A name and an origin are required;
-the description may be omitted and an empty label falls back to the name, so
-`console||https://console.example.com` is a valid entry:
+`name|label|origin|description|path` entries. A name and an origin are
+required; the description may be omitted and an empty label falls back to the
+name, so `console||https://console.example.com` is a valid entry:
 
 ```
 DOCS_STATUS_TARGETS='console|Console|https://console.example.com,sites|Published sites|https://sites.example.com'
 ```
 
+The fifth field is the health path to probe, and defaults to `/api/health`.
+Point a target at a subsystem endpoint when the aggregate is not the signal you
+want a visitor to see — `/api/health` proves the app is serving, while
+`/api/health/render/site` proves a real page still renders:
+
+```
+DOCS_STATUS_TARGETS='rendering|Site rendering|https://sites.example.com|A real page renders|/api/health/render/site'
+```
+
+Two things the grammar cannot do, both of which fail quietly rather than
+loudly: **a description may not contain a comma** (the comma separates
+entries, so the text after it is parsed as a new entry, found to have no
+origin, and dropped), and a path that does not begin with `/` is ignored in
+favour of `/api/health` rather than pasted onto the origin.
+
+Whatever you configure, the page reports a service as operational **only**
+when it answers 200 with the platform's own health body. A reply it cannot
+read — a bot-protection challenge, a proxy error page, a redirect — is shown
+as *no reading*, never as healthy, and never as an outage either.
 If you point `DOCS_ERROR_BEACON_ENDPOINT` at your own console's `/api/errors`,
 set `NEXT_PUBLIC_DOCS_ORIGIN` on that **console** to your docs origin as well —
 the collector's CORS allowlist reads it.

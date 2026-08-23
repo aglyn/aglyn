@@ -550,6 +550,25 @@ describe('continuePath cannot leave the origin', () => {
     expect(safeContinuePath(null)).toBe('/')
   })
 
+  /**
+   * AGL-1881. The list above was the whole guard and it was incomplete: the
+   * URL parser strips tab, LF and CR before parsing, so these carry neither
+   * `//` nor `\` and still resolve off-site. That matters most HERE — the
+   * handoff lands the user immediately after minting their session.
+   */
+  it.each([
+    ['a tab in the authority', '/\t/evil.example'],
+    ['a newline in the authority', '/\n/evil.example'],
+    ['a carriage return in the authority', '/\r/evil.example'],
+    ['a tab concealing a backslash', '/\t\\evil.example'],
+  ])('refuses %s, which no character check caught', (_label, candidate) => {
+    // The resolution first, so the assertion below is not a claim.
+    expect(new URL(candidate, 'https://console.acme.com').origin).toBe(
+      'https://evil.example',
+    )
+    expect(safeContinuePath(candidate)).toBe('/')
+  })
+
   it('sanitises on the way IN, so a stored record cannot carry one', async () => {
     const started = await startConsoleHandoff({
       targetHost: HOST,

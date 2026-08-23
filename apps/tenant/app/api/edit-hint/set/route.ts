@@ -15,6 +15,12 @@
  * limitations under the License.
  */
 
+// lockdown-423: exempt — the landing half of the login-time cookie bounce. It
+// verifies a signed blob and plants two browser cookies on `.aglyn.app`; no
+// Firestore read, no Firestore write, no org data. The hint is worthless on its
+// own — it names a uid and nothing more — and is redeemed at
+// `/api/edit-access/exchange`, which is where the lockdown verdict runs.
+
 import { TENANT_APEX } from '@aglyn/aglyn/server'
 import {
   EDIT_HINT_COOKIE,

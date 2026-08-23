@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { type PluginJobHostGate } from '@aglyn/aglyn/server'
 import { firebaseAdmin, notifyHostManagers } from '@aglyn/tenant-data-admin'
 import * as CommerceModel from '../model'
 
@@ -377,6 +378,8 @@ export interface StockReconciliationScan {
   missingLines: number
   reportedOrders: number
   truncatedHosts: number
+  /** Hosts left unreconciled because they are locked (AGL-2495). */
+  skippedLocked: number
 }
 
 /**
@@ -389,10 +392,14 @@ export interface StockReconciliationScan {
  * in the plugin stamps `createdAtMs` (cart, buy-now, draft, POS cash, POS
  * card, subscription cycle), so nothing is invisible to the ordering.
  */
-export async function scanStockDecrements(options?: {
-  orderLimit?: number
-  nowMs?: number
-}): Promise<StockReconciliationScan> {
+export async function scanStockDecrements(
+  /** The lockdown gate, injected by the caller (AGL-2495). Not optional. */
+  gate: PluginJobHostGate,
+  options?: {
+    orderLimit?: number
+    nowMs?: number
+  },
+): Promise<StockReconciliationScan> {
   const firestore = firebaseAdmin.app().firestore()
   const snapshot = await firestore
     .collectionGroup('orders')
@@ -409,6 +416,7 @@ export async function scanStockDecrements(options?: {
     missingLines: 0,
     reportedOrders: 0,
     truncatedHosts: 0,
+    skippedLocked: 0,
   }
   if (!snapshot) return scan
   const hostIds = new Set<string>()
@@ -421,6 +429,19 @@ export async function scanStockDecrements(options?: {
   }
   scan.hosts = hostIds.size
   for (const hostId of hostIds) {
+    // LOCKDOWN (AGL-2495). This pass posts a console notification and stamps
+    // the order timeline, so it is a write for the host — and on a site taken
+    // down for abuse or a legal order, telling its managers about stock is
+    // both a mutation and a message the takedown was meant to stop.
+    //
+    // SKIPPED, NOT DROPPED: the reconciliation is a DETECTOR with no cursor.
+    // It re-derives everything from the last N orders on every beat, so a
+    // host skipped now is reconciled in full on the first hourly beat after
+    // the lift, and nothing it would have found is lost by waiting.
+    if (await gate.isLocked(hostId)) {
+      scan.skippedLocked += 1
+      continue
+    }
     const result = await reconcileHostStockDecrements({
       firestore,
       hostRef: firestore.collection('hosts').doc(hostId),

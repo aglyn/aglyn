@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+// lockdown-423: via libs/tenant/data/admin/src/lib/server/edit-access-authz.ts
+// `editAccessMintRefusal` asks the verdict at `intent: 'write'` before this route
+// mints anything, so a locked host issues no new edit-access tokens.
+
 import { TENANT_APEX } from '@aglyn/aglyn/server'
 import {
   EDIT_HINT_COOKIE,

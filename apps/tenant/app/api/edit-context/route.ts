@@ -15,6 +15,13 @@
  * limitations under the License.
  */
 
+// lockdown-423: exempt — read-only projection for the admin edit bar; it composes
+// nothing and writes nothing. The capability it reports on is gated at the MINT:
+// both `/api/edit-access/token` (console) and `/api/edit-access/exchange` run
+// `editAccessMintRefusal`, which asks the verdict at `intent: 'write'`, so a lock
+// stops new edit tokens being issued. This route only describes what an already
+// issued token may see, and the console it points at refuses the writes itself.
+
 import {
   buildRoute,
   checkEntitlement,

@@ -15,6 +15,11 @@
  * limitations under the License.
  */
 
+// lockdown-423: exempt — this IS the lockdown notice surface. The middleware
+// rewrites every path of a locked host here to serve the 503, so refusing it under
+// a lock would replace the takedown notice with nothing. Same reasoning as the
+// console's notice exemption: the page that explains the lock has to outlive it.
+
 /**
  * The lockdown notice page (AGL-1501): a REAL **503** with `Retry-After`,
  * served by the middleware rewrite for every path of a locked host.

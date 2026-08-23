@@ -15,6 +15,12 @@
  * limitations under the License.
  */
 
+// lockdown-423: exempt — pure request-header echo. It reads `x-vercel-ip-country`
+// off the incoming request and returns a country code; it touches no host doc, no
+// org doc and no Firestore collection, so there is nothing here for a lock to
+// pause. Refusing it would only push the consent posture to opt-in on a locked
+// site, which is a privacy default, not an enforcement.
+
 import type { NextRequest } from 'next/server'
 import {
   GEO_COUNTRY_HEADER,

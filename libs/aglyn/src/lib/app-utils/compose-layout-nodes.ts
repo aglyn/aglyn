@@ -17,6 +17,7 @@
 
 import type { AglynNodeSchema, NodeId } from '../foundation'
 import { NODE_ROOT_ID } from '../canvas-manager/canvas-manager'
+import { COMPONENT_NODE_ID_PREFIX } from './compose-reusable-components'
 
 /** Persisted component id of the layout content outlet (plugins-mui). */
 export const LAYOUT_SLOT_COMPONENT_ID = 'layoutSlot'
@@ -58,6 +59,60 @@ export const LAYOUT_NODE_ID_PREFIXES = Array.from(
   { length: MAX_LAYOUT_CHAIN_DEPTH },
   (_unused, index) => layoutNodeIdPrefix(index + 1),
 )
+
+/**
+ * Whether a composed node id came from the LAYOUT chain rather than from the
+ * screen (AGL-1871).
+ *
+ * Composition namespaces ids by origin and nothing else does: a layout node
+ * is `layout__{id}` (`layout2__` … `layout5__` further up the chain, see
+ * {@link layoutNodeIdPrefix}) while a screen node keeps its raw canvas id. A
+ * reusable component grafted onto either one wears its host's id inside its
+ * own namespace — the marketing nav really ships as
+ * `cmp__layout__52Ef-3t6yd___R91yATrXH` — so the graft prefixes are peeled
+ * before the origin is read, and a graft nested in a graft peels the same way.
+ *
+ * A raw canvas id cannot collide with this: nanoid emits a single token with
+ * no `__` boundary in it, so `layout__` can only be a prefix that composition
+ * put there.
+ */
+export function isLayoutComposedNodeId(id: string | undefined | null): boolean {
+  let value = String(id ?? '')
+  while (value.startsWith(COMPONENT_NODE_ID_PREFIX)) {
+    value = value.slice(COMPONENT_NODE_ID_PREFIX.length)
+  }
+  return LAYOUT_NODE_ID_PREFIXES.some((prefix) => value.startsWith(prefix))
+}
+
+/**
+ * Whether a composed tree contains anything the SCREEN put there (AGL-1871).
+ *
+ * `composeLayoutAndScreenNodes` always answers with a populated map when the
+ * host has a layout, because the layout chrome is in it whether or not the
+ * screen contributed a single node. So "compose returned nodes" is not the
+ * same question as "this screen has a page on it", and code that treats the
+ * two as one renders a header and a footer around nothing.
+ *
+ * That is not hypothetical. Measured on `aglyn.com` 2026-08-23, the published
+ * *"Not found (404)"* screen composed to **297 nodes, every one of them layout
+ * chrome**, with the `layoutSlot` holding an empty child list — the screen was
+ * routed, published and completely empty. The 404 boundary read the 297 as
+ * "the site has a designed 404", declined its own fallback, and every unmatched
+ * URL on the site served branding wrapped around a blank page.
+ *
+ * The root node is not evidence — composition synthesizes one for an empty
+ * screen — so it is excluded.
+ */
+export function hasScreenAuthoredNodes(
+  nodes: Record<string, unknown> | null | undefined,
+): boolean {
+  if (!nodes) return false
+  for (const id of Object.keys(nodes)) {
+    if (id === NODE_ROOT_ID) continue
+    if (!isLayoutComposedNodeId(id)) return true
+  }
+  return false
+}
 
 type NormalizedNodes<N extends AglynNodeSchema> = Record<NodeId, N>
 

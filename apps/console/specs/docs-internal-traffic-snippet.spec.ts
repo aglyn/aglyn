@@ -55,9 +55,14 @@ describe('the docs internal-traffic snippet (AGL-2064)', () => {
 
   it('is queued INTO the head snippet that defines gtag', () => {
     // The snippet assumes a `gtag` function exists and pushes into the same
-    // dataLayer the preset's own script later reads. In a headTag of its own
-    // it would throw on an undefined `gtag` and take `content_group` with it.
-    const head = source.slice(source.indexOf('headTags:'))
+    // dataLayer the preset's own script later reads. On its own it would throw
+    // on an undefined `gtag` and take `content_group` with it.
+    //
+    // Anchored on the bootstrap constant, not on `headTags:` — AGL-1597 moved
+    // this queue out of `headTags` and into `ssrTemplate`, because site-config
+    // headTags render AFTER a preset plugin's tags and so landed after the
+    // gtag preset's `config`.
+    const head = source.slice(source.indexOf('const GTAG_HEAD_BOOTSTRAP'))
     const shim = head.indexOf("function gtag(){dataLayer.push(arguments);}")
     const stamp = head.indexOf(INTERNAL_TRAFFIC_GTAG_SNIPPET)
     expect(shim).toBeGreaterThan(-1)

@@ -42,11 +42,110 @@ const docsGaTrackingId = env('DOCS_GA_TRACKING_ID')
 const docsErrorBeaconEndpoint = env('DOCS_ERROR_BEACON_ENDPOINT')
 
 /**
- * Comma-separated `name|label|origin|description` targets the /status page
- * probes. UNSET → it probes nothing and says so, instead of live-probing
+ * Comma-separated `name|label|origin|description|path` targets the /status
+ * page probes. UNSET → it probes nothing and says so, instead of live-probing
  * Aglyn's infrastructure and reporting OUR uptime as the operator's.
+ *
+ * ⚠️ UNSET IS ALSO HOW A PUBLIC STATUS PAGE ENDS UP MONITORING NOTHING
+ * (AGL-2411). `docs.aglyn.com/status` shipped reading "No services are
+ * configured for this documentation build to check" while `/pricing` and
+ * `/solutions/enterprise` pointed customers at it — because the `aglyn-docs`
+ * Vercel project had NO environment variables at all, so this, the GA4 id and
+ * the error beacon were every one of them off on our own deployment. "Unset
+ * means off, never ours" is the right rule and it is not a substitute for
+ * setting the value; the warning below is here because a build log is the
+ * first place anyone would have seen it.
  */
 const docsStatusTargets = env('DOCS_STATUS_TARGETS')
+
+if (!docsStatusTargets) {
+  console.warn(
+    '\n[status] DOCS_STATUS_TARGETS is unset: /status will publish a page that' +
+      '\n[status] checks NO services and says so. Set it to a comma-separated' +
+      '\n[status] list of name|label|origin|description|path entries, or accept' +
+      '\n[status] that this build publishes a status page monitoring nothing.\n',
+  )
+}
+
+/**
+ * Everything that must reach `dataLayer` BEFORE the gtag preset's `config`.
+ *
+ * ## Why this is not a `headTags` entry any more (AGL-1597)
+ *
+ * It used to be, and that was silently broken from the moment the tag was
+ * switched on. Docusaurus builds the `<head>` by running every plugin's
+ * `injectHtmlTags` first and the site config's `headTags` last
+ * (`@docusaurus/core/lib/server/plugins/configs.js` — `preset.plugins` are
+ * spread ahead of `standalonePlugins`, and site `headTags` land after both).
+ * The gtag preset is a preset plugin, so the emitted HTML was:
+ *
+ *   1. `<script async src=".../gtag/js?id=…">`
+ *   2. `gtag("js",new Date),gtag("config","G-…")`   ← the preset
+ *   3. `gtag("consent","default",…)`                 ← us, TOO LATE
+ *
+ * A consent `default` processed after `config` is not a default. Verified on
+ * the wire against a throwaway property: the first `page_view` left the page
+ * with **no `gcs` parameter at all** and `_ga` was set — i.e. Consent Mode was
+ * not in effect for the pageview, in every region including the EEA/UK/CH.
+ * Nothing threw, the snippet was present in the HTML, and it read exactly like
+ * a working declaration. That is why it survived review.
+ *
+ * It was invisible until now for a mundane reason: `DOCS_GA_TRACKING_ID` was
+ * unset, so the preset emitted nothing and our snippet was the only thing in
+ * the head — first by default. Setting the id is what exposed it.
+ *
+ * `ssrTemplate` is the ONLY supported lever that lands ahead of a preset
+ * plugin's tags; a local plugin cannot, whatever order `plugins:` is written
+ * in. See the `ssrTemplate` note below for the cost that buys.
+ *
+ * Ordering inside this string is itself load-bearing: the shim first (gtag.js
+ * processes `arguments` objects, NOT plain arrays — `dataLayer.push(['set',…])`
+ * is the classic silent no-op), then consent, then the `set` calls.
+ */
+const GTAG_HEAD_BOOTSTRAP: string =
+  'window.dataLayer=window.dataLayer||[];' +
+  'function gtag(){dataLayer.push(arguments);}' +
+  // The region-conditional consent default (AGL-1597).
+  //
+  // Analytics GRANTED by default (Zach, 2026-08-20: implied consent where it
+  // is lawful), DENIED for the prior-consent regions — EEA/UK/CH — through the
+  // second declaration's `region` array. Ads denied in both. This site
+  // previously declared nothing that took effect, so its tag ran unrestricted
+  // everywhere, ad storage included.
+  //
+  // ⚠️ VERBATIM COPY of `PLATFORM_CONSENT_DEFAULT_SNIPPET` in
+  // `libs/aglyn/src/lib/app-utils/platform-consent-default.ts`, because this
+  // app cannot import from `libs/` (AGL-1595) — the same constraint that puts
+  // the measurement id in source below.
+  // `apps/console/specs/docs-platform-consent-snippet.spec.ts` fails if the two
+  // ever drift. A template literal because the snippet contains both quote
+  // styles.
+  `gtag('consent','default',{"analytics_storage":"granted","ad_storage":"denied","ad_user_data":"denied","ad_personalization":"denied"});gtag('consent','default',{"analytics_storage":"denied","ad_storage":"denied","ad_user_data":"denied","ad_personalization":"denied","region":["AT","AX","BE","BG","CH","CY","CZ","DE","DK","EE","ES","FI","FR","GB","GF","GI","GP","GR","HR","HU","IE","IS","IT","LI","LT","LU","LV","MQ","MT","NL","NO","PL","PT","RE","RO","SE","SI","SK","YT"]});` +
+  // `content_group: 'docs'` (AGL-1857): the GA4 axis that separates docs
+  // traffic from `marketing` and `console` in standard reports. The gtag preset
+  // accepts no config params, so the group is queued as a `gtag('set')` into
+  // the same dataLayer the preset's snippet uses. Now that this runs ahead of
+  // `config`, the FIRST pageview of a session carries it too — the "best
+  // effort" caveat this used to carry is gone with the ordering fix.
+  "gtag('set',{'content_group':'docs'});" +
+  // `traffic_type: 'internal'` (AGL-2064), same queue, and likewise now
+  // covering the first pageview. Dev builds were already safe — the gtag plugin
+  // returns null unless `NODE_ENV === 'production'` and this project has
+  // non-production git deployments disabled — but PRODUCTION `docs.aglyn.com`
+  // was not: we read our own docs constantly while building, logged out, and
+  // every one of those visits counted as a real reader in the property the
+  // September activation funnel is read from.
+  //
+  // Opt a browser in with `?aglyn_internal=1` on any docs URL. `localStorage`
+  // is origin-scoped, so this is a separate opt-in from `aglyn.com` and
+  // `app.aglyn.com` — see docs/ANALYTICS.md §8.
+  //
+  // ⚠️ VERBATIM COPY of `INTERNAL_TRAFFIC_GTAG_SNIPPET` in
+  // `libs/aglyn/src/lib/app-utils/internal-traffic.ts`, for the same AGL-1595
+  // reason; `apps/console/specs/docs-internal-traffic-snippet.spec.ts` fails if
+  // the two ever drift, so the copy is checked rather than trusted: a stale
+  // copy here would read as a working stamp and stamp nothing.
+  "try{var aq=new URLSearchParams(location.search).get('aglyn_internal');if(aq!==null){if(['0','false','off','no'].indexOf(aq.toLowerCase())>=0)localStorage.removeItem('aglyn_traffic_type');else localStorage.setItem('aglyn_traffic_type','internal');}if(localStorage.getItem('aglyn_traffic_type')==='internal')gtag('set',{'traffic_type':'internal'});}catch(e){}"
 
 const config: Config = {
   title: 'Aglyn Docs',
@@ -93,69 +192,50 @@ const config: Config = {
     statusTargets: docsStatusTargets ?? null,
   },
 
-  // `content_group: 'docs'` (AGL-1857): the GA4 axis that separates docs
-  // traffic from `marketing` and `console` in standard reports. The gtag
-  // preset below accepts no config params, so the group is queued as a
-  // `gtag('set')` into the SAME dataLayer the preset's snippet creates —
-  // `set` applies to every event processed after it in queue order, which
-  // covers the route-change `page_view`s the drop-off metric is read from.
-  // Whether the FIRST pageview of a session carries it depends on where
-  // Docusaurus renders config headTags relative to the preset's snippet;
-  // best-effort there, and Hostname still separates the domains fully.
+  // ⚠️ AN OWNED COPY of Docusaurus's default SSG template
+  // (`@docusaurus/core/lib/ssg/ssgTemplate.html.js`), with ONE line added:
+  // the `<script>` carrying {@link GTAG_HEAD_BOOTSTRAP}, placed immediately
+  // before `<%~ it.headTags %>`.
   //
-  // `traffic_type: 'internal'` (AGL-2064) rides the same queue, for the same
-  // reason and with the same best-effort caveat. Dev builds were already safe
-  // — the gtag plugin returns null unless `NODE_ENV === 'production'` and this
-  // project has non-production git deployments disabled — but PRODUCTION
-  // `docs.aglyn.com` was not: we read our own docs constantly while building,
-  // logged out, and every one of those visits counted as a real reader in the
-  // property the September activation funnel is read from.
+  // That placement is the entire point, and it is not cosmetic — see the
+  // constant's note. Plugin-injected tags (the gtag preset's `js` + `config`)
+  // are rendered into `it.headTags`; nothing a plugin or a site-config
+  // `headTags` entry can do lands ahead of them, so the consent default has to
+  // come from the template itself or it arrives after `config` and does
+  // nothing at all.
   //
-  // Opt a browser in with `?aglyn_internal=1` on any docs URL. `localStorage`
-  // is origin-scoped, so this is a separate opt-in from `aglyn.com` and
-  // `app.aglyn.com` — see docs/ANALYTICS.md §8.
-  //
-  // ⚠️ The snippet is a VERBATIM COPY of `INTERNAL_TRAFFIC_GTAG_SNIPPET` in
-  // `libs/aglyn/src/lib/app-utils/internal-traffic.ts`, because this app
-  // cannot import from `libs/` (AGL-1595) — the same constraint that puts the
-  // measurement id in source below. `apps/console/specs/docs-internal-traffic-
-  // snippet.spec.ts` fails if the two ever drift, so the copy is checked
-  // rather than trusted: a stale copy here would read as a working stamp and
-  // stamp nothing, which no report would show.
-  headTags: [
-    {
-      tagName: 'script',
-      attributes: {},
-      // The canonical gtag queue shape: gtag.js processes `arguments`
-      // objects, NOT plain arrays — `dataLayer.push(['set', …])` is the
-      // classic silent no-op.
-      innerHTML:
-        'window.dataLayer=window.dataLayer||[];' +
-        'function gtag(){dataLayer.push(arguments);}' +
-        // The region-conditional consent default (AGL-1597). FIRST in the
-        // queue, before any `set` or the preset's `config`: a consent
-        // `default` read after `config` is not a default at all.
-        //
-        // Analytics GRANTED by default (Zach, 2026-08-20: implied consent
-        // where it is lawful), DENIED for the prior-consent regions —
-        // EEA/UK/CH — through the second declaration's `region` array. Ads
-        // denied in both. This site previously declared nothing, so its tag
-        // ran unrestricted everywhere, ad storage included.
-        //
-        // ⚠️ VERBATIM COPY of `PLATFORM_CONSENT_DEFAULT_SNIPPET` in
-        // `libs/aglyn/src/lib/app-utils/platform-consent-default.ts`, because
-        // this app cannot import from `libs/` (AGL-1595) — the same
-        // constraint that puts the measurement id and the internal-traffic
-        // snippet in source here. `apps/console/specs/docs-platform-consent-
-        // snippet.spec.ts` fails if the two ever drift; a stale copy would
-        // still run without error and still read like a working declaration,
-        // and no GA report would show it. A template literal because the
-        // snippet contains both quote styles.
-        `gtag('consent','default',{"analytics_storage":"granted","ad_storage":"denied","ad_user_data":"denied","ad_personalization":"denied"});gtag('consent','default',{"analytics_storage":"denied","ad_storage":"denied","ad_user_data":"denied","ad_personalization":"denied","region":["AT","AX","BE","BG","CH","CY","CZ","DE","DK","EE","ES","FI","FR","GB","GF","GI","GP","GR","HR","HU","IE","IS","IT","LI","LT","LU","LV","MQ","MT","NL","NO","PL","PT","RE","RO","SE","SI","SK","YT"]});` +
-        "gtag('set',{'content_group':'docs'});" +
-        "try{var aq=new URLSearchParams(location.search).get('aglyn_internal');if(aq!==null){if(['0','false','off','no'].indexOf(aq.toLowerCase())>=0)localStorage.removeItem('aglyn_traffic_type');else localStorage.setItem('aglyn_traffic_type','internal');}if(localStorage.getItem('aglyn_traffic_type')==='internal')gtag('set',{'traffic_type':'internal'});}catch(e){}",
-    },
-  ],
+  // THE COST, stated plainly: this pins a copy of a Docusaurus internal. If a
+  // future Docusaurus adds something to its skeleton, this copy silently will
+  // not have it — the failure mode is a missing feature, not a crash, so
+  // re-diff this against the file above on every Docusaurus major upgrade.
+  // `apps/console/specs/docs-platform-consent-snippet.spec.ts` asserts the
+  // ordering and the placeholders, which catches an edit to this string but
+  // cannot catch upstream drift.
+  ssrTemplate: `
+<!DOCTYPE html>
+<html <%~ it.htmlAttributes %>>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="generator" content="Docusaurus v<%= it.version %>">
+    <% it.metaAttributes.forEach((metaAttribute) => { %>
+      <%~ metaAttribute %>
+    <% }); %>
+    <script>${GTAG_HEAD_BOOTSTRAP}</script>
+    <%~ it.headTags %>
+    <% it.stylesheets.forEach((stylesheet) => { %>
+      <link rel="stylesheet" href="<%= it.baseUrl %><%= stylesheet %>" />
+    <% }); %>
+    <% it.scripts.forEach((script) => { %>
+      <script src="<%= it.baseUrl %><%= script %>" defer></script>
+    <% }); %>
+  </head>
+  <body <%~ it.bodyAttributes %>>
+    <%~ it.preBodyTags %>
+    <div id="__docusaurus"><%~ it.appHtml %></div>
+    <%~ it.postBodyTags %>
+  </body>
+</html>
+`,
 
   presets: [
     [

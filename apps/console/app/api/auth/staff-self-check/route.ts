@@ -36,6 +36,10 @@
  *     staff" is limited to identities sharing THEIR OWN verified address, so
  *     it reveals nothing they could not establish by signing in.
  *
+ *     "Verified" is load-bearing in that sentence and was not enforced until
+ *     AGL-1881 — see the note at the fan-out below for what that let an
+ *     unverified self-signup learn about SSO-only addresses.
+ *
  * The cross-pool half is the actually useful part: a person whose address
  * exists in both the project pool and a GCIP tenant (the AGL-1962 phantom
  * shape, and the ordinary SSO-migration shape) is told which record carries
@@ -51,6 +55,7 @@
 import {
   authForPool,
   firebaseAdmin,
+  isImpersonationSession,
   listAuthTenantIds,
 } from '@aglyn/tenant-data-admin'
 
@@ -86,8 +91,31 @@ async function handler(request: Request): Promise<Response> {
   const currentTenantId = decoded.firebase?.tenant ?? null
   const email = typeof decoded.email === 'string' ? decoded.email : null
 
+  // THE WORD "VERIFIED" IN THE DOCBLOCK ABOVE WAS NOT ENFORCED (AGL-1881).
+  //
+  // Point 2 of the contract promises the cross-pool disclosure is "limited to
+  // identities sharing THEIR OWN verified address". Nothing checked it, and
+  // this route consumes the raw ID token, so neither the session mint's gate
+  // (`auth/session`) nor the passkey gate applied.
+  //
+  // Firebase enforces one address per pool, so an attacker cannot claim an
+  // address the PROJECT pool already holds. But an address that exists only in
+  // a GCIP tenant — every SSO-only enterprise user — is claimable in the
+  // project pool by ordinary self-signup, and the sweep below then reports
+  // which tenants hold it, whether it carries `staff`, and the `staffRole`
+  // string. That is cross-tenant identity disclosure plus a staff-roster
+  // oracle for any guessed address, obtained without ever receiving mail.
+  //
+  // The caller's OWN answer is unaffected — it comes off their verified token
+  // claims below, and "am I staff" is this route's actual job. Only the
+  // fan-out is gated, so an unverified caller loses the disclosure and keeps
+  // the function.
+  const emailProven =
+    email !== null &&
+    (decoded.email_verified === true || isImpersonationSession(decoded))
+
   const identities: IdentityRow[] = []
-  if (email) {
+  if (emailProven) {
     // Every pool holding THIS address. Deliberately not `findUserByEmail-
     // AcrossPools`, which stops at the first hit — the whole point here is to
     // see the records it would have skipped.

@@ -33,23 +33,38 @@
  * - **`aglyn.com`** — served by the TENANT runtime, so it already runs the
  *   full AGL-1498 gate: a Firestore `consent.mode`, `/api/consent/region`, a
  *   per-visitor record in localStorage, and a tag that never LOADS for a
- *   visitor who has not granted. Verified live on 2026-08-20 from the US:
- *   the stored record is `{"status":"implied","analytics":true,"country":"US"}`
- *   and the page emits `analytics_storage: 'granted'` with all three ad
- *   signals denied. It is already default-on outside the prior-consent
- *   regions. **This module does not touch it and must not.**
- * - **`app.aglyn.com` and `docs.aglyn.com`** — GA runs UNCONDITIONALLY on
- *   both, with no consent declaration of any kind. That is not "default on
- *   where lawful"; it is default on EVERYWHERE, including the prior-consent
- *   regions, which is the gap AGL-1597 was filed for. These two are what this
- *   module is wired into.
+ *   visitor who has not granted. It is already default-on outside the
+ *   prior-consent regions. **This module does not touch it and must not.**
+ *
+ *   ⚠️ Its AD signals are no longer the same as this module's. When this was
+ *   written (2026-08-20) `aglyn.com` denied all three, and the sentence below
+ *   about "exactly as `aglyn.com` already declares them" was true. It is not
+ *   any more: AGL-1649/AGL-2402 gave hosts an advertising category that runs
+ *   on implied consent outside the EU/UK, and the marketing host opted in.
+ *   Re-verified live from the US on 2026-08-23: the record is
+ *   `{"status":"implied","analytics":true,"advertising":true,"country":"US"}`
+ *   and the collect hit carries `gcs=G111` — ad storage GRANTED. That is the
+ *   host's configured choice on a surface that can ask, and it is deliberate;
+ *   it is recorded here only so the next reader does not take the comparison
+ *   below as current fact.
+ * - **`app.aglyn.com` and `docs.aglyn.com`** — GA loads unconditionally on
+ *   both (no gate can run here), and BEFORE this module they carried no
+ *   consent declaration of any kind. That was not "default on where lawful";
+ *   it was default on EVERYWHERE, prior-consent regions included, which is the
+ *   gap AGL-1597 was filed for. These two are what this module is wired into.
+ *
+ *   On the docs side, being wired in was not enough on its own: the
+ *   declaration was emitted but landed AFTER the gtag preset's `config`, which
+ *   makes it a no-op. See the `ssrTemplate` note in
+ *   `apps/docs/docusaurus.config.ts` — position matters as much as presence.
  * - **Customer/tenant sites** — NOT in scope by a wide margin. Aglyn ships
  *   the consent gate to customers as a product (AGL-1498) and the host
  *   chooses the posture. Changing their default would configure a customer's
  *   compliance posture for them, for visitors who may well be European. The
  *   separation here is structural rather than a matter of care: this module
  *   is imported only by the console's Firebase Analytics boot and copied into
- *   the docs site's head snippet. Nothing in the tenant runtime reads it, and
+ *   the docs site's `ssrTemplate` bootstrap. Nothing in the tenant runtime
+ *   reads it, and
  *   `visitor-consent.ts` — the tenant's decision module — is unchanged.
  *
  * ## Why a region-scoped `default` here, and not the tenant's gate
@@ -69,12 +84,19 @@
  *
  * ## The ad signals
  *
- * Denied in BOTH branches, everywhere, exactly as `aglyn.com` already
- * declares them. Zach decided analytics and only analytics; there is no
- * advertising basis on file, Google Signals is off, there is no Google Ads
- * link and enhanced conversions is off. Today these two surfaces declare
- * nothing, which leaves a freshly loaded tag with ad storage UNRESTRICTED —
- * so denying them is a tightening, not a preference.
+ * Denied in BOTH branches, everywhere. Zach decided analytics and only
+ * analytics for these two surfaces: Google Signals is off, there is no Google
+ * Ads link and enhanced conversions is off.
+ *
+ * This deliberately no longer matches `aglyn.com`, which has since taken an
+ * advertising grant (see the note above). The asymmetry is the point rather
+ * than an oversight — `aglyn.com` can ASK, through the AGL-1498 gate, so a
+ * grant there has a recorded basis behind it. The console and the docs cannot
+ * ask at all, so an ad grant here would rest on nothing.
+ *
+ * Before this module they declared nothing, which left a freshly loaded tag
+ * with ad storage UNRESTRICTED — so denying them was a tightening, not a
+ * preference.
  */
 
 import { PRIOR_CONSENT_COUNTRY_CODES } from './visitor-consent'

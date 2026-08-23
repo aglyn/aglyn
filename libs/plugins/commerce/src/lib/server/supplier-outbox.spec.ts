@@ -57,6 +57,15 @@ import {
   supplierDeliveryId,
 } from './supplier-outbox'
 
+/**
+ * An UNLOCKED gate (AGL-2495). This suite is about delivery, backoff and the
+ * dead letter; the lockdown behaviour has its own suite in
+ * `job-lockdown.spec.ts`, which asserts the opposite answer. Written out
+ * rather than defaulted in the scan itself, so "forgot to thread the gate"
+ * still cannot compile.
+ */
+const OPEN_GATE = { isLocked: async () => false }
+
 // ---------------------------------------------------------------------------
 // In-memory Firestore
 // ---------------------------------------------------------------------------
@@ -257,13 +266,17 @@ afterEach(() => {
 describe('the supplier outbox drains (AGL-2473)', () => {
   it('posts the queued body and retires the row on success', async () => {
     seedDelivery()
-    const result = await scanSupplierDeliveries(NOW)
+    const result = await scanSupplierDeliveries(OPEN_GATE, NOW)
     expect(result).toEqual({
       scanned: 1,
       delivered: 1,
       retried: 0,
       deadLettered: 0,
       cancelled: 0,
+      // AGL-2495. Zero here is load-bearing: the gate above says UNLOCKED,
+      // so a non-zero count would mean the drain declined work it should
+      // have done.
+      skippedLocked: 0,
     })
     expect(fetchMock).toHaveBeenCalledTimes(1)
     const [url, init] = fetchMock.mock.calls[0] as any[]
@@ -283,7 +296,7 @@ describe('the supplier outbox drains (AGL-2473)', () => {
    */
   it('signs with the live secret and omits the header when there is none', async () => {
     seedDelivery()
-    await scanSupplierDeliveries(NOW)
+    await scanSupplierDeliveries(OPEN_GATE, NOW)
     expect(
       (fetchMock.mock.calls[0] as any[])[1].headers['x-aglyn-signature'],
     ).toEqual(expect.any(String))
@@ -295,7 +308,7 @@ describe('the supplier outbox drains (AGL-2473)', () => {
     })
     seedDelivery()
     fetchMock.mockClear()
-    await scanSupplierDeliveries(NOW)
+    await scanSupplierDeliveries(OPEN_GATE, NOW)
     expect(
       (fetchMock.mock.calls[0] as any[])[1].headers,
     ).not.toHaveProperty('x-aglyn-signature')
@@ -312,7 +325,7 @@ describe('the supplier outbox drains (AGL-2473)', () => {
       name: 'Northwind Fulfilment',
       webhookUrl: 'https://corrected.example.com/inbound',
     })
-    await scanSupplierDeliveries(NOW)
+    await scanSupplierDeliveries(OPEN_GATE, NOW)
     expect((fetchMock.mock.calls[0] as any[])[0]).toBe(
       'https://corrected.example.com/inbound',
     )
@@ -320,7 +333,7 @@ describe('the supplier outbox drains (AGL-2473)', () => {
 
   it('leaves a row that is still inside its backoff alone', async () => {
     seedDelivery({ attempts: 1, nextAttemptAtMs: NOW + 1 })
-    const result = await scanSupplierDeliveries(NOW)
+    const result = await scanSupplierDeliveries(OPEN_GATE, NOW)
     expect(fetchMock).not.toHaveBeenCalled()
     expect(result.scanned).toBe(1)
     expect(result.delivered + result.retried + result.deadLettered).toBe(0)
@@ -328,7 +341,7 @@ describe('the supplier outbox drains (AGL-2473)', () => {
 
   it('ignores a row that is not pending', async () => {
     seedDelivery({ status: 'failed', attempts: SUPPLIER_DELIVERY_MAX_ATTEMPTS })
-    const result = await scanSupplierDeliveries(NOW)
+    const result = await scanSupplierDeliveries(OPEN_GATE, NOW)
     expect(result.scanned).toBe(0)
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -344,7 +357,7 @@ describe('a supplier that does not answer (AGL-2473)', () => {
   it('books a retry with backoff on an error status', async () => {
     seedDelivery()
     fetchMock.mockResolvedValue({ ok: false, status: 503 } as never)
-    const result = await scanSupplierDeliveries(NOW)
+    const result = await scanSupplierDeliveries(OPEN_GATE, NOW)
     expect(result.retried).toBe(1)
     expect(delivery()?.status).toBe('pending')
     expect(delivery()?.attempts).toBe(1)
@@ -360,7 +373,7 @@ describe('a supplier that does not answer (AGL-2473)', () => {
   it('books a retry when the request itself throws', async () => {
     seedDelivery()
     fetchMock.mockRejectedValue(new Error('The operation was aborted') as never)
-    const result = await scanSupplierDeliveries(NOW)
+    const result = await scanSupplierDeliveries(OPEN_GATE, NOW)
     expect(result.retried).toBe(1)
     expect(delivery()?.lastError).toContain('aborted')
   })
@@ -382,7 +395,7 @@ describe('a supplier that does not answer (AGL-2473)', () => {
   it('dead-letters after the last attempt and tells the merchant', async () => {
     seedDelivery({ attempts: SUPPLIER_DELIVERY_MAX_ATTEMPTS - 1 })
     fetchMock.mockResolvedValue({ ok: false, status: 500 } as never)
-    const result = await scanSupplierDeliveries(NOW)
+    const result = await scanSupplierDeliveries(OPEN_GATE, NOW)
 
     expect(result.deadLettered).toBe(1)
     expect(delivery()?.status).toBe('failed')
@@ -413,8 +426,8 @@ describe('a supplier that does not answer (AGL-2473)', () => {
   it('does not re-notify a dead letter on the next beat', async () => {
     seedDelivery({ attempts: SUPPLIER_DELIVERY_MAX_ATTEMPTS - 1 })
     fetchMock.mockResolvedValue({ ok: false, status: 500 } as never)
-    await scanSupplierDeliveries(NOW)
-    await scanSupplierDeliveries(NOW + 86_400_000)
+    await scanSupplierDeliveries(OPEN_GATE, NOW)
+    await scanSupplierDeliveries(OPEN_GATE, NOW + 86_400_000)
     expect(notifications).toHaveLength(1)
     expect(
       (order()?.timeline as any[]).filter(
@@ -435,7 +448,7 @@ describe('a supplier the merchant changed (AGL-2473)', () => {
     docs.set(`hosts/${HOST}/suppliers/${SUPPLIER}`, {
       name: 'Northwind Fulfilment',
     })
-    const result = await scanSupplierDeliveries(NOW)
+    const result = await scanSupplierDeliveries(OPEN_GATE, NOW)
     expect(result.cancelled).toBe(1)
     expect(fetchMock).not.toHaveBeenCalled()
     expect(docs.has(DELIVERY_PATH)).toBe(false)
@@ -452,7 +465,7 @@ describe('a supplier the merchant changed (AGL-2473)', () => {
   it('retires the row when the supplier record is deleted', async () => {
     seedDelivery()
     docs.delete(`hosts/${HOST}/suppliers/${SUPPLIER}`)
-    const result = await scanSupplierDeliveries(NOW)
+    const result = await scanSupplierDeliveries(OPEN_GATE, NOW)
     expect(result.cancelled).toBe(1)
     expect(docs.has(DELIVERY_PATH)).toBe(false)
   })

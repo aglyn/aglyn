@@ -50,6 +50,12 @@
 // scope's apex check cannot introduce a cycle here.
 import { TENANT_APEX } from './host-naming'
 import { operatorContactLine } from './operator-identity'
+// Also a leaf — `platform-brand` imports nothing — so the same no-cycle
+// argument as `host-naming` above covers it. Staff-surface copy must read
+// the CONFIGURED brand: a self-host operator cannot edit source to rename
+// the product (AGL-2153), and "Aglyn cannot reach the database" is a
+// sentence their operators would be shown about their own install.
+import { PLATFORM_BRAND_NAME } from './platform-brand'
 
 export type LockdownScope =
   | 'platform'
@@ -179,6 +185,97 @@ export function isReadOnlyLockdown(
 }
 
 /**
+ * WHAT HAPPENS WHEN WE CANNOT READ THE LOCK (AGL-1621).
+ *
+ * Lockdown fails OPEN: if the carrier read throws, the verdict is "not
+ * locked". That is the right posture for availability — a Firestore blip
+ * must not weld every customer site shut — and the wrong one for a legal or
+ * abuse takedown, where the whole point is that the content stops being
+ * served and STAYS stopped. A DMCA notice is not satisfied by "we served it
+ * because our database was down".
+ *
+ * So the two needs are split on their own axis rather than either one being
+ * bent to fit the other:
+ *
+ * - `standard` — today's behaviour, unchanged. An unreadable lock is not
+ *   enforced. Maintenance windows, billing suspensions, precautionary
+ *   holds, incident response: everything whose cost of over-refusing is
+ *   higher than its cost of under-refusing.
+ * - `takedown` — holds through an infrastructure failure. Legal orders,
+ *   abuse/CSAM removals, domain hijack disputes: the cost of serving is
+ *   higher than the cost of an outage on that one subject.
+ *
+ * ## Why this is its own field and not read off `scope` or `reason`
+ *
+ * NOT `scope`: every one of the six scopes carries both classes. A `host`
+ * lock is a maintenance window on Tuesday and a court-ordered removal on
+ * Wednesday; the scope says WHAT is locked, never why it must hold.
+ *
+ * NOT `reason`: `reason` is already spoken for as the VISITOR-FACING
+ * classifier — it selects the notice copy in `lockdownNotice`. Deriving
+ * fail-closed from `reason === 'security'` would both couple what the
+ * public is told to how the system behaves under failure, and be exactly
+ * the inference this field exists to avoid: most `security` locks are
+ * precautionary holds during an investigation, and those must keep failing
+ * open. A lock that becomes fail-closed because of a heuristic is a lock
+ * that takes a site down for an unrelated reason.
+ *
+ * ABSENT MEANS `standard`, and that direction is the safety property. Every
+ * lock written before this field existed, every lock an operator did not
+ * classify, and every doc whose value this build cannot interpret is
+ * fail-OPEN — the behaviour shipped today. Getting this backwards during a
+ * Firestore incident is the platform-wide outage the split exists to
+ * prevent, so only the exact string `takedown` opts in. Same posture and
+ * same storage discipline as `mode` above: the writer stores the field only
+ * for takedowns, so every existing carrier document stays byte-identical
+ * and no migration is needed.
+ */
+export type LockdownEnforcement = 'standard' | 'takedown'
+
+const LOCKDOWN_ENFORCEMENT_KEYS: Record<LockdownEnforcement, true> = {
+  standard: true,
+  takedown: true,
+}
+export const LOCKDOWN_ENFORCEMENTS = Object.keys(
+  LOCKDOWN_ENFORCEMENT_KEYS,
+) as LockdownEnforcement[]
+
+export function isLockdownEnforcement(
+  value: unknown,
+): value is LockdownEnforcement {
+  return typeof value === 'string' && value in LOCKDOWN_ENFORCEMENT_KEYS
+}
+
+/** Staff-surface labels; the key stays the wire/API identity. */
+export const LOCKDOWN_ENFORCEMENT_LABELS: Record<LockdownEnforcement, string> = {
+  standard: `Standard — releases if ${PLATFORM_BRAND_NAME} cannot reach the database`,
+  takedown: `Takedown — keeps holding if ${PLATFORM_BRAND_NAME} cannot reach the database`,
+}
+
+/**
+ * The enforcement class of a state, with the absent-means-`standard`
+ * default applied. Read through this, never bare — an unrecognised value
+ * must land on the fail-open default rather than on a truthiness test that
+ * would make any junk string fail closed.
+ */
+export function lockdownEnforcement(
+  state: { enforcement?: LockdownEnforcement } | null | undefined,
+): LockdownEnforcement {
+  return state?.enforcement === 'takedown' ? 'takedown' : 'standard'
+}
+
+/**
+ * Is this the class that must survive an unreadable carrier? The ONE
+ * predicate the fail-closed path reduces to, so "what is a takedown" has a
+ * single definition rather than one per reader.
+ */
+export function isTakedownLockdown(
+  state: { enforcement?: LockdownEnforcement } | null | undefined,
+): boolean {
+  return lockdownEnforcement(state) === 'takedown'
+}
+
+/**
  * What a request is trying to DO, which is the only thing a read-only lock
  * discriminates on.
  *
@@ -256,6 +353,11 @@ export interface LockdownState {
   feature?: LockdownFeatureKey
   /** Absent = `full` (AGL-1511). Read through `lockdownMode`, never bare. */
   mode?: LockdownMode
+  /**
+   * Absent = `standard`, i.e. fail-open (AGL-1621). Read through
+   * `lockdownEnforcement`/`isTakedownLockdown`, never bare.
+   */
+  enforcement?: LockdownEnforcement
   reason: LockdownReasonCode
   /**
    * Visitor/user-facing notice text (bounded at write time). Anything staff
@@ -349,6 +451,8 @@ export interface LockdownDoc {
   feature?: LockdownFeatureKey
   /** Written only for read-only locks; absent = `full`. */
   mode?: LockdownMode
+  /** Written only for takedowns; absent = `standard` (fail open). */
+  enforcement?: LockdownEnforcement
   reason: LockdownReasonCode
   message?: string
   atMs?: number
@@ -594,6 +698,7 @@ export function normalizeOrgLockdown(
         suspendedMessage?: unknown
         suspendedUntilMs?: unknown
         suspendedMode?: unknown
+        suspendedEnforcement?: unknown
       }
     | null
     | undefined,
@@ -605,6 +710,12 @@ export function normalizeOrgLockdown(
     // a strictness this build cannot interpret must not read as the softer
     // one (an older deploy meeting a mode it has never heard of).
     ...(org.suspendedMode === 'read-only' ? { mode: 'read-only' as const } : {}),
+    // Only the exact string opts into fail-closed; anything else — absent,
+    // malformed, or a class a newer deploy invented — stays `standard` and
+    // keeps failing open (AGL-1621).
+    ...(org.suspendedEnforcement === 'takedown'
+      ? { enforcement: 'takedown' as const }
+      : {}),
     reason: isLockdownReasonCode(org.suspendedReasonCode)
       ? org.suspendedReasonCode
       : 'manual',
@@ -634,6 +745,7 @@ export function normalizeHostLockdown(
         suspendedMessage?: unknown
         suspendedUntilMs?: unknown
         suspendedMode?: unknown
+        suspendedEnforcement?: unknown
       }
     | null
     | undefined,
@@ -642,6 +754,10 @@ export function normalizeHostLockdown(
   return {
     scope: 'host',
     ...(host.suspendedMode === 'read-only' ? { mode: 'read-only' as const } : {}),
+    // As the org carrier: exact string only, everything else fails open.
+    ...(host.suspendedEnforcement === 'takedown'
+      ? { enforcement: 'takedown' as const }
+      : {}),
     reason: isLockdownReasonCode(host.suspendedReasonCode)
       ? host.suspendedReasonCode
       : 'manual',
@@ -677,6 +793,12 @@ export function normalizeLockdownDoc(
     // Same posture as the org/host carriers: only the exact string relaxes
     // the lock. A malformed or unknown `mode` leaves it full.
     ...(doc.mode === 'read-only' ? { mode: 'read-only' as const } : {}),
+    // As the org/host carriers: exact string only. A doc whose enforcement
+    // class this build cannot interpret is a STANDARD lock and fails open,
+    // never the reverse (AGL-1621).
+    ...(doc.enforcement === 'takedown'
+      ? { enforcement: 'takedown' as const }
+      : {}),
     reason: doc.reason,
     message:
       typeof doc.message === 'string' && doc.message

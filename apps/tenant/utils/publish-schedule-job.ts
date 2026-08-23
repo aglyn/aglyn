@@ -16,7 +16,7 @@
  */
 
 import { registerPluginJob, screenRoutePathToUrl } from '@aglyn/aglyn/server'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, getSiteLockdown } from '@aglyn/tenant-data-admin'
 import { tenantDataTag } from '@aglyn/tenant-data-admin/render-cache'
 import applyDuePublishSchedule from '@aglyn/tenant-runtime/apply-publish-schedule'
 import { revalidatePath, revalidateTag } from 'next/cache'
@@ -66,6 +66,13 @@ registerPluginJob({
   // `now - lastRun >= intervalMinutes`, so 1 means "every beat".
   intervalMinutes: 1,
   description: 'Publish screens whose scheduled time has passed, and drop their cached pages.',
+  // AGL-2495. This beat predates the injected gate and keeps calling
+  // `getSiteLockdown` directly, which it may: it lives in `apps/tenant`, so
+  // the admin lib is an ordinary static import rather than something reached
+  // through a registry. Declaring the scope anyway is not decoration — it is
+  // what makes the contract uniform, so `runPluginJobs` and the coverage
+  // guard have one question to ask of every registration including this one.
+  lockdown: { scope: 'per-host' },
   handler: async () => {
     const firestore = firebaseAdmin.app().firestore()
 
@@ -123,6 +130,29 @@ registerPluginJob({
       if (!hostId) continue
 
       try {
+        // LOCKDOWN (AGL-1621). This beat runs on platform credentials, on a
+        // secret-gated route, with no visitor and no session — so none of the
+        // gates that cover the visitor-facing write paths are in its way. That
+        // is precisely the shape of bug just fixed on `api/presence/summary`:
+        // a privileged path answering, or here ACTING, outside the lock.
+        //
+        // A publish is a write, so ANY active lock stops it — including a
+        // read-only one, whose whole purpose is that nothing races the repair
+        // in progress. Under a full takedown it matters for a different
+        // reason: the site is 503-ing, but a schedule that fired anyway would
+        // flip the version pointer and re-register the route, so the content
+        // the takedown was answering goes live the instant the lock lifts.
+        //
+        // SKIPPED, NOT DROPPED: the schedule stays `pending` because the only
+        // thing that marks it published is the executor below, which never
+        // runs. A lockdown is a pause, not a cancellation — the publish lands
+        // on the next beat after the lift, late but not lost.
+        //
+        // Fails OPEN, inherited from `getSiteLockdown`: an unreachable
+        // Firestore publishes rather than silently freezing every schedule on
+        // the platform.
+        if (await getSiteLockdown(hostId)) continue
+
         // The executor re-checks the `scheduledPublishing` entitlement and
         // handles the unpublish action. Reused rather than reimplemented
         // precisely so this beat cannot drift from the lazy path.

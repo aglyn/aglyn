@@ -89,6 +89,16 @@ export interface CollectionEntriesProps extends StackProps {
   /** 1-based page for `perPage` (compose-time, AGL-620). */
   page?: number | string
   /**
+   * Render this block only on page 1 of the routed listing (compose-time,
+   * AGL-1871). For a LEAD card — a block with no `perPage`, showing the top
+   * of the set — every `/{collection}/page/{n}` past the first otherwise
+   * repeats the identical entry above a page of different ones.
+   *
+   * Opt-in and default off: a block that legitimately belongs on every page
+   * of a listing (a "popular posts" rail) has exactly the same shape.
+   */
+  firstPageOnly?: boolean
+  /**
    * Show a search box that filters the RENDERED entries by title/excerpt as
    * the reader types (AGL-1516, Figma 494:1220). Opt-in and default off, so
    * every existing instance renders exactly as before.
@@ -267,6 +277,7 @@ const CollectionEntries = forwardRef<HTMLDivElement, CollectionEntriesProps>(
       filterTag,
       perPage,
       page,
+      firstPageOnly,
       search,
       searchMode,
       searchPlaceholder,
@@ -598,6 +609,15 @@ export const collectionEntriesSchema: Aglyn.ComponentSchema<CollectionEntriesPro
         description: '1-based page to render when Entries per page is set.',
         component: Aglyn.FieldComponentType.TEXT_FIELD,
         type: 'number',
+      },
+      {
+        name: 'firstPageOnly',
+        label: 'Only on page 1',
+        description:
+          'Show this block on the first page of the listing only. Use it ' +
+          'for a featured or lead card: without it the same entry repeats ' +
+          'at the top of every /page/{n}, above a page of different ones.',
+        component: Aglyn.FieldComponentType.SWITCH,
       },
       {
         name: 'search',

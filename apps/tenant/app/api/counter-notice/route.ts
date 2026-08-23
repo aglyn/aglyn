@@ -15,6 +15,13 @@
  * limitations under the License.
  */
 
+// lockdown-423: exempt — this is the form the LOCKED-OUT customer uses. A
+// host-scope takedown 503s their site and an org suspension shuts them out of the
+// console, so gating the §512(g) counter-notice on the same lock would make it
+// unreachable in exactly the circumstances it exists for. See "Why it is
+// UNAUTHENTICATED" above. Its write is bounded to the abuse queue and it lifts
+// nothing — `receivedAt` is stamped once and staff compute the restore instant.
+
 /**
  * PUBLIC §512(g) COUNTER-NOTICE INTAKE (AGL-1983). `GET` renders the form,
  * `POST` accepts it. No authentication, no App Check, no JavaScript required.

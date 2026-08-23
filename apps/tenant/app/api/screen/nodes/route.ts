@@ -15,6 +15,11 @@
  * limitations under the License.
  */
 
+// lockdown-423: via apps/tenant/app/[host]/[[...slug]]/load-page-data.ts
+// This route deliberately composes nothing itself: it calls the same loader the
+// page uses, so the loader's lockdown branch (and protection, membership,
+// maintenance, org suspension) answers `nodes: null` and this returns 404.
+
 import { deferLazyPanelNodes } from '@aglyn/tenant-runtime/defer-lazy-panels'
 import { loadPageData } from '../../../[host]/[[...slug]]/load-page-data'
 

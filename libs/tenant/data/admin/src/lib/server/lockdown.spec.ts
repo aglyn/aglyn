@@ -55,12 +55,15 @@ import {
   featureLockdownRefusal,
   getFeatureLockdown,
   getLockdownVerdict,
+  getDomainLockdown,
   getPlatformLockdown,
   getUserLockdown,
+  invalidateDomainLockdownCache,
   invalidateFeatureLockdownCache,
   invalidatePlatformLockdownCache,
   invalidateUserLockdownCache,
   lockdownJsonResponse,
+  resetTakedownLedger,
   USER_LOCKDOWN_CACHE_MAX,
 } from './lockdown'
 
@@ -72,6 +75,8 @@ beforeEach(() => {
   failReads = false
   invalidatePlatformLockdownCache()
   invalidateFeatureLockdownCache()
+  invalidateDomainLockdownCache()
+  resetTakedownLedger()
   invalidateUserLockdownCache()
 })
 
@@ -200,6 +205,249 @@ describe('fail-open on infrastructure error', () => {
     ).resolves.toBeNull()
     await expect(getPlatformLockdown()).resolves.toBeNull()
     await expect(getUserLockdown('customer-1')).resolves.toBeNull()
+  })
+})
+
+/**
+ * AGL-1621 — "fail closed for takedown scopes only".
+ *
+ * The whole feature is two assertions that must BOTH hold: an ordinary lock
+ * still releases when Firestore is unreachable, and a takedown-class lock
+ * does not. Everything else here defends the DEFAULT, which is the property
+ * a future refactor will quietly break: anything not explicitly classified
+ * as a takedown fails open, exactly as it does today.
+ *
+ * Note the shape every case follows — observe the lock through a SUCCESSFUL
+ * read first, then fail the reads. That is not test scaffolding, it is the
+ * mechanism: the classification lives on the document, so a process that
+ * has never read the document has nothing to classify. A case that skipped
+ * the first read would be asserting a guarantee this does not make.
+ */
+describe('AGL-1621 · fail closed for TAKEDOWNS only', () => {
+  /** Observe current state through a successful read, then cut Firestore. */
+  const observeThenFail = async (read: () => Promise<unknown>) => {
+    await read()
+    failReads = true
+    invalidatePlatformLockdownCache()
+    invalidateUserLockdownCache()
+    invalidateDomainLockdownCache()
+    invalidateFeatureLockdownCache()
+  }
+
+  describe('the two assertions the feature reduces to', () => {
+    it('an ORDINARY lock FAILS OPEN when Firestore is unreachable', async () => {
+      lockPlatform({ reason: 'maintenance' })
+      await observeThenFail(getPlatformLockdown)
+
+      await expect(getPlatformLockdown()).resolves.toBeNull()
+      await expect(
+        getLockdownVerdict({ uid: 'customer-1', nowMs: NOW }),
+      ).resolves.toBeNull()
+    })
+
+    it('a TAKEDOWN lock HOLDS when Firestore is unreachable', async () => {
+      lockPlatform({ reason: 'security', enforcement: 'takedown' })
+      await observeThenFail(getPlatformLockdown)
+
+      const held = await getPlatformLockdown()
+      expect(held).toMatchObject({ scope: 'platform', enforcement: 'takedown' })
+      await expect(
+        getLockdownVerdict({ uid: 'customer-1', nowMs: NOW }),
+      ).resolves.toMatchObject({ enforcement: 'takedown' })
+    })
+  })
+
+  describe('the DEFAULT is fail-open — the safety property', () => {
+    it('an UNCLASSIFIED lock fails open (every lock written before this field existed)', async () => {
+      // Deliberately no `enforcement` key at all: this is byte-for-byte the
+      // document shape the panic button has been writing since AGL-1501.
+      lockPlatform({ reason: 'security' })
+      await observeThenFail(getPlatformLockdown)
+      await expect(getPlatformLockdown()).resolves.toBeNull()
+    })
+
+    it('a lock classified with an UNREADABLE value fails open, never closed', async () => {
+      // The direction that matters: a value this build cannot interpret —
+      // an older deploy meeting a class a newer one invented, or simple
+      // corruption — must land on the AVAILABLE answer.
+      for (const junk of ['TAKEDOWN', 'takedown ', 'legal', true, 1, null, {}]) {
+        store.clear()
+        invalidatePlatformLockdownCache()
+        resetTakedownLedger()
+        failReads = false
+        lockPlatform({ reason: 'security', enforcement: junk })
+        await observeThenFail(getPlatformLockdown)
+        await expect(getPlatformLockdown()).resolves.toBeNull()
+      }
+    })
+
+    it('`security` alone does NOT make a lock fail closed — the class is never inferred', async () => {
+      // The specific heuristic this design rejects. Most `security` locks
+      // are precautionary holds during an investigation; if `reason` could
+      // imply the class, every one of them would fail closed and a
+      // Firestore blip would be an outage.
+      lockPlatform({ reason: 'security' })
+      await observeThenFail(getPlatformLockdown)
+      await expect(getPlatformLockdown()).resolves.toBeNull()
+    })
+
+    it('a NEVER-OBSERVED takedown fails open — the stated limit of the guarantee', async () => {
+      // A cold process has nothing remembered, so it cannot enforce. This
+      // is asserted rather than left implicit: someone will eventually read
+      // "takedowns fail closed" and assume it covers this. It does not.
+      lockPlatform({ reason: 'security', enforcement: 'takedown' })
+      failReads = true
+      await expect(getPlatformLockdown()).resolves.toBeNull()
+    })
+  })
+
+  describe('a held takedown still releases', () => {
+    it('an EXPIRED takedown stops holding even while Firestore is down', async () => {
+      // A dead-man expiry must not become un-liftable by being classified.
+      //
+      // This case drives the WALL CLOCK rather than the fixture's `NOW`,
+      // because the held-takedown expiry check runs on `Date.now()` like
+      // every cache in this module — an `untilMs` built from `NOW` (a fixed
+      // 2025 constant) is already long past by real time, and the case
+      // would pass for the wrong reason.
+      const realNow = Date.now()
+      const clock = jest.spyOn(Date, 'now').mockReturnValue(realNow)
+      try {
+        lockPlatform({
+          reason: 'security',
+          enforcement: 'takedown',
+          untilMs: realNow + 60_000,
+        })
+        await observeThenFail(getPlatformLockdown)
+
+        // Still inside the window: held.
+        await expect(
+          getLockdownVerdict({ uid: 'customer-1', nowMs: realNow }),
+        ).resolves.toMatchObject({ enforcement: 'takedown' })
+
+        // Past the window: released, with no write and no successful read.
+        clock.mockReturnValue(realNow + 61_000)
+        invalidatePlatformLockdownCache()
+        // Asserted at the READER, not only through the verdict:
+        // `resolveLockdown` filters expired states on its own, so a verdict
+        // of null would stay null even if the ledger held the entry
+        // forever. This is the assertion that can actually see the ledger's
+        // own expiry check — and the entry being dropped is what stops a
+        // long outage from accumulating dead takedowns.
+        await expect(getPlatformLockdown()).resolves.toBeNull()
+        await expect(
+          getLockdownVerdict({ uid: 'customer-1', nowMs: realNow + 61_000 }),
+        ).resolves.toBeNull()
+      } finally {
+        clock.mockRestore()
+      }
+    })
+
+    it('a LIFT retires the hold — a later outage does not resurrect it', async () => {
+      lockPlatform({ reason: 'security', enforcement: 'takedown' })
+      await getPlatformLockdown()
+
+      // Staff lift: the doc goes away and the acting process re-reads.
+      store.delete('lockdowns/platform')
+      invalidatePlatformLockdownCache()
+      await expect(getPlatformLockdown()).resolves.toBeNull()
+
+      // Firestore now fails. The takedown was released, so nothing holds.
+      failReads = true
+      invalidatePlatformLockdownCache()
+      await expect(getPlatformLockdown()).resolves.toBeNull()
+    })
+
+    it('a takedown DOWNGRADED to an ordinary lock stops holding', async () => {
+      lockPlatform({ reason: 'security', enforcement: 'takedown' })
+      await getPlatformLockdown()
+
+      lockPlatform({ reason: 'maintenance' })
+      invalidatePlatformLockdownCache()
+      await getPlatformLockdown()
+
+      failReads = true
+      invalidatePlatformLockdownCache()
+      await expect(getPlatformLockdown()).resolves.toBeNull()
+    })
+  })
+
+  describe('every scope this module READS carries the class', () => {
+    it('USER: takedown holds, ordinary fails open', async () => {
+      lockUser('u-take', { enforcement: 'takedown' })
+      lockUser('u-plain')
+      await getUserLockdown('u-take')
+      await getUserLockdown('u-plain')
+      failReads = true
+      invalidateUserLockdownCache()
+
+      await expect(getUserLockdown('u-take')).resolves.toMatchObject({
+        enforcement: 'takedown',
+      })
+      await expect(getUserLockdown('u-plain')).resolves.toBeNull()
+    })
+
+    it('FEATURE: takedown holds, ordinary fails open', async () => {
+      lockFeature('uploads', { enforcement: 'takedown' })
+      lockFeature('checkout')
+      await getFeatureLockdown('uploads')
+      await getFeatureLockdown('checkout')
+      failReads = true
+      invalidateFeatureLockdownCache()
+
+      await expect(getFeatureLockdown('uploads')).resolves.toMatchObject({
+        enforcement: 'takedown',
+      })
+      await expect(getFeatureLockdown('checkout')).resolves.toBeNull()
+    })
+
+    it('DOMAIN: takedown holds, ordinary fails open — the hijack/dispute scope', async () => {
+      store.set('lockdowns/domain--seized.example', {
+        scope: 'domain',
+        reason: 'security',
+        enforcement: 'takedown',
+        atMs: NOW,
+      })
+      store.set('lockdowns/domain--ordinary.example', {
+        scope: 'domain',
+        reason: 'maintenance',
+        atMs: NOW,
+      })
+      await getDomainLockdown('seized.example')
+      await getDomainLockdown('ordinary.example')
+      failReads = true
+      invalidateDomainLockdownCache()
+
+      await expect(getDomainLockdown('seized.example')).resolves.toMatchObject({
+        enforcement: 'takedown',
+      })
+      await expect(getDomainLockdown('ordinary.example')).resolves.toBeNull()
+    })
+
+    it('one subject holding does not make another subject hold', async () => {
+      lockUser('u-take', { enforcement: 'takedown' })
+      await getUserLockdown('u-take')
+      await getUserLockdown('u-never-locked')
+      failReads = true
+      invalidateUserLockdownCache()
+
+      await expect(getUserLockdown('u-take')).resolves.toMatchObject({
+        enforcement: 'takedown',
+      })
+      await expect(getUserLockdown('u-never-locked')).resolves.toBeNull()
+    })
+  })
+
+  describe('the un-panic invariant is untouched', () => {
+    it('staff still bypass a HELD takedown — the operator who must lift it', async () => {
+      // If a fail-closed lock could lock out staff, a Firestore incident
+      // during a takedown would leave nobody able to release it.
+      lockPlatform({ reason: 'security', enforcement: 'takedown' })
+      await observeThenFail(getPlatformLockdown)
+      await expect(
+        getLockdownVerdict({ staff: true, uid: 'staff-1', nowMs: NOW }),
+      ).resolves.toBeNull()
+    })
   })
 })
 

@@ -16,6 +16,8 @@
  */
 
 import { checkEntitlement,
+  pluginJobHostGate,
+  type PluginJobHostGate,
   registerPluginConfigSchema,
   registerPluginJob,
   resolveBrandingProfile,
@@ -51,7 +53,8 @@ registerPluginJob({
   name: 'expire-stale-holds',
   intervalMinutes: 6 * 60,
   description: 'Cancel pendingPayment bookings whose hold lapsed >24h ago.',
-  handler: async () => {
+  lockdown: { scope: 'per-host' },
+  handler: async (gate) => {
     const cutoff = Date.now() - 24 * 60 * 60_000
     const snapshot = await firebaseAdmin
       .app()
@@ -61,11 +64,26 @@ registerPluginJob({
       .where('expiresAtMs', '<', cutoff)
       .limit(100)
       .get()
+    let lapsed = 0
     for (const doc of snapshot.docs) {
+      // LOCKDOWN (AGL-2495). `bookings` live at `hosts/{hostId}/bookings/{id}`,
+      // so the grandparent is the host. This flips a booking to `canceled` for
+      // a site that may be suspended mid-dispute, and a status a customer can
+      // see is not a change to make while the operator is deciding whether the
+      // site should exist.
+      //
+      // SKIPPED, NOT DROPPED: the query selects on `status == 'pendingPayment'`
+      // and an age cutoff that only gets truer with time, so an untouched hold
+      // is picked up by the next six-hour beat after the lift. The read paths
+      // already treat a lapsed hold as released, so waiting costs tidiness and
+      // nothing else — which is why this one can afford to wait at all.
+      const hostId = doc.ref.parent.parent?.id ?? ''
+      if (await gate.isLocked(hostId)) continue
       await doc.ref.set({ status: 'canceled' }, { merge: true })
+      lapsed += 1
     }
-    if (snapshot.size) {
-      console.info(`bookings: lapsed ${snapshot.size} stale payment holds`)
+    if (lapsed) {
+      console.info(`bookings: lapsed ${lapsed} stale payment holds`)
     }
   },
 })
@@ -704,10 +722,14 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
  * scheduler" for as long as it has existed. It never ran, for anyone. Same
  * shape as the two commerce beats in AGL-2227, one plugin over.
  */
-export async function scanBookingReminders(): Promise<{
+export async function scanBookingReminders(
+  /** The lockdown gate, injected by the caller (AGL-2495). Not optional. */
+  gate: PluginJobHostGate,
+): Promise<{
   scanned: number
   sent: number
   skipped: number
+  skippedLocked: number
 }> {
   const firestore = firebaseAdmin.app().firestore()
   // ONE instant for the query bounds and for the per-booking predicate. Two
@@ -726,6 +748,7 @@ export async function scanBookingReminders(): Promise<{
 
   let sent = 0
   let skipped = 0
+  let skippedLocked = 0
   // Resolve each host's designed reminder template once per run (AGL-770),
   // not once per booking — a busy site has many bookings in the window.
   const templateCache = new Map<string, LoadedHostEmail | null>()
@@ -752,6 +775,25 @@ export async function scanBookingReminders(): Promise<{
     // bookings live at hosts/{hostId}/bookings/{id}, so the grandparent is
     // the host.
     const hostId = doc.ref.parent.parent?.id ?? ''
+    // LOCKDOWN (AGL-2495), ahead of the send, the meter and the
+    // `reminderSentAt` stamp — the three things this loop does, all of them
+    // for the host. Counted separately from `skipped` on purpose: `skipped`
+    // means "this booking was not due", and folding a locked site into it
+    // would make a suspended merchant's silence read as an ordinary quiet
+    // hour on the console card that shows these numbers.
+    //
+    // SKIPPED, NOT DROPPED: `reminderSentAt` is what retires a booking from
+    // this pass, and it is stamped only on a successful send. An unstamped
+    // booking is re-scanned hourly — though unlike the other five, this one
+    // has a real deadline: the 23–25h window closes. A reminder whose window
+    // passed under a lock is genuinely lost, and that is the correct
+    // outcome, not a defect to engineer around. A site under takedown should
+    // not be mailing its customers, and a reminder that arrives after the
+    // appointment is worse than none.
+    if (await gate.isLocked(hostId)) {
+      skippedLocked += 1
+      continue
+    }
     let loaded = templateCache.get(hostId)
     if (loaded === undefined) {
       loaded = hostId
@@ -803,7 +845,7 @@ export async function scanBookingReminders(): Promise<{
         .catch(() => undefined)
     }
   }
-  return { scanned: upcoming.size, sent, skipped }
+  return { scanned: upcoming.size, sent, skipped, skippedLocked }
 }
 
 /**
@@ -826,11 +868,12 @@ registerPluginJob({
   name: 'booking-reminders',
   intervalMinutes: 60,
   description: 'Email a 24-hour reminder for each upcoming confirmed booking.',
-  handler: async () => {
+  lockdown: { scope: 'per-host' },
+  handler: async (gate) => {
     // Quietly, not as an error: email is optional per deployment, and a beat
     // that logs hourly on a self-host without Resend buries everything else.
     if (!isEmailConfigured()) return
-    const { sent } = await scanBookingReminders()
+    const { sent } = await scanBookingReminders(gate)
     if (sent) console.info(`bookings: sent ${sent} booking reminders`)
   },
 })
@@ -859,7 +902,8 @@ const remindersHandler: PluginApiHandler = async (req, res) => {
     })
   }
   try {
-    return res.status(200).json(await scanBookingReminders())
+    // The manual door asks the same question the beat does (AGL-2495).
+    return res.status(200).json(await scanBookingReminders(pluginJobHostGate()))
   } catch (error) {
     console.error(error)
     return res.status(500).json({ error: 'Reminders failed' })

@@ -16,6 +16,7 @@
  */
 
 import { createHash, randomBytes } from 'crypto'
+import { safeSameOriginPath } from '@aglyn/shared-util-http/safe-redirect'
 import firebaseAdmin from './firebase-admin'
 import { consumeOnce } from './consume-once'
 import {
@@ -121,20 +122,19 @@ function newSecret(): string {
 /**
  * A `continuePath` that cannot leave the custom domain.
  *
- * `//evil.example` is a protocol-relative URL and a browser follows it
- * off-origin, so "starts with a slash" is not enough on its own — this is the
- * open-redirect shape, and the handoff lands the user somewhere immediately
- * after signing them in, which is the worst possible moment to hand control to
- * an attacker-chosen origin.
+ * The handoff lands the user somewhere immediately after signing them in,
+ * which is the worst possible moment to hand control to an attacker-chosen
+ * origin — so this defers to {@link safeSameOriginPath}, which resolves the
+ * value and compares origins instead of testing its shape (AGL-1881).
+ *
+ * This function used to reject `//evil.example` and `/\evil.example` by
+ * inspecting the characters. That list read as complete and was not: the URL
+ * parser deletes tab, LF and CR before parsing, so `/<TAB>/evil.example`
+ * contains neither `//` nor `\` and still resolves to `https://evil.example/`.
+ * Enumerating tricks is the bug; asking the parser is the fix.
  */
 export function safeContinuePath(input: string | null | undefined): string {
-  const value = typeof input === 'string' ? input.trim() : ''
-  if (!value.startsWith('/')) return '/'
-  if (value.startsWith('//')) return '/'
-  // A backslash is normalised to a forward slash by several browsers, so
-  // `/\evil.example` is the same trick wearing a different hat.
-  if (value.startsWith('/\\')) return '/'
-  return value
+  return safeSameOriginPath(input, '/')
 }
 
 export interface StartedHandoff {

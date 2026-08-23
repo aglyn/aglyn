@@ -15,23 +15,26 @@
  * limitations under the License.
  */
 
+import { safeSameOriginPath } from '@aglyn/shared-util-http/safe-redirect'
+
 /**
  * Post-auth redirect target (AGL-553): the sign-in/up blocks honor a
  * `continue` query parameter so gated pages can send visitors back where
- * they came from. Open-redirect hardened — only same-origin RELATIVE
- * paths pass: must start with a single `/` (`//evil.com` is a
- * protocol-relative absolute URL and backslashes normalize to slashes in
- * some UAs), anything else falls back.
+ * they came from. Open-redirect hardened — only same-origin RELATIVE paths
+ * pass.
+ *
+ * Delegates to {@link safeSameOriginPath} rather than testing the string's
+ * shape (AGL-1881). The character checks this used to carry — `//`, then `\`
+ * — were each correct and each incomplete: the URL parser strips tab, LF and
+ * CR before parsing, so `/<TAB>/evil.com` contains neither and still resolves
+ * off-site. The shared predicate resolves and compares origins, so it catches
+ * the forms nobody has enumerated yet.
  */
 export function safeContinuePath(
   raw: string | null | undefined,
   fallback = '/',
 ): string {
-  const candidate = String(raw ?? '')
-  if (!candidate.startsWith('/')) return fallback
-  if (candidate.startsWith('//')) return fallback
-  if (candidate.includes('\\')) return fallback
-  return candidate
+  return safeSameOriginPath(raw, fallback)
 }
 
 /** Reads + validates the `continue` param from the current location. */

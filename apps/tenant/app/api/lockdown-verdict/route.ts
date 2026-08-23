@@ -15,6 +15,12 @@
  * limitations under the License.
  */
 
+// lockdown-423: exempt — this IS the verdict. The edge middleware cannot read
+// Firestore, so it asks this Node route whether a host is locked; a route that
+// refused while locked would make the lock unobservable and the middleware would
+// fail open on every request. Deliberately unauthenticated and disclosure-free —
+// the body is a boolean about a public website, with no actor and no target ids.
+
 /**
  * Is this host locked down? (AGL-1501)
  *

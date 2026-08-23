@@ -74,7 +74,15 @@ import {
  * ## Permission
  *
  * `billing.manage`, and admin-SDK-only by construction: `usageBudget` sits on
- * the org document, which the rules deny to every client. That matters less
+ * the org document, on the deny-list the rules apply to every client write.
+ *
+ * That second clause was FALSE until AGL-1881 — the field was named nowhere in
+ * the rules, so an org owner or admin could write it straight from the client
+ * SDK. It is on the deny-list now. Worth knowing why the guard missed it: the
+ * org-write coverage spec derives its universe from `AglynOrgBilling`, the
+ * deny-list itself, the entitlement resolvers, and the seed writer — a field
+ * that only ever appears in an API route is invisible to all four. That
+ * matters less
  * here than it does for the cap — a budget cannot raise or lower an invoice —
  * but the two controls live side by side on one card, and a customer who can
  * edit one and not the other would reasonably assume the difference means

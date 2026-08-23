@@ -24,13 +24,17 @@ import {
   LOCKDOWN_FEATURE_KEYS,
   LOCKDOWN_FEATURE_LABELS,
   LOCKDOWN_FEATURE_STAFF_BYPASS,
+  LOCKDOWN_ENFORCEMENTS,
   LOCKDOWN_MESSAGE_MAX,
+  isLockdownEnforcement,
   isLockdownMode,
   isReadOnlyLockdown,
   LOCKDOWN_MODES,
   lockdownBlocks,
   lockdownFeaturesForPluginApiPath,
   lockdownIntentForMethod,
+  isTakedownLockdown,
+  lockdownEnforcement,
   lockdownMode,
   lockdownNotice,
   lockdownPausedNotice,
@@ -595,6 +599,148 @@ describe('parseLockdownRefusal — the client 423 reader (AGL-1532)', () => {
  * absent, which lock wins when two are active with different strictness,
  * and which requests a read-only lock actually refuses.
  */
+/**
+ * AGL-1621 · the enforcement class — what happens when the lock cannot be
+ * READ. The server half (the takedown ledger) is proved in
+ * libs/tenant/data/admin/.../lockdown.spec.ts; this is the pure half, and
+ * it exists because the two layers here — the NORMALIZER, which decides
+ * what class reaches a state, and `lockdownEnforcement`, which reads that
+ * class — will each happily cover for the other being wrong. Mutating
+ * either one alone leaves the server suite green, so each is pinned at
+ * source rather than through a caller.
+ *
+ * Every case is a variation on one question: does anything other than the
+ * exact string `takedown` ever produce a fail-closed lock? It must not.
+ */
+describe('AGL-1621 · enforcement class (fail closed for takedowns only)', () => {
+  it('treats an absent, unknown or malformed enforcement as standard', () => {
+    // The DEFAULT, and the safety property: fail-open is what every lock
+    // written before this field existed already does, and it is the answer
+    // an uninterpretable value must land on. `mode` defaults to the
+    // STRICTER value; this defaults to the LOOSER one, and that inversion
+    // is deliberate — an over-strict mode over-refuses one workspace, an
+    // over-strict enforcement welds shut everything a Firestore blip
+    // touches.
+    expect(lockdownEnforcement(undefined)).toBe('standard')
+    expect(lockdownEnforcement(null)).toBe('standard')
+    expect(lockdownEnforcement(state())).toBe('standard')
+    expect(lockdownEnforcement({ enforcement: 'TAKEDOWN' } as never)).toBe(
+      'standard',
+    )
+    expect(lockdownEnforcement({ enforcement: 'takedown ' } as never)).toBe(
+      'standard',
+    )
+    expect(lockdownEnforcement({ enforcement: 'legal' } as never)).toBe(
+      'standard',
+    )
+    expect(lockdownEnforcement({ enforcement: true } as never)).toBe('standard')
+    expect(lockdownEnforcement({ enforcement: 1 } as never)).toBe('standard')
+    expect(lockdownEnforcement({ enforcement: {} } as never)).toBe('standard')
+    // ...and the one value that does opt in.
+    expect(lockdownEnforcement({ enforcement: 'takedown' })).toBe('takedown')
+  })
+
+  it('isTakedownLockdown is false for everything but the exact string', () => {
+    expect(isTakedownLockdown(undefined)).toBe(false)
+    expect(isTakedownLockdown(null)).toBe(false)
+    expect(isTakedownLockdown(state())).toBe(false)
+    expect(isTakedownLockdown({ enforcement: 'Takedown' } as never)).toBe(false)
+    expect(isTakedownLockdown({ enforcement: true } as never)).toBe(false)
+    expect(isTakedownLockdown(state({ enforcement: 'takedown' }))).toBe(true)
+  })
+
+  it('exposes the set and its guard', () => {
+    expect(LOCKDOWN_ENFORCEMENTS).toEqual(['standard', 'takedown'])
+    expect(isLockdownEnforcement('takedown')).toBe(true)
+    expect(isLockdownEnforcement('standard')).toBe(true)
+    expect(isLockdownEnforcement('legal')).toBe(false)
+    expect(isLockdownEnforcement(undefined)).toBe(false)
+  })
+
+  it('the class is INDEPENDENT of reason — `security` implies nothing', () => {
+    // The heuristic this field exists to replace. Most `security` locks are
+    // precautionary holds during an investigation, and those must keep
+    // failing open; if reason could imply the class, a Firestore blip
+    // during any one of them would become an outage.
+    expect(isTakedownLockdown(state({ reason: 'security' }))).toBe(false)
+    // ...and conversely, a takedown need not be filed under `security`.
+    expect(
+      isTakedownLockdown(state({ reason: 'manual', enforcement: 'takedown' })),
+    ).toBe(true)
+  })
+
+  it('the class is INDEPENDENT of scope — no scope is takedown-only', () => {
+    for (const scope of [
+      'platform',
+      'org',
+      'host',
+      'domain',
+      'user',
+      'feature',
+    ] as const) {
+      expect(isTakedownLockdown(state({ scope }))).toBe(false)
+      expect(isTakedownLockdown(state({ scope, enforcement: 'takedown' }))).toBe(
+        true,
+      )
+    }
+  })
+
+  describe('the normalizers admit the exact string and nothing else', () => {
+    // Pinned separately from `lockdownEnforcement` above: if the normalizer
+    // let junk through, only that reader's exactness would stand between a
+    // corrupt document and a fail-closed platform.
+    it('normalizeLockdownDoc', () => {
+      const doc = (enforcement: unknown) =>
+        normalizeLockdownDoc(
+          { reason: 'security', enforcement } as never,
+          'platform',
+        )
+      expect(doc('takedown')?.enforcement).toBe('takedown')
+      for (const junk of ['TAKEDOWN', 'takedown ', 'legal', true, 1, {}, null]) {
+        expect(doc(junk)?.enforcement).toBeUndefined()
+      }
+      expect(
+        normalizeLockdownDoc({ reason: 'security' }, 'platform')?.enforcement,
+      ).toBeUndefined()
+    })
+
+    it('normalizeOrgLockdown / normalizeHostLockdown', () => {
+      const org = (suspendedEnforcement: unknown) =>
+        normalizeOrgLockdown({ suspendedAt: 1, suspendedEnforcement } as never)
+      const host = (suspendedEnforcement: unknown) =>
+        normalizeHostLockdown({ suspendedAt: 1, suspendedEnforcement } as never)
+      expect(org('takedown')?.enforcement).toBe('takedown')
+      expect(host('takedown')?.enforcement).toBe('takedown')
+      for (const junk of ['TAKEDOWN', 'legal', true, 1]) {
+        expect(org(junk)?.enforcement).toBeUndefined()
+        expect(host(junk)?.enforcement).toBeUndefined()
+      }
+      expect(
+        normalizeOrgLockdown({ suspendedAt: 1 })?.enforcement,
+      ).toBeUndefined()
+      expect(
+        normalizeHostLockdown({ suspendedAt: 1 })?.enforcement,
+      ).toBeUndefined()
+    })
+  })
+
+  it('classifying a lock does not change WHO or WHAT it refuses', () => {
+    // The class only decides what happens when the carrier is unreadable.
+    // A takedown must otherwise behave exactly like the same lock without
+    // it — same precedence, same intent discrimination, same notice.
+    const plain = state({ scope: 'host', reason: 'security' })
+    const taken = state({
+      scope: 'host',
+      reason: 'security',
+      enforcement: 'takedown',
+    })
+    expect(lockdownBlocks(taken, 'read')).toBe(lockdownBlocks(plain, 'read'))
+    expect(lockdownBlocks(taken, 'write')).toBe(lockdownBlocks(plain, 'write'))
+    expect(lockdownMode(taken)).toBe(lockdownMode(plain))
+    expect(lockdownNotice(taken)).toEqual(lockdownNotice(plain))
+  })
+})
+
 describe('AGL-1511 · read-only mode', () => {
   it('treats an absent, unknown or malformed mode as full', () => {
     // Every lock written before this field existed, and any value a future

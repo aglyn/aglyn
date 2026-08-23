@@ -32,11 +32,21 @@
  * "not locked": an infrastructure blip must not weld the whole platform
  * shut. The same posture as the sanctions gate on an absent geo signal
  * (AGL-1492) and the release-flag reader on a missing template.
+ *
+ * **…except for takedowns (AGL-1621).** One class of lock inverts that cost
+ * function: a legal or abuse takedown must keep holding when Firestore is
+ * unreachable, because "we served it, our database was down" answers no
+ * court order. The class is an EXPLICIT stored field (`enforcement`), never
+ * inferred from scope or reason, and absent means `standard` — so every
+ * lock that exists today, and every lock an operator does not classify,
+ * keeps failing open exactly as before. See the takedown ledger below for
+ * how a classification survives the read that loses it.
  */
 
 import {
   featureLockdownDocId,
   isLockdownActive,
+  isTakedownLockdown,
   LOCKDOWN_FEATURE_STAFF_BYPASS,
   type LockdownFeatureKey,
   LOCKDOWNS_COLLECTION,
@@ -67,6 +77,119 @@ import firebaseAdmin from './firebase-admin'
  */
 const PLATFORM_TTL_MS = 15_000
 
+/**
+ * ===================== THE TAKEDOWN LEDGER (AGL-1621) =====================
+ *
+ * Lockdown fails open, and that stays true for ordinary locks: an
+ * unreachable Firestore is an outage, not a lockdown, and a blip must never
+ * weld every customer site shut. But a legal or abuse TAKEDOWN has the
+ * opposite cost function — "we served the infringing content because our
+ * database was down" is not an answer to a court order. So takedown-class
+ * locks (`enforcement: 'takedown'`) hold through a failed read, and
+ * everything else keeps today's behaviour exactly.
+ *
+ * ## The ordering problem this exists to solve
+ *
+ * The classification is stored ON the lock document. When the read throws
+ * there IS no document, so the class cannot be consulted at failure time —
+ * the obvious implementation ("if the lock is a takedown, fail closed") is
+ * unimplementable as written, because the failure is precisely the loss of
+ * the thing it wants to branch on.
+ *
+ * The only honest source is what this process last SUCCESSFULLY read. So
+ * every successful read records its verdict here: a takedown is remembered,
+ * and anything else RETIRES the entry. A subsequent failed read consults
+ * the ledger instead of falling to null.
+ *
+ * ## What this does and does not guarantee — stated, not implied
+ *
+ * HOLDS: a takedown that a process has already observed keeps being
+ * enforced by that process for as long as Firestore is unreachable. That is
+ * the real incident shape — a takedown placed hours or days ago, then a
+ * Firestore blip — and it is what Zach's decision asks for.
+ *
+ * DOES NOT HOLD: a COLD process that has never once read the takedown has
+ * nothing to remember and fails open, like everything else. Closing that
+ * gap needs a second carrier more available than Firestore (edge config or
+ * similar), which is a different and much larger change; pretending
+ * otherwise here would be worse than naming it. A takedown placed DURING a
+ * total Firestore outage is likewise not enforceable — the write itself
+ * cannot land.
+ *
+ * ## Two things it deliberately does not do
+ *
+ * It is NOT cleared by `invalidate*LockdownCache`. Those run after a staff
+ * write, and clearing the ledger there would mean a lock-then-outage
+ * sequence forgot the takedown at the exact moment it mattered. The next
+ * successful read is what retires an entry, and a lift IS such a read.
+ *
+ * It does not outlive the lock's own expiry: a held takedown is still
+ * checked against `isLockdownActive`, so a `untilMs` that has passed
+ * releases on schedule even while Firestore is down. A dead-man expiry must
+ * not become un-liftable by being classified.
+ */
+const takedownLedger = new Map<string, LockdownState>()
+
+/**
+ * Bounded like the user and domain caches, and for the same reason: two of
+ * the four keyed readers take their key from caller-controlled input.
+ * Eviction is least-recently-USED.
+ */
+export const TAKEDOWN_LEDGER_MAX = 5000
+
+/**
+ * Record what a SUCCESSFUL read saw. A takedown is remembered; anything
+ * else — no lock, an ordinary lock, or a lock whose class this build cannot
+ * interpret — retires the entry, which is how a lift takes effect.
+ */
+function rememberTakedown(key: string, state: LockdownState | null): void {
+  if (!state || !isTakedownLockdown(state)) {
+    takedownLedger.delete(key)
+    return
+  }
+  // Re-insert to refresh recency before the LRU trim below.
+  takedownLedger.delete(key)
+  takedownLedger.set(key, state)
+  while (takedownLedger.size > TAKEDOWN_LEDGER_MAX) {
+    const oldest = takedownLedger.keys().next().value
+    if (oldest === undefined) break
+    takedownLedger.delete(oldest)
+  }
+}
+
+/**
+ * What a FAILED read should serve: a remembered, still-active takedown, or
+ * null — which is the shipped fail-open answer and therefore the default
+ * for every lock that is not an observed takedown.
+ */
+function heldTakedown(key: string, nowMs: number): LockdownState | null {
+  const state = takedownLedger.get(key)
+  if (!state) return null
+  if (!isLockdownActive(state, nowMs)) {
+    takedownLedger.delete(key)
+    return null
+  }
+  return state
+}
+
+/**
+ * Forget every remembered takedown. NOT part of the panic path and not
+ * called by the admin route — this exists for process-boundary and test
+ * setup, where a ledger surviving between cases would make one test's lock
+ * another test's fail-closed verdict.
+ */
+export function resetTakedownLedger(): void {
+  takedownLedger.clear()
+}
+
+/** Ledger keys. Disjoint by construction — the doc-id prefixes already are. */
+const PLATFORM_LEDGER_KEY = 'platform'
+const featureLedgerKey = (feature: LockdownFeatureKey): string =>
+  featureLockdownDocId(feature)
+const userLedgerKey = (uid: string): string => userLockdownDocId(uid)
+const domainLedgerKey = (hostname: string): string =>
+  domainLockdownDocId(hostname)
+
 let platformCache: { at: number; state: LockdownState | null } | undefined
 let platformPending: Promise<LockdownState | null> | undefined
 
@@ -87,7 +210,7 @@ export async function getPlatformLockdown(): Promise<LockdownState | null> {
   }
   if (!platformPending) {
     platformPending = (async () => {
-      let state: LockdownState | null = null
+      let state: LockdownState | null
       try {
         const snapshot = await firebaseAdmin
           .app()
@@ -101,8 +224,12 @@ export async function getPlatformLockdown(): Promise<LockdownState | null> {
               'platform',
             )
           : null
+        rememberTakedown(PLATFORM_LEDGER_KEY, state)
       } catch {
-        // Fail open: an unreachable Firestore is an outage, not a lockdown.
+        // Fail open: an unreachable Firestore is an outage, not a lockdown
+        // — UNLESS this process has already seen a takedown here, which is
+        // the one class that must survive the read failing (AGL-1621).
+        state = heldTakedown(PLATFORM_LEDGER_KEY, Date.now())
       }
       platformCache = { at: Date.now(), state }
       return state
@@ -144,7 +271,7 @@ export async function getFeatureLockdown(
   let pending = featurePending.get(feature)
   if (!pending) {
     pending = (async () => {
-      let state: LockdownState | null = null
+      let state: LockdownState | null
       try {
         const snapshot = await firebaseAdmin
           .app()
@@ -158,9 +285,12 @@ export async function getFeatureLockdown(
               'feature',
             )
           : null
+        rememberTakedown(featureLedgerKey(feature), state)
       } catch {
         // Fail open, matching the platform read: an unreachable Firestore is
-        // an outage, not a feature lockdown.
+        // an outage, not a feature lockdown. A takedown-class feature lock
+        // this process has already observed still holds (AGL-1621).
+        state = heldTakedown(featureLedgerKey(feature), Date.now())
       }
       featureCache.set(feature, { at: Date.now(), state })
       return state
@@ -278,7 +408,7 @@ export async function getUserLockdown(
   let pending = userPending.get(uid)
   if (!pending) {
     pending = (async () => {
-      let state: LockdownState | null = null
+      let state: LockdownState | null
       try {
         const snapshot = await firebaseAdmin
           .app()
@@ -289,9 +419,12 @@ export async function getUserLockdown(
         state = snapshot.exists
           ? normalizeLockdownDoc(snapshot.data() as Partial<LockdownDoc>, 'user')
           : null
+        rememberTakedown(userLedgerKey(uid), state)
       } catch {
         // Fail open, matching the platform and feature reads: an unreachable
-        // Firestore is an outage, not a lockdown.
+        // Firestore is an outage, not a lockdown. An observed takedown-class
+        // user lock holds through it (AGL-1621).
+        state = heldTakedown(userLedgerKey(uid), Date.now())
       }
       userCache.delete(uid)
       userCache.set(uid, { at: Date.now(), state })
@@ -364,7 +497,7 @@ export async function getDomainLockdown(
   let pending = domainPending.get(key)
   if (!pending) {
     pending = (async () => {
-      let state: LockdownState | null = null
+      let state: LockdownState | null
       try {
         const snapshot = await firebaseAdmin
           .app()
@@ -378,8 +511,12 @@ export async function getDomainLockdown(
               'domain',
             )
           : null
+        rememberTakedown(domainLedgerKey(key), state)
       } catch {
-        // Fail open, as above.
+        // Fail open, as above — and, as above, an observed takedown holds.
+        // This is the scope where that matters most: AGL-1513's hijack and
+        // dispute incidents are takedowns almost by definition.
+        state = heldTakedown(domainLedgerKey(key), Date.now())
       }
       domainCache.delete(key)
       domainCache.set(key, { at: Date.now(), state })

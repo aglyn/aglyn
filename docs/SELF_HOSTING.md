@@ -148,11 +148,16 @@ one of these is **off when unset, and never falls back to Aglyn's**:
 | `DOCS_ORGANIZATION_NAME` | the footer copyright reads `Aglyn LLC` — set it |
 
 `DOCS_STATUS_TARGETS` is a comma-separated list of
-`name|label|origin|description`, for example:
+`name|label|origin|description|path`, for example:
 
 ```
 DOCS_STATUS_TARGETS='console|Console|https://app.example.com|Sign-in and editing'
 ```
+
+The fifth field is optional and defaults to `/api/health`; set it to probe a
+subsystem endpoint such as `/api/health/render/site` instead. A description
+may not contain a comma — the comma separates entries, and the remainder is
+dropped as an entry with no origin.
 
 If you point `DOCS_ERROR_BEACON_ENDPOINT` at your own console's
 `/api/errors`, set `NEXT_PUBLIC_DOCS_ORIGIN` on that console to your docs

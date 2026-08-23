@@ -831,6 +831,60 @@ describe('expandCollectionEntries (AGL-551)', () => {
     ).toBe(false)
   })
 
+  it('drops a firstPageOnly LEAD block past route page 1 (AGL-1871)', () => {
+    // The featured split card is a limit-1 block with no `perPage`, so it
+    // slices the top of the set on EVERY route page: `/blog/page/2` led with
+    // the same cover, title and excerpt as `/blog`, above six different
+    // posts, under an eyebrow reading "Latest" that is only true on page 1.
+    const lead = (routePage?: number, firstPageOnly?: boolean) => {
+      const nodes = baseNodes()
+      nodes['list'].props.entriesLimit = 1
+      if (firstPageOnly !== undefined) {
+        nodes['list'].props.firstPageOnly = firstPageOnly
+      }
+      const expanded = expandCollectionEntries(
+        nodes,
+        { blog: { ...blog, ...(routePage ? { page: routePage } : {}) } },
+        'blog',
+      )
+      return (expanded['list'].nodes as string[]).map(
+        (id) => expanded[`${id.replace(/item$/, '')}link`].props.href,
+      )
+    }
+
+    // Page 1 is unchanged — the lead card is the whole point of the block.
+    expect(lead(1, true)).toEqual(['/blog/hello-world'])
+    // Past it, nothing: zero rows, not a second copy of page 1's lead.
+    expect(lead(2, true)).toEqual([])
+    expect(lead(3, true)).toEqual([])
+
+    // DEFAULT OFF. Every block published before this switch existed keeps
+    // rendering on every page — a "popular posts" rail is the same shape as
+    // a lead card and only the author knows which one they built.
+    expect(lead(2, false)).toEqual(['/blog/hello-world'])
+    expect(lead(2)).toEqual(['/blog/hello-world'])
+
+    // Off a routed listing (a blog rail on the homepage) `source.page` is
+    // unset, so the switch has no page to be past and hides nothing.
+    expect(lead(undefined, true)).toEqual(['/blog/hello-world'])
+  })
+
+  it('gates firstPageOnly on the ROUTE page, not a pinned page (AGL-1871)', () => {
+    // A block that names its own `page` is a deliberately fixed window —
+    // "the entries page 3 would show, here" — which says nothing about which
+    // page of the listing the reader is on. Reading the pinned page instead
+    // would blank that block on page 1, where it is supposed to render.
+    const nodes = baseNodes()
+    nodes['list'].props.entriesLimit = 1
+    nodes['list'].props.firstPageOnly = true
+    nodes['list'].props.perPage = 1
+    nodes['list'].props.page = 2
+    const pinned = expandCollectionEntries(nodes, { blog }, 'blog')
+    expect(pinned['list'].nodes).toHaveLength(1)
+    const pinnedLink = `${(pinned['list'].nodes as string[])[0].replace(/item$/, '')}link`
+    expect(pinned[pinnedLink].props.href).toBe('/blog/second')
+  })
+
   it('renders one page window with perPage/page (AGL-620)', () => {
     const many = {
       slug: 'blog',

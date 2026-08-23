@@ -118,6 +118,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     tenantId: null,
     record: { uid, customClaims: {} },
   }),
+  invalidateDomainLockdownCache: () => undefined,
   invalidateFeatureLockdownCache: () => undefined,
   invalidatePlatformLockdownCache: () => undefined,
   invalidateUserLockdownCache: () => undefined,
@@ -235,6 +236,7 @@ describe('AGL-1572 · adminAudit remembers the expiry, the notice and the scope'
       message: NOTICE,
       untilMs: until,
       // AGL-1511: full vs read-only is on every row, both sides.
+      enforcement: 'standard',
       mode: 'full',
     })
     // The carrier really did get the expiry too — otherwise this spec would
@@ -267,6 +269,7 @@ describe('AGL-1572 · adminAudit remembers the expiry, the notice and the scope'
       message: NOTICE,
       untilMs: until,
       // AGL-1511: full vs read-only is on every row, both sides.
+      enforcement: 'standard',
       mode: 'full',
     })
     expect(row.after).toEqual({ locked: false, feature: 'uploads' })
@@ -293,6 +296,7 @@ describe('AGL-1572 · adminAudit remembers the expiry, the notice and the scope'
       message: NOTICE,
       untilMs: until,
       // AGL-1511: full vs read-only is on every row, both sides.
+      enforcement: 'standard',
       mode: 'full',
     })
     expect(row.before).toEqual({
@@ -301,6 +305,7 @@ describe('AGL-1572 · adminAudit remembers the expiry, the notice and the scope'
       message: null,
       untilMs: null,
       // AGL-1511: full vs read-only is on every row, both sides.
+      enforcement: 'standard',
       mode: 'full',
     })
   })
@@ -324,6 +329,7 @@ describe('AGL-1572 · adminAudit remembers the expiry, the notice and the scope'
       message: null,
       untilMs: until,
       // AGL-1511: full vs read-only is on every row, both sides.
+      enforcement: 'standard',
       mode: 'full',
     })
     expect(mockStore[`${LOCKDOWNS_COLLECTION}/${userLockdownDocId('uid-9')}`]).toBeDefined()
@@ -349,6 +355,7 @@ describe('AGL-1572 · adminAudit remembers the expiry, the notice and the scope'
       untilMs: until,
       tokensRevoked: 1,
       // AGL-1511: full vs read-only is on every row, both sides.
+      enforcement: 'standard',
       mode: 'full',
     })
 
@@ -370,6 +377,7 @@ describe('AGL-1572 · adminAudit remembers the expiry, the notice and the scope'
       message: NOTICE,
       untilMs: until,
       // AGL-1511: full vs read-only is on every row, both sides.
+      enforcement: 'standard',
       mode: 'full',
     })
   })
@@ -393,6 +401,7 @@ describe('AGL-1572 · adminAudit remembers the expiry, the notice and the scope'
       message: null,
       untilMs: until,
       // AGL-1511: full vs read-only is on every row, both sides.
+      enforcement: 'standard',
       mode: 'full',
     })
 
@@ -410,6 +419,7 @@ describe('AGL-1572 · adminAudit remembers the expiry, the notice and the scope'
       message: null,
       untilMs: until,
       // AGL-1511: full vs read-only is on every row, both sides.
+      enforcement: 'standard',
       mode: 'full',
     })
   })
@@ -427,6 +437,11 @@ describe('AGL-1572 · adminAudit remembers the expiry, the notice and the scope'
     })
     const after = onlyRow().after as Record<string, unknown>
     expect(Object.keys(after).sort()).toEqual([
+      // AGL-1621 joins the same rule as `mode` below: absence is impossible,
+      // so `standard` is stated rather than inferred from a missing key. A
+      // takedown is exactly the row someone has to produce evidence about
+      // later, and "the key wasn't written yet" is not evidence.
+      'enforcement',
       'feature',
       'locked',
       'message',
@@ -626,5 +641,106 @@ describe('AGL-1571 · a write answers with what the server reads back', () => {
     expect((await get('?scope=feature&targetId=not-a-feature')).status).toBe(400)
     // No scope at all is still the collection listing, unchanged.
     expect((await get('')).status).toBe(200)
+  })
+})
+
+/**
+ * AGL-1621 · the enforcement class through the WRITER.
+ *
+ * The reader's behaviour is proved in
+ * libs/tenant/data/admin/src/lib/server/lockdown.spec.ts. These are the
+ * writer's half: what actually lands in Firestore, and which requests the
+ * route refuses rather than quietly reinterpreting. The storage assertions
+ * matter as much as the validation ones — the whole design rests on absent
+ * meaning fail-open, so a standard lock that writes an `enforcement` key at
+ * all would break the "byte-identical to a pre-AGL-1621 document" property
+ * the migration story depends on.
+ */
+describe('AGL-1621 · enforcement is explicit, stored, and defaults to fail-open', () => {
+  const platformLock = (over: Record<string, unknown> = {}) => ({
+    action: 'lock',
+    scope: 'platform',
+    reason: 'security',
+    confirm: 'LOCK PLATFORM',
+    ...over,
+  })
+  const doc = () => mockStore[`${LOCKDOWNS_COLLECTION}/${PLATFORM_LOCKDOWN_DOC_ID}`]
+
+  it('a takedown STORES the class', async () => {
+    expect((await post(platformLock({ enforcement: 'takedown' }))).status).toBe(200)
+    expect(doc()?.enforcement).toBe('takedown')
+  })
+
+  it('an unclassified lock stores NO enforcement key at all', async () => {
+    // The migration property: absent means fail-open, and every document
+    // written before this field existed is absent. A standard lock must be
+    // indistinguishable from one of those.
+    expect((await post(platformLock())).status).toBe(200)
+    expect(doc()).not.toHaveProperty('enforcement')
+  })
+
+  it('an EXPLICIT standard lock also stores no key — same document either way', async () => {
+    expect((await post(platformLock({ enforcement: 'standard' }))).status).toBe(200)
+    expect(doc()).not.toHaveProperty('enforcement')
+  })
+
+  it('a malformed class is REFUSED, never defaulted in either direction', async () => {
+    // Defaulting is right for an absent field and wrong for a malformed
+    // one: the operator meant something and we could not read it. Both
+    // possible silent outcomes are bad — a takedown that became ordinary,
+    // or an ordinary lock that became fail-closed.
+    for (const junk of ['TAKEDOWN', 'legal', 'take-down', true, 1]) {
+      mockStore = {}
+      mockAuditRows = []
+      const response = await post(platformLock({ enforcement: junk }))
+      expect(response.status).toBe(400)
+      expect((await response.json()).error).toMatch(/enforcement must be one of/)
+      expect(doc()).toBeUndefined()
+    }
+  })
+
+  it('a READ-ONLY takedown is refused — it would keep serving the content', async () => {
+    const response = await post(
+      platformLock({ enforcement: 'takedown', mode: 'read-only' }),
+    )
+    expect(response.status).toBe(400)
+    expect((await response.json()).error).toMatch(/takedown cannot be read-only/)
+    expect(doc()).toBeUndefined()
+  })
+
+  it('the class rides the audit row on BOTH sides, never as a missing key', async () => {
+    await post(platformLock({ enforcement: 'takedown' }))
+    expect((onlyRow().after as Record<string, unknown>).enforcement).toBe('takedown')
+
+    mockAuditRows = []
+    await post({ action: 'unlock', scope: 'platform' })
+    expect((onlyRow().before as Record<string, unknown>).enforcement).toBe('takedown')
+  })
+
+  it('the route READS THE CLASS BACK so the operator can verify it landed', async () => {
+    const response = await post(platformLock({ enforcement: 'takedown' }))
+    const payload = await response.json()
+    expect(payload.verified.enforcement).toBe('takedown')
+    expect(payload.confirmed).toBe(true)
+  })
+
+  it('every narrow scope carries the class too, not just platform', async () => {
+    for (const [scope, targetId] of [
+      ['feature', 'uploads'],
+      ['domain', 'seized.example'],
+      ['user', 'uid-9'],
+    ] as const) {
+      mockStore = {}
+      mockAuditRows = []
+      const response = await post({
+        action: 'lock',
+        scope,
+        targetId,
+        reason: 'security',
+        enforcement: 'takedown',
+      })
+      expect(response.status).toBe(200)
+      expect((await response.json()).verified.enforcement).toBe('takedown')
+    }
   })
 })

@@ -123,12 +123,13 @@ registerPluginJob({
   intervalMinutes: RECOVERY_JOB_INTERVAL_MINUTES,
   description:
     'Email one recovery reminder per stalled checkout (abandonedCart plans).',
-  handler: async () => {
+  lockdown: { scope: 'per-host' },
+  handler: async (gate) => {
     // Quietly, not as an error: email is optional per deployment, and a beat
     // that logs every minute on a self-host without Resend buries everything
     // else in the log.
     if (!isEmailConfigured()) return
-    const { sent } = await scanAbandonedCheckouts()
+    const { sent } = await scanAbandonedCheckouts(gate)
     if (sent) console.info(`commerce: sent ${sent} abandoned-cart reminders`)
   },
 })
@@ -138,9 +139,10 @@ registerPluginJob({
   name: 'back-in-stock-alerts',
   intervalMinutes: RECOVERY_JOB_INTERVAL_MINUTES,
   description: 'Email shoppers whose requested product is in stock again.',
-  handler: async () => {
+  lockdown: { scope: 'per-host' },
+  handler: async (gate) => {
     if (!isEmailConfigured()) return
-    const { sent } = await scanRestockAlerts()
+    const { sent } = await scanRestockAlerts(gate)
     if (sent) console.info(`commerce: sent ${sent} back-in-stock alerts`)
   },
 })
@@ -167,8 +169,9 @@ registerPluginJob({
   intervalMinutes: 60,
   description:
     'Report paid orders whose stock decrement never landed (AGL-2358).',
-  handler: async () => {
-    const scan = await scanStockDecrements()
+  lockdown: { scope: 'per-host' },
+  handler: async (gate) => {
+    const scan = await scanStockDecrements(gate)
     if (scan.missingLines || scan.truncatedHosts) {
       console.warn(
         `commerce: ${scan.missingLines} order lines across ${scan.hosts} ` +
@@ -206,8 +209,9 @@ registerPluginJob({
   description:
     'Deliver queued dropship supplier notifications, with backoff and a ' +
     'dead letter that tells the merchant (AGL-2473).',
-  handler: async () => {
-    const scan = await scanSupplierDeliveries()
+  lockdown: { scope: 'per-host' },
+  handler: async (gate) => {
+    const scan = await scanSupplierDeliveries(gate)
     if (scan.deadLettered) {
       console.warn(
         `commerce: ${scan.deadLettered} dropship orders could not be routed ` +

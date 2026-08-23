@@ -59,9 +59,39 @@ describe('a continue URL that leaves the origin is refused', () => {
     ['a mixed slash-backslash authority', '/\\/evil.com'],
     ['a lookalike suffix host', 'https://evilaglyn.com/steal'],
     ['the empty string', ''],
+    // AGL-1881. The backslash list above was correct and incomplete: the
+    // WHATWG parser DELETES tab, LF and CR before it parses, so each of these
+    // resolves to `https://evil.com/` while containing neither `//` nor `\`.
+    // The predicate now resolves and compares origins instead of reading
+    // characters, which is why these pass without a fourth character being
+    // added to a list. The exhaustive, generated proof lives beside the
+    // predicate in `libs/shared/util/http/src/lib/safe-redirect.spec.ts`.
+    ['a tab in the authority', '/\t/evil.com'],
+    ['a newline in the authority', '/\n/evil.com'],
+    ['a carriage return in the authority', '/\r/evil.com'],
+    ['a tab concealing a backslash authority', '/\t\\evil.com'],
+    ['a CRLF pair in the authority', '/\r\n/evil.com'],
   ])('refuses %s', (_label, url) => {
     expect(isSafeContinueUrl(url)).toBe(false)
   })
+
+  it.each([
+    ['/\t/evil.com'],
+    ['/\n/evil.com'],
+    ['/\r/evil.com'],
+    ['/\t\\evil.com'],
+  ])(
+    'resolves %j off-site — the runtime behaviour those rejections exist for',
+    (url) => {
+      // Not a rule under test, and not a claim about the parser: a live
+      // demonstration. If a future runtime stops stripping these characters,
+      // this line fails and tells us the guard is now stricter than it needs
+      // to be, rather than the reverse.
+      expect(new URL(url, 'https://app.aglyn.com').origin).toBe(
+        'https://evil.com',
+      )
+    },
+  )
 
   /**
    * `strictNullChecks` is OFF repo-wide, so an absent `continue` reaches this

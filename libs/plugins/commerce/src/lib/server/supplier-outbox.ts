@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { type PluginJobHostGate } from '@aglyn/aglyn/server'
 import {
   firebaseAdmin,
   notifyHostManagers,
@@ -157,6 +158,8 @@ export interface SupplierDeliveryScanResult {
   deadLettered: number
   /** Retired without delivery because the merchant removed the endpoint. */
   cancelled: number
+  /** Left pending, with the retry budget intact, because the site is locked. */
+  skippedLocked: number
 }
 
 /** gRPC `Status.ALREADY_EXISTS` — what `create()` on a live path carries. */
@@ -444,6 +447,8 @@ async function recordFailure(
  * drains rather than growing a permanent head.
  */
 export async function scanSupplierDeliveries(
+  /** The lockdown gate, injected by the caller (AGL-2495). Not optional. */
+  gate: PluginJobHostGate,
   now: number = Date.now(),
 ): Promise<SupplierDeliveryScanResult> {
   const firestore = firebaseAdmin.app().firestore()
@@ -458,9 +463,29 @@ export async function scanSupplierDeliveries(
     retried: 0,
     deadLettered: 0,
     cancelled: 0,
+    skippedLocked: 0,
   }
   for (const snapshot of pending.docs) {
     const data = snapshot.data() as SupplierDeliveryRecord
+    // LOCKDOWN (AGL-2495). The row is a TOP-LEVEL document carrying its own
+    // `hostId` rather than living under `hosts/{hostId}`, so the host is read
+    // from the record instead of the parent chain — the one job of the six
+    // whose subject is not in its path.
+    //
+    // An outbound POST to the merchant's supplier is this platform acting in
+    // a suspended merchant's name against a third party, which is precisely
+    // what a takedown is for. The attempt also mutates the row (`attempts`,
+    // `nextAttemptAtMs`, or the dead-letter) and can notify the host's
+    // managers.
+    //
+    // SKIPPED, NOT DROPPED, and the strongest case of the six: the row stays
+    // `pending` with its `attempts` count untouched, so a long lock cannot
+    // burn a paid order's retry budget and dead-letter it for being locked.
+    // The queue drains from where it stood the minute the lock lifts.
+    if (await gate.isLocked(String(data?.hostId ?? ''))) {
+      result.skippedLocked += 1
+      continue
+    }
     if (Number(data?.nextAttemptAtMs ?? 0) > now) continue
     const outcome = await attemptSupplierDelivery(
       firestore,

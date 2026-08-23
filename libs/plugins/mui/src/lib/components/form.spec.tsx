@@ -372,6 +372,27 @@ describe('form survey fields (AGL-544)', () => {
         expect(sanitizeRedirectUrl('')).toBeUndefined()
         expect(sanitizeRedirectUrl(undefined)).toBeUndefined()
       })
+
+      /**
+       * AGL-1881. This site never received the AGL-2486 backslash fix, and the
+       * backslash alone would not have been enough: the URL parser deletes
+       * tab, LF and CR before parsing, so each of these resolves off-site
+       * while containing neither `//` nor `\`. `formNavigation.assign` hands
+       * the result to `window.location.assign`, which resolves it the same
+       * way — a stored prop on a published site, reaching every visitor.
+       */
+      it.each([
+        ['a backslash authority', '/\\evil.com'],
+        ['a tab in the authority', '/\t/evil.com'],
+        ['a newline in the authority', '/\n/evil.com'],
+        ['a carriage return in the authority', '/\r/evil.com'],
+        ['a tab concealing a backslash', '/\t\\evil.com'],
+      ])('rejects %s', (_label, candidate) => {
+        expect(new URL(candidate, 'https://shop.example').origin).toBe(
+          'https://evil.com',
+        )
+        expect(sanitizeRedirectUrl(candidate)).toBeUndefined()
+      })
     })
 
     describe('resolveRedirectTarget', () => {

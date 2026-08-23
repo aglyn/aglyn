@@ -49,6 +49,16 @@ import { join, relative, resolve } from 'path'
  */
 const REPO_ROOT = resolve(__dirname, '../../..')
 const CONSOLE_API = 'apps/console/app/api'
+/**
+ * Widened with its sibling (AGL-2495): the whole `app` tree, and every App
+ * Router handler spelling. A `route.tsx` that declared `intent: 'read'` was
+ * invisible to this audit, and so was any handler outside `app/api` — which
+ * is not hypothetical, `app/auth/handoff/start/route.ts` is one. The
+ * `api/admin/` exclusion below is unchanged and still keys off `CONSOLE_API`.
+ */
+const CONSOLE_APP = 'apps/console/app'
+const isRouteFile = (name: string): boolean =>
+  /^route\.(?:ts|tsx|js|jsx|mjs|cjs)$/.test(name)
 
 const SKIP_DIRS = new Set([
   'node_modules',
@@ -68,7 +78,7 @@ function walk(absoluteDir: string): string[] {
     if (entry.isDirectory()) {
       if (SKIP_DIRS.has(entry.name)) continue
       found.push(...walk(join(absoluteDir, entry.name)))
-    } else if (entry.name === 'route.ts') {
+    } else if (isRouteFile(entry.name)) {
       found.push(join(absoluteDir, entry.name))
     }
   }
@@ -77,7 +87,7 @@ function walk(absoluteDir: string): string[] {
 
 const read = (absolutePath: string) => readFileSync(absolutePath, 'utf8')
 
-const ROUTES = walk(resolve(REPO_ROOT, CONSOLE_API))
+const ROUTES = walk(resolve(REPO_ROOT, CONSOLE_APP))
   .map((absolutePath) => relative(REPO_ROOT, absolutePath))
   .filter((file) => !file.includes(`${CONSOLE_API}/admin/`))
   .sort()
@@ -204,6 +214,15 @@ describe('AGL-1625 · which console routes are declared READS', () => {
     // would "pass" every assertion below by finding nothing to check.
     expect(ROUTES.length).toBeGreaterThanOrEqual(80)
     expect(DECLARED.length).toBeGreaterThan(0)
+    // ANTI-VACUITY for the widened root (AGL-2495): the walk must actually
+    // reach outside `app/api`, and be seen to. A root that resolved to the
+    // same set as before would pass every assertion in this file.
+    expect(ROUTES).toContain('apps/console/app/auth/handoff/start/route.ts')
+    // And the extension predicate, which no fixture proves on its own.
+    expect(
+      ['route.ts', 'route.tsx', 'route.js'].map(isRouteFile),
+    ).toEqual([true, true, true])
+    expect(['page.tsx', 'my-route.ts'].map(isRouteFile)).toEqual([false, false])
   })
 
   it('declares a read intent only on an audited route', () => {

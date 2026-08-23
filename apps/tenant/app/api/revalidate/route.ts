@@ -15,6 +15,12 @@
  * limitations under the License.
  */
 
+// lockdown-423: exempt — shared-secret cache purge called by the console's server
+// after it has already run the verdict for the publish that triggered it. It drops
+// cached HTML for paths on one host and writes no org data; the worst it can do is
+// make pages regenerate, which is why the route itself is deliberately not treated
+// as an authorization boundary (see the docblock above).
+
 /**
  * Drop the cached HTML for specific tenant pages (AGL-1150).
  *

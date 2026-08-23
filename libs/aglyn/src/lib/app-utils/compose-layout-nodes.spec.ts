@@ -20,6 +20,8 @@ import {
   canNestLayout,
   composeLayoutAndScreenNodes,
   composeLayoutChainAndScreenNodes,
+  hasScreenAuthoredNodes,
+  isLayoutComposedNodeId,
   LAYOUT_NODE_ID_PREFIX,
   LAYOUT_SLOT_COMPONENT_ID,
   layoutNodeIdPrefix,
@@ -286,5 +288,76 @@ describe('canNestLayout', () => {
   it('refuses blank ids rather than treating them as a valid pair', () => {
     expect(canNestLayout('', 'a', parentOf)).toBe(false)
     expect(canNestLayout('a', '', parentOf)).toBe(false)
+  })
+})
+
+
+/**
+ * The 404 that rendered as branding around nothing (AGL-1871).
+ *
+ * `aglyn.com` published a *"Not found (404)"* screen with no nodes on it. The
+ * compose still answered — with 297 layout nodes and an empty slot — and the
+ * caller read a populated map as "this host has a designed 404", so the
+ * platform fallback never ran and every unmatched URL on the site served a
+ * header and a footer with a blank middle. The ids below are the real shapes
+ * measured on the served payload that day.
+ */
+describe('isLayoutComposedNodeId / hasScreenAuthoredNodes (AGL-1871)', () => {
+  it('reads a layout node, at every depth of the chain, as layout', () => {
+    expect(isLayoutComposedNodeId('layout__52Ef-3t6yd')).toBe(true)
+    expect(isLayoutComposedNodeId('layout2__XwUE-u-uqi')).toBe(true)
+    expect(
+      isLayoutComposedNodeId(`${layoutNodeIdPrefix(MAX_LAYOUT_CHAIN_DEPTH)}x`),
+    ).toBe(true)
+  })
+
+  it('reads a component grafted ONTO the layout as layout, nesting included', () => {
+    // The marketing nav's real composed id.
+    expect(isLayoutComposedNodeId('cmp__layout__52Ef-3t6yd___R91yATrXH')).toBe(
+      true,
+    )
+    expect(
+      isLayoutComposedNodeId('cmp__cmp__layout__52Ef-3t6yd___R91yATrXH__aB'),
+    ).toBe(true)
+  })
+
+  it('reads a screen node — and a component grafted onto one — as the screen’s', () => {
+    expect(isLayoutComposedNodeId('QBq3zyK1EV')).toBe(false)
+    expect(isLayoutComposedNodeId('_R91yATrXH')).toBe(false)
+    expect(isLayoutComposedNodeId('cmp__QBq3zyK1EV__az16ysFuZD')).toBe(false)
+    expect(isLayoutComposedNodeId(undefined)).toBe(false)
+  })
+
+  it('answers FALSE for a tree that is layout chrome and a synthesized root', () => {
+    // Annotated for the same reason `screenNodes` above is: an inline literal
+    // infers `nodes: any[]`, which is not assignable to `NormalizedNodes`.
+    const rootOnly: Record<string, AglynNodeSchema> = {
+      [ROOT]: { $id: ROOT, componentId: 'root', nodes: [] },
+    }
+    const chromeOnly = composeLayoutAndScreenNodes(layoutNodes, rootOnly)
+
+    // The compose really did answer with a populated map — which is exactly
+    // why "truthy nodes" was the wrong question to ask it.
+    expect(Object.keys(chromeOnly).length).toBeGreaterThan(1)
+    expect(hasScreenAuthoredNodes(chromeOnly)).toBe(false)
+  })
+
+  it('answers TRUE as soon as the screen contributes one node', () => {
+    expect(
+      hasScreenAuthoredNodes(
+        composeLayoutAndScreenNodes(layoutNodes, screenNodes),
+      ),
+    ).toBe(true)
+  })
+
+  it('answers FALSE for an absent or empty tree rather than throwing', () => {
+    expect(hasScreenAuthoredNodes(null)).toBe(false)
+    expect(hasScreenAuthoredNodes(undefined)).toBe(false)
+    expect(hasScreenAuthoredNodes({})).toBe(false)
+    expect(hasScreenAuthoredNodes({ [ROOT]: {} })).toBe(false)
+  })
+
+  it('answers TRUE for a screen with no layout at all', () => {
+    expect(hasScreenAuthoredNodes(screenNodes)).toBe(true)
   })
 })

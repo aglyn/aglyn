@@ -347,6 +347,44 @@ describe('Collection entries search (AGL-1516)', () => {
     expect(screen.getByText('{{entry.title}}')).toBeTruthy()
   })
 
+  it('offers Only-on-page-1 as a switch, kept off the DOM (AGL-1871)', () => {
+    const attribute = (collectionEntriesSchema.attributes ?? []).find(
+      (item) => item.name === 'firstPageOnly',
+    )
+    // A SWITCH, so the author flips it rather than typing a truthy string —
+    // this is read with `Boolean()` at compose time and "false" is truthy.
+    expect(attribute?.component).toBe(Aglyn.FieldComponentType.SWITCH)
+    // Compose-time only: `expandCollectionEntries` acts on it and the
+    // component must not leak it onto the rendered element, the way
+    // collectionSlug/entriesLimit/perPage/page are stripped.
+    //
+    // React drops an unrecognized camelCase prop rather than rendering it, so
+    // the ATTRIBUTE alone cannot tell a stripped prop from a leaked one — it
+    // is absent either way, and only a console warning marks the difference.
+    // Assert the warning too, or this passes on a component that forwards it.
+    const warnings: unknown[][] = []
+    const consoleError = jest
+      .spyOn(console, 'error')
+      .mockImplementation((...args: unknown[]) => {
+        warnings.push(args)
+      })
+    let root: HTMLElement
+    try {
+      const { container } = render(
+        <CollectionEntries firstPageOnly>
+          <span>{'{{entry.title}}'}</span>
+        </CollectionEntries>,
+      )
+      root = container.firstElementChild as HTMLElement
+    } finally {
+      consoleError.mockRestore()
+    }
+    expect(root.getAttributeNames()).not.toContain('firstpageonly')
+    expect(
+      warnings.filter((args) => /firstPageOnly/.test(args.join(' '))),
+    ).toEqual([])
+  })
+
   it('offers Search as a switch and the placeholder gated behind it', () => {
     const attribute = (name: string) =>
       (collectionEntriesSchema.attributes ?? []).find(

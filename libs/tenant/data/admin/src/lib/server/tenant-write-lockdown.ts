@@ -132,3 +132,48 @@ export async function visitorWriteRefusal(options: {
     notice: lockdownPausedNotice(options.surface),
   })
 }
+
+/**
+ * The refusal a visitor-facing route that SERVES SITE CONTENT over `/api`
+ * returns under a FULL lock, or null to proceed (AGL-2495):
+ *
+ *   const down = await visitorContentRefusal({ hostId })
+ *   if (down) return down
+ *
+ * The gap this closes, found by the AGL-1621 drill. The tenant middleware
+ * is what takes a locked site off the air, and its matcher deliberately
+ * excludes `/api` — so a full org or host takedown 503s every page while an
+ * API route that composes and returns screen nodes keeps handing the site's
+ * content out to anyone who can name a screen. `visitorWriteRefusal` above
+ * cannot answer that: it leaves before any read, by design, because it is a
+ * WRITE gate on the hot unauthenticated GET path.
+ *
+ * FULL locks only, and that is the whole point of it being a separate
+ * helper rather than a flag on the write gate. Read-only mode exists so a
+ * customer's site keeps serving and earning; refusing reads there would
+ * spend exactly what the mode protects. `lockdownBlocks(state, 'read')` is
+ * true only when the mode is full, which is precisely the case where the
+ * pages are already gone.
+ *
+ * Deliberately NOT applied to the whole tenant API surface. A read-refusing
+ * gate on every route would take the lock notice, the verdict probe and the
+ * abuse intake down with the site. This is for the routes that serve the
+ * SITE ITSELF — a composed node tree — where continuing to serve is
+ * continuing to publish. `serve-media-cdn.ts` made the same call for bytes
+ * (AGL-1520); this is the node-tree half of it.
+ *
+ * Fails OPEN through `getSiteLockdown`, like every other reader here.
+ */
+export async function visitorContentRefusal(options: {
+  hostId: string
+  surface?: LockdownPausedSurface
+  nowMs?: number
+}): Promise<Response | null> {
+  const nowMs = options.nowMs ?? Date.now()
+  const state = await getSiteLockdown(options.hostId, nowMs)
+  if (!lockdownBlocks(state, 'read')) return null
+  return lockdownJsonResponse(
+    state as LockdownState,
+    options.surface ? { notice: lockdownPausedNotice(options.surface) } : undefined,
+  )
+}

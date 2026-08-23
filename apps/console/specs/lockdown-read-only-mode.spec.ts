@@ -43,6 +43,24 @@
 
 import { PLATFORM_LOCKDOWN_DOC_ID } from '@aglyn/aglyn/server'
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+/**
+ * The scopes the route itself accepts, parsed from its `SCOPES` set. Read
+ * from source on purpose: a scope added to the route without a decision
+ * about read-only must fail HERE rather than be silently uncovered.
+ */
+function routeScopes(): string[] {
+  const source = readFileSync(
+    join(__dirname, '..', 'app', 'api', 'admin', 'lockdown', 'route.ts'),
+    'utf8',
+  )
+  const block = /const SCOPES = new Set\(\[([\s\S]*?)\]\)/.exec(source)
+  if (!block) throw new Error('SCOPES set not found in the lockdown route')
+  return Array.from(block[1].matchAll(/'([^']+)'/g)).map((m) => m[1])
+}
+
 let mockStore: Record<string, Record<string, unknown>> = {}
 let mockAuditRows: Record<string, unknown>[] = []
 let mockOrgCalls: Record<string, unknown>[] = []
@@ -108,6 +126,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   getLockdownVerdict: async () => null,
   featureLockdownRefusal: async () => null,
   lockdownJsonResponse: () => Response.json({}, { status: 423 }),
+  // AGL-1513. Absent from this mock the DOMAIN branch 500s at its cache
+  // invalidation, which would mask what this file is here to assert.
+  invalidateDomainLockdownCache: () => undefined,
   invalidateFeatureLockdownCache: () => undefined,
   invalidatePlatformLockdownCache: () => undefined,
   invalidateUserLockdownCache: () => undefined,
@@ -280,6 +301,138 @@ describe('AGL-1511 · arming a read-only lock', () => {
       expect(mockAuditRows).toHaveLength(0)
       expect(mockStore).toEqual({})
     }
+  })
+
+  /*=====================================================================
+   * AGL-1621 · every scope either PERSISTS read-only or REFUSES it.
+   *
+   * The `domain` scope (AGL-1513) landed after AGL-1511 and got neither:
+   * it was absent from the refusal list above AND its `ref.set` omitted the
+   * `...(mode === 'read-only' ? { mode } : {})` spread that every other
+   * carrier writes. So `mode: 'read-only'` returned 200, was dropped on the
+   * floor, and `lockdownMode()` read the resulting document back as `full`
+   * — the absent-means-full fail-safe doing exactly its job on a value the
+   * operator had actually supplied. An operator asked for the lighter
+   * action, was told it worked, and a whole custom domain went dark.
+   *
+   * This is the STRUCTURAL form of that check rather than one more case in
+   * the list above: it is quantified over the route's own scope set, so the
+   * next scope added is a violation BY EXISTING unless its author does one
+   * of the two things. A per-scope test would have had to be remembered.
+   *===================================================================*/
+  describe('AGL-1621 · no scope may silently upgrade read-only to full', () => {
+    /**
+     * Where each scope's carrier keeps its strictness. `null` = the scope is
+     * expected to refuse read-only outright, so there is no carrier to read.
+     */
+    const CARRIER: Record<
+      string,
+      { targetId?: string; seed?: [string, Record<string, unknown>]; doc: string; field: string } | null
+    > = {
+      platform: {
+        doc: `lockdowns/${PLATFORM_LOCKDOWN_DOC_ID}`,
+        field: 'mode',
+      },
+      org: {
+        targetId: 'org-1',
+        seed: ['orgs/org-1', { name: 'Acme' }],
+        doc: 'orgs/org-1',
+        field: 'suspendedMode',
+      },
+      host: {
+        targetId: 'host-1',
+        seed: ['hosts/host-1', { subdomain: 'acme' }],
+        doc: 'hosts/host-1',
+        field: 'suspendedMode',
+      },
+      // REFUSED since AGL-1621, and the reason is stronger than the
+      // user/feature one: read-only has no enforcement surface here at all.
+      // Every path that resolves the domain scope is a path that SERVES (the
+      // edge verdict, the page loader, the locked notice), and neither write
+      // gate resolves the domain scope — `getSiteLockdown` and
+      // `getLockdownVerdict` are keyed by hostId, a domain lock by HOSTNAME.
+      // A stored read-only domain lock would refuse nothing anywhere while
+      // the console reported LOCKED.
+      domain: null,
+      user: null,
+      feature: null,
+    }
+
+    /** The target each refusing scope is exercised with. */
+    const REFUSED_TARGET: Record<string, string> = {
+      domain: 'disputed.example.com',
+      feature: 'checkout',
+      user: 'user-1',
+    }
+
+    // Read from the route's own source so a new scope cannot be added
+    // without appearing here — the list is DISCOVERED, not restated.
+    const ROUTE_SCOPES = routeScopes()
+
+    /**
+     * The STAFF PAGE's half of the same decision. The original defect was
+     * exactly this drift: `domain` arrived in the route's `SCOPES`, nobody
+     * added it to the refusal list, and nobody removed its mode control from
+     * the card — so the card offered read-only, sent it, and was told 200.
+     * Pinning the two sides against each other means the next scope cannot
+     * be half-taught.
+     */
+    it('the staff card offers the mode control on exactly the scopes the route accepts it on', () => {
+      const page = readFileSync(
+        join(__dirname, '..', 'app', '(app)', 'admin', 'lockdown', 'page.tsx'),
+        'utf8',
+      )
+      const block = /const READ_ONLY_SCOPES = new Set\(\[([\s\S]*?)\]\)/.exec(page)
+      if (!block) throw new Error('READ_ONLY_SCOPES not found on the staff page')
+      const offered = Array.from(block[1].matchAll(/'([^']+)'/g)).map((m) => m[1])
+      // Anti-vacuity: an empty parse would make the comparison below pass
+      // against an empty refusal set.
+      expect(offered.length).toBeGreaterThan(0)
+      const accepted = ROUTE_SCOPES.filter((scope) => CARRIER[scope] !== null)
+      expect(offered.slice().sort()).toEqual(accepted.slice().sort())
+    })
+
+    it('the scope set is read from the route, not restated here', () => {
+      // Anti-vacuity: a parse returning [] would make every case below
+      // vacuously pass. It must find the six shipped scopes exactly.
+      expect(ROUTE_SCOPES.slice().sort()).toEqual(
+        ['domain', 'feature', 'host', 'org', 'platform', 'user'].sort(),
+      )
+      expect(Object.keys(CARRIER).slice().sort()).toEqual(
+        ROUTE_SCOPES.slice().sort(),
+      )
+    })
+
+    it.each(ROUTE_SCOPES)(
+      'scope %s: read-only is stored as read-only, or refused with a reason',
+      async (scope) => {
+        const carrier = CARRIER[scope]
+        if (carrier?.seed) mockStore[carrier.seed[0]] = { ...carrier.seed[1] }
+        const response = await post({
+          action: 'lock',
+          scope,
+          targetId: carrier?.targetId ?? REFUSED_TARGET[scope] ?? '',
+          mode: 'read-only',
+          reason: 'maintenance',
+          ...(scope === 'platform' ? { confirm: 'LOCK PLATFORM' } : {}),
+        })
+        if (carrier === null) {
+          // Refused — and the refusal has to SAY read-only is the thing that
+          // cannot apply, not fail for some unrelated validation reason.
+          expect(response.status).toBe(400)
+          expect(String((await response.json()).error)).toMatch(/read-only/)
+          // Refused BEFORE anything was written or audited — the whole point
+          // is that no carrier ever holds a strictness nobody asked for.
+          expect(mockStore).toEqual({})
+          expect(mockAuditRows).toHaveLength(0)
+          return
+        }
+        expect(response.status).toBe(200)
+        // The stored value is what the operator asked for. Absent is the
+        // failure being guarded: `lockdownMode()` reads absent as `full`.
+        expect(mockStore[carrier.doc]?.[carrier.field]).toBe('read-only')
+      },
+    )
   })
 
   it('rejects an unrecognised mode rather than defaulting it away', async () => {

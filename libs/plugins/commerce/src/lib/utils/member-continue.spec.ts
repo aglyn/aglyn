@@ -35,4 +35,22 @@ describe('safeContinuePath (AGL-553)', () => {
     expect(safeContinuePath(null)).toBe('/')
     expect(safeContinuePath(undefined, '/account')).toBe('/account')
   })
+
+  /**
+   * AGL-1881 — the characters the URL parser deletes before it parses. Each of
+   * these contains neither `//` nor `\`, so every previous version of this
+   * guard passed them straight through to a storefront member's post-sign-in
+   * navigation.
+   */
+  it.each([
+    ['a tab in the authority', '/\t/evil.example'],
+    ['a newline in the authority', '/\n/evil.example'],
+    ['a carriage return in the authority', '/\r/evil.example'],
+    ['a tab concealing a backslash', '/\t\\evil.example'],
+  ])('falls back for %s', (_label, candidate) => {
+    expect(new URL(candidate, 'https://shop.example').origin).toBe(
+      'https://evil.example',
+    )
+    expect(safeContinuePath(candidate)).toBe('/')
+  })
 })

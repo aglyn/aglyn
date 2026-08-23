@@ -28,7 +28,11 @@ import {
   sendEmail,
   type LoadedHostEmail,
 } from '@aglyn/shared-util-email'
-import { type PluginApiHandler } from '@aglyn/aglyn/server'
+import {
+  type PluginApiHandler,
+  type PluginJobHostGate,
+  pluginJobHostGate,
+} from '@aglyn/aglyn/server'
 
 const REMIND_AFTER_MS = 60 * 60 * 1000
 const GIVE_UP_AFTER_MS = 7 * 24 * 60 * 60 * 1000
@@ -37,6 +41,8 @@ const GIVE_UP_AFTER_MS = 7 * 24 * 60 * 60 * 1000
 export interface AbandonedScanResult {
   scanned: number
   sent: number
+  /** Rows left untouched because their site is locked (AGL-2495). */
+  skippedLocked: number
 }
 
 /**
@@ -56,7 +62,14 @@ export interface AbandonedScanResult {
  * proved out) while the HTTP door stays for manual/ops invocation and for the
  * console's "send now" control.
  */
-export async function scanAbandonedCheckouts(): Promise<AbandonedScanResult> {
+export async function scanAbandonedCheckouts(
+  /**
+   * The lockdown gate, injected by whoever drives the pass (AGL-2495). NOT
+   * optional: a default would make "forgot to thread it" compile, which is
+   * the whole failure this parameter exists to make impossible.
+   */
+  gate: PluginJobHostGate,
+): Promise<AbandonedScanResult> {
   const firestore = firebaseAdmin.app().firestore()
   const now = Date.now()
   // Collection-group over every host's checkouts.
@@ -73,8 +86,25 @@ export async function scanAbandonedCheckouts(): Promise<AbandonedScanResult> {
   const brandingByHost = new Map<string, Aglyn.ResolvedBrandingProfile>()
   // Resolve each host's designed template once per run (AGL-770).
   const templateCache = new Map<string, LoadedHostEmail | null>()
+  let skippedLocked = 0
   for (const docSnapshot of openCheckouts.docs) {
     const data = docSnapshot.data() as any
+    // `hosts/{hostId}/checkouts/{id}` — the grandparent is the host.
+    const hostId = docSnapshot.ref.parent.parent?.id
+    if (!hostId) continue
+    // LOCKDOWN (AGL-2495), and it is the FIRST thing in the loop body rather
+    // than sitting next to the email below, because the `status: 'expired'`
+    // stamp further down is itself a write for this host. Reordered for that
+    // reason: the cheap filters used to run first, and one of them wrote.
+    //
+    // SKIPPED, NOT DROPPED: `continue` leaves the checkout `open` and
+    // unstamped, so the reminder is sent — or the row expired — on the first
+    // beat after the lift. Nothing here marks a checkout done, so declining
+    // to act IS leaving it for later.
+    if (await gate.isLocked(hostId)) {
+      skippedLocked += 1
+      continue
+    }
     const createdAtMs = Number(data.createdAtMs ?? 0)
     if (!data.email || data.remindedAtMs) continue
     if (now - createdAtMs < REMIND_AFTER_MS) continue
@@ -84,8 +114,6 @@ export async function scanAbandonedCheckouts(): Promise<AbandonedScanResult> {
         .catch(() => undefined)
       continue
     }
-    const hostId = docSnapshot.ref.parent.parent?.id
-    if (!hostId) continue
     if (!entitledHosts.has(hostId)) {
       const org = await getOrgForHost(hostId).catch(() => null)
       entitledHosts.set(
@@ -126,7 +154,7 @@ export async function scanAbandonedCheckouts(): Promise<AbandonedScanResult> {
       .catch(() => undefined)
     sent += 1
   }
-  return { scanned: openCheckouts.size, sent }
+  return { scanned: openCheckouts.size, sent, skippedLocked }
 }
 
 /**
@@ -149,7 +177,10 @@ export const processAbandonedHandler: PluginApiHandler = async (req, res) => {
     return res.status(501).json({ error: 'Email is not configured.' })
   }
   try {
-    return res.status(200).json(await scanAbandonedCheckouts())
+    // The manual door asks the same question the beat does (AGL-2495): a
+    // forced pass is still a pass, and `x-cron-secret` is not an argument
+    // for mailing a suspended site's shoppers.
+    return res.status(200).json(await scanAbandonedCheckouts(pluginJobHostGate()))
   } catch (error) {
     console.error(error)
     return res.status(500).json({ error: 'Processing failed' })
