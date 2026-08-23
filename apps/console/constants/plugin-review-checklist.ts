@@ -103,6 +103,29 @@ export const PLUGIN_REVIEW_CHECKLIST: readonly ReviewChecklistItem[] = [
       `Read the listing title, description and README the way a customer would. Describing what the plugin does, and stating which ${PLATFORM_BRAND_NAME} plans or features it needs or is compatible with, is fine. Comparing against ${PLATFORM_BRAND_NAME}’s prices, asserting what a plan costs or contains, or presenting the plugin as a way to avoid paying for a tier is not — this text renders in the console beside the upgrade the customer is weighing. Publisher Agreement §3(h): reject and say which line, rather than approving with a note.`,
     required: true,
   },
+  /**
+   * The publisher copy the listing page never shows (AGL-2486).
+   *
+   * A plugin declares canvas elements in its manifest (AGL-1031), each with a
+   * display name and a description the besigner renders in the element
+   * picker. That text is publisher-authored, it ships inside the bundle
+   * rather than in the listing, and it lands closer to the customer's own
+   * work than the listing ever does. `positioning` above is written as "read
+   * the listing the way a customer would" — worked exactly as written, it
+   * finishes without this copy ever having been read.
+   *
+   * Its own item rather than a sentence bolted onto `positioning`, because it
+   * is a different ACTION in a different place. Folded into one tick, "I read
+   * the listing" stays honestly tickable by a reviewer who never opened the
+   * picker, and that is precisely the gap.
+   */
+  {
+    id: 'element-metadata',
+    label: 'Declared element names and descriptions read in the picker',
+    detail:
+      `Element copy is not on the listing page — it ships in the manifest's \`elements\` array (shown in Security above) and renders in the besigner element picker. Read it where a customer meets it: on the throwaway install from the item above, open the besigner and the element picker, and read every entry this plugin contributes. Same bar as the listing — saying what the element does is fine, quoting what a ${PLATFORM_BRAND_NAME} plan costs or pitching it as a way to skip an upgrade is not. If the version declares no elements, confirm that from Security rather than assuming it.`,
+    required: true,
+  },
   {
     id: 'license',
     label: 'License present and acceptable',

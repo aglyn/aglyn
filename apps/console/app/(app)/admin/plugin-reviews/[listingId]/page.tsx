@@ -64,6 +64,17 @@ interface VersionEntry {
   sha256: string
   hostAbi: number | null
   capabilities: { network?: string[]; events?: string[] }
+  /**
+   * Canvas elements this version declares (AGL-1031) — publisher-authored
+   * copy the besigner renders in the element picker, and the subject of the
+   * `element-metadata` criterion (AGL-2486).
+   */
+  elements?: Array<{
+    id: string
+    displayName?: string
+    description?: string
+    category?: string
+  }>
   publishedAt: string | null
   signed: boolean
   reviewState: string
@@ -409,6 +420,20 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
             }
           : null
       }
+      case 'element-metadata':
+        // Where the copy is READ, which is the whole difficulty with this
+        // one: the picker lives in the besigner on whatever site the
+        // reviewer installed it to, so the listing is the closest thing to
+        // a starting point this page can hand them.
+        return detail.publisherSlug
+          ? {
+              href: buildRoute(Route.ORG_MARKETPLACE_LISTING, {
+                orgSlug: detail.publisherSlug,
+                listingId: detail.listingId,
+              }),
+              label: 'Install, then open the element picker',
+            }
+          : null
       case 'behaviour':
         return detail.publisherSlug
           ? {
@@ -738,6 +763,33 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                       reviewVersionEntry?.hostAbi ?? 'none (legacy)'
                     }, platform runs ${detail.platformHostAbi}`}
                   </Typography>
+                  {/* Declared elements (AGL-2486). Not a capability — copy.
+                      The picker renders this name and description inside the
+                      customer's console, and the listing page shows neither,
+                      so a reviewer working from the listing alone never meets
+                      it. "Declares none" and "we never looked" must not read
+                      the same, hence the explicit empty line. */}
+                  <Stack spacing={0.5}>
+                    <Typography variant="body2" color="text.secondary">
+                      {`Declared elements: ${
+                        reviewVersionEntry?.elements?.length ?? 0
+                      } — this text renders in the element picker, not on the listing.`}
+                    </Typography>
+                    {(reviewVersionEntry?.elements ?? []).map((element) => (
+                      <Typography
+                        key={element.id}
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ pl: 1 }}
+                      >
+                        {`${element.displayName || element.id}${
+                          element.category ? ` · ${element.category}` : ''
+                        }${
+                          element.description ? ` — ${element.description}` : ''
+                        }`}
+                      </Typography>
+                    ))}
+                  </Stack>
                   {/* "No findings" and "never checked" must not look the
                       same. A null verdict means the artifacts bucket is
                       unreachable or unconfigured, and rendering that as a
