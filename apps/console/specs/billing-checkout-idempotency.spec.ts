@@ -92,7 +92,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
   featureLockdownRefusal: async () => null,
-  getServerReleaseFlagValues: async () => ({}),
+  // The checkout route resolves `release_native_checkout` through the ORG-AWARE
+  // gate (AGL-2486), so this is the seam, not `getServerReleaseFlagValues`.
+  // False keeps every case in these suites on the hosted redirect, which is
+  // the shape they assert.
+  isServerReleaseFlagOnForOrg: async () => false,
   memberHasOrgPermission: async () => true,
   resolveOrgMembership: async (_uid: string, orgId: string | null) => ({
     orgId: orgId ?? 'org-1',

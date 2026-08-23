@@ -20,7 +20,6 @@ import {
   claimAttempt,
   isCustomPricedPlan,
   isOrgSubscriptionLive,
-  isReleaseFlagOn,
   pluginRequestFromWeb,
   Route,
   type AttemptClaim,
@@ -30,8 +29,8 @@ import {
   emailUnverifiedResponse,
   featureLockdownRefusal,
   firebaseAdmin,
-  getServerReleaseFlagValues,
   isImpersonationSession,
+  isServerReleaseFlagOnForOrg,
   memberHasOrgPermission,
   readOrgBilling,
   resolveOrgMembership,
@@ -234,22 +233,31 @@ async function handler(request: Request): Promise<Response> {
     //
     // The redirect stays the default until a real card has been through this,
     // which is not something a test suite can do for us.
-    const flagValues = await getServerReleaseFlagValues()
     // BOTH conditions, not just the flag. An embedded session returns a client
     // secret and no `url`, so if the browser cannot mount it — which needs a
     // publishable key that is currently set nowhere — flipping the flag would
     // strand a paying customer with a dead Upgrade button. Requiring the key
     // here means the worst case of a premature flag flip is the redirect we
     // already ship.
+    //
+    // Resolved through `isServerReleaseFlagOnForOrg` (AGL-2486), NOT by reading
+    // `getServerReleaseFlagValues()` and calling `isReleaseFlagOn` here. That
+    // two-step is what this route used to do, and it made the per-org overrides
+    // unreachable on the one code path that takes money: a staff grant on
+    // `orgs/{orgId}.releaseFlags` was written, cached and then ignored, so
+    // native checkout was all-or-nothing platform-wide and there was no way to
+    // pilot it with a single customer. Which is precisely what the note above
+    // asks for — the redirect stays the default until a real card has been
+    // through this, and a per-org grant is how that first card gets there.
+    //
+    // The org is the subject for both halves: it selects the override AND it is
+    // the rollout bucket, so a rollout moves a whole workspace together rather
+    // than showing one owner a different checkout from their colleague, and the
+    // console cannot land on the opposite side of a percentage from the
+    // storefront's `resolveNativeCheckoutMode` for the same org (AGL-1656).
     const embedded =
       Boolean(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) &&
-      isReleaseFlagOn(
-        'release_native_checkout',
-        flagValues['release_native_checkout'],
-        // Bucket by org, so a rollout moves a whole workspace together rather
-        // than showing one owner a different checkout from their colleague.
-        orgId,
-      )
+      (await isServerReleaseFlagOnForOrg('release_native_checkout', orgId))
     const params = new URLSearchParams({
       mode: 'subscription',
       'line_items[0][price]': priceId,
