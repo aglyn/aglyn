@@ -42,7 +42,6 @@
     "./lib/hooks/use-node-property",
     "./lib/hooks/use-observer-intersection",
     "./lib/hooks/use-observer-mutation",
-    "./lib/hooks/use-observer-resize",
     "./lib/hooks/use-on-mouse-enter",
     "./lib/hooks/use-on-mouse-over",
     "./lib/hooks/use-subscribable",
@@ -86,7 +85,6 @@
     "react-dom",
     "react-is",
     "react-use",
-    "resize-observer-polyfill",
     "use-debounce"
   ]
 }
