@@ -22,6 +22,8 @@ import {
   parseOrgReleaseFlagOverrides,
   parseReleaseFlagValue,
   RELEASE_FLAGS,
+  resolveEffectivePlan,
+  type OrgPlan,
   type OrgReleaseFlagOverrides,
   type ReleaseFlagKey,
   type ReleaseFlagValue,
@@ -105,15 +107,40 @@ export async function getServerReleaseFlagValues(): Promise<
  * doc or a denied read must gate exactly as "no override set", never as an
  * error that takes a published page down.
  */
-const orgCache = new Map<string, { at: number; overrides: OrgReleaseFlagOverrides }>()
+/**
+ * What one org read answers about release flags: the staff overrides, and
+ * the org's EFFECTIVE plan for tier targeting (AGL-2486).
+ *
+ * `plan` is null when the read did not produce an org document — missing,
+ * denied, or no Firestore at all. Deliberately not `'free'`: an org whose
+ * doc could not be read has an UNKNOWN tier, and
+ * `resolveEffectivePlan(undefined)` answers `'free'`, which would hand a
+ * Free-targeted flag to every org the read failed for. The two cases have to
+ * stay distinguishable at the boundary, because the evaluator treats an
+ * unknown plan as a refusal and a known `'free'` as a match.
+ */
+interface OrgReleaseFlagTargeting {
+  overrides: OrgReleaseFlagOverrides
+  plan: OrgPlan | null
+}
 
-export async function getOrgReleaseFlagOverrides(
+const orgCache = new Map<string, { at: number; targeting: OrgReleaseFlagTargeting }>()
+
+/**
+ * Both halves of the per-org answer from ONE cached document read.
+ *
+ * Sharing the read is the point: `plan` and `releaseFlags` live on the same
+ * org document, this runs on every published page render and every API
+ * dispatch, and fetching the tier separately would have doubled the hot-path
+ * Firestore traffic to learn something already in hand.
+ */
+export async function getOrgReleaseFlagTargeting(
   orgId: string | null | undefined,
-): Promise<OrgReleaseFlagOverrides> {
-  if (!orgId) return {}
+): Promise<OrgReleaseFlagTargeting> {
+  if (!orgId) return { overrides: {}, plan: null }
   const hit = orgCache.get(orgId)
-  if (hit && Date.now() - hit.at < TTL_MS) return hit.overrides
-  let overrides: OrgReleaseFlagOverrides = {}
+  if (hit && Date.now() - hit.at < TTL_MS) return hit.targeting
+  const targeting: OrgReleaseFlagTargeting = { overrides: {}, plan: null }
   try {
     const snapshot = await firebaseAdmin
       .app()
@@ -121,12 +148,22 @@ export async function getOrgReleaseFlagOverrides(
       .collection('orgs')
       .doc(orgId)
       .get()
-    overrides = parseOrgReleaseFlagOverrides(snapshot.data()?.['releaseFlags'])
+    const data = snapshot.data()
+    targeting.overrides = parseOrgReleaseFlagOverrides(data?.['releaseFlags'])
+    // Only when a document actually came back. `snapshot.data()` is undefined
+    // for a missing doc, and `resolveEffectivePlan` would read that as Free.
+    if (data) targeting.plan = resolveEffectivePlan(data as any)
   } catch {
     // No Firestore here, or the doc is unreadable — inherit, never fail.
   }
-  orgCache.set(orgId, { at: Date.now(), overrides })
-  return overrides
+  orgCache.set(orgId, { at: Date.now(), targeting })
+  return targeting
+}
+
+export async function getOrgReleaseFlagOverrides(
+  orgId: string | null | undefined,
+): Promise<OrgReleaseFlagOverrides> {
+  return (await getOrgReleaseFlagTargeting(orgId)).overrides
 }
 
 /**
@@ -143,11 +180,17 @@ export async function isServerReleaseFlagOnForOrg(
   flagKey: ReleaseFlagKey,
   orgId: string | null | undefined,
 ): Promise<boolean> {
-  const [values, overrides] = await Promise.all([
+  const [values, targeting] = await Promise.all([
     getServerReleaseFlagValues(),
-    getOrgReleaseFlagOverrides(orgId),
+    getOrgReleaseFlagTargeting(orgId),
   ])
-  return isReleaseFlagOnForOrg(flagKey, values[flagKey], orgId ?? null, overrides)
+  return isReleaseFlagOnForOrg(
+    flagKey,
+    values[flagKey],
+    orgId ?? null,
+    targeting.overrides,
+    targeting.plan,
+  )
 }
 
 /** Test seam: drops both caches so a spec can change a verdict. */
@@ -185,9 +228,9 @@ export async function filterEnabledPluginsByReleaseFlags(
     authorization?: string | null
   },
 ): Promise<string[]> {
-  const [values, overrides] = await Promise.all([
+  const [values, targeting] = await Promise.all([
     getServerReleaseFlagValues(),
-    getOrgReleaseFlagOverrides(options.orgId),
+    getOrgReleaseFlagTargeting(options.orgId),
   ])
   const isFlagOn = (flagKey: string): boolean =>
     isReleaseFlagKey(flagKey)
@@ -195,7 +238,8 @@ export async function filterEnabledPluginsByReleaseFlags(
           flagKey,
           values[flagKey],
           options.orgId ?? null,
-          overrides,
+          targeting.overrides,
+          targeting.plan,
         )
       : true
   const filtered = filterPluginsByReleaseFlags(pluginIds, isFlagOn)

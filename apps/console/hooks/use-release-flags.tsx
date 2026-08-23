@@ -21,6 +21,8 @@ import {
   parseOrgReleaseFlagOverrides,
   parseReleaseFlagValue,
   RELEASE_FLAGS,
+  resolveEffectivePlan,
+  type OrgPlan,
   type ReleaseFlagKey,
   type ReleaseFlagValue,
 } from '@aglyn/aglyn'
@@ -132,6 +134,19 @@ export function ReleaseFlagsProvider(props: ReleaseFlagsProviderProps) {
         : {},
     [orgReady, namesOrg, releaseFlagOverrides],
   )
+  // The tier a plan-targeted flag is evaluated against (AGL-2486), on the
+  // same terms as the overrides above: only once the org doc is trustworthy,
+  // and null otherwise.
+  //
+  // Null rather than `resolveEffectivePlan(undefined)` on purpose — that
+  // answers `'free'`, so during the loading window a Free-targeted flag would
+  // switch ON for a Business workspace and then off again a moment later.
+  // Unknown-means-off keeps the direction the rest of this provider already
+  // takes: a flag never flashes on before it is known to apply.
+  const plan: OrgPlan | null = useMemo(
+    () => (orgReady && namesOrg && org ? resolveEffectivePlan(org as any) : null),
+    [orgReady, namesOrg, org],
+  )
 
   const [activated, setActivated] = useState(false)
   const [isStaff, setIsStaff] = useState(false)
@@ -216,12 +231,13 @@ export function ReleaseFlagsProvider(props: ReleaseFlagsProviderProps) {
               value,
               subjectId,
               overrides,
+              plan,
             ),
           },
         ]
       }),
     ) as Record<ReleaseFlagKey, ReleaseFlagState>
-  }, [remoteConfig, activated, subjectId, overrides])
+  }, [remoteConfig, activated, subjectId, overrides, plan])
 
   const context = useMemo(
     () => ({ ready: activated, isStaff, flags }),

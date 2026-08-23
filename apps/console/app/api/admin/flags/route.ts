@@ -18,6 +18,7 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   isReleaseFlagKey,
+  parseReleaseFlagPlans,
   parseReleaseFlagValue,
   RELEASE_FLAGS,
   type ReleaseFlagValue,
@@ -32,7 +33,8 @@ import { FieldValue } from 'firebase-admin/firestore'
 /**
  * Release-flag management (AGL-230). GET returns every registered flag
  * merged with the live Remote Config template (any staff); PUT publishes
- * a single flag's new value (super staff only, like user management),
+ * a single flag's new value — enabled, rollout percent, plan/tier targeting
+ * (AGL-2486) and the note — (super staff only, like user management),
  * with etag concurrency so two admins can't silently clobber each other,
  * and an adminAudit entry per change (AGL-42).
  */
@@ -95,11 +97,6 @@ async function handler(request: Request): Promise<Response> {
       Math.max(0, Math.round(Number(body?.rolloutPercent ?? 0)) || 0),
     )
     const note = String(body?.note ?? '').slice(0, 500)
-    const nextValue: ReleaseFlagValue = {
-      enabled: body?.enabled === true,
-      rolloutPercent,
-      ...(note ? { note } : {}),
-    }
 
     const template = await remoteConfig.getTemplate()
     const expectedEtag = body?.etag
@@ -117,6 +114,25 @@ async function handler(request: Request): Promise<Response> {
       previousRaw,
       definition?.defaultEnabled ?? false,
     )
+
+    // Tier targeting (AGL-2486). A PUT REPLACES the whole Remote Config
+    // parameter, so a client that simply omits `plans` would silently clear
+    // the targeting on a live flag — the partial-write hazard this repo
+    // already has scars from, arriving through Remote Config instead of a
+    // Firestore converter. Absence therefore means "this caller is not
+    // talking about targeting, keep what is published"; only a caller that
+    // SENDS the key gets to change it, and sending `[]` is how the console
+    // says "clear it, target every tier".
+    const plans = Object.prototype.hasOwnProperty.call(body ?? {}, 'plans')
+      ? parseReleaseFlagPlans(body?.plans)
+      : before.plans
+
+    const nextValue: ReleaseFlagValue = {
+      enabled: body?.enabled === true,
+      rolloutPercent,
+      ...(plans && plans.length > 0 ? { plans } : {}),
+      ...(note ? { note } : {}),
+    }
 
     template.parameters[key] = {
       defaultValue: { value: JSON.stringify(nextValue) },

@@ -17,7 +17,11 @@
 'use client'
 
 import {
+  PLAN_LABELS,
   pluginForReleaseFlag,
+  RELEASE_FLAG_PLAN_LADDER,
+  releaseFlagPlansAtOrAbove,
+  type OrgPlan,
   type ReleaseFlagKey,
   type ReleaseFlagValue,
 } from '@aglyn/aglyn'
@@ -28,7 +32,11 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
   Button,
+  Checkbox,
   Chip,
+  ListItemText,
+  MenuItem,
+  Select,
   Slider,
   Stack,
   Switch,
@@ -53,6 +61,24 @@ interface FlagRow {
   value: ReleaseFlagValue
   published: boolean
 }
+
+/**
+ * How an unrestricted flag reads, everywhere on this page (AGL-2486).
+ *
+ * No tier list means EVERY tier — the same reading the evaluator takes, and
+ * the one an operator has to be able to see without inferring it from an
+ * empty control. A blank multi-select that silently meant "nobody" is the
+ * inversion this label exists to make impossible to ship.
+ */
+const ALL_TIERS_LABEL = 'All tiers'
+
+const tiersOf = (value: ReleaseFlagValue): OrgPlan[] => value.plans ?? []
+
+/** "Pro, Business, Scale…" or the every-tier label. */
+const describeTiers = (plans: OrgPlan[]): string =>
+  plans.length === 0
+    ? ALL_TIERS_LABEL
+    : plans.map((plan) => PLAN_LABELS[plan]).join(', ')
 
 /**
  * Staff release-flag editor (AGL-230): every registered flag with its live
@@ -119,6 +145,11 @@ const AdminFlags: NextPageWithLayout<Record<string, never>> = () => {
           key: row.key,
           enabled: row.value.enabled,
           rolloutPercent: row.value.rolloutPercent ?? 0,
+          // Always sent, even empty (AGL-2486). The route only touches
+          // targeting for a caller that sends the key, so omitting it here
+          // when nothing is selected would make "clear the tier list" the one
+          // edit this page could not perform.
+          plans: tiersOf(row.value),
           note: row.value.note ?? '',
           etag,
         }),
@@ -161,6 +192,26 @@ const AdminFlags: NextPageWithLayout<Record<string, never>> = () => {
       )
     }
     return <Chip label="Off" size="small" />
+  }
+
+  /**
+   * The tier restriction, beside the on/rollout chip (AGL-2486).
+   *
+   * Rendered for a targeted flag whether it is fully ON or mid-rollout,
+   * because the filter binds both — an "On" chip alone would read as "every
+   * customer has this" for a flag only Enterprise can see.
+   */
+  const tierChip = (row: FlagRow) => {
+    const plans = tiersOf(row.value)
+    if (plans.length === 0) return null
+    return (
+      <Chip
+        label={`Tiers: ${describeTiers(plans)}`}
+        size="small"
+        color="info"
+        variant="outlined"
+      />
+    )
   }
 
   return (
@@ -232,6 +283,7 @@ const AdminFlags: NextPageWithLayout<Record<string, never>> = () => {
                           {row.key}
                         </Typography>
                         {statusChip(row)}
+                        {tierChip(row)}
                         {/* AGL-422: flags mapped to a first-party plugin
                             gate its whole LOADER (console, sites, API),
                             not just nav — surface that blast radius. */}
@@ -292,6 +344,82 @@ const AdminFlags: NextPageWithLayout<Record<string, never>> = () => {
                           />
                         </Stack>
                       )}
+                      {/* Tier targeting (AGL-2486). Shown for an ON flag too:
+                          the tier filter gates the fully-enabled path as well
+                          as the rollout, so hiding it behind the percentage
+                          would make "launch to Enterprise and Agency" — the
+                          thing actually asked for — unreachable. */}
+                      <Stack
+                        direction="row"
+                        spacing={2}
+                        sx={{ alignItems: 'center', maxWidth: 480 }}
+                      >
+                        <Typography variant="caption" sx={{ width: 120 }}>
+                          {'Tiers'}
+                        </Typography>
+                        <Select
+                          multiple
+                          size="small"
+                          displayEmpty
+                          disabled={!canEdit}
+                          value={tiersOf(row.value)}
+                          onChange={(event) =>
+                            updateRow(row.key, {
+                              plans: (typeof event.target.value === 'string'
+                                ? []
+                                : event.target.value) as OrgPlan[],
+                            })
+                          }
+                          renderValue={(selected) =>
+                            describeTiers(selected as OrgPlan[])
+                          }
+                          inputProps={{
+                            'aria-label': `${row.label} tiers`,
+                          }}
+                          sx={{ flexGrow: 1 }}
+                        >
+                          {RELEASE_FLAG_PLAN_LADDER.map((plan) => (
+                            <MenuItem key={plan} value={plan}>
+                              <Checkbox
+                                size="small"
+                                checked={tiersOf(row.value).includes(plan)}
+                              />
+                              <ListItemText primary={PLAN_LABELS[plan]} />
+                            </MenuItem>
+                          ))}
+                        </Select>
+                        {/* Fills in every tier above the cheapest one already
+                            picked — "Pro" becomes "Pro and above" in a click.
+                            It expands to an EXPLICIT list rather than storing
+                            a threshold, so inserting a tier into the middle of
+                            the ladder later (pricing v3 did exactly that) can
+                            never re-aim a flag that is already live. */}
+                        <Button
+                          size="small"
+                          disabled={
+                            !canEdit || tiersOf(row.value).length === 0
+                          }
+                          onClick={() =>
+                            updateRow(row.key, {
+                              plans: releaseFlagPlansAtOrAbove(
+                                tiersOf(row.value)[0],
+                              ),
+                            })
+                          }
+                        >
+                          {'and above'}
+                        </Button>
+                      </Stack>
+                      <Typography variant="caption" color="text.secondary">
+                        {tiersOf(row.value).length === 0
+                          ? 'Every tier. Pick tiers to restrict who this flag can reach.'
+                          : `Only ${describeTiers(tiersOf(row.value))}. ` +
+                            (row.value.enabled
+                              ? 'Every workspace on those tiers.'
+                              : `The ${row.value.rolloutPercent ?? 0}% rollout is drawn from those tiers — ` +
+                                'the bucket is the org id, so changing this list never reshuffles who already has it.') +
+                            ' A per-org override on /admin/orgs still wins over this.'}
+                      </Typography>
                       <Stack
                         direction="row"
                         spacing={1}

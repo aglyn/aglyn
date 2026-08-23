@@ -25,6 +25,8 @@
  */
 
 /** Remote Config parameter keys for release-gated features. */
+import type { OrgPlan } from '../foundation'
+import { PLAN_LABELS, SELF_SERVE_PLANS } from './plan-entitlements'
 import { PLATFORM_BRAND_NAME } from './platform-brand'
 
 export type ReleaseFlagKey =
@@ -251,12 +253,26 @@ export function getReleaseFlagDefinition(
  * The JSON payload stored in each Remote Config parameter. `enabled: true`
  * turns the feature on for everyone; `enabled: false` with a positive
  * `rolloutPercent` enables it for that percentage of subjects (stable
- * per-tenant bucketing, GrowthBook-style).
+ * per-tenant bucketing, GrowthBook-style); `plans` narrows either of those
+ * to a set of tiers (AGL-2486).
  */
 export interface ReleaseFlagValue {
   enabled: boolean
   /** 0–100; only consulted while `enabled` is false. */
   rolloutPercent?: number
+  /**
+   * Plan/tier targeting (AGL-2486). The tiers this flag is being rolled out
+   * to, or ABSENT for "every tier".
+   *
+   * ABSENT AND EMPTY BOTH MEAN EVERY TIER, and that is load-bearing: every
+   * flag stored before this field existed parses to `undefined` here, and an
+   * operator who unticks every box has plainly not asked for a flag that
+   * reaches nobody. Reading an empty list as "no tiers" would dark-launch
+   * nothing while the console still said the flag was on — the inverted
+   * reading of this field is the whole hazard, so it is closed in the parser
+   * rather than left to each call site.
+   */
+  plans?: OrgPlan[]
   /** Free-form staff note ("waiting on AGL-199", owner, etc.). */
   note?: string
 }
@@ -264,6 +280,55 @@ export interface ReleaseFlagValue {
 const clampPercent = (value: unknown): number => {
   const percent = typeof value === 'number' && Number.isFinite(value) ? value : 0
   return Math.min(100, Math.max(0, Math.round(percent)))
+}
+
+/**
+ * Every plan a flag may target, cheapest first — `SELF_SERVE_PLANS` then
+ * `enterprise`, the same ladder `planGrantingFeature` walks and the same
+ * order the plan grid renders. Derived, never re-typed: pricing v3 inserted
+ * `scale` mid-ladder and added `agency`, and a second hand-written tier list
+ * here would have missed both.
+ */
+export const RELEASE_FLAG_PLAN_LADDER: readonly OrgPlan[] = [
+  ...SELF_SERVE_PLANS,
+  'enterprise' as OrgPlan,
+]
+
+const isOrgPlan = (value: unknown): value is OrgPlan =>
+  typeof value === 'string' &&
+  Object.prototype.hasOwnProperty.call(PLAN_LABELS, value)
+
+/**
+ * The tiers on the ladder at or above `plan` — what the console's "Pro and
+ * above" shortcut expands to before it is STORED as an explicit list.
+ *
+ * Deliberately a UI convenience and not a stored "minimum plan" mode: a
+ * stored threshold would silently re-aim every live flag the day a tier is
+ * inserted into the middle of the ladder (pricing v3 did exactly that with
+ * `scale`). An explicit list means the audience of a published flag only
+ * ever changes because a human changed it.
+ */
+export function releaseFlagPlansAtOrAbove(plan: OrgPlan): OrgPlan[] {
+  const index = RELEASE_FLAG_PLAN_LADDER.indexOf(plan)
+  return index < 0 ? [] : RELEASE_FLAG_PLAN_LADDER.slice(index)
+}
+
+/**
+ * Sanitises whatever is stored at `plans`, in ladder order.
+ *
+ * Returns `undefined` — not `[]` — for "no targeting declared", so the
+ * absence survives a round trip through the staff editor and cannot be
+ * written back as a list that means something else. Unknown tier names are
+ * dropped for the same reason `parseOrgReleaseFlagOverrides` drops unknown
+ * keys: a renamed or retired tier must never gate anything. A list that
+ * names ONLY unknown tiers collapses to `undefined` (every tier) rather than
+ * to an empty list, because a typo must inherit, never silently target.
+ */
+export function parseReleaseFlagPlans(raw: unknown): OrgPlan[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const named = new Set(raw.filter(isOrgPlan))
+  if (named.size === 0) return undefined
+  return RELEASE_FLAG_PLAN_LADDER.filter((plan) => named.has(plan))
 }
 
 /**
@@ -284,9 +349,16 @@ export function parseReleaseFlagValue(
     const parsed = JSON.parse(text)
     if (typeof parsed === 'boolean') return { enabled: parsed }
     if (parsed && typeof parsed === 'object') {
+      const plans = parseReleaseFlagPlans(parsed.plans)
       return {
         enabled: parsed.enabled === true,
         rolloutPercent: clampPercent(parsed.rolloutPercent),
+        // Spread, so a flag stored before AGL-2486 has NO `plans` key at all
+        // rather than an explicit `undefined`. `JSON.stringify` drops both,
+        // but the two are not the same to `'plans' in value`, which is what
+        // the staff PUT uses to tell "the operator cleared the targeting"
+        // apart from "this client never sent the field".
+        ...(plans ? { plans } : {}),
         note: typeof parsed.note === 'string' ? parsed.note : undefined,
       }
     }
@@ -333,12 +405,61 @@ export function isReleaseFlagOn(
   flagKey: ReleaseFlagKey,
   value: ReleaseFlagValue,
   subjectId: string | null | undefined,
+  /**
+   * The subject org's plan, when the caller knows it (AGL-2486). Optional so
+   * every pre-existing call site compiles and answers unchanged: a flag that
+   * declares no tier targeting never reads this.
+   */
+  plan?: OrgPlan | null,
 ): boolean {
+  if (!releaseFlagTargetsPlan(value, plan)) return false
   if (value.enabled) return true
   const percent = clampPercent(value.rolloutPercent)
   if (percent <= 0 || !subjectId) return false
   if (percent >= 100) return true
   return releaseFlagBucket(flagKey, subjectId) < percent
+}
+
+/**
+ * Does this flag's tier targeting admit `plan`? (AGL-2486)
+ *
+ * THE SEMANTICS, because an operator who cannot predict the audience will
+ * not stage a rollout at all:
+ *
+ *  - The tier list is a FILTER, applied before and independently of the
+ *    percentage. The percentage then picks a cohort WITHIN the admitted
+ *    tiers. "Pro and above at 50%" is therefore both "half of the Pro+
+ *    workspaces" and "the global 50% cohort, restricted to Pro+" — the two
+ *    readings name the same set, and they do so because
+ *    {@link releaseFlagBucket} hashes `flagKey:orgId` and NOTHING ELSE.
+ *  - Which is also why the bucket is stable. Adding, removing or reordering
+ *    tiers cannot reshuffle the bucket, so an org already inside a 50%
+ *    rollout keeps the feature when an unrelated tier joins the list. Had
+ *    the plan been mixed into the hash — the obvious way to write this — a
+ *    tier edit would have re-drawn the cohort under every customer already
+ *    in it, and a plan change would have re-rolled the dice for one.
+ *  - The filter binds the FULLY-ENABLED path too, not just the rollout.
+ *    "On, Enterprise + Agency" is how a launch to the top of the ladder is
+ *    expressed, and it is what was actually asked for. Untargeted flags are
+ *    unaffected: no list means every tier, so `enabled` still means everyone.
+ *  - An UNKNOWN plan fails a declared list. Same conservatism as a missing
+ *    subject on a percentage rollout: a caller that cannot say which
+ *    workspace it is asking about gets the safe answer rather than a
+ *    confidently wrong one. A per-org staff override still wins over all of
+ *    it — see {@link isReleaseFlagOnForOrg} — so a targeted flag can still be
+ *    handed to one org off-ladder.
+ */
+export function releaseFlagTargetsPlan(
+  value: ReleaseFlagValue,
+  plan: OrgPlan | null | undefined,
+): boolean {
+  const plans = value.plans
+  // `!plans` would be the idiom here, but `strictNullChecks` is off repo-wide
+  // and an empty array is truthy — both "absent" and "empty" have to be named
+  // for the every-tier reading to actually hold.
+  if (plans == null || plans.length === 0) return true
+  if (!plan) return false
+  return plans.includes(plan)
 }
 
 /**
@@ -398,8 +519,16 @@ export function isReleaseFlagOnForOrg(
   value: ReleaseFlagValue,
   subjectId: string | null | undefined,
   overrides: OrgReleaseFlagOverrides | null | undefined,
+  /**
+   * The org's plan, for tier targeting (AGL-2486). Optional, and checked
+   * only AFTER the override: a staff grant is a decision about one named
+   * customer and outranks the tier filter exactly as it already outranks the
+   * rollout bucket. That ordering is what lets a Free org preview a
+   * Business-targeted flag without widening the flag for every Free org.
+   */
+  plan?: OrgPlan | null,
 ): boolean {
   const override = overrides?.[flagKey]
   if (typeof override === 'boolean') return override
-  return isReleaseFlagOn(flagKey, value, subjectId)
+  return isReleaseFlagOn(flagKey, value, subjectId, plan)
 }
