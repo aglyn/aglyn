@@ -41,6 +41,9 @@ const mockSetDoc = jest.fn().mockResolvedValue(undefined)
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useHost: () => ({ doc: mockHost, setDoc: mockSetDoc }),
+  // The card renders the AGL-2486 disable-cascade dialog, which reads the
+  // signed-in user to authorize its impact scan.
+  useUser: () => ({ data: { getIdToken: async () => 'token' } }),
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
     .writeGuardedBySeed,
 }))

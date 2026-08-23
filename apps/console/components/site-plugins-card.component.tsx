@@ -20,8 +20,12 @@ import {
   classifyEnabledPlugins,
   FIRST_PARTY_PLUGINS,
   isDefaultOffPerSite,
+  resolveDisableCascade,
   resolveEnabledPlugins,
 } from '@aglyn/aglyn'
+import PluginDisableCascadeDialog, {
+  type CascadeEntry,
+} from './plugin-disable-cascade-dialog.component'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -133,7 +137,7 @@ export default function SitePluginsCard(props: { hostId: string }) {
    * position or label, so adding a second default-off plugin needs no edit
    * here.
    */
-  const toggle = (id: string) => {
+  const applyToggle = (id: string) => {
     setDirty(true)
     const flip = (current: string[]) =>
       current.includes(id)
@@ -146,6 +150,47 @@ export default function SitePluginsCard(props: { hostId: string }) {
   /** Is this row's switch in the ON position? */
   const isOn = (id: string, alwaysOn: boolean) =>
     alwaysOn || (isDefaultOffPerSite(id) ? optedIn.includes(id) : !disabled.includes(id))
+
+  /**
+   * The pending cascade (AGL-2486). Held rather than applied, so Cancel is a
+   * genuine no-op: nothing is written and no local state moves, which is what
+   * makes the switch spring back to ON rather than merely looking reverted.
+   */
+  const [pending, setPending] = useState<{
+    id: string
+    label: string
+    cascade: CascadeEntry[]
+  } | null>(null)
+
+  const labelFor = (id: string) => catalog.get(id)?.label ?? id
+
+  const toggle = (id: string) => {
+    // Only a DISABLE can strand a dependent. Turning one on cannot.
+    if (!isOn(id, false)) return void applyToggle(id)
+    const enabledNow = [...bundles, ...listings].filter((candidate) =>
+      isOn(candidate, Boolean(catalog.get(candidate)?.alwaysOn)),
+    )
+    const cascade = resolveDisableCascade(id, enabledNow)
+    if (!cascade.length) return void applyToggle(id)
+    setPending({
+      id,
+      label: labelFor(id),
+      cascade: cascade.map((one) => ({ id: one, label: labelFor(one) })),
+    })
+  }
+
+  /**
+   * Apply the whole cascade at once. Every id here is ON by construction —
+   * `resolveDisableCascade` filters to the enabled set — so each flip is a
+   * disable. The WRITE stays atomic: this only moves local state, and `save`
+   * puts both lists in one `setDoc`.
+   */
+  const confirmCascade = () => {
+    if (!pending) return
+    applyToggle(pending.id)
+    for (const entry of pending.cascade) applyToggle(entry.id)
+    setPending(null)
+  }
 
   const save = async () => {
     setBusy(true)
@@ -266,6 +311,16 @@ export default function SitePluginsCard(props: { hostId: string }) {
           </Button>
         </Stack>
       </Stack>
+      <PluginDisableCascadeDialog
+        open={Boolean(pending)}
+        pluginId={pending?.id ?? ''}
+        pluginLabel={pending?.label ?? ''}
+        cascade={pending?.cascade ?? []}
+        scope="site"
+        hostId={hostId}
+        onCancel={() => setPending(null)}
+        onConfirm={confirmCascade}
+      />
     </CardDisplay>
   )
 }

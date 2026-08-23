@@ -63,6 +63,70 @@ export interface FirstPartyPlugin {
    * what its org enables.
    */
   defaultOffPerSite?: boolean
+  /**
+   * Plugin ids this one cannot function without (AGL-2486) — DECLARED, never
+   * inferred.
+   *
+   * The switchboard has always let a workspace turn off a plugin another one
+   * is built on, and said nothing. `accounts` is the case that proves it: the
+   * Members blocks and every `membership/*` API handler ship inside the
+   * COMMERCE bundle, so switching Commerce off leaves a site advertising
+   * `/signin` while nothing can answer the login POST.
+   *
+   * Declared rather than derived on purpose. The couplings that matter are
+   * exactly the ones no static read can see — which bundle happens to
+   * register whose components — so a graph inferred from imports or from the
+   * registry would miss the real edges while looking authoritative. An
+   * incomplete warning that presents itself as complete is worse than none,
+   * so this list is the contract, and {@link resolveDisableCascade} is honest
+   * about covering only what is on it.
+   */
+  requires?: readonly string[]
+}
+
+/**
+ * What a DISABLE does to a site that is already published (AGL-2486).
+ *
+ * The cascade dialog has to state a consequence, and there are two very
+ * different ones. "These blocks will no longer be offered" is a different
+ * decision from "parts of your live pages go blank", and one generic sentence
+ * for both would be a lie in one direction or the other.
+ *
+ * - `elements` — the plugin registers site components. The tenant loads only
+ *   the site's enabled bundles, so elements ALREADY PLACED on published pages
+ *   stop rendering. Pre-existing AGL-1014 behaviour.
+ * - `routes`   — the plugin registers no components, but a published site
+ *   stops serving something: `accounts` gates `/signin`, `/signup`,
+ *   `/recover`; `redirects` stops applying its rules; `workflows` stops
+ *   answering its hooks.
+ * - `console-only` — nothing a visitor can reach changes; the plugin leaves
+ *   navigation and the editor.
+ */
+export type PublishedSiteImpact = 'elements' | 'routes' | 'console-only'
+
+/**
+ * Every catalog id classified. Kept beside the catalog rather than inside it
+ * because the `elements` verdict is a fact about `plugins.config.json`
+ * (`register.site`), and a spec cross-checks the two so a new
+ * site-registering bundle cannot be added without declaring its consequence.
+ */
+export const PUBLISHED_SITE_IMPACT: Readonly<
+  Record<string, PublishedSiteImpact>
+> = {
+  mui: 'elements',
+  accounts: 'routes',
+  bookings: 'elements',
+  commerce: 'elements',
+  marketplace: 'console-only',
+  contacts: 'console-only',
+  data: 'console-only',
+  email: 'elements',
+  'events-calendar': 'elements',
+  inbox: 'console-only',
+  logic: 'console-only',
+  marketing: 'elements',
+  redirects: 'routes',
+  workflows: 'routes',
 }
 
 /**
@@ -94,6 +158,10 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
       'pages, and the Members blocks. Off for a site until you turn it on.',
     releaseFlag: 'release_member_accounts',
     defaultOffPerSite: true,
+    // The Members blocks and the `membership/*` handlers are registered by
+    // the COMMERCE bundle (`plugins.config.json` gives commerce the
+    // `membership` api prefix). Commerce off = member pages with no server.
+    requires: ['commerce'],
   },
   { id: 'bookings', label: 'Bookings', description: 'Services, open slots, and paid bookings.', releaseFlag: 'release_bookings' },
   { id: 'commerce', label: 'Commerce', description: 'Products, carts, checkout, orders, POS.', releaseFlag: 'release_commerce_v2' },
@@ -268,6 +336,77 @@ export function isPluginEnabled(
 ): boolean {
   return resolveEnabledPlugins(org).includes(pluginId)
 }
+
+/**
+ * Everything that must ALSO be switched off when `pluginId` is (AGL-2486) —
+ * the transitive closure over reverse `requires` edges, restricted to what is
+ * currently on.
+ *
+ * Pure and surface-agnostic: the org switchboard and the per-site card both
+ * call it with their own "currently enabled" set, so the same graph answers
+ * both, and the org's wider blast radius comes from the set it passes, not
+ * from a second implementation.
+ *
+ * `extraRequirements` is how a marketplace listing joins the graph. Third-party
+ * ids ride the same `enabledPlugins` field, so a listing whose manifest
+ * declares `requires` is cascaded exactly like a bundle. It EXTENDS the
+ * catalog graph and cannot shrink it — a listing cannot declare away a
+ * first-party edge.
+ *
+ * ⚠️ The result is only ever as complete as what has been DECLARED. A
+ * marketplace plugin that uses first-party components without saying so in its
+ * manifest will not appear here, and callers must not present the list as
+ * exhaustive. See `PLUGIN_CASCADE_IS_DECLARED_ONLY`.
+ */
+export function resolveDisableCascade(
+  pluginId: string,
+  enabledIds: readonly string[],
+  extraRequirements?: Readonly<Record<string, readonly string[]>>,
+): string[] {
+  const enabled = new Set(enabledIds.map(String))
+  // Reverse index: required id -> ids that depend on it.
+  const dependents = new Map<string, string[]>()
+  const addEdge = (dependent: string, required: string) => {
+    const list = dependents.get(required)
+    if (list) list.push(dependent)
+    else dependents.set(required, [dependent])
+  }
+  for (const plugin of FIRST_PARTY_PLUGINS)
+    for (const required of plugin.requires ?? []) addEdge(plugin.id, required)
+  for (const [dependent, required] of Object.entries(extraRequirements ?? {}))
+    for (const one of required ?? []) addEdge(dependent, String(one))
+
+  // Breadth-first over reverse edges. `seen` is seeded with the origin so a
+  // cycle back to it terminates and the plugin being disabled is never listed
+  // among its own dependents.
+  const seen = new Set<string>([pluginId])
+  const cascade: string[] = []
+  const queue: string[] = [pluginId]
+  while (queue.length) {
+    const current = queue.shift() as string
+    for (const dependent of dependents.get(current) ?? []) {
+      if (seen.has(dependent)) continue
+      seen.add(dependent)
+      // Walk THROUGH an already-off dependent — something may depend on it in
+      // turn — but do not claim it is being turned off.
+      if (enabled.has(dependent)) cascade.push(dependent)
+      queue.push(dependent)
+    }
+  }
+  return cascade
+}
+
+/**
+ * Why the cascade list must never be presented as exhaustive (AGL-2486).
+ *
+ * Exported as copy rather than left to each caller to paraphrase: the whole
+ * value of the warning rests on it being honest about its own limits, and two
+ * surfaces wording that differently is how one of them ends up overclaiming.
+ */
+export const PLUGIN_CASCADE_IS_DECLARED_ONLY =
+  'This lists plugins that declare a dependency. A marketplace plugin that ' +
+  'uses this one without declaring it cannot be detected, so check any ' +
+  'third-party plugins you rely on.'
 
 /** Reverse lookup: which first-party plugin a release flag gates, if any. */
 export function pluginForReleaseFlag(

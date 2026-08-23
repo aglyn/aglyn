@@ -171,6 +171,46 @@ installing.
   marketing site is worse than a missing one. See
   [Member accounts](../../guides/member-accounts.md) for what the switch does.
 
+## When one plugin depends on another
+
+Some plugins cannot run without another one. **User Accounts** is the case that exists
+today: its Members blocks and its `membership/*` API handlers ship inside the **Commerce**
+bundle, so User Accounts with Commerce switched off is a site that still routes `/signin`
+while nothing can answer the sign-in request.
+
+Switching off a plugin something else depends on therefore asks first. The dialog names
+every dependent, says what disabling each one does to a site that is already published,
+and offers **Cancel** or **Continue and disable those too**:
+
+- **Cancel** writes nothing and the switch stays where it was.
+- **Continue** disables the plugin and every dependent in a **single** save, so a
+  half-applied cascade cannot happen.
+- Dependents are followed **transitively** — if C needs B and B needs A, switching off A
+  names both.
+- **Re-enabling does not undo a cascade.** Turning the plugin back on later does not
+  switch its dependents back on; re-enable each one yourself.
+
+Two consequences are possible and the dialog distinguishes them, because they are very
+different decisions:
+
+| The dependent | What disabling it does |
+| --- | --- |
+| Registers site components (Commerce, Bookings, Email, Events Calendar, Marketing) | Elements **already placed on published pages stop rendering**. For a single site the dialog counts them. |
+| Serves routes (User Accounts, Redirects, Workflows) | Published pages keep rendering, but the routes or rules it serves stop. |
+| Console-only (Contacts, Data, Inbox, Logic, Marketplace) | It leaves navigation and the editor. Published pages are unaffected. |
+
+Counts come from scanning the **published** version of each screen, layout and component,
+and are capped — where the scan hits its cap the dialog says "at least". Drafts are not
+scanned.
+
+:::caution The warning covers *declared* dependencies only
+First-party plugins declare what they require. A **marketplace plugin** is only included
+if its manifest declares the dependency — a third-party plugin that uses another plugin's
+components without saying so cannot be detected, and the dialog says as much rather than
+implying the list is exhaustive. If you rely on a marketplace plugin, check it yourself
+before switching off something it might be built on.
+:::
+
 ## Configure
 
 Plugins expose a **settings** field for per-plugin configuration, so the same plugin can
