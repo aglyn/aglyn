@@ -15,7 +15,6 @@
     "./lib/components/mui-shadow-dom",
     "./lib/components/shadow-dom",
     "./lib/components/sr-only",
-    "./lib/components/zoomable-panning-component",
     "./lib/const/svg-icons",
     "./lib/contexts/confirmation.context",
     "./lib/contexts/loading.context",
@@ -88,7 +87,6 @@
     "react-is",
     "react-use",
     "resize-observer-polyfill",
-    "use-debounce",
-    "warning"
+    "use-debounce"
   ]
 }

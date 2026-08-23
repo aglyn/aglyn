@@ -82,7 +82,16 @@ export * from './lib/components/mui-shadow-dom'
 // `@aglyn/shared-ui-jsx/components/navigation-drawer.component`.
 export * from './lib/components/shadow-dom'
 export * from './lib/components/sr-only'
-export * from './lib/components/zoomable-panning-component'
+// zoomable-panning-component is NOT re-exported (AGL-2486), for the same
+// reason navigation-drawer is not — and with less excuse, because nothing
+// imports it. The only references left in the tree are a COMMENTED-OUT import
+// in `viewport-canvas.component.tsx` and three prose mentions; the barrel
+// export was its last live edge, so every published customer page was paying
+// to parse an editor-only pan/zoom canvas class (and the five
+// `getBoundingClientRect()` call sites in it) that nothing on the page mounts.
+// Still importable from
+// `@aglyn/shared-ui-jsx/components/zoomable-panning-component` if the besigner
+// ever uncomments that import.
 
 export * from './lib/contexts/confirmation.context'
 export * from './lib/contexts/loading.context'
