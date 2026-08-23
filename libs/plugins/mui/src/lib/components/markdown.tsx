@@ -228,8 +228,12 @@ const Markdown = forwardRef<HTMLDivElement, MarkdownProps>((props, ref) => {
               // an author-typed hotlink — passes through untouched.
               src={Aglyn.resolveMediaSrc(block.src, { hostId })}
               alt={block.alt}
-              loading="lazy"
               sx={{ maxWidth: '100%', borderRadius: 1, my: 2 }}
+              // `lazy` alone until AGL-2486. A markdown image is by
+              // definition inside prose the reader scrolls through, so it
+              // belongs in the same deferred rank as everything else that is
+              // not the lead image.
+              {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
             />
           )
         }

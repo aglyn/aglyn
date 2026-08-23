@@ -202,6 +202,11 @@ const EventList = forwardRef<HTMLDivElement, EventListProps>((props, ref) => {
                 borderRadius: 1,
                 flexShrink: 0,
               }}
+              // Deferred (AGL-2486). A 96x96 thumbnail, one per event, in a
+              // list that is as long as the calendar is busy — previously
+              // unhinted, so a twenty-event list opened twenty eager
+              // default-priority fetches.
+              {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
             />
           ) : null}
           <Stack spacing={0.25} sx={{ minWidth: 0 }}>

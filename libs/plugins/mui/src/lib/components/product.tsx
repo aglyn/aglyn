@@ -107,6 +107,12 @@ const Product = forwardRef<HTMLDivElement, ProductProps>((props, ref) => {
           image={imageUrl}
           alt={name ?? ''}
           sx={{ height: 200, objectFit: 'cover' }}
+          // Deferred (AGL-2486). A Product card is a 360px-wide card dropped
+          // into a page; it is never the page's lead image, and before this
+          // it carried no loading hint at all — i.e. EAGER at default
+          // priority, outranking the `lazy` + `low` Image elements in the
+          // section the reader was actually looking at.
+          {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
         />
       ) : null}
       <CardContent>

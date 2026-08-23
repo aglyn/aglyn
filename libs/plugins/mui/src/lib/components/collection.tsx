@@ -771,15 +771,13 @@ const CollectionEntryBody = forwardRef<
               // has no reason to be stored in a more fragile form.
               src={Aglyn.resolveMediaSrc(block.src, { hostId })}
               alt={block.alt}
+              sx={{ maxWidth: '100%', borderRadius: 1, my: 1 }}
               // An image inside an entry body is below the fold by
               // construction — the title, byline and opening paragraphs are
               // above it. This one carried no loading hint at all, so it was
               // fetched EAGERLY, at default priority, competing with the
               // entry's own cover (AGL-2486).
-              loading="lazy"
-              fetchPriority="low"
-              decoding="async"
-              sx={{ maxWidth: '100%', borderRadius: 1, my: 1 }}
+              {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
             />
           )
         }
@@ -1080,7 +1078,6 @@ const CollectionRelated = forwardRef<HTMLDivElement, CollectionRelatedProps>(
           // cover is the LINK's own content, so it must carry an accessible
           // name rather than go silent.
           alt={Aglyn.renderedMediaAlt(entry.coverImageAlt, entry.title)}
-          loading="lazy"
           sx={{
             display: 'block',
             width: '100%',
@@ -1088,6 +1085,12 @@ const CollectionRelated = forwardRef<HTMLDivElement, CollectionRelatedProps>(
             objectFit: 'cover',
             borderRadius: 1,
           }}
+          // `lazy` ALONE was the bug in miniature (AGL-2486): a lazy image
+          // at default priority still outranks a lazy image at `low`, so
+          // this related-entries rail — which sits at the bottom of an entry
+          // by construction — was beating the deferred Image elements in the
+          // body above it. The hint only works as a set.
+          {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
         />
       )
     }
@@ -1504,7 +1507,6 @@ const CollectionEntryMeta = forwardRef<
           // Decorative: the byline names the author in text right beside it,
           // so a screen reader announcing the mark again is noise.
           alt=""
-          loading="lazy"
           sx={{
             display: 'block',
             width: ENTRY_AVATAR_SIZE,
@@ -1514,6 +1516,10 @@ const CollectionEntryMeta = forwardRef<
             // No background plate: a brand mark with a transparent ground
             // would sit on a grey disc nobody asked for.
           }}
+          // `lazy` alone, same as the related rail above (AGL-2486). A
+          // byline avatar is decorative and tiny; it has no business
+          // outranking anything.
+          {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
         />
       ) : null}
       {line ? (

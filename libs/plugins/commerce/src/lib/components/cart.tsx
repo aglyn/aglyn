@@ -386,6 +386,10 @@ function CartLines(props: {
                 objectFit: 'cover',
                 borderRadius: 1,
               }}
+              // Deferred (AGL-2486). A 48px cart-line thumbnail is the
+              // clearest case of the set: it can never be the LCP, and a
+              // cart is usually below the fold or inside a panel.
+              {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
             />
           ) : (
             <Box

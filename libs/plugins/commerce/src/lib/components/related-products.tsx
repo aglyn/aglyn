@@ -134,6 +134,11 @@ const RelatedProducts = forwardRef<HTMLDivElement, RelatedProductsProps>(
                       image={item.imageUrl}
                       alt={item.name}
                       sx={{ height: 110, objectFit: 'cover' }}
+                      // Deferred (AGL-2486). A related-products rail sits at
+                      // the BOTTOM of a product page by construction, and it
+                      // was fetching eagerly against the gallery hero above
+                      // it — the one image on that page that is the LCP.
+                      {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
                     />
                   ) : (
                     <Box sx={{ height: 110, bgcolor: 'action.hover' }} />

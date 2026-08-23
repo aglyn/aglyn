@@ -294,7 +294,6 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
       // so the a11y intent is explicit rather than an accident of blank.
       alt={decorative ? '' : (alt ?? '')}
       title={decorative ? undefined : title || undefined}
-      loading={eager ? 'eager' : 'lazy'}
       // The ordering signal, ONE-DIRECTIONAL on purpose (AGL-2486).
       //
       // `low` on every deferred image, so a footer image cannot be fetched
@@ -337,12 +336,21 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
       // and reading one out of that choice is how the logo got `high` in the
       // first place. A real priority affordance needs its own control and its
       // own words. After September 1.
-      fetchPriority={eager ? undefined : 'low'}
       // Decoding off the main thread for the deferred ones — they have no
       // paint deadline, and decoding them synchronously is main-thread time
       // spent on pixels nobody is looking at yet. The eager image keeps the
       // browser's default (`auto`) so it is free to decode in time to paint.
-      decoding={eager ? undefined : 'async'}
+      //
+      // The deferred set is `DEFERRED_IMAGE_ATTRIBUTES` rather than three
+      // literals because every OTHER `<img>` a published page renders has to
+      // land in the same rank to be ranked at all — a product grid, an event
+      // list, a cart line. Those carried no hint whatsoever and so were
+      // fetched EAGERLY, ahead of anything this component deferred. The set
+      // is documented at its definition; the reasoning for each member is
+      // the two paragraphs above and the two below.
+      {...(eager
+        ? { loading: 'eager' as const }
+        : Aglyn.DEFERRED_IMAGE_ATTRIBUTES)}
       {...rest}
       sx={[
         {

@@ -213,6 +213,9 @@ const Wishlist = forwardRef<HTMLDivElement, WishlistProps>((props, ref) => {
                     image={item.imageUrl}
                     alt={item.name}
                     sx={{ height: 120, objectFit: 'cover' }}
+                    // Deferred (AGL-2486), same reasoning as the product
+                    // grid: one image per saved item, none of them the lead.
+                    {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
                   />
                 ) : (
                   <Box sx={{ height: 120, bgcolor: 'action.hover' }} />

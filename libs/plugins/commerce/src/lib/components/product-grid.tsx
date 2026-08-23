@@ -625,6 +625,12 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
                   image={item.imageUrl}
                   alt={item.name}
                   sx={{ height: 160, objectFit: 'cover' }}
+                  // Deferred (AGL-2486), and this is the worst offender of
+                  // the set: a grid renders one image PER PRODUCT, all of
+                  // them previously unhinted, so a storefront section below
+                  // the fold opened N eager default-priority fetches that
+                  // outranked everything above it.
+                  {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
                 />
               ) : (
                 <Box sx={{ height: 160, bgcolor: 'action.hover' }} />

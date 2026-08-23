@@ -439,6 +439,19 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               component="img"
               src={galleryImage}
               alt={resolved.name}
+              // DELIBERATELY NOT DEFERRED (AGL-2486). This is the gallery
+              // hero at the top of a product page — the one image on this
+              // surface that really is the LCP candidate, and the browser
+              // default here is already `eager`. Spreading
+              // `DEFERRED_IMAGE_ATTRIBUTES` over it to "finish the job" is
+              // the obvious next edit and it re-introduces the bug this
+              // issue opened with: an LCP image not discovered until after
+              // layout has run. The thumbnail strip below it IS deferred.
+              //
+              // No `fetchpriority` either, for the reason written out at
+              // `image.tsx`: `high` is a claim about every other request in
+              // flight, and a page whose real LCP is the product NAME would
+              // pay for that claim.
               sx={{
                 width: '100%',
                 aspectRatio: '1 / 1',
@@ -475,6 +488,11 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                     borderColor:
                       index === activeImage ? 'primary.main' : 'transparent',
                   }}
+                  // Deferred (AGL-2486): 56px thumbnails that exist to swap
+                  // the hero above. They were fetching eagerly ALONGSIDE
+                  // that hero, so a five-image gallery had the hero
+                  // competing with four thumbnails nobody had asked for yet.
+                  {...Aglyn.DEFERRED_IMAGE_ATTRIBUTES}
                 />
               ))}
             </Box>
