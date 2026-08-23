@@ -300,6 +300,18 @@ async function handler(request: Request): Promise<Response> {
       // checkout. Stripe validates the code and the discount rides the
       // resulting subscription; the webhook mirrors it onto org.discount.
       allow_promotion_codes: 'true',
+      // Pinned, not defaulted (AGL-2486). Stripe's default for `mode:
+      // subscription` IS `always` — measured against the live API on
+      // 2026-08-23: a session carrying a 100%-off `duration: forever` coupon
+      // came back `payment_method_collection=always` with `amount_total=0`,
+      // so a discounted signup still saves a card. We state it anyway because
+      // the failure mode is silent and delayed: if this ever resolved to
+      // `if_required`, every $0-today signup — an enterprise first month
+      // free, a full-discount promo code — would complete with NO payment
+      // method on file, and we would not find out until the first renewal
+      // failed across all of them at once. The word `always` here is what a
+      // reviewer checks; an unstated default is not.
+      payment_method_collection: 'always',
       // Billing identity on the customer (AGL-1133). An invoice that has to
       // satisfy a tax authority needs an address on it, and a B2B one needs
       // the buyer's tax id.
