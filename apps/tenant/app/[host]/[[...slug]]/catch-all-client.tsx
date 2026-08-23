@@ -768,6 +768,18 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
                   src={brandLogo}
                   alt=""
                   aria-hidden
+                  // Explicit intrinsic size (AGL-2486). Lighthouse named THIS
+                  // image as the page's only unsized one, and it is unsized in
+                  // the way that actually costs: the mark is an SVG declaring
+                  // `width="100%" height="100%"`, so it carries no intrinsic
+                  // size of its own and the browser reserves nothing for it
+                  // until the file has been fetched and parsed — then reflows
+                  // the badge. The viewBox is `0 0 24 24`, i.e. exactly 1:1,
+                  // so 14x14 is the true ratio at the rendered height rather
+                  // than a guess. The CSS below still governs final layout;
+                  // these attributes only supply the aspect ratio to reserve.
+                  width={14}
+                  height={14}
                   style={{ height: 14, width: 'auto', display: 'block' }}
                 />
               ) : null}
