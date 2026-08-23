@@ -19,6 +19,9 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import ConsentBannerUi from '@aglyn/aglyn/app-utils/consent-banner-ui'
+// Deep import for the same reason as `consent-banner-ui` above (AGL-2486):
+// the plugin-manager barrel is server-reachable and this hook is not.
+import { PluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles-ui'
 import { AglynNodeRenderer, useAglynSiteTheme } from '@aglyn/aglyn-node-renderer'
 import {
   getGoogleFontsUrl,
@@ -516,6 +519,12 @@ export function DocumentPreview(props: DocumentPreviewProps) {
           renders the same nodes, so it ships the same rule — without it the
           panel is stuck open. */}
       <style>{Aglyn.ELEMENT_HIDDEN_STYLE_TEXT}</style>
+      {/* Plugin stylesheets (AGL-2486), same reasoning as the hidden-class
+          rule above: Preview renders the same nodes as the published page, so
+          it ships the same plugin CSS in the same unlayered slot. `document`
+          scope — Preview is NOT shadow-rooted, so a mirrored sheet is already
+          applying to it from the console document's own head. */}
+      <PluginStyles scope="document" />
       {root ? (
         // Preview renders draft state outside the tenant site: screen links
         // show their content but must not navigate the console origin.

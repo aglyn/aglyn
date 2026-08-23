@@ -16,6 +16,7 @@
  */
 
 import { pluginArtifactPath } from '../app-utils/plugin-manifest'
+import { capturePluginStyles } from './plugin-styles'
 
 /**
  * Trusted-realm remote plugins (AGL-420). Marketplace bundles normally run
@@ -226,15 +227,28 @@ export async function loadRealmPlugins(
               new Blob([bytes], { type: 'text/javascript' }),
             )
             try {
-              const mod = (await import(/* webpackIgnore: true */ blobUrl)) as {
-                register?: (host: unknown) => void
-                default?: { register?: (host: unknown) => void }
-              }
-              const register = mod.register ?? mod.default?.register
-              if (typeof register !== 'function') {
-                throw new Error('bundle exports no register(host)')
-              }
-              register(host)
+              // AGL-2486: module evaluation and `register()` both run inside
+              // the style capture, because a bundler's `import './x.css'`
+              // compiles to a `document.head.appendChild(<style>)` at module
+              // EVAL time — before `register` is ever called. Anything the
+              // bundle injects in that window is mirrored into the besigner
+              // canvas's closed shadow root, which a document-level rule
+              // otherwise cannot reach at all (measured: no effect on the
+              // canvas, wins outright on the published page). See
+              // `plugin-styles.tsx`.
+              await capturePluginStyles(install.listingId, async () => {
+                const mod = (await import(
+                  /* webpackIgnore: true */ blobUrl
+                )) as {
+                  register?: (host: unknown) => void
+                  default?: { register?: (host: unknown) => void }
+                }
+                const register = mod.register ?? mod.default?.register
+                if (typeof register !== 'function') {
+                  throw new Error('bundle exports no register(host)')
+                }
+                register(host)
+              })
             } finally {
               URL.revokeObjectURL(blobUrl)
             }

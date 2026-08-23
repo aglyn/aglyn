@@ -16,6 +16,8 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+// Deep import, NOT the barrel (AGL-2486) — see `plugin-styles-ui.tsx`.
+import { PluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles-ui'
 import { AglynNodeRenderer, useAglynSiteTheme } from '@aglyn/aglyn-node-renderer'
 import {
   MuiShadowDom,
@@ -275,6 +277,11 @@ export const ElementPreview = observer((props: ElementPreviewProps) => {
             ref={hostRef}
             style={{ display: 'block', width: '100%' }}
           >
+            {/* Plugin stylesheets (AGL-2486). The same shadow-root miss as the
+                canvas viewport, and for the same reason — a thumbnail of a
+                plugin element that ignores the plugin's own CSS is a thumbnail
+                of something the site will never render. */}
+            <PluginStyles scope="shadow" />
             <Aglyn.SiteContext.Provider
               // No `hostId`: data-backed elements take their own placeholder
               // branch rather than fetching a site's real content into a

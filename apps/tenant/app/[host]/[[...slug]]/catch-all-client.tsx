@@ -18,6 +18,10 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+// Deep import, NOT the barrel (AGL-2486): the plugin-manager barrel is
+// reachable from `@aglyn/aglyn/server`, and a client-only React hook on that
+// path 500s every server route. See `plugin-styles-ui.tsx`.
+import { PluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles-ui'
 import { AglynNodeRenderer } from '@aglyn/aglyn-node-renderer'
 import { observer } from 'mobx-react-lite'
 import {
@@ -708,6 +712,14 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
           automations engine hydrates. The besigner canvas deliberately
           omits this rule so hidden elements stay editable. */}
       <style>{Aglyn.ELEMENT_HIDDEN_STYLE_TEXT}</style>
+      {/* Plugin stylesheets (AGL-2486). The published page is the SOURCE of
+          truth for where plugin CSS sits in the cascade — unlayered, so it
+          beats every `@layer mui` rule regardless of specificity — and the
+          besigner canvas renders the same component in the same position
+          inside its shadow root so the editor agrees. `scope="document"`
+          skips MIRRORED sheets: those are still live in this document's own
+          head, where the bundle put them. */}
+      <PluginStyles scope="document" />
       {/* Plugin site runtimes (AGL-419): experiment runners, automation
           engines, overlays — each registered from its plugin's site
           surface and reading back the page-props slices its own server

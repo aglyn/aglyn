@@ -16,6 +16,8 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+// Deep import, NOT the barrel (AGL-2486) — see `plugin-styles-ui.tsx`.
+import { PluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles-ui'
 import {
   AglynNodeRenderer,
   Leaf,
@@ -246,6 +248,17 @@ const SiteContainer = observer(
       >
         <>
           {ViewportGlobalStyles}
+          {/* Plugin stylesheets (AGL-2486). THIS is the gap `8dc718ed4` named
+              and left open: a plugin's raw CSS goes into `document.head`,
+              which a `mode: 'closed'` shadow root with `:host { all: initial }`
+              and no `adoptedStyleSheets` never sees. Measured — the identical
+              rule that beats every `@layer mui` declaration on the published
+              page had literally NO effect on this canvas. Rendered here as a
+              plain `<style>` child, so it lands in the shadow root in the same
+              unlayered slot it occupies on the published document; `shadow`
+              scope is what pulls in the MIRRORED sheets a bundle injected into
+              the console's own head, which is the copy that never crossed. */}
+          <PluginStyles scope="shadow" />
           <ThemedElementContainer>
             <FramePaper>
               {chromeRoot ? (
