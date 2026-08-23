@@ -66,9 +66,65 @@ const isSameSiteAbsoluteUrl = (url: string): boolean => {
  * Only same-app relative paths, or same-site absolute URLs within the
  * workspace domain (AGL-465), may be continued to — anything else absolute
  * or protocol-relative would make the post-auth redirect an open redirect.
+ *
+ * The backslash rejection is not tidiness (AGL-2486). The WHATWG URL parser
+ * treats `\` as `/` in the authority position, so `/\evil.com` passes a
+ * `startsWith('/') && !startsWith('//')` test and STILL resolves off-site —
+ * measured in node 20:
+ *
+ *     new URL('/\\evil.com', 'https://app.aglyn.com').href
+ *     // → 'https://evil.com/'
+ *
+ * and `window.location.assign` resolves it the same way, which is exactly
+ * what the callers of this predicate go on to do. A `continue` that has
+ * survived an external IdP round trip is the case that makes this matter:
+ * whatever we put into `state` comes back as untrusted input.
+ *
+ * `''` is rejected explicitly rather than by accident. `strictNullChecks` is
+ * off repo-wide, so an absent param arrives here as an empty string far more
+ * often than as `undefined`, and "no continue" must read as unsafe so the
+ * caller falls back to its own default instead of building `?continue=`.
  */
-export const isSafeContinueUrl = (url: string): boolean =>
-  (url.startsWith('/') && !url.startsWith('//')) || isSameSiteAbsoluteUrl(url)
+export const isSafeContinueUrl = (url: string): boolean => {
+  if (!url) return false
+  if (url.includes('\\')) return false
+  return (
+    (url.startsWith('/') && !url.startsWith('//')) || isSameSiteAbsoluteUrl(url)
+  )
+}
+
+/**
+ * Forward the continue URL onto another same-app path (AGL-2486).
+ *
+ * A signed-out user who deep-links in arrives at `/signin?continue=…`, and
+ * every link OUT of that page to another auth route — the SSO button above
+ * all — has to carry the value or the destination they were going to is
+ * gone. Zach hit this on the SSO button: "the url does not carry the
+ * continue url and is dropped entirely".
+ *
+ * Unsafe or absent values append nothing, so a poisoned `continue` degrades
+ * to a plain link rather than being laundered one hop further along.
+ */
+export function withContinueUrl(path: string, continueUrl: string): string {
+  if (!isSafeContinueUrl(continueUrl)) return path
+  const separator = path.includes('?') ? '&' : '?'
+  return `${path}${separator}${continueParam(encodeURIComponent(continueUrl))}`
+}
+
+/**
+ * `href` for a link out of the current page that keeps the continue URL.
+ *
+ * Deliberately reads `useSearchParams` directly instead of reusing
+ * {@link useContinueUrlDecoded}: that hook also calls `useRouter`, and a
+ * link does not navigate imperatively. Pulling the router in would make
+ * every page that renders one of these links require an App Router context
+ * it does not otherwise need.
+ */
+export function useContinueHref(path: string): string {
+  const searchParams = useSearchParams()
+  const raw = searchParams?.get(ContinueParamName) ?? ''
+  return useMemo(() => withContinueUrl(path, raw), [path, raw])
+}
 
 export function useContinueUrlDecoded(): UseContinueUrlDecodedResponse {
   const router = useRouter()
