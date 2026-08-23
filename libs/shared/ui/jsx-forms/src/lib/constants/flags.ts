@@ -41,6 +41,8 @@ export enum FieldComponentType {
   TABS = 'tabs',
   TEXT_FIELD = 'text-field',
   TEXTAREA = 'textarea',
+  /** Theme-scale combo box that still accepts a raw value (AGL-2486). */
+  THEME_SCALE = 'theme-scale',
   TIME_PICKER = 'time-picker',
   TOGGLE_BUTTON = 'toggle-button',
   WIZARD = 'wizard',

@@ -296,6 +296,18 @@ export enum FieldComponentType {
   TABS = 'tabs',
   TEXT_FIELD = 'text-field',
   TEXTAREA = 'textarea',
+  /**
+   * Theme-scale combo box (AGL-2486): offers the THEME's own scale for a
+   * property — `theme.typography` for font size and weight,
+   * `theme.zIndex` for stacking — while still accepting any raw value
+   * (`18px`, `1.25rem`, `700`, `1400`), because arbitrary values are
+   * legitimate. The persisted value is a theme token PATH
+   * (`h4.fontSize`, `fontWeightBold`, `appBar`), which MUI's sx system
+   * resolves against the active theme exactly as it resolves
+   * `color: 'primary.main'` — so the element keeps following the theme
+   * instead of freezing the number it had when it was styled.
+   */
+  THEME_SCALE = 'theme-scale',
   TIME_PICKER = 'time-picker',
   TOGGLE_BUTTON = 'toggle-button',
   WIZARD = 'wizard',

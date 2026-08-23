@@ -36,6 +36,7 @@ import type {
   SwitchProps,
   TextFieldProps,
   TextareaProps,
+  ThemeScaleProps,
   TimePickerProps,
   WizardProps,
 } from '../mapper'
@@ -81,6 +82,11 @@ export const FieldCssGradient = dynamic<CssGradientProps>(
 )
 export const FieldTextarea = dynamic<TextareaProps>(() =>
   import('../mapper/textarea').then((mod) => mod.default),
+)
+// Theme scale + free text for font size / weight / z-index (AGL-2486). Not
+// `ssr: false`: it is one combo box with no popper anchor of its own.
+export const FieldThemeScale = dynamic<ThemeScaleProps>(() =>
+  import('../mapper/theme-scale').then((mod) => mod.default),
 )
 export const FieldPlainText = dynamic<PlainTextProps>(() =>
   import('../mapper/plain-text').then((mod) => mod.default),

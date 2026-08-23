@@ -21,8 +21,10 @@ import {
   describeCssColorProblem,
   expandSxAliases,
 } from '@aglyn/shared-data-enums'
+import type { ThemeScaleOption } from '@aglyn/shared-ui-jsx-forms'
 import { besignerDocsUrl } from './docs-help'
 import { readSxValue, type SxBreakpoint, writeSxValue } from './responsive-sx'
+import type { StyleThemeScales } from './theme-scale-options'
 
 /**
  * First-class style controls beyond the base panel (AGL-540): layout,
@@ -230,6 +232,27 @@ const colorField = (
   ...extra,
 })
 
+/**
+ * A field offering a THEME SCALE while still accepting any raw value
+ * (AGL-2486, item 12). The stored value is a theme token path
+ * (`fontWeightBold`, `appBar`) that MUI's sx system resolves itself, or
+ * whatever the author typed — see `ThemeScaleField`.
+ */
+const themeScaleField = (
+  name: string,
+  label: string,
+  description: string,
+  scaleOptions: ThemeScaleOption[],
+  extra?: Record<string, unknown>,
+) => ({
+  component: FieldComponentType.THEME_SCALE,
+  name,
+  label,
+  description,
+  scaleOptions,
+  ...extra,
+})
+
 const selectField = (
   name: string,
   label: string,
@@ -273,6 +296,15 @@ export interface StyleFieldGroupOptions {
    * unset choice has to be named for what it does.
    */
   isInstanceOverride?: boolean
+  /**
+   * The site theme's own scales for the three fields that had no connection
+   * to it (AGL-2486, item 12): font size, font weight and z-index. Built
+   * from the live theme by {@link buildStyleThemeScales}, so a host that
+   * retuned its type scale offers its own values. Absent (a spec, a theme
+   * still loading) simply means no scale is offered — every one of these
+   * fields still takes a raw value.
+   */
+  themeScales?: StyleThemeScales
 }
 
 /**
@@ -452,17 +484,26 @@ function styleFieldGroups(
       $id: 'typography',
       label: 'Typography',
       fields: [
+        // Number + unit AND the theme's type scale (AGL-2486). Picking
+        // `h4.fontSize` stores that token path, which MUI resolves against
+        // `theme.typography` at render — so the heading keeps moving with
+        // the type scale instead of being pinned to the pixels it had on
+        // the day it was styled. A raw length is still one keystroke away.
         dimensionField(
           'fontSize',
           'Font Size',
-          'CSS font size, e.g. 18px, 1.25rem.',
-          half,
+          'CSS font size, e.g. 18px or 1.25rem — or a size from the theme’s type scale.',
+          { ...half, scaleOptions: options?.themeScales?.fontSize ?? [] },
         ),
-        selectField(
+        // The theme's named weights first, then the CSS ladder, and any raw
+        // value typed straight in (AGL-2486). `fontWeightBold` follows a
+        // host that decides its bold is 600; `700` means exactly 700.
+        themeScaleField(
           'fontWeight',
           'Font Weight',
-          'Thickness of the glyph strokes.',
-          ['100', '200', '300', '400', '500', '600', '700', '800', '900'],
+          'Thickness of the glyph strokes — a theme weight, or a raw value like 700.',
+          options?.themeScales?.fontWeight ?? [],
+          half,
         ),
         textField(
           'fontFamily',
@@ -588,11 +629,15 @@ function styleFieldGroups(
           half,
         ),
         dimensionField('left', 'Left', 'Offset from the left edge.', half),
-        textField(
+        // The theme's stacking layers, not a guessed number (AGL-2486).
+        // `modal` is 1300 today and stays right if the host re-tunes its
+        // layers; a hand-typed 1300 next to the modal is a coin toss.
+        themeScaleField(
           'zIndex',
           'Z-Index',
-          'Stacking order for positioned elements.',
-          { type: 'number', ...half },
+          'Stacking order for positioned elements — a theme layer, or a raw number.',
+          options?.themeScales?.zIndex ?? [],
+          half,
         ),
         selectField(
           'overflow',

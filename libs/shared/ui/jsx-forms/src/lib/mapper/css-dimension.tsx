@@ -35,6 +35,7 @@ import FormFieldGrid, {
   buildFieldClear,
   type FormFieldGridProps,
 } from './form-field-grid'
+import type { ThemeScaleOption } from './theme-scale'
 import type { BaseFieldProps } from './types'
 import { type ExtendedFieldMeta, validationError } from './validation-error'
 
@@ -131,6 +132,14 @@ export interface CssDimensionProps extends BaseFieldProps {
   units?: CssUnit[]
   /** How a bare number is read. See {@link DimensionNumberAs}. */
   numberAs?: DimensionNumberAs
+  /**
+   * Theme scale offered alongside the raw length (AGL-2486). Each option's
+   * `value` is a token path MUI's sx system resolves itself — `h4.fontSize`
+   * against `theme.typography` — so picking one keeps the element following
+   * the theme instead of freezing the number it had when it was styled. An
+   * empty list renders no scale menu at all.
+   */
+  scaleOptions?: ThemeScaleOption[]
   /** Offer the reset-to-unset affordance (AGL-2486). */
   clearable?: boolean
   FormFieldGridProps?: FormFieldGridProps
@@ -151,6 +160,7 @@ export const CssDimensionField = (props: CssDimensionProps) => {
     help,
     units = CSS_UNITS,
     numberAs = 'px',
+    scaleOptions = [],
     clearable,
     FormFieldGridProps = {},
     // Free-text leftovers from the attribute schema that must never reach
@@ -237,6 +247,57 @@ export const CssDimensionField = (props: CssDimensionProps) => {
     [commit, draft],
   )
 
+  // Theme scale alongside the raw length (AGL-2486, item 12). A token like
+  // `h4.fontSize` is not a `<number><unit>`, so the field already holds it
+  // fine — in custom mode, as raw text — and all that was missing was a way
+  // to PICK one. Rendered as its own menu rather than folded into the unit
+  // list because it does not choose a unit, it replaces the whole value:
+  // MUI's sx resolves `fontSize: 'h4.fontSize'` against `theme.typography`,
+  // which is what keeps the element following the type scale.
+  const activeScaleOption = scaleOptions.find(
+    (option) => option.value === value,
+  )
+  const scaleSelect = scaleOptions.length ? (
+    <InputAdornment position="end" sx={{ ml: 0, mr: 0.5 }}>
+      <Select
+        value={activeScaleOption ? activeScaleOption.value : ''}
+        onChange={(event) => {
+          const picked = `${event.target.value ?? ''}`
+          // Empty means "back to a raw length"; the number box takes over
+          // again and the author is not stranded on a token they undid.
+          commit(
+            picked
+              ? { text: picked, unit: '', custom: true }
+              : { text: '', unit: '', custom: false },
+          )
+        }}
+        disabled={isDisabled || isReadOnly}
+        variant="standard"
+        disableUnderline
+        displayEmpty
+        renderValue={() =>
+          activeScaleOption ? activeScaleOption.label : 'theme'
+        }
+        inputProps={{ 'aria-label': 'Theme scale' }}
+        sx={{
+          '& .MuiSelect-select': { pr: '20px !important', py: 0 },
+          fontSize: '0.8125rem',
+          color: 'text.secondary',
+          maxWidth: 92,
+        }}
+      >
+        <MenuItem value="">
+          <em>{'raw value'}</em>
+        </MenuItem>
+        {scaleOptions.map((option) => (
+          <MenuItem key={option.value} value={option.value}>
+            {option.hint ? `${option.label} — ${option.hint}` : option.label}
+          </MenuItem>
+        ))}
+      </Select>
+    </InputAdornment>
+  ) : null
+
   const unitSelect = (
     <InputAdornment position="end" sx={{ ml: 0 }}>
       <Select
@@ -307,7 +368,12 @@ export const CssDimensionField = (props: CssDimensionProps) => {
           inputLabel: keywordUnit ? { shrink: true } : undefined,
           input: {
             readOnly: isReadOnly || keywordUnit,
-            endAdornment: unitSelect,
+            endAdornment: (
+              <>
+                {scaleSelect}
+                {unitSelect}
+              </>
+            ),
           },
           htmlInput: { inputMode: 'decimal' },
         }}

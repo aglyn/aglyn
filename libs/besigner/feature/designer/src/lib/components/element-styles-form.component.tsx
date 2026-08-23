@@ -67,6 +67,7 @@ import { Container, HelpTip, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useHostThemeDocument } from '@aglyn/shared-ui-theme'
 import { objectFlatten } from '@aglyn/shared-util-vendor'
 import {
+  Alert,
   Chip,
   FormControlLabel,
   FormHelperText,
@@ -107,7 +108,14 @@ import {
   pickStyleValues,
   styleGroupFieldNames,
 } from '../utils/style-field-groups'
+import {
+  filterStyleGroup,
+  matchesStyleQuery,
+  STYLE_SECTION_ENTRIES,
+  styleFieldEntry,
+} from '../utils/style-field-search'
 import { getNodeStyleTarget } from '../utils/style-target'
+import { buildStyleThemeScales } from '../utils/theme-scale-options'
 import {
   readHiddenBands,
   VISIBILITY_BAND_LABELS,
@@ -555,7 +563,14 @@ export interface ElementStylesFormProps extends Partial<FormRendererProps> {
  * - Layout / Colors / Sizing / Typography / Borders & Shadows /
  *   Position & Overflow: the accordion field groups from
  *   `buildStyleFieldGroups`.
- * - Top level: breakpoint chip, BoxStyler, and the text-align toggle.
+ * - Top level: search box, breakpoint chip, BoxStyler, and the text-align
+ *   toggle.
+ *
+ * The search box (AGL-2486) filters every one of those by property name AND
+ * by the words a non-developer would use — `rounded` finds Corner Radius —
+ * hiding sections with no match and opening the ones that have one. See
+ * `style-field-search.ts`; the filtered group is also what each form SAVES
+ * through, so hiding a field can never clear it.
  */
 const ElementStylesForm = observer(
   forwardRef<any, ElementStylesFormProps>((props, ref) => {
@@ -649,12 +664,22 @@ const ElementStylesForm = observer(
     // instance an unset Background Fill is the component's gradient, not
     // no gradient, and the control that could not tell those apart was
     // the bug.
+    // The theme's own scales for font size, font weight and z-index
+    // (AGL-2486, item 12). Read off the SITE theme, so a host that retuned
+    // its type scale or added a stacking layer offers its own values — and
+    // the option list names what each token resolves to, which is the only
+    // thing that makes `h4.fontSize` legible to an author.
+    const themeScales = useMemo(
+      () => buildStyleThemeScales(siteTheme as any),
+      [siteTheme],
+    )
     const styleGroups = useMemo(
       () =>
         buildStyleFieldGroups(presetColors, {
           isInstanceOverride: target.isInstanceOverride,
+          themeScales,
         }),
-      [presetColors, target.isInstanceOverride],
+      [presetColors, target.isInstanceOverride, themeScales],
     )
     // Every typed layout field, rendered under the alignment toggles in
     // the single Flexbox & Grid section (AGL-2486).
@@ -847,6 +872,62 @@ const ElementStylesForm = observer(
       [node?.$id],
     )
 
+    // Panel search (AGL-2486, item 13). The panel is seven accordions plus
+    // the box stylers and the toggles, so "which section is Corner Radius
+    // in?" was a question every author had to answer from memory. Filtering
+    // is derived from the query on every render rather than held in state:
+    // one source of truth, and no way for the list to disagree with the box.
+    const [query, setQuery] = useState('')
+    const search = query.trim()
+    const searching = search !== ''
+    const handleSearchChange = useCallback(
+      (event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value),
+      [],
+    )
+    // While searching, a section that HAS a match opens itself — a hit
+    // hidden inside a collapsed accordion is not a hit. Keyed on the search
+    // MODE rather than the text so this re-seeds the accordions once, when
+    // searching starts or stops, not on every keystroke.
+    const accordionKey = searching ? 'search' : 'browse'
+    const matchesSection = useCallback(
+      (key: keyof typeof STYLE_SECTION_ENTRIES) =>
+        matchesStyleQuery(STYLE_SECTION_ENTRIES[key], search),
+      [search],
+    )
+    const visibleFlexboxToggles = useMemo(
+      () =>
+        FLEXBOX_TOGGLES.filter((schema) =>
+          matchesStyleQuery(styleFieldEntry(schema as any), search),
+        ),
+      [search],
+    )
+    const visibleFlexGridGroup = useMemo(
+      () => filterStyleGroup(flexGridGroup, search),
+      [flexGridGroup, search],
+    )
+    const visibleStyleGroups = useMemo(
+      () =>
+        styleGroups
+          .map((group) => filterStyleGroup(group, search))
+          .filter((group): group is typeof styleGroups[number] =>
+            Boolean(group),
+          ),
+      [styleGroups, search],
+    )
+    // Nothing anywhere answered the query — said once, rather than leaving
+    // the author looking at a panel that has silently emptied itself.
+    const hasResults =
+      !searching ||
+      Boolean(
+        visibleStyleGroups.length ||
+          visibleFlexboxToggles.length ||
+          visibleFlexGridGroup ||
+          matchesSection('box') ||
+          matchesSection('textAlign') ||
+          matchesSection('visibility') ||
+          matchesSection('classes'),
+      )
+
     // Re-seeds a group form's initial values when the selection, the
     // override target or the artboard scope changes (AGL-540/588/1332).
     const formSeedKey =
@@ -855,6 +936,29 @@ const ElementStylesForm = observer(
 
     return (
       <>
+        {/* Find a style by what it is called OR by what an author would
+            call it (AGL-2486, item 13): `rounded` finds Corner Radius,
+            `shadow` finds the shadow preset, `see through` finds Opacity. */}
+        <Container gutterY={[1]} dense>
+          <TextField
+            fullWidth
+            size="small"
+            margin="dense"
+            type="search"
+            value={query}
+            onChange={handleSearchChange}
+            label="Search styles"
+            placeholder="rounded, shadow, spacing…"
+          />
+        </Container>
+        {hasResults ? null : (
+          <Container gutterY={[1]} dense>
+            <Alert severity="info" sx={{ fontSize: '0.8125rem' }}>
+              {`No style matches “${search}”. Try a plainer word — ` +
+                '“rounded”, “shadow”, “spacing”, “hide”.'}
+            </Alert>
+          </Container>
+        )}
         <Container gutterY={[1]} dense>
           <Tooltip
             title={
@@ -988,6 +1092,7 @@ const ElementStylesForm = observer(
             ))}
           </Container>
         ) : null}
+        {matchesSection('box') ? (
         <Container gutterY={[2]} dense sx={{ position: 'relative' }}>
           <HelpTip
             title="Margin & padding"
@@ -1000,6 +1105,8 @@ const ElementStylesForm = observer(
             onChange={handleBoxStylerChange}
           />
         </Container>
+        ) : null}
+        {matchesSection('textAlign') ? (
         <Container gutterY={[2]} dense>
           <TextAlignToggleButtonGroup
             onChange={handleTextAlignChange}
@@ -1041,6 +1148,7 @@ const ElementStylesForm = observer(
             }}
           />
         </Container>
+        ) : null}
 
         {/* One layout section, not two (AGL-2486). `Flexbox & Grids` and
             `Grid & Flex Child` described the same two CSS layout models
@@ -1048,7 +1156,10 @@ const ElementStylesForm = observer(
             did not follow — `Align self` sat with the container controls
             while `Grid Columns`, a container property, sat under "Flex
             Child". Every property both sections carried is here. */}
+        {visibleFlexboxToggles.length || visibleFlexGridGroup ? (
         <Accordion
+          key={`flex-grid:${accordionKey}`}
+          expanded={searching}
           summary="Flexbox & Grid"
           help={{
             title: 'Flexbox & grid layout',
@@ -1065,7 +1176,7 @@ const ElementStylesForm = observer(
               highlighted the same authoring correctly on the same node.
               Rendered from a list rather than eight hand-wired call sites
               so a toggle added later cannot arrive read-only again. */}
-          {FLEXBOX_TOGGLES.map((schema) => (
+          {visibleFlexboxToggles.map((schema) => (
             <ToggleButtonFormControl
               key={schema.name}
               onChange={handleFlexboxChange(schema.name as string)}
@@ -1076,24 +1187,37 @@ const ElementStylesForm = observer(
           {/* Gaps, grid tracks, item placement and flex-child sizing —
               the typed half of the same section. They apply immediately
               like everything else. */}
-          <FormRenderer
-            key={formSeedKey}
-            FormTemplate={ElementStylesFormTemplate}
-            componentMapper={componentMapper}
-            keepDirtyOnReinitialize
-            onSubmit={handleGroupSave(styleGroupFieldNames(flexGridGroup))}
-            initialValues={pickStyleValues(
-              styleGroupFieldNames(flexGridGroup),
-              effectiveValues,
-            )}
-            schema={{ fields: flexGridGroup.fields }}
-          />
+          {visibleFlexGridGroup ? (
+            <FormRenderer
+              key={formSeedKey}
+              FormTemplate={ElementStylesFormTemplate}
+              componentMapper={componentMapper}
+              keepDirtyOnReinitialize
+              // The SAVE stays scoped to the whole group even while the
+              // panel shows a filtered subset (AGL-2486): a partial does not
+              // carry the hidden fields, and `computeStylePartial` would
+              // then write `undefined` over every one of them — a search
+              // would silently clear the styles it was only meant to hide.
+              onSubmit={handleGroupSave(
+                styleGroupFieldNames(visibleFlexGridGroup),
+              )}
+              initialValues={pickStyleValues(
+                styleGroupFieldNames(visibleFlexGridGroup),
+                effectiveValues,
+              )}
+              schema={{ fields: visibleFlexGridGroup.fields }}
+            />
+          ) : null}
         </Accordion>
+        ) : null}
 
         {/* Responsive visibility (AGL-562): hide the element on whole
             device bands — e.g. hide the desktop link cluster on mobile
             and show a menu button instead. */}
+        {matchesSection('visibility') ? (
         <Accordion
+          key={`visibility:${accordionKey}`}
+          expanded={searching}
           summary="Visibility"
           help={{
             title: 'Visibility per device band',
@@ -1122,16 +1246,18 @@ const ElementStylesForm = observer(
               'resize the window (or publish) to see the effect.'}
           </FormHelperText>
         </Accordion>
+        ) : null}
 
         {/* First-class style groups (AGL-540/587). Each form is keyed on
             the node + breakpoint so switching selection or artboard
             scope re-seeds the initial values; edits apply immediately
             through the shared debounced template. */}
-        {styleGroups.map((group) => {
+        {visibleStyleGroups.map((group) => {
           const fieldNames = styleGroupFieldNames(group)
           return (
             <Accordion
-              key={group.$id}
+              key={`${group.$id}:${accordionKey}`}
+              expanded={searching}
               summary={group.label}
               help={{
                 title: `${group.label} styles`,
@@ -1162,7 +1288,10 @@ const ElementStylesForm = observer(
           )
         })}
 
+        {matchesSection('classes') ? (
         <Accordion
+          key={`classes:${accordionKey}`}
+          expanded={searching}
           summary="Classes & custom CSS"
           help={{
             title: 'Custom classes & CSS',
@@ -1181,6 +1310,7 @@ const ElementStylesForm = observer(
             overrideKey={overrideKey}
           />
         </Accordion>
+        ) : null}
 
         <Container gutterY={[2]} dense>
           <FormControl margin="none" fullWidth>
