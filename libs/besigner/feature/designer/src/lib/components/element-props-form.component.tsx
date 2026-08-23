@@ -49,6 +49,7 @@ import {
   Stack,
   Switch,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import Box from '@mui/material/Box'
@@ -1246,21 +1247,56 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                         formatting away — and it is one `updateNodeProps`,
                         so a single undo brings the markup back. */}
                     {hasFormattedText ? (
-                      <Button
-                        size="small"
-                        color="warning"
-                        onClick={handleRemoveFormatting}
-                        sx={{ mr: 'auto', textTransform: 'none' }}
+                      /* A warning-coloured button named for a deletion has to
+                         say WHAT it deletes before it is pressed, not after
+                         (AGL-2486). The words and the line breaks survive —
+                         which is the half an author actually worries about —
+                         so the tooltip leads with that, then names what goes,
+                         then says it is undoable. Without it the only way to
+                         find out is to press it. */
+                      <Tooltip
+                        title={
+                          'Keeps every word and line break. Removes bold, ' +
+                          'italic, underline, links and lists, so the text ' +
+                          'becomes editable in this field. One undo brings ' +
+                          'the formatting back.'
+                        }
                       >
-                        {'Remove formatting'}
-                      </Button>
+                        <Button
+                          size="small"
+                          color="warning"
+                          onClick={handleRemoveFormatting}
+                          sx={{ mr: 'auto', textTransform: 'none' }}
+                        >
+                          {'Remove formatting'}
+                        </Button>
+                      </Tooltip>
                     ) : null}
-                    <HelpTip
-                      title="Editing text"
-                      excerpt="The Text attribute and double-clicking the element on the canvas edit the same value. Rich text is opt-in per element."
-                      href={besignerDocsUrl('textEditing', '#the-text-attribute')}
-                      sx={{ fontSize: '0.9em' }}
-                    />
+                    {/* The help tip follows the state the author is IN: with
+                        formatted text the live question is what the greyed
+                        field and that button mean, so it deep-links there
+                        rather than to the section's opening paragraph. */}
+                    {hasFormattedText ? (
+                      <HelpTip
+                        title="This text is formatted"
+                        excerpt="Formatted text is edited on the canvas — double-click the element. Remove formatting to edit it in this field instead; the words and line breaks are kept."
+                        href={besignerDocsUrl(
+                          'textEditing',
+                          '#text-field-read-only',
+                        )}
+                        sx={{ fontSize: '0.9em' }}
+                      />
+                    ) : (
+                      <HelpTip
+                        title="Editing text"
+                        excerpt="The Text attribute and double-clicking the element on the canvas edit the same value. Rich text is opt-in per element."
+                        href={besignerDocsUrl(
+                          'textEditing',
+                          '#the-text-attribute',
+                        )}
+                        sx={{ fontSize: '0.9em' }}
+                      />
+                    )}
                   </Box>
                 ) : null}
                 <ElementPropsFormTemplate

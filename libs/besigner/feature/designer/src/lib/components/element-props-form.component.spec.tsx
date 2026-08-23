@@ -580,3 +580,59 @@ describe('formatted text is owned by the canvas (AGL-2486)', () => {
     })
   })
 })
+
+/**
+ * AGL-2486 — the affordances beside the read-only Text field.
+ *
+ * `isFormattedText` and `withoutFormatting` above prove the DECISION and the
+ * transform. They cannot prove that the panel explains either one, and that
+ * is the half a user actually meets: a warning-coloured button named
+ * "Remove formatting" beside text they cannot type into. Told nothing more,
+ * the only way to learn whether the words survive is to press it and find
+ * out — on the paragraph, not on a copy.
+ *
+ * So the tooltip has to lead with what is KEPT. It is asserted here rather
+ * than rendered for the reason recorded on the Screen-picker block below:
+ * this branch sits in an unexported render tree behind the besigner's
+ * context stack. Read from source, with a guard on the guard.
+ */
+describe('the read-only Text field explains itself (AGL-2486)', () => {
+  const source = readFileSync(
+    join(__dirname, 'element-props-form.component.tsx'),
+    'utf8',
+  )
+  const formattedBranch = source.slice(
+    source.indexOf('{hasFormattedText ? ('),
+    source.indexOf('<ElementPropsFormTemplate'),
+  )
+
+  it('is looking at the right branch', () => {
+    // Without this, every check below would pass on an empty string.
+    expect(formattedBranch).toContain("'Remove formatting'")
+    expect(formattedBranch.length).toBeGreaterThan(400)
+  })
+
+  it('says what survives before the button is pressed, not after', () => {
+    // The words and the breaks are the reassurance; a tooltip that only
+    // named the losses would read as a warning and stop people using a
+    // button that is safe and undoable.
+    expect(formattedBranch).toContain('Tooltip')
+    expect(formattedBranch).toMatch(/Keeps every word and line break/)
+    expect(formattedBranch).toMatch(/One undo brings/)
+  })
+
+  it('names the formatting it does remove', () => {
+    expect(formattedBranch).toMatch(/bold, .*italic, underline, links and lists/s)
+  })
+
+  /**
+   * A help link is only help if it lands on the paragraph answering the
+   * question the reader has RIGHT NOW. With formatted text that question is
+   * "why can I not type in this box", which is its own section — not the
+   * general "the two fields edit the same value" opener.
+   */
+  it('deep-links to the section for the state the author is in', () => {
+    expect(formattedBranch).toContain("'#text-field-read-only'")
+    expect(formattedBranch).toContain("'#the-text-attribute'")
+  })
+})
