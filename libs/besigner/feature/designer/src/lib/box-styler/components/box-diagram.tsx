@@ -298,13 +298,18 @@ const StyledWrapper = styled('div')(({ theme }) => {
      * Selection is a fill, not an outline: two darker outlines inside a
      * figure built from dashed outlines read as one more outline rather
      * than as "this is the side you are editing".
+     *
+     * The fill itself is defined in `region-fills` alongside the four
+     * region materials, so the answer to "what colour is a region, in
+     * which state" lives in one file. It is a TINT of primary rather
+     * than solid primary — solid was the brightest thing in a figure
+     * made of low-alpha tints, so it dominated instead of indicating.
      */
     '.isSelected': {
-      backgroundColor: tv.palette.primary.main,
-      backgroundImage: 'none',
-      color: tv.palette.primary.contrastText,
+      background: fills.selected.background,
+      color: fills.selected.color,
       fontWeight: 700,
-      '&:hover': { filter: 'brightness(1.08)' },
+      '&:hover': { filter: 'brightness(0.96)' },
     },
 
     // A value that follows the theme carries a dot: the number alone

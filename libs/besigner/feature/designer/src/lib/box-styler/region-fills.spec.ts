@@ -50,10 +50,51 @@ describe('the box diagram gets its colour from the theme, never from literals', 
     fills[key].borderColor,
   ]
 
-  it('names all four regions', () => {
+  it('names all four regions, plus the selected state', () => {
     expect(regions.sort()).toEqual(
-      ['border', 'contents', 'margin', 'padding'].sort(),
+      ['border', 'contents', 'margin', 'padding', 'selected'].sort(),
     )
+  })
+
+  it('paints every ground OPAQUELY, so no region shows through another', () => {
+    // The bug this is for: the seams were bare `rgba(...)`, so the border
+    // band's texture showed straight through the padding box sitting on
+    // top of it. A region paints its own material and nothing else's, so
+    // every fill and every seam has to END on a background token — the
+    // tints are layered ON a ground, never left to composite against
+    // whatever happens to be behind them.
+    for (const key of regions) {
+      for (const value of [fills[key].background, fills[key].seam]) {
+        expect(value).toMatch(/var\(--mui-palette-background-(paper|default)[^)]*\)\s*$/)
+      }
+    }
+  })
+
+  it('stripes the BORDER region and nothing else', () => {
+    // "The stripes should not be on the margin buttons, only the border
+    // area." The margin is the largest area in the figure, so whatever it
+    // wears sets the noise level; being the only striped region is also
+    // what makes the border identifiable at a glance.
+    expect(fills.border.background).toContain('repeating-linear-gradient')
+    for (const key of regions.filter((k) => k !== 'border')) {
+      expect(fills[key].background).not.toContain('repeating-linear-gradient')
+    }
+  })
+
+  it('selects with a TINT of primary, never solid primary', () => {
+    // Solid `primary.main` was the only fully saturated thing in a figure
+    // built from low-alpha tints, so it dominated instead of indicating.
+    const alpha = fills.selected.background.match(/primary-mainChannel[^)]*\)\s*\/\s*([\d.]+)/)
+    expect(alpha).toBeTruthy()
+    expect(Number(alpha![1])).toBeGreaterThan(0)
+    expect(Number(alpha![1])).toBeLessThan(1)
+    // Still the strongest primary present, so it reads as the selection.
+    expect(Number(alpha![1])).toBeGreaterThan(0.3)
+    // The label rides on text.primary, which flips with the scheme — a
+    // contrast-text token is computed for a SOLID primary and would be
+    // right in one theme only.
+    expect(fills.selected.color).toContain('text-primary')
+    expect(fills.selected.color).not.toContain('contrastText')
   })
 
   it('uses a CSS variable for every colour, in every region', () => {
@@ -80,11 +121,13 @@ describe('the box diagram gets its colour from the theme, never from literals', 
     }
   })
 
-  it('gives every band a seam, so the wedge geometry has something to show', () => {
+  it('gives every BAND a seam distinct from its material', () => {
     // The bands are drawn as four mitred wedges with a gap between them;
     // the seam is the ground that shows through, and it is what makes the
-    // corners read as a frame rather than as a plain rectangle.
-    for (const key of regions) {
+    // corners read as a frame rather than as a plain rectangle. Scoped to
+    // the bands: `selected` is a STATE, drawn on a wedge that already has
+    // its geometry, so it has no seam of its own to differ from.
+    for (const key of regions.filter((k) => k !== 'selected')) {
       expect(`${fills[key].seam}`.length).toBeGreaterThan(0)
       expect(fills[key].seam).not.toBe(fills[key].background)
     }

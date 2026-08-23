@@ -45,7 +45,7 @@
 /** The subset of a theme these fills read (a CSS-vars theme's `vars`). */
 export interface RegionFillTheme {
   palette: {
-    text: { primaryChannel: string }
+    text: { primary: string; primaryChannel: string }
     info: { mainChannel: string }
     primary: { mainChannel: string }
     secondary: { mainChannel: string }
@@ -66,6 +66,13 @@ export interface RegionFill {
    * shows through between them. The original used `common.black` here,
    * which is what made the seams read as harsh slashes; a low-alpha ink
    * tint gives the same geometry as fine lines instead.
+   *
+   * **Opaque, like every other value here.** A translucent seam is what
+   * put the border band's texture underneath the padding controls: the
+   * padding box's ground let the ring's material show straight through
+   * it. A region paints its own material and nothing else's, so every
+   * ground ends in a `background.*` token and each tint is layered ON it
+   * rather than left to composite against whatever happens to be behind.
    */
   seam: string
   /** The edge drawn around the region. */
@@ -78,83 +85,129 @@ export interface RegionFills {
   border: RegionFill
   padding: RegionFill
   contents: RegionFill
+  /**
+   * The side whose editor is open.
+   *
+   * It lives here rather than in the component because "what colour is a
+   * region, in which state" should have one answer in one file — and
+   * because this is the value that was wrong: a fully saturated
+   * `primary.main` inside a figure built deliberately from low-alpha
+   * tints, so the selected wedge was the brightest thing on screen.
+   */
+  selected: RegionFill & { color: string }
 }
+
+/** An opaque stack: a flat tint layered ON a background token. */
+const tint = (channel: string, alpha: number, ground: string) =>
+  [
+    `linear-gradient(0deg,`,
+    ` rgba(${channel} / ${alpha}),`,
+    ` rgba(${channel} / ${alpha}))`,
+    `, ${ground}`,
+  ].join('')
 
 export function regionFills(tv: RegionFillTheme): RegionFills {
   const ink = tv.palette.text.primaryChannel
   const info = tv.palette.info.mainChannel
+  const primary = tv.palette.primary.mainChannel
+  const paper = tv.palette.background.paper
+  const ground = tv.palette.background.default
 
   return {
     /**
-     * Grey, striped, quiet — the outermost band and the largest area, so
-     * it carries the least. The orange it replaces is the change Zach
-     * singled out as right: "the orange definitely stood out too much and
-     * I like you switched it to grey."
+     * The calmest material in the figure, because it is the largest area
+     * in it — whatever the margin wears sets the overall noise level.
+     *
+     * It used to carry the stripes. That put the two loudest materials on
+     * the two outermost regions and the diagram read as busy rather than
+     * layered, which is Zach's "the stripes should not be on the margin
+     * buttons". A flat grey tint is all it needs: it is the region an
+     * author looks at last.
      */
     margin: {
-      background: [
-        `repeating-linear-gradient(45deg,`,
-        ` rgba(${ink} / 0.055) 0 4px,`,
-        ` rgba(${ink} / 0.015) 4px 9px)`,
-        `, ${tv.palette.background.paper}`,
-      ].join(''),
-      seam: `rgba(${ink} / 0.13)`,
+      background: tint(ink, 0.05, paper),
+      seam: tint(ink, 0.15, paper),
       borderColor: `rgba(${ink} / 0.28)`,
       borderStyle: 'dashed',
     },
 
     /**
-     * The band that needed the most work — "needs visually polishing the
-     * border part especially". It is the thinnest region, so it gets the
-     * densest, highest-contrast texture: a tight cross-hatch that reads as
-     * a distinct material at 26px rather than as a gap between two better
-     * resolved neighbours. Info-hued so it is nobody else's colour.
+     * The stripes, and the only striped region — "only the border area".
+     *
+     * This is where they were always headed: it is the thinnest band, the
+     * one that needed the most help reading as its own material, and the
+     * one whose name an author is least likely to already understand.
+     * Being the only patterned region is what makes it identifiable at a
+     * glance rather than one texture among several.
      */
     border: {
       background: [
-        `repeating-linear-gradient(135deg,`,
-        ` rgba(${info} / 0.30) 0 2px,`,
-        ` rgba(${info} / 0.08) 2px 6px)`,
-        `, ${tv.palette.background.default}`,
+        `repeating-linear-gradient(45deg,`,
+        ` rgba(${info} / 0.34) 0 4px,`,
+        ` rgba(${info} / 0.10) 4px 9px)`,
+        `, ${ground}`,
       ].join(''),
-      seam: `rgba(${info} / 0.22)`,
+      seam: tint(info, 0.26, ground),
       borderColor: `rgba(${info} / 0.55)`,
       borderStyle: 'dashed',
     },
 
     /**
-     * The original's faint diagonal wash between the two brand hues, kept
-     * because it was never the thing that was too loud — at this alpha it
-     * is a tint on the ground rather than a gradient in its own right.
+     * The original's faint diagonal wash between the two brand hues. It
+     * was never the thing that was too loud, and it stays a tint on an
+     * opaque ground rather than a gradient in its own right.
      */
     padding: {
       background: [
         `linear-gradient(65deg,`,
         ` rgba(${tv.palette.secondary.mainChannel} / 0.16),`,
-        ` rgba(${tv.palette.primary.mainChannel} / 0.16))`,
-        `, ${tv.palette.background.paper}`,
+        ` rgba(${primary} / 0.16))`,
+        `, ${paper}`,
       ].join(''),
-      seam: `rgba(${tv.palette.primary.mainChannel} / 0.22)`,
-      borderColor: `rgba(${tv.palette.primary.mainChannel} / 0.42)`,
+      seam: tint(primary, 0.24, paper),
+      borderColor: `rgba(${primary} / 0.42)`,
       borderStyle: 'dashed',
     },
 
     /**
-     * "Plain white inside it looks boring" — so the innermost box gets a
-     * fine dotted grid, the visual shorthand for an empty canvas. It is
-     * the quietest texture of the four because this is the region the
-     * others exist to surround, and it has to read as empty space that
-     * something will fill.
+     * "Plain white inside it looks boring" — a fine dotted grid, the
+     * visual shorthand for an empty canvas, and the quietest texture of
+     * the four because this is the region the others exist to surround.
      */
     contents: {
       background: [
         `radial-gradient(rgba(${ink} / 0.16) 0.5px, transparent 0.5px)`,
         ` 0 0 / 5px 5px`,
-        `, ${tv.palette.background.default}`,
+        `, ${ground}`,
       ].join(''),
-      seam: `rgba(${ink} / 0.13)`,
+      seam: tint(ink, 0.15, ground),
       borderColor: `rgba(${ink} / 0.42)`,
       borderStyle: 'solid',
+    },
+
+    /**
+     * Selection: the same hue, given alpha — "use the same color but
+     * maybe make it have less opacity and add an alpha to the color".
+     *
+     * It was solid `primary.main`, the one fully saturated thing in a
+     * figure built out of low-alpha tints, so it dominated instead of
+     * indicating. At 0.42 over the region's own ground it is still the
+     * strongest colour present — nothing else uses primary above 0.24 —
+     * without being the brightest thing on screen.
+     *
+     * The text goes to `text.primary` rather than `primary.contrastText`.
+     * A contrast-text token is computed for a SOLID primary; over a
+     * translucent tint the actual backdrop is the region behind it, which
+     * is near-white on light and near-black on dark. `text.primary` is
+     * the token that flips with exactly that, so the label stays legible
+     * in both schemes instead of being right in one.
+     */
+    selected: {
+      background: tint(primary, 0.42, paper),
+      seam: tint(primary, 0.42, paper),
+      borderColor: `rgba(${primary} / 0.75)`,
+      borderStyle: 'solid',
+      color: tv.palette.text.primary,
     },
   }
 }
