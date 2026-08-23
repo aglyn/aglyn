@@ -336,6 +336,7 @@ export class CanvasManager {
       clearNodes: action,
       reset: action,
       updateInitialNodes: action,
+      confirmInitialNodes: action,
       setNode: action,
       setNodes: action,
       applyNodes: action,
@@ -729,6 +730,32 @@ export class CanvasManager {
     this._initial = nodes ? (toJS(nodes) as NodesMap) : this.serializeNodes()
     this._initialConfirmed = options?.confirmed ?? true
     return this
+  }
+  /**
+   * Promote an UNCONFIRMED baseline to a confirmed one, once the store has
+   * acknowledged the write that made it unconfirmed (AGL-2486).
+   *
+   * Without this there is no way back. `_initialConfirmed` moves to true in
+   * only two other places — {@link reset} and {@link updateInitialNodes} —
+   * and the editor records its baseline exactly once, on the first snapshot
+   * that carries nodes. A document whose first snapshot happens to carry
+   * this client's own queued write therefore reads dirty for the rest of the
+   * session over content nobody has edited.
+   *
+   * Conditional on the canvas still MATCHING the baseline, which is what
+   * keeps AGL-1262 intact. The acknowledgement is for the write that was in
+   * flight, and says nothing about work the author has done since; adopting
+   * a canvas that has moved on would call that work saved and take away the
+   * only control that could still write it.
+   *
+   * @returns whether the baseline is confirmed as a result.
+   */
+  public confirmInitialNodes(): boolean {
+    if (!this._initial) return false
+    if (this._initialConfirmed) return true
+    if (!isEqual(this._initial, this.serializeNodes())) return false
+    this._initialConfirmed = true
+    return true
   }
   /**
    * Registers a node in the map AND lists it on `parent`, in one action

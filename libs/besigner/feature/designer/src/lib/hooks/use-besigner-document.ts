@@ -358,6 +358,17 @@ export function useBesignerDocument<TData = unknown>(
       })
       baseStampRef.current = Aglyn.versionStamp(updatedAt)
       baseNodesRef.current = nodes
+      return
+    }
+    // The baseline was recorded from a snapshot carrying our own queued
+    // write, and that write has now been acknowledged (AGL-2486). Nothing
+    // else ever re-confirms: the guard above runs once, so without this the
+    // editor stays dirty for the rest of the session over a document nobody
+    // has edited. `confirmInitialNodes` refuses if the canvas has moved on
+    // since, so an author who edited in that window keeps their Save
+    // (AGL-1262) — the store vouched for the earlier write, not for theirs.
+    if (nodes && !pendingWrites && !Aglyn.canvas.isInitialConfirmed) {
+      Aglyn.canvas.confirmInitialNodes()
     }
   }, [nodes, pendingWrites])
 

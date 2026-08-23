@@ -45,8 +45,26 @@ const mockCanvas = {
   updateInitialNodes: jest.fn(
     (_nodes?: Record<string, unknown>, _options?: { confirmed?: boolean }) => {
       mockCanvas.didSetInitial = true
+      mockCanvas.isInitialConfirmed = _options?.confirmed ?? true
     },
   ),
+  /** Mirrors `CanvasManager._initialConfirmed`, which defaults to true. */
+  isInitialConfirmed: true,
+  /**
+   * Stands in for the real `isEqual(_initial, serializeNodes())` check inside
+   * `confirmInitialNodes`. The stub has no node map to compare, so the
+   * "author edited while the write was in flight" case is expressed here —
+   * modelled rather than assumed, because a double that always confirms
+   * would report AGL-1262 as green whatever the hook did.
+   */
+  canvasMatchesInitial: true,
+  confirmInitialNodes: jest.fn(() => {
+    if (!mockCanvas.didSetInitial) return false
+    if (mockCanvas.isInitialConfirmed) return true
+    if (!mockCanvas.canvasMatchesInitial) return false
+    mockCanvas.isInitialConfirmed = true
+    return true
+  }),
   applyNodes: jest.fn(),
   toJSON: jest.fn((): { nodes: Record<string, unknown> } => ({
     nodes: { root: {} },
@@ -103,6 +121,8 @@ describe('useBesignerDocument', () => {
     jest.restoreAllMocks()
     mockCanvas.isInitialSame = true
     mockCanvas.didSetInitial = false
+    mockCanvas.isInitialConfirmed = true
+    mockCanvas.canvasMatchesInitial = true
     mockCanvas.toJSON.mockReturnValue({ nodes: { root: {} } })
   })
 

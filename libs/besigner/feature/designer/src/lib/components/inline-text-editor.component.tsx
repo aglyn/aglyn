@@ -19,6 +19,8 @@ import * as Aglyn from '@aglyn/aglyn'
 import { mdiCodeBraces } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { Box, Button, IconButton, Paper } from '@mui/material'
+import isEqual from 'lodash-es/isEqual'
+import { toJS } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import {
   type KeyboardEvent,
@@ -217,6 +219,26 @@ export const InlineTextEditorComponent = observer(
       return () => cancelAnimationFrame(raf)
     }, [node, rich, propTarget])
 
+    /**
+     * Writes `next` only when it is a different document (AGL-2486).
+     *
+     * Closing this editor is not by itself an edit. Every branch below
+     * rebuilds the WHOLE props object from the surface's DOM, so a commit
+     * that changed nothing still produced a fresh object — an undo entry, a
+     * node-changed signal, and a co-editing mirror publish, all for an edit
+     * the author never made. The mirror is the expensive one: it is cleared
+     * only by a successful save, so an unsaved no-op is replayed into every
+     * joiner's canvas for `COEDIT_MIRROR_MAX_AGE_MS` (seven days) and each
+     * of them opens a document that reads dirty with nothing to see.
+     */
+    const commitProps = useCallback(
+      (node: Aglyn.NodeSchema<any>, next: Record<string, unknown>) => {
+        if (isEqual(toJS(node.props), next)) return
+        Aglyn.canvas.updateNodeProps(node, next as never)
+      },
+      [],
+    )
+
     const commit = useCallback(() => {
       if (committedRef.current) return
       committedRef.current = true
@@ -233,12 +255,20 @@ export const InlineTextEditorComponent = observer(
           const sanitized = sanitizeRichText(clone.innerHTML)
           const plain = richTextToPlain(sanitized)
           const hasMarkup = /<[a-z]/i.test(sanitized)
-          Aglyn.canvas.updateNodeProps(current, {
-            ...current.props,
-            // Empty html falls back to plain children in the renderer.
-            html: hasMarkup ? sanitized : '',
+          const nextProps: Record<string, unknown> = {
+            ...toJS(current.props),
             children: plain,
-          })
+          }
+          // ABSENT, not `''`, when there is no markup (AGL-2486). The
+          // renderer gates on `typeof html === 'string' && Boolean(html)`,
+          // so the two are the same document to everything that draws it —
+          // but `isInitialSame` compares serialized node maps with
+          // `isEqual`, and there the empty key is a difference. Writing it
+          // onto a node that never had one is what put SAVE on the header
+          // of a screen nobody had touched.
+          if (hasMarkup) nextProps['html'] = sanitized
+          else delete nextProps['html']
+          commitProps(current, nextProps)
         } else if (plainRef.current) {
           let value = serializeTokenSegments(
             readTokenSegmentsFromDom(plainRef.current),
@@ -268,17 +298,17 @@ export const InlineTextEditorComponent = observer(
             if (!Object.keys(values).length) {
               delete nextProps[Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY]
             }
-            Aglyn.canvas.updateNodeProps(current, nextProps)
+            commitProps(current, toJS(nextProps))
           } else {
-            Aglyn.canvas.updateNodeProps(current, {
-              ...current.props,
+            commitProps(current, {
+              ...toJS(current.props),
               children: value,
             })
           }
         }
       }
       inlineTextEdit.close()
-    }, [rich])
+    }, [rich, commitProps])
 
     const cancel = useCallback(() => {
       committedRef.current = true

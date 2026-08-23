@@ -276,6 +276,61 @@ describe('Aglyn: Screen Manager', () => {
         canvas.updateInitialNodes()
         expect(canvas.isInitialSame).toBe(true)
       })
+
+      /**
+       * AGL-2486. An unconfirmed baseline had no way back: `_initialConfirmed`
+       * moved to true only in `reset()` or another `updateInitialNodes`, and
+       * the editor records its baseline exactly once. A document whose first
+       * snapshot carried the client's own queued write was therefore pinned
+       * dirty for the whole session over content nobody had edited.
+       */
+      describe('is promoted once the store acknowledges the write', () => {
+        it('confirms while the canvas still matches it', () => {
+          const canvas = makeCanvas()
+          canvas.updateInitialNodes(undefined, { confirmed: false })
+          expect(canvas.isInitialSame).toBe(false)
+
+          expect(canvas.confirmInitialNodes()).toBe(true)
+          expect(canvas.isInitialConfirmed).toBe(true)
+          expect(canvas.isInitialSame).toBe(true)
+        })
+
+        /**
+         * The AGL-1262 direction, which must not regress: the store
+         * acknowledged the write that was IN FLIGHT, not the edit made
+         * since. Adopting the canvas here would call that edit saved and
+         * disable the only control that could still write it.
+         */
+        it('refuses when the author has edited since', () => {
+          const canvas = makeCanvas()
+          canvas.updateInitialNodes(undefined, { confirmed: false })
+
+          const child = canvas.nodes.get('child1')
+          canvas.updateNodeProps(child, { title: 'changed' })
+
+          expect(canvas.confirmInitialNodes()).toBe(false)
+          expect(canvas.isInitialConfirmed).toBe(false)
+          expect(canvas.isInitialSame).toBe(false)
+        })
+
+        it('leaves an already-confirmed baseline exactly as it was', () => {
+          const canvas = makeCanvas()
+          canvas.updateInitialNodes()
+          const child = canvas.nodes.get('child1')
+          canvas.updateNodeProps(child, { title: 'changed' })
+
+          // Confirmed already — this must not re-record the baseline and
+          // swallow a real edit.
+          expect(canvas.confirmInitialNodes()).toBe(true)
+          expect(canvas.isInitialSame).toBe(false)
+        })
+
+        it('has nothing to confirm before a baseline exists', () => {
+          const canvas = makeCanvas()
+          expect(canvas.confirmInitialNodes()).toBe(false)
+          expect(canvas.didSetInitial).toBe(false)
+        })
+      })
     })
   })
 
