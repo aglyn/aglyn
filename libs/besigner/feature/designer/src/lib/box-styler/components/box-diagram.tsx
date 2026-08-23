@@ -85,6 +85,46 @@ const PAD_BAND = 26
 const RING = 26
 const HEIGHT = 244
 
+/**
+ * The narrowest diagram that can carry the PADDING chip (AGL-2486, Zach
+ * 2026-08-23).
+ *
+ * A chip sits at the top-left of its region and a side's value is centred
+ * in its wedge. Measured across panel widths, exactly ONE pair ever meets:
+ * the PADDING chip and the `paddingTop` value. The cause is arithmetic
+ * rather than styling — the padding band is about 40% of the diagram,
+ * because the margin bands take 17% a side and the border ring a further
+ * FIXED `RING` px a side, and it is the fixed part that eats a growing
+ * share as the panel narrows. At a 260px panel the band is 83px and the
+ * chip alone is 54px of it.
+ *
+ * **There is no placement that fixes this, and the first attempt proved
+ * it.** Reserving a column so the value slid right did clear the chip by
+ * the numbers `getBoundingClientRect` reports — and the value came out
+ * CLIPPED, because the wedge is a trapezoid: `clipPath` narrows the band
+ * from 100% at its top edge to 74% at its bottom, and a rect-based check
+ * cannot see a clip path any more than it can see an outline. At the
+ * value's own row the usable window at 260px is ~54px wide in total. A
+ * 54px chip and a 25px value do not both go in it, at any offset.
+ *
+ * So the chip yields, below the width at which its band can hold both.
+ * Nothing is lost by it: the legend directly under the diagram names all
+ * four regions and paints each swatch with that region's own material, so
+ * the padding region is still named and still identified by its wash —
+ * whereas a covered value is data the author simply cannot read.
+ *
+ * The threshold is measured, with headroom rather than to the millimetre:
+ * the value clears naturally at a 307px diagram, by 1.3px, which is a
+ * coincidence and not a clearance. At 320px it clears by ~5.5px, and by
+ * ~1.5px even for a value half again as wide as the ladder's own. The
+ * stock 375px panel gives a 342px diagram, so the chip is well clear of
+ * the boundary at every ordinary width.
+ */
+export const PADDING_CHIP_MIN_WIDTH = 320
+
+/** The query container the threshold is measured against. */
+const CONTAINER_NAME = 'aglynBoxDiagram'
+
 export type PolyType = {
   topLX: string
   topLY: string
@@ -143,6 +183,13 @@ const StyledWrapper = styled('div')(({ theme }) => {
     textAlign: 'center',
     overflow: 'hidden',
     boxSizing: 'border-box',
+    // The figure answers to its OWN width, not the window's. The panel is
+    // resizable, so a viewport media query would be measuring the wrong
+    // thing entirely — a 260px panel and a 375px panel sit in the same
+    // window. `inline-size` only contains the inline axis, and the height
+    // here is a fixed `HEIGHT`, so nothing about the layout moves.
+    containerType: 'inline-size',
+    containerName: CONTAINER_NAME,
     borderRadius: theme.shape.borderRadius,
     borderWidth: 1,
     borderStyle: fills.margin.borderStyle,
@@ -405,6 +452,23 @@ const StyledWrapper = styled('div')(({ theme }) => {
         borderColor: fills.border.borderColor,
         color: tv.palette.text.primary,
       },
+    },
+
+    /**
+     * Below `PADDING_CHIP_MIN_WIDTH` the padding band cannot hold its chip
+     * AND its value, so the chip goes and the value stays — see the
+     * constant for why there is no placement that keeps both.
+     *
+     * Only this chip. MARGIN's band is the full width of the diagram and
+     * BORDER's carries no value at all, so neither can ever reach one;
+     * hiding them here would remove information for no reason. The rule is
+     * "a chip is drawn where its own band has room for it", which is why
+     * it reads as one chip short rather than as an arbitrary breakpoint.
+     */
+    [`@container ${CONTAINER_NAME} (max-width: ${
+      PADDING_CHIP_MIN_WIDTH - 1
+    }px)`]: {
+      '.label.padding': { display: 'none' },
     },
   }
 })

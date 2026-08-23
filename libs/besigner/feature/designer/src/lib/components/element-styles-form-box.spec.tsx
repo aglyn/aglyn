@@ -28,6 +28,7 @@ import {
   within,
 } from '@testing-library/react'
 
+import { PADDING_CHIP_MIN_WIDTH } from '../box-styler/components/box-diagram'
 import ElementStylesForm from './element-styles-form.component'
 
 /**
@@ -380,6 +381,117 @@ describe('the box styler in the styles panel (AGL-2486)', () => {
       return rules.join(' | ')
     }
 
+    /** Every rule emitted, whitespace removed. */
+    const allCss = () => {
+      const rules: string[] = []
+      for (const sheet of Array.from(document.styleSheets)) {
+        try {
+          for (const rule of Array.from(sheet.cssRules)) {
+            rules.push(`${(rule as CSSRule).cssText}`.replace(/\s+/g, ''))
+          }
+        } catch {
+          // A sheet jsdom cannot read has nothing to contribute.
+        }
+      }
+      return rules.join(' | ')
+    }
+
+    /**
+     * Everything the diagram hides, as `[at-rule, selector]` pairs, with
+     * the emotion hash stripped.
+     *
+     * This is the LIST form, and the first version of the test did not
+     * have it: it asked whether a handful of named selectors were hidden,
+     * which cannot see a rule hiding something it never thought to name.
+     * Hiding `.paddingTop .sideValue` — the value itself, the exact thing
+     * this fix exists to protect — sailed straight through it. Enumerating
+     * what is hidden and pinning the whole list is the check that fails.
+     */
+    const everythingHidden = () => {
+      // Scoped to the DIAGRAM's own class, found by the one declaration
+      // only it makes — otherwise this collects MUI's own `display:none`
+      // rules (scrollbars, Accordion separators) and says nothing.
+      let root = ''
+      const eachRule = (fn: (rule: any, enclosing: string) => void) => {
+        const walk = (rules: CSSRuleList, enclosing: string) => {
+          for (const rule of Array.from(rules)) {
+            const inner = (rule as any).cssRules as CSSRuleList | undefined
+            if (inner) {
+              walk(
+                inner,
+                `${(rule as any).conditionText ?? ''}`.replace(/\s+/g, ''),
+              )
+              continue
+            }
+            fn(rule, enclosing)
+          }
+        }
+        for (const sheet of Array.from(document.styleSheets)) {
+          try {
+            walk(sheet.cssRules, '')
+          } catch {
+            // unreadable sheet
+          }
+        }
+      }
+      eachRule((rule) => {
+        if (root) return
+        if (!`${rule.cssText}`.replace(/\s+/g, '').includes('container-type:inline-size')) return
+        root = `${rule.selectorText ?? ''}`.trim()
+      })
+      expect(root).toMatch(/^\.css-[a-z0-9]+$/i)
+
+      const found: Array<[string, string]> = []
+      eachRule((rule, enclosing) => {
+        const selector = `${rule.selectorText ?? ''}`
+        if (!selector.includes(root)) return
+        if (!/[;{]display:none/.test(`${rule.cssText}`.replace(/\s+/g, ''))) {
+          return
+        }
+        found.push([enclosing, selector.split(root).join('').trim()])
+      })
+      return found
+    }
+
+    /**
+     * What hides `selector`, and under which at-rule — `''` for a rule at
+     * the top level. Answers "is this chip hidden, and by what", which is
+     * the question; a plain substring search could not tell a container
+     * query from a viewport media query.
+     */
+    const hiddenBy = (selector: string) => {
+      const found: string[] = []
+      const walk = (rules: CSSRuleList, enclosing: string) => {
+        for (const rule of Array.from(rules)) {
+          const inner = (rule as any).cssRules as CSSRuleList | undefined
+          if (inner) {
+            walk(
+              inner,
+              `${(rule as any).conditionText ?? ''}`.replace(/\s+/g, '') ||
+                `${(rule as any).cssText}`.slice(0, 40),
+            )
+            continue
+          }
+          const text = `${(rule as CSSRule).cssText}`.replace(/\s+/g, '')
+          const target = `${(rule as any).selectorText ?? ''}`.replace(
+            /^\.css-[a-z0-9]+\s*/i,
+            '',
+          )
+          if (target === selector && text.includes('display:none')) {
+            found.push(enclosing)
+          }
+        }
+      }
+      for (const sheet of Array.from(document.styleSheets)) {
+        try {
+          walk(sheet.cssRules, '')
+        } catch {
+          // unreadable sheet
+        }
+      }
+      return found
+    }
+
     it('sits on the same opaque chip as MARGIN and PADDING', async () => {
       // Zach: "the border label on the box styler needs a background to
       // make it more legible just like padding and margin labels". The
@@ -416,6 +528,70 @@ describe('the box styler in the styles panel (AGL-2486)', () => {
       for (const escape of ['top:auto', 'left:auto', 'bottom:-1px', 'right:']) {
         expect(chip).not.toContain(escape)
       }
+    })
+
+    /**
+     * Measured in a real browser, in the BAND's own coordinates — the
+     * padding band, not the padding box, is what the chip and the value
+     * actually share. Keyed by PANEL width; the diagram is the panel less
+     * ~33px of surrounding chrome.
+     *
+     * 375px is the panel's stock width; 260px is the narrow end the
+     * resizable panel reaches, and the width the state-pill row in this
+     * same panel was tuned against.
+     */
+    const DIAGRAM_WIDTH = { 260: 227, 300: 267, 320: 287, 340: 307, 375: 342 }
+    /** `value.left - chip.right` in the padding band, measured, unclipped. */
+    const NATURAL_GAP = { 300: -12, 320: -5.4, 340: 1.3, 375: 12.8 }
+
+    it('drops the PADDING chip exactly where its band stops fitting both', async () => {
+      // The defect: at a 260px panel the padding band is 83px and the chip
+      // is 54px of it, so the chip covered `paddingTop`'s value outright.
+      //
+      // The threshold has to sit ABOVE the width where they merely stop
+      // touching. 307px is where the value clears by 1.3px, which is a
+      // coincidence rather than a clearance, and it would not survive a
+      // value one character longer.
+      for (const panel of [300, 320] as const) {
+        expect(NATURAL_GAP[panel]).toBeLessThan(0)
+        expect(DIAGRAM_WIDTH[panel]).toBeLessThan(PADDING_CHIP_MIN_WIDTH)
+      }
+      // 340 is the width that clears by a hair — still below the
+      // threshold, deliberately.
+      expect(NATURAL_GAP[340]).toBeGreaterThan(0)
+      expect(NATURAL_GAP[340]).toBeLessThan(4)
+      expect(DIAGRAM_WIDTH[340]).toBeLessThan(PADDING_CHIP_MIN_WIDTH)
+
+      // and the stock panel is well clear of the boundary, so an ordinary
+      // author never meets it.
+      expect(DIAGRAM_WIDTH[375]).toBeGreaterThan(PADDING_CHIP_MIN_WIDTH)
+      expect(DIAGRAM_WIDTH[375] - PADDING_CHIP_MIN_WIDTH).toBeGreaterThan(20)
+    })
+
+    it('asks the FIGURE how wide it is, not the window', async () => {
+      // The panel is resizable, so a viewport media query would measure
+      // the wrong thing entirely — a 260px panel and a 375px panel sit in
+      // the same window, and the figure would answer the same for both.
+      await renderPanel({})
+      expect(allCss()).toContain('container-type:inline-size')
+      expect(hiddenBy('.label.padding')).toEqual([
+        `aglynBoxDiagram(max-width:${PADDING_CHIP_MIN_WIDTH - 1}px)`,
+      ])
+    })
+
+    it('drops only the chip that cannot fit, and never a value', async () => {
+      // MARGIN's band is the full width of the diagram and BORDER's
+      // carries no value at all, so neither can ever reach one. Hiding
+      // them would remove information for no reason — and hiding a VALUE
+      // would remove the very data this fix exists to protect, which is
+      // why the assertion is the WHOLE list rather than a few names.
+      await renderPanel({})
+      expect(everythingHidden()).toEqual([
+        [
+          `aglynBoxDiagram(max-width:${PADDING_CHIP_MIN_WIDTH - 1}px)`,
+          '.label.padding',
+        ],
+      ])
     })
 
     it('positions each chip against its OWN region, so the step is geometry', async () => {
