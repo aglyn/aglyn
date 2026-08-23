@@ -65,3 +65,20 @@ export const APP_EMOTION_CACHE_OPTIONS = {
   key: EMOTION_CACHE_KEY,
   enableCssLayer: true,
 } as const
+
+/**
+ * The layer `enableCssLayer` actually emits.
+ *
+ * It is NOT configurable: `AppRouterCacheProvider` hard-codes the string when
+ * it patches `cache.insert`. Naming it here lets a surface that cannot use
+ * that provider — the besigner canvas's shadow-root cache, via
+ * `createLayeredEmotionCache` — reproduce the SAME layer rather than invent a
+ * parallel one, which would order differently and put the editor back out of
+ * step with the published page (AGL-2486). `emotion-cache.spec.ts` pins the
+ * value against MUI's own source so an upstream rename cannot drift past us.
+ *
+ * Kept in this module because it is a plain string: this file is imported by
+ * App Router root layouts, which are Server Components, so it must stay free
+ * of React, emotion and the theme HOCs (AGL-405).
+ */
+export const MUI_CSS_LAYER_NAME = 'mui'
