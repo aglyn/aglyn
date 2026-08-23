@@ -168,6 +168,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Guide: console extensions & site surfaces',
     excerpt: 'Task-ordered recipes for nav/pages/widgets/providers and canvas components/site runtimes.',
   },
+  consoleSearch: {
+    path: '/getting-started/console-search',
+    title: 'Search the console',
+    excerpt: 'What the console search palette can find, how it matches what you type, and the two things it deliberately does not search.',
+  },
   consoleTour: {
     path: '/getting-started/console-tour',
     title: 'The console tour',
@@ -683,6 +688,7 @@ export const DOCS_HELP_ANCHORS = {
   components: ['#promote', '#insert-instances', '#properties', '#declare-them', '#use-them', '#save-then-publish', '#fill-them-in-per-page', '#restyle-one-instance', '#retrofit-duplicated-sections', '#detach', '#nesting', '#used-by', '#manage', '#copy--paste-vs-reusable-components', '#tips', '#related'],
   connectADomain: ['#steps', '#after-it-connects', '#your-aglyn-subdomain-afterwards', '#registrar-quick-reference', '#one-domain-per-site', '#disconnect', '#related'],
   consoleAndSite: ['#add-a-console-page', '#add-a-widget-to-a-shell-zone', '#wrap-every-console-page-providers', '#add-a-canvas-component-besigner--published-sites', '#add-a-site-runtime', '#troubleshooting'],
+  consoleSearch: ['#what-it-searches', '#how-matching-works', '#what-it-does-not-search', '#why-a-group-sometimes-says-it-was-only-partly-searched'],
   consoleTour: ['#the-app-bar', '#in-context-help', '#primary-navigation', '#editing-vs-managing', '#the-sites-list', '#the-status-pill', '#how-the-pill-is-decided', '#your-site-allowance', '#a-sites-dashboard', '#next', '#workspace-settings--notifications', '#alerts-on-this-device'],
   contacts: ['#unified-ingestion', '#the-contacts-page', '#segments', '#related'],
   content: ['#site-templates--starter-gallery', '#section--block-library', '#content-collections--blog', '#related'],

@@ -17,60 +17,262 @@
 
 /**
  * What console search can answer, and the words it uses to promise it
- * (AGL-2179).
+ * (AGL-2179, widened and corrected under AGL-2486).
  *
- * ## Why this is a module and not three lines in the dialog
+ * ## What was wrong, measured rather than reasoned
  *
- * The defect this closes is a PROMISE that outran the product: the console
- * mockup on `/product` and `/product/console` shows a top-bar field reading
- * `Search sites, orders, contacts…`, and the console had no search of any
- * kind. The fix is not to paste that placeholder over a real input — that
- * would be the same defect with a working text cursor. So the scope is
- * computed, the placeholder is DERIVED from it, and both are tested, because
- * the sentence is the part that can lie.
+ * Zach: *"console search does not seem to do anything when you click on it,
+ * but you should also be able to search more than just screens"*. Driven
+ * against the seeded emulator, the palette does this: opening it lists four
+ * rows — a site and three pages, one of them literally named **Home** — and
+ * typing `home` returns **zero**.
  *
- * ## What is searchable, and what is not
+ * The reason is not the matcher being strict. It is that the search mode of
+ * `useSwitcherCollection` is `orderBy('nameLower')`, and **Firestore omits
+ * every document that does not carry the ordered field**. `nameLower` is
+ * written by exactly three paths (`/api/hosts/resources` on create, the screen
+ * rename in the `view` page, and `/api/hosts/import`) and for exactly one
+ * resource kind. Every screen older than AGL-835, and every screen written by
+ * any other path, is therefore invisible to search while remaining visible in
+ * the idle list — which is precisely "shows results until you touch it".
  *
- * Firestore has no full-text index and no `LIKE`. What it has is the
- * "scalable switcher" shape (AGL-835/838): a normalized `nameLower` written
- * beside the display name, queried as a prefix range. That is the whole
- * mechanism here, which fixes the boundary precisely:
+ * This is the same hazard `/api/admin/orgs` already documents in its own
+ * comment: *"an `orderBy` on a field some org docs lack would silently hide
+ * them"*. It cost that route a real bug; it costs this one the whole feature.
  *
- * * **Sites** — `users/{uid}/hostMemberships` carries `nameLower`
- *   (`host-memberships.ts`) and is already indexed and in production behind
- *   the site switcher. Scoped by construction: the path is the caller's own
- *   membership projection, narrowed to the open workspace.
- * * **Screens** — `hosts/{hostId}/screens` carries `nameLower`, and only
- *   screens do: `/api/hosts/resources` stamps it for `resourceKey === 'screen'`
- *   and deliberately for nothing else, because "stamping it on every resource
- *   kind would be an index field nothing reads".
+ * ## The mechanism now, and why it is the DAM's and not the switcher's
  *
- * Which is exactly why ORDERS AND CONTACTS ARE NOT HERE, despite being in the
- * mockup's placeholder:
+ * `media-search.ts` faced this exact fork and chose: read a bounded set, match
+ * richly over all of it, and describe the bound. Its reasoning applies here
+ * word for word — Firestore has no `LIKE` and no full-text index, so a
+ * word-anywhere match has no server expression at any price, and buying the
+ * prefix shape for eleven more collections costs a schema field, a backfill of
+ * every existing document, and a composite index for each one that also
+ * carries a `where`. The repo has exactly ONE `nameLower` composite index
+ * today, which is the measure of how far that path was ever taken.
  *
- * * **Orders** — `hosts/{h}/orders` has no `nameLower`. A prefix search over
- *   it costs a schema field, a backfill of every existing order and a new
- *   composite index; a missing index does not degrade, it throws
- *   `FAILED_PRECONDITION` in production. Adding the word "orders" to a
- *   placeholder is free, and that asymmetry is the whole trap.
- * * **Contacts** — real (`libs/plugins/contacts`) but behind
- *   `release_contacts`, which is `defaultEnabled: false`. Naming a
- *   capability most orgs cannot see is the mockup's error, not a fix for it.
+ * So: `useGlobalSearch` reads a capped window per collection, ONCE per page
+ * mount, and `global-search-match.ts` matches over all of it. That fixes the
+ * disappearing "Home", and it is what lets `layout` find "Main Layout".
  *
- * So the placeholder names what this context can actually reach and nothing
- * else. `describeEntities` keeps that honest by construction: a future entity
- * is added to one list and the sentence follows, rather than the two drifting.
+ * ## Read cost is a design input here, not an afterthought
+ *
+ * Zach's own caveat. Three controls, in order of how much they save:
+ *
+ * 1. **Nothing is read until two characters are typed.** The old palette
+ *    spent a read in every group just to be OPENED, to populate a
+ *    recently-updated list nobody asked for. Opening now costs zero.
+ * 2. **One fetch per collection per page mount**, cached. Typing more, or
+ *    closing and reopening the palette, costs nothing further — a longer
+ *    query can only ever narrow what a shorter one returned, so it is
+ *    answered from memory.
+ * 3. **A group nobody is entitled to is never read.** The free plan has no
+ *    workflows, products, services or redirects, so a free workspace fans out
+ *    to strictly fewer collections than a paid one. Cost scales with what the
+ *    org actually owns, which is the right direction for a plan that has to
+ *    hard-cap.
+ *
+ * ## And the honesty, which is load-bearing
+ *
+ * A window is a partial set. `globalSearchScopeMessage` says so, and
+ * `useGlobalSearch` marks any group that filled its window as truncated, so an
+ * absent result never silently reads as "you do not have one" to somebody
+ * about to create a duplicate. A group whose read FAILED says that too, rather
+ * than rendering as zero matches — a swallowed query that renders as a
+ * measured zero is worse than an error, because nothing looks wrong.
  */
 
+import { Route } from '@aglyn/aglyn/app-utils/console-routes'
+
 /** A class of thing console search can look through. */
-export type GlobalSearchEntity = 'sites' | 'screens'
+export type GlobalSearchEntity =
+  | 'sites'
+  | 'screens'
+  | 'emails'
+  | 'components'
+  | 'layouts'
+  | 'templates'
+  | 'collections'
+  | 'authors'
+  | 'workflows'
+  | 'products'
+  | 'redirects'
+  | 'services'
+
+/**
+ * Where a collection hangs, which decides BOTH the path and who may read it.
+ *
+ * `host` collections are `hosts/{hostId}/…` for the site already open, which
+ * `HostGuard` has admitted the caller to and which the Firestore rules gate on
+ * host membership. `org` collections are `users/{uid}/…` — the caller's OWN
+ * projection, which the rules would refuse for anyone else. Nothing here is a
+ * top-level collection query, deliberately: a top-level query is the shape
+ * that can leak, whatever it filters on.
+ */
+export type GlobalSearchScopeKind = 'host' | 'org'
+
+export interface GlobalSearchEntityDef {
+  id: GlobalSearchEntity
+  /** Heading above the rows. */
+  group: string
+  /** How the entity is named inside a sentence. */
+  noun: string
+  scopeKind: GlobalSearchScopeKind
+  /** Collection name under the scope root. */
+  collection: string
+  /**
+   * The document field holding the human-readable name.
+   *
+   * Not uniform across the platform and deliberately not normalised here:
+   * screens/layouts/components/templates use `displayName`, the logic and
+   * commerce resources use `name`. Getting this wrong renders a group of rows
+   * all labelled with their document id, which is why every entry is pinned
+   * by a test against the real write path's allow-list.
+   */
+  nameField: string
+  /** Extra fields a reader may legitimately search by (slug, route). */
+  extraFields?: string[]
+  /**
+   * The plan quota that must be non-zero, or the feature flag that must be
+   * on, for this group to be READ AT ALL.
+   *
+   * Both a cost control and a correctness one: querying a collection the org
+   * cannot use spends a read to render nothing, every time.
+   */
+  entitlementKey?: string
+  featureKey?: string
+}
+
+/**
+ * Everything searchable, in the order groups are shown.
+ *
+ * Ordered by how often the answer is wanted, not alphabetically: somebody
+ * typing into a console search box is usually trying to REACH a page.
+ */
+export const GLOBAL_SEARCH_ENTITIES: GlobalSearchEntityDef[] = [
+  {
+    id: 'sites',
+    group: 'Sites',
+    noun: 'sites',
+    scopeKind: 'org',
+    collection: 'hostMemberships',
+    nameField: 'displayName',
+    extraFields: ['subdomain'],
+  },
+  {
+    id: 'screens',
+    group: 'Pages',
+    noun: 'pages',
+    scopeKind: 'host',
+    collection: 'screens',
+    nameField: 'displayName',
+    extraFields: ['route', 'slug'],
+  },
+  {
+    id: 'emails',
+    group: 'Emails',
+    noun: 'emails',
+    scopeKind: 'host',
+    collection: 'screens',
+    nameField: 'displayName',
+  },
+  {
+    id: 'components',
+    group: 'Components',
+    noun: 'components',
+    scopeKind: 'host',
+    collection: 'components',
+    nameField: 'displayName',
+    // A boolean feature rather than a numeric quota: the free plan turns
+    // reusable components OFF entirely rather than allowing zero of them.
+    featureKey: 'reusableComponents',
+  },
+  {
+    id: 'layouts',
+    group: 'Layouts',
+    noun: 'layouts',
+    scopeKind: 'host',
+    collection: 'layouts',
+    nameField: 'displayName',
+    entitlementKey: 'sharedLayoutsPerHost',
+  },
+  {
+    id: 'templates',
+    group: 'Templates',
+    noun: 'templates',
+    scopeKind: 'host',
+    collection: 'templates',
+    nameField: 'displayName',
+    extraFields: ['slug'],
+    entitlementKey: 'templatesPerHost',
+  },
+  {
+    id: 'collections',
+    group: 'Content',
+    noun: 'content collections',
+    scopeKind: 'host',
+    collection: 'collections',
+    nameField: 'displayName',
+    extraFields: ['slug'],
+  },
+  {
+    id: 'authors',
+    group: 'Authors',
+    noun: 'authors',
+    scopeKind: 'host',
+    collection: 'authors',
+    nameField: 'name',
+  },
+  {
+    id: 'workflows',
+    group: 'Workflows',
+    noun: 'workflows',
+    scopeKind: 'host',
+    collection: 'workflows',
+    nameField: 'name',
+    entitlementKey: 'workflowsPerHost',
+    featureKey: 'workflows',
+  },
+  {
+    id: 'products',
+    group: 'Products',
+    noun: 'products',
+    scopeKind: 'host',
+    collection: 'products',
+    nameField: 'name',
+    extraFields: ['slug'],
+    entitlementKey: 'productsPerHost',
+    featureKey: 'commerce',
+  },
+  {
+    id: 'redirects',
+    group: 'Redirects',
+    noun: 'redirects',
+    scopeKind: 'host',
+    collection: 'redirects',
+    nameField: 'source',
+    extraFields: ['destination'],
+    entitlementKey: 'redirectsPerHost',
+    featureKey: 'redirects',
+  },
+  {
+    id: 'services',
+    group: 'Services',
+    noun: 'services',
+    scopeKind: 'host',
+    collection: 'services',
+    nameField: 'name',
+    entitlementKey: 'servicesPerHost',
+    featureKey: 'bookings',
+  },
+]
 
 /** Everything the scope decision depends on. */
 export interface GlobalSearchContext {
   /**
    * The resolved workspace, or null while it is still resolving.
    *
-   * Load-bearing for SCOPE, not just for loading states. The sites query is
+   * Load-bearing for SCOPE, not just for loading states. The sites read is
    * narrowed by `where('orgId','==',orgId)`, and an unresolved id there does
    * not narrow anything — it drops the filter and returns this person's site
    * memberships across every org they belong to (AGL-2350). So a null org
@@ -82,11 +284,24 @@ export interface GlobalSearchContext {
   hostId: string | null
   /** `hostId` is settled — `HostIdProvider` has finished resolving. */
   hostReady: boolean
+  /**
+   * Numeric plan quotas and boolean feature flags for the open workspace,
+   * or null while they are still resolving.
+   *
+   * Null means UNRESOLVED, and is treated as "read nothing extra" rather than
+   * as "free tier" — a loading default that answers a question it was never
+   * asked is how a paying org gets rendered as Free. Groups with no
+   * entitlement key at all (pages, content, authors) are unaffected, so the
+   * palette still works while entitlements settle.
+   */
+  entitlements: Record<string, unknown> | null
+  /** True once `entitlements` reflects a real answer rather than a default. */
+  entitlementsReady: boolean
 }
 
 export interface GlobalSearchScope {
   /** What may be queried, in the order results are shown. */
-  entities: GlobalSearchEntity[]
+  entities: GlobalSearchEntityDef[]
   /** The field's placeholder, derived from `entities`. */
   placeholder: string
   /**
@@ -98,18 +313,38 @@ export interface GlobalSearchScope {
   unavailable: boolean
 }
 
-/** How each entity is named to a person. */
-const ENTITY_NOUN: Record<GlobalSearchEntity, string> = {
-  sites: 'sites',
-  screens: 'pages',
+/**
+ * Is this group's entitlement satisfied?
+ *
+ * A numeric quota counts as enabled when it is anything other than zero —
+ * `UNLIMITED` is a sentinel number, and a plan that grants none of something
+ * stores `0`. An ABSENT key is treated as enabled, because a resolved
+ * entitlement record that simply does not mention a quota is the shape every
+ * pre-existing org has, and reading "absent" as "denied" would silently empty
+ * most of the palette for them.
+ */
+export function entitlementAllows(
+  definition: GlobalSearchEntityDef,
+  entitlements: Record<string, unknown> | null,
+): boolean {
+  if (!definition.entitlementKey && !definition.featureKey) return true
+  if (!entitlements) return false
+  if (definition.featureKey && entitlements[definition.featureKey] === false) {
+    return false
+  }
+  if (definition.entitlementKey) {
+    const quota = entitlements[definition.entitlementKey]
+    if (quota === 0 || quota === false) return false
+  }
+  return true
 }
 
 /**
- * "sites", "sites and pages", "sites, pages and orders" — an Oxford-comma-free
+ * "sites", "sites and pages", "sites, pages and emails" — an Oxford-comma-free
  * list, because this is prose in a placeholder rather than a sentence.
  */
-export function describeEntities(entities: GlobalSearchEntity[]): string {
-  const nouns = entities.map((entity) => ENTITY_NOUN[entity])
+export function describeEntities(entities: GlobalSearchEntityDef[]): string {
+  const nouns = entities.map((entity) => entity.noun)
   if (nouns.length === 0) return ''
   if (nouns.length === 1) return nouns[0]
   return `${nouns.slice(0, -1).join(', ')} and ${nouns[nouns.length - 1]}`
@@ -125,29 +360,40 @@ export function describeEntities(entities: GlobalSearchEntity[]): string {
 export function resolveGlobalSearchScope(
   context: GlobalSearchContext,
 ): GlobalSearchScope {
-  const entities: GlobalSearchEntity[] = []
+  const entities: GlobalSearchEntityDef[] = []
+  const onHost = Boolean(context.orgId && context.hostReady && context.hostId)
 
-  // Sites first: they are the only thing searchable off a site, and the
-  // thing people navigate between most.
-  if (context.orgId) entities.push('sites')
-  // Screens belong to ONE site, so they are only offered on a site, and only
-  // once the id is settled — a half-resolved host would query
-  // `hosts//screens`, which `useSwitcherCollection` holds on anyway.
-  if (context.orgId && context.hostReady && context.hostId) {
-    entities.push('screens')
+  for (const definition of GLOBAL_SEARCH_ENTITIES) {
+    // Sites are the only thing searchable off a site, and the thing people
+    // navigate between most.
+    if (definition.scopeKind === 'org' && !context.orgId) continue
+    // Host collections belong to ONE site, so they are only offered on a
+    // site, and only once the id is settled — a half-resolved host would
+    // address `hosts//screens`.
+    if (definition.scopeKind === 'host' && !onHost) continue
+    // An unresolved entitlement answers nothing: hold the gated groups until
+    // it is real, rather than letting a loading default decide.
+    if (
+      (definition.entitlementKey || definition.featureKey) &&
+      (!context.entitlementsReady ||
+        !entitlementAllows(definition, context.entitlements))
+    ) {
+      continue
+    }
+    entities.push(definition)
   }
 
   if (entities.length === 0) {
-    return {
-      entities,
-      placeholder: 'Search',
-      unavailable: true,
-    }
+    return { entities, placeholder: 'Search', unavailable: true }
   }
 
+  // The placeholder names the first few rather than all twelve: a field whose
+  // placeholder does not fit the field is not a promise anybody reads.
+  const named = entities.slice(0, 3)
+  const suffix = entities.length > named.length ? ' and more' : ''
   return {
     entities,
-    placeholder: `Search ${describeEntities(entities)}…`,
+    placeholder: `Search ${describeEntities(named)}${suffix}…`,
     unavailable: false,
   }
 }
@@ -155,16 +401,106 @@ export function resolveGlobalSearchScope(
 /**
  * The sentence under the results, which is the honest half of this feature.
  *
- * A prefix match behaves unlike the search box people expect: typing `store`
- * finds "Store front" and never "My store". Leaving that undocumented makes
- * an absent result read as "you do not have one", which for a person about to
- * create a duplicate is the expensive direction to be wrong in. Named after
- * `mediaSearchScopeMessage`, which exists for the same reason.
+ * Two claims, both of which have to stay true as the code changes, which is
+ * why they are generated from the same constant the reader is bounded by:
+ *
+ *  * WHAT counts as a match — any part of the name, so an absent result is
+ *    really an absent thing and not a matcher technicality. This is the claim
+ *    the old copy had to make in the opposite direction ("whose name STARTS
+ *    with what you type"), and the reason it had to is now gone.
+ *  * HOW MUCH was looked at — the window. This is the claim that keeps the
+ *    new mechanism from being a nicer-looking version of the old lie. Named
+ *    after `mediaSearchScopeMessage`, which exists for the same reason.
  */
-export function globalSearchScopeMessage(scope: GlobalSearchScope): string {
+export function globalSearchScopeMessage(
+  scope: GlobalSearchScope,
+  windowSize: number,
+): string {
   if (scope.unavailable) return ''
   return (
-    `Matches ${describeEntities(scope.entities)} whose name STARTS with what ` +
-    'you type. Orders and contacts are not searchable.'
+    'Matches any part of a name. Looks at up to ' +
+    `${windowSize} items in each group, so a very large group may hold ` +
+    'matches that are not shown.'
   )
+}
+
+/** Where a row of each kind links to. */
+export interface GlobalSearchLinkContext {
+  orgSlug: string | null
+  hostSubdomain: string | null
+}
+
+/**
+ * Build the href for one result row.
+ *
+ * Returns null rather than a broken link when a row cannot be addressed — a
+ * screen with no `versionId` has never been opened and the besigner routes
+ * are version-keyed, so there is genuinely nowhere to go. A row that cannot
+ * be reached is dropped rather than rendered dead, which is the specific
+ * complaint this issue opened with.
+ */
+export function buildResultHref(
+  entity: GlobalSearchEntity,
+  row: Record<string, any>,
+  context: GlobalSearchLinkContext,
+  buildRoute: (route: Route, payload: Record<string, string>) => string,
+): string | null {
+  const { orgSlug, hostSubdomain } = context
+  if (!orgSlug) return null
+  const id = String(row.$id ?? '')
+  const host = hostSubdomain ?? ''
+
+  switch (entity) {
+    case 'sites':
+      return row.subdomain
+        ? buildRoute(Route.HOST_DASHBOARD, {
+            orgSlug,
+            host: String(row.subdomain),
+          })
+        : null
+    case 'screens':
+      if (!host || !row.versionId) return null
+      return buildRoute(Route.SCREEN_DETAILS, {
+        orgSlug,
+        host,
+        screenId: id,
+        versionId: String(row.versionId),
+      })
+    case 'emails':
+      // A `kind: 'email'` screen is authored in the screen besigner like any
+      // other screen; the `/emails/[templateKey]` routes address the
+      // transactional CATALOG, which is a different store entirely.
+      if (!host || !row.versionId) return null
+      return buildRoute(Route.SCREEN_BESIGNER, {
+        orgSlug,
+        host,
+        screenId: id,
+        versionId: String(row.versionId),
+      })
+    case 'components':
+      return host
+        ? buildRoute(Route.COMPONENT_DETAILS, { orgSlug, host, componentId: id })
+        : null
+    case 'layouts':
+      return host
+        ? buildRoute(Route.LAYOUT_DETAILS, { orgSlug, host, layoutId: id })
+        : null
+    case 'templates':
+      return host
+        ? buildRoute(Route.TEMPLATE_DETAILS, { orgSlug, host, templateId: id })
+        : null
+    case 'collections':
+    case 'authors':
+      return host ? buildRoute(Route.HOST_CONTENT, { orgSlug, host }) : null
+    case 'workflows':
+      return host ? buildRoute(Route.HOST_WORKFLOWS, { orgSlug, host }) : null
+    case 'products':
+      return host ? buildRoute(Route.HOST_PRODUCTS, { orgSlug, host }) : null
+    case 'redirects':
+      return host ? buildRoute(Route.HOST_REDIRECTS, { orgSlug, host }) : null
+    case 'services':
+      return host ? buildRoute(Route.HOST_BOOKINGS, { orgSlug, host }) : null
+    default:
+      return null
+  }
 }

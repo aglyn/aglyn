@@ -16,160 +16,313 @@
  */
 
 /**
- * AGL-2179: the placeholder may only promise what the context can answer.
+ * AGL-2179/AGL-2486: what console search offers, and whether the sentence
+ * under the field is true.
  *
- * The issue is a promise that outran the product — a console mockup, published
- * twice on the marketing site, showing `Search sites, orders, contacts…` over
- * a console with no search of any kind. The failure mode this guards is the
- * obvious repair of that: shipping a real field and pasting the mockup's
- * sentence over it, so the words are still wrong and now there is a cursor
- * blinking in them.
- *
- * So the assertions are about the SENTENCE, not the plumbing: what it names,
- * what it must never name, and that it tracks the scope rather than being
- * written down twice.
+ * The caption is the part that can lie, so it is tested like code. The old
+ * one said results were matched by a name PREFIX, which was true and made the
+ * feature unusable; the new one says any part of a name and states the window
+ * it looked at, which has to stay true as groups are added.
  */
 
+import { Route } from '@aglyn/aglyn/app-utils/console-routes'
 import {
+  buildResultHref,
   describeEntities,
-  type GlobalSearchEntity,
+  entitlementAllows,
+  GLOBAL_SEARCH_ENTITIES,
   globalSearchScopeMessage,
   resolveGlobalSearchScope,
+  type GlobalSearchEntity,
+  type GlobalSearchEntityDef,
 } from './global-search-scope'
 
-/** On a site: the workspace resolved and a host is open and settled. */
-const ON_SITE = { orgId: 'org-1', hostId: 'host-1', hostReady: true }
-/** In a workspace, off any site — the org dashboard, billing, settings. */
-const OFF_SITE = { orgId: 'org-1', hostId: null, hostReady: true }
-/** Before the workspace resolves, and the workspace picker itself. */
-const NO_ORG = { orgId: null, hostId: null, hostReady: true }
+/** A workspace with everything switched on. */
+const RICH = {
+  reusableComponents: true,
+  workflows: true,
+  commerce: true,
+  redirects: true,
+  bookings: true,
+  sharedLayoutsPerHost: 5,
+  templatesPerHost: 10,
+  workflowsPerHost: 5,
+  productsPerHost: 100,
+  redirectsPerHost: 10,
+  servicesPerHost: 3,
+}
 
-describe('what console search offers to search', () => {
-  it('searches sites and pages on a site', () => {
-    const scope = resolveGlobalSearchScope(ON_SITE)
-    expect(scope.entities).toEqual(['sites', 'screens'])
-    expect(scope.unavailable).toBe(false)
+/** The free plan, as `PLAN_ENTITLEMENTS.free` actually shapes it. */
+const FREE = {
+  reusableComponents: false,
+  workflows: false,
+  commerce: false,
+  redirects: false,
+  bookings: false,
+  sharedLayoutsPerHost: 1,
+  templatesPerHost: 10,
+  workflowsPerHost: 0,
+  productsPerHost: 0,
+  redirectsPerHost: 0,
+  servicesPerHost: 0,
+}
+
+const scopeAt = (overrides: Record<string, any> = {}) =>
+  resolveGlobalSearchScope({
+    orgId: 'org-1',
+    hostId: 'host-1',
+    hostReady: true,
+    entitlements: RICH,
+    entitlementsReady: true,
+    ...overrides,
   })
 
-  it('searches only sites off a site', () => {
-    // Screens are host-scoped. Offering them across an org would be a query
-    // per site — a fan-out on an interactive path — so the scope shrinks and
-    // the placeholder shrinks with it.
-    expect(resolveGlobalSearchScope(OFF_SITE).entities).toEqual(['sites'])
-  })
+const ids = (scope: { entities: GlobalSearchEntityDef[] }) =>
+  scope.entities.map((entity) => entity.id)
 
-  /**
-   * The scoping guard, not a loading-state guard.
-   *
-   * The sites query is narrowed by `where('orgId','==',orgId)`. An unresolved
-   * org does not narrow it — it drops the filter and returns this person's
-   * memberships across EVERY org (AGL-2350). So "not yet known" has to mean
-   * "search nothing", never "search sites and sort it out later".
-   */
-  it('searches NOTHING until the workspace is known', () => {
-    const scope = resolveGlobalSearchScope(NO_ORG)
-    expect(scope.entities).toEqual([])
+describe('where the caller is standing', () => {
+  it('offers nothing at all before a workspace resolves', () => {
+    const scope = scopeAt({ orgId: null })
+    expect(scope.entities).toHaveLength(0)
     expect(scope.unavailable).toBe(true)
   })
 
-  it('does not offer pages while the host id is still resolving', () => {
-    // A half-resolved host would query `hosts//screens`.
-    expect(
-      resolveGlobalSearchScope({ ...ON_SITE, hostReady: false }).entities,
-    ).toEqual(['sites'])
-    expect(
-      resolveGlobalSearchScope({ ...ON_SITE, hostId: null }).entities,
-    ).toEqual(['sites'])
+  it('offers only sites off a site', () => {
+    expect(ids(scopeAt({ hostId: null }))).toEqual(['sites'])
+  })
+
+  it('holds host groups while the host id is still resolving', () => {
+    // A half-resolved host would address `hosts//screens`.
+    expect(ids(scopeAt({ hostReady: false }))).toEqual(['sites'])
+  })
+
+  it('offers the full set on a site', () => {
+    const offered = ids(scopeAt())
+    expect(offered).toContain('sites')
+    expect(offered).toContain('screens')
+    expect(offered).toContain('emails')
+    expect(offered).toContain('components')
+    expect(offered).toContain('layouts')
+    expect(offered).toContain('templates')
+    expect(offered).toContain('collections')
+    expect(offered).toContain('authors')
   })
 })
 
-describe('the placeholder', () => {
-  it('names exactly what the scope can reach, and nothing else', () => {
-    expect(resolveGlobalSearchScope(ON_SITE).placeholder).toBe(
-      'Search sites and pages…',
-    )
-    expect(resolveGlobalSearchScope(OFF_SITE).placeholder).toBe(
-      'Search sites…',
-    )
+describe('entitlement gating, which is a cost control as well as a correctness one', () => {
+  /**
+   * A free workspace has no workflows, products, services or redirects, so
+   * querying those collections would spend a read to render nothing, every
+   * time. Cost scaling with what the org actually owns is the right direction
+   * for a plan that has to hard-cap.
+   */
+  it('never reads a collection the plan does not grant', () => {
+    const offered = ids(scopeAt({ entitlements: FREE }))
+    expect(offered).not.toContain('workflows')
+    expect(offered).not.toContain('products')
+    expect(offered).not.toContain('services')
+    expect(offered).not.toContain('redirects')
+    expect(offered).not.toContain('components')
+    // …but the ungated groups are unaffected.
+    expect(offered).toContain('screens')
+    expect(offered).toContain('collections')
+    expect(offered).toContain('layouts')
   })
 
   /**
-   * THE assertion this issue exists for.
-   *
-   * `Search sites, orders, contacts…` is the mockup's string. Orders have no
-   * `nameLower` and would need a schema field, a backfill and a new composite
-   * index; contacts are behind `release_contacts`, which is default-off. Both
-   * are free to promise and expensive to mean, which is the asymmetry that
-   * produced the original defect. A future change that makes either genuinely
-   * searchable adds it to the entity list, and this test then reads the new
-   * word out of the placeholder rather than blocking it.
+   * A loading default that answers a question it was never asked is how a
+   * paying org gets rendered as Free. Unresolved must mean "hold", not
+   * "assume the cheapest plan" and not "assume the richest".
    */
-  it('never promises a capability that does not exist', () => {
-    for (const context of [ON_SITE, OFF_SITE, NO_ORG]) {
-      const scope = resolveGlobalSearchScope(context)
-      const promised = `${scope.placeholder} ${globalSearchScopeMessage(scope)}`
-      for (const absent of ['order', 'contact']) {
-        // The scope message names them to say they are NOT searchable, so the
-        // claim under test is narrower: the entity list must not contain them.
-        expect(scope.entities).not.toContain(absent)
-      }
-      // The mockup's sentence, verbatim, must never be what a person reads.
-      expect(promised).not.toContain('Search sites, orders, contacts')
-    }
+  it('holds gated groups while entitlements are UNRESOLVED', () => {
+    const offered = ids(scopeAt({ entitlements: null, entitlementsReady: false }))
+    expect(offered).not.toContain('workflows')
+    expect(offered).not.toContain('products')
+    // The ungated groups still work, so the palette is useful immediately.
+    expect(offered).toContain('screens')
+    expect(offered).toContain('sites')
   })
 
-  it('is derived from the scope rather than written down twice', () => {
-    // A placeholder that names an entity the scope does not hold is the
-    // defect. Asserting the containment relation catches a hand-edited
-    // sentence that a fixed-string comparison would not.
-    for (const context of [ON_SITE, OFF_SITE]) {
-      const scope = resolveGlobalSearchScope(context)
-      expect(scope.placeholder).toContain(describeEntities(scope.entities))
-    }
+  it('does not treat a resolved-but-silent entitlement as a denial', () => {
+    // Every pre-existing org has a record that simply does not mention a
+    // newer quota; reading absence as denial would empty most of the palette.
+    const quiet = { ...RICH } as Record<string, unknown>
+    delete quiet.workflowsPerHost
+    expect(
+      entitlementAllows(
+        GLOBAL_SEARCH_ENTITIES.find((e) => e.id === 'workflows') as any,
+        quiet,
+      ),
+    ).toBe(true)
   })
 
-  it('offers no affordance at all when nothing is searchable', () => {
-    const scope = resolveGlobalSearchScope(NO_ORG)
-    expect(scope.unavailable).toBe(true)
-    expect(globalSearchScopeMessage(scope)).toBe('')
+  it('reads a zero quota as denied and a positive one as allowed', () => {
+    const workflows = GLOBAL_SEARCH_ENTITIES.find((e) => e.id === 'workflows')!
+    expect(entitlementAllows(workflows, { workflows: true, workflowsPerHost: 0 })).toBe(false)
+    expect(entitlementAllows(workflows, { workflows: true, workflowsPerHost: 3 })).toBe(true)
+    expect(entitlementAllows(workflows, { workflows: false, workflowsPerHost: 3 })).toBe(false)
+  })
+
+  it('lets an ungated group through with no entitlements at all', () => {
+    const screens = GLOBAL_SEARCH_ENTITIES.find((e) => e.id === 'screens')!
+    expect(entitlementAllows(screens, null)).toBe(true)
   })
 })
 
-describe('the scope message', () => {
+describe('the registry', () => {
   /**
-   * Firestore has no full-text index; this is a prefix range over `nameLower`.
-   * Typing `store` finds "Store front" and never "My store". Unsaid, an empty
-   * result reads as "you do not have one" — which for someone about to create
-   * a duplicate is the expensive direction to be wrong in.
+   * Getting `nameField` wrong renders a whole group of rows labelled with
+   * their document id. The split is real and not tidy: the besigner resources
+   * use `displayName`, the logic and commerce resources use `name`.
    */
-  it('says the match is a prefix, in words a person can act on', () => {
-    const message = globalSearchScopeMessage(resolveGlobalSearchScope(ON_SITE))
-    expect(message).toContain('STARTS with')
+  it('names each collection by the field that write path actually stores', () => {
+    const nameFieldOf = (id: GlobalSearchEntity) =>
+      GLOBAL_SEARCH_ENTITIES.find((entity) => entity.id === id)?.nameField
+    expect(nameFieldOf('screens')).toBe('displayName')
+    expect(nameFieldOf('layouts')).toBe('displayName')
+    expect(nameFieldOf('components')).toBe('displayName')
+    expect(nameFieldOf('templates')).toBe('displayName')
+    expect(nameFieldOf('collections')).toBe('displayName')
+    expect(nameFieldOf('authors')).toBe('name')
+    expect(nameFieldOf('workflows')).toBe('name')
+    expect(nameFieldOf('products')).toBe('name')
+    expect(nameFieldOf('services')).toBe('name')
+    expect(nameFieldOf('redirects')).toBe('source')
   })
 
-  it('says outright that orders and contacts are not searchable', () => {
-    // The mockup named both. Silence about them would leave the reader to
-    // assume the field simply found nothing.
-    for (const context of [ON_SITE, OFF_SITE]) {
-      const message = globalSearchScopeMessage(
-        resolveGlobalSearchScope(context),
-      )
-      expect(message).toContain('Orders and contacts are not searchable')
+  it('reads pages and emails out of the SAME collection', () => {
+    const collectionOf = (id: GlobalSearchEntity) =>
+      GLOBAL_SEARCH_ENTITIES.find((entity) => entity.id === id)?.collection
+    expect(collectionOf('screens')).toBe('screens')
+    expect(collectionOf('emails')).toBe('screens')
+  })
+
+  /**
+   * Nothing here may be a top-level collection query: that is the shape that
+   * can leak, whatever it filters on. Sites come from the caller's own
+   * projection, everything else from the site already open.
+   */
+  it('scopes every group under a user or a host, never the root', () => {
+    for (const entity of GLOBAL_SEARCH_ENTITIES) {
+      expect(['org', 'host']).toContain(entity.scopeKind)
     }
+    expect(
+      GLOBAL_SEARCH_ENTITIES.filter((entity) => entity.scopeKind === 'org').map(
+        (entity) => entity.collection,
+      ),
+    ).toEqual(['hostMemberships'])
   })
 })
 
-describe('describeEntities', () => {
-  it('reads as English for one, two and three entities', () => {
-    const three = ['sites', 'screens', 'sites'] as GlobalSearchEntity[]
+describe('the sentence under the field', () => {
+  it('says nothing when there is nothing to search', () => {
+    expect(globalSearchScopeMessage(scopeAt({ orgId: null }), 30)).toBe('')
+  })
+
+  /**
+   * The claim the old copy had to make in the opposite direction. If this
+   * ever reverts to a prefix matcher the caption has to revert with it.
+   */
+  it('promises a match on ANY part of a name', () => {
+    expect(globalSearchScopeMessage(scopeAt(), 30)).toContain(
+      'any part of a name',
+    )
+    expect(globalSearchScopeMessage(scopeAt(), 30)).not.toContain('STARTS')
+  })
+
+  /**
+   * The claim that stops the new mechanism from being a nicer-looking version
+   * of the old lie: a window is a partial set, and absence of a result is
+   * only evidence of absence if everything was looked at.
+   */
+  it('states the window it actually looked at', () => {
+    expect(globalSearchScopeMessage(scopeAt(), 30)).toContain('30')
+    expect(globalSearchScopeMessage(scopeAt(), 7)).toContain('7')
+    expect(globalSearchScopeMessage(scopeAt(), 30)).toMatch(/not shown|may hold/)
+  })
+
+  it('lists nouns without an Oxford comma, and shortens a long list', () => {
     expect(describeEntities([])).toBe('')
-    expect(describeEntities(['sites'])).toBe('sites')
-    expect(describeEntities(['sites', 'screens'])).toBe('sites and pages')
-    // Growth case: the joiner must not degrade to "a and b and c".
-    expect(describeEntities(three)).toBe('sites, pages and sites')
+    expect(
+      describeEntities(GLOBAL_SEARCH_ENTITIES.slice(0, 2)),
+    ).toBe('sites and pages')
+    expect(
+      describeEntities(GLOBAL_SEARCH_ENTITIES.slice(0, 3)),
+    ).toBe('sites, pages and emails')
   })
 
-  it('calls a screen a page, because that is what the console calls it', () => {
-    expect(describeEntities(['screens'])).toBe('pages')
+  it('does not put twelve nouns in a placeholder', () => {
+    const { placeholder } = scopeAt()
+    expect(placeholder).toContain('and more')
+    expect(placeholder.length).toBeLessThan(60)
+  })
+})
+
+describe('where a result row goes', () => {
+  const context = { orgSlug: 'acme', hostSubdomain: 'demo' }
+  const href = (entity: GlobalSearchEntity, row: Record<string, any>) =>
+    buildResultHref(entity, row, context, ((route: Route, payload: any) => {
+      let out = String(route)
+      for (const [key, value] of Object.entries(payload)) {
+        out = out.replace(`[${key}]`, String(value))
+      }
+      return out
+    }) as any)
+
+  it('reaches every kind of row', () => {
+    expect(href('sites', { $id: 'h1', subdomain: 'demo' })).toBe(
+      '/acme/hosts/demo',
+    )
+    expect(href('screens', { $id: 's1', versionId: 'v1' })).toBe(
+      '/acme/hosts/demo/screens/s1/versions/v1/view',
+    )
+    expect(href('emails', { $id: 's2', versionId: 'v2' })).toBe(
+      '/acme/hosts/demo/screens/s2/versions/v2/besigner',
+    )
+    expect(href('components', { $id: 'c1' })).toBe(
+      '/acme/hosts/demo/components/c1',
+    )
+    expect(href('layouts', { $id: 'l1' })).toBe('/acme/hosts/demo/layouts/l1')
+    expect(href('templates', { $id: 't1' })).toBe(
+      '/acme/hosts/demo/templates/t1',
+    )
+    expect(href('collections', { $id: 'x' })).toBe('/acme/hosts/demo/content')
+    expect(href('authors', { $id: 'a1' })).toBe('/acme/hosts/demo/content')
+    expect(href('workflows', { $id: 'w1' })).toBe('/acme/hosts/demo/workflows')
+    expect(href('products', { $id: 'p1' })).toBe('/acme/hosts/demo/products')
+    expect(href('redirects', { $id: 'r1' })).toBe('/acme/hosts/demo/redirects')
+    expect(href('services', { $id: 'sv1' })).toBe('/acme/hosts/demo/bookings')
+  })
+
+  /**
+   * The complaint this issue opened with was a row that does nothing when
+   * clicked. A row that cannot be addressed returns null here and is dropped
+   * by the dialog, rather than rendering as a link to nowhere.
+   */
+  it('returns null rather than a link to nowhere', () => {
+    // The besigner routes are version-keyed; a screen with no version has
+    // never been opened.
+    expect(href('screens', { $id: 's1' })).toBeNull()
+    expect(href('emails', { $id: 's1' })).toBeNull()
+    // A membership row with no subdomain cannot address its site.
+    expect(href('sites', { $id: 'h1' })).toBeNull()
+    // Off a site there is no host segment to build with.
+    expect(
+      buildResultHref(
+        'layouts',
+        { $id: 'l1' },
+        { orgSlug: 'acme', hostSubdomain: null },
+        ((r: any) => String(r)) as any,
+      ),
+    ).toBeNull()
+    // And without a workspace slug nothing in the console is addressable.
+    expect(
+      buildResultHref(
+        'screens',
+        { $id: 's1', versionId: 'v1' },
+        { orgSlug: null, hostSubdomain: 'demo' },
+        ((r: any) => String(r)) as any,
+      ),
+    ).toBeNull()
   })
 })
