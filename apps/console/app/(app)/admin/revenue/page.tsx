@@ -669,6 +669,201 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
               ) : null}
             </CardDisplay>
 
+            {/* ---- Where the earned money came from ---- */}
+            <CardDisplay
+              header="Where the money came from"
+              help={docsHelp('revenue', {
+                anchor: '#where-the-money-came-from',
+                excerpt:
+                  'Earned revenue by source, each already net of the thing that would overstate it.',
+              })}
+              contentGutterX
+              contentGutterY
+            >
+              <Box sx={{ mb: 3 }}>
+                <CompositionBar
+                  slices={earned.map((line) => ({
+                    key: line.id,
+                    label: line.label,
+                    cents: line.cents,
+                  }))}
+                  emptyMessage={`Nothing settled in this period, so there is no total to divide. The chart appears as soon as ${PLATFORM_BRAND_NAME} earns something — it is waiting for data, not failing to load.`}
+                />
+              </Box>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Source</TableCell>
+                    <TableCell align="right">Earned</TableCell>
+                    <TableCell>What is and is not in it</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {earned.map((line) => (
+                    <TableRow key={line.id}>
+                      <TableCell>{line.label}</TableCell>
+                      <TableCell align="right">
+                        {money(line.cents)}
+                      </TableCell>
+                      <TableCell>{line.note}</TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow>
+                    <TableCell>
+                      <strong>Total earned</strong>
+                    </TableCell>
+                    <TableCell align="right">
+                      <strong>{money(settled?.totalEarnedCents)}</strong>
+                    </TableCell>
+                    <TableCell>
+                      {`Net throughout. There is no gross figure here that means “${PLATFORM_BRAND_NAME}’s money” — see the gross-versus-net table below.`}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </CardDisplay>
+
+            {/* ---- Gross vs net, unambiguously ---- */}
+            <CardDisplay
+              header="Gross versus net — what was subtracted"
+              help={docsHelp('revenue', {
+                anchor: '#gross-versus-net',
+                excerpt:
+                  `Every deduction between the money that moved through Stripe and the money ${PLATFORM_BRAND_NAME} kept, named and quantified.`,
+              })}
+              contentGutterX
+              contentGutterY
+            >
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Line</TableCell>
+                    <TableCell align="right">Amount</TableCell>
+                    <TableCell>Whose money</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  <TableRow>
+                    <TableCell>
+                      Subscription invoices paid (gross, tax included)
+                    </TableCell>
+                    <TableCell align="right">
+                      ${dollars(subscriptions.grossCents)}
+                    </TableCell>
+                    <TableCell>
+                      {`${PLATFORM_BRAND_NAME}’s, apart from the tax below.`}{' '}
+                      {subscriptions.transactionCount ?? 0} invoices.
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>— less sales tax collected</TableCell>
+                    <TableCell align="right">
+                      −${dollars(subscriptions.taxCents)}
+                    </TableCell>
+                    <TableCell>
+                      The state’s. Held and remitted, never revenue.
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>
+                      — less refunds and lost disputes
+                    </TableCell>
+                    <TableCell align="right">
+                      −${dollars(subscriptions.refundedCents)}
+                    </TableCell>
+                    <TableCell>
+                      A loss. Stripe keeps its processing fee on a refund and a
+                      lost dispute costs a further fee, so the true cost is
+                      higher than this line. Of this,{' '}
+                      ${dollars(subscriptions.chargedBackCents)} was charged
+                      back rather than refunded voluntarily.
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Marketplace sales (buyer gross)</TableCell>
+                    <TableCell align="right">
+                      ${dollars(marketplace.grossCents)}
+                    </TableCell>
+                    <TableCell>
+                      {`Mostly the publisher’s. ${PLATFORM_BRAND_NAME} keeps only the commission.`}
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>— less publisher payouts</TableCell>
+                    <TableCell align="right">
+                      −${dollars(marketplace.sellerTransferCents)}
+                    </TableCell>
+                    <TableCell>The publisher’s. Transferred out.</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Storefront sales (shopper gross)</TableCell>
+                    <TableCell align="right">
+                      ${dollars(commerce.grossCents)}
+                    </TableCell>
+                    <TableCell>
+                      The merchant’s. It transfers straight to their connected
+                      account and is shown only for scale.
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Storefront platform fee collected</TableCell>
+                    <TableCell align="right">
+                      ${dollars(commerce.applicationFeeCents)}
+                    </TableCell>
+                    <TableCell>
+                      {`Not all ${PLATFORM_BRAND_NAME}’s — see the next line.`}
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>
+                      — less card processing passed through at cost
+                    </TableCell>
+                    <TableCell align="right">
+                      −${dollars(commerce.processingPassThroughCents)}
+                    </TableCell>
+                    <TableCell>
+                      {`Stripe’s. On a destination charge Stripe debits ${PLATFORM_BRAND_NAME}’s balance for processing, and this half of the fee recovers exactly that. It is a recovery, not earnings, and reporting it as revenue would overstate every storefront sale.`}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+              <Box sx={{ mt: 2 }}>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  useFlexGap
+                  sx={{ flexWrap: 'wrap', rowGap: 1 }}
+                >
+                  {Number(subscriptions.internalTrafficCents ?? 0) > 0 ? (
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      label={`$${dollars(
+                        subscriptions.internalTrafficCents,
+                      )} of this is ${PLATFORM_BRAND_NAME}’s own tagged purchases — real cash, excluded from GA`}
+                    />
+                  ) : null}
+                  {Number(marketplace.estimatedProcessingCostCents ?? 0) > 0 ? (
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      color="warning"
+                      label={`~$${dollars(
+                        marketplace.estimatedProcessingCostCents,
+                      )} of card processing on marketplace sales is NOT recovered — the commission above is gross of it`}
+                    />
+                  ) : null}
+                  {Number(commerce.subscriptionOrders ?? 0) > 0 ? (
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      color="warning"
+                      label={`${commerce.subscriptionOrders} storefront subscription renewals recover no card cost — ${PLATFORM_BRAND_NAME} absorbs it`}
+                    />
+                  ) : null}
+                </Stack>
+              </Box>
+            </CardDisplay>
             {/* ---- Who produced the numbers ---- */}
             <CardDisplay
               header="Which orgs did what"
@@ -884,201 +1079,6 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
               </Typography>
             </CardDisplay>
 
-            {/* ---- Where the earned money came from ---- */}
-            <CardDisplay
-              header="Where the money came from"
-              help={docsHelp('revenue', {
-                anchor: '#where-the-money-came-from',
-                excerpt:
-                  'Earned revenue by source, each already net of the thing that would overstate it.',
-              })}
-              contentGutterX
-              contentGutterY
-            >
-              <Box sx={{ mb: 3 }}>
-                <CompositionBar
-                  slices={earned.map((line) => ({
-                    key: line.id,
-                    label: line.label,
-                    cents: line.cents,
-                  }))}
-                  emptyMessage={`Nothing settled in this period, so there is no total to divide. The chart appears as soon as ${PLATFORM_BRAND_NAME} earns something — it is waiting for data, not failing to load.`}
-                />
-              </Box>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Source</TableCell>
-                    <TableCell align="right">Earned</TableCell>
-                    <TableCell>What is and is not in it</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {earned.map((line) => (
-                    <TableRow key={line.id}>
-                      <TableCell>{line.label}</TableCell>
-                      <TableCell align="right">
-                        {money(line.cents)}
-                      </TableCell>
-                      <TableCell>{line.note}</TableCell>
-                    </TableRow>
-                  ))}
-                  <TableRow>
-                    <TableCell>
-                      <strong>Total earned</strong>
-                    </TableCell>
-                    <TableCell align="right">
-                      <strong>{money(settled?.totalEarnedCents)}</strong>
-                    </TableCell>
-                    <TableCell>
-                      {`Net throughout. There is no gross figure here that means “${PLATFORM_BRAND_NAME}’s money” — see the gross-versus-net table below.`}
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </CardDisplay>
-
-            {/* ---- Gross vs net, unambiguously ---- */}
-            <CardDisplay
-              header="Gross versus net — what was subtracted"
-              help={docsHelp('revenue', {
-                anchor: '#gross-versus-net',
-                excerpt:
-                  `Every deduction between the money that moved through Stripe and the money ${PLATFORM_BRAND_NAME} kept, named and quantified.`,
-              })}
-              contentGutterX
-              contentGutterY
-            >
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Line</TableCell>
-                    <TableCell align="right">Amount</TableCell>
-                    <TableCell>Whose money</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  <TableRow>
-                    <TableCell>
-                      Subscription invoices paid (gross, tax included)
-                    </TableCell>
-                    <TableCell align="right">
-                      ${dollars(subscriptions.grossCents)}
-                    </TableCell>
-                    <TableCell>
-                      {`${PLATFORM_BRAND_NAME}’s, apart from the tax below.`}{' '}
-                      {subscriptions.transactionCount ?? 0} invoices.
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>— less sales tax collected</TableCell>
-                    <TableCell align="right">
-                      −${dollars(subscriptions.taxCents)}
-                    </TableCell>
-                    <TableCell>
-                      The state’s. Held and remitted, never revenue.
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>
-                      — less refunds and lost disputes
-                    </TableCell>
-                    <TableCell align="right">
-                      −${dollars(subscriptions.refundedCents)}
-                    </TableCell>
-                    <TableCell>
-                      A loss. Stripe keeps its processing fee on a refund and a
-                      lost dispute costs a further fee, so the true cost is
-                      higher than this line. Of this,{' '}
-                      ${dollars(subscriptions.chargedBackCents)} was charged
-                      back rather than refunded voluntarily.
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>Marketplace sales (buyer gross)</TableCell>
-                    <TableCell align="right">
-                      ${dollars(marketplace.grossCents)}
-                    </TableCell>
-                    <TableCell>
-                      {`Mostly the publisher’s. ${PLATFORM_BRAND_NAME} keeps only the commission.`}
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>— less publisher payouts</TableCell>
-                    <TableCell align="right">
-                      −${dollars(marketplace.sellerTransferCents)}
-                    </TableCell>
-                    <TableCell>The publisher’s. Transferred out.</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>Storefront sales (shopper gross)</TableCell>
-                    <TableCell align="right">
-                      ${dollars(commerce.grossCents)}
-                    </TableCell>
-                    <TableCell>
-                      The merchant’s. It transfers straight to their connected
-                      account and is shown only for scale.
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>Storefront platform fee collected</TableCell>
-                    <TableCell align="right">
-                      ${dollars(commerce.applicationFeeCents)}
-                    </TableCell>
-                    <TableCell>
-                      {`Not all ${PLATFORM_BRAND_NAME}’s — see the next line.`}
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell>
-                      — less card processing passed through at cost
-                    </TableCell>
-                    <TableCell align="right">
-                      −${dollars(commerce.processingPassThroughCents)}
-                    </TableCell>
-                    <TableCell>
-                      {`Stripe’s. On a destination charge Stripe debits ${PLATFORM_BRAND_NAME}’s balance for processing, and this half of the fee recovers exactly that. It is a recovery, not earnings, and reporting it as revenue would overstate every storefront sale.`}
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-              <Box sx={{ mt: 2 }}>
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  useFlexGap
-                  sx={{ flexWrap: 'wrap', rowGap: 1 }}
-                >
-                  {Number(subscriptions.internalTrafficCents ?? 0) > 0 ? (
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      label={`$${dollars(
-                        subscriptions.internalTrafficCents,
-                      )} of this is ${PLATFORM_BRAND_NAME}’s own tagged purchases — real cash, excluded from GA`}
-                    />
-                  ) : null}
-                  {Number(marketplace.estimatedProcessingCostCents ?? 0) > 0 ? (
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      color="warning"
-                      label={`~$${dollars(
-                        marketplace.estimatedProcessingCostCents,
-                      )} of card processing on marketplace sales is NOT recovered — the commission above is gross of it`}
-                    />
-                  ) : null}
-                  {Number(commerce.subscriptionOrders ?? 0) > 0 ? (
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      color="warning"
-                      label={`${commerce.subscriptionOrders} storefront subscription renewals recover no card cost — ${PLATFORM_BRAND_NAME} absorbs it`}
-                    />
-                  ) : null}
-                </Stack>
-              </Box>
-            </CardDisplay>
           </Stack>
         </StaffOnly>
       </Container>

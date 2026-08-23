@@ -614,3 +614,32 @@ describe('every source is attributed on its own dimension', () => {
     )
   })
 })
+
+describe('the page reads summary first, detail last', () => {
+  it('puts the composition of earnings before the per-source breakdowns', async () => {
+    // Order is part of the argument the page makes: a reader should meet the
+    // headline, then how it divides, then what was subtracted, and only then
+    // the row-by-row attribution. The breakdown tables used to sit ABOVE the
+    // total they break down.
+    render(<AdminRevenue />)
+    await waitFor(() =>
+      expect(screen.getByText('Where the money came from')).toBeTruthy(),
+    )
+    const order = ['h2']
+      .flatMap(() => [...document.querySelectorAll('h2')])
+      .map((node) => node.textContent ?? '')
+    const at = (heading: string) => order.findIndex((text) => text === heading)
+
+    expect(at('The two bases')).toBeGreaterThanOrEqual(0)
+    expect(at('The two bases')).toBeLessThan(at('The gap, and what is in it'))
+    expect(at('The gap, and what is in it')).toBeLessThan(
+      at('Where the money came from'),
+    )
+    expect(at('Where the money came from')).toBeLessThan(
+      at('Which orgs did what'),
+    )
+    expect(at('Which orgs did what')).toBeLessThan(
+      at('Which plugin, and which storefront'),
+    )
+  })
+})
