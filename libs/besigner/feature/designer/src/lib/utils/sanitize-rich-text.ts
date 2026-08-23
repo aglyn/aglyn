@@ -55,6 +55,15 @@ export function sanitizeRichText(html: string): string {
     const tag = element.tagName.toLowerCase()
     const inner = Array.from(element.childNodes).map(sanitizeNode).join('')
     if (!ALLOWED_TAGS.has(tag)) return inner
+    // A bare `span` is INERT and is unwrapped (AGL-2486). Every attribute is
+    // stripped here, so a surviving `<span>` carries no styling, no class and
+    // no binding — it renders exactly as its own text. Keeping it would be
+    // dead weight with a cost: `html` is what marks a node as "formatted", so
+    // an inert wrapper left behind by a contentEditable merge would pin the
+    // Attributes Text field read-only forever over markup that does nothing.
+    // Measured on test-org: deleting the line break out of
+    // `About <div>us</div>` left Chrome with `About<span>us</span>`.
+    if (tag === 'span') return inner
     if (tag === 'br') return '<br>'
     if (tag === 'a') {
       const href = element.getAttribute('href') ?? ''

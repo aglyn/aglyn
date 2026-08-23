@@ -240,6 +240,76 @@ describe('the canvas leaf is the editing surface (AGL-2486)', () => {
   })
 
   /**
+   * AGL-2486 — Zach: *"the line break persists regardless if you remove it
+   * or not once you click out"*.
+   *
+   * The markup the commit computed was always right; it was being undone a
+   * moment later. Ending the edit restores the element's original child
+   * nodes, and that restore used to run in the effect cleanup — AFTER
+   * `updateNodeProps` had told React to re-render the leaf. React painted
+   * the new text and the parked ORIGINAL nodes went back over the top.
+   *
+   * Worst for formatted text, which is how it was found: a node with `html`
+   * renders through `dangerouslySetInnerHTML`, so React never tracks those
+   * children and never corrects them afterwards. The canvas kept the
+   * pre-edit markup while the store held the new value.
+   */
+  describe('an edit to formatted text actually lands', () => {
+    const richLeaf = () => {
+      const leaf = document.createElement('div')
+      leaf.setAttribute('data-aglyn', 'leaf:agl2486-leaf-rich')
+      leaf.innerHTML = 'About <div>us</div>'
+      document.body.appendChild(leaf)
+      return leaf
+    }
+
+    it('drops the html once the markup is gone, keeping the words', async () => {
+      const node = richNode('About \nus', 'About <div>us</div>')
+      const leaf = richLeaf()
+      await openOn(node, leaf)
+
+      // The author removes the line break.
+      leaf.innerHTML = 'About us'
+      fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+
+      const props = updateNodeProps.mock.calls.at(-1)?.[1] as Record<
+        string,
+        unknown
+      >
+      expect(props).toBeTruthy()
+      expect(props['children']).toBe('About us')
+      // Markup identical to its own plain text is dead weight, and a future
+      // source of exactly this confusion.
+      expect('html' in props).toBe(false)
+    })
+
+    it('has already given the element back when it writes', async () => {
+      const node = richNode('About \nus', 'About <div>us</div>')
+      const leaf = richLeaf()
+      await openOn(node, leaf)
+      leaf.innerHTML = 'About us'
+
+      let domAtWrite: { html: string; editable: boolean } | undefined
+      updateNodeProps.mockImplementation((() => {
+        domAtWrite = {
+          html: leaf.innerHTML,
+          editable: leaf.hasAttribute('contenteditable'),
+        }
+      }) as any)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+
+      expect(domAtWrite).toBeTruthy()
+      // The parked originals are back, and the element is no longer
+      // editable, BEFORE React is told anything — so the re-render that
+      // follows lands on a subtree exactly where React left it, instead of
+      // being overwritten by a restore that comes afterwards.
+      expect(domAtWrite?.editable).toBe(false)
+      expect(domAtWrite?.html).toBe('About <div>us</div>')
+    })
+  })
+
+  /**
    * Unchanged from `d7ba450b5`: a commit that changes nothing must not
    * dirty the document, or the co-editing mirror replays a phantom edit to
    * every joiner for seven days.

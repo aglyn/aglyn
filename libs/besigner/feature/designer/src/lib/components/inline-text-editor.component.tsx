@@ -350,6 +350,30 @@ export const InlineTextEditorComponent = observer(
       const current = inlineTextEdit.node
       // An unbuilt surface is not an emptied one (AGL-2486) — close, do not
       // write. See `seededRef`.
+      /**
+       * Collected first, WRITTEN LAST (AGL-2486).
+       *
+       * Zach: *"the line break persists regardless if you remove it or not
+       * once you click out"*. The markup this computes was always correct;
+       * it was being undone a moment later. Ending the edit restores the
+       * element's original child nodes — deliberately, by reference, so
+       * React's fibers keep pointing at live nodes — and that restore used
+       * to run in the effect cleanup, i.e. AFTER `updateNodeProps` had
+       * already told React to re-render the leaf. React painted the new
+       * text, then the parked ORIGINAL nodes went back over the top of it.
+       *
+       * Worst for formatted text, which is how it was found: a node with
+       * `html` renders through `dangerouslySetInnerHTML`, so React does not
+       * track those children at all and never corrects them afterwards. The
+       * canvas kept the pre-edit markup, the store held the new value, and
+       * the break came back every time — until "Remove formatting" dropped
+       * `html` and the plain `children` finally showed.
+       *
+       * So the element is given back BEFORE the store is written, and the
+       * write is the last thing that happens. React then re-renders onto a
+       * subtree that is exactly where it left it.
+       */
+      let nextWrite: Record<string, unknown> | undefined
       if (current && seededRef.current) {
         // updateNodeProps REPLACES the props object — spread the existing
         // props so variant/component/etc. survive the text edit.
@@ -376,7 +400,7 @@ export const InlineTextEditorComponent = observer(
           // of a screen nobody had touched.
           if (hasMarkup) nextProps['html'] = sanitized
           else delete nextProps['html']
-          commitProps(current, nextProps)
+          nextWrite = nextProps
         } else if (surface) {
           let value = serializeTokenSegments(
             readTokenSegmentsFromDom(surface),
@@ -406,15 +430,19 @@ export const InlineTextEditorComponent = observer(
             if (!Object.keys(values).length) {
               delete nextProps[Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY]
             }
-            commitProps(current, toJS(nextProps))
+            nextWrite = toJS(nextProps) as Record<string, unknown>
           } else {
-            commitProps(current, {
+            nextWrite = {
               ...toJS(current.props),
               children: value,
-            })
+            }
           }
         }
       }
+      // Give the element back to React BEFORE the write — see `nextWrite`.
+      inPlaceRef.current?.dispose()
+      inPlaceRef.current = undefined
+      if (current && nextWrite) commitProps(current, nextWrite)
       inlineTextEdit.close()
     }, [rich, commitProps, activeEditable])
 

@@ -30,9 +30,12 @@ describe('sanitizeRichText', () => {
   it('strips scripts, event handlers, and styles', () => {
     expect(sanitizeRichText('<script>alert(1)</script>hi')).toBe('alert(1)hi')
     expect(sanitizeRichText('<b onclick="x()">hi</b>')).toBe('<b>hi</b>')
-    expect(sanitizeRichText('<span style="color:red">hi</span>')).toBe(
-      '<span>hi</span>',
-    )
+    // The `style` is gone, and since AGL-2486 so is the now-inert wrapper:
+    // a span that can carry nothing is unwrapped rather than kept. The
+    // security property is unchanged — what mattered was losing the
+    // attribute — and the node no longer reads as "formatted" over markup
+    // that renders exactly as its own text.
+    expect(sanitizeRichText('<span style="color:red">hi</span>')).toBe('hi')
     expect(sanitizeRichText('<img src="x" onerror="x()">text')).toBe('text')
   })
 
@@ -111,5 +114,37 @@ describe('richTextToPlain keeps the author’s line breaks (AGL-2486)', () => {
 
   it('is unchanged for markup that never breaks', () => {
     expect(richTextToPlain('plain text')).toBe('plain text')
+  })
+})
+
+/**
+ * AGL-2486 — markup that cannot render anything must not survive.
+ *
+ * `html` is what marks a node as formatted, and a formatted node hands its
+ * text to the canvas and shows the Attributes field read-only. An inert
+ * wrapper left behind by a contentEditable merge would pin it that way over
+ * markup that does nothing. Measured on test-org: deleting the line break
+ * out of `About <div>us</div>` left Chrome with `About<span>us</span>`.
+ */
+describe('sanitizeRichText drops inert wrappers (AGL-2486)', () => {
+  it('unwraps a bare span, which can carry nothing once attributes are stripped', () => {
+    expect(sanitizeRichText('About<span>us</span>')).toBe('Aboutus')
+  })
+
+  it('leaves no markup at all when the span was the only tag', () => {
+    const out = sanitizeRichText('<span>just words</span>')
+    expect(out).toBe('just words')
+    expect(/<[a-z]/i.test(out)).toBe(false)
+  })
+
+  it('keeps the formatting inside it', () => {
+    expect(sanitizeRichText('<span>a <b>bold</b> word</span>')).toBe(
+      'a <b>bold</b> word',
+    )
+  })
+
+  it('still keeps tags that actually render', () => {
+    expect(sanitizeRichText('one<br>two')).toBe('one<br>two')
+    expect(sanitizeRichText('a <div>b</div>')).toBe('a <div>b</div>')
   })
 })
