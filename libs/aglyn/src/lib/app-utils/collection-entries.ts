@@ -804,6 +804,8 @@ export function buildCollectionCategoryLinks(options: {
  *   never collide; run AFTER grafting and BEFORE binding resolution.
  * - Rows are bounded by `props.entriesLimit` and
  *   {@link COLLECTION_ENTRIES_MAX}.
+ * - `props.firstPageOnly` renders zero rows past page 1 of the ROUTED
+ *   listing (AGL-1871), so a lead card does not repeat down the pagination.
  * - An UNKNOWN collection leaves the node untouched (fail-open: a renamed
  *   collection must never take a screen down). A known collection with no
  *   matching entries renders zero rows — never the unsubstituted template.
@@ -865,6 +867,27 @@ export function expandCollectionEntries<
         : Number.isFinite(routedPage) && routedPage >= 1
           ? Math.floor(routedPage)
           : 1
+    // "Only on page 1" (AGL-1871): a LEAD block takes the top of the set and
+    // has no page window of its own, so on `/blog/page/2` it repeats exactly
+    // what page 1 led with — same cover, same title, same excerpt — above a
+    // page of different posts, under an eyebrow that reads "Latest". True on
+    // page 1, false everywhere after it.
+    //
+    // Opt-in and default off. The alternative reading — "a block with no
+    // `perPage` on a paginated route is a lead block" — is wrong: a "popular
+    // posts" rail is the same shape and belongs on every page of the listing.
+    // Only the author knows which one they built, so the author says so.
+    //
+    // Gated on the ROUTE's page, never on the block's own pinned `page`. A
+    // block that names its own page is a deliberately fixed window ("the
+    // entries page 3 would show, here"), which says nothing about which page
+    // of the listing the reader is on; and off a routed listing entirely
+    // (a blog rail on the homepage) `source.page` is unset, so the switch
+    // correctly hides nothing.
+    const firstPageOnly = Boolean((container.props as any)?.firstPageOnly)
+    const suppressedBeyondFirstPage =
+      firstPageOnly && Number.isFinite(routedPage) && routedPage > 1
+
     const templateIds = Array.isArray(container.nodes)
       ? (container.nodes as NodeId[])
       : []
@@ -893,9 +916,11 @@ export function expandCollectionEntries<
           )
         : source.entries
 
-    const windowed = perPage
-      ? filtered.slice((page - 1) * perPage, (page - 1) * perPage + perPage)
-      : filtered.slice(0, limit)
+    const windowed = suppressedBeyondFirstPage
+      ? []
+      : perPage
+        ? filtered.slice((page - 1) * perPage, (page - 1) * perPage + perPage)
+        : filtered.slice(0, limit)
 
     const childIds: NodeId[] = []
     windowed.forEach((entry, index) => {
