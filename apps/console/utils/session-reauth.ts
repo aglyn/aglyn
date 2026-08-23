@@ -51,7 +51,20 @@
  * in-place prompt exists only for a session lost mid-use.
  */
 
-export type SessionReauthReason = 'revoked' | 'signed-out' | 'idle' | 'stale'
+/**
+ * `unstable` (AGL-2486) is the loop breaker's verdict, not a diagnosis: the
+ * app ↔ `/signin` round trip ran its full budget (`SIGNIN_BOUNCE_LIMIT` in
+ * `signin-bounce.ts`) without settling. It carries `requiresSignIn`, like every
+ * reason but `stale`, because the console genuinely does not have a session
+ * it can use — the redirect it replaces was on its way to ask for exactly
+ * the same credentials.
+ */
+export type SessionReauthReason =
+  | 'revoked'
+  | 'signed-out'
+  | 'idle'
+  | 'stale'
+  | 'unstable'
 
 /**
  * What we still know about who was signed in — captured from the live user

@@ -51,6 +51,7 @@ import {
   signInWithPasskey,
   usePasskeysSupported,
 } from '../utils/passkeys'
+import { clearSignInBounces } from '../utils/signin-bounce'
 import {
   clearSessionReauth,
   dismissSessionReauth,
@@ -123,6 +124,17 @@ function reasonText(state: SessionReauthState): string {
         'You were signed out after a period of inactivity. Sign in again ' +
         'to pick up exactly where you left off.'
       )
+    // The loop breaker (AGL-2486). Says what the console actually observed
+    // — it kept being sent back to sign in — and names the one cause a user
+    // can act on, because another tab holding an older session is what
+    // produced this on production and refreshing that tab is what fixed it.
+    case 'unstable':
+      return (
+        'The console kept being sent back to sign in, so it stopped trying ' +
+        'rather than keep redirecting you. This usually means another tab ' +
+        'is holding an older session for this browser. Sign in again here ' +
+        'to fix it — and if it returns, reload the other tab.'
+      )
     default:
       return (
         'Your session can no longer read your data from the server. ' +
@@ -168,6 +180,11 @@ export function SessionReauthDialog() {
   useEffect(() => {
     if (active && state.requiresSignIn && user && !busy) {
       clearSessionReauth()
+      // The round trip settled, so the loop breaker's evidence is spent
+      // (AGL-2486). Cleared HERE and at the sign-in success below — never
+      // in the layout's "signed in" branch, which a flapping session
+      // reaches on every cycle and would reset the counter forever.
+      clearSignInBounces()
     }
   }, [active, state.requiresSignIn, user, busy])
 
@@ -205,6 +222,7 @@ export function SessionReauthDialog() {
         await setPersistence(auth, browserLocalPersistence)
         await credentialSignIn()
         clearSessionReauth()
+        clearSignInBounces()
       } catch (caught) {
         const failure = caught as { code?: string; message?: string }
         // A classified passkey failure already carries copy written for a

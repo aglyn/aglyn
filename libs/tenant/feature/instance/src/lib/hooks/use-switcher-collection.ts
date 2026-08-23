@@ -36,6 +36,24 @@ import {
   useRef,
   useState,
 } from 'react'
+import {
+  reportFirestoreDenial,
+  reportFirestoreServerRead,
+} from './firestore-denial-reporter'
+
+/**
+ * Collection KEY for the session-health verdict (AGL-2486).
+ *
+ * The even path segments only — `['users', uid, 'hostMemberships']` becomes
+ * `users/hostMemberships`. That is the convention `use-org-hosts` already
+ * uses for the same collection, so the two report the SAME key and still
+ * count as one collection rather than inflating each other toward the
+ * two-collection threshold. It also keeps document ids — a uid among them —
+ * out of a module-scope map.
+ */
+export function switcherCollectionKey(path: string[]): string {
+  return path.filter((_, index) => index % 2 === 0).join('/')
+}
 
 export interface UseSwitcherCollectionOptions<T> {
   firestore: Firestore
@@ -193,8 +211,21 @@ export function useSwitcherCollection<T = DocumentData>(
         setItems(filter ? rows.filter(filter) : rows)
         setError(false)
         setLoading(false)
+        // A SERVER answer is proof the session can read, and it clears the
+        // denial evidence outright (AGL-2486). Guarded on `fromCache`
+        // because `getDocs` falls back to the cache while offline, and the
+        // reporter contract is explicit that a cached snapshot proves
+        // nothing.
+        //
+        // Written as `=== false` rather than `!fromCache` on purpose: the
+        // claim being made is "the server answered", so absent metadata
+        // must report NOTHING rather than be read as a server read. It also
+        // keeps this branch from throwing on a snapshot shape it did not
+        // expect — a throw here lands in the `catch` below and would show
+        // the user a refusal for a fetch that actually succeeded.
+        if (snapshot.metadata?.fromCache === false) reportFirestoreServerRead()
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         // A missing composite index or transient error leaves the prior rows
         // in place rather than blanking the menu; the caller's "view all"
         // escape hatch still reaches everything.
@@ -207,6 +238,18 @@ export function useSwitcherCollection<T = DocumentData>(
         if (requestRef.current !== requestId) return
         setError(true)
         setLoading(false)
+        // …and tell the session detector, which this read used to keep to
+        // itself (AGL-2486). Zach's production report was a Sites list that
+        // "could not be loaded" while the console had no idea the session
+        // was the reason: the switcher is one of the first reads on the
+        // page and it contributed ZERO evidence toward the stale verdict,
+        // so the very list that failed could never be what raised the
+        // prompt. Only `permission-denied` — a missing index
+        // (`failed-precondition`) or a dropped network (`unavailable`) is
+        // not a session problem and must never be counted as one.
+        if ((error as { code?: string })?.code === 'permission-denied') {
+          reportFirestoreDenial(switcherCollectionKey(path))
+        }
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // `skip` is listed even though it is derived from a value already in
