@@ -1316,7 +1316,14 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'flex-end',
-                      mb: -1,
+                      // The pull-up closes the gap under a row that holds
+                      // only the help icon, which is shorter than the line
+                      // box it sits in. `Remove formatting` is a full-height
+                      // Button, so the same -8px drives its label into the
+                      // outlined field's notch and overprints the `Text`
+                      // legend (AGL-2486) — found while capturing the docs
+                      // shot of this exact control.
+                      mb: hasFormattedText ? 0 : -1,
                     }}
                   >
                     {/* The escape hatch beside the read-only field
