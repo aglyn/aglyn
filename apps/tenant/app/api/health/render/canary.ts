@@ -62,20 +62,55 @@ import {
 import { loadPageData } from '../../../[host]/[[...slug]]/load-page-data'
 
 /**
- * Aglyn's own marketing site. A custom domain reaches the loader under the
- * middleware's `cname--{hostname}` sentinel, not as the bare hostname.
+ * Which tenant host the marketing canary renders — CONFIGURED, never a
+ * literal (AGL-2486).
+ *
+ * This copies the AGL-1919 auth-origin precedence deliberately, for the same
+ * reason it was built that way: *"so a self-host install is never pointed at
+ * our origin"*. A canary hard-wired to Aglyn's own domain is dead weight on
+ * someone else's deployment at best, and a permanent confusing red at worst.
+ *
+ *   1. `AGLYN_CANARY_MARKETING_HOST` — the explicit answer, and the escape
+ *      hatch if the derivation below is ever wrong.
+ *   2. `cname--{NEXT_PUBLIC_WORKSPACE_DOMAIN}` — the operator's own domain,
+ *      already the established self-host knob (`.env.selfhost.example`). A
+ *      custom domain reaches the loader under the middleware's `cname--`
+ *      sentinel, not as the bare hostname.
+ *   3. **Nothing.** There is no Aglyn fallback, so this file names no Aglyn
+ *      host and the self-host ratchet has nothing to allowlist.
+ *
+ * Unconfigured is graded as a FAILURE (`not-configured`), never as healthy —
+ * "we are not watching anything" must not read the same as "the page is
+ * fine". It is not a false alarm either: nothing consumes these endpoints
+ * until an operator points a monitor at one, and the code says exactly what
+ * to do. The tenant's own `/api/health` does not aggregate these, so an
+ * unconfigured install never goes red on the check that matters.
  */
-export const MARKETING_HOST =
-  process.env['AGLYN_CANARY_MARKETING_HOST']?.trim() || 'cname--aglyn.com'
+export function marketingHost(): string | null {
+  const explicit = process.env['AGLYN_CANARY_MARKETING_HOST']?.trim()
+  if (explicit) return explicit
+  const workspace = process.env['NEXT_PUBLIC_WORKSPACE_DOMAIN']
+    ?.trim()
+    .toLowerCase()
+  // `includes('.')` for the same reason `media-ref.ts` screens it: a value
+  // without a dot is not a domain, and `cname--localhost` resolves nothing.
+  if (workspace && workspace.includes('.')) return `cname--${workspace}`
+  return null
+}
 
 /**
- * The platform demonstration site — the same host the middleware serves for
- * `app.aglyn.com` and preview URLs (`AGLYN_TENANT_DEMO`, default `demo`).
+ * Which tenant host the site canary renders.
+ *
+ * `demo` is a tenant host LABEL, not an Aglyn hostname — it is the middleware's
+ * own default for `app.aglyn.com` and every preview deployment
+ * (`AGLYN_TENANT_DEMO || 'demo'`), so this reuses the platform convention a
+ * self-host install already follows rather than inventing a second one.
  */
-export const SITE_HOST =
-  process.env['AGLYN_CANARY_SITE_HOST']?.trim() ||
-  process.env['AGLYN_TENANT_DEMO']?.trim() ||
-  'demo'
+export function siteHost(): string | null {
+  const explicit = process.env['AGLYN_CANARY_SITE_HOST']?.trim()
+  if (explicit) return explicit
+  return process.env['AGLYN_TENANT_DEMO']?.trim() || 'demo'
+}
 
 /**
  * Five minutes, matching every sibling subsystem probe. It bounds what a
@@ -87,10 +122,13 @@ export const PROBE_TTL_MS = 5 * 60_000
 
 /**
  * Run the real page loader for `host`'s home page and describe the outcome
- * structurally. Never throws: an exception here is a `unavailable` verdict,
- * because a monitoring probe must not become the outage it reports.
+ * structurally. Never throws: an exception here is an `unavailable` verdict,
+ * because a monitoring probe must not become the outage it reports. A null
+ * host — nothing configured — is `not-configured`, also a failure.
  */
-export async function probeRender(host: string): Promise<RenderCheck> {
+export async function probeRender(host: string | null): Promise<RenderCheck> {
+  // No target configured is a failure, not a pass. See `marketingHost`.
+  if (!host) return renderHealth({ kind: 'not-configured' }, '', 0)
   const startedAt = Date.now()
   let outcome: RenderOutcome
   try {

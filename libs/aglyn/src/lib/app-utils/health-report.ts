@@ -833,6 +833,11 @@ export type RenderOutcome =
   | { kind: 'redirect' }
   /** The loader threw, or could not be reached at all. */
   | { kind: 'unavailable' }
+  /**
+   * No target host is configured. A failure on purpose: "we are watching
+   * nothing" must never read the same as "the page is fine".
+   */
+  | { kind: 'not-configured' }
 
 export interface RenderCheck extends HealthCheck {
   /**
@@ -840,7 +845,11 @@ export interface RenderCheck extends HealthCheck {
    * is public and the nodes are the customer's page. Zero is the failure.
    */
   nodeCount: number
-  /** Which tenant host was rendered — our own hosts only, never a visitor's. */
+  /**
+   * Which tenant host was rendered — a CONFIGURED host, never one derived
+   * from the request, so no caller can choose what we render. Empty string
+   * when nothing is configured.
+   */
   host: string
 }
 
@@ -866,6 +875,8 @@ export function renderHealth(
       return { ...base, ok: false, code: 'not-found', nodeCount: 0 }
     case 'redirect':
       return { ...base, ok: false, code: 'redirected', nodeCount: 0 }
+    case 'not-configured':
+      return { ...base, ok: false, code: 'not-configured', nodeCount: 0 }
     case 'unavailable':
     default:
       // Same rule as `beaconHealth`: "we could not determine whether the page

@@ -45,7 +45,7 @@ import {
   type RenderCheck,
 } from '@aglyn/aglyn/server'
 
-import { SITE_HOST, PROBE_TTL_MS, probeRender } from '../canary'
+import { siteHost, PROBE_TTL_MS, probeRender } from '../canary'
 
 // lockdown-423: exempt — infrastructure monitoring probe; no org-scoped action.
 
@@ -54,8 +54,11 @@ import { SITE_HOST, PROBE_TTL_MS, probeRender } from '../canary'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
+// The host is resolved INSIDE the probe, not captured at module load, so a
+// configuration change takes effect on the next probe rather than needing a
+// cold instance.
 const renderProbe = memoizeWithTtl<RenderCheck>(PROBE_TTL_MS, () =>
-  probeRender(SITE_HOST),
+  probeRender(siteHost()),
 )
 
 export async function GET(): Promise<Response> {

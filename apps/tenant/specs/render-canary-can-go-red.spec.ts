@@ -62,7 +62,21 @@ async function routeWith(
   }
 }
 
+/**
+ * The canaries are CONFIGURED, not hard-coded (self-host ratchet, AGL-2486),
+ * so every case that expects a render has to name a target first. Cleared
+ * afterwards so the unconfigured cases below cannot pass on a leaked value.
+ */
+beforeEach(() => {
+  process.env['AGLYN_CANARY_MARKETING_HOST'] = 'cname--example.test'
+  process.env['AGLYN_CANARY_SITE_HOST'] = 'demo-site'
+})
+
 afterEach(() => {
+  delete process.env['AGLYN_CANARY_MARKETING_HOST']
+  delete process.env['AGLYN_CANARY_SITE_HOST']
+  delete process.env['NEXT_PUBLIC_WORKSPACE_DOMAIN']
+  delete process.env['AGLYN_TENANT_DEMO']
   jest.resetModules()
   jest.dontMock(LOADER)
 })
@@ -162,6 +176,71 @@ describe.each(['marketing', 'site'] as const)(
   },
 )
 
+/**
+ * The self-host half. A canary hard-wired to Aglyn's domain is dead weight on
+ * someone else's deployment, so the target is configured — and "nothing
+ * configured" must not read as healthy.
+ */
+describe('host resolution', () => {
+  const canary = async () => {
+    jest.resetModules()
+    jest.doMock(LOADER, () => ({ loadPageData: async () => RENDERED }))
+    return import('../app/api/health/render/canary')
+  }
+
+  it('names NO Aglyn host of its own — the file has no literal to fall back to', async () => {
+    delete process.env['AGLYN_CANARY_MARKETING_HOST']
+    const { marketingHost } = await canary()
+    expect(marketingHost()).toBeNull()
+  })
+
+  it('derives the marketing host from the operator own workspace domain', async () => {
+    delete process.env['AGLYN_CANARY_MARKETING_HOST']
+    process.env['NEXT_PUBLIC_WORKSPACE_DOMAIN'] = 'Example.COM'
+    const { marketingHost } = await canary()
+    expect(marketingHost()).toBe('cname--example.com')
+  })
+
+  it('ignores a workspace domain that is not a domain', async () => {
+    delete process.env['AGLYN_CANARY_MARKETING_HOST']
+    process.env['NEXT_PUBLIC_WORKSPACE_DOMAIN'] = 'localhost'
+    const { marketingHost } = await canary()
+    expect(marketingHost()).toBeNull()
+  })
+
+  it('lets an explicit setting win over the derivation', async () => {
+    process.env['AGLYN_CANARY_MARKETING_HOST'] = 'cname--chosen.test'
+    process.env['NEXT_PUBLIC_WORKSPACE_DOMAIN'] = 'derived.test'
+    const { marketingHost } = await canary()
+    expect(marketingHost()).toBe('cname--chosen.test')
+  })
+
+  it('falls back to the middleware own demo label for the site canary', async () => {
+    delete process.env['AGLYN_CANARY_SITE_HOST']
+    const { siteHost } = await canary()
+    expect(siteHost()).toBe('demo')
+    process.env['AGLYN_TENANT_DEMO'] = 'showcase'
+    jest.resetModules()
+    const again = await canary()
+    expect(again.siteHost()).toBe('showcase')
+  })
+
+  it('reports 503 not-configured rather than a green it has not earned', async () => {
+    delete process.env['AGLYN_CANARY_MARKETING_HOST']
+    jest.resetModules()
+    jest.doMock(LOADER, () => ({ loadPageData: async () => RENDERED }))
+    const route =
+      (await import('../app/api/health/render/marketing/route')) as {
+        GET: () => Promise<Response>
+        HEAD: () => Promise<Response>
+      }
+    const response = await route.GET()
+    expect(response.status).toBe(503)
+    expect((await response.json()).checks.render.code).toBe('not-configured')
+    expect((await route.HEAD()).status).toBe(503)
+  })
+})
+
 describe('renderHealth grading', () => {
   it('passes only a resolved host with a non-empty tree', () => {
     expect(
@@ -182,6 +261,7 @@ describe('renderHealth grading', () => {
     [{ kind: 'not-found' }, 'not-found'],
     [{ kind: 'redirect' }, 'redirected'],
     [{ kind: 'unavailable' }, 'render-unavailable'],
+    [{ kind: 'not-configured' }, 'not-configured'],
   ])('grades %j as %s', (outcome, code) => {
     const check = renderHealth(outcome as never, 'demo', 5)
     expect(check.ok).toBe(false)

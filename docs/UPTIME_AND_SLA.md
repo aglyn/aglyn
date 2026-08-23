@@ -671,6 +671,43 @@ challenges. The fix is to point them at the render canaries added in
 | `marketing-home` | `/api/health/render/marketing` | `aglyn.com/` |
 | `customer-site` | `/api/health/render/site` | `demo.aglyn.app/` |
 
+:::danger Step 0 — configure the marketing target, or it stays red
+The canaries name **no Aglyn host of their own**: the self-host ratchet
+forbids it, and a canary hard-wired to `aglyn.com` is dead weight on somebody
+else's install. The marketing target resolves
+`AGLYN_CANARY_MARKETING_HOST` → `cname--{NEXT_PUBLIC_WORKSPACE_DOMAIN}` →
+**nothing**, and nothing is reported as `503 not-configured` rather than a
+green it has not earned.
+
+Measured on `aglyn-tenant` 2026-08-23: **both are unset**, so
+`/api/health/render/marketing` answers `not-configured` until one is set.
+`AGLYN_TENANT_DEMO` *is* set, so `/api/health/render/site` needs nothing.
+
+Set one of these on the `aglyn-tenant` project and **redeploy** — an env var
+added without a redeploy does not reach the running deployment:
+
+```
+AGLYN_CANARY_MARKETING_HOST=cname--aglyn.com
+```
+
+Repointing the check before this is done just moves the red from one cause to
+another.
+:::
+
+**Confirm both endpoints are green BEFORE repointing anything.** Repointing a
+check at an endpoint that is failing tells you nothing you did not already
+know, and it costs you the ability to tell "the fix did not work" from "the
+page is genuinely broken":
+
+```bash
+curl -s -A 'Monitor/1.0' https://aglyn.com/api/health/render/marketing | python3 -m json.tool
+curl -s -A 'Monitor/1.0' https://demo.aglyn.app/api/health/render/site | python3 -m json.tool
+# Expect: HTTP 200, "status": "ok", checks.render.nodeCount > 0.
+# "code": "not-configured"  -> Step 0 above is not done (or not redeployed).
+# "code": "not-found"       -> the host resolves nothing; check the cname-- sentinel.
+# "code": "rendered-empty"  -> the page really is blank. That is a real outage.
+```
+
 **Keep each check's HOSTNAME as it is.** Only the path and the matcher change.
 `aglyn.com` and `demo.aglyn.app` both serve these endpoints, and leaving the
 hostnames alone means each check still proves DNS, the TLS certificate and
@@ -719,18 +756,6 @@ gcloud monitoring uptime update '<customer-site id>' --project=aglyn-main \
   --json-path='$.status' --json-path-matcher-type=exact-match \
   --matcher-content='"ok"' \
   --display-name='customer-site — demo.aglyn.app/api/health/render/site status=ok'
-```
-
-**Confirm before and after**, from an anonymous client — this is the whole
-point, so do not take it on trust:
-
-```bash
-curl -s -o /dev/null -w '%{http_code}\n' -A 'Monitor/1.0' \
-  https://aglyn.com/api/health/render/marketing      # expect 200
-curl -s -o /dev/null -w '%{http_code}\n' -A 'Monitor/1.0' \
-  https://demo.aglyn.app/api/health/render/site      # expect 200
-curl -s -A 'Monitor/1.0' https://aglyn.com/api/health/render/marketing | \
-  python3 -m json.tool                                # status: "ok", checks.render.nodeCount > 0
 ```
 
 Then re-run the pass-rate query in
