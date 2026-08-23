@@ -90,6 +90,14 @@ function healthyTenantConfig() {
           },
         ],
       },
+      {
+        name: 'Health endpoint bypass',
+        id: 'rule_health_endpoint_bypass_X48B7Y',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [{ conditions: [{ type: 'path', op: 'pre', value: '/api/health' }] }],
+      },
     ],
   }
 }
@@ -312,11 +320,11 @@ test('a non-bypass custom rule is not reported as an undeclared hole', () => {
   assert.deepEqual(evalTenant(config).findings, [])
 })
 
-test('a config with no rules at all fails for both declared rules', () => {
+test('a config with no rules at all fails for every declared rule', () => {
   const config = healthyTenantConfig()
   config.rules = []
   const findings = evalTenant(config).findings
-  assert.equal(findings.length, 2)
+  assert.equal(findings.length, tenantExpected.bypassRules.length)
   assert.ok(findings.every((f) => /is MISSING/.test(f)))
 })
 
@@ -453,6 +461,67 @@ test('the loader bypass mitigating with something other than bypass fails', () =
   const result = evalConsole(config)
   assert.equal(result.ok, false)
   assert.match(result.findings.join('\n'), /no longer mitigates with "bypass"/)
+})
+
+// ── Health endpoint bypass decay (AGL-2486) ────────────────────────────────
+// This rule is the only thing keeping `tenant-health` and `beacon-heartbeat
+// tenant` green: without it the challenge answers GCP with a 429 checkpoint
+// and both go to 0%, which is how they sat for three days. It decays in two
+// opposite directions and BOTH are failures — losing it puts the monitoring
+// back in the dark, and widening it unchallenges routes that are not health
+// endpoints. Each shape below has to be caught by name.
+
+test('losing the health bypass fails — the tenant uptime checks would go dark again', () => {
+  const config = healthyTenantConfig()
+  config.rules = config.rules.filter((r) => r.name !== 'Health endpoint bypass')
+  assert.match(findingsFor(config), /"Health endpoint bypass" is MISSING/)
+})
+
+test('the health bypass deactivated fails', () => {
+  const config = healthyTenantConfig()
+  ruleNamed(config, 'Health endpoint bypass').active = false
+  assert.match(findingsFor(config), /"Health endpoint bypass" is present but INACTIVE/)
+})
+
+test('the health bypass narrowed from `pre` to `eq` fails — the beacon heartbeat is a SUBPATH', () => {
+  // `/api/health` would still answer 200 and a one-URL smoke test would call
+  // it fixed, while `/api/health/error-beacon` — the `beacon-heartbeat
+  // tenant` check — stayed challenged and stayed at 0%.
+  const config = healthyTenantConfig()
+  ruleNamed(config, 'Health endpoint bypass').conditionGroup = [
+    { conditions: [{ type: 'path', op: 'eq', value: '/api/health' }] },
+  ]
+  assert.match(findingsFor(config), /"Health endpoint bypass" NO LONGER REQUIRES path pre "\/api\/health"/)
+})
+
+test('the health bypass widened to the whole /api prefix fails', () => {
+  // The dangerous direction: one character deleted from the prefix and every
+  // tenant API route is unchallenged, while the rule still passes any check
+  // that merely looks for a rule of this name matching a path.
+  const config = healthyTenantConfig()
+  ruleNamed(config, 'Health endpoint bypass').conditionGroup = [
+    { conditions: [{ type: 'path', op: 'pre', value: '/api' }] },
+  ]
+  assert.match(findingsFor(config), /"Health endpoint bypass" NO LONGER REQUIRES path pre "\/api\/health"/)
+})
+
+test('a SECOND, wider group on the health bypass re-opens it and fails', () => {
+  // The original group is untouched and still correctly scoped; the hole is
+  // the appended one. `conditionGroup` entries are OR'd, so this is the decay
+  // that survives any check looking for "a group that matches".
+  const config = healthyTenantConfig()
+  const rule = ruleNamed(config, 'Health endpoint bypass')
+  rule.conditionGroup = [
+    ...rule.conditionGroup,
+    { conditions: [{ type: 'path', op: 'pre', value: '/' }] },
+  ]
+  assert.match(findingsFor(config), /"Health endpoint bypass" \(condition group 2 of 2\) NO LONGER REQUIRES/)
+})
+
+test('the health bypass mitigating with something other than bypass fails', () => {
+  const config = healthyTenantConfig()
+  ruleNamed(config, 'Health endpoint bypass').action = bypass('deny')
+  assert.match(findingsFor(config), /no longer mitigates with "bypass"/)
 })
 
 // ── Aggregate + strict mode ────────────────────────────────────────────────

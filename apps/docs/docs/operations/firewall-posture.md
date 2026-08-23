@@ -148,7 +148,7 @@ Measured 2026-08-23.
 
 | Project | Serves | Posture |
 | --- | --- | --- |
-| `aglyn-tenant` | every customer site on `*.aglyn.app` + custom domains | ✅ protected — challenge, 2 scoped bypass rules |
+| `aglyn-tenant` | every customer site on `*.aglyn.app` + custom domains | ✅ protected — challenge, 3 scoped bypass rules |
 | `aglyn-docs` | `docs.aglyn.com` | ✅ protected — challenge, 1 scoped bypass rule |
 | `aglyn-console` | `app.aglyn.com` — sign-in, billing, staff surfaces | ✅ protected — challenge, 3 scoped bypass rules |
 | `aglyn-plugins` | `plugins.aglyn.com` — plugin loader origin | ⚠️ **no WAF config** — reviewed, deliberate |
@@ -237,6 +237,41 @@ an ordinary console route all still answer **429**.
 that are *your own server-side code fetching your own public endpoints*. They
 look like third-party bots to the WAF, they cannot solve a challenge, and their
 failure is silent.
+
+### How the tenant health checks were unblocked
+
+The same enablement left **four GCP uptime checks at 0% for three days** —
+`tenant-health`, `beacon-heartbeat tenant`, `marketing-home` and
+`customer-site`, all on `aglyn-tenant`, all answered with a **429 Vercel
+Security Checkpoint**. The two existing bypass rules are keyed on headers GCP
+cannot be made to send, and the probe token is deliberately scoped to our own
+scripts rather than handed to a third-party monitor.
+
+Fixed on 2026-08-23 (AGL-2486) with a third tenant rule, `Health endpoint
+bypass` — a single `path pre /api/health` group. A **path-only** bypass is
+right here and wrong for the job runner alongside it: `/api/health` and
+`/api/health/error-beacon` are public by design, take no auth, read no session
+and answer codes rather than messages, so a challenge protects nothing and
+breaks the only thing watching. `pre` rather than `eq` because the beacon
+heartbeat is a subpath. Needing no shared secret, it also fixes the endpoints
+for any monitor chosen later.
+
+Both directions were checked, anonymous `Monitor/1.0`:
+
+```text
+/api/health               200   challenge bypassed
+/api/health/error-beacon  200   challenge bypassed
+/                         429   the page challenge still stands
+```
+
+That last line is the point: `marketing-home` and `customer-site` probe **real
+pages**, so a path rule does not reach them and the challenge there is still
+doing real work. They need Google's checker IP ranges allowlisted
+(`gcloud monitoring uptime list-ips`) — see `docs/UPTIME_AND_SLA.md`.
+
+Because `pre` is a prefix, this rule stays exactly as narrow as the
+`/api/health` namespace is kept: any privileged route added under it would be
+unchallenged from the day it shipped.
 
 ### The remaining gap: `aglyn-plugins` — reviewed, and deliberately open
 

@@ -168,6 +168,47 @@ export const EXPECTED_POSTURE = Object.freeze([
           Object.freeze({ type: 'header', op: 'ex', key: 'x-plugin-jobs-secret' }),
         ]),
       }),
+      Object.freeze({
+        name: 'Health endpoint bypass',
+        why: 'four GCP uptime checks read 0% for three days — the challenge answered them with a 429 checkpoint and they cannot be given a bypass header',
+        // ADDED 2026-08-23 (AGL-2486). `tenant-health` and `beacon-heartbeat
+        // tenant` had been at 0% since 2026-08-21, alongside `marketing-home`
+        // and `customer-site`, all four on this project and all four answering
+        // 429 Vercel Security Checkpoint.
+        //
+        // WHY A PATH BYPASS IS THE RIGHT SHAPE HERE, where it would be wrong
+        // for the job runner above: `/api/health` and `/api/health/*` are
+        // PUBLIC by design, take no auth, read no session, and answer codes
+        // rather than messages. There is nothing behind them for a challenge
+        // to protect, and challenging them broke the only thing watching the
+        // tenant. Contrast the job runner, which is a privileged endpoint and
+        // therefore carries a header condition as well — a path-only rule
+        // there would leave it open to the internet.
+        //
+        // Unlike the probe-header bypass, this needs no shared secret and so
+        // fixes the endpoints for ANY monitor chosen later, not just GCP's.
+        // `pre` rather than `eq` because the tenant serves two of them:
+        // `/api/health` and `/api/health/error-beacon` (the beacon heartbeat).
+        //
+        // MEASURED on 2026-08-23, anonymous `Monitor/1.0`, both halves:
+        //   /api/health               200   (challenge bypassed)
+        //   /api/health/error-beacon  200   (challenge bypassed)
+        //   /                         429   (the page challenge still stands)
+        //
+        // SCOPE NOTE: `pre` is a prefix, so this rule is exactly as narrow as
+        // the `/api/health` namespace is kept. Every route under it must stay
+        // public and secrets-free; a privileged route added there would be
+        // unchallenged on the day it shipped. `apps/tenant/app/api/` has no
+        // other segment beginning `health`, so nothing outside that directory
+        // is reachable through this rule today.
+        //
+        // This does NOT fix `marketing-home` or `customer-site`. Those probe
+        // real pages, and the page challenge is doing real work; they need
+        // Google's checker IPs allowlisted instead. See docs/UPTIME_AND_SLA.md.
+        conditions: Object.freeze([
+          Object.freeze({ type: 'path', op: 'pre', value: '/api/health' }),
+        ]),
+      }),
     ]),
   }),
   Object.freeze({
