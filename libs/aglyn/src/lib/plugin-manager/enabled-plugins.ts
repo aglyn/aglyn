@@ -402,11 +402,22 @@ export function resolveDisableCascade(
  * Exported as copy rather than left to each caller to paraphrase: the whole
  * value of the warning rests on it being honest about its own limits, and two
  * surfaces wording that differently is how one of them ends up overclaiming.
+ *
+ * It says built-in ONLY, and that is the current truth rather than a hedge.
+ * `PluginManifest` carries no `requires` field, so a publisher cannot declare
+ * a dependency even if they want to, and `extraRequirements` above — the seam
+ * that would carry them — is supplied by nothing outside tests. An earlier
+ * draft said "a plugin that uses this one WITHOUT declaring it cannot be
+ * detected", which quietly implied declaring was possible and would have made
+ * this the exact overclaiming warning it exists to avoid. Adding the manifest
+ * field is a separate change: it needs a publish form, validation and a line
+ * on the install screen, or it is a field written by nobody and read by
+ * nothing. Update this sentence in the same change, not before.
  */
 export const PLUGIN_CASCADE_IS_DECLARED_ONLY =
-  'This lists plugins that declare a dependency. A marketplace plugin that ' +
-  'uses this one without declaring it cannot be detected, so check any ' +
-  'third-party plugins you rely on.'
+  'This covers built-in plugins only. A marketplace plugin has no way to ' +
+  'declare that it depends on another one yet, so none are listed here — ' +
+  'check any third-party plugins you rely on before continuing.'
 
 /** Reverse lookup: which first-party plugin a release flag gates, if any. */
 export function pluginForReleaseFlag(

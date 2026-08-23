@@ -203,12 +203,12 @@ Counts come from scanning the **published** version of each screen, layout and c
 and are capped — where the scan hits its cap the dialog says "at least". Drafts are not
 scanned.
 
-:::caution The warning covers *declared* dependencies only
-First-party plugins declare what they require. A **marketplace plugin** is only included
-if its manifest declares the dependency — a third-party plugin that uses another plugin's
-components without saying so cannot be detected, and the dialog says as much rather than
-implying the list is exhaustive. If you rely on a marketplace plugin, check it yourself
-before switching off something it might be built on.
+:::caution The warning covers built-in plugins only
+First-party plugins declare what they require. **Marketplace plugins are not covered at
+all**: a plugin manifest has no way to declare a dependency yet, so no third-party plugin
+is ever listed — whether or not it actually depends on the one you are switching off. The
+dialog says this rather than implying the list is exhaustive. If you rely on a marketplace
+plugin, check it yourself before switching off something it might be built on.
 :::
 
 ## Configure

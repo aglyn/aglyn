@@ -203,11 +203,17 @@ describe('SitePluginsCard — disable cascade (AGL-2486)', () => {
     )
   })
 
-  it('admits it can only see DECLARED dependencies', () => {
+  it('admits marketplace plugins are not covered at all', () => {
+    // Not "undeclared ones cannot be detected" — a marketplace plugin has no
+    // way to declare a dependency today, so implying it could would make this
+    // the overclaiming warning the feature exists to avoid.
     render(<SitePluginsCard hostId="host-1" />)
     fireEvent.click(commerceSwitch())
     expect(
-      screen.getByText(/cannot be detected, so check any third-party plugins/),
+      screen.getByText(/covers built-in plugins only/),
+    ).toBeTruthy()
+    expect(
+      screen.getByText(/no way to declare that it depends on another one yet/),
     ).toBeTruthy()
   })
 

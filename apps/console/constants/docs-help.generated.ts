@@ -483,6 +483,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Redirects',
     excerpt: 'Manage URL redirects with validation, loop detection, and hit metrics.',
   },
+  refunds: {
+    path: '/staff-console/refunds',
+    title: 'Refunds',
+    excerpt: 'Refunding an organization\'s subscription charge from its org page — who may issue one, what the confirmation states, why a refund is a loss rather than a reversal, and the audit row it writes.',
+  },
   relations: {
     path: '/content-and-data/datasets/relations',
     title: 'Relations',
@@ -738,6 +743,7 @@ export const DOCS_HELP_ANCHORS = {
   publishYourFirstScreen: ['#1-create-a-screen', '#2-design-it-in-the-besigner', '#3-preview-and-publish', '#how-fast-changes-go-live', '#next'],
   realmBundles: ['#build-against-the-host-abi', '#the-chain-that-runs-before-a-byte-executes', '#granting-trust-staff', '#where-realm-bundles-load', '#key-rotation', '#troubleshooting'],
   redirects: ['#manage-redirects', '#metrics', '#match-modes-v2', '#related'],
+  refunds: ['#where-it-is', '#who-can-refund', '#issuing-a-refund', '#a-refund-is-a-loss', '#what-it-refuses', '#what-is-recorded', '#in-revenue', '#what-this-is-not', '#related'],
   relations: ['#reference-fields', '#many-to-many', '#using-relations', '#tips', '#related'],
   reportAnIssue: ['#is-it-us-or-your-site', '#what-to-write', '#a-bug', '#an-idea', '#a-question', '#length-caps', '#what-gets-attached-for-you', '#being-contacted', '#where-it-goes', '#when-it-does-not-send', '#rate-limits', '#verified-email', '#something-went-wrong-on-our-side', '#related'],
   responsiveStyling: ['#style-per-breakpoint', '#interaction-states', '#you-can-see-the-state-while-you-style-it', '#fields-you-dont-touch-keep-inheriting', '#states-and-breakpoints-combine', '#focus-state', '#box-stylers', '#spacing-side-names', '#spacing-units', '#spacing-steps', '#spacing-custom-amounts', '#unit-px', '#unit-rem', '#unit-em', '#unit-percent', '#unit-ch', '#unit-viewport', '#unit-small-viewport', '#style-groups', '#gradient-backgrounds', '#visibility-per-device-band', '#scheme-scoped-colors', '#custom-classes', '#custom-css-sx', '#semantic-sections--theme-mode', '#edit-json-for-one-element'],
@@ -754,7 +760,7 @@ export const DOCS_HELP_ANCHORS = {
   siteProtection: ['#where-these-controls-live', '#per-screen-passwords', '#custom-error-screens', '#maintenance-mode', '#related'],
   siteSearch: ['#how-it-works', '#what-it-searches', '#configure-it', '#related'],
   sso: ['#setting-it-up', '#1-verify-your-domain', '#2-connect-your-identity-provider', '#3-turn-it-on', '#how-it-works', '#enforcement', '#consequences-worth-knowing-before-you-switch', '#testing-it', '#related'],
-  staffConsole: ['#runbooks', '#whats-there', '#staff-overview', '#support-queue', '#plugin-reviews', '#organizations-admin', '#free-workspace-limit', '#entitlement-editor', '#users-admin', '#password-help', '#staff-notes', '#broadcast-announcements', '#billing-insight', '#impersonation', '#system-emails', '#platform-send-rate', '#feature-flags', '#multi-tenant-architecture', '#audit-archival', '#organization-suspension', '#sales-tax-return', '#audit-log', '#coupons', '#contact-suppressions', '#access', '#which-identity-holds-staff', '#staff-inside-a-customers-tenant--a-property-worth-knowing', '#offboarding', '#break-glass-access', '#requiring-sso-for-a-company-domain', '#why-am-i-getting-a-404', '#related'],
+  staffConsole: ['#runbooks', '#whats-there', '#staff-overview', '#support-queue', '#plugin-reviews', '#organizations-admin', '#free-workspace-limit', '#entitlement-editor', '#users-admin', '#password-help', '#staff-notes', '#broadcast-announcements', '#billing-insight', '#refunds', '#impersonation', '#system-emails', '#platform-send-rate', '#feature-flags', '#multi-tenant-architecture', '#audit-archival', '#organization-suspension', '#sales-tax-return', '#audit-log', '#coupons', '#contact-suppressions', '#access', '#which-identity-holds-staff', '#staff-inside-a-customers-tenant--a-property-worth-knowing', '#offboarding', '#break-glass-access', '#requiring-sso-for-a-company-domain', '#why-am-i-getting-a-404', '#related'],
   supportAndCommunity: ['#support-tickets', '#ticket-status', '#what-to-include', '#community-forum', '#related'],
   supportQueue: ['#triage', '#notifications', '#related'],
   supportTiers: ['#why-enterprise-is-in-hours-not-business-days', '#what-starts-and-stops-the-clock', '#where-to-see-it'],
