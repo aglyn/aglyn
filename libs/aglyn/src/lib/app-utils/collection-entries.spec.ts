@@ -779,6 +779,58 @@ describe('expandCollectionEntries (AGL-551)', () => {
     expect(expanded['list'].nodes).toHaveLength(1)
   })
 
+  it('takes the FEATURED entry from the route-filtered set (AGL-1871)', () => {
+    // The `/blog` featured split card was hardcoded to one post, and
+    // `blogListTmpl` is the single list screen behind `/blog`,
+    // `/blog/page/{n}` and every `/blog/category/{slug}` — so the card led
+    // `/blog/category/open-source` with a Product post that was not in the
+    // category the reader had asked for.
+    //
+    // The fix is authored (a Collection Entries block with `entriesLimit: 1`
+    // wrapping the card), and it rests on TWO properties of this function
+    // that nothing asserted. The existing `entriesLimit` case only counts
+    // clones, so a slice from the wrong end — or from the unfiltered set —
+    // would have kept it green while putting the wrong post back on the page.
+    //
+    // 1. `source.entries` is what the ROUTE resolved. On a category URL the
+    //    compose pipeline hands the block the already-filtered entries
+    //    (`compose-collection-page.ts`), so a limit-1 block on that route can
+    //    only ever render a post from that category.
+    const openSourceRoute = {
+      slug: 'blog',
+      entries: [
+        { $id: 'e4', title: 'Why Aglyn is Apache-2.0', slug: 'why-apache-2-0' },
+      ],
+    }
+    const featured = baseNodes()
+    featured['list'].props.entriesLimit = 1
+    const filtered = expandCollectionEntries(
+      featured,
+      { blog: openSourceRoute },
+      'blog',
+    )
+    const filteredChildren = filtered['list'].nodes as string[]
+    expect(filteredChildren).toHaveLength(1)
+    const filteredLink = `${filteredChildren[0].replace(/item$/, '')}link`
+    expect(filtered[filteredLink].props.href).toBe('/blog/why-apache-2-0')
+
+    // 2. The slice is from the TOP, so the unfiltered listing leads with the
+    //    newest post rather than an arbitrary one. The card's own label says
+    //    "· Latest"; this is what makes that label true.
+    const unfiltered = baseNodes()
+    unfiltered['list'].props.entriesLimit = 1
+    const lead = expandCollectionEntries(unfiltered, { blog }, 'blog')
+    const leadChildren = lead['list'].nodes as string[]
+    const leadLink = `${leadChildren[0].replace(/item$/, '')}link`
+    expect(lead[leadLink].props.href).toBe('/blog/hello-world')
+    // And nothing from further down the feed leaks into the card.
+    expect(
+      Object.values(lead).some(
+        (node: any) => node?.props?.href === '/blog/second',
+      ),
+    ).toBe(false)
+  })
+
   it('renders one page window with perPage/page (AGL-620)', () => {
     const many = {
       slug: 'blog',
