@@ -8,10 +8,34 @@ description: The live status page, what it does and does not show, and why there
 
 ## The status page
 
-**[status.aglyn.com](/status)** checks the console and the published-site
-runtime live, when you load it.
+**[docs.aglyn.com/status](/status)** checks the console, the published-site
+runtime, and an end-to-end page render live, from your browser, when you load
+it — and again every minute while the page is open.
 
-It shows whether each surface is responding **right now**.
+It shows whether each surface is responding **right now**, in one of three
+words:
+
+| Word | What it means |
+| --- | --- |
+| **Operational** | The service returned its own health report saying so. This is the only way a surface goes green. |
+| **Degraded** | The service answered and reported a problem, or returned an error. |
+| **No reading** | The check could not be completed — a blocked request, a network problem, or a reply the page cannot read. It is **not** treated as healthy, and it is not a claim that we are down. |
+
+That third state is deliberate. From your browser a real outage and a captive
+wifi portal look identical, so the page says which of the three it actually
+observed rather than rounding either way.
+
+Two limits worth knowing before you rely on it:
+
+- **It covers the surfaces you use.** Internal subsystems — scheduled jobs,
+  backups, billing, abuse controls — are monitored continuously and separately,
+  and are not on the page. They can be degraded while everything on it is
+  green, because none of them changes whether your site is serving.
+- **It is not an independent monitor.** It is served from a different
+  deployment than the services it reports on, so a console outage does not take
+  it down. It is not served from a different *provider*, so an outage broad
+  enough to take out the whole platform could take the page with it. If
+  `/status` does not load at all, treat that as a signal.
 
 It does **not** show uptime history or an availability percentage — nothing
 stores historical samples yet, so a number there would be invented rather than

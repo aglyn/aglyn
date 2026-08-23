@@ -42,11 +42,30 @@ const docsGaTrackingId = env('DOCS_GA_TRACKING_ID')
 const docsErrorBeaconEndpoint = env('DOCS_ERROR_BEACON_ENDPOINT')
 
 /**
- * Comma-separated `name|label|origin|description` targets the /status page
- * probes. UNSET → it probes nothing and says so, instead of live-probing
+ * Comma-separated `name|label|origin|description|path` targets the /status
+ * page probes. UNSET → it probes nothing and says so, instead of live-probing
  * Aglyn's infrastructure and reporting OUR uptime as the operator's.
+ *
+ * ⚠️ UNSET IS ALSO HOW A PUBLIC STATUS PAGE ENDS UP MONITORING NOTHING
+ * (AGL-2411). `docs.aglyn.com/status` shipped reading "No services are
+ * configured for this documentation build to check" while `/pricing` and
+ * `/solutions/enterprise` pointed customers at it — because the `aglyn-docs`
+ * Vercel project had NO environment variables at all, so this, the GA4 id and
+ * the error beacon were every one of them off on our own deployment. "Unset
+ * means off, never ours" is the right rule and it is not a substitute for
+ * setting the value; the warning below is here because a build log is the
+ * first place anyone would have seen it.
  */
 const docsStatusTargets = env('DOCS_STATUS_TARGETS')
+
+if (!docsStatusTargets) {
+  console.warn(
+    '\n[status] DOCS_STATUS_TARGETS is unset: /status will publish a page that' +
+      '\n[status] checks NO services and says so. Set it to a comma-separated' +
+      '\n[status] list of name|label|origin|description|path entries, or accept' +
+      '\n[status] that this build publishes a status page monitoring nothing.\n',
+  )
+}
 
 const config: Config = {
   title: 'Aglyn Docs',
