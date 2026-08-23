@@ -1834,6 +1834,29 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // Email addresses on this account (AGL-2486): SERVER-WRITE ONLY, and
+      // this one is the sharpest case of the rule `passkeys` above states.
+      //
+      // `users/{userId}` itself is `allow read, write` for its owner with no
+      // field validation at all, so anything stored ON that document is a
+      // field its owner may set to any value they like. `verified` is the
+      // entire security property of this feature: a verified address is a
+      // SIGN-IN IDENTIFIER and can be promoted to primary, and the primary is
+      // the Firebase Auth record's email — the string `decoded.email`
+      // carries, which the session mint's SSO domain policy and the
+      // invite-accept comparison both read. An owner who could write
+      // `verified: true` could therefore claim an address they have never
+      // received mail at and turn it into an authorization input.
+      //
+      // So every write goes through /api/account/emails, which proves
+      // delivery by an emailed round-trip before it sets the bit. The owner
+      // reads their own list for the management card, exactly like passkeys.
+      match /emails/{address} {
+        allow read: if isStaff() ||
+          (isSignedIn() && request.auth.uid == userId);
+        allow write: if false;
+      }
+
       // Clickwrap acceptance records (AGL-1497): SERVER-WRITE ONLY, for the
       // same reason as passkeys above — this is evidence ABOUT the person who
       // would be writing it. A client-writable acceptance could be forged
@@ -1857,6 +1880,29 @@ service cloud.firestore {
       allow read, write: if false;
     }
     match /passkeyCredentialIndex/{credentialId} {
+      allow read, write: if false;
+    }
+
+    // Account email machinery (AGL-2486): server-only, both of them, on the
+    // same reasoning as the WebAuthn pair directly above.
+    //
+    // `emailIdentityIndex/{address}` -> `{ uid }` is THE uniqueness guard:
+    // one verified address, one account. A client that could WRITE one could
+    // point somebody else's address at their own uid, which makes the sign-in
+    // identifier ambiguous and is account takeover with no password involved.
+    // A client that could READ the collection could enumerate which addresses
+    // exist and which account holds each — the address book of every user we
+    // have, keyed for lookup.
+    //
+    // `emailVerifications/{tokenId}` holds the SHA-256 of a secret that
+    // confirms an address. Readable would let an attacker compare candidates
+    // offline; writable would let them mint a confirmation for an address
+    // they do not own, which defeats the round-trip that the whole feature
+    // rests on. Single-use and TTL'd, deleted by the route that consumes it.
+    match /emailIdentityIndex/{address} {
+      allow read, write: if false;
+    }
+    match /emailVerifications/{tokenId} {
       allow read, write: if false;
     }
 
