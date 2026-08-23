@@ -69,6 +69,13 @@ const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 60_000)
  * path → output file (under static/img) + the text to wait for.
  * `annotate` draws numbered badges + outlines around the located elements
  * before the shot (the legend lives in the docs page that embeds it).
+ *
+ * `actions` runs before the shutter: `click`, `clickXY`, `hoverXY`,
+ * `scroll`, `dblclickXY` (select-then-double-click, for the canvas'
+ * in-place text editor), `fill: [selector, value]` and `press: 'Key'`.
+ * A step may carry only `settleMs`, which is how a shot waits for the
+ * canvas to finish laying out before its first click.
+ *
  * Run a subset with `--only=<out-substring>[,<out-substring>…]`.
  */
 const shots = [
@@ -453,6 +460,131 @@ const shots = [
       { rect: { x: 1068, y: 90, width: 370, height: 806 }, n: 5 },
     ],
   },
+  // ── The canvas work of the August 23 release (AGL-2486) ──────────────
+  //
+  // Four of these five STAGE the state they photograph instead of relying
+  // on a seeded document: an interaction-state slice, a margin, and a bold
+  // word are all things the seed does not carry, and adding them to
+  // seed-e2e.mjs would put fixture state behind six other specs to serve
+  // one picture. Staging them here also means the shot fails if the
+  // feature stops working, which a seeded shape cannot tell you.
+  //
+  // The leading `{ settleMs: … }` action is deliberate: `waitFor:
+  // 'Properties'` resolves when the PANEL mounts, and the canvas iframe is
+  // still laying out for several seconds after that — a clickXY fired at
+  // that moment lands on whatever is under the pointer mid-reflow.
+  {
+    out: 'besigner/state-chips-row.png',
+    stagesDocument: true,
+    path: `/${HOST_BASE}/screens/seed-home/versions/seed-home-v1/besigner`,
+    waitFor: 'Properties',
+    actions: [
+      { settleMs: 9000 },
+      // The seeded `Order now` button.
+      { clickXY: [677, 305], settleMs: 1500 },
+      { click: '[role="tab"]:has-text("STYLES")', settleMs: 2000 },
+      // Give Focus a slice so a chip OTHER than the selected one carries
+      // the • — otherwise the dot and the ✕ appear on the same chip and
+      // the image cannot say which mark means what.
+      { click: '.MuiChip-root:has-text("Focus")', settleMs: 1200 },
+      { click: '[aria-label="Space inside — top"]', settleMs: 1200 },
+      { click: '[role="combobox"]', settleMs: 1000 },
+      { click: 'li.MuiMenuItem-root:has-text("Medium")', settleMs: 1500 },
+      // …then Hover, on a different side so the click cannot toggle the
+      // already-open editor shut instead of opening one.
+      { click: '.MuiChip-root:has-text("Hover")', settleMs: 1200 },
+      { click: '[aria-label="Space inside — bottom"]', settleMs: 1200 },
+      { click: '[role="combobox"]', settleMs: 1000 },
+      { click: 'li.MuiMenuItem-root:has-text("Hairline")', settleMs: 1500 },
+    ],
+    clipTo: {
+      locator: '.MuiChip-root:has-text("Styling: all screen sizes")',
+      // The hold banner is what gives the crop the panel's full width, and
+      // it is also the bottom of the frame: the section is about the two
+      // chip rows and the preview they turn on.
+      include: ['.MuiAlert-root'],
+    },
+  },
+  {
+    out: 'besigner/box-styler-diagram.png',
+    stagesDocument: true,
+    path: `/${HOST_BASE}/screens/seed-home/versions/seed-home-v1/besigner`,
+    waitFor: 'Properties',
+    actions: [
+      { settleMs: 9000 },
+      // The hero Stack, which the seed gives `py: 8` — so padding top and
+      // bottom already read back as `64px` rather than as a step number.
+      { clickXY: [677, 350], settleMs: 1500 },
+      { click: '[role="tab"]:has-text("STYLES")', settleMs: 2000 },
+      // Margin the seed does not have, so the diagram shows a value in the
+      // outer ring as well as the inner one.
+      { click: '[aria-label="Space outside — top"]', settleMs: 1200 },
+      { click: '[role="combobox"]', settleMs: 1000 },
+      { click: 'li.MuiMenuItem-root:has-text("Large")', settleMs: 1500 },
+      // Land on a padding side, so the open editor below the diagram is
+      // the one whose side already has a value.
+      { click: '[aria-label="Space inside — top"]', settleMs: 1800 },
+    ],
+    clipTo: {
+      locator: 'text=Apply to',
+      include: [
+        '.MuiToggleButtonGroup-root:has-text("SIDE")',
+        '.BoxStyler-legendItem.BoxStyler-contents',
+      ],
+    },
+  },
+  {
+    out: 'besigner/inline-text-editing.png',
+    stagesDocument: true,
+    path: `/${HOST_BASE}/screens/seed-home/versions/seed-home-v1/besigner`,
+    waitFor: 'Properties',
+    actions: [
+      { settleMs: 9000 },
+      { dblclickXY: [620, 205], settleMs: 2500 },
+    ],
+    // A static box, not a clipTo: everything this shot is about lives in
+    // the canvas' closed shadow root, where no locator reaches. The frame
+    // keeps the paragraph and the button under the heading, because the
+    // point is the text sitting on the page with no chrome around it —
+    // crop to the heading alone and there is nothing for the absence of
+    // chrome to show against.
+    clip: { x: 316, y: 128, width: 740, height: 240 },
+  },
+  {
+    out: 'besigner/text-field-read-only.png',
+    stagesDocument: true,
+    path: `/${HOST_BASE}/screens/seed-home/versions/seed-home-v1/besigner`,
+    waitFor: 'Properties',
+    actions: [
+      { settleMs: 9000 },
+      { dblclickXY: [620, 205], settleMs: 2500 },
+      // Bold the last word — `morning` — so the element carries real
+      // formatting rather than being formatted-flagged by fixture data.
+      { press: 'Shift+Alt+ArrowLeft', settleMs: 800 },
+      { click: 'button[title="Bold"]', settleMs: 1200 },
+      { click: 'button:has-text("DONE")', settleMs: 3000 },
+    ],
+    // No callout: the crop holds the button, the field and the helper line
+    // and nothing else, and an outline drawn round the button overprints
+    // the field's `Text` legend a few pixels below it.
+    clipTo: {
+      locator: 'text=Remove formatting',
+      include: ['text=This text is formatted'],
+    },
+  },
+  {
+    out: 'besigner/element-search-best-matches.png',
+    path: `/${HOST_BASE}/screens/seed-home/versions/seed-home-v1/besigner`,
+    waitFor: 'Properties',
+    actions: [
+      { settleMs: 9000 },
+      { click: '[role="tab"]:has-text("ELEMENTS")', settleMs: 2000 },
+      { fill: ['input[placeholder="Search elements"]', 'grid'], settleMs: 2500 },
+    ],
+    // The Elements panel is a fixed-width column, so a static box is
+    // stable here in a way it would not be beside a growing card.
+    clip: { x: 0, y: 137, width: 288, height: 452 },
+  },
 ]
 
 // Chrome-flavor fallback, mirroring tools/e2e/console.e2e.mjs: the first
@@ -611,6 +743,36 @@ async function annotate(page, marks) {
   }
 }
 
+// Where the besigner keeps SHARED unsaved state. A shot that stages a
+// document change (an interaction-state slice, a margin, a bold word)
+// never saves it — but the co-editing mirror publishes it anyway, and the
+// NEXT editor load restores it, because that state is deliberately not
+// per-tab (AGL-2486). Two staged shots in one run therefore photograph
+// each other: the first version of `inline-text-editing.png` came out
+// 32px low because the box-styler shot had left a margin behind.
+const RTDB_HOST = process.env.FIREBASE_DATABASE_EMULATOR_HOST ?? 'localhost:9000'
+const RTDB_NS = process.env.E2E_RTDB_NS ?? 'aglyn-main-default-rtdb'
+
+/**
+ * Drops the co-editing mirror, so a staged shot opens the SEEDED document.
+ *
+ * Throws rather than warning: a silently un-cleared mirror produces a
+ * plausible image of the wrong thing, which is the one outcome a docs
+ * capture must not have. `owner` is the emulator's admin bearer token —
+ * the mirror's rules deny an unauthenticated delete.
+ */
+async function clearCoEditMirror() {
+  const response = await fetch(
+    `http://${RTDB_HOST}/coedit.json?ns=${RTDB_NS}`,
+    { method: 'DELETE', headers: { Authorization: 'Bearer owner' } },
+  )
+  if (!response.ok) {
+    throw new Error(
+      `co-edit mirror not cleared (${response.status}) at ${RTDB_HOST}`,
+    )
+  }
+}
+
 let failures = 0
 /**
  * Removes what the docs must never show: the auth-emulator warning banner,
@@ -690,6 +852,24 @@ async function resolveClipTo(page, clipTo) {
 for (const shot of selected) {
   const page = await context.newPage()
   try {
+    if (shot.stagesDocument) {
+      await clearCoEditMirror()
+      // …and the PRIVATE half of the same unsaved state. Every shot in a
+      // run shares one browser context, so the crash-recovery draft the
+      // previous staged shot wrote is same-origin localStorage waiting to
+      // be restored — the mirror alone is only half the leak.
+      await page.addInitScript(() => {
+        try {
+          for (const key of Object.keys(window.localStorage)) {
+            if (key.startsWith('aglyn:draft:')) {
+              window.localStorage.removeItem(key)
+            }
+          }
+        } catch {
+          // Storage blocked — nothing to restore from either.
+        }
+      })
+    }
     await page.goto(`${BASE_URL}${shot.path}`, {
       waitUntil: 'domcontentloaded',
       timeout: TIMEOUT_MS,
@@ -705,6 +885,20 @@ for (const shot of selected) {
       if (action.clickXY) {
         await page.mouse.click(action.clickXY[0], action.clickXY[1])
       }
+      // The canvas is a closed shadow root, so the in-place text editor can
+      // only be opened by pointer coordinates. It also wants the element
+      // SELECTED first: a double-click on an unselected element selects it
+      // and stops there, which reads as "double-click does nothing" and is
+      // why this is a distinct action rather than two clickXY entries.
+      if (action.dblclickXY) {
+        await page.mouse.click(action.dblclickXY[0], action.dblclickXY[1])
+        await page.waitForTimeout(action.selectMs ?? 1200)
+        await page.mouse.dblclick(action.dblclickXY[0], action.dblclickXY[1])
+      }
+      if (action.fill) {
+        await scope.locator(action.fill[0]).first().fill(action.fill[1])
+      }
+      if (action.press) await page.keyboard.press(action.press)
       // Hover the canvas without selecting: the besigner outlines and names
       // the element under the pointer, which is how a shot can say "this
       // band is the instance" while the Attributes panel stays empty. Two

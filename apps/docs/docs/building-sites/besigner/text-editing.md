@@ -27,7 +27,7 @@ type, exactly as visitors will see it.
 A **Markdown** element is different — double-clicking one opens the full document
 editor instead. See [Long documents in markdown](long-form-markdown.md).
 
-<!-- screenshot: besigner/inline-text-editing.png per SCREENSHOT_PLAN.md -->
+![A heading being edited directly on the canvas, with a small floating toolbar above it and no selection outline around it](/img/besigner/inline-text-editing.png)
 
 ### Finishing, and changing your mind {#committing}
 
@@ -94,7 +94,7 @@ says so:
 > This text is formatted — double-click the element on the canvas to edit it. Remove
 > formatting to edit it here.
 
-<!-- screenshot: besigner/text-field-read-only.png per SCREENSHOT_PLAN.md -->
+![The Attributes panel showing a read-only Text field explaining that the text is formatted, with a Remove formatting button above it](/img/besigner/text-field-read-only.png)
 
 This is not the field being awkward. A plain text box can only show you the words,
 so anything you typed into it would have to throw the bold, the links and the lists

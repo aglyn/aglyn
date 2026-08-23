@@ -39,7 +39,7 @@ their description or keywords. So typing `grid` puts **Grid** at the top rather 
 burying it under everything whose description happens to mention a grid. Clearing the
 box brings the curated categories back.
 
-<!-- screenshot: besigner/element-search-best-matches.png per SCREENSHOT_PLAN.md -->
+![The Elements panel searched for "grid", showing a single Best matches list with Grid first and elements matched on their description below it](/img/besigner/element-search-best-matches.png)
 
 ### What an element says about itself {#element-detail}
 

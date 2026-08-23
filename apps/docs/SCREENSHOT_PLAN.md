@@ -705,7 +705,16 @@ element, a wrapped inline heading). Add the state in the shot's `actions` rather
 than seeding it, so the capture also proves the feature works — a shot that has to
 be hand-staged is a shot that silently rots.
 
-### N1. `static/img/besigner/state-chips-row.png`
+> **A staged shot must clear the unsaved state it leaves behind, and there are TWO
+> halves of it.** The besigner publishes unsaved edits to the co-editing mirror in
+> RTDB *and* writes a private crash-recovery draft to `localStorage`; the next
+> editor load restores from either. Four of these five carry `stagesDocument: true`,
+> which drops both before the page opens. Without it the shots photograph each
+> other — `inline-text-editing.png` first came out 32px low, wearing the margin the
+> box-styler shot had just set, and the double-click landed on the Stack instead of
+> the heading. The failure looks like a mis-measured `clip`, not like contamination.
+
+### N1. `static/img/besigner/state-chips-row.png` — ✅ CAPTURED (AGL-2486)
 
 - **Docs page:** `building-sites/besigner/responsive-styling.md` → `#interaction-states`
 - **Capture:** besigner → select a **Button** → **Styles** panel. The breakpoint chip
@@ -719,8 +728,11 @@ be hand-staged is a shot that silently rots.
   chip shows the **•** that marks a state with styles. All-empty chips do not show
   what the dot means, and the dot is the only way to tell at a glance where styling
   already exists.
+- **As captured:** the seeded `Order now` button, with the shot itself giving
+  **Focus** a slice and then **Hover** one — so `Hover • ⊗` and `Focus •` are both
+  in frame and the dot and the clear are told apart.
 
-### N2. `static/img/besigner/box-styler-diagram.png`
+### N2. `static/img/besigner/box-styler-diagram.png` — ✅ CAPTURED (AGL-2486)
 
 - **Docs page:** `building-sites/besigner/responsive-styling.md` → `#box-stylers`
 - **Capture:** besigner → select an element with **padding and margin already set**
@@ -735,8 +747,14 @@ be hand-staged is a shot that silently rots.
   renders too — the figure has no mode branch and is meant to re-resolve on the class
   swap, so a dark capture is the cheapest proof that still holds. Sides with values
   must show the resolved amount (`80px`), not the step number.
+- **As captured:** the seeded hero **Stack** (`py: 8`, so padding reads back `64px`),
+  with the shot adding a `32px` top margin so the outer ring carries a value too, and
+  landing on the padding-top side. Dark scheme checked under
+  `colorScheme: 'dark'` — the regions, labels and the selected tint all re-resolve,
+  so no mode branch is needed. Note the artboard's own scheme toggle is *not* this:
+  it repaints the canvas, not the panel.
 
-### N3. `static/img/besigner/inline-text-editing.png`
+### N3. `static/img/besigner/inline-text-editing.png` — ✅ CAPTURED (AGL-2486)
 
 - **Docs page:** `building-sites/besigner/text-editing.md` → `#edit-inline`
 - **Capture:** double-click a **Typography** heading on the canvas so the in-place
@@ -747,7 +765,7 @@ be hand-staged is a shot that silently rots.
 - **Alt text:** A heading being edited directly on the canvas, with a small floating
   toolbar above it and no selection outline around it.
 
-### N4. `static/img/besigner/text-field-read-only.png`
+### N4. `static/img/besigner/text-field-read-only.png` — ✅ CAPTURED (AGL-2486)
 
 - **Docs page:** `building-sites/besigner/text-editing.md` → `#text-field-read-only`
 - **Capture:** on a Typography element, bold a word in place first so it carries
@@ -758,19 +776,36 @@ be hand-staged is a shot that silently rots.
   this shot and must be legible.
 - **Alt text:** The Attributes panel showing a read-only Text field explaining that
   the text is formatted, with a Remove formatting button above it.
-- **Annotate:** call out the **Remove formatting** button — it is the affordance the
-  section is about, and it is the smallest thing in frame.
+- **Annotate:** ~~call out the **Remove formatting** button~~ — **not done, and the
+  reason is worth keeping.** Cropped to the button, the field and the helper line,
+  the button is the only coloured thing in frame and needs no pointing at; and the
+  outline the harness draws sits 3px proud of the element, which put it straight
+  through the field's `Text` legend a few pixels below. Annotate what a reader would
+  otherwise hunt for, not what the crop already isolates.
+- **Found while capturing:** the row holding this button carries `mb: -1`, sized for
+  a row with only the help icon in it. A full-height Button in the same row drove its
+  label into the outlined field's notch and overprinted the `Text` legend. Fixed in
+  `element-props-form.component.tsx` before the shot was taken — a docs image of a
+  broken control is a bug report nobody filed.
 
-### N5. `static/img/besigner/element-search-best-matches.png`
+### N5. `static/img/besigner/element-search-best-matches.png` — ✅ CAPTURED (AGL-2486)
 
 - **Docs page:** `building-sites/besigner/element-catalog.md` → `#element-search`
 - **Capture:** the **Elements** panel → type `space` into **Search elements**.
 - **Frame:** the search field and the flattened **Best matches** list beneath it.
-- **Alt text:** The Elements panel searched for "space", showing a single Best matches
-  list instead of the usual categories.
-- **Note:** `space` is chosen deliberately — it matches Stack on its **description**,
+- **Alt text:** The Elements panel searched for "grid", showing a single Best matches
+  list with Grid first and elements matched on their description below it.
+- **Note:** `space` was chosen deliberately — it matches Stack on its **description**,
   not its name, which is the behaviour the section documents. A query that matches a
   title would illustrate nothing the reader could not already assume.
+- **Captured as `grid` instead, measured rather than assumed.** There is no element
+  *named* `Stack` in the picker — the presets are `Stack Horizontal` and `Stack
+  Vertical` — and `space` ranks them **38th and 42nd**, behind FAQ, Card, Hero,
+  Image and Paper. The image would have sat under a sentence saying `space` finds
+  Stack while showing that it does not. `grid` shows **both** documented rules in one
+  frame: `Grid`, `Grid Cell`, `Feature Grid`, `Product grid` by name, then `Shop
+  catalog` and `Box` on their descriptions. The prose's `space` example is not wrong,
+  only unillustratable; leave it, or reword it against the ranking as it measures.
 - **Do NOT capture the element detail view yet.** Its placement changed twice during
   the August 23 release and is the least settled surface in the editor; a capture now
   would be wrong within the hour. The prose deliberately describes what the detail
