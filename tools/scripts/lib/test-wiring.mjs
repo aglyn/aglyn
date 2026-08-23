@@ -74,11 +74,6 @@ export const UNTESTED_PROJECTS = [
     why: 'Pages-router JSON/cookie/middleware helpers. Its only spec (csrf-app.spec.ts) was deleted by ecc2a7d1d (AGL-910) and never replaced.',
   },
   {
-    project: 'shared-util-dom',
-    dir: 'libs/shared/util/dom',
-    why: 'Browser DOM helpers. Has never had a spec file in its history.',
-  },
-  {
     project: 'shared-ui-next',
     dir: 'libs/shared/ui/next',
     why: 'Next-specific UI wrappers, imported by 69 files. Has never had a spec file in its history.',
