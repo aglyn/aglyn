@@ -92,11 +92,6 @@ export interface MemberAvatarProps extends Omit<AvatarProps, 'src' | 'alt'> {
    * prop did not exist.
    */
   name?: string | null
-  /**
-   * How the identity ring is drawn, in the SESSION's colour either way.
-   * `dashed` marks one of your own sessions; solid is everyone else.
-   */
-  ringStyle?: 'solid' | 'dashed'
   /** Rendered pixel size. */
   size?: number
 }
@@ -154,7 +149,6 @@ export function MemberAvatar(props: MemberAvatarProps) {
     name,
     colour,
     colourSeed,
-    ringStyle = 'solid',
     size = 32,
     sx,
     ...rest
@@ -222,16 +216,17 @@ export function MemberAvatar(props: MemberAvatarProps) {
               // because it bought nothing and contradicted the tested
               // decision this condition encodes.
               //
-              // `ringStyle` is a FORM difference in the session's own colour
-              // (AGL-2486).
-              // Presence used to mark your own sessions with a dashed ring in
-              // the warning colour, which Zach read — correctly — as a second
-              // visual language for something the colour already said: "this
-              // dashed orange border should probably be the user color like
-              // the others". The monitor badge in the corner is what actually
-              // says "this one is me"; the ring now only ever says "this is
-              // the colour of my cursor".
-              outline: `2px ${ringStyle}`,
+              // ONE ring style, one meaning (AGL-2486). The ring says "this
+              // is the colour of my cursor" and nothing else.
+              //
+              // It went through two wrong answers first: a dashed ring in the
+              // WARNING colour, then a dashed ring in the session's own
+              // colour. Zach objected three times and was right each time —
+              // dashing was a second visual language for "this one is me",
+              // which the monitor badge in the corner already carries by
+              // itself. Two indicators for one fact is how a chip ends up
+              // looking unlike its neighbours for no reason a reader can name.
+              outline: '2px solid',
               outlineColor: colour,
               // Flush with the circle, so the chips can overlap without the
               // ring being clipped by its neighbour (AGL-2486).
