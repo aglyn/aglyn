@@ -340,6 +340,73 @@ function colourIndexFor(key: string): number {
   return AVATAR_COLOURS.indexOf(avatarColourFor(key))
 }
 
+/**
+ * Is the pointer ACTUALLY over the canvas, or is something drawn on top of it?
+ * (AGL-2486)
+ *
+ * ## The bug
+ *
+ * Zach: "even though the canvas does not have focus because of the
+ * drawer/dialog for aglyn assist the presence does still report cursor". A
+ * session typing into the Assist panel kept broadcasting a canvas position, so
+ * a colleague saw a cursor implying attention on the document while the person
+ * was somewhere else entirely.
+ *
+ * The old test was purely GEOMETRIC — normalise the pointer against the canvas
+ * box and publish if it lands in 0..1. A panel drawn over the canvas does not
+ * move the canvas, so the box still contains the pointer and the position
+ * still looks valid. Measured with Assist open: a point over the visibly
+ * exposed canvas hit-tests to `MuiBackdrop-root`, while the canvas's bounding
+ * box still covers it. The box cannot see what is in front of it; only a hit
+ * test can.
+ *
+ * ## Why a hit test and NOT focus
+ *
+ * "The canvas does not have focus" is how it looks, but focus is the wrong
+ * signal to decide on. Someone reading the Attributes panel with the mouse
+ * resting on the canvas has not stopped pointing at the canvas, and a modal
+ * can cover the canvas while focus sits nowhere in particular. The question a
+ * colleague actually needs answered is "is this position meaningful", and that
+ * is decided by what is UNDER the pointer, not by what holds focus.
+ *
+ * This also makes the rule general rather than a special case for Assist: the
+ * Attributes and Styles panels, the JSON editor, every dialog, every popover
+ * and every modal backdrop are all just "something else is topmost here".
+ *
+ * ## Why the containment test is not the obvious one
+ *
+ * The besigner canvas renders into a CLOSED shadow root, so
+ * `elementFromPoint` retargets to the shadow HOST — measured, the host is
+ * `AglynViewportShadowDom-root`, and BOTH `canvasRoot.contains(top)` and
+ * `top.contains(canvasRoot)` are false because `contains` does not cross a
+ * shadow boundary. A naive `contains` check therefore answers "not on the
+ * canvas" always, and would have silently killed every cursor in the product.
+ * Hence the walk up the host chain.
+ *
+ * @param root - the canvas root element from the besigner's registry
+ * @param topmost - what `document.elementFromPoint` returned for the pointer
+ */
+export function pointerIsOnCanvas(
+  root: Element | null | undefined,
+  topmost: Element | null | undefined,
+): boolean {
+  if (!root || !topmost) return false
+  // The canvas is not inside a shadow root, or the hit landed on something
+  // genuinely inside it.
+  if (root.contains(topmost)) return true
+  // It is: `elementFromPoint` retargets to the outermost host, so the pointer
+  // is on the canvas when the topmost element IS one of the hosts the canvas
+  // sits inside. Walked rather than read once, because nesting is allowed.
+  let node: Node | null = root.getRootNode()
+  for (let depth = 0; depth < 8 && node; depth += 1) {
+    const host = (node as ShadowRoot).host
+    if (!host) return false
+    if (host === topmost) return true
+    node = host.getRootNode()
+  }
+  return false
+}
+
 /** Secondary Firebase app holding the presence-scoped session. */
 const PRESENCE_APP_NAME = 'AGLYN_PRESENCE'
 
@@ -1339,6 +1406,9 @@ export function usePresence(options: {
     let last = 0
     let lastX = -1
     let lastY = -1
+    /** The last VIEWPORT position, so a re-check can hit-test it again. */
+    let lastClientX = -1
+    let lastClientY = -1
     const clearCursor = () => {
       const meRef = meRefHolder.current
       if (!meRef) return
@@ -1372,6 +1442,24 @@ export function usePresence(options: {
         clearCursor()
         return
       }
+      lastClientX = event.clientX
+      lastClientY = event.clientY
+      // INSIDE the box is not the same as ON the canvas. A drawer, dialog,
+      // modal backdrop or side panel drawn over the canvas leaves the box
+      // exactly where it was, so the geometry still says "valid position"
+      // while the pointer is demonstrably somewhere else. See
+      // `pointerIsOnCanvas` — and note it withdraws the cursor rather than
+      // freezing it, because a cursor parked where somebody used to be
+      // reading is the same lie told more slowly.
+      if (
+        !pointerIsOnCanvas(
+          root,
+          document.elementFromPoint(event.clientX, event.clientY),
+        )
+      ) {
+        clearCursor()
+        return
+      }
       // A pointer that has not really moved costs a write for a position
       // nobody's screen would change by. This is the guard that matters
       // most: a hand resting on the mouse generates a steady trickle of
@@ -1395,13 +1483,38 @@ export function usePresence(options: {
         }).catch(() => undefined)
       })
     }
+    /**
+     * Re-decide without a pointer move.
+     *
+     * A panel that opens while the hand is still generates no `pointermove`,
+     * so the stale cursor would sit on a colleague's screen until the mouse
+     * happened to twitch. Focus moving into the panel is the cheap signal that
+     * something may have changed — used only as a TRIGGER to re-run the hit
+     * test at the last known position, never as the decision itself, which
+     * stays "what is under the pointer".
+     */
+    const recheck = () => {
+      if (lastClientX < 0 && lastClientY < 0) return
+      const root = getCanvasRootRef.current?.()
+      if (!root) return
+      if (
+        !pointerIsOnCanvas(
+          root,
+          document.elementFromPoint(lastClientX, lastClientY),
+        )
+      ) {
+        clearCursor()
+      }
+    }
     window.addEventListener('pointermove', onMove, { passive: true })
     window.addEventListener('blur', clearCursor)
     document.addEventListener('visibilitychange', clearCursor)
+    document.addEventListener('focusin', recheck)
     return () => {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('blur', clearCursor)
       document.removeEventListener('visibilitychange', clearCursor)
+      document.removeEventListener('focusin', recheck)
       if (frame) cancelAnimationFrame(frame)
     }
   }, [broadcastCursor, session])
