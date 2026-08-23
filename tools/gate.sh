@@ -27,7 +27,7 @@
 #                        spec-tsconfig failure is exactly what a narrowed one
 #                        would have missed
 #     - docs:typecheck   a standalone package, excluded from the sweep by name
-#     - the REPO-WIDE GUARD SWEEPS, in full (run-guards.mjs REPO_WIDE) — the
+#     - EVERY GUARD, including the repo-wide sweeps (run-guards.mjs) — the
 #                        NUL-byte, brand-literal, tax-identifier and generated-
 #                        artifact checks. `nx affected` reasons over the
 #                        project graph and these do not live in it. Three of
@@ -37,7 +37,13 @@
 #
 #   narrowed to `nx affected`:
 #     - lint, test       the project graph is exactly the right scope for these
-#     - the ~34 project-shaped guards
+#
+#   NOT narrowed, though the first design said it would be: the ~34
+#   project-shaped guards. Narrowing them was the plan until the guards phase
+#   went from 1m09s to ~15s by running concurrently. That left a few seconds
+#   on the table against the cost of getting a guard-to-project mapping wrong,
+#   which is a guard silently sitting out the one commit it exists to catch.
+#   All of them run on both paths.
 #
 #   narrowed, and this is the one to read twice:
 #     - PRODUCTION BUILDS run only for the apps `nx affected` marks. A change
@@ -618,7 +624,7 @@ if [ "$AFFECTED" = 1 ]; then
   log "affected    : $(echo "$AFFECTED_PROJECTS" | wc -w | tr -d ' ') project(s)${AFFECTED_NOTE:+ — $AFFECTED_NOTE}"
   log "  $AFFECTED_PROJECTS"
   log "affected apps (production builds): ${AFFECTED_APPS:-NONE}"
-  log "NOT narrowed: typecheck, docs:typecheck, all 54 guards"
+  log "NOT narrowed: typecheck, docs:typecheck, and EVERY guard ($(node tools/scripts/run-guards.mjs --list | wc -l | tr -d ' '))"
   log ""
 fi
 
