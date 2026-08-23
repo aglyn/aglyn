@@ -213,7 +213,24 @@ export const footerNavigation = [
 export const tailNavigation = [
   {
     children: 'Docs',
-    href: buildDocsUrl('/'),
+    /*
+     * A GETTER, not a call at module scope (AGL-2486).
+     *
+     * `buildDocsUrl` lives in `docs-links`, which a dozen specs partially
+     * `jest.mock` for `docsHelp` alone. Calling it while this module
+     * evaluates therefore threw `buildDocsUrl is not a function` in every one
+     * of them — four suites failed to run at all, and none of them is about
+     * the footer. Deferring to first read means only a caller that actually
+     * renders the footer needs the real module.
+     *
+     * Resolved through `buildDocsUrl` rather than re-reading
+     * `NEXT_PUBLIC_DOCS_ORIGIN` here: `docs-links` documents at length what
+     * happened when one docs origin acquired two env names, and a second
+     * reader in this file is how the next one starts.
+     */
+    get href() {
+      return buildDocsUrl('/')
+    },
     target: '_blank',
     rel: 'noopener',
   },
