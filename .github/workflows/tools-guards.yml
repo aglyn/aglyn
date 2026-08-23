@@ -436,6 +436,13 @@ jobs:
 
       - run: npm run check:hardcoded-colours
 
+      # AGL-2486. `compiler.reactRemoveProperties` deletes JSX props from the
+      # BROWSER build only, and jest's transform keeps them — so a prop being
+      # erased in production still renders under test and its spec passes.
+      # `displayName` sat in that list and silently blanked a real prop at
+      # eight call sites for weeks. This is the only place that list is read.
+      - run: npm run test:react-remove-properties
+
       # Brand-literal ratchet (AGL-2170), the same shape and the same sweep
       # roots as the colour one above. AGL-2153 made the platform brand
       # configuration so a self-host operator can rename the product without

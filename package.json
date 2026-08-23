@@ -73,6 +73,7 @@
     "test:retired-colours": "node --test tools/scripts/lib/retired-colours.test.mjs",
     "test:brand-literals": "node --test tools/scripts/lib/brand-literals.test.mjs",
     "test:hardcoded-colours": "node --test tools/scripts/lib/hardcoded-colours.test.mjs",
+    "test:react-remove-properties": "node --test tools/scripts/lib/react-remove-properties.test.mjs",
     "test:jsx-barrel": "node --test tools/scripts/lib/jsx-barrel.test.mjs",
     "test:disk-space": "node --test tools/scripts/lib/disk-space.test.mjs",
     "test:erase-cli": "node --test tools/scripts/lib/erase-org-cli.test.mjs",
