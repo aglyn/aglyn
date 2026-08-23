@@ -219,10 +219,16 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
     }
   }, [firestore, listingIdsKey])
 
-  const enabled = useMemo(
-    () => new Set(resolveEnabledPlugins((org as any)?.enabledPlugins)),
-    [org],
-  )
+  // The ORG DOCUMENT, not `org.enabledPlugins` (AGL-2486). This passed the
+  // array, and an array has no `enabledPlugins` property — so the resolver
+  // saw `undefined` and returned DEFAULT_ENABLED_PLUGINS every time. The
+  // page reported every plugin as enabled whatever the workspace had stored,
+  // and `toggle` below read-modify-WRITES off this value into an API that
+  // REPLACES the array, so flipping any one plugin silently switched every
+  // plugin this workspace had turned off back on, for every site in it. The
+  // `as any` is what kept the compiler from saying so, which is why it is
+  // gone rather than merely corrected.
+  const enabled = useMemo(() => new Set(resolveEnabledPlugins(org)), [org])
 
   const saveEnabledPlugins = async (pluginIds: string[]) => {
     const idToken = await (
@@ -429,6 +435,13 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
                   plugin.description ?? '',
                   <Switch
                     size="small"
+                    // The row is a link and the label is rendered as its own
+                    // text, so without this the control has no accessible
+                    // name of its own — nothing a screen reader (or a test)
+                    // can use to say WHICH plugin a switch belongs to.
+                    slotProps={{
+                      input: { 'aria-label': `Toggle ${plugin.label}` },
+                    }}
                     checked={plugin.alwaysOn || enabled.has(plugin.id)}
                     // Unready means these switch positions are the defaults,
                     // not this workspace's (AGL-1422) — so they are not
