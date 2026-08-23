@@ -63,16 +63,6 @@ on:
         type: boolean
         default: true
 
-# A constant group per job, NOT cancel-in-progress. AGL-2378's finding applies:
-# a group holds one running plus at most one pending run, so a third arrival
-# cancels the pending one. That is the CORRECT behaviour for a timer — a
-# superseded scheduled run covers a range the next run also covers, so nothing
-# is lost by dropping it, unlike a push run where each commit needs its own
-# verdict. Stated so nobody later reads the cancelled pending runs as the
-# eviction bug that workflow was fixed for.
-concurrency:
-  group: main-gate-${{ github.workflow }}
-  cancel-in-progress: false
 
 env:
   NX_NO_CLOUD: 'true'
@@ -98,6 +88,22 @@ jobs:
     name: fast (typecheck + guards)
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # PER-JOB concurrency, not per-workflow, and the difference is the whole
+    # 15-minute cadence. A workflow-level group put `fast` and `full` in ONE
+    # group, so every quarter-hourly fast run queued behind the HOURLY full
+    # sweep — observed live: run 32626327444's fast finished at 07:47 while its
+    # full ran on, and the next three fast runs sat pending behind it. The job
+    # sized to catch a break within 15 minutes was silently throttled to
+    # hourly, which is the one property it exists to provide.
+    #
+    # NOT cancel-in-progress. AGL-2378's finding still applies: a group holds
+    # one running plus at most one pending run, so a third arrival drops the
+    # pending one. That is correct for a timer — a superseded scheduled run
+    # covers a range the next run also covers — and wrong for a push, where
+    # each commit needs its own verdict.
+    concurrency:
+      group: main-gate-fast
+      cancel-in-progress: false
     outputs:
       # Whether this job actually ran its checks. A job that skipped every step
       # still reports `success`, so the report job cannot infer this from the
@@ -174,6 +180,10 @@ jobs:
   full:
     name: full (tests + production builds)
     runs-on: ubuntu-latest
+    # Its own group, so a long sweep never blocks the fast cadence above.
+    concurrency:
+      group: main-gate-full
+      cancel-in-progress: false
     # The four things a promotion gate exists to prove, so it inherits the
     # promotion gate's runtime. nx-ci.yml's 60 was measured against `nx
     # affected`; this is run-many over all 40 projects plus three production
