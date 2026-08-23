@@ -18,7 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { render } from '@testing-library/react'
 import { renderToString } from 'react-dom/server'
-import Image, { schema } from './image'
+import Image, { firstImageNodeId, schema } from './image'
 
 describe('Image element (AGL-579 SSR hardening)', () => {
   it('is flagged self-closing so renderers never pass it children', () => {
@@ -186,5 +186,158 @@ describe('Image node styles (AGL-1240)', () => {
     const style = getComputedStyle(container.querySelector('img')!)
     expect(style.display).toBe('block')
     expect(style.width).toBe('100%')
+  })
+})
+
+/**
+ * A screen tree the way every render surface holds one: a flat node map
+ * filled into the shared canvas singleton. Same helper shape as
+ * `markdown.spec.tsx`, which resolves its document from the tree the same way.
+ */
+const fillCanvas = (
+  nodes: Array<{ $id: string; componentId?: string; props?: any }>,
+) => {
+  Aglyn.canvas.setNodes({
+    [Aglyn.NODE_ROOT_ID]: {
+      $id: Aglyn.NODE_ROOT_ID,
+      type: Aglyn.NodeType.NODE,
+      componentId: 'box',
+      nodes: nodes.map((node) => node.$id),
+    },
+    ...Object.fromEntries(
+      nodes.map((node) => [
+        node.$id,
+        {
+          $id: node.$id,
+          type: Aglyn.NodeType.NODE,
+          parentId: Aglyn.NODE_ROOT_ID,
+          componentId: node.componentId ?? 'image',
+          props: node.props ?? {},
+        },
+      ]),
+    ),
+  } as any)
+}
+
+/** Render an Image as the renderer does: under its node's identity. */
+const renderAsNode = (nodeId: string, element: React.ReactElement) =>
+  render(
+    <Aglyn.NodeIdentityContext.Provider value={nodeId}>
+      {element}
+    </Aglyn.NodeIdentityContext.Provider>,
+  )
+
+describe('Image loading priority (AGL-2486)', () => {
+  afterEach(() => Aglyn.canvas.clearNodes())
+
+  it('finds the first image in DOCUMENT order, not map order', () => {
+    fillCanvas([
+      { $id: 'text1', componentId: 'muiTypography' },
+      { $id: 'hero', props: { src: 'https://example.com/hero.png' } },
+      { $id: 'footer', props: { src: 'https://example.com/footer.png' } },
+    ])
+    expect(firstImageNodeId(Aglyn.canvas.rootNode as any)).toBe('hero')
+  })
+
+  it('skips an image with no src — it renders no <img> to prioritise', () => {
+    fillCanvas([
+      { $id: 'placeholder', props: {} },
+      { $id: 'real', props: { src: 'https://example.com/real.png' } },
+    ])
+    expect(firstImageNodeId(Aglyn.canvas.rootNode as any)).toBe('real')
+  })
+
+  it('returns undefined for a page with no images at all', () => {
+    fillCanvas([{ $id: 'text1', componentId: 'muiTypography' }])
+    expect(firstImageNodeId(Aglyn.canvas.rootNode as any)).toBeUndefined()
+  })
+
+  it('loads the first image eagerly at high priority', () => {
+    fillCanvas([
+      { $id: 'hero', props: { src: 'https://example.com/hero.png' } },
+      { $id: 'below', props: { src: 'https://example.com/below.png' } },
+    ])
+    const { container } = renderAsNode(
+      'hero',
+      <Image src="https://example.com/hero.png" alt="hero" />,
+    )
+    const img = container.querySelector('img')!
+    expect(img.getAttribute('loading')).toBe('eager')
+    expect(img.getAttribute('fetchpriority')).toBe('high')
+    // The eager image keeps the browser default so it can decode in time to
+    // paint; forcing async here would be the same mistake in a new place.
+    expect(img.getAttribute('decoding')).toBeNull()
+  })
+
+  it('defers every LATER image at low priority', () => {
+    // The bug this exists for: with everything lazy and nothing ranked, an
+    // image four sections down could be fetched before the one on screen.
+    fillCanvas([
+      { $id: 'hero', props: { src: 'https://example.com/hero.png' } },
+      { $id: 'below', props: { src: 'https://example.com/below.png' } },
+    ])
+    const { container } = renderAsNode(
+      'below',
+      <Image src="https://example.com/below.png" alt="below" />,
+    )
+    const img = container.querySelector('img')!
+    expect(img.getAttribute('loading')).toBe('lazy')
+    expect(img.getAttribute('fetchpriority')).toBe('low')
+    expect(img.getAttribute('decoding')).toBe('async')
+  })
+
+  it('lets an explicit author choice win in BOTH directions', () => {
+    fillCanvas([
+      { $id: 'hero', props: { src: 'https://example.com/hero.png' } },
+      { $id: 'below', props: { src: 'https://example.com/below.png' } },
+    ])
+    // Author deferred the hero deliberately: it stays lazy.
+    const lazyHero = renderAsNode(
+      'hero',
+      <Image src="https://example.com/hero.png" alt="hero" loading="lazy" />,
+    )
+    expect(lazyHero.container.querySelector('img')!.getAttribute('loading')).toBe(
+      'lazy',
+    )
+    // Author marked a later image eager: it stays eager.
+    const eagerBelow = renderAsNode(
+      'below',
+      <Image src="https://example.com/below.png" alt="below" loading="eager" />,
+    )
+    const img = eagerBelow.container.querySelector('img')!
+    expect(img.getAttribute('loading')).toBe('eager')
+    expect(img.getAttribute('fetchpriority')).toBe('high')
+  })
+
+  it('stays lazy outside the renderer, where there is no node identity', () => {
+    // A component mounted directly (a test, a console surface) has an empty
+    // node id. Guessing "eager" there would make every isolated preview
+    // claim to be somebody's LCP element.
+    fillCanvas([{ $id: 'hero', props: { src: 'https://example.com/hero.png' } }])
+    const { container } = render(<Image src="https://example.com/hero.png" alt="x" />)
+    expect(container.querySelector('img')!.getAttribute('loading')).toBe('lazy')
+  })
+})
+
+describe('Image sizes (AGL-2486)', () => {
+  const CDN = '/api/media/cdn/org123/asset456'
+
+  it('describes a pinned pixel slot instead of claiming the full viewport', () => {
+    const { container } = render(<Image src={CDN} alt="thumb" width="320px" />)
+    expect(container.querySelector('img')!.getAttribute('sizes')).toBe('320px')
+  })
+
+  it('keeps 100vw for a width it cannot read as a fixed slot', () => {
+    for (const width of [undefined, '100%', '50vw', 'calc(100% - 2rem)']) {
+      const { container } = render(<Image src={CDN} alt="fluid" width={width} />)
+      expect(container.querySelector('img')!.getAttribute('sizes')).toBe('100vw')
+    }
+  })
+
+  it('sets no sizes at all for a non-CDN url, which has no variants', () => {
+    const { container } = render(
+      <Image src="https://example.com/a.png" alt="ext" width="320px" />,
+    )
+    expect(container.querySelector('img')!.getAttribute('sizes')).toBeNull()
   })
 })
