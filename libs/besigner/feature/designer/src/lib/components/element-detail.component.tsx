@@ -51,6 +51,12 @@ export interface ElementDetailViewProps {
    */
   dense?: boolean
   /**
+   * Height the preview may take. Both surfaces now float or pane the detail,
+   * so the preview is no longer squeezed into whatever the text leaves — it
+   * gets the room, because it is the part that needs it.
+   */
+  previewHeight?: number
+  /**
    * The picker item itself, when the surface wants a rendered preview above
    * the text. Only ever the one selected or hovered element — the detail
    * region is single-tenant by construction, so the preview is too.
@@ -72,7 +78,7 @@ export interface ElementDetailViewProps {
  * go stale and third-party elements get it for free.
  */
 export function ElementDetailView(props: ElementDetailViewProps) {
-  const { detail, dense, node } = props
+  const { detail, dense, node, previewHeight } = props
   if (!detail) return null
 
   return (
@@ -82,7 +88,13 @@ export function ElementDetailView(props: ElementDetailViewProps) {
       aria-live="polite"
       data-testid="element-detail"
     >
-      {node ? <ElementPreview node={node} height={dense ? 116 : 168} /> : null}
+      {node ? (
+        <ElementPreview
+          node={node}
+          height={previewHeight ?? (dense ? 116 : 168)}
+          requiredParents={detail.requiredParents}
+        />
+      ) : null}
 
       <Stack
         direction="row"

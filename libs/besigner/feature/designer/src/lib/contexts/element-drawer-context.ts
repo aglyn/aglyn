@@ -37,6 +37,15 @@ export type ElementDrawerFn = (
 
 export interface ElementDrawerContextType {
   elementDrawer: ElementDrawerFn
+  /**
+   * Whether the Choose-element dialog is currently open (AGL-2486).
+   *
+   * Published so surfaces BELOW the provider can stand down while it is up —
+   * the Elements panel's floating detail has no business surviving a modal
+   * opening over it, and sniffing for a backdrop in the DOM would be a guess
+   * where the provider already knows the answer.
+   */
+  open?: boolean
 }
 
 export type UseElementDrawerType = () => ElementDrawerContextType

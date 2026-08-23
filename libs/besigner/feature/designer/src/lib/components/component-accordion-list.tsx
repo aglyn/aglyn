@@ -18,17 +18,18 @@
 import { REUSABLE_COMPONENT_CATEGORY } from '@aglyn/aglyn'
 import { DragType } from '@aglyn/besigner'
 import { mergeRefs } from '@aglyn/shared-ui-jsx'
-import { DragOverlay } from '@dnd-kit/core'
-import { Box, Grid, Stack, Typography } from '@mui/material'
+import { DragOverlay, useDndMonitor } from '@dnd-kit/core'
+import { Box, Grid, Stack } from '@mui/material'
 import { Observer, observer } from 'mobx-react-lite'
-import { useCallback, useState } from 'react'
-import { describeElement } from '../utils/describe-element'
+import { useEffect } from 'react'
+import { useElementDrawerContext } from '../contexts/element-drawer-context'
+import useDetailHoverIntent from '../hooks/use-detail-hover-intent'
 import usePickerFilter from '../hooks/use-picker-filter'
 import useVisibleComponentCategories from '../hooks/use-visible-component-categories'
 import { besignerDocsUrl } from '../utils/docs-help'
 import { AccordionListComponent } from './accordion-list.component'
 import Draggable from './dnd/draggable'
-import ElementDetailView from './element-detail.component'
+import ElementDetailOverlay from './element-detail-overlay.component'
 import EmptyResults from './empty-results'
 import NodeCard, { type NodeCardItemData } from './node-card'
 import PickerSearchField from './picker-search-field'
@@ -40,14 +41,6 @@ export type ComponentGridGroupItemData = {
 }
 
 NodeCard.displayName = 'NodeCard'
-
-/**
- * Reserved height of the docked detail band, in pixels.
- *
- * Fixed rather than content-sized: the band sits below a scrolling grid, so
- * anything that changes its height moves every card above it.
- */
-const DETAIL_REGION_HEIGHT = 232
 
 interface ComponentAccordionListProp {}
 
@@ -62,18 +55,28 @@ export const ComponentAccordionList = observer(
     // of them having none.
     const { filter, items, handleFilterChange } = usePickerFilter(allItems)
 
-    // Hover previews, click PINS. Both feed one docked region below the
-    // grid — not a floating tip over it. A tip would have to avoid
-    // swallowing the drag it sits on top of, avoid covering the very card
-    // being pointed at, and make sure only one is ever open; a region
-    // outside the grid cannot do any of those things in the first place.
-    const [hovered, setHovered] = useState<NodeCardItemData>(null)
-    const [pinned, setPinned] = useState<NodeCardItemData>(null)
-    const detailFor = pinned ?? hovered
+    // Hover previews, click PINS, and the pin outranks the pointer — which
+    // is what makes the floating panel clickable at all. See
+    // `useDetailHoverIntent` for why each half is load-bearing.
+    const detail = useDetailHoverIntent<NodeCardItemData>()
 
-    const handleCardClick = useCallback((node: NodeCardItemData) => {
-      setPinned((prev) => (prev && prev.$id === node?.$id ? null : node))
-    }, [])
+    // The panel floats over the CANVAS, which is exactly where a dragged
+    // element is going. It leaves the drop path on drag START — waiting for
+    // the drop would leave it sitting under the pointer for the whole
+    // gesture — and stays suspended until the drag ends so the cards the
+    // pointer crosses on the way out cannot re-open it.
+    useDndMonitor({
+      onDragStart: detail.suspend,
+      onDragEnd: detail.resume,
+      onDragCancel: detail.resume,
+    })
+
+    // A modal opening over the panel is a context change, and a pinned
+    // detail has no business outliving it.
+    const drawerOpen = useElementDrawerContext()?.open
+    useEffect(() => {
+      if (drawerOpen) detail.dismiss()
+    }, [drawerOpen, detail])
 
     return (
       <Stack sx={{ height: 1, minHeight: 0 }}>
@@ -100,7 +103,12 @@ export const ComponentAccordionList = observer(
         ) : (
           // The grid scrolls; the detail region below it does not, so the
           // description stays put while you browse.
-          <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+          // Scrolling moves the card the panel is anchored to, so a pinned
+          // panel would end up pointing at whatever slid into its place.
+          <Box
+            sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}
+            onScroll={detail.dismiss}
+          >
             <AccordionListComponent
               // `defaultExpanded` is read once per mount, so the results group
               // would arrive collapsed without a fresh mount when the list flips
@@ -142,13 +150,16 @@ export const ComponentAccordionList = observer(
                           <Grid
                             key={node?.$id ?? index}
                             size={6}
-                            onMouseEnter={() => setHovered(node)}
-                            onMouseLeave={() =>
-                              setHovered((prev) =>
-                                prev?.$id === node?.$id ? null : prev,
+                            onMouseEnter={(e) =>
+                              detail.open(node, e.currentTarget as HTMLElement)
+                            }
+                            onMouseLeave={detail.scheduleClose}
+                            onClick={(e) =>
+                              detail.togglePin(
+                                node,
+                                e.currentTarget as HTMLElement,
                               )
                             }
-                            onClick={() => handleCardClick(node)}
                           >
                             <Draggable
                               node={node}
@@ -192,34 +203,14 @@ export const ComponentAccordionList = observer(
             />
           </Box>
         )}
-        {/* ALWAYS mounted, never conditional. Appearing only on hover made
-            the region push the grid up as it opened, which slid the card out
-            from under the pointer, which ended the hover, which closed the
-            region again — a flicker the panel could not settle out of. The
-            band holds its own height whether or not anything is hovered. */}
-        <Box
-          sx={{
-            flex: '0 0 auto',
-            p: 1,
-            borderTop: 1,
-            borderColor: 'divider',
-            backgroundColor: 'surface.main',
-            height: DETAIL_REGION_HEIGHT,
-            overflowY: 'auto',
-          }}
-        >
-          {detailFor ? (
-            <ElementDetailView
-              detail={describeElement(detailFor)}
-              node={detailFor}
-              dense
-            />
-          ) : (
-            <Typography variant="caption" color="textSecondary">
-              {'Point at an element to see what it does.'}
-            </Typography>
-          )}
-        </Box>
+        <ElementDetailOverlay
+          item={detail.active?.item}
+          anchor={detail.active?.anchor ?? null}
+          pinned={detail.isPinned}
+          onPointerEnter={detail.keepOpen}
+          onPointerLeave={detail.scheduleClose}
+          onDismiss={detail.dismiss}
+        />
       </Stack>
     )
   },

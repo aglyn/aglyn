@@ -18,8 +18,15 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { consoleThemeCssVar, ThemeProvider } from '@aglyn/shared-ui-theme'
 import { DndContext } from '@dnd-kit/core'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 
+import { DETAIL_CLOSE_DELAY_MS } from '../hooks/use-detail-hover-intent'
 import ComponentAccordionList from './component-accordion-list'
 import ComponentPicker from './component-picker'
 
@@ -164,31 +171,94 @@ describe('element detail in both picker surfaces (AGL-2486)', () => {
       expect(details().length).toBe(1)
     })
 
-    it('never puts the detail region inside the grid it describes', () => {
+    it('floats clear of the grid rather than covering it', () => {
       renderPanel()
       const card = cardFor('Surfaces Holder')
       fireEvent.mouseEnter(card.parentElement)
       const region = details()[0]
-      // A region that does not CONTAIN the cards cannot cover one or
-      // swallow the click meant for it — the structural version of the
-      // "tooltips blocked clicks" failure.
+      // Portalled out of the panel entirely: it cannot be clipped by the
+      // column's own overflow, cannot push the grid, and — being anchored
+      // right-start — cannot sit on top of the card it describes.
       expect(region.contains(card)).toBe(false)
       expect(card.contains(region)).toBe(false)
+      expect(document.body.contains(region)).toBe(true)
     })
 
-    it('pins on click and unpins on clicking the same card again', () => {
+    it('holds the pinned element while the pointer crosses other cards', async () => {
       renderPanel()
-      const holder = cardFor('Surfaces Holder')
-      fireEvent.click(holder.parentElement)
-      // Pinned: moving the pointer away leaves it up.
-      fireEvent.mouseLeave(holder.parentElement)
+      fireEvent.click(cardFor('Surfaces Holder').parentElement)
+      fireEvent.mouseLeave(cardFor('Surfaces Holder').parentElement)
+
+      // THE load-bearing behaviour. Reaching for "Learn more" means leaving
+      // the card and crossing whatever is between; without the pin winning,
+      // the content swaps under the pointer and nothing in it is clickable.
+      fireEvent.mouseEnter(cardFor('Surfaces Plain').parentElement)
+      fireEvent.mouseEnter(cardFor('Surfaces Only Child').parentElement)
+
+      // Scoped to the panel itself: the name also appears on the card, and
+      // asserting globally would pass on the card alone.
+      expect(details().length).toBe(1)
+      expect(details()[0].textContent).toContain('Surfaces Holder')
+      expect(details()[0].textContent).toContain('Only accepts Surfaces Only Child')
+      expect(details()[0].textContent).not.toContain('Surfaces Plain')
+    })
+
+    it('survives the pointer leaving the card on the way to the panel', async () => {
+      renderPanel()
+      fireEvent.mouseEnter(cardFor('Surfaces Holder').parentElement)
+      // Leaving the card starts a close; arriving in the panel cancels it.
+      fireEvent.mouseLeave(cardFor('Surfaces Holder').parentElement)
+      fireEvent.mouseEnter(details()[0])
+
+      await new Promise((r) => setTimeout(r, DETAIL_CLOSE_DELAY_MS + 60))
+      expect(details().length).toBe(1)
+    })
+
+    it('closes after the delay once the pointer has really gone', async () => {
+      renderPanel()
+      fireEvent.mouseEnter(cardFor('Surfaces Holder').parentElement)
+      expect(details().length).toBe(1)
+
+      fireEvent.mouseLeave(cardFor('Surfaces Holder').parentElement)
+      // Not instant — an instant dismiss is what makes these unusable.
+      expect(details().length).toBe(1)
+
+      await waitFor(() => expect(details().length).toBe(0))
+    })
+
+    it('unpins on clicking the same card again', async () => {
+      renderPanel()
+      fireEvent.click(cardFor('Surfaces Holder').parentElement)
+      fireEvent.mouseLeave(cardFor('Surfaces Holder').parentElement)
       expect(screen.getByText('Only accepts Surfaces Only Child')).toBeTruthy()
 
       fireEvent.click(cardFor('Surfaces Holder').parentElement)
+      // Still pointing at the card, so it stays up as a plain hover...
+      expect(details().length).toBe(1)
+      // ...and now closes on the normal delay rather than being held.
       fireEvent.mouseLeave(cardFor('Surfaces Holder').parentElement)
-      expect(details().length).toBe(0)
+      await waitFor(() => expect(details().length).toBe(0))
+    })
+
+    it('dismisses a pinned panel on Escape', async () => {
+      renderPanel()
+      fireEvent.click(cardFor('Surfaces Holder').parentElement)
+      expect(details().length).toBe(1)
+
+      fireEvent.keyDown(window, { key: 'Escape' })
+      await waitFor(() => expect(details().length).toBe(0))
+    })
+
+    it('leaves the search usable while the detail floats', () => {
+      renderPanel()
+      fireEvent.mouseEnter(cardFor('Surfaces Holder').parentElement)
+      expect(details().length).toBe(1)
+      // The overlay is portalled and anchored into the canvas, so the
+      // panel's own header is neither covered nor unmounted.
+      expect(screen.getByLabelText('search elements')).toBeTruthy()
     })
   })
+
   describe('the rendered preview', () => {
     it('appears in the dialog on selecting, and only for the selection', () => {
       render(

@@ -33,7 +33,6 @@ import {
   Grid,
   IconButton,
   Slide,
-  Stack,
   Toolbar,
   Typography,
 } from '@mui/material'
@@ -113,7 +112,7 @@ export const ComponentPicker = observer(
         ref={forwardRef}
         onClose={handleClose}
         open={open}
-        maxWidth="sm"
+        maxWidth="md"
         slotProps={{ paper: { sx: { width: '100%' } } }}
         slots={{ transition: Transition }}
         {...rest}
@@ -174,91 +173,124 @@ export const ComponentPicker = observer(
             </Toolbar>
           </Collapse>
         </AppBar>
-        <DialogContent dividers sx={{ p: 0 }}>
-          {!items?.length ? (
-            <EmptyResults sx={{ minHeight: '40vh', height: 1 }} />
-          ) : (
-            <AccordionListComponent
-              // `defaultExpanded` is read once per mount, so the results
-              // group would arrive collapsed without a fresh mount when the
-              // list flips between grouped and flat. Keyed on the SHAPE,
-              // not the filter text, so typing does not remount per press.
-              key={filter ? 'results' : 'categories'}
-              items={items}
-              defaultExpanded={items.map((i) => i.$id)}
-              getItemId={(item) => item?.$id}
-              onRenderSummary={({ item }) => (
-                <Observer>{() => <>{item?.label}</>}</Observer>
+        {/* Grid left, detail right (AGL-2486). The detail used to be a strip
+            under the grid, which gave a preview and five facts about a
+            quarter of the height they need while the modal's width sat
+            unused. A full-height pane is also the first place the rendered
+            preview has room to be worth drawing. */}
+        <DialogContent
+          dividers
+          sx={{
+            p: 0,
+            display: 'flex',
+            alignItems: 'stretch',
+            minHeight: '60vh',
+          }}
+        >
+          <Box sx={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
+            {!items?.length ? (
+              <EmptyResults sx={{ minHeight: '40vh', height: 1 }} />
+            ) : (
+              <AccordionListComponent
+                // `defaultExpanded` is read once per mount, so the results
+                // group would arrive collapsed without a fresh mount when the
+                // list flips between grouped and flat. Keyed on the SHAPE,
+                // not the filter text, so typing does not remount per press.
+                key={filter ? 'results' : 'categories'}
+                items={items}
+                defaultExpanded={items.map((i) => i.$id)}
+                getItemId={(item) => item?.$id}
+                onRenderSummary={({ item }) => (
+                  <Observer>{() => <>{item?.label}</>}</Observer>
+                )}
+                AccordionDetailsProps={{
+                  sx: { overflowX: 'hidden' },
+                }}
+                onRenderDetail={({ item }) => (
+                  <Observer>
+                    {() => (
+                      <Box>
+                        <Grid
+                          spacing={3}
+                          container
+                          sx={{ overflowX: 'hidden' }}
+                        >
+                          {item?.items?.map(
+                            (
+                              node: (typeof allItems)[number]['items'][number],
+                              index: number,
+                            ) => (
+                              <Observer key={node?.$id ?? index}>
+                                {() => (
+                                  <Grid
+                                    size={{
+                                      xs: 4,
+                                      sm: 3,
+                                    }}
+                                  >
+                                    <NodeCard
+                                      sx={[
+                                        { cursor: 'pointer' },
+                                        selected?.$id === node?.$id
+                                          ? { borderColor: 'primary.main' }
+                                          : null,
+                                      ]}
+                                      node={node as any}
+                                      onClick={(e) => handleItemClick(e, node)}
+                                    />
+                                  </Grid>
+                                )}
+                              </Observer>
+                            ),
+                          )}
+                        </Grid>
+                      </Box>
+                    )}
+                  </Observer>
+                )}
+              />
+            )}
+          </Box>
+          <Box
+            sx={{
+              flex: '0 0 auto',
+              width: 420,
+              display: { xs: 'none', sm: 'flex' },
+              flexDirection: 'column',
+              borderLeft: 1,
+              borderColor: 'divider',
+              backgroundColor: 'surface.main',
+            }}
+          >
+            <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 2 }}>
+              {selected ? (
+                /* The same content component the panel floats over the
+                   canvas — one description of an element, two placements. */
+                <ElementDetailView
+                  detail={describeElement(selected)}
+                  node={selected}
+                  previewHeight={380}
+                />
+              ) : (
+                <Typography variant="caption" color="textSecondary">
+                  {'Choose an element to see what it does.'}
+                </Typography>
               )}
-              AccordionDetailsProps={{
-                sx: { overflowX: 'hidden' },
-              }}
-              onRenderDetail={({ item }) => (
-                <Observer>
-                  {() => (
-                    <Box>
-                      <Grid spacing={3} container sx={{ overflowX: 'hidden' }}>
-                        {item?.items?.map(
-                          (
-                            node: (typeof allItems)[number]['items'][number],
-                            index: number,
-                          ) => (
-                            <Observer key={node?.$id ?? index}>
-                              {() => (
-                                <Grid
-                                  size={{
-                                    xs: 4,
-                                    sm: 3,
-                                  }}
-                                >
-                                  <NodeCard
-                                    sx={[
-                                      { cursor: 'pointer' },
-                                      selected?.$id === node?.$id
-                                        ? { borderColor: 'primary.main' }
-                                        : null,
-                                    ]}
-                                    node={node as any}
-                                    onClick={(e) => handleItemClick(e, node)}
-                                  />
-                                </Grid>
-                              )}
-                            </Observer>
-                          ),
-                        )}
-                      </Grid>
-                    </Box>
-                  )}
-                </Observer>
-              )}
-            />
-          )}
-        </DialogContent>
-        <Box sx={{ flex: '0 0 auto', display: 'flex' }}>
-          <Collapse in={Boolean(selected)} sx={{ p: 1, pl: 2, width: 1 }}>
-            <Stack
-              sx={{
-                flexDirection: 'row',
-                alignItems: 'flex-start',
-                justifyContent: 'space-between',
-                gap: 2,
-              }}
-            >
-              {/* Was the element's NAME and nothing else — the one thing the
-                  card you just clicked already told you. Capped and
-                  scrollable so a heavily-restricted element cannot push
-                  Confirm off the dialog. */}
-              <Box
-                sx={{ flex: 1, minWidth: 0, maxHeight: 168, overflowY: 'auto' }}
+            </Box>
+            {/* Anchored to the pane rather than the dialog: Confirm belongs
+                with the thing being confirmed. */}
+            <Box sx={{ p: 1.5, borderTop: 1, borderColor: 'divider' }}>
+              <Button
+                fullWidth
+                variant="contained"
+                disabled={!selected}
+                onClick={handleConfirm}
               >
-                <ElementDetailView detail={describeElement(selected)} node={selected} />
-              </Box>
-              <Button onClick={handleConfirm} sx={{ flex: '0 0 auto' }}>
                 {'Confirm'}
               </Button>
-            </Stack>
-          </Collapse>
-        </Box>
+            </Box>
+          </Box>
+        </DialogContent>
       </Dialog>
     )
   }),
