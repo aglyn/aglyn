@@ -81,6 +81,7 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
+import AccountEmailsCard from '../../../../components/account-emails-card.component'
 import AccountIdentitiesCard from '../../../../components/account-identities-card.component'
 import CardDisplayFormTemplate from '../../../../components/card-display-form-template'
 import CloseAccountCard from '../../../../components/close-account-card.component'
@@ -564,7 +565,13 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
           size="small"
           fullWidth
           slotProps={{ input: { readOnly: true } }}
-          helperText="Set by your sign-in provider — change it there, not here."
+          // Was "Set by your sign-in provider — change it there, not here."
+          // That is no longer true (AGL-2486): the primary IS changeable, on
+          // the Email addresses tab, and leaving the old sentence would send
+          // people to their identity provider for something this console now
+          // does. It stays read-only HERE because the change has a policy
+          // attached to it and belongs beside the list it reorders.
+          helperText="Your primary address. Add or change addresses on the Email addresses tab."
         />
         <Chip
           size="small"
@@ -817,6 +824,13 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
   // to change (AGL-852).
   const sections: Array<{ id: string; label: string; content: ReactNode }> = [
     { id: 'account', label: 'Account', content: accountCard },
+    // Several addresses per account (AGL-2486). Its own section rather than a
+    // block inside the Account card: that card is about SIGN-IN METHODS
+    // (password, Google, passkeys, which pool you are in), and addresses are
+    // a different question with four controls of their own. Directly after
+    // Account because the read-only "Email" field there is what sends people
+    // looking for this.
+    { id: 'emails', label: 'Email addresses', content: <AccountEmailsCard /> },
     { id: 'profile', label: 'Profile image', content: profileCard },
     { id: 'basic', label: 'Basic info', content: formPanel(basicSchema, handleBasicSave) },
     // Security is no longer password-only (AGL-662): passkeys apply to every
