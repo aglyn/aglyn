@@ -399,6 +399,17 @@ self_test() {
   _assert "an explicit --parallel/--max-workers is NOT overridden" "3/1" "$PARALLEL/$MAX_WORKERS"
   unset -f cpu_count load_1m
 
+  # --fresh-cache MUST NOT delete the shared cache. Now that the cache is
+  # stable and shared between gate runs, `rm -rf "$NX_CACHE_DIRECTORY"` would
+  # clear one another gate is actively writing into — TRAP 1's incident,
+  # reproduced by the very change that made the cache warm. Asserted as the
+  # absence of an rm against the shared path, and the presence of a private one.
+  if grep -q 'rm -rf "\$NX_CACHE_DIRECTORY"' "$0" && ! grep -q 'nx-cache-fresh' "$0"; then
+    echo "FAIL --fresh-cache deletes the SHARED nx cache (trap 1 on another run)"; fail=$((fail + 1))
+  else
+    echo "ok   --fresh-cache uses a private cache, never deleting the shared one"; pass=$((pass + 1))
+  fi
+
   # THE FAST PATH'S HONESTY. These assert against this file's own text: the
   # claims are only true while the lines that implement them are present.
   if grep -q 'build: NO app affected' "$0"; then
@@ -573,16 +584,35 @@ run "provision:verify"    verify_modules
 # So the cache lives at a STABLE path, outside the source checkout and outside
 # any per-run root. Runs stay isolated from the shared checkout (the assertion
 # at the bottom of this file still proves that, bare) and warm across each
-# other. `--fresh-cache` still empties it for a run that needs to distrust it.
+# other. `--fresh-cache` gives a run its OWN empty cache under the gate root
+# rather than deleting this one — see the block below, where that distinction
+# is the difference between isolation and reproducing TRAP 1 on somebody else.
 NX_CACHE_HOME="${GATE_NX_CACHE:-/private/tmp/aglyn-gate/nx-cache}"
 export NX_CACHE_DIRECTORY="$NX_CACHE_HOME"
 export NX_DAEMON=false
 export NPM_CONFIG_CACHE="$GATE_ROOT/npm-cache"
 export NODE_OPTIONS="--max-old-space-size=8192"
 export CI=true
-[ "$FRESH_CACHE" = 1 ] && rm -rf "$NX_CACHE_DIRECTORY"
+# --fresh-cache gets a PRIVATE cache directory; it never deletes the shared one.
+#
+# `rm -rf "$NX_CACHE_DIRECTORY"` was correct while that directory was per-run.
+# Now that it is stable and shared between gate runs, deleting it would clear a
+# cache another gate is actively writing into — which is TRAP 1's incident
+# exactly, reproduced by the change that made the cache warm. The observed
+# symptom there was nx dying on a file it had just written, the test phase
+# aborting after 18 of 40 projects, and the run still printing an exit code
+# that read like a verdict.
+#
+# A run that wants to distrust the cache wants its own empty one; it does not
+# want every other gate's cache deleted. Same isolation, none of the collateral.
+CACHE_NOTE="shared, warm"
+if [ "$FRESH_CACHE" = 1 ]; then
+  export NX_CACHE_DIRECTORY="$GATE_ROOT/nx-cache-fresh"
+  rm -rf "$NX_CACHE_DIRECTORY"
+  CACHE_NOTE="PRIVATE and empty (--fresh-cache)"
+fi
 mkdir -p "$NX_CACHE_DIRECTORY" "$NPM_CONFIG_CACHE"
-log "nx cache    : $NX_CACHE_DIRECTORY"
+log "nx cache    : $NX_CACHE_DIRECTORY ($CACHE_NOTE)"
 cd "$WT" || exit 67
 
 # Prove the isolation instead of trusting it: nothing this run does may appear
