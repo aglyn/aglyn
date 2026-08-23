@@ -70,7 +70,44 @@ function makeCollectionRef(path: string): any {
   return { doc: (id: string) => makeDocRef(`${path}/${id}`) }
 }
 
-const fakeFirestore = { collection: (name: string) => makeCollectionRef(name) }
+/**
+ * A transaction, because the code under test now uses one (AGL-2356).
+ *
+ * Checkout reserves the units it is about to sell inside a Firestore
+ * transaction, so a double without `runTransaction` is not a Firestore and this
+ * file's handler fails before it reaches anything this file is about. Reads and
+ * writes go through the same doc refs as everything else here, and writes are
+ * applied on commit.
+ *
+ * NO VERSIONING and no retry: nothing in this file tests contention, and a fake
+ * that pretended to model it would be decoration. The contention is proved in
+ * `stock-hold-race.spec.ts`, which versions every document and re-runs a
+ * callback whose read went stale.
+ */
+async function runTransaction(
+  body: (transaction: any) => Promise<any>,
+): Promise<any> {
+  const writes: Array<() => Promise<void>> = []
+  const result = await body({
+    get: async (ref: any) => ref.get(),
+    set: (ref: any, value: any, options?: any) => {
+      writes.push(() => ref.set(value, options))
+    },
+    update: (ref: any, value: any) => {
+      writes.push(() => ref.set(value, { merge: true }))
+    },
+    create: (ref: any, value: any) => {
+      writes.push(() => ref.set(value))
+    },
+  })
+  for (const write of writes) await write()
+  return result
+}
+
+const fakeFirestore = {
+  collection: (name: string) => makeCollectionRef(name),
+  runTransaction,
+}
 
 const mockOrg: any = {
   org: {

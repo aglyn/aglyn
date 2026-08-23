@@ -82,6 +82,44 @@ function makeSnapshot(path: string) {
   }
 }
 
+/**
+ * The delete sentinel and a DEEP merge (AGL-2356).
+ *
+ * `set(…, { merge: true })` merges nested maps key by key in Firestore, and only
+ * a `FieldValue.delete()` sentinel removes one. This fake merged shallowly,
+ * which was invisible while nothing here wrote a nested map — settling a paid
+ * session now removes one key from the product's `stockHolds`, and under a
+ * shallow merge that write would replace the whole map with a marker object
+ * instead of removing the key. A double that models the wrong semantics reports
+ * green for the behaviour it is supposed to be checking.
+ */
+const DELETE = Symbol('FieldValue.delete')
+
+function mergeInto(
+  target: Record<string, any>,
+  patch: Record<string, any>,
+): Record<string, any> {
+  const next = { ...target }
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === DELETE) {
+      delete next[key]
+    } else if (
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      value.constructor === Object
+    ) {
+      next[key] = mergeInto(
+        (next[key] && typeof next[key] === 'object' ? next[key] : {}) as any,
+        value,
+      )
+    } else {
+      next[key] = value
+    }
+  }
+  return next
+}
+
 function makeDocRef(path: string): any {
   return {
     id: path.split('/').pop() as string,
@@ -90,8 +128,11 @@ function makeDocRef(path: string): any {
     set: async (value: Record<string, any>, options?: { merge?: boolean }) => {
       docs.set(
         path,
-        options?.merge ? { ...(docs.get(path) ?? {}), ...value } : value,
+        options?.merge ? mergeInto(docs.get(path) ?? {}, value) : value,
       )
+    },
+    delete: async () => {
+      docs.delete(path)
     },
     /** `create()` rejecting on an existing doc IS the dedupe primitive. */
     create: async (value: Record<string, any>) => {
@@ -164,6 +205,11 @@ jest.mock('@aglyn/tenant-data-admin', () => {
           serverTimestamp: () => '<server-timestamp>',
           arrayUnion: (value: any) => ({ __arrayUnion: value }),
           increment: (value: number) => ({ __increment: value }),
+          // AGL-2356: settling a paid session drops the stock reservation it
+          // was holding, and the sentinel is how a map key is removed. Honoured
+          // by `makeDocRef`'s merge above, so a released hold really does leave
+          // the document rather than sitting there as a marker object.
+          delete: () => DELETE,
         },
       },
     },

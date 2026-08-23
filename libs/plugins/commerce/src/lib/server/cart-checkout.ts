@@ -28,6 +28,7 @@ import {
   holdPromotionSlot,
   promotionHoldKey,
 } from './promotion-hold'
+import { type StockHoldLine, holdStock, stockHoldKey } from './stock-hold'
 import {
   applyNativeCheckoutParams,
   nativeCheckoutStripeHeaders,
@@ -89,6 +90,19 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
   const heldPromotions: PromotionSlotHold[] = []
   const releasePromotionHolds = async (): Promise<void> => {
     for (const hold of heldPromotions.splice(0)) await hold.release()
+  }
+  /**
+   * The units this attempt reserved (AGL-2356), hoisted for the same reason —
+   * a throw after the hold is placed is exactly the case where a merchant's
+   * last unit would sit invisibly spoken for until the TTL lapsed.
+   */
+  let stockHold: { holdKey: string; release: () => Promise<void> } | null = null
+  let heldStockKey = ''
+  const releaseStock = async (): Promise<void> => {
+    const held = stockHold
+    stockHold = null
+    heldStockKey = ''
+    if (held) await held.release()
   }
   try {
     const firestore = firebaseAdmin.app().firestore()
@@ -163,6 +177,13 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     // now that an unresolvable destination REFUSES: a shopper buying two PDFs
     // must not be asked which country to ship them to.
     let hasPhysicalLine = false
+    /**
+     * What this cart will RESERVE (AGL-2356), collected as the loop below
+     * resolves each line's variant rather than re-derived afterwards: the
+     * reservation and the price must be taken against the same variant, and a
+     * second resolution is a second chance to pick a different one.
+     */
+    const reserveLines: StockHoldLine[] = []
     // Cart checkout never builds subscription sessions — every line bills
     // one-time in `payment` mode (recurring products subscribe through the
     // PDP's direct checkout, AGL-303) — so the buyer-chosen billing field
@@ -190,6 +211,24 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       ) {
         throw Object.assign(new Error('unavailable'), {
           visible: `"${product.name}" is not available on this store's plan`,
+        })
+      }
+      // Only the lines there is something to reserve ON. An untracked variant
+      // and a `backorder` product have no finite shelf, so a hold could never
+      // change what they answer — and collecting them would open a transaction
+      // over the products of a purely digital storefront to write nothing at
+      // all. The same decision `holdPromotionSlot` makes for an UNCAPPED
+      // promotion: the unlimited case stays off the write path entirely.
+      //
+      // A pre-filter, so the authority is still the in-transaction re-check in
+      // `holdStock`. The only thing it can get wrong is skipping a hold for a
+      // variant that became tracked between this read and that transaction,
+      // which is the behaviour that shipped before this issue.
+      if (CommerceModel.stockIsReservable(product, variant.id, Date.now())) {
+        reserveLines.push({
+          productId: line.productId,
+          variantId: variant.id,
+          quantity: line.quantity,
         })
       }
       const unitCents = Math.round(Number(variant.priceUsd) * 100)
@@ -351,6 +390,55 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     const stripeKeyHeader = (object: string): Record<string, string> => {
       const derived = deriveStripeObjectKey(claimed.claim.stripeKey, object)
       return derived ? { 'Idempotency-Key': derived } : {}
+    }
+
+    // THE UNITS ARE RESERVED HERE (AGL-2356), not merely read in the loop
+    // above.
+    //
+    // `canPurchase` up there is a plain `.get()` compared against a number, and
+    // the webhook decremented minutes later without ever re-asking. Nothing was
+    // written, so there was no document to contend on: every shopper who
+    // reached this line while the shelf held one unit passed it, and they all
+    // paid. This is the write that makes them serialise.
+    //
+    // ONE transaction across every product in the cart, so a two-product basket
+    // reserves both or neither — a partial reservation would charge a shopper
+    // for goods the store cannot fill, which is this issue's own defect
+    // arriving through its fix. See `stock-hold.ts`.
+    //
+    // FIRST among the three holds this handler takes, before the promotion
+    // slots and the gift card below: stock is the likeliest refusal, and
+    // reserving a merchant's capped discount for a basket the store cannot fill
+    // is a slot held for nothing.
+    {
+      const held = await holdStock({
+        firestore,
+        hostRef,
+        holdKey: stockHoldKey(claimed.claim.stripeKey),
+        lines: reserveLines,
+        label: `cart ${hostId}/${cartId}`,
+      })
+      if (!held.ok) {
+        // Nothing has been minted yet, so the key goes back and the same
+        // button works when the units return (AGL-1697). `sold-out` names the
+        // shelf being SPOKEN FOR rather than empty — the merchant has stock and
+        // another shopper is in checkout with it, and telling this one to come
+        // back in a few minutes is the difference between a wait and a loss.
+        await releaseStock()
+        await claim.release()
+        return res.status(409).json({
+          error:
+            held.reason === 'sold-out'
+              ? held.productName
+                ? `"${held.productName}" — ${CommerceModel.STOCK_HELD_MESSAGE}`
+                : CommerceModel.STOCK_HELD_MESSAGE
+              : 'Your cart is no longer available',
+        })
+      }
+      if (held.holdKey) {
+        stockHold = held
+        heldStockKey = held.holdKey
+      }
     }
 
     // ONE Stripe discount, and that is the whole shape of this block
@@ -737,6 +825,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       // setting and the shopper retries under the same key (AGL-1697).
       await releaseGiftCardHold()
       await releasePromotionHolds()
+      await releaseStock()
       await claim.release()
       return res
         .status(409)
@@ -752,6 +841,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       // Below the claim here too, so release it for the same reason.
       await releaseGiftCardHold()
       await releasePromotionHolds()
+      await releaseStock()
       await claim.release()
       return res.status(409).json({ error: taxMisconfigured })
     }
@@ -792,6 +882,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           // replays any rate the first run did mint.
           await releaseGiftCardHold()
           await releasePromotionHolds()
+          await releaseStock()
           await claim.release()
           return res.status(502).json({ error: 'Checkout failed' })
         }
@@ -821,6 +912,24 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     params.set('metadata[hostId]', hostId)
     params.set('metadata[cartId]', cartId)
     params.set('metadata[feeCents]', String(Math.max(0, feeCents)))
+    // Set only when units were actually reserved (AGL-2356). Its ABSENCE is
+    // what tells the webhook there is nothing to release — right for a cart of
+    // untracked or backorder lines, and right for a session minted before this
+    // deploy, neither of which reserved anything.
+    if (heldStockKey) params.set('metadata[stockHoldKey]', heldStockKey)
+    // A HALF-HOUR SESSION, AND IT IS THE HOLD'S WHOLE SAFETY ARGUMENT
+    // (AGL-2356). Stripe's default is 24 hours, and a hold must outlive any
+    // session that can still be paid — so the default would mean one abandoned
+    // cart standing on a merchant's last unit for a day, which is exactly the
+    // unbounded, invisible UNDER-sell this issue was held back for. Shortening
+    // the SESSION is what bounds it; see `CHECKOUT_SESSION_TTL_MS` for why the
+    // figure is 31 minutes and not Stripe's advertised 30-minute floor.
+    params.set(
+      'expires_at',
+      String(
+        Math.floor((Date.now() + CommerceModel.CHECKOUT_SESSION_TTL_MS) / 1000),
+      ),
+    )
 
     // The Payment Element (AGL-1944), LAST and touching nothing above it. Every
     // figure the shopper is charged — line prices, the discount coupon, the tax
@@ -875,6 +984,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       // keys, so Stripe replays whatever objects the first run did create.
       await releaseGiftCardHold()
       await releasePromotionHolds()
+      await releaseStock()
       await claim.release()
       return res.status(502).json({ error: 'Checkout failed' })
     }
@@ -884,6 +994,10 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     // leave a paid order whose redemption is never counted — the same
     // over-redemption this fix closes, arriving through the release path.
     heldPromotions.length = 0
+    // And so do the units (AGL-2356), for the stronger version of the same
+    // reason: releasing here would hand the last unit to the next shopper while
+    // this one still holds a payable session, which is the oversell itself.
+    stockHold = null
     // Recoverable checkout (AGL-296): email captured before the redirect
     // makes abandonment actionable (AGL-323 sends the recovery emails). Written
     // for the native path too, and it matters MORE there: a shopper who
@@ -910,6 +1024,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       // ABOVE the claim — so there is nothing to release and the key
       // survives, as a deterministic refusal should (AGL-1697).
       await releasePromotionHolds()
+      await releaseStock()
       await claim?.release()
       return res.status(409).json({ error: error.visible })
     }
@@ -917,6 +1032,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     // Release on the way out so a transient failure does not strand the key
     // (AGL-1691's rule) — nor a merchant's promotion slot (AGL-2453).
     await releasePromotionHolds()
+    await releaseStock()
     await claim?.release()
     return res.status(500).json({ error: 'Checkout failed' })
   }

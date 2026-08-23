@@ -1287,6 +1287,12 @@ describe('hosts', () => {
       'stripeTaxRates',
       'restockAlerts',
       'inventoryReconciliation',
+      // AGL-2356. The release index for the stock a live checkout has
+      // reserved. Server-only, like the six above, and on the money path: an
+      // editor who could delete one would strand a merchant's units until the
+      // hold's TTL lapsed, and one who could forge one would have the webhook
+      // release reservations it does not own.
+      'stockHolds',
     ]) {
       assert.ok(
         hostServerOnlySubcollections().includes(name),
@@ -1640,6 +1646,37 @@ describe('hosts', () => {
     // The recovery-queue panel reads `checkouts` client-side and keeps working.
     await assertSucceeds(
       getDoc(doc(authed(EDITOR), 'hosts', HOST, 'checkouts', 'cs_1')),
+    )
+  })
+
+  it('an editor cannot forge or drop a stock reservation (AGL-2356)', async () => {
+    // `stockHolds/{holdKey}` names the products a live Checkout Session has
+    // reserved units on. `billing-webhook.ts` reads it by id on
+    // `checkout.session.expired` and at settlement and releases exactly what it
+    // names, so a forged entry releases another shopper's reservation and a
+    // deleted one strands a merchant's units until the TTL lapses. Written
+    // exclusively by `stock-hold.ts`, in the same transaction as the holds.
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'hosts', HOST, 'stockHolds', 'hold-1'),
+        { productIds: ['product-1'], expiresAtMs: 1, createdAtMs: 0 },
+      )
+    })
+    await mustDeny(
+      'pointing a reservation at another product',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'stockHolds', 'hold-1'), {
+        productIds: ['product-2'],
+      }),
+    )
+    await mustDeny(
+      'forging a reservation index',
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'stockHolds', 'hold-forged'), {
+        productIds: ['product-1'],
+      }),
+    )
+    await mustDeny(
+      'dropping a reservation so its units are never released',
+      deleteDoc(doc(authed(EDITOR), 'hosts', HOST, 'stockHolds', 'hold-1')),
     )
   })
 
