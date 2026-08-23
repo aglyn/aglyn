@@ -156,7 +156,11 @@
     "typecheck": "node tools/scripts/typecheck.mjs",
     "clean:next": "node tools/scripts/clean-next.mjs",
     "clean:next:prune": "node tools/scripts/clean-next.mjs --prune --force",
-    "worktree:new": "node tools/scripts/new-worktree.mjs"
+    "worktree:new": "node tools/scripts/new-worktree.mjs",
+    "precheck": "node tools/scripts/precheck.mjs",
+    "guards": "node tools/scripts/run-guards.mjs",
+    "test:run-guards": "node tools/scripts/run-guards.mjs --self-test",
+    "typecheck:changed": "node tools/scripts/typecheck.mjs --changed"
   },
   "dependencies": {
     "@base-ui/react": "1.6.0",

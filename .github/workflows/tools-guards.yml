@@ -286,6 +286,20 @@ jobs:
       # no install, well under a second.
       - run: npm run test:gate-script
 
+      # AGL-2486. The guards phase is no longer a serial loop inside gate.sh —
+      # it is tools/scripts/run-guards.mjs, which DERIVES the guard list from
+      # this file and nx-ci.yml and runs it concurrently (1m09s -> ~15s). That
+      # makes the derivation load-bearing for every gate run: a query that
+      # silently matches nothing would exit green having gated nothing, which
+      # is precisely the shape gate.sh's own self-test exists to refuse.
+      #
+      # So the self-test asserts the derivation is non-empty and finds named
+      # guards, that a missing workflow file derives ZERO (so the caller's
+      # refusal is reachable), and that every guard in the repo-wide set is
+      # both a real npm script and actually wired into CI — a set member that
+      # is neither would be a guard nothing runs, protected from narrowing.
+      - run: npm run test:run-guards
+
       # AGL-1882. The comparator behind `check:backup-copies`, which asks the
       # one question `/api/health/backups` structurally cannot: does ANY copy
       # of production data live outside the production GCP project? Every
