@@ -296,6 +296,33 @@ It was not zero. **Assert the audit exists before reading it**, or enumerate
 applies to `cache-insight`, `forced-reflow-insight`, `image-delivery-insight`,
 `cls-culprits-insight` and `third-parties-insight`.
 
+### A warm cache makes every variant agree with itself
+
+Comparing `srcset` / `sizes` behaviour across variants in one browser session
+produces unanimous, confident, wrong results. Chrome prefers a candidate it has
+**already cached**: with the page's real image warm, `sizes="100vw"`,
+`sizes="auto"` and an explicit `sizes="158px"` all "selected" the same 1280w
+candidate, which reads as "sizes makes no difference". Re-run with a fresh
+document, `Network.setCacheDisabled`, and `Network.clearBrowserCache` per case
+and the three separate cleanly.
+
+The general shape: **a measurement where every arm agrees is evidence about the
+harness, not about the thing being measured.** Same class as a test that passes
+for the wrong reason — check that the setup can produce a difference at all
+before believing it did not.
+
+### A `fetchpriority` hint aimed at the wrong element is worse than none
+
+Recorded because it is counter-intuitive and still open. The Image component
+marks the first image in document order `loading="eager"` +
+`fetchpriority="high"` on the reasoning that the first image is almost always
+the LCP element. On a text-hero page it is not: on `northwind-coffee` Lighthouse
+names the `<h1>` as LCP, and the heuristic was promoting a 357 KB PNG to high
+priority ahead of what the real LCP needed. A priority hint does not merely fail
+to help when it is aimed wrong — it **competes**. If the heuristic is revisited,
+it needs to consider whether a text element outranks the first image, not just
+which image comes first.
+
 ### What attribution you can and cannot trust in this stack
 
 The tenant builds with **Turbopack** (`"webpack": false` on the production configuration in
