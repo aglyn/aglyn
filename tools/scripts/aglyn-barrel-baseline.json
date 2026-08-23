@@ -12,7 +12,6 @@
     "deepmerge-ts",
     "eventemitter2",
     "flat",
-    "fuse.js",
     "hoist-non-react-statics",
     "lodash-es",
     "mitt",

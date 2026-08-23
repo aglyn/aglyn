@@ -33,7 +33,7 @@ import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 // The icon picker's fuzzy matcher (use-mdi-icons-fuzzy), not a re-implementation
 // (AGL-1516): search here has to feel like search does everywhere else in the
 // product, and two matchers is how they drift.
-import { Fuse } from '@aglyn/shared-util-vendor'
+import { Fuse } from '@aglyn/shared-util-vendor/fuse'
 import Box from '@mui/material/Box'
 import Chip from '@mui/material/Chip'
 import IconButton from '@mui/material/IconButton'

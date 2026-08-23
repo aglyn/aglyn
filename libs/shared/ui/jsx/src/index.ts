@@ -145,7 +145,6 @@ export * from './lib/types'
 
 export * from './lib/hooks/mdi-icon/use-mdi-icon'
 export * from './lib/hooks/mdi-icon/use-mdi-icons'
-export * from './lib/hooks/mdi-icon/use-mdi-icons-fuzzy'
 
 export * from './lib/components/mdi-icon/mdi-icon'
 export * from './lib/components/mdi-icon/mdi-icon-from-id'
