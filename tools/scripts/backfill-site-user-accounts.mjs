@@ -50,9 +50,27 @@
 // controls exposure, not data, so a host already carrying an opt-in (or any
 // other value in `enabledPlugins`) is unioned with, never replaced.
 //
-// Dry-run by default (reads + prints the plan, writes nothing). Pass --commit
-// to apply. Idempotent: a host already opted in is skipped, so re-running
-// converges. Optional --host <id> limits to one site.
+// HOW IT RUNS, in three phases, because this is a production write and a
+// count is not a record:
+//
+//   1. PLAN  — reads every host, re-evaluates the three signals AT RUN TIME
+//              (never from an earlier dry run: a site that gained its first
+//              member since then has to be caught), and prints the intended
+//              change host by host as `before -> after`. Nothing is written.
+//   2. GUARD — refuses the whole run if any host would come out with fewer
+//              capabilities than it went in with, or if a planned host would
+//              not actually gain the opt-in. Closing a site is a regression,
+//              not a grandfathering, and this change's worst outcome is a
+//              live members site losing /signin — so it aborts, not warns.
+//   3. APPLY + VERIFY — writes, then RE-READS each host and prints what the
+//              database now holds. Plan and actual are printed separately on
+//              purpose: a write that silently did not land would otherwise be
+//              indistinguishable from one that did. Exits non-zero on any
+//              mismatch.
+//
+// Dry-run by default (phases 1 and 2 only). Pass --commit to apply.
+// Idempotent: a host already opted in is skipped and never rewritten, so
+// re-running converges. Optional --host <id> limits to one site.
 //
 //   FIREBASE_PROJECT_ID=… FIREBASE_CLIENT_EMAIL=… FIREBASE_PRIVATE_KEY=… \
 //     node tools/scripts/backfill-site-user-accounts.mjs [--host <id>] [--commit]
@@ -151,23 +169,20 @@ console.log(
     `mode=${COMMIT ? 'COMMIT' : 'dry-run'}\n`,
 )
 
-let batch = firestore.batch()
-let buffered = 0
-const optIn = async (ref, next) => {
-  if (!COMMIT) return
-  batch.update(ref, { enabledPlugins: next })
-  if ((buffered += 1) >= 400) {
-    // Swap in the fresh batch BEFORE awaiting the full one, so `batch` never
-    // points at an in-flight commit (require-atomic-updates, AGL-1815).
-    const full = batch
-    batch = firestore.batch()
-    buffered = 0
-    await full.commit()
-  }
-}
+/*==========================================
+ *
+ * MARK - PHASE 1: PLAN (reads only)
+ *
+ * The whole plan is computed and PRINTED before a single write, so the
+ * record shows what moved host by host rather than a count. Signals are
+ * re-read here, in this invocation — a site that gained its first member
+ * since an earlier dry run has to be caught by the run that writes.
+ *
+ *=========================================*/
 
 let hostsScanned = 0
-const optedIn = []
+/** { label, hostId, ref, before, after, reasons } */
+const plan = []
 const alreadyOptedIn = []
 const leftClosed = []
 
@@ -182,11 +197,11 @@ for (const hostDoc of hostSnap.docs) {
   const host = hostDoc.data() ?? {}
   const label = host.subdomain || host.cname || hostId
 
-  const existing = Array.isArray(host.enabledPlugins)
+  const before = Array.isArray(host.enabledPlugins)
     ? host.enabledPlugins.map(String)
     : []
-  if (existing.includes(ACCOUNTS_PLUGIN_ID)) {
-    alreadyOptedIn.push(label)
+  if (before.includes(ACCOUNTS_PLUGIN_ID)) {
+    alreadyOptedIn.push({ label, hostId, before })
     continue
   }
 
@@ -205,9 +220,7 @@ for (const hostDoc of hostSnap.docs) {
     const value = host.authScreens?.[slot]
     return typeof value === 'string' && value.trim()
   })
-  if (designated.length) {
-    reasons.push(`designates ${designated.join(', ')}`)
-  }
+  if (designated.length) reasons.push(`designates ${designated.join(', ')}`)
 
   const gated = screenSnap.docs.filter((doc) => {
     const data = doc.data() ?? {}
@@ -220,45 +233,162 @@ for (const hostDoc of hostSnap.docs) {
   if (gated.length) reasons.push(`${gated.length} members-only screen(s)`)
 
   if (!reasons.length) {
-    leftClosed.push(label)
+    leftClosed.push({ label, hostId })
     continue
   }
 
   // Union, never replace: another default-off capability could already be
   // listed here, and this backfill has no business removing it.
-  const next = Array.from(new Set([...existing, ACCOUNTS_PLUGIN_ID]))
-  optedIn.push({ label, hostId, reasons })
-  await optIn(hostDoc.ref, next)
+  const after = Array.from(new Set([...before, ACCOUNTS_PLUGIN_ID]))
+  plan.push({ label, hostId, ref: hostDoc.ref, before, after, reasons })
 }
 
-if (COMMIT && buffered) await batch.commit()
+/*==========================================
+ *
+ * MARK - PHASE 1b: THE ADDITIVE-ONLY GUARD
+ *
+ * This run may only ever ADD an opt-in. A host that would come out of it
+ * with fewer capabilities than it went in with is not being grandfathered,
+ * it is being regressed — and the failure mode of this whole change is a
+ * live members site losing /signin, so that must abort rather than warn.
+ *
+ * Checked against the computed plan rather than trusted from the code
+ * above, because the point is to catch a future edit to that code.
+ *
+ *=========================================*/
 
+const regressions = []
+for (const row of plan) {
+  const after = new Set(row.after)
+  const dropped = row.before.filter((id) => !after.has(id))
+  if (dropped.length) {
+    regressions.push(`${row.label} (${row.hostId}) would LOSE ${dropped.join(', ')}`)
+  }
+  if (!after.has(ACCOUNTS_PLUGIN_ID)) {
+    regressions.push(
+      `${row.label} (${row.hostId}) is planned but would not gain ${ACCOUNTS_PLUGIN_ID}`,
+    )
+  }
+}
+// The already-opted-in are not written at all, so nothing can take the
+// capability off them. Stated as an assertion so a future edit that starts
+// writing them has to satisfy it.
+for (const row of alreadyOptedIn) {
+  if (plan.some((entry) => entry.hostId === row.hostId)) {
+    regressions.push(
+      `${row.label} (${row.hostId}) is already opted in and must not be rewritten`,
+    )
+  }
+}
+
+console.log('=== PLAN (nothing written yet) ===\n')
 console.log(`Hosts scanned:            ${hostsScanned}`)
 console.log(`Already opted in:         ${alreadyOptedIn.length}`)
-console.log(`Opted in by this run:     ${optedIn.length}`)
+console.log(`To opt in:                ${plan.length}`)
 console.log(`Left closed (no signal):  ${leftClosed.length}\n`)
 
-if (optedIn.length) {
-  console.log('Grandfathered into User Accounts:')
-  for (const row of optedIn) {
-    console.log(`  ${row.label} (${row.hostId}) — ${row.reasons.join('; ')}`)
+if (plan.length) {
+  console.log('INTENDED CHANGES, host by host:')
+  for (const row of plan) {
+    console.log(
+      `  ${row.label} (${row.hostId})\n` +
+        `      enabledPlugins: [${row.before.join(', ')}] -> [${row.after.join(', ')}]\n` +
+        `      because: ${row.reasons.join('; ')}`,
+    )
+  }
+  console.log('')
+}
+
+if (alreadyOptedIn.length) {
+  console.log('Already opted in — NOT rewritten:')
+  for (const row of alreadyOptedIn) {
+    console.log(`  ${row.label} (${row.hostId}) — [${row.before.join(', ')}]`)
   }
   console.log('')
 }
 
 if (leftClosed.length) {
   console.log(
-    'Left closed — these serve no /signin, /signup or /recover after this ' +
-      'ships. Read the list before committing: a name you recognise as a ' +
-      'members site here means a signal is missing, not that the site is ' +
-      'idle.',
+    'Left closed — these serve no /signin, /signup or /recover after this\n' +
+      'ships. Read the list before committing: a name you recognise as a\n' +
+      'members site here means a signal is missing, not that the site is idle.',
   )
-  for (const label of leftClosed) console.log(`  ${label}`)
+  for (const row of leftClosed) console.log(`  ${row.label} (${row.hostId})`)
   console.log('')
+}
+
+if (regressions.length) {
+  console.error('REFUSING TO WRITE — this run would close or narrow a host:\n')
+  for (const line of regressions) console.error(`  ${line}`)
+  console.error(
+    '\nThat is a regression, not a grandfathering. Nothing was written.',
+  )
+  process.exit(1)
 }
 
 if (!COMMIT) {
   console.log('Dry run — nothing written. Re-run with --commit to apply.\n')
+  process.exit(0)
 }
 
+/*==========================================
+ *
+ * MARK - PHASE 2: APPLY
+ *
+ *=========================================*/
+
+let batch = firestore.batch()
+let buffered = 0
+for (const row of plan) {
+  batch.update(row.ref, { enabledPlugins: row.after })
+  if ((buffered += 1) >= 400) {
+    // Swap in the fresh batch BEFORE awaiting the full one, so `batch` never
+    // points at an in-flight commit (require-atomic-updates, AGL-1815).
+    const full = batch
+    batch = firestore.batch()
+    buffered = 0
+    await full.commit()
+  }
+}
+if (buffered) await batch.commit()
+
+/*==========================================
+ *
+ * MARK - PHASE 3: VERIFY (re-reads what actually landed)
+ *
+ * The plan is what we asked for; this is what the database now holds. They
+ * are printed separately on purpose — a write that silently did not land
+ * would otherwise be indistinguishable from one that did.
+ *
+ *=========================================*/
+
+console.log('=== ACTUAL, re-read from Firestore ===\n')
+const failures = []
+for (const row of plan) {
+  const fresh = await row.ref.get()
+  const stored = Array.isArray(fresh.data()?.enabledPlugins)
+    ? fresh.data().enabledPlugins.map(String)
+    : []
+  const ok = stored.includes(ACCOUNTS_PLUGIN_ID)
+  const kept = row.before.every((id) => stored.includes(id))
+  if (!ok || !kept) {
+    failures.push(
+      `${row.label} (${row.hostId}) — stored [${stored.join(', ')}]` +
+        `${ok ? '' : `, missing ${ACCOUNTS_PLUGIN_ID}`}` +
+        `${kept ? '' : ', DROPPED a pre-existing id'}`,
+    )
+  }
+  console.log(
+    `  ${row.label} (${row.hostId}) — enabledPlugins now [${stored.join(', ')}] ${ok && kept ? 'OK' : 'FAILED'}`,
+  )
+}
+console.log('')
+
+if (failures.length) {
+  console.error('WRITES DID NOT LAND AS PLANNED:\n')
+  for (const line of failures) console.error(`  ${line}`)
+  process.exit(1)
+}
+
+console.log(`Committed ${plan.length} host(s). Nothing was closed or removed.\n`)
 process.exit(0)
