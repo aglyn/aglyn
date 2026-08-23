@@ -152,9 +152,6 @@ function makeDocRef(path: string): any {
       }
       docs.set(path, { ...(docs.get(path) ?? {}), ...value })
     },
-    delete: async () => {
-      docs.delete(path)
-    },
     collection: (name: string) => makeCollectionRef(`${path}/${name}`),
   }
 }

@@ -207,6 +207,13 @@ async function runTransaction(
       path: string
       value: Record<string, any>
       merge: boolean
+      /**
+       * Set only by `delete()`, which is how a hold RELEASE is distinguished
+       * from a hold write of `{}`. Optional because the other three recorders
+       * never set it, and a required field would force every one of them to
+       * push a falsy flag that means nothing to them.
+       */
+      remove?: boolean
     }[] = []
     const transaction = {
       get: async (ref: any) => {
