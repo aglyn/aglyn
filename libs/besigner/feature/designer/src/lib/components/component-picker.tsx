@@ -17,10 +17,8 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import {
-  ICON_VARIANT_CLEAR,
   ICON_VARIANT_CLOSE,
   ICON_VARIANT_FILTER,
-  ICON_VARIANT_SEARCH,
 } from '@aglyn/shared-data-enums'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
@@ -34,8 +32,6 @@ import {
   DialogProps,
   Grid,
   IconButton,
-  InputAdornment,
-  InputBase,
   Slide,
   Stack,
   Toolbar,
@@ -43,12 +39,13 @@ import {
 } from '@mui/material'
 import type { TransitionProps } from '@mui/material/transitions'
 import { Observer, observer } from 'mobx-react-lite'
-import { forwardRef, SyntheticEvent, useCallback, useEffect, useState } from 'react'
+import { forwardRef, SyntheticEvent, useCallback, useState } from 'react'
+import usePickerFilter from '../hooks/use-picker-filter'
 import useVisibleComponentCategories from '../hooks/use-visible-component-categories'
-import { rankPickerItems } from '../utils/rank-picker-results'
 import AccordionListComponent from './accordion-list.component'
 import EmptyResults from './empty-results'
 import NodeCard from './node-card'
+import PickerSearchField from './picker-search-field'
 
 const Transition = forwardRef(function Transition(
   props: TransitionProps & {
@@ -61,10 +58,6 @@ const Transition = forwardRef(function Transition(
 
 type PickerOption = Aglyn.ComponentSchema<any> | Aglyn.PresetSchema<any>
 
-/** The single group search results collapse into (AGL-2486). */
-const RESULTS_CATEGORY_ID = 'aglyn:picker-results'
-const RESULTS_CATEGORY_LABEL = 'Best matches'
-
 export interface ComponentPickerProps extends DialogProps {
   onSelectItem?: (e: SyntheticEvent, item?: { option: PickerOption }) => void
 }
@@ -75,88 +68,23 @@ export const ComponentPicker = observer(
     const allItems = useVisibleComponentCategories()
 
     const [filterOpen, setFilterOpen] = useState(false)
-    const [filter, setFilter] = useState('')
-    const [items, setItems] = useState(allItems)
-
-    // Presets can register after mount (per-host reusable components load
-    // from Firestore) — refresh the unfiltered list when the registry
-    // changes. `allItems` is a fresh array every render, so key on a stable
-    // signature to avoid a setState loop.
-    const registrySignature = allItems
-      .map((category) => `${category.$id}:${category.items?.length ?? 0}`)
-      .join('|')
-    useEffect(() => {
-      if (!filter) setItems(allItems)
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [registrySignature, filter])
     const [selected, setSelected] = useState<PickerOption>(null)
 
     const clearSelected = useCallback(() => setSelected(null), [])
+
+    // The SAME search the Elements panel runs (AGL-2486). Both surfaces read
+    // one hook so a query cannot mean two different things depending on
+    // which picker you happened to open.
+    const { filter, items, handleFilterChange } = usePickerFilter(
+      allItems,
+      clearSelected,
+    )
+
     const handleConfirm = useCallback(
       (e: SyntheticEvent) => {
         onSelectItem?.(e, { option: selected })
       },
       [selected, onSelectItem],
-    )
-
-    const handleFilterChange = useCallback(
-      async (e: { currentTarget?: { value?: string } }) => {
-        const filter = e.currentTarget?.value || ''
-        setFilter(filter)
-        clearSelected()
-        let items = allItems
-
-        if (filter) {
-          try {
-            // Dynamically load fuse.js
-            const Fuse = (await import('fuse.js')).default
-            const fuse = new Fuse<typeof allItems[number]['items'][number]>([], {
-              shouldSort: true,
-              keys: [
-                'displayName',
-                'title',
-                'description',
-                'subtitle',
-                'category',
-                'pluginId',
-                'kind',
-                '$id',
-              ],
-            })
-
-            // Fuse decides WHAT matches (it is the only thing here with
-            // any typo tolerance); the ranking decides the ORDER. Fuse's
-            // own `shouldSort` weights every key alike, which is what put
-            // `Icon` below everything whose description merely mentions an
-            // icon (AGL-2486).
-            //
-            // Results are FLAT while a filter is active, deliberately. A
-            // name hit has to outrank a description hit, and that cannot
-            // hold inside category accordions: `Icon` lives in Media, so
-            // grouping would drag every Media entry — Avatar, "shows a
-            // picture, initials or an icon" — above `Icon button` in Input.
-            // Unfiltered, the curated categories come back untouched.
-            const matched = allItems.flatMap((category) => {
-              fuse.setCollection(category.items)
-              return fuse.search(filter).map((result) => result.item)
-            })
-            items = matched.length
-              ? [
-                  {
-                    $id: RESULTS_CATEGORY_ID,
-                    label: RESULTS_CATEGORY_LABEL,
-                    items: rankPickerItems(matched, filter),
-                  } as typeof allItems[number],
-                ]
-              : []
-          } catch (error) {
-            console.error('Failed to load fuse.js', error)
-          }
-        }
-
-        setItems(items)
-      },
-      [allItems, clearSelected],
     )
 
     const handleClose = useCallback(
@@ -236,33 +164,9 @@ export const ComponentPicker = observer(
                 borderColor: 'divider',
               }}
             >
-              {/*<Divider sx={{ height: 28, m: 0.5 }} orientation="vertical" />*/}
-              <InputBase
-                sx={{ flex: 1, color: 'inherit' }}
-                placeholder="Search elements"
-                inputProps={{ 'aria-label': 'search elements' }}
+              <PickerSearchField
                 value={filter}
                 onChange={handleFilterChange}
-                startAdornment={
-                  <InputAdornment sx={{ color: 'inherit' }} position="start">
-                    <MdiIcon path={ICON_VARIANT_SEARCH.path} />
-                  </InputAdornment>
-                }
-                endAdornment={
-                  filter && (
-                    <InputAdornment sx={{ color: 'inherit' }} position="end">
-                      <IconButton
-                        type="button"
-                        color="inherit"
-                        sx={{ p: '10px' }}
-                        aria-label="clear filter"
-                        onClick={handleFilterChange}
-                      >
-                        <MdiIcon path={ICON_VARIANT_CLEAR.path} />
-                      </IconButton>
-                    </InputAdornment>
-                  )
-                }
               />
             </Toolbar>
           </Collapse>
