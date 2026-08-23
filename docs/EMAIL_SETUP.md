@@ -176,26 +176,59 @@ letter.
 
 #### `security@` — the one we already promised
 
-`docs.aglyn.com/trust` says "We will acknowledge". The 3-business-day figure
-below is lifted from `SECURITY.md`, which today attaches only to GitHub private
-vulnerability reporting; putting it here **extends that commitment to this
-address**. That is a deliberate choice and it is yours — if you would rather
-not, delete the sentence containing it and the reply still makes the trust page
-true, which is the actual gap.
+`docs.aglyn.com/trust` says "We will acknowledge". That is the gap this body
+closes, and closing it needs a receipt and nothing more.
+
+⚠️ **This body states NO response window, deliberately.** An earlier draft
+carried the **3 business days** from `SECURITY.md` (§"Our commitment", lines
+38–39). That figure attaches **only to GitHub private vulnerability reporting**,
+where a report arrives in a tracked queue with a named reporter. Pasting it here
+would newly extend the commitment to *every* inbound mail to `security@` —
+vendor questionnaires, scanner output, phishing reports, mistakes — on an inbox
+with one member. Zach's decision, 2026-08-23: acknowledge receipt, invent no
+timeframe. **Do not re-add a number here** without also changing `SECURITY.md`
+and `trust.md`, because then there would be three places to keep true.
+
+The wording below is a receipt plus the three things already published on
+`docs.aglyn.com/trust` (no bounty, no payment, no threats). It adds no
+commitment that is not already public, which is what makes it safe to send
+automatically.
 
 > Thank you — this address received your report, and this reply is your record
-> of it. Please keep it.
+> of it. Please keep it, along with your own sent copy; this reply's timestamp
+> is the only date stamp either of us gets.
 >
-> We aim to reply personally within 3 business days, and to tell you honestly
-> what we can fix and when. We do not run a bug bounty and cannot offer
-> payment. We will not threaten anyone who reports a problem in good faith,
-> and we ask for a reasonable disclosure window — typically up to 90 days — so
-> a fix can ship before details are public.
+> We do not run a bug bounty and cannot offer payment. We will not threaten
+> anyone who reports a problem in good faith, and we ask for a reasonable
+> disclosure window — typically up to 90 days — so a fix can ship before
+> details are public.
 >
-> If you have not heard from a person within 3 business days, please escalate
-> to help@aglyn.com rather than assuming this was read.
+> We are a small team and we do not publish a response time for this address,
+> so please do not read silence as a decision. If you would like to escalate,
+> write to help@aglyn.com.
 >
 > This is an automated acknowledgement. Nobody has read your report yet.
+
+**Steps for Zach** (nobody else can do this — it is Workspace account state):
+
+1. Open `https://groups.google.com/a/aglyn.com/g/security/settings` — or
+   Groups → **security** → **Settings**. You need Owner or Manager on the group.
+2. **Email options → Auto replies**.
+3. Tick **Enable auto-reply to non-members outside the organization**. That is
+   the box that covers every real reporter.
+4. Paste the block above into the body — the four paragraphs only, without the
+   `>` quote markers.
+5. Leave *…to members outside the organization* alone unless you want a reply to
+   your own mail; `zach@aglyn.com` is the only member today.
+6. **Save changes.**
+7. Verify by reloading the settings page and reading the checkbox and body back.
+   **Do not test by emailing `security@`** — a fake vulnerability report in that
+   inbox is indistinguishable from a real one nobody answered.
+
+Once this is saved, `trust.md`'s *"We will acknowledge"* is true for the first
+time. The second half of that sentence — *"we will tell you honestly what we can
+fix and when"* — is a human promise the auto-reply does not and cannot keep; it
+stays a person's job.
 
 #### `dmca@` — must not look like a rejection
 
