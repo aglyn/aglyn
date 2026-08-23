@@ -412,6 +412,121 @@ export function buildVisibilityFields(
   ]
 }
 
+/**
+ * The animation fields every element gets (AGL-2486).
+ *
+ * Presets rather than a keyframes box, because the audience includes people
+ * who have never written CSS: an author picks "Slide up", "on scroll into
+ * view", and two numbers. The four dials are the ones that actually change how
+ * an animation FEELS; everything else (easing, distance, the difference
+ * between a transition and a keyframe run) is decided for them.
+ *
+ * Offered on every element, unlike the visibility directives above, because an
+ * animation is meaningful on any node on any screen — there is no context in
+ * which the field would be inert.
+ *
+ * The "None" option carries a real value, never `''` (AGL-1451/AGL-1191): an
+ * empty value cannot persist, so an author who picked a preset could never
+ * turn it back off.
+ *
+ * The dependent fields are gated on the PRESET rather than on "not none", so
+ * an element that has never been animated shows one dropdown and nothing else.
+ * `is` takes the explicit list; a `notMatch` against `'none'` would be true for
+ * the undefined case too and would show all five fields on every element.
+ */
+export function buildAnimationFields(): Array<Record<string, unknown>> {
+  const animated = {
+    when: Aglyn.NODE_ANIMATION_PROP,
+    is: Aglyn.ANIMATION_PRESETS.filter(
+      (preset) => preset !== Aglyn.ANIMATION_NONE,
+    ),
+  }
+  const help = (label: string, description: string) => ({
+    label,
+    description,
+    // Same tooltip treatment the schema attributes get (AGL-600); this list
+    // never reaches the `withAttributeHelp` map above.
+    help: { title: label, excerpt: description },
+  })
+  return [
+    {
+      name: Aglyn.NODE_ANIMATION_PROP,
+      ...help(
+        'Animation',
+        'Adds movement to this element. Motion is skipped automatically for ' +
+          'visitors who have asked their device to reduce it.',
+      ),
+      component: Aglyn.FieldComponentType.SELECT,
+      options: [
+        { value: Aglyn.ANIMATION_NONE, label: 'None' },
+        { value: 'fade', label: 'Fade in' },
+        { value: 'slide-up', label: 'Slide up' },
+        { value: 'slide-down', label: 'Slide down' },
+        { value: 'slide-left', label: 'Slide left' },
+        { value: 'slide-right', label: 'Slide right' },
+        { value: 'zoom-in', label: 'Zoom in' },
+        { value: 'zoom-out', label: 'Zoom out' },
+      ],
+    },
+    {
+      name: Aglyn.NODE_ANIMATION_TRIGGER_PROP,
+      ...help(
+        'Plays',
+        'When the animation runs. "On scroll into view" is the usual choice ' +
+          'for anything below the top of the page.',
+      ),
+      component: Aglyn.FieldComponentType.SELECT,
+      condition: animated,
+      initialValue: Aglyn.ANIMATION_DEFAULT_TRIGGER,
+      options: [
+        { value: 'scroll', label: 'On scroll into view' },
+        { value: 'load', label: 'On page load' },
+        { value: 'hover', label: 'On hover' },
+      ],
+    },
+    {
+      name: Aglyn.NODE_ANIMATION_DURATION_PROP,
+      ...help(
+        'Duration (ms)',
+        `How long the animation takes, in milliseconds. ${Aglyn.ANIMATION_DEFAULT_DURATION_MS} is a ` +
+          `natural default; anything over ${Aglyn.ANIMATION_MAX_DURATION_MS} is capped.`,
+      ),
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      type: 'number',
+      condition: animated,
+      initialValue: Aglyn.ANIMATION_DEFAULT_DURATION_MS,
+    },
+    {
+      name: Aglyn.NODE_ANIMATION_DELAY_PROP,
+      ...help(
+        'Delay (ms)',
+        'How long to wait before starting. Stagger a row of cards by giving ' +
+          'each one a slightly larger delay.',
+      ),
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      type: 'number',
+      condition: animated,
+      initialValue: Aglyn.ANIMATION_DEFAULT_DELAY_MS,
+    },
+    {
+      name: Aglyn.NODE_ANIMATION_REPEAT_PROP,
+      ...help(
+        'Replay each time',
+        'Play the animation again every time the element scrolls back into ' +
+          'view, instead of only the first time.',
+      ),
+      component: Aglyn.FieldComponentType.SWITCH,
+      // Both conditions must hold: DDF ANDs an array of conditions. Replay is
+      // meaningless for the other two triggers — a page loads once, and hover
+      // is a transition that already reverses.
+      condition: [
+        animated,
+        { when: Aglyn.NODE_ANIMATION_TRIGGER_PROP, is: 'scroll' },
+      ],
+    },
+  ]
+}
+
 const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
   (props, ref) => {
     const { node, ...rest } = props
@@ -738,9 +853,18 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       [editedComponentProps, insertOptions, tokenLabelContext],
     )
 
+    // Element animation (AGL-2486). Static, so it is built once rather than
+    // per render; unlike the visibility directives it is offered everywhere.
+    const animationFields = useMemo(() => buildAnimationFields(), [])
+
     const formFieldSchema = useMemo(
-      () => [...attributes, ...instancePropFields, ...visibilityFields],
-      [attributes, instancePropFields, visibilityFields],
+      () => [
+        ...attributes,
+        ...instancePropFields,
+        ...visibilityFields,
+        ...animationFields,
+      ],
+      [attributes, instancePropFields, visibilityFields, animationFields],
     )
 
     // Image-typed declared props get the same library browse button the

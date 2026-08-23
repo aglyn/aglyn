@@ -130,6 +130,7 @@ export * from './plugin-api-rate-limit'
 // two gates exempt exactly the same machine surfaces.
 export * from './plugin-api-cross-origin'
 export * from './actions'
+export * from './element-animation'
 export * from './element-ui'
 export * from './media-folders'
 export * from './media-metadata'

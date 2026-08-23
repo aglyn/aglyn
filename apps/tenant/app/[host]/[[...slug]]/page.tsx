@@ -18,6 +18,10 @@
 import { PLATFORM_BRANDING_PROFILE } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import { deferLazyPanelNodes } from '@aglyn/tenant-runtime/defer-lazy-panels'
+import {
+  ELEMENT_ANIMATION_STYLE_ID,
+  pageAnimationAssets,
+} from '@aglyn/tenant-runtime/element-animation-assets'
 import { getTemplateScreenRouting } from '@aglyn/tenant-runtime/template-screens'
 import type { Metadata } from 'next'
 import { notFound, permanentRedirect, redirect } from 'next/navigation'
@@ -829,8 +833,31 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
   const clientProps: Props = screenRoutes
     ? { ...prunedProps, screenRoutes }
     : prunedProps
+  // Element animations (AGL-2486). Derived from the PRUNED node map, so a
+  // deferred tab panel's animations don't drag the stylesheet onto a page that
+  // is not shipping them; the runtime re-scans on mutation, so a panel opened
+  // later still animates if anything else on the page armed the runtime.
+  //
+  // Both tags are withheld when nothing animates — which is the point. There
+  // is no animation library on a published page at all: these are CSS
+  // keyframes plus, only when a scroll trigger is present, ~700 bytes of
+  // inline IntersectionObserver. See the module for the full reasoning.
+  const animation = pageAnimationAssets(clientProps.nodes)
   return (
     <>
+      {animation ? (
+        <style
+          id={ELEMENT_ANIMATION_STYLE_ID}
+          // A build-time constant of our own; no author input reaches it.
+          dangerouslySetInnerHTML={{ __html: animation.styleText }}
+        />
+      ) : null}
+      {animation?.scriptText ? (
+        // Not `next/script`: this must run before hydration and costs no
+        // request inline. The tenant sends no `script-src` (AGL-1228), so no
+        // nonce is involved.
+        <script dangerouslySetInnerHTML={{ __html: animation.scriptText }} />
+      ) : null}
       {jsonLd.map((json, index) => (
         <script
           key={index}

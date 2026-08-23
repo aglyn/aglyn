@@ -54,8 +54,34 @@ export const Leaf = observer(
       style: propsStyle,
       [Aglyn.NODE_HIDE_IF_PROP]: _hideIf,
       [Aglyn.NODE_HIDE_UNLESS_PROP]: _hideUnless,
+      // Element animation (AGL-2486): the five reserved animation props come
+      // out here for the same reason the visibility directives above do —
+      // they are directives to the RENDERER, and spreading them onto the
+      // element would land `aglynanimation="slide-up"` as an unknown DOM
+      // attribute. Destructured rather than `delete`d after the fact so the
+      // `none` case is stripped too (it resolves to no animation, but it is
+      // still a prop an author saved) and so the props object keeps one
+      // shape.
+      [Aglyn.NODE_ANIMATION_PROP]: _animation,
+      [Aglyn.NODE_ANIMATION_TRIGGER_PROP]: _animationTrigger,
+      [Aglyn.NODE_ANIMATION_DURATION_PROP]: _animationDuration,
+      [Aglyn.NODE_ANIMATION_DELAY_PROP]: _animationDelay,
+      [Aglyn.NODE_ANIMATION_REPEAT_PROP]: _animationRepeat,
       ...resolvedProps
     } = (node?.resolvedProps ?? node?.props ?? {}) as Record<string, any>
+
+    // Resolves to a class, a `data-` attribute and two custom properties; the
+    // keyframes themselves live in the tenant's stylesheet, so this costs no
+    // JS on any surface. The besigner canvas never ships that stylesheet
+    // (same posture as the AGL-562 hidden class), so an author sees the
+    // element in its normal, selectable, un-animated state while editing.
+    const animation = Aglyn.resolveElementAnimation({
+      [Aglyn.NODE_ANIMATION_PROP]: _animation,
+      [Aglyn.NODE_ANIMATION_TRIGGER_PROP]: _animationTrigger,
+      [Aglyn.NODE_ANIMATION_DURATION_PROP]: _animationDuration,
+      [Aglyn.NODE_ANIMATION_DELAY_PROP]: _animationDelay,
+      [Aglyn.NODE_ANIMATION_REPEAT_PROP]: _animationRepeat,
+    })
     const Factory = Aglyn.components.getFactory(node?.componentId)
     const Component = isValidElementType(Factory) ? Factory : DefaultComponent
 
@@ -74,10 +100,15 @@ export const Leaf = observer(
     const textContent = selfClosing ? null : resolvedProps?.['children']
 
     const mergedClassName =
-      [propsClassName, node?.className, className].filter(Boolean).join(' ') ||
-      undefined
+      [propsClassName, node?.className, className, animation?.className]
+        .filter(Boolean)
+        .join(' ') || undefined
+    // The animation's custom properties go in FIRST so an author who typed
+    // `--aglyn-anim-duration` into the Custom CSS tab still wins.
     const mergedStyle =
-      propsStyle || style ? { ...propsStyle, ...style } : undefined
+      animation || propsStyle || style
+        ? { ...animation?.style, ...propsStyle, ...style }
+        : undefined
 
     // Canvas-only hook (AGL-581): the besigner provides a transform that
     // re-targets viewport media queries at the artboard device width.
@@ -127,6 +158,9 @@ export const Leaf = observer(
     const leafProps = {
       ref,
       'data-aglyn': `leaf:${node?.$id}`,
+      // Before the spreads: the animation trigger/repeat attributes are ours,
+      // but an element that genuinely declared one of these should win.
+      ...animation?.attributes,
       ...resolvedProps,
       ...rest,
       className: mergedClassName,
