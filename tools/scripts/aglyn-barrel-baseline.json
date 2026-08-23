@@ -23,7 +23,6 @@
     "nanoid",
     "nanoid-dictionary",
     "php-serialize",
-    "platform",
     "react",
     "use-debounce"
   ]
