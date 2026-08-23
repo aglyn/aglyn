@@ -227,9 +227,9 @@ describe('never fabricate — every word is template or verbatim docs', () => {
         '',
       )
       for (const section of verdict.quoted) {
-        const header = `**[${
+        const header = `[${
           section.heading ? `${section.title} — ${section.heading}` : section.title
-        }](${sectionUrl(section)})**\n\n`
+        }](${sectionUrl(section)})\n`
         expect(remainder).toContain(header)
         remainder = remainder.replace(header, '')
       }
@@ -276,6 +276,55 @@ describe('never fabricate — every word is template or verbatim docs', () => {
     for (const section of verdict.quoted) {
       expect(ASSIST_DOCS_INDEX).toContain(section)
     }
+  })
+})
+
+describe('the answer is composed for the surface that renders it', () => {
+  /**
+   * The Assist panel is NOT a markdown surface, deliberately and by its own
+   * docstring: `renderAssistText` converts `[label](url)` and bare URLs and
+   * renders everything else literally, under `whiteSpace: 'pre-wrap'`.
+   *
+   * So markup this template emits and that renderer does not understand
+   * reaches the user as punctuation. It shipped that way once — the header
+   * was wrapped in `**…**` and Zach's besigner drawer showed
+   * `**Drag-and-drop hierarchy — Moving an element without dragging**`,
+   * asterisks and all.
+   *
+   * Links are the ONE markup the panel speaks, so they are the one markup
+   * this template may use.
+   */
+  const composed = () =>
+    ANSWERABLE.map((question) => verdictFor(question)).filter((v) => v.answered)
+
+  it('emits no emphasis markers — the panel would render them literally', () => {
+    for (const verdict of composed()) {
+      expect(verdict.answer).not.toMatch(/\*\*/)
+      expect(verdict.answer).not.toMatch(/__/)
+    }
+  })
+
+  it('emits no heading markers at the start of a line', () => {
+    for (const verdict of composed()) {
+      expect(verdict.answer).not.toMatch(/^\s*#{1,6}\s/m)
+    }
+  })
+
+  it('still LINKS the page it quotes — the one markup the panel speaks', () => {
+    for (const verdict of composed()) {
+      expect(verdict.answer).toMatch(/\[[^\]]+\]\(https?:\/\/[^)]+\)/)
+    }
+  })
+
+  it('quotes text that reads as lines, not as one run-on paragraph', () => {
+    // The docs write these as lists. The index used to collapse every run of
+    // whitespace to a single space — harmless while the text only ever went
+    // into a model prompt, and the reason Zach's answer ran three bullets
+    // together inside one paragraph the first time a human was shown it.
+    const verdict = verdictFor('how do I move an element without dragging')
+    expect(verdict.answered).toBe(true)
+    const quoted = verdict.quoted.map((section) => section.text).join('\n')
+    expect(quoted).toContain('\n- ')
   })
 })
 

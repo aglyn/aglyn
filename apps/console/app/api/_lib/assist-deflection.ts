@@ -436,6 +436,31 @@ export function deflectToDocs(
  * else. Kept exported so the spec can assert the reconstruction property
  * against it directly rather than through the route.
  *
+ * ⚠️ COMPOSED FOR A SURFACE THAT DOES NOT RENDER MARKDOWN. The Assist panel
+ * says so in its own docstring — `renderAssistText` turns `[label](url)` and
+ * bare URLs into links and renders everything else literally, under
+ * `whiteSpace: 'pre-wrap'`. That is a deliberate phase-1 decision, not a gap.
+ *
+ * This template shipped once with the heading wrapped in `**…**`, and Zach's
+ * besigner drawer duly showed `**Drag-and-drop hierarchy — Moving an element
+ * without dragging**`, asterisks and all. The lesson is not "escape the
+ * asterisks" — it is that the composer has to know what renders it.
+ *
+ * So the heading is a bare `[label](url)` on its own line — a LINK, which is
+ * the one markup the panel speaks, and which is why the title in Zach's
+ * screenshot was correctly clickable even while the asterisks around it were
+ * not. Everything else is carried by NEWLINES, which `pre-wrap` renders,
+ * rather than by markup, which it does not.
+ *
+ * The link has to live in the TEXT. The `done` event also carries a `docs`
+ * array, and it is tempting to treat that as the structural home for the
+ * citation — but the panel never renders it (it feeds the `grounded`
+ * analytics flag and nothing else), so a citation moved there would reach
+ * no reader at all.
+ *
+ * Three specs in `assist-deflection.spec.ts` hold the line — no emphasis
+ * markers, no heading markers, and a link still present.
+ *
  * The closing line is not decoration. A user who reads this and finds it did
  * not answer them needs to know that asking again in different words reaches
  * something else — otherwise the cheap path looks like the assistant simply
@@ -448,7 +473,7 @@ export function composeDocsAnswer(sections: readonly AssistDocsSection[]): strin
     if (budget <= MIN_SECTION_CHARS) break
     const quote = trimToSentence(section.text, budget)
     budget -= quote.length
-    parts.push(`**[${sectionLabel(section)}](${sectionUrl(section)})**\n\n${quote}`)
+    parts.push(`[${sectionLabel(section)}](${sectionUrl(section)})\n${quote}`)
   }
   parts.push(
     'That is straight from the documentation — the headings above link to the full page. If it did not cover what you meant, ask again with more detail and I will work through it with you.',
