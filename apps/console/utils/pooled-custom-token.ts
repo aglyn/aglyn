@@ -59,4 +59,55 @@ export function signInWithPooledCustomToken(
   return signInWithCustomToken(auth, token)
 }
 
+/**
+ * Put the instance back in the pool of the user it just RESTORED from
+ * persistence (AGL-2486).
+ *
+ * AGL-1993 fixed the exchange and left the restore, and the restore is the
+ * commoner path: `signInWithPooledCustomToken` runs only when this origin
+ * has no local user, whereas a second visit — or a second TAB — finds the
+ * user already in IndexedDB and never exchanges anything.
+ *
+ * The SDK's own invariant is that `auth.tenantId` and
+ * `auth.currentUser.tenantId` agree; `_updateCurrentUser` asserts it and
+ * throws `auth/tenant-id-mismatch` when they do not. But the restore path
+ * does not go through that assertion — `initializeCurrentUser` calls
+ * `directlySetCurrentUser`, which sets `currentUser` and never touches
+ * `tenantId` (verified in `@firebase/auth` 1.13.4) — while the `AuthImpl`
+ * constructor has already set `tenantId = null`. So a GCIP-tenant user
+ * restored from persistence lands on an instance that believes it is on the
+ * project pool, and nothing complains.
+ *
+ * Two things then go wrong, and the second is the cross-tab one:
+ *
+ * 1. Every Identity Toolkit request from that instance omits `tenantId` and
+ *    is therefore aimed at the project pool.
+ * 2. The cross-tab sync path — `_onStorageEvent` → `_updateCurrentUser` —
+ *    hits the assertion above and THROWS. A tab in this state silently
+ *    stops tracking what the rest of the browser profile is doing with the
+ *    shared auth record, which is the "an old tab and a new tab disagree"
+ *    shape Zach reported on production. It bites only tenant-pool
+ *    identities, i.e. SSO accounts.
+ *
+ * Assigned unconditionally and from the USER, for the same reason
+ * `signInWithPooledCustomToken` assigns unconditionally: `null` is a real
+ * value here. This is a repair, never a decision — it makes an invariant the
+ * SDK already enforces elsewhere actually hold, and it can only ever move
+ * the instance to the pool its own current user is in.
+ *
+ * Call it ONLY on a restore, never while a sign-in is in flight: the SSO
+ * page sets `auth.tenantId` to the TARGET pool before `signInWith…`, and at
+ * that moment `currentUser` may still be the outgoing account. Adopting the
+ * outgoing user's pool there would aim the in-flight sign-in at the wrong
+ * one — the same cross-pool bug this exists to close, pointed backwards.
+ */
+export function adoptRestoredPool(
+  auth: Pick<Auth, 'tenantId'>,
+  user: { tenantId?: string | null } | null | undefined,
+): void {
+  const restored = user?.tenantId ?? null
+  if (auth.tenantId === restored) return
+  auth.tenantId = restored
+}
+
 export default signInWithPooledCustomToken

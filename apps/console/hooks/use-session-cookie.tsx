@@ -27,7 +27,10 @@ import {
   consumeInteractiveSignOut,
 } from '../utils/interactive-signin'
 import clearServiceWorkerCaches from '../utils/clear-service-worker-caches'
-import { signInWithPooledCustomToken } from '../utils/pooled-custom-token'
+import {
+  adoptRestoredPool,
+  signInWithPooledCustomToken,
+} from '../utils/pooled-custom-token'
 import {
   captureReauthIdentity,
   requestSessionReauth,
@@ -150,6 +153,15 @@ export function useSessionCookie(): void {
         hadUser.current = true
 
         if (isInitialState) {
+          // This user came out of PERSISTENCE (or a redirect landing), and a
+          // restore leaves `auth.tenantId` at its constructed `null` however
+          // tenanted the user is — the SDK's own invariant, un-asserted on
+          // this one path (AGL-2486). Repair it before anything reads a
+          // token or another tab writes the shared record, both of which
+          // this instance would otherwise handle on the wrong pool. Safe
+          // HERE and only here: `isInitialState` is the one moment no
+          // sign-in is in flight on this tab.
+          adoptRestoredPool(auth, user as { tenantId?: string | null })
           // The mobile Google flow (signInWithRedirect) completes on a
           // fresh page load, so an interactive sign-in surfaces here as an
           // "initial state" — indistinguishable from a persistence restore.
