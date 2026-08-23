@@ -89,6 +89,7 @@ const BESIGNER_TOPICS = {
   besigner: '/building-sites/besigner/overview',
   bindings: '/building-sites/bindings/overview',
   dragDropHierarchy: '/building-sites/besigner/drag-drop-hierarchy',
+  elementCatalog: '/building-sites/besigner/element-catalog',
   interactions: '/building-sites/besigner/interactions-and-custom-html',
   responsiveStyling: '/building-sites/besigner/responsive-styling',
   reusableComponents: '/building-sites/besigner/reusable-components',

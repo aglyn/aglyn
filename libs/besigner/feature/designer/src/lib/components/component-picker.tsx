@@ -42,7 +42,9 @@ import { Observer, observer } from 'mobx-react-lite'
 import { forwardRef, SyntheticEvent, useCallback, useState } from 'react'
 import usePickerFilter from '../hooks/use-picker-filter'
 import useVisibleComponentCategories from '../hooks/use-visible-component-categories'
+import { describeElement } from '../utils/describe-element'
 import AccordionListComponent from './accordion-list.component'
+import ElementDetailView from './element-detail.component'
 import EmptyResults from './empty-results'
 import NodeCard from './node-card'
 import PickerSearchField from './picker-search-field'
@@ -89,7 +91,10 @@ export const ComponentPicker = observer(
 
     const handleClose = useCallback(
       (e: object, reason = 'canceled') => {
-        onClose?.(e, reason as Parameters<NonNullable<DialogProps['onClose']>>[1])
+        onClose?.(
+          e,
+          reason as Parameters<NonNullable<DialogProps['onClose']>>[1],
+        )
       },
       [onClose],
     )
@@ -131,10 +136,11 @@ export const ComponentPicker = observer(
               component="div"
               noWrap
               sx={{
-                textOverflow: "ellipsis",
+                textOverflow: 'ellipsis',
                 ml: 2,
-                flex: 1
-              }}>
+                flex: 1,
+              }}
+            >
               {'Choose element'}
             </Typography>
             <IconButton
@@ -164,10 +170,7 @@ export const ComponentPicker = observer(
                 borderColor: 'divider',
               }}
             >
-              <PickerSearchField
-                value={filter}
-                onChange={handleFilterChange}
-              />
+              <PickerSearchField value={filter} onChange={handleFilterChange} />
             </Toolbar>
           </Collapse>
         </AppBar>
@@ -195,28 +198,34 @@ export const ComponentPicker = observer(
                   {() => (
                     <Box>
                       <Grid spacing={3} container sx={{ overflowX: 'hidden' }}>
-                        {item?.items?.map((node: typeof allItems[number]['items'][number], index: number) => (
-                          <Observer key={node?.$id ?? index}>
-                            {() => (
-                              <Grid
-                                size={{
-                                  xs: 4,
-                                  sm: 3
-                                }}>
-                                <NodeCard
-                                  sx={[
-                                    { cursor: 'pointer' },
-                                    selected?.$id === node?.$id
-                                      ? { borderColor: 'primary.main' }
-                                      : null,
-                                  ]}
-                                  node={node as any}
-                                  onClick={(e) => handleItemClick(e, node)}
-                                />
-                              </Grid>
-                            )}
-                          </Observer>
-                        ))}
+                        {item?.items?.map(
+                          (
+                            node: (typeof allItems)[number]['items'][number],
+                            index: number,
+                          ) => (
+                            <Observer key={node?.$id ?? index}>
+                              {() => (
+                                <Grid
+                                  size={{
+                                    xs: 4,
+                                    sm: 3,
+                                  }}
+                                >
+                                  <NodeCard
+                                    sx={[
+                                      { cursor: 'pointer' },
+                                      selected?.$id === node?.$id
+                                        ? { borderColor: 'primary.main' }
+                                        : null,
+                                    ]}
+                                    node={node as any}
+                                    onClick={(e) => handleItemClick(e, node)}
+                                  />
+                                </Grid>
+                              )}
+                            </Observer>
+                          ),
+                        )}
                       </Grid>
                     </Box>
                   )}
@@ -229,26 +238,29 @@ export const ComponentPicker = observer(
           <Collapse in={Boolean(selected)} sx={{ p: 1, pl: 2, width: 1 }}>
             <Stack
               sx={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between"
-              }}>
-              <Typography
-                variant="subtitle1"
-                color="textSecondary"
-                noWrap
-                sx={{
-                  textOverflow: "ellipsis"
-                }}
+                flexDirection: 'row',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: 2,
+              }}
+            >
+              {/* Was the element's NAME and nothing else — the one thing the
+                  card you just clicked already told you. Capped and
+                  scrollable so a heavily-restricted element cannot push
+                  Confirm off the dialog. */}
+              <Box
+                sx={{ flex: 1, minWidth: 0, maxHeight: 168, overflowY: 'auto' }}
               >
-                {selected?.['displayName'] || selected?.$id}
-              </Typography>
-              <Button onClick={handleConfirm}>{'Confirm'}</Button>
+                <ElementDetailView detail={describeElement(selected)} />
+              </Box>
+              <Button onClick={handleConfirm} sx={{ flex: '0 0 auto' }}>
+                {'Confirm'}
+              </Button>
             </Stack>
           </Collapse>
         </Box>
       </Dialog>
-    );
+    )
   }),
 )
 ComponentPicker.displayName = 'ComponentPicker'
