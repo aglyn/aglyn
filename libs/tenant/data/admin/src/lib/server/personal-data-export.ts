@@ -267,18 +267,392 @@ export const EXPORT_COVERED_COLLECTIONS: readonly string[] =
   PERSONAL_DATA_SOURCES.map((source) => source.collection)
 
 /**
- * Field names whose VALUE is a credential, wherever they appear.
+ * ## WHY THIS IS SHAPE-DRIVEN AND NOT A LIST OF NAMES
  *
- * Matched on the key, at any depth, in any collection — deliberately blunt.
- * A denylist keyed by `collection.field` would have to be maintained in step
- * with every schema change, and the failure mode of forgetting an entry is
- * that a live secret is written into a file we hand to a customer over email.
- * A false positive costs a redacted field in an export; a false negative costs
- * a credential. The names come from the AGL-1443 inventory of exactly what the
- * old erasure dump was found to contain.
+ * It used to be a list of names, anchored on separators:
+ *
+ *     /(^|[._-])(secret|token|password|apikey|…)($|[._-])/i
+ *
+ * That pattern requires a `.`, `_`, `-`, or a string boundary on both sides
+ * of the word, so it reads `password_hash` and `webhooks.secret` and misses
+ * `supplierToken` and `passwordScrypt` — the exact two fields the AGL-1881
+ * review found leaving the platform in a customer's own export file. One is
+ * a live bearer credential a supplier authenticates with; the other is a
+ * shopper's scrypt password hash. **A denylist of names is always one naming
+ * convention behind, and camelCase is the proof.**
+ *
+ * So the name half is now tokenized rather than separator-anchored, and it is
+ * no longer the only gate. Three run, in order, and any of them redacts:
+ *
+ *  * **(A) The name, tokenized.** `supplierToken` splits to
+ *    `['supplier','token']` the same way `supplier_token` and
+ *    `SUPPLIER-TOKEN` do, so the convention stops mattering. A name matches
+ *    on a single secret word or on an adjacent pair (`client secret`).
+ *  * **(B) The VALUE's shape, whatever the key is called.** This is the half
+ *    that does not need to know the schema: a PEM block, a JWT, a vendor
+ *    prefix (`sk_live_`, `whsec_`, `ghp_`, `AKIA`…), a `$2b$`/`$argon2` hash,
+ *    this repo's own `salt:hash` scrypt form, or an opaque high-entropy
+ *    string is a credential whether the field is called `supplierToken`,
+ *    `t`, or `notes`. **Gate B is the "redact unless known safe" default**:
+ *    a credential-shaped string is withheld unless its key names it as a
+ *    content identifier (see {@link SAFE_VALUE_WORDS}).
+ *  * **(C) Credentials carried inside a URL.** `?token=`, `?sig=`,
+ *    `?key=`, and `https://user:pass@host` are stripped from the URL rather
+ *    than the URL being blanked, because a media object's `url` field really
+ *    does carry a live Firebase download token in a query parameter, and the
+ *    location of the customer's own file is exactly what an access request
+ *    asks for. Precision beats blanking here.
+ *
+ * ### Why the KEY half is still deny-based, when the value half is not
+ *
+ * A true allowlist of field names is not available on this data. The export
+ * walks documents whose field names our customers author — canvas nodes,
+ * dataset records, custom metadata, form submissions — so an allowlist of
+ * names would blank most of the file and turn an access request into a
+ * non-answer, which is the under-disclosure this feature exists to stop. The
+ * allowlist therefore lives where the vocabulary IS ours: value shapes. An
+ * unrecognized VALUE shape is passed through (it is prose, a number, a date,
+ * a customer's own content); an unrecognized value shape that looks like a
+ * credential is withheld. That is the inversion the review asked for, put
+ * where it can hold.
+ *
+ * ### The one deliberate carve-out
+ *
+ * `token`/`tokens` is also a metering word — `tokensUsed: 14203` on an
+ * assist exchange is a usage count, and blanking it would blank a real
+ * disclosure. A credential is a STRING; a count is a number. So a numeric or
+ * boolean value under a name that matched only on a metering word passes
+ * through. Nothing else in the vocabulary gets that treatment.
+ *
+ * A false positive costs a redacted field in an export. A false negative
+ * costs a credential. Everything below is tuned in that direction.
  */
-const SECRET_KEY_PATTERN =
-  /(^|[._-])(secret|secrets|token|tokens|apikey|api_key|passwordhash|password_hash|password|privatekey|private_key|signingkey|signing_key|credential|credentials|clientsecret|client_secret|webhooksecret|refreshtoken|access_token|paymentlinkurl|payment_link_url)($|[._-])/i
+
+/**
+ * Split a field name into lowercase word tokens, convention-independently.
+ *
+ * `supplierToken`, `supplier_token`, `SUPPLIER-TOKEN` and `Supplier.Token`
+ * all become `['supplier','token']`. Acronym runs split at the last capital
+ * (`SSOTokenId` → `['sso','token','id']`) and digits break a word
+ * (`apiKey2` → `['api','key','2']`), so a numbered field cannot hide.
+ */
+export function fieldNameTokens(key: unknown): string[] {
+  return String(key ?? '')
+    .replace(/[^A-Za-z0-9]+/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .replace(/([A-Za-z])([0-9])/g, '$1 $2')
+    .toLowerCase()
+    .split(' ')
+    .filter(Boolean)
+}
+
+/**
+ * Words that make a field a credential on their own.
+ *
+ * Deliberately short. Every entry here is a word that has no innocent
+ * meaning on a stored VALUE — `hmac`, `scrypt` and `bcrypt` name the
+ * algorithm that produced a verifier, `passphrase` and `credential` name the
+ * thing itself. `key` is NOT here and must never be: `publicKey` on a
+ * passkey and `sortKey` on a dataset are not secrets, which is what
+ * {@link SECRET_WORD_PAIRS} is for.
+ */
+const SECRET_WORDS = new Set([
+  'secret',
+  'secrets',
+  'password',
+  'passwords',
+  'passwd',
+  'pwd',
+  'passphrase',
+  'token',
+  'tokens',
+  'credential',
+  'credentials',
+  'apikey',
+  'privatekey',
+  'scrypt',
+  'bcrypt',
+  'argon',
+  'argon2',
+  'pbkdf2',
+  'hmac',
+  'otp',
+  'totp',
+  'authorization',
+])
+
+/**
+ * Words that are a credential only next to another word.
+ *
+ * `key` is meaningless alone and decisive after `api`, `private`, `signing`,
+ * `secret`, `session` or `encryption`; `token` after `access`/`refresh` is
+ * already caught by {@link SECRET_WORDS} and listed here anyway so the pair
+ * table reads as the complete statement of the rule.
+ */
+const SECRET_WORD_PAIRS = new Set([
+  'api key',
+  'private key',
+  'signing key',
+  'secret key',
+  'session key',
+  'encryption key',
+  'client secret',
+  'access token',
+  'refresh token',
+  'webhook secret',
+  'shared secret',
+  // A Stripe payment link is a live bearer URL: whoever holds it can pay.
+  // Named in the AGL-1443 inventory of what the old dump actually carried.
+  'payment link',
+  'auth code',
+  'recovery code',
+  'backup code',
+])
+
+/**
+ * The metering carve-out — see the header. A name that matched ONLY on one
+ * of these, over a number or a boolean, is a count and is disclosed.
+ */
+const METERING_WORDS = new Set(['token', 'tokens'])
+
+/**
+ * Key words that mark a high-entropy value as a content identifier rather
+ * than a credential, defusing gate (B) only.
+ *
+ * A SHA-256 has exactly the shape of a 64-character secret and is not one.
+ * Gate (A) is never defused by this list: `apiKeyId` is redacted, because
+ * the name says credential and an id of a credential is not worth the
+ * argument.
+ */
+const SAFE_VALUE_WORDS = new Set([
+  // A passkey's `publicKey` is public by definition and has exactly the shape
+  // of a secret. Safe to list because gate (A) is never defused here — a
+  // `publicToken` is still redacted, on the strength of `token`.
+  'public',
+  'id',
+  'ids',
+  'uid',
+  'uuid',
+  'guid',
+  'hash',
+  'hashes',
+  'sha',
+  'sha1',
+  'sha256',
+  'sha512',
+  'md5',
+  'crc',
+  'crc32c',
+  'etag',
+  'checksum',
+  'digest',
+  'fingerprint',
+  'generation',
+  'version',
+  'revision',
+  'slug',
+  'path',
+  'url',
+  'uri',
+  'href',
+  'src',
+  'color',
+  'colour',
+  'hex',
+])
+
+/** Vendor credential prefixes — unambiguous, and worth naming explicitly. */
+const CREDENTIAL_PREFIXES = [
+  'sk_live_',
+  'sk_test_',
+  'rk_live_',
+  'rk_test_',
+  'whsec_',
+  'ghp_',
+  'gho_',
+  'ghu_',
+  'ghs_',
+  'ghr_',
+  'github_pat_',
+  'xoxb-',
+  'xoxp-',
+  'xapp-',
+  'xoxa-',
+  'AKIA',
+  'ASIA',
+  'AIza',
+  'ya29.',
+  'SG.',
+  're_',
+  'shpat_',
+  'shpss_',
+  'npm_',
+  'glpat-',
+  'sq0csp-',
+  'sq0atp-',
+]
+
+/** A PEM block that carries a private key or a certificate request. */
+const PEM_PATTERN = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/
+
+/** Modular crypt format: bcrypt, argon2, scrypt, PBKDF2, sha512-crypt. */
+const CRYPT_HASH_PATTERN = /^\$(2[abxy]?|argon2[a-z]*|scrypt|pbkdf2[^$]*|[56])\$/
+
+/** This repo's own scrypt storage form: `{16+ hex salt}:{32+ hex hash}`. */
+const SALTED_HASH_PATTERN = /^[0-9a-f]{16,}:[0-9a-f]{32,}$/i
+
+/** A JSON Web Token — three base64url segments. */
+const JWT_PATTERN = /^[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}$/
+
+/** A UUID, which is an identifier far more often than it is a credential. */
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** Charset of an opaque credential: base64, base64url or hex, nothing else. */
+const OPAQUE_CHARSET = /^[A-Za-z0-9_+/=-]+$/
+
+/**
+ * The window an opaque secret lives in.
+ *
+ * Below 32 characters the false-positive rate against ordinary identifiers is
+ * not worth it and the value is too short to be a modern credential anyway.
+ * Above 512 it is customer CONTENT — a base64 image, a compressed canvas
+ * blob, an encoded document — and blanking those is the "gutting the export"
+ * failure this file is explicitly trying not to commit.
+ */
+const OPAQUE_MIN_LENGTH = 32
+const OPAQUE_MAX_LENGTH = 512
+
+/** Shannon entropy per character. Prose and slugs sit well below this. */
+const OPAQUE_MIN_ENTROPY = 3.2
+
+function shannonEntropyPerChar(text: string): number {
+  const counts = new Map<string, number>()
+  for (const character of text) {
+    counts.set(character, (counts.get(character) ?? 0) + 1)
+  }
+  let entropy = 0
+  for (const count of counts.values()) {
+    const p = count / text.length
+    entropy -= p * Math.log2(p)
+  }
+  return entropy
+}
+
+/**
+ * Does this STRING look like a credential, ignoring what it is called?
+ *
+ * Exported because the guard spec asserts each limb independently — a shape
+ * detector tested only through the redactor is a detector whose gaps are
+ * invisible.
+ */
+export function looksLikeCredential(value: string): boolean {
+  const text = value.trim()
+  if (!text) return false
+  if (PEM_PATTERN.test(text)) return true
+  if (CRYPT_HASH_PATTERN.test(text)) return true
+  if (SALTED_HASH_PATTERN.test(text)) return true
+  if (CREDENTIAL_PREFIXES.some((prefix) => text.startsWith(prefix))) return true
+  if (JWT_PATTERN.test(text)) return true
+  // Anything with whitespace is prose, and `data:` is an inline asset. Both
+  // are customer content, and neither is a bearer credential.
+  if (/\s/.test(text)) return false
+  if (/^data:/i.test(text)) return false
+  if (UUID_PATTERN.test(text)) return false
+  if (text.length < OPAQUE_MIN_LENGTH || text.length > OPAQUE_MAX_LENGTH) {
+    return false
+  }
+  if (!OPAQUE_CHARSET.test(text)) return false
+  return shannonEntropyPerChar(text) >= OPAQUE_MIN_ENTROPY
+}
+
+/** What a stripped URL parameter reads as, so the removal is visible. */
+export const REDACTED_URL_PARAM = 'REDACTED'
+
+/** Query parameters that carry a bearer credential inside a URL. */
+const URL_CREDENTIAL_PARAMS = new Set([
+  'token',
+  'access_token',
+  'accesstoken',
+  'id_token',
+  'refresh_token',
+  'auth',
+  'authorization',
+  'apikey',
+  'api_key',
+  'key',
+  'sig',
+  'signature',
+  'secret',
+  'password',
+  'downloadtoken',
+])
+
+/**
+ * Strip the credential out of a URL, keeping the URL.
+ *
+ * A media object's `url` is `…/o/{path}?alt=media&token={uuid}` — a live,
+ * unauthenticated download credential, in a field an access request has a
+ * real interest in. Blanking the whole value would tell the customer nothing
+ * about where their own file is; keeping it whole hands out the credential.
+ * So the parameter is replaced and the rest survives. `user:pass@` userinfo
+ * goes the same way.
+ *
+ * Returns the input unchanged when it is not a URL — every non-URL string
+ * has already been decided by the shape gate.
+ */
+export function scrubUrlCredentials(value: string): string {
+  if (!/^https?:\/\//i.test(value)) return value
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    return value
+  }
+  let changed = false
+  if (url.username || url.password) {
+    url.username = ''
+    url.password = ''
+    changed = true
+  }
+  for (const name of Array.from(url.searchParams.keys())) {
+    if (!URL_CREDENTIAL_PARAMS.has(name.toLowerCase())) continue
+    if (!url.searchParams.get(name)) continue
+    url.searchParams.set(name, REDACTED_URL_PARAM)
+    changed = true
+  }
+  return changed ? url.toString() : value
+}
+
+/**
+ * Gate (A): does the NAME say credential?
+ *
+ * `value` is consulted only for the metering carve-out described in the
+ * header — a `tokensUsed: 14203` is a count, not a credential.
+ */
+export function secretByName(key: unknown, value?: unknown): boolean {
+  const tokens = fieldNameTokens(key)
+  if (!tokens.length) return false
+  const hits = tokens.filter((token) => SECRET_WORDS.has(token))
+  for (let index = 0; index + 1 < tokens.length; index += 1) {
+    if (SECRET_WORD_PAIRS.has(`${tokens[index]} ${tokens[index + 1]}`)) {
+      return true
+    }
+  }
+  if (!hits.length) return false
+  // Matched only on a metering word, over a number or a boolean: a count.
+  const metering = hits.every((token) => METERING_WORDS.has(token))
+  if (metering && (typeof value === 'number' || typeof value === 'boolean')) {
+    return false
+  }
+  return true
+}
+
+/** Gate (B)'s defuser: does the NAME say this high-entropy value is an id? */
+function nameMarksContentIdentifier(key: unknown): boolean {
+  return fieldNameTokens(key).some((token) => SAFE_VALUE_WORDS.has(token))
+}
 
 /** What a redacted value is replaced with — presence, never content. */
 export interface RedactedValue {
@@ -307,12 +681,30 @@ const redactedMarker = (present: boolean): RedactedValue => ({
  * Buffer) are stringified rather than walked: they carry no nested keys to
  * redact, and `JSON.stringify` on a Timestamp yields `{_seconds,_nanoseconds}`,
  * which is not a date to a human reading the file.
+ *
+ * Three gates, any of which redacts — the name (A), the value's shape (B),
+ * and a credential embedded in a URL (C). See the header above
+ * {@link fieldNameTokens} for why the value half is the one that carries the
+ * "withhold unless known safe" default.
  */
 export function redactSecrets(value: unknown, key = ''): unknown {
-  if (key && SECRET_KEY_PATTERN.test(key)) {
+  // (A) The name, tokenized — convention-independent.
+  if (key && secretByName(key, value)) {
     return redactedMarker(value !== undefined && value !== null && value !== '')
   }
   if (value === null || value === undefined) return value ?? null
+  if (typeof value === 'string') {
+    // (C) A URL that carries its credential in a parameter keeps the URL and
+    // loses the credential — see {@link scrubUrlCredentials}.
+    const scrubbed = scrubUrlCredentials(value)
+    if (scrubbed !== value) return scrubbed
+    // (B) The shape, whatever the field is called. Withheld unless the name
+    // marks it as a content identifier.
+    if (looksLikeCredential(value) && !nameMarksContentIdentifier(key)) {
+      return redactedMarker(true)
+    }
+    return value
+  }
   if (Array.isArray(value)) return value.map((entry) => redactSecrets(entry, key))
   if (typeof value === 'object') {
     const source = value as Record<string, unknown>
