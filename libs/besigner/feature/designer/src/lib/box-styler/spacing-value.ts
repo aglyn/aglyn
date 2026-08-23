@@ -77,6 +77,26 @@ export function findSpacingStep(
 }
 
 /**
+ * The theme's spacing UNIT, inferred from the ladder itself.
+ *
+ * The ladder already carries the answer — a rung of 1 whose hint is `8px`
+ * says the unit is 8 — so nothing extra has to be threaded through to
+ * resolve a step that has no rung of its own. Returns 0 when the ladder
+ * cannot say, which callers read as "cannot resolve".
+ */
+function spacingUnitOf(steps: readonly SpacingScaleOption[]): number {
+  for (const step of steps ?? []) {
+    if (!step || step.value === 0) continue
+    const px = Number.parseFloat(`${step.hint}`)
+    if (Number.isFinite(px) && `${step.hint}`.endsWith('px')) {
+      const unit = px / step.value
+      if (Number.isFinite(unit) && unit > 0) return unit
+    }
+  }
+  return 0
+}
+
+/**
  * The compact text one side of the diagram shows — what the element
  * actually renders, so the diagram reads as a measurement rather than as a
  * vocabulary quiz. `''` when nothing is set, which is the caller's cue to
@@ -93,9 +113,15 @@ export function spacingDisplayText(
   if (!isSpacingSet(value)) return ''
   const step = findSpacingStep(value, steps)
   if (step) return step.hint
-  // A number the current theme has no rung for is still a valid step —
-  // an author may have typed it, or the theme may have been retuned since.
-  if (typeof value === 'number') return `${value}×`
+  // A number the current theme has no rung for is still a valid step, and
+  // it is common — `p: 10` is an ordinary thing to find on a hero. It is
+  // resolved through the theme's own unit rather than shown as `10×`,
+  // which named the step but not the amount, and so could not be compared
+  // with the `32px` sitting next to it.
+  if (typeof value === 'number') {
+    const unit = spacingUnitOf(steps)
+    return unit ? `${Math.round(value * unit * 100) / 100}px` : `${value}×`
+  }
   return `${value}`
 }
 
@@ -111,7 +137,11 @@ export function spacingDescription(
   if (!isSpacingSet(value)) return 'Not set'
   const step = findSpacingStep(value, steps)
   if (step) return `${step.label} (theme spacing) — ${step.hint}`
-  if (typeof value === 'number') return `${value}× the theme spacing unit`
+  if (typeof value === 'number') {
+    const unit = spacingUnitOf(steps)
+    const resolved = unit ? ` — ${Math.round(value * unit * 100) / 100}px` : ''
+    return `${value}× the theme spacing unit${resolved}`
+  }
   return `${value}`
 }
 

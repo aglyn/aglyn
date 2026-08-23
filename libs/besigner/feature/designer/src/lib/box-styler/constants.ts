@@ -25,4 +25,7 @@ export const classKeys = generateComponentClassKeys('BoxStyler', [
   'border',
   'padding',
   'contents',
+  'legendItem',
+  'legendSwatch',
+  'legendLabel',
 ])

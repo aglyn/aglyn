@@ -130,11 +130,19 @@ describe('what a side shows', () => {
     expect(spacingDescription(undefined, steps)).toBe('Not set')
   })
 
-  it('still shows a step the current theme has no rung for', () => {
-    // A retuned theme, or a number typed elsewhere: it is a valid step
-    // and must not vanish just because the ladder does not name it.
-    expect(spacingDisplayText(7, steps)).toBe('7×')
-    expect(spacingDescription(7, steps)).toBe('7× the theme spacing unit')
+  it('resolves a step the ladder has no rung for, rather than showing 7x', () => {
+    // `p: 10` is an ordinary thing to find on a hero and 10 is not a rung.
+    // `10×` named the step but not the amount, so it could not be compared
+    // with the `32px` sitting beside it in the same diagram.
+    expect(spacingDisplayText(7, steps)).toBe('56px')
+    expect(spacingDescription(7, steps)).toBe(
+      '7× the theme spacing unit — 56px',
+    )
+  })
+
+  it('falls back to the multiple when no ladder can resolve it', () => {
+    expect(spacingDisplayText(7, [])).toBe('7×')
+    expect(spacingDescription(7, [])).toBe('7× the theme spacing unit')
   })
 })
 

@@ -127,7 +127,7 @@ describe('the box styler in the styles panel (AGL-2486)', () => {
       const diagram = document.querySelector('.borderRing')
         ?.parentElement as HTMLElement
       expect(diagram).toBeTruthy()
-      for (const region of ['Margin', 'Border', 'Padding', 'Content']) {
+      for (const region of ['Margin', 'Border', 'Padding', 'Contents']) {
         expect(within(diagram).getAllByText(region).length).toBeGreaterThan(0)
       }
     })
@@ -325,6 +325,20 @@ describe('the box styler in the styles panel (AGL-2486)', () => {
       })
       await act(async () => undefined)
       expect(live().sx).toEqual({ marginLeft: '12px' })
+    })
+
+    it('shows a step the ladder has no rung for, instead of going blank', async () => {
+      // `p: 10` on a hero: 10 is not a rung, and with no option carrying
+      // it the select rendered EMPTY while the diagram beside it read
+      // 80px — so the control claimed "not set" about a value that was
+      // set, and the next pick would have overwritten it unseen.
+      await renderPanel({ paddingTop: 10 })
+      await openSide('Space inside — top')
+      expect(
+        within(screen.getByLabelText('Space inside — top')).getByText('80px'),
+      ).toBeTruthy()
+      const select = screen.getByLabelText('Space inside — top value')
+      expect(select.textContent).toContain('80px')
     })
 
     it('opens in custom mode for a value that is already custom', async () => {

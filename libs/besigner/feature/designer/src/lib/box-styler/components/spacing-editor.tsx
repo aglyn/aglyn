@@ -37,8 +37,10 @@ import { besignerDocsUrl } from '../../utils/docs-help'
 import type { SpacingScaleOption } from '../../utils/theme-scale-options'
 import {
   type BoxSpacingValue,
+  findSpacingStep,
   isSpacingSet,
   isThemeSpacingStep,
+  spacingDisplayText,
   UNIT_GLOSS,
   UNIT_GROUPS,
   unitDocsAnchor,
@@ -99,6 +101,21 @@ export const SpacingEditor = (props: SpacingEditorProps) => {
     () => parseCssMeasurement(typeof value === 'string' ? value : undefined),
     [value],
   )
+
+  /**
+   * A step the ladder has no rung for still has to be SELECTABLE.
+   *
+   * `p: 10` is an ordinary thing to find on a hero, and 10 is not on the
+   * ladder. Without an option carrying that value the select rendered
+   * blank — the control claimed the side was unset while the diagram
+   * beside it read `80px`, and the next pick would have quietly replaced
+   * a value the author never saw. So the stored step is offered as its
+   * own entry when the ladder does not already contain it.
+   */
+  const offLadderStep =
+    isThemeSpacingStep(value) && !findSpacingStep(value, ladder)
+      ? { value: value as number, hint: spacingDisplayText(value, ladder) }
+      : null
 
   const selectValue = isCustom
     ? CUSTOM
@@ -179,6 +196,20 @@ export const SpacingEditor = (props: SpacingEditorProps) => {
           <ListSubheader sx={{ lineHeight: 2 }}>
             {'Theme spacing'}
           </ListSubheader>
+        ) : null}
+        {offLadderStep ? (
+          <MenuItem value={`${offLadderStep.value}`}>
+            <Box component="span" sx={{ flex: 1 }}>
+              {`${offLadderStep.value}× the spacing unit`}
+            </Box>
+            <Typography
+              component="span"
+              variant="caption"
+              sx={{ color: 'text.secondary', ml: 1 }}
+            >
+              {offLadderStep.hint}
+            </Typography>
+          </MenuItem>
         ) : null}
         {ladder.map((step) => (
           <MenuItem key={step.value} value={`${step.value}`}>

@@ -28,6 +28,7 @@ import { forwardRef, useCallback, useEffect, useRef, useState } from 'react'
 
 import type { SpacingScaleOption } from '../utils/theme-scale-options'
 import BoxDiagram, { SIDE_LABELS } from './components/box-diagram'
+import Legend, { LegendItem } from './components/legend'
 import SpacingEditor from './components/spacing-editor'
 import type { BoxSpacingValue } from './spacing-value'
 import type { Measurements } from './types'
@@ -207,10 +208,26 @@ export const BoxStyler = forwardRef<any, BoxStylerProps>(
           ) : null}
         </Collapse>
 
-        {/* No legend. It was a swatch key for four regions that now name
-            themselves on the region they label — a diagram that needs a key
-            to be understood is a diagram that is not communicating, and this
-            one was repeating what the labels already said. */}
+        {/* The legend stays. Removing it was part of a redraw Zach did not
+            ask for — he liked this control as it was, and the key belongs
+            to the treatment he liked. It gains the border swatch, because
+            the diagram now has a border region for the BORDER label to
+            sit on. */}
+        <Legend
+          direction="row"
+          spacing={1}
+          sx={{
+            alignItems: 'center',
+            justifyContent: 'space-around',
+            mt: 1,
+            mb: 2,
+          }}
+        >
+          <LegendItem item={'margin'} />
+          <LegendItem item={'border'} />
+          <LegendItem item={'padding'} />
+          <LegendItem item={'contents'} />
+        </Legend>
       </Box>
     )
   },
