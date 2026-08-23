@@ -40,12 +40,30 @@ import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
  * means naming the cookie and saying what the Cookie Policy has to say about
  * it — which is the moment to notice the policy needs a new row.
  *
- * NOT covered, and deliberately: cookies set by third-party SDKs we load
- * (Stripe's `__stripe_mid`/`__stripe_sid`, Google's `_ga`/`_ga_<id>` and
- * `_GRECAPTCHA`). No line of ours writes them, so no scan of ours can find
- * them. They are listed in `THIRD_PARTY_COOKIES` below so the inventory is
- * complete for a reader, and the spec asserts each named loader is still
- * imported somewhere — a integration we drop must lose its policy row too.
+ * NOT covered by the writer scan, and deliberately: cookies set by third-party
+ * SDKs we load (Stripe's `__stripe_mid`/`__stripe_sid`, Google's `_ga`/
+ * `_ga_<id>` and `_GRECAPTCHA`). No line of ours writes them, so no scan of
+ * ours can find them. They are listed in `THIRD_PARTY_COOKIES` below so the
+ * inventory is complete for a reader, and the spec asserts each named loader
+ * is still imported somewhere — an integration we drop must lose its policy
+ * row too.
+ *
+ * ## The blind spot that let the advertising rows go missing (AGL-2486)
+ *
+ * That writer scan is structurally incapable of finding an advertising vendor,
+ * and this is worth stating because the same shape will recur. The scan keys
+ * on code that WRITES a cookie; our advertising code only ever CLEARS one.
+ * `META_PIXEL_VENDOR` has declared `cookiePrefixes: ['_fbp', '_fbc']` since
+ * AGL-1649 — the platform knew the names, used them to sweep, and still had no
+ * row here, because a guard that can only see writers misses every vendor
+ * whose tag sets cookies from a script we do not author. That is most of them.
+ *
+ * So `THIRD_PARTY_COOKIES` is now checked in BOTH directions for advertising:
+ * the existing "still loaded" direction, plus a new one keyed on
+ * `ADVERTISING_VENDORS` — every vendor the gate can load must have an entry
+ * covering every prefix it declares. The vendor registry is the right key
+ * precisely because it is written for teardown, so it cannot be complete
+ * enough to revoke a vendor while being too incomplete to disclose it.
  */
 
 /** One first-party cookie, as the Cookie Policy has to describe it. */
@@ -327,11 +345,45 @@ export interface ThirdPartyCookies {
 
 export const THIRD_PARTY_COOKIES: Record<string, ThirdPartyCookies> = {
   'Google Analytics': {
-    names: ['_ga', '_ga_<id>', '_gid'],
+    // `_gac_<id>` belongs here and was missing (AGL-2486). It is the Google
+    // Ads linking cookie, named in `ANALYTICS_COOKIE_PREFIXES`'s own comment
+    // and swept by the `_ga` prefix, so the code has always known about it and
+    // only the disclosure did not.
+    names: ['_ga', '_ga_<id>', '_gac_<id>', '_gid'],
     loaderToken: 'ANALYTICS_COOKIE_PREFIXES',
     surface:
       `${WORKSPACE_DOMAIN}, ${CONSOLE_HOST} (loaded through the Firebase SDK, not a gtag tag), the docs site, and customer sites that configure their own id`,
     purpose: 'Measures how the site is used',
+  },
+  /**
+   * The advertising category (AGL-1649/AGL-2402), disclosed by CAPABILITY
+   * rather than by rollout — Zach's standing rule, and the published Cookie
+   * Policy (2026-08-20) already names Google and Meta, so the inventory is the
+   * half that was behind.
+   *
+   * Both entries are reached only where a visitor has explicitly allowed
+   * advertising on a site whose owner turned the question on. Nothing here is
+   * set under implied consent alone in a prior-consent region, and nothing is
+   * set at all on a site that never asked.
+   */
+  'Google advertising (ad_storage)': {
+    // Set by gtag's conversion linker once `ad_storage` is granted. Distinct
+    // from the analytics row above because `_gcl_au` does NOT start with `_ga`
+    // and is therefore not covered by the analytics sweep — see the note on
+    // `ANALYTICS_COOKIE_PREFIXES`.
+    names: ['_gcl_au'],
+    loaderToken: 'consentModeSignals',
+    surface:
+      `${WORKSPACE_DOMAIN} and customer sites whose owner enabled the advertising question and configured a Google Analytics id`,
+    purpose:
+      'Attributes an ad click to what you did on the site, and measures whether an ad worked',
+  },
+  'Meta Pixel': {
+    names: ['_fbp', '_fbc'],
+    loaderToken: 'META_PIXEL_VENDOR',
+    surface: `${WORKSPACE_DOMAIN} — ${PLATFORM_BRAND_NAME}'s own marketing site only, gated by \`isPlatformMarketingHost\`; a Host operator may enable their own tag on their site`,
+    purpose:
+      'Shows you our ads on other sites, and measures whether they worked',
   },
   Stripe: {
     names: ['__stripe_mid', '__stripe_sid'],
