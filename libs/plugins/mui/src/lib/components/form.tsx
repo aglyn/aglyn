@@ -18,6 +18,7 @@
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiEmailFastOutline, mdiFormTextbox } from '@aglyn/shared-data-mdi'
+import { isSameOriginPath } from '@aglyn/shared-util-http/safe-redirect'
 import Alert from '@mui/material/Alert'
 import Button from '@mui/material/Button'
 import Checkbox from '@mui/material/Checkbox'
@@ -88,12 +89,21 @@ export const FIELD_MAP_INPUT_PREFIX = '__map__'
  * absolute https URLs (AGL-557): stored props reach every visitor's
  * browser, so `javascript:`/`data:` URLs — and protocol-relative
  * `//host` forms, which keep the scheme but swap the host — never pass.
+ *
+ * The relative branch asks {@link isSameOriginPath} rather than reading the
+ * string's first two characters (AGL-1881). This site never got the AGL-2486
+ * backslash fix, and the character list would not have been enough anyway:
+ * the URL parser deletes tab/LF/CR before parsing, so `/<TAB>/evil.com`
+ * carries neither `//` nor `\` and `window.location.assign` — which
+ * `formNavigation` below calls — still lands the visitor on `evil.com`. The
+ * absolute branch is unchanged: an explicit `https://` target is a documented
+ * feature, and for absolute input the parser's verdict was never in doubt.
  */
 export const sanitizeRedirectUrl = (url?: string): string | undefined => {
   const trimmed = (url ?? '').trim()
   if (!trimmed) return undefined
   if (/^https:\/\//i.test(trimmed)) return trimmed
-  if (trimmed.startsWith('/') && !trimmed.startsWith('//')) return trimmed
+  if (isSameOriginPath(trimmed)) return trimmed
   return undefined
 }
 

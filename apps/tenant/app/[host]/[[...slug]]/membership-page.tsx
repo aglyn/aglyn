@@ -17,6 +17,7 @@
 
 'use client'
 
+import { safeSameOriginPath } from '@aglyn/shared-util-http/safe-redirect'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -26,16 +27,17 @@ import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
 
 /**
- * Post-auth redirect target (AGL-553): only same-origin relative paths —
- * `//host` and backslash forms are open-redirect vectors, so anything that
- * is not a plain `/path` falls back to the home page.
+ * Post-auth redirect target (AGL-553): only same-origin relative paths reach
+ * a navigation here.
+ *
+ * This was a fourth hand-written copy of the same guard, with the same
+ * incomplete character list every copy had (AGL-1881) — `/<TAB>/evil.com`
+ * contains neither `//` nor `\` and the URL parser still resolves it off-site.
+ * It now defers to the shared predicate, which resolves the value and compares
+ * origins instead.
  */
 function safeContinuePath(raw: string | null): string {
-  const candidate = String(raw ?? '')
-  if (!candidate.startsWith('/')) return '/'
-  if (candidate.startsWith('//')) return '/'
-  if (candidate.includes('\\')) return '/'
-  return candidate
+  return safeSameOriginPath(raw, '/')
 }
 
 export interface MembershipPageProps {

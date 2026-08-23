@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { isSameOriginPath } from '@aglyn/shared-util-http/safe-redirect'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useMemo } from 'react'
 
@@ -67,18 +68,23 @@ const isSameSiteAbsoluteUrl = (url: string): boolean => {
  * workspace domain (AGL-465), may be continued to — anything else absolute
  * or protocol-relative would make the post-auth redirect an open redirect.
  *
- * The backslash rejection is not tidiness (AGL-2486). The WHATWG URL parser
- * treats `\` as `/` in the authority position, so `/\evil.com` passes a
- * `startsWith('/') && !startsWith('//')` test and STILL resolves off-site —
- * measured in node 20:
+ * The relative branch defers to {@link isSameOriginPath} rather than testing
+ * the string's shape (AGL-1881). AGL-2486 rejected `\` here because the
+ * WHATWG URL parser treats it as `/` in the authority position, so
+ * `/\evil.com` passed a `startsWith('/') && !startsWith('//')` test and still
+ * resolved off-site. That was true but incomplete: the same parser also
+ * DELETES every tab, LF and CR before parsing, so `/<TAB>/evil.com` resolves
+ * to `https://evil.com/` while containing neither `//` nor `\`. Enumerating
+ * the tricks was the mistake; the shared predicate resolves the value and
+ * compares origins, which is the question `window.location.assign` will
+ * actually ask.
  *
- *     new URL('/\\evil.com', 'https://app.aglyn.com').href
- *     // → 'https://evil.com/'
+ * The absolute branch below never had that bug and keeps its own check: once
+ * the input is absolute the parser's `hostname` is already ground truth.
  *
- * and `window.location.assign` resolves it the same way, which is exactly
- * what the callers of this predicate go on to do. A `continue` that has
- * survived an external IdP round trip is the case that makes this matter:
- * whatever we put into `state` comes back as untrusted input.
+ * A `continue` that has survived an external IdP round trip is the case that
+ * makes this matter: whatever we put into `state` comes back as untrusted
+ * input.
  *
  * `''` is rejected explicitly rather than by accident. `strictNullChecks` is
  * off repo-wide, so an absent param arrives here as an empty string far more
@@ -87,10 +93,7 @@ const isSameSiteAbsoluteUrl = (url: string): boolean => {
  */
 export const isSafeContinueUrl = (url: string): boolean => {
   if (!url) return false
-  if (url.includes('\\')) return false
-  return (
-    (url.startsWith('/') && !url.startsWith('//')) || isSameSiteAbsoluteUrl(url)
-  )
+  return isSameOriginPath(url) || isSameSiteAbsoluteUrl(url)
 }
 
 /**

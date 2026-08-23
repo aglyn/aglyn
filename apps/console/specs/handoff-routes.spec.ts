@@ -52,8 +52,22 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   getConsoleDomainClaim: (...a: unknown[]) => mockClaim(...a),
   resolveOrgMembership: (...a: unknown[]) => mockMembership(...a),
   isImpersonationSession: () => false,
-  safeContinuePath: (v: string | null) =>
-    typeof v === 'string' && v.startsWith('/') && !v.startsWith('//') ? v : '/',
+  // A test double must model the real semantics (AGL-1881). The shape test
+  // this used to carry stopped matching the real `safeContinuePath` the moment
+  // it moved onto `safeSameOriginPath`, and a double that is more permissive
+  // than the thing it stands in for lets the route specs pass over inputs
+  // production refuses. Resolve-and-compare, exactly as the real one does.
+  safeContinuePath: (v: string | null) => {
+    if (typeof v !== 'string') return '/'
+    const probe = 'https://redirect-probe.aglyn.invalid'
+    const value = v.trim()
+    if (!value.startsWith('/')) return '/'
+    try {
+      return new URL(value, probe).origin === probe ? value : '/'
+    } catch {
+      return '/'
+    }
+  },
   authForPool: () => ({
     createCustomToken: (...a: unknown[]) => mockCreateCustomToken(...(a as [])),
   }),

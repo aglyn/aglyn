@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { safeSameOriginPath } from '@aglyn/shared-util-http/safe-redirect'
+
 /**
  * Central auth origin (AGL-465). Interactive sign-in can only run where
  * Firebase Auth is authorized and the OAuth helper can be framed — and
@@ -129,9 +131,14 @@ export function buildDelegatedSignInUrl(
   page: 'signin' | 'signup' = 'signin',
   workspaceDomain = WORKSPACE_DOMAIN,
 ): string {
-  const safePath = returnPath.startsWith('/') && !returnPath.startsWith('//')
-    ? returnPath
-    : '/'
+  // `safeSameOriginPath`, not a shape test (AGL-1881). This one never got the
+  // AGL-2486 backslash fix, so `/\evil.com` was concatenated onto `origin`
+  // verbatim; and the backslash fix alone would not have been enough, because
+  // the URL parser also strips tab/LF/CR before it parses. The receiving auth
+  // host re-validates what arrives in `continue`, so this was the second of
+  // two gates rather than the only one — which is exactly why it was easy to
+  // miss and worth closing.
+  const safePath = safeSameOriginPath(returnPath, '/')
   const returnUrl = `${origin}${safePath}`
   return (
     `https://${authSignInHost(workspaceDomain)}/${page}` +
