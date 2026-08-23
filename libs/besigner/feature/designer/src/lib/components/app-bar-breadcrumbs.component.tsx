@@ -37,7 +37,7 @@ import {
 } from '@mui/material'
 import clsx from 'clsx'
 import { observer } from 'mobx-react-lite'
-import { forwardRef, useCallback } from 'react'
+import { forwardRef, useCallback, useEffect, useRef } from 'react'
 import useLeafDrop from '../hooks/use-leaf-drop'
 
 const breadcrumbItemClassKey = generateComponentClassKeys('BreadcrumbItem', [
@@ -264,9 +264,45 @@ export const AppBarBreadcrumbsComponent = forwardRef<
 >((props, ref) => {
   const { children, sx, ...rest } = props
 
+  // This strip is the canvas column's bottom chrome, so it is what a
+  // viewport-fixed affordance in that corner would clip (AGL-2486). It
+  // publishes its own height as the stand-off the Assist launcher reads;
+  // measured rather than assumed, because "24px dense toolbar plus a
+  // border" is exactly the kind of constant that stops being true the
+  // first time a chip wraps.
+  const stripRef = useRef<HTMLElement | null>(null)
+  const setRefs = useCallback(
+    (node: HTMLElement | null) => {
+      stripRef.current = node
+      if (typeof ref === 'function') ref(node)
+      else if (ref) (ref as { current: unknown }).current = node
+    },
+    [ref],
+  )
+  useEffect(() => {
+    const node = stripRef.current
+    if (!node) return undefined
+    const root = document.documentElement
+    const property = '--aglyn-assist-inset-bottom'
+    const publish = () => {
+      const { height } = node.getBoundingClientRect()
+      root.style.setProperty(property, `${Math.round(height) + 20}px`)
+    }
+    publish()
+    // Guarded: jsdom has no ResizeObserver, and the initial publish above
+    // is the part that matters — the observer only keeps it honest.
+    const observer =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(publish)
+    observer?.observe(node)
+    return () => {
+      observer?.disconnect()
+      root.style.removeProperty(property)
+    }
+  }, [])
+
   return (
     <MuiAppBar
-      ref={ref}
+      ref={setRefs}
       id="aglyn:besigner-appbar-secondary"
       aria-label="secondary app toolbar"
       position="static"

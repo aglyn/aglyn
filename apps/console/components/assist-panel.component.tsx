@@ -600,8 +600,19 @@ export function AssistPanelComponent() {
             onClick={() => setOpen(true)}
             sx={{
               position: 'fixed',
-              right: 20,
-              bottom: 20,
+              // Insets, not constants (AGL-2486). The console chrome leaves
+              // the bottom-right corner empty, but the besigner does not:
+              // its properties panel is a full-height column on that edge,
+              // and a fixed launcher lands on the Styles form and its
+              // scrollbar. A surface that owns the corner publishes these
+              // variables to move the launcher clear of itself; everywhere
+              // else the fallback is the corner it has always used. Read as
+              // CSS rather than passed as props so the offset can follow a
+              // panel the launcher knows nothing about — one that is
+              // resizable and collapsible — without this component growing
+              // a dependency on the editor.
+              right: 'var(--aglyn-assist-inset-right, 20px)',
+              bottom: 'var(--aglyn-assist-inset-bottom, 20px)',
               zIndex: (theme) => theme.zIndex.drawer - 1,
             }}
           >
