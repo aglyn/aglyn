@@ -53,9 +53,31 @@ import {
 } from 'firebase/database'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-/** One entry per editor currently in a document. */
+/**
+ * One entry per editing SESSION currently in a document.
+ *
+ * A session, not a person (AGL-2486). Zach's call: "we should see co-editing
+ * regardless anyways if we are in the same account or not". A cursor and a
+ * selection belong to a tab, so collapsing two tabs into one entry threw away
+ * exactly the thing the overlays draw — and it made your own second window
+ * invisible, which is the case that loses work most often.
+ *
+ * `people` on `PresenceState` is the collapsed view, for the avatar stack.
+ */
 export interface PresenceEntry {
   uid: string
+  /** The peer's tab id — the `$sessionId` half of the presence key. */
+  sessionId: string
+  /** Stable across renders and unique in the room: `uid:sessionId`. */
+  key: string
+  /**
+   * This is YOU, in another tab or another window of the same account.
+   *
+   * Kept as a flag rather than filtered out, so the UI can say "you,
+   * elsewhere" instead of showing a stranger — a second person and your own
+   * other tab must never be indistinguishable.
+   */
+  isSelf?: boolean
   displayName: string
   photoURL?: string
   colour?: string
@@ -72,9 +94,55 @@ export interface PresenceEntry {
   sessions?: number
 }
 
+/** One row per PERSON in the avatar stack, however many tabs they have. */
+export interface PresencePerson {
+  uid: string
+  displayName: string
+  photoURL?: string
+  colour?: string
+  /** How many sessions this person has here — their tabs, or yours. */
+  sessions: number
+  /** True when the person is you, signed in somewhere else. */
+  isSelf?: boolean
+}
+
+/**
+ * How presence is getting on, in terms an operator can act on (AGL-2486).
+ *
+ * Presence failed SILENTLY in three separate places — a non-ok broker
+ * response returned with no log at all, the sign-in catch wrote one
+ * `console.warn`, and a rules refusal on the room read wrote another — so
+ * "nobody else is here" and "presence is broken" looked identical on screen
+ * and very nearly identical in the console. This makes the difference
+ * legible without reading source.
+ */
+export type PresenceStatus =
+  | 'idle'
+  | 'connecting'
+  | 'live'
+  | 'unauthorized'
+  | 'error'
+
+export interface PresenceFault {
+  /** Which leg failed, so the next person knows where to look. */
+  stage: 'broker' | 'sign-in' | 'announce' | 'room'
+  /** HTTP status or Firebase error code, whichever applies. */
+  code: string
+  message: string
+}
+
 export interface PresenceState {
-  /** Everyone except you, one entry per person however many tabs they have. */
+  /**
+   * Every editing SESSION in the room except this tab — including your own
+   * other tabs, flagged `isSelf`. One entry per session, because cursors and
+   * selections are per session.
+   */
   entries: PresenceEntry[]
+  /** The same room collapsed to one row per person, for the avatar stack. */
+  people: PresencePerson[]
+  /** Where presence has got to, and why it stopped if it did. */
+  status: PresenceStatus
+  fault: PresenceFault | null
   /**
    * How many OTHER places *you* have this document open — your other tabs,
    * or the same account signed in elsewhere (AGL-675).
@@ -146,8 +214,163 @@ function colourFor(uid: string): string {
 /** Secondary Firebase app holding the presence-scoped session. */
 const PRESENCE_APP_NAME = 'AGLYN_PRESENCE'
 
-/** Pointer moves are cheap to generate and expensive to broadcast. */
-const CURSOR_THROTTLE_MS = 60
+/**
+ * Record a fault once, in both places that matter.
+ *
+ * The console line is for whoever has devtools open; the state is for the
+ * app bar, which is the only one an operator without devtools will ever see.
+ * A failure that only exists as a `console.warn` is a failure nobody reports.
+ */
+function report(
+  setStatus: (value: PresenceStatus) => void,
+  setFault: (value: PresenceFault | null) => void,
+  status: PresenceStatus,
+  fault: PresenceFault,
+): void {
+  console.warn(
+    `[presence] ${fault.stage} failed (${fault.code}): ${fault.message}`,
+  )
+  setStatus(status)
+  setFault(fault)
+}
+
+/**
+ * Turn one RTDB room snapshot into what the UI draws.
+ *
+ * Pure, exported and taking `now` as an argument so the staleness rule can be
+ * tested at a fixed clock rather than inferred from a rendered component —
+ * the reaping cutoff is the part most likely to be got wrong, and the most
+ * expensive to get wrong, since too tight a window evicts live colleagues.
+ */
+export function projectRoom(
+  room: Record<string, Record<string, PresenceEntry> | PresenceEntry>,
+  uid: string,
+  now: number,
+): {
+  entries: PresenceEntry[]
+  people: PresencePerson[]
+  ownOtherSessions: number
+} {
+  const entries: PresenceEntry[] = []
+  const cutoff = now - PRESENCE_STALE_MS
+  let ownOtherSessions = 0
+  for (const [entryUid, sessions] of Object.entries(room ?? {})) {
+    // Tolerate the pre-session shape: an entry written by an older client
+    // sits directly under the uid rather than under a session.
+    const list = isSessionMap(sessions)
+      ? Object.entries(sessions)
+      : ([['legacy', sessions as unknown as PresenceEntry]] as [
+          string,
+          PresenceEntry,
+        ][])
+    for (const [sessionId, entry] of list) {
+      if (!entry) continue
+      if (entryUid === uid && sessionId === TAB_SESSION_ID) continue
+      // Reaped by AGE, on read, never written back. `onDisconnect` misses
+      // often enough that a room accumulates ghosts of people who left —
+      // measured at 73 minutes on production RTDB — and a ghost that draws a
+      // cursor and a selection box is a phantom colleague fighting you over
+      // an element nobody has selected, not a cosmetic wart.
+      if ((entry.lastSeenAt ?? 0) < cutoff) continue
+      const isSelf = entryUid === uid
+      if (isSelf) ownOtherSessions += 1
+      entries.push({
+        ...entry,
+        uid: entryUid,
+        sessionId,
+        key: `${entryUid}:${sessionId}`,
+        isSelf,
+      })
+    }
+  }
+  // The avatar stack stays one face per PERSON — a stack of faces you cannot
+  // tell apart is worse than a stack of names — while the overlays keep the
+  // per-session list, because a cursor and a selection belong to a tab.
+  const people = new Map<string, PresencePerson>()
+  const freshest = new Map<string, number>()
+  for (const entry of entries) {
+    const seenAt = entry.lastSeenAt ?? 0
+    const existing = people.get(entry.uid)
+    if (existing) {
+      existing.sessions += 1
+      // The freshest session speaks for them: that is where they are
+      // looking, so that is whose name and picture are current.
+      if (seenAt > (freshest.get(entry.uid) ?? 0)) {
+        freshest.set(entry.uid, seenAt)
+        existing.displayName = entry.displayName
+        existing.photoURL = entry.photoURL
+      }
+      continue
+    }
+    freshest.set(entry.uid, seenAt)
+    people.set(entry.uid, {
+      uid: entry.uid,
+      displayName: entry.displayName,
+      photoURL: entry.photoURL,
+      colour: entry.colour,
+      sessions: 1,
+      isSelf: entry.isSelf,
+    })
+  }
+  return { entries, people: [...people.values()], ownOtherSessions }
+}
+
+/**
+ * Pointer moves are cheap to generate and expensive to broadcast.
+ *
+ * 60 ms — a ceiling of ~16 writes per second per editor, coalesced onto an
+ * animation frame so a burst of moves inside one frame becomes one write.
+ * Chosen against the receiving end rather than the sending end: the overlay
+ * re-measures every frame, so a position landing every 60 ms reads as
+ * continuous motion, and the interval sits under the ~100 ms at which a
+ * followed cursor starts to look like it is stepping.
+ *
+ * The interval alone was not the expensive part. Two cheaper guards do more:
+ * a stationary or barely-moving pointer now writes NOTHING (see
+ * `CURSOR_MIN_DELTA`), and a hidden tab stops broadcasting altogether. A
+ * pointer resting on the canvas used to keep paying the full rate for a
+ * position nobody's screen would move.
+ *
+ * Cost at the ceiling: one `update()` of three numeric fields on a leaf node,
+ * ~60 bytes on the wire, so a four-person room peaks near 50 writes/second
+ * and 3 KB/second — and only while four people are actually moving.
+ */
+export const CURSOR_THROTTLE_MS = 60
+
+/**
+ * How far the pointer must travel, in canvas-relative units, to be worth a
+ * write. 0.002 of the canvas box — about 2 px on a 1000 px-wide canvas, below
+ * which nobody can see the cursor move anyway.
+ */
+export const CURSOR_MIN_DELTA = 0.002
+
+/**
+ * How often a tab re-stamps `lastSeenAt` while it just sits there.
+ *
+ * Without this there is no liveness signal at all: `lastSeenAt` was only
+ * written on announce, on a selection change and on a cursor move, so an
+ * editor reading a page for five minutes looked identical to a dead entry,
+ * and nothing could be reaped by age without evicting live people.
+ */
+export const PRESENCE_HEARTBEAT_MS = 20_000
+
+/**
+ * How stale an entry may be before the room stops drawing it.
+ *
+ * Three missed heartbeats. `onDisconnect().remove()` is the primary cleanup
+ * and it is not reliable enough to be the only one — measured on production
+ * RTDB on 2026-08-22, a presence entry whose tab was long gone was still
+ * sitting in the room 73 minutes later, counted as a live session. That ghost
+ * was merely a wrong badge before; now that a session draws an avatar, a
+ * cursor and a selection box, it would be a phantom colleague fighting you
+ * over an element nobody has selected.
+ *
+ * Reaped on READ, never written back. Cursors and selections are disposable
+ * and must not acquire the durability the co-edit mirror has: nothing here
+ * replays, nothing here is retained, and nothing here reaches the saved
+ * document.
+ */
+export const PRESENCE_STALE_MS = 3 * PRESENCE_HEARTBEAT_MS
 
 /** `initializeAppCheck` throws if it runs twice for one app. */
 let presenceAppCheckStarted = false
@@ -309,8 +532,11 @@ export function usePresence(options: {
     user as { getIdToken?: () => Promise<string> } | undefined
   )?.getIdToken?.bind(user)
   const [entries, setEntries] = useState<PresenceEntry[]>([])
+  const [people, setPeople] = useState<PresencePerson[]>([])
   const [ownOtherSessions, setOwnOtherSessions] = useState(0)
   const [session, setSession] = useState<PresenceSession | null>(null)
+  const [status, setStatus] = useState<PresenceStatus>('idle')
+  const [fault, setFault] = useState<PresenceFault | null>(null)
   /** Latest selection, read by the announce effect without depending on it. */
   const selectedNodeIdRef = useRef(selectedNodeId)
   selectedNodeIdRef.current = selectedNodeId
@@ -324,10 +550,21 @@ export function usePresence(options: {
   useEffect(() => {
     if (!hostId || !uid) return
     let active = true
+    setStatus('connecting')
+    setFault(null)
     void (async () => {
       try {
         const idToken = await getIdTokenRef.current?.()
-        if (!idToken) return
+        if (!idToken) {
+          if (active) {
+            report(setStatus, setFault, 'error', {
+              stage: 'sign-in',
+              code: 'no-id-token',
+              message: 'The console session produced no ID token.',
+            })
+          }
+          return
+        }
         const profile = readIdpProfile(idToken)
         if (active && (profile.displayName || profile.photoURL)) {
           setIdp(profile)
@@ -340,9 +577,50 @@ export function usePresence(options: {
           },
           body: JSON.stringify({ hostId }),
         })
-        if (!response.ok) return
+        // A bare `if (!response.ok) return` sat here and logged NOTHING. It
+        // is the most likely thing to fire in the field — a non-member, a
+        // suspended org, an unverified address, an SSO account whose token
+        // the broker would not take — and it produced an empty avatar stack
+        // indistinguishable from an empty room. The broker's own reason is
+        // right there in the body; read it and say it.
+        if (!response.ok) {
+          const detail = await response
+            .text()
+            .then((text) => {
+              try {
+                const parsed = JSON.parse(text)
+                return String(parsed?.error ?? text).slice(0, 200)
+              } catch {
+                return text.slice(0, 200)
+              }
+            })
+            .catch(() => '')
+          if (active) {
+            report(
+              setStatus,
+              setFault,
+              response.status === 401 || response.status === 403
+                ? 'unauthorized'
+                : 'error',
+              {
+                stage: 'broker',
+                code: String(response.status),
+                message: detail || 'The presence broker refused this session.',
+              },
+            )
+          }
+          return
+        }
         const { token, orgId, canEdit, tenantId } = await response.json()
-        if (!active || !token) return
+        if (!active) return
+        if (!token) {
+          report(setStatus, setFault, 'error', {
+            stage: 'broker',
+            code: 'no-token',
+            message: 'The presence broker returned 200 with no token.',
+          })
+          return
+        }
 
         // The shared constant, not a literal: the primary app is
         // registered under a non-default name and a stale copy of it here
@@ -399,10 +677,19 @@ export function usePresence(options: {
       } catch (error) {
         // Quiet for the USER — an editor that will not open because nobody
         // could be listed is far worse than an empty avatar stack. Not
-        // quiet for developers: swallowing this entirely made a broken
-        // presence session indistinguishable from an empty room, which
-        // cost real time to diagnose.
-        console.warn('[presence] could not start a session', error)
+        // quiet for developers, and no longer quiet for the OPERATOR either:
+        // the fault travels out on `PresenceState` so the app bar can say
+        // that presence is off rather than implying the room is empty.
+        if (!active) return
+        report(setStatus, setFault, 'error', {
+          stage: 'sign-in',
+          code: String(
+            (error as { code?: string } | undefined)?.code ?? 'unknown',
+          ),
+          message: String(
+            (error as { message?: string } | undefined)?.message ?? error,
+          ).slice(0, 200),
+        })
       }
     })()
     return () => {
@@ -427,53 +714,86 @@ export function usePresence(options: {
       ...(selectedNodeIdRef.current
         ? { selectedNodeId: selectedNodeIdRef.current }
         : {}),
-    }).catch((error) => console.warn('[presence] could not announce', error))
+    }).catch((error) =>
+      report(setStatus, setFault, 'error', {
+        stage: 'announce',
+        code: String((error as { code?: string })?.code ?? 'unknown'),
+        message: String((error as { message?: string })?.message ?? error).slice(
+          0,
+          200,
+        ),
+      }),
+    )
     // Server-side cleanup: a closed tab or a slept laptop leaves no ghost.
     // Scoped to this tab's node, so one tab closing no longer evicts the
     // other tabs of the same person.
     void onDisconnect(meRef).remove().catch(() => undefined)
 
+    // The last room snapshot, re-projected on a timer as well as on change.
+    // Staleness is a function of the CLOCK, not of RTDB traffic: a ghost
+    // sitting in a room nobody is writing to produces no snapshot, so a
+    // purely event-driven projection would leave it on screen forever.
+    let lastRoom: Record<string, Record<string, PresenceEntry>> = {}
+    const project = () => {
+      const projected = projectRoom(lastRoom, uid, Date.now())
+      setEntries(projected.entries)
+      setPeople(projected.people)
+      setOwnOtherSessions(projected.ownOtherSessions)
+    }
+
     const unsubscribe = onValue(
       ref(database, roomPath),
       (snapshot) => {
-        const room = (snapshot.val() ?? {}) as Record<
+        lastRoom = (snapshot.val() ?? {}) as Record<
           string,
           Record<string, PresenceEntry>
         >
-        const others: PresenceEntry[] = []
-        let mine = 0
-        for (const [entryUid, sessions] of Object.entries(room)) {
-          // Tolerate the pre-session shape: an entry written by an older
-          // client sits directly under the uid rather than under a session.
-          const list = isSessionMap(sessions)
-            ? Object.entries(sessions)
-            : ([['legacy', sessions as unknown as PresenceEntry]] as const)
-          if (entryUid === uid) {
-            mine += list.filter(([id]) => id !== TAB_SESSION_ID).length
-            continue
-          }
-          // One avatar per PERSON however many tabs they have; the freshest
-          // session speaks for them, since that is where they are looking.
-          const freshest = list.reduce((best, [, entry]) =>
-            (entry?.lastSeenAt ?? 0) > (best?.lastSeenAt ?? 0) ? entry : best,
-          list[0]?.[1] as PresenceEntry)
-          if (freshest) {
-            others.push({ ...freshest, uid: entryUid, sessions: list.length })
-          }
-        }
-        setEntries(others)
-        setOwnOtherSessions(mine)
+        project()
+        setStatus('live')
+        setFault(null)
       },
       (error) => {
-        console.warn('[presence] lost the room', error)
+        // A rules refusal arrives here, not at the write — the room read is
+        // gated on `presenceOrg`, so this is what a bad or missing claim
+        // looks like from the client. It used to be one `console.warn` that
+        // said "lost the room" and named neither the path nor the code.
+        report(
+          setStatus,
+          setFault,
+          String((error as { code?: string })?.code ?? '').includes('permission')
+            ? 'unauthorized'
+            : 'error',
+          {
+            stage: 'room',
+            code: String((error as { code?: string })?.code ?? 'unknown'),
+            message: `${roomPath}: ${String(
+              (error as { message?: string })?.message ?? error,
+            ).slice(0, 160)}`,
+          },
+        )
         setEntries([])
+        setPeople([])
         setOwnOtherSessions(0)
       },
     )
 
+    // Liveness, so age-based reaping cannot evict someone who is simply
+    // reading. Cheap: one numeric field every 20 s per open document, and
+    // only while the tab is visible — a backgrounded tab is allowed to go
+    // stale and drop out of the room, which is the honest answer.
+    //
+    // The same tick re-projects, so a peer who stops heartbeating fades from
+    // the room within one interval of going stale.
+    const heartbeat = setInterval(() => {
+      project()
+      if (typeof document !== 'undefined' && document.hidden) return
+      void update(meRef, { lastSeenAt: Date.now() }).catch(() => undefined)
+    }, PRESENCE_HEARTBEAT_MS)
+
     meRefHolder.current = meRef
     return () => {
       meRefHolder.current = null
+      clearInterval(heartbeat)
       unsubscribe()
       void remove(meRef).catch(() => undefined)
     }
@@ -505,9 +825,27 @@ export function usePresence(options: {
     if (!broadcastCursor || !session) return undefined
     let frame: number | null = null
     let last = 0
+    let lastX = -1
+    let lastY = -1
+    const clearCursor = () => {
+      const meRef = meRefHolder.current
+      if (!meRef) return
+      if (lastX < 0 && lastY < 0) return
+      lastX = -1
+      lastY = -1
+      // RTDB has no "delete this field" in an update object; null is it. A
+      // cursor left behind when the pointer leaves the canvas is a lie that
+      // would sit on someone else's screen indefinitely.
+      void update(meRef, { cursorX: null, cursorY: null }).catch(
+        () => undefined,
+      )
+    }
     const onMove = (event: PointerEvent) => {
       const meRef = meRefHolder.current
       if (!meRef) return
+      // A hidden tab has no pointer worth broadcasting, and a background tab
+      // that keeps writing is pure cost.
+      if (typeof document !== 'undefined' && document.hidden) return
       const now = Date.now()
       if (now - last < CURSOR_THROTTLE_MS) return
       const root = getCanvasRootRef.current?.()
@@ -516,9 +854,25 @@ export function usePresence(options: {
       if (!box.width || !box.height) return
       const x = (event.clientX - box.left) / box.width
       const y = (event.clientY - box.top) / box.height
-      // Outside the document is not a position worth sending.
-      if (x < 0 || x > 1 || y < 0 || y > 1) return
+      // Outside the document is not a position worth sending — and if we
+      // were previously inside it, the stale one has to be withdrawn.
+      if (x < 0 || x > 1 || y < 0 || y > 1) {
+        clearCursor()
+        return
+      }
+      // A pointer that has not really moved costs a write for a position
+      // nobody's screen would change by. This is the guard that matters
+      // most: a hand resting on the mouse generates a steady trickle of
+      // sub-pixel moves, and the throttle alone happily forwards all of it.
+      if (
+        Math.abs(x - lastX) < CURSOR_MIN_DELTA &&
+        Math.abs(y - lastY) < CURSOR_MIN_DELTA
+      ) {
+        return
+      }
       last = now
+      lastX = x
+      lastY = y
       if (frame) cancelAnimationFrame(frame)
       frame = requestAnimationFrame(() => {
         frame = null
@@ -530,15 +884,19 @@ export function usePresence(options: {
       })
     }
     window.addEventListener('pointermove', onMove, { passive: true })
+    window.addEventListener('blur', clearCursor)
+    document.addEventListener('visibilitychange', clearCursor)
     return () => {
       window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('blur', clearCursor)
+      document.removeEventListener('visibilitychange', clearCursor)
       if (frame) cancelAnimationFrame(frame)
     }
   }, [broadcastCursor, session])
 
   return useMemo(
-    () => ({ entries, ownOtherSessions, session }),
-    [entries, ownOtherSessions, session],
+    () => ({ entries, people, status, fault, ownOtherSessions, session }),
+    [entries, people, status, fault, ownOtherSessions, session],
   )
 }
 

@@ -24,9 +24,11 @@ import type { PresenceEntry } from '../hooks/use-presence'
 
 /** Where one collaborator's marks should be painted, in viewport pixels. */
 interface Placement {
-  uid: string
+  /** `uid:sessionId` — per SESSION, because a cursor belongs to a tab. */
+  key: string
   displayName: string
   colour: string
+  isSelf?: boolean
   cursor?: { x: number; y: number }
   selection?: { top: number; left: number; width: number; height: number }
 }
@@ -66,7 +68,7 @@ export function CollaboratorOverlays({
   // Identity of the collaborator set, so the effect re-arms when someone
   // joins or leaves but not on every cursor tick.
   const roster = entries
-    .map((entry) => `${entry.uid}:${entry.colour}:${entry.displayName}`)
+    .map((entry) => `${entry.key}:${entry.colour}:${entry.displayName}`)
     .join('|')
 
   useEffect(() => {
@@ -85,9 +87,14 @@ export function CollaboratorOverlays({
       const next: Placement[] = []
       for (const entry of entriesRef.current) {
         const placement: Placement = {
-          uid: entry.uid,
-          displayName: entry.displayName,
+          key: entry.key,
+          // Your own other tab is labelled as such rather than by name.
+          // Two marks reading "Zach Gover" on one canvas, one of which is
+          // your own second window, is exactly the confusion the flag
+          // exists to prevent (AGL-2486).
+          displayName: entry.isSelf ? 'You, in another tab' : entry.displayName,
           colour: entry.colour ?? '#1a73e8',
+          isSelf: entry.isSelf,
         }
         if (
           rootBox?.width &&
@@ -139,7 +146,7 @@ export function CollaboratorOverlays({
       }}
     >
       {placements.map((placement) => (
-        <Box key={placement.uid}>
+        <Box key={placement.key}>
           {placement.selection ? (
             <Box
               sx={{
@@ -148,7 +155,7 @@ export function CollaboratorOverlays({
                 left: placement.selection.left,
                 width: placement.selection.width,
                 height: placement.selection.height,
-                border: `2px solid ${placement.colour}`,
+                border: `2px ${placement.isSelf ? 'dashed' : 'solid'} ${placement.colour}`,
                 borderRadius: '2px',
                 boxSizing: 'border-box',
               }}

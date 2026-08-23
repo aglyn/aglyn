@@ -20,6 +20,7 @@ import {
   createContext,
   type RefObject,
   useContext,
+  useEffect,
   useMemo,
   useRef,
 } from 'react'
@@ -75,6 +76,28 @@ export function RenderedCanvasElementsProvider(
     }),
     [],
   )
+
+  // The registry, readable from a devtools console (AGL-2486).
+  //
+  // This map had NO writer for its entire existence and nothing said so:
+  // every consumer read `{}`, found nothing, and rendered nothing. Two
+  // features were void for months because the only way to discover an empty
+  // registry was to read the source of everything that touches it.
+  //
+  // `window.AglynCanvasElements()` returns the live ids, so "is the canvas
+  // registered?" is one line in a console instead of an afternoon. Cheap,
+  // dev-only, and it holds no reference the registry does not already hold.
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production') return undefined
+    if (typeof window === 'undefined') return undefined
+    ;(window as unknown as Record<string, unknown>)['AglynCanvasElements'] =
+      () => Object.keys(elements.current ?? {})
+    return () => {
+      delete (window as unknown as Record<string, unknown>)[
+        'AglynCanvasElements'
+      ]
+    }
+  }, [])
 
   return (
     <RenderedCanvasElementsContext.Provider value={context}>
