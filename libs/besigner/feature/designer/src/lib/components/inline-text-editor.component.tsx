@@ -112,10 +112,30 @@ export const InlineTextEditorComponent = observer(
     // unconditionally, above the `!node || !rect` bail-out further down, so the
     // hook order is stable whether or not an edit is open.
     const live = useAnchoredRect(inlineTextEdit.anchor, rect ?? EMPTY_RECT)
+    const overlayRef = useRef<HTMLElement>(null)
     const plainRef = useRef<HTMLDivElement>(null)
     const richRef = useRef<HTMLDivElement>(null)
     // Distinguish commit-blur (Enter already committed) from cancel paths.
     const committedRef = useRef(false)
+    /**
+     * Whether the surface has been BUILT from the node yet (AGL-2486).
+     *
+     * The editable is populated and focused on a `requestAnimationFrame`, so
+     * between opening and that frame it is an empty box holding no caret.
+     * Committing then reads emptiness as an author's deletion and writes
+     * `children: ''` — the element's text is gone from the canvas, the
+     * co-editing mirror publishes it, and every joiner gets the blank.
+     * Measured exactly that way against screen `yFjgqiG2wm`: node
+     * `XlqFJTz4ej` ("Be first through the door") went to `children: ''` from
+     * a double-click and a click-away, with nothing typed. A background tab
+     * makes it certain rather than rare — `requestAnimationFrame` does not
+     * run in one at all, so the surface NEVER seeds and every click-away is
+     * a wipe.
+     *
+     * Nothing can be lost by refusing: a surface that was never built holds
+     * no caret and no typing.
+     */
+    const seededRef = useRef(false)
     // The insert picker / pill popover take focus (portal + autofocus
     // search) — commit-on-blur must stand down while one is open, or the
     // editor would commit and close under the open menu (AGL-586).
@@ -154,6 +174,7 @@ export const InlineTextEditorComponent = observer(
       committedRef.current = false
       menuOpenRef.current = false
       savedRangeRef.current = null
+      seededRef.current = false
       const props = { ...node.props, ...node.resolvedProps } as any
       const text = propTarget
         ? propTarget.initialText
@@ -183,6 +204,7 @@ export const InlineTextEditorComponent = observer(
               selection.removeAllRanges()
               selection.addRange(range)
             }
+            seededRef.current = true
           }
         })
         return () => cancelAnimationFrame(raf)
@@ -215,6 +237,7 @@ export const InlineTextEditorComponent = observer(
           selection.removeAllRanges()
           selection.addRange(range)
         }
+        seededRef.current = true
       })
       return () => cancelAnimationFrame(raf)
     }, [node, rich, propTarget])
@@ -243,7 +266,9 @@ export const InlineTextEditorComponent = observer(
       if (committedRef.current) return
       committedRef.current = true
       const current = inlineTextEdit.node
-      if (current) {
+      // An unbuilt surface is not an emptied one (AGL-2486) — close, do not
+      // write. See `seededRef`.
+      if (current && seededRef.current) {
         // updateNodeProps REPLACES the props object — spread the existing
         // props so variant/component/etc. survive the text edit.
         if (rich && richRef.current) {
@@ -319,6 +344,64 @@ export const InlineTextEditorComponent = observer(
       if (menuOpenRef.current) return
       commit()
     }, [commit])
+
+    // Latest `commit` for the document listener below, which must not
+    // re-register on every render just to stay current.
+    const commitRef = useRef(commit)
+    commitRef.current = commit
+
+    /**
+     * Click-away commits, because on this canvas blur never arrives
+     * (AGL-2486).
+     *
+     * `commit()` used to be reachable from a click only through `onBlur`,
+     * and a click on another element cannot produce one: `DraggableDroppable`
+     * registers `mousedown` AND `pointerdown` on every leaf and both begin
+     * `e.preventDefault(); e.stopPropagation()`. Preventing a mousedown's
+     * default suppresses the focus change it would have caused, so the
+     * editable keeps focus and stays open — while the same handler runs
+     * `Besigner.focus.handleNodeSelection(node, …)` and moves the selection
+     * out from under it. Clicking out "just selects other elements rather
+     * than applying", and the edit sits in a surface the author has already
+     * mentally left. This repo has recorded that exact shape once before:
+     * an attribute that commits on blur, discarded by selecting the next
+     * node, with the canvas still looking right.
+     *
+     * A CAPTURE-phase listener on the document is what reaches the commit
+     * first: capture runs from the document down, so it is ahead of the
+     * leaf's own bubble-phase listener and ahead of the `preventDefault`
+     * that would have swallowed the blur. It calls the SAME `commit()` the
+     * Done button does — one commit path, one undo entry, and the same
+     * no-op guard, rather than a second route into the document.
+     *
+     * The click is deliberately NOT consumed: committing and then letting
+     * the canvas select what was clicked is what every other design tool
+     * does, and it is what the author asked for by clicking there.
+     *
+     * `pointerdown`, not `mousedown`: it is the first of the pair, and
+     * `preventDefault` on it suppresses the mouse events that follow, so a
+     * `mousedown` listener would never run for a touch or pen edit.
+     *
+     * Targets inside the canvas retarget to its CLOSED shadow host, which is
+     * not inside this overlay, so `contains` reads them as outside — which
+     * they are. The portalled insert picker and pill popover ARE outside the
+     * overlay in the DOM, and are covered by the same `menuOpenRef` stand-down
+     * that already guards commit-on-blur (AGL-586).
+     */
+    useEffect(() => {
+      if (!node) return
+      const handlePointerDownAway = (event: Event) => {
+        if (menuOpenRef.current) return
+        const overlay = overlayRef.current
+        const target = event.target as Node | null
+        if (overlay && target && overlay.contains(target)) return
+        commitRef.current()
+      }
+      document.addEventListener('pointerdown', handlePointerDownAway, true)
+      return () => {
+        document.removeEventListener('pointerdown', handlePointerDownAway, true)
+      }
+    }, [node])
 
     /** Shift+Enter in plain mode: a literal newline, DOM kept flat. */
     const insertPlainNewline = useCallback(() => {
@@ -527,6 +610,7 @@ export const InlineTextEditorComponent = observer(
 
     return (
       <Box
+        ref={overlayRef}
         data-aglyn="overlay:inline-text-editor"
         sx={{
           position: 'fixed',
