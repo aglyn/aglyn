@@ -34,6 +34,13 @@ import useBesignerDocument from './use-besigner-document'
 const mockCanvas = {
   isInitialSame: true,
   didSetInitial: false,
+  /**
+   * Whether a co-editor has touched this canvas (AGL-2486). Modelled rather
+   * than omitted: the draft prompt reads it to decide whether restoring is
+   * still a private act, and an absent property would read as "nobody else
+   * is here" for every case in this file.
+   */
+  hasRemoteEdits: false,
   reset: jest.fn(),
   setNodes: jest.fn(),
   processNodesToDenormalized: jest.fn((value: unknown) => value),

@@ -506,8 +506,12 @@ function HostEmailBesignerPage() {
                 saveAvailable={saveAvailable}
                 onPropertiesEdit={() => setPropertiesOpen(true)}
               />
-              <BesignerDraftAlertComponent draft={draft} noun="email" />
-              {remoteChanged ? (
+              <BesignerDraftAlertComponent
+                draft={draft}
+                noun="email"
+                remoteChanged={remoteChanged}
+              />
+              {remoteChanged && !draft.available ? (
                 <BesignerConflictAlertComponent noun="email" />
               ) : null}
               {/* Host emails have a host, so the media picker works here — the

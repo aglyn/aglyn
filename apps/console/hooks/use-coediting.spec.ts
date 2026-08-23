@@ -621,6 +621,156 @@ describe('undo against a co-editor (AGL-1958)', () => {
 })
 
 /**
+ * AGL-2486 — the same rule, for the OTHER wholesale replace.
+ *
+ * `applyNodes` is what the raw-JSON editor and the local crash-recovery
+ * draft (AGL-1256) push a whole map through. It had no epoch overlay, so it
+ * carried the entire AGL-1958 failure mode intact: the map was composed
+ * without any knowledge of a peer's later changes, and the result is diffed
+ * against the co-editing shadow and published, which turns a node the map
+ * happens to lack into a DELETE broadcast under this session's id.
+ *
+ * Reproduced on the running editor before this fix, two browser sessions on
+ * one screen: the peer created a node, the other session pressed Restore,
+ * and the node was gone from the peer's own canvas — with the tombstone
+ * `{deleted: true}` sitting in RTDB under the restorer's session id to say
+ * how.
+ *
+ * The draft's own map is the fixture here: a snapshot of the document as it
+ * was BEFORE the peer joined, which is exactly what a crash net holds.
+ */
+describe('applyNodes against a co-editor (AGL-2486)', () => {
+  const ROOT = Aglyn.CANVAS_ROOT_ELEMENT_ID
+
+  /** What the draft holds: the document before any peer touched it. */
+  const DRAFT = {
+    [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['mine', 'theirs'] },
+    mine: {
+      $id: 'mine',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'mine, unsaved' },
+    },
+    theirs: {
+      $id: 'theirs',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'theirs v0' },
+    },
+  }
+
+  const children = (nodeId: string): string | undefined =>
+    (Aglyn.canvas.nodes.get(nodeId) as { props?: { children?: string } })?.props
+      ?.children
+
+  const remote = (nodeId: string, node: Record<string, unknown>) =>
+    applyRemoteNode(nodeId, {
+      by: 'peer-tab',
+      at: Date.now(),
+      json: JSON.stringify(node),
+    })
+
+  beforeEach(() => {
+    flushRemoteReconcile()
+    Aglyn.canvas.reset()
+    Aglyn.canvas.setNodes(DRAFT as never)
+    Aglyn.canvas.updateInitialNodes()
+  })
+
+  afterAll(() => {
+    Aglyn.canvas.reset()
+  })
+
+  it('reports whether a peer has touched the canvas', () => {
+    expect(Aglyn.canvas.hasRemoteEdits).toBe(false)
+
+    remote('theirs', {
+      $id: 'theirs',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'theirs v1' },
+    })
+
+    // This is the flag the draft prompt reads to stop offering Restore.
+    expect(Aglyn.canvas.hasRemoteEdits).toBe(true)
+    Aglyn.canvas.reset()
+    expect(Aglyn.canvas.hasRemoteEdits).toBe(false)
+  })
+
+  it('keeps a node the peer CREATED, and its place in the tree', () => {
+    remote('fresh', {
+      $id: 'fresh',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'peer node, unsaved' },
+    })
+    // One peer `update()`, so the parent's new child list rides along.
+    remote(ROOT, {
+      $id: ROOT,
+      componentId: 'div',
+      nodes: ['mine', 'theirs', 'fresh'],
+    })
+    flushRemoteReconcile()
+
+    Aglyn.canvas.applyNodes(DRAFT as never)
+
+    // The draft map has no 'fresh' key at all. Before AGL-2486 the replace
+    // deleted it, and the publish that follows sent {deleted: true} to the
+    // person who had just created it.
+    expect(Aglyn.canvas.nodes.has('fresh')).toBe(true)
+    expect(children('fresh')).toBe('peer node, unsaved')
+    expect(Aglyn.canvas.nodes.get(ROOT)?.nodes).toContain('fresh')
+    // …and the author's own work is still restored.
+    expect(children('mine')).toBe('mine, unsaved')
+  })
+
+  it('keeps a peer CHANGE to a node the draft also carries', () => {
+    remote('theirs', {
+      $id: 'theirs',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'theirs v1' },
+    })
+    flushRemoteReconcile()
+
+    Aglyn.canvas.applyNodes(DRAFT as never)
+
+    // Last writer wins toward the peer, the same resolution AGL-1958 chose
+    // for undo rather than a second rule invented here.
+    expect(children('theirs')).toBe('theirs v1')
+  })
+
+  it('does not resurrect a node the peer DELETED', () => {
+    applyRemoteNode('theirs', { by: 'peer-tab', at: Date.now(), deleted: true })
+    flushRemoteReconcile()
+    expect(Aglyn.canvas.nodes.has('theirs')).toBe(false)
+
+    Aglyn.canvas.applyNodes(DRAFT as never)
+
+    // An absence is a remote state as much as a value is.
+    expect(Aglyn.canvas.nodes.has('theirs')).toBe(false)
+  })
+
+  it('replaces normally when no peer has touched the canvas', () => {
+    Aglyn.canvas.setNodes({
+      ...DRAFT,
+      extra: {
+        $id: 'extra',
+        componentId: 'muiTypography',
+        parentId: ROOT,
+        props: { children: 'added since' },
+      },
+    } as never)
+
+    Aglyn.canvas.applyNodes(DRAFT as never)
+
+    // Nothing is preserved for its own sake — a solo restore is still a
+    // whole-map replace, which is what makes it a restore at all.
+    expect(Aglyn.canvas.nodes.has('extra')).toBe(false)
+  })
+})
+
+/**
  * The join-time admission rule and the join-time reap (AGL-1870 R4).
  *
  * These cases are the PRODUCTION rooms, measured 2026-08-20, not invented
