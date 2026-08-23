@@ -329,9 +329,12 @@ describe('isLayoutComposedNodeId / hasScreenAuthoredNodes (AGL-1871)', () => {
   })
 
   it('answers FALSE for a tree that is layout chrome and a synthesized root', () => {
-    const chromeOnly = composeLayoutAndScreenNodes(layoutNodes, {
+    // Annotated for the same reason `screenNodes` above is: an inline literal
+    // infers `nodes: any[]`, which is not assignable to `NormalizedNodes`.
+    const rootOnly: Record<string, AglynNodeSchema> = {
       [ROOT]: { $id: ROOT, componentId: 'root', nodes: [] },
-    })
+    }
+    const chromeOnly = composeLayoutAndScreenNodes(layoutNodes, rootOnly)
 
     // The compose really did answer with a populated map — which is exactly
     // why "truthy nodes" was the wrong question to ask it.

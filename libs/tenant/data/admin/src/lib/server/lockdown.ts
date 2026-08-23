@@ -210,7 +210,7 @@ export async function getPlatformLockdown(): Promise<LockdownState | null> {
   }
   if (!platformPending) {
     platformPending = (async () => {
-      let state: LockdownState | null = null
+      let state: LockdownState | null
       try {
         const snapshot = await firebaseAdmin
           .app()
@@ -271,7 +271,7 @@ export async function getFeatureLockdown(
   let pending = featurePending.get(feature)
   if (!pending) {
     pending = (async () => {
-      let state: LockdownState | null = null
+      let state: LockdownState | null
       try {
         const snapshot = await firebaseAdmin
           .app()
@@ -408,7 +408,7 @@ export async function getUserLockdown(
   let pending = userPending.get(uid)
   if (!pending) {
     pending = (async () => {
-      let state: LockdownState | null = null
+      let state: LockdownState | null
       try {
         const snapshot = await firebaseAdmin
           .app()
@@ -497,7 +497,7 @@ export async function getDomainLockdown(
   let pending = domainPending.get(key)
   if (!pending) {
     pending = (async () => {
-      let state: LockdownState | null = null
+      let state: LockdownState | null
       try {
         const snapshot = await firebaseAdmin
           .app()
