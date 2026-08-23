@@ -567,8 +567,9 @@ export function buildAnimationFields(): Array<Record<string, unknown>> {
       name: Aglyn.NODE_ANIMATION_EASE_PROP,
       ...help(
         'Easing',
-        'The shape of the motion — whether it starts fast and settles, moves ' +
-          'at one speed, or overshoots slightly before landing.',
+        'The shape of the motion — whether it eases off as it arrives, moves ' +
+          'at one steady speed, or travels a little past its mark and comes ' +
+          'back to it.',
       ),
       component: Aglyn.FieldComponentType.SELECT,
       condition: animated,
@@ -579,7 +580,13 @@ export function buildAnimationFields(): Array<Record<string, unknown>> {
         { value: 'gentle-start', label: 'Gentle start' },
         { value: 'gentle-end', label: 'Gentle end' },
         { value: 'gentle-both', label: 'Gentle start and end' },
-        { value: 'overshoot', label: 'Slight overshoot' },
+        // The LABEL changed, the value did not (AGL-2486). `overshoot` is the
+        // stored id: it is written into `aglynAnimationEase` on every node
+        // that uses it, published as the `aglyn-anim-ease--overshoot` class,
+        // and keyed in `EASE_CURVES`. Renaming the value would silently drop
+        // the easing from every document already using it, which is why only
+        // the human-facing string here moves.
+        { value: 'overshoot', label: 'Settles into place' },
       ],
     },
     {

@@ -58,7 +58,7 @@ its duration does.
 | **Gentle start** | Eases in slowly, then arrives quickly. |
 | **Gentle end** | Starts quickly, then slows into place. |
 | **Gentle start and end** | Slow at both ends, quickest in the middle. |
-| **Slight overshoot** | Travels a little past its resting place and settles back. Use sparingly. |
+| **Settles into place** | Travels a little past its resting place and settles back onto it. The most emphatic curve on offer — use it sparingly. |
 
 Leaving this alone gives you **Smooth**, which is the curve every animation
 used before this setting existed — so nothing you built earlier has changed.
@@ -111,8 +111,9 @@ have to do anything, and there is no way to override it.
 
 This is also why the presets are what they are. Every one of them only fades,
 slides a short distance or changes size slightly; none of them spin or
-parallax, and the most emphatic thing on offer is the **Slight overshoot**
-easing, which you have to choose deliberately.
+parallax, and the most emphatic thing on offer is the **Settles into place**
+easing — which travels a little past its resting place before coming back to
+it, and which you have to choose deliberately.
 
 ## Speed and layout
 

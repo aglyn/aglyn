@@ -26,6 +26,7 @@ import { join } from 'node:path'
 import * as Aglyn from '@aglyn/aglyn'
 import {
   ATTRIBUTE_COMMIT_DEBOUNCE_MS,
+  buildAnimationFields,
   buildInstancePropFields,
   buildVisibilityFields,
   elementPropsComponentMapper,
@@ -634,5 +635,116 @@ describe('the read-only Text field explains itself (AGL-2486)', () => {
   it('deep-links to the section for the state the author is in', () => {
     expect(formattedBranch).toContain("'#text-field-read-only'")
     expect(formattedBranch).toContain("'#the-text-attribute'")
+  })
+})
+
+/**
+ * The easing formerly labelled "Slight overshoot" is now "Settles into
+ * place" (AGL-2486).
+ *
+ * The rename is Zach's, and the curve is deliberately untouched: it is still
+ * `cubic-bezier(.34,1.56,.64,1)`, still the only one of the six that leaves
+ * the 0–1 range. What changed is the promise the name makes. The docs page
+ * says every preset only fades, slides or resizes and that nothing bounces,
+ * and a control labelled "overshoot" advertised the one thing the page said
+ * the platform does not do — an author reading the label chose it expecting
+ * a bounce, or avoided it expecting one.
+ *
+ * THE ID IS THE PART THAT MUST NOT MOVE, and it is why this spec exists at
+ * all rather than the rename being a one-word diff. `overshoot` is persisted:
+ * it is written into `aglynAnimationEase` on every node that uses it, keyed
+ * in `EASE_CURVES`, and published as the `aglyn-anim-ease--overshoot` class.
+ * `ANIMATION_EASINGS` says "Persisted; never rename one" for that reason.
+ * Renaming the VALUE alongside the label would leave every screen already
+ * using it carrying an id nothing maps, and the failure mode is silent — the
+ * element still renders, it just stops easing. So the select's option values
+ * are asserted to be exactly the shared id list, which is a check the next
+ * person renaming a label will trip if they touch the wrong string.
+ */
+describe('the overshoot easing is labelled by what it does (AGL-2486)', () => {
+  const easing = buildAnimationFields().find(
+    (field) => field['name'] === Aglyn.NODE_ANIMATION_EASE_PROP,
+  ) as { options?: Array<{ value: string; label: string }> } | undefined
+
+  it('is looking at the easing field at all', () => {
+    // Without this every assertion below would pass vacuously on `undefined`
+    // — the field is found by a shared constant, and a rename of THAT would
+    // otherwise turn this whole block green while testing nothing.
+    expect(easing).toBeDefined()
+    expect(easing?.options?.length).toBe(Aglyn.ANIMATION_EASINGS.length)
+  })
+
+  it('offers "Settles into place" and no longer offers "Slight overshoot"', () => {
+    const labels = (easing?.options ?? []).map((option) => option.label)
+    expect(labels).toContain('Settles into place')
+    expect(labels).not.toContain('Slight overshoot')
+  })
+
+  it('keeps the STORED id, which is what documents already hold', () => {
+    const option = (easing?.options ?? []).find(
+      (candidate) => candidate.label === 'Settles into place',
+    )
+    expect(option?.value).toBe('overshoot')
+    // And nothing else in the list drifted from the persisted vocabulary.
+    expect((easing?.options ?? []).map((candidate) => candidate.value)).toEqual([
+      ...Aglyn.ANIMATION_EASINGS,
+    ])
+  })
+
+  /**
+   * The field's own help text described the curve as "overshoots slightly",
+   * which was the sentence carrying the old name's promise. Renaming the
+   * option and leaving that behind would have moved the word rather than
+   * retired it.
+   */
+  it('no longer describes the curve as an overshoot in the help text', () => {
+    // The PROSE only — deliberately not the whole field. The serialized
+    // field still contains the string "overshoot" and always must, because
+    // that is the stored option value the test above pins.
+    const prose = [
+      String((easing as any)?.description ?? ''),
+      String((easing as any)?.help?.excerpt ?? ''),
+    ].join(' ')
+    expect(prose.length).toBeGreaterThan(40)
+    expect(prose).not.toMatch(/overshoot/i)
+    expect(prose).toMatch(/past its mark/)
+  })
+
+  /**
+   * Label/docs parity. The docs page covers easing in full and named the old
+   * label twice — once in the table, once in the accessibility section that
+   * calls it the most emphatic curve on offer. A console that says one thing
+   * and a docs page that says another is the failure this catches.
+   */
+  describe('the docs page uses the same name', () => {
+    const page = readFileSync(
+      join(
+        __dirname,
+        '../../../../../../../apps/docs/docs/building-sites/besigner/animations.md',
+      ),
+      'utf8',
+    )
+
+    it('is reading the animations page', () => {
+      expect(page).toContain('# Element animations')
+      expect(page).toContain('### Easing')
+    })
+
+    it('names the easing "Settles into place" everywhere it names it', () => {
+      expect(page).toContain('**Settles into place**')
+      expect(page).not.toContain('Slight overshoot')
+    })
+
+    it('still explains what the curve does, having lost the word for it', () => {
+      // The name no longer carries the behaviour, so the prose has to. Both
+      // mentions describe the travel-past-and-return, in the table and in
+      // the accessibility section.
+      expect(page).toMatch(
+        /\*\*Settles into place\*\* \| Travels a little past its resting place/,
+      )
+      expect(page).toMatch(
+        /most emphatic thing on offer is the \*\*Settles into place\*\*[\s\S]{0,120}travels a little past its resting place/,
+      )
+    })
   })
 })
