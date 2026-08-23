@@ -26,6 +26,7 @@ import { VirtualElement } from '@popperjs/core'
 import { observer } from 'mobx-react-lite'
 import { forwardRef, useMemo, useState } from 'react'
 import NodeOutline from './node-outline'
+import { isInlineEditWithin } from '../utils/inline-text-edit.store'
 import NodeQuickActions from './node-quick-actions'
 
 const outerModifiers = [
@@ -105,7 +106,30 @@ const NodeOverlay = observer(
     // parent isn't loaded) — selecting the root via the breadcrumbs must not
     // crash the overlay.
     const nodeIndex = node?.parent ? node.index : null
-    const isOpen = Boolean(elementRef?.current)
+    /**
+     * The selection chrome stands down while this node is being edited in
+     * place (AGL-2486).
+     *
+     * Zach: *"background becomes white in when editing"* and *"the element
+     * outline doesn't wrap the text on the new line unless you are
+     * editing it"*. Both are this overlay. It paints a translucent FILL
+     * behind the node as well as an outline (`node-outline.tsx`), and while
+     * the author is typing that tint is the one thing standing between the
+     * in-place surface and its whole promise — that the text looks exactly
+     * as it renders. It is also redundant: the caret and the toolbar
+     * already say which element is being edited.
+     *
+     * Suppressing it here also takes the wrong geometry out of the edited
+     * node's way. The rect below is a SINGLE `getBoundingClientRect()`, and
+     * an inline run that has wrapped is a set of line fragments that one
+     * rectangle cannot describe — the same lesson that removed the editing
+     * overlay. That defect still applies to a merely SELECTED wrapped
+     * inline element and is not fixed here; it wants `getClientRects()`,
+     * drawn per fragment or as their union, and it is shared with the hover
+     * outline and the collaborator selection boxes.
+     */
+    const isBeingEdited = isInlineEditWithin(elementRef?.current ?? null)
+    const isOpen = Boolean(elementRef?.current) && !isBeingEdited
     const [rect, setRect] = useState<DOMRect>(DEFAULT_RECT)
 
     useIsomorphicLayoutEffect(() => {
