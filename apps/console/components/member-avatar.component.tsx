@@ -185,6 +185,31 @@ export function MemberAvatar(props: MemberAvatarProps) {
         // A theme-aware pairing would flip this to black in a light theme and
         // put black on #d93025.
         color: 'common.white',
+        // The identity colour has to be VISIBLE on a photo too (AGL-2486).
+        // Zach, looking at a presence stack of two photos and two initials:
+        // "The users with a profile image need to have a border indicative of
+        // their color in the canvas, right now only those without an image
+        // can you tell because it uses the background." A photo covers the
+        // background entirely, so on exactly the sessions that HAVE a picture
+        // the one signal tying an avatar to its cursor and its selection box
+        // disappeared.
+        //
+        // Only when the caller supplied `colour` explicitly. That is the
+        // signal that the colour MEANS something — presence passes the
+        // session's own colour, matching the cursor. A member list seeds its
+        // colour off an email purely so two rows differ, and ringing those
+        // would assert a correspondence to something that is not on screen.
+        ...(colour && src
+          ? {
+              // Outside the circle, like the self ring beside it, so the face
+              // is not cropped by its own indicator.
+              outline: '2px solid',
+              outlineColor: colour,
+              // Flush with the circle, so the chips can overlap without the
+              // ring being clipped by its neighbour (AGL-2486).
+              outlineOffset: 0,
+            }
+          : {}),
         ...sx,
       }}
       {...rest}

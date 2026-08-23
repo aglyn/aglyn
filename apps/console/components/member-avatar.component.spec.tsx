@@ -117,6 +117,70 @@ describe('MemberAvatar (AGL-1683)', () => {
     expect(img?.getAttribute('referrerpolicy')).toBe('no-referrer')
   })
 
+  /**
+   * Emotion inserts its rules with `insertRule` under jest, so reading a
+   * `<style>` element's textContent returns `''` and every assertion below
+   * would pass for the wrong reason. Read the CSSOM instead.
+   */
+  const cssFor = (container: HTMLElement): string => {
+    const el = container.querySelector('.MuiAvatar-root') as HTMLElement
+    const classes = [...el.classList]
+    const rules: string[] = []
+    for (const sheet of [...document.styleSheets]) {
+      let list: CSSRuleList
+      try {
+        list = sheet.cssRules
+      } catch {
+        continue
+      }
+      for (const rule of [...(list as any)] as CSSStyleRule[]) {
+        if (classes.some((c) => rule.selectorText?.includes(`.${c}`)))
+          rules.push(rule.cssText)
+      }
+    }
+    return rules.join(' ')
+  }
+
+  it('rings a PHOTO avatar in the identity colour (AGL-2486)', () => {
+    // A photo covers the background completely, so on exactly the sessions
+    // that have a picture the one signal tying the avatar to its cursor and
+    // its selection box was invisible. Zach: "right now only those without an
+    // image can you tell because it uses the background."
+    const { container } = render(
+      <MemberAvatar
+        photoURL="https://lh3.googleusercontent.com/a/ada"
+        colour="#9334e6"
+        name="Ada Lovelace"
+      />,
+    )
+    const css = cssFor(container)
+    expect(css).toContain('#9334e6')
+    expect(css).toMatch(/outline/)
+  })
+
+  it('leaves an INITIALS avatar unringed — the background already says it', () => {
+    // Two indicators of one fact is noise, and the ring is drawn outside the
+    // circle where it costs layout room in an overlapping stack.
+    const { container } = render(
+      <MemberAvatar colour="#9334e6" name="Ada Lovelace" />,
+    )
+    expect(cssFor(container)).not.toMatch(/outline-color/)
+  })
+
+  it('does not ring a photo whose colour was only SEEDED', () => {
+    // A member list seeds a colour off the email purely so two rows differ.
+    // Ringing those asserts a correspondence to something not on screen —
+    // only an explicitly passed `colour` means "this matches the cursor".
+    const { container } = render(
+      <MemberAvatar
+        photoURL="https://lh3.googleusercontent.com/a/ada"
+        email="ada@example.com"
+        name="Ada Lovelace"
+      />,
+    )
+    expect(cssFor(container)).not.toMatch(/outline-color/)
+  })
+
   it('treats a blank photoURL as no photo rather than as an empty src', () => {
     const { container } = render(
       <MemberAvatar photoURL="   " email="ada@example.com" />,

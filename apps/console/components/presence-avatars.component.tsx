@@ -220,13 +220,27 @@ const MAX_VISIBLE_SESSIONS = 6
  *
  * ## Spacing
  *
- * A `MuiAvatarGroup` was used here, which overlaps its children by a negative
- * margin. That is right for a row of DIFFERENT faces and wrong for this: two
- * sessions of one person are the same face, so overlapping them produced the
- * collision Zach reported — one avatar half-hidden behind an identical one,
- * with the ring that distinguishes them clipped by the neighbour. A plain
- * row with a real gap costs a few pixels and makes N sessions legible, and
- * the trailing margin keeps the cluster off the control beside it.
+ * OVERLAPPED, and the rings hug the circle (AGL-2486). An earlier pass read
+ * "weird spacing" as ring collision and answered it with a gap; Zach meant
+ * the opposite — "We also need to make them overlap, that wasn't what I meant
+ * by there is a weird spacing issue, I meant the orange border that seemed to
+ * have padding."
+ *
+ * So the ring sits ON the circle's edge rather than 2px off it — that gap was
+ * the "padding" — and the chips overlap the way a stacked avatar group does.
+ * Overlapping is only legible because every session carries its OWN ring
+ * colour: two sessions of one person are the same face, and the ring is what
+ * tells them apart, so it has to be the part that stays visible. The earlier
+ * chips are stacked on top, so each ring is drawn over its neighbour rather
+ * than under it.
+ *
+ * PADDING for the outer spacing, never margin. This sits inside a MUI `Stack`
+ * whose own child-spacing rule (`& > :not(style) ~ :not(style)`) sets the
+ * children's margins and outranks `sx` — measured, `mr: 1.5` computed to
+ * `0px` while the left spacing came from the parent rather than from this
+ * component at all. Padding is untouched by that rule, so it is the one that
+ * holds, and it is symmetric: Zach saw "the enormous right margin and very
+ * small left margin".
  */
 function RoomAvatars({ entries }: { entries: PresenceEntry[] }) {
   const visible = entries.slice(0, MAX_VISIBLE_SESSIONS)
@@ -234,23 +248,22 @@ function RoomAvatars({ entries }: { entries: PresenceEntry[] }) {
   return (
     <Stack
       direction="row"
-      // `gap`, not the overlap an AvatarGroup applies — and 8px of it, not
-      // 4: the self ring is drawn 2px OUTSIDE the circle at a 2px offset, so
-      // a 4px gap leaves two adjacent rings touching, which is the collision
-      // in Zach's screenshot in a smaller size.
-      //
-      // PADDING for the outer spacing, never margin. This sits inside a MUI
-      // `Stack` whose own child-spacing rule (`& > :not(style) ~ :not(style)`)
-      // sets the children's margins and outranks `sx` — measured here, `mr:
-      // 1.5` computed to `0px` while the 8px on the left came from the parent
-      // rather than from this component at all. Padding is untouched by that
-      // rule, so it is the one that actually holds.
-      sx={{ alignItems: 'center', gap: 1, pl: 0.5, pr: 1 }}
+      sx={{ alignItems: 'center', px: 1 }}
       data-aglyn-presence-sessions={String(entries.length)}
     >
-      {visible.map((entry) => (
+      {visible.map((entry, index) => (
         <Tooltip key={entry.key} title={describe(entry)}>
-          <Box sx={{ position: 'relative', display: 'inline-flex' }}>
+          <Box
+            sx={{
+              position: 'relative',
+              display: 'inline-flex',
+              // The overlap. Left-to-right reading order is preserved and the
+              // EARLIER chip is on top, so a ring is never half-covered by
+              // the neighbour that comes after it.
+              ...(index > 0 && { ml: -0.75 }),
+              zIndex: visible.length - index,
+            }}
+          >
             <MemberAvatar
               // `|| 'Someone'` belt-and-braces with the `projectRoom` guard
               // that already drops nameless rows (AGL-2486). A chip is the one
@@ -268,10 +281,13 @@ function RoomAvatars({ entries }: { entries: PresenceEntry[] }) {
                 // The ring is drawn OUTSIDE the circle, which is why the row
                 // needs real spacing — inside an overlapping group it was the
                 // first thing to be clipped.
+                // Offset 0: the ring hugs the circle. The 2px gap it used
+                // to sit at is the "padding" Zach saw, and it is also what
+                // made overlapping impossible without clipping.
                 ...(entry.isSelf && {
                   outline: '2px dashed',
                   outlineColor: 'warning.main',
-                  outlineOffset: 2,
+                  outlineOffset: 0,
                 }),
               }}
             />
