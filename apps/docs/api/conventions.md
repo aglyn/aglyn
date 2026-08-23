@@ -136,7 +136,7 @@ errors add a `code` with the specific detail.
 | `403` | `insufficient_scope` | The key lacks the required scope (`code` is the scope). |
 | `404` | `not_found` | No such resource — or no such endpoint. |
 | `405` | `method_not_allowed` | Method not supported on that path; the `Allow` header lists what is. |
-| `409` | `conflict` | The request conflicts with current state. `code: "idempotency_in_progress"` — an earlier request with the same [`Idempotency-Key`](#idempotency) is still running. `code: "dataset_not_empty"` — the dataset you asked us to delete still holds records. `code: "contact_exists"` — that email is already a [contact](resources/contacts.md#contact-exists), and the message names its id. |
+| `409` | `conflict` | The request conflicts with current state. `code: "idempotency_in_progress"` — an earlier request with the same [`Idempotency-Key`](#idempotency) is still running. `code: "dataset_not_empty"` — the dataset you asked us to delete still holds records. `code: "contact_exists"` — that email is already a [contact](resources/contacts.md#contact-exists), and the message names its id. `code: "order_transition"` — the [order](resources/orders.md#which-moves-are-allowed) cannot move to the status you asked for from the one it is in, and the message names that status. |
 | `429` | `rate_limited` | [Rate limit](rate-limits.md) exceeded. |
 | `500` | `internal_error` | Something went wrong on our side. Safe to retry. |
 

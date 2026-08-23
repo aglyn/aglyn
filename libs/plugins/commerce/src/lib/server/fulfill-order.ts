@@ -16,8 +16,114 @@
  */
 
 import * as CommerceModel from '../model'
-import { createResourceUid, type PluginApiHandler } from '@aglyn/aglyn/server'
+import {
+  createResourceUid,
+  type OrderFulfilmentTarget,
+  type PluginApiHandler,
+  type RecordShipmentOutcome,
+  type RecordShipmentRequest,
+} from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+
+/**
+ * Record a shipment — the transaction, with NO authorization of any kind
+ * (AGL-2461).
+ *
+ * This is the whole of what `fulfillOrderHandler` used to do below its auth
+ * preamble, lifted out unchanged so a SECOND caller can have it: the customer
+ * REST API's `PATCH /v1/sites/{id}/orders/{id}`, which authenticates an org
+ * API key and so shares not one line of this function's former preamble.
+ *
+ * Lifted rather than copied, and that is the entire point of the change. The
+ * console app may not import this library (the `scope:app` boundary), so the
+ * alternative on the table was a second `ORDER_TRANSITIONS` inside `/v1` —
+ * two tables that drift into the API writing a status the console forbids.
+ * One implementation, reached from the app through the core
+ * `registerOrderFulfilmentService` registry, is the fix; see that registry's
+ * docblock for why the edge runs that way.
+ *
+ * **The caller authorizes.** Everything this function knows is the transition
+ * rule. It does not know who is asking, and it will happily move any order on
+ * any host — `hostId` is taken on trust because its two callers establish
+ * trust in ways that have nothing in common (a Firebase uid in `memberRoles`
+ * for the console; an org credential that owns the host for `/v1`).
+ *
+ * Every guarantee AGL-1819 built is inside the transaction and therefore
+ * inherited by both callers: `canTransitionOrder` is re-asked under the write
+ * so a stale caller cannot skip a state, the already-in-target case returns
+ * without writing so a retry cannot append a duplicate shipment, and
+ * `lineItemIds` and the timeline are computed from the transaction's OWN read
+ * so a note landed from another tab survives.
+ */
+export async function recordOrderShipment({
+  hostId,
+  orderId,
+  to,
+  carrier,
+  trackingNumber,
+}: RecordShipmentRequest): Promise<RecordShipmentOutcome> {
+  const firestore = firebaseAdmin.app().firestore()
+  const orderRef = firestore
+    .collection('hosts')
+    .doc(hostId)
+    .collection('orders')
+    .doc(orderId)
+
+  return firestore.runTransaction(
+    async (transaction): Promise<RecordShipmentOutcome> => {
+      const snapshot = await transaction.get(orderRef)
+      if (!snapshot.exists) return { outcome: 'no_such_order' }
+      const order = CommerceModel.liftLegacyOrder(
+        (snapshot.data() ?? {}) as never,
+      )
+      // A redelivered click, or the second of two admins. Success because it
+      // IS the state the caller asked for — but nothing is written, so a
+      // retry cannot append a second copy of the same fulfillment.
+      if (order.status === to) return { outcome: 'already' }
+      if (!CommerceModel.canTransitionOrder(order.status, to)) {
+        return { outcome: 'blocked', from: order.status }
+      }
+
+      const atMs = Date.now()
+      const patch: Record<string, unknown> =
+        to === 'fulfilled'
+          ? {
+              status: 'fulfilled',
+              fulfillments: [
+                ...(order.fulfillments ?? []),
+                {
+                  id: createResourceUid(),
+                  lineItemIds: (order.lineItems ?? []).map(
+                    (_line, index) => index,
+                  ),
+                  ...(carrier ? { carrier } : {}),
+                  ...(trackingNumber ? { trackingNumber } : {}),
+                  atMs,
+                } satisfies CommerceModel.OrderFulfillment,
+              ],
+              timeline: CommerceModel.appendOrderEvent(
+                order,
+                'fulfilled',
+                trackingNumber
+                  ? `${carrier || 'Shipped'} ${trackingNumber}`
+                  : 'Fulfilled',
+                atMs,
+              ),
+            }
+          : {
+              status: 'delivered',
+              timeline: CommerceModel.appendOrderEvent(
+                order,
+                'delivered',
+                undefined,
+                atMs,
+              ),
+            }
+      transaction.update(orderRef, patch)
+      return { outcome: 'recorded' }
+    },
+  )
+}
 
 /**
  * Fulfil and mark-delivered, with the transition re-asked under the write
@@ -88,7 +194,7 @@ export const fulfillOrderHandler: PluginApiHandler = async (req, res) => {
   if (/^__.*__$/.test(hostId) || /^__.*__$/.test(orderId)) {
     return res.status(400).json({ error: 'Missing hostId or orderId' })
   }
-  const to = String(body.to ?? '')
+  const to = String(body.to ?? '') as OrderFulfilmentTarget
   if (to !== 'fulfilled' && to !== 'delivered') {
     // Deliberately NOT a generic transition endpoint — see the header.
     return res.status(400).json({ error: 'to must be fulfilled or delivered' })
@@ -108,73 +214,34 @@ export const fulfillOrderHandler: PluginApiHandler = async (req, res) => {
     if (memberRole !== 'admin' && memberRole !== 'editor') {
       return res.status(403).json({ error: 'Not permitted' })
     }
-    const orderRef = hostRef.collection('orders').doc(orderId)
 
-    const outcome = await firestore.runTransaction(async (transaction) => {
-      const snapshot = await transaction.get(orderRef)
-      if (!snapshot.exists) {
-        return { status: 404, body: { error: 'Unknown order' } }
-      }
-      const order = CommerceModel.liftLegacyOrder(
-        (snapshot.data() ?? {}) as never,
-      )
-      // A redelivered click, or the second of two admins. Success because it
-      // IS the state the caller asked for — but nothing is written, so a
-      // retry cannot append a second copy of the same fulfillment.
-      if (order.status === to) {
-        return { status: 200, body: { ok: true, already: true } }
-      }
-      if (!CommerceModel.canTransitionOrder(order.status, to)) {
-        return {
-          status: 409,
-          body: {
-            error:
-              to === 'delivered'
-                ? `Orders in "${order.status}" cannot be marked delivered`
-                : `Orders in "${order.status}" cannot be fulfilled`,
-          },
-        }
-      }
-
-      const atMs = Date.now()
-      const patch: Record<string, unknown> =
-        to === 'fulfilled'
-          ? {
-              status: 'fulfilled',
-              fulfillments: [
-                ...(order.fulfillments ?? []),
-                {
-                  id: createResourceUid(),
-                  lineItemIds: (order.lineItems ?? []).map(
-                    (_line, index) => index,
-                  ),
-                  ...(carrier ? { carrier } : {}),
-                  ...(trackingNumber ? { trackingNumber } : {}),
-                  atMs,
-                } satisfies CommerceModel.OrderFulfillment,
-              ],
-              timeline: CommerceModel.appendOrderEvent(
-                order,
-                'fulfilled',
-                trackingNumber
-                  ? `${carrier || 'Shipped'} ${trackingNumber}`
-                  : 'Fulfilled',
-                atMs,
-              ),
-            }
-          : {
-              status: 'delivered',
-              timeline: CommerceModel.appendOrderEvent(
-                order,
-                'delivered',
-                undefined,
-                atMs,
-              ),
-            }
-      transaction.update(orderRef, patch)
-      return { status: 200, body: { ok: true } }
+    // Authorized above; the shipment itself is the shared transaction. The
+    // wire shape below is unchanged — the console dialog branches on `ok`,
+    // `already` and the 409's `error` string, and this route's contract is
+    // with that dialog, not with the registry's vocabulary.
+    const outcome = await recordOrderShipment({
+      hostId,
+      orderId,
+      to,
+      carrier,
+      trackingNumber,
     })
-    return res.status(outcome.status).json(outcome.body)
+    if (outcome.outcome === 'no_such_order') {
+      return res.status(404).json({ error: 'Unknown order' })
+    }
+    if (outcome.outcome === 'blocked') {
+      return res.status(409).json({
+        error:
+          to === 'delivered'
+            ? `Orders in "${outcome.from}" cannot be marked delivered`
+            : `Orders in "${outcome.from}" cannot be fulfilled`,
+      })
+    }
+    return res
+      .status(200)
+      .json(
+        outcome.outcome === 'already' ? { ok: true, already: true } : { ok: true },
+      )
   } catch (error) {
     // Nothing landed — the transaction is all-or-nothing — so the order is
     // still where it was and the merchant can try again.

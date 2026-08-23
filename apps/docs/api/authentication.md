@@ -69,6 +69,7 @@ lacks returns `403` `insufficient_scope`. Grant the least a key needs.
 | `forms:read` | Read a site's form submissions. |
 | `forms:write` | Mark a site's form submissions read or unread, and delete them. Never edits what a visitor typed. |
 | `orders:read` | Read a site's store orders. |
+| `orders:write` | [Record a shipment](resources/orders.md#record-a-shipment): mark an order fulfilled or delivered and attach a carrier and tracking number. Cannot cancel or refund an order, and never moves stock or money. |
 | `products:read` | Read a site's products, variants, prices and stock. |
 | `media:read` | List files in the organization library and in a site's media. |
 | `media:write` | Upload files to the organization library and to a site's media. Cannot replace, edit or delete an existing file. |
@@ -86,9 +87,13 @@ from. See [contacts](resources/contacts.md#read-only-fields).
 Several resources are **read-only** over the API, and the missing write scope is
 deliberate in each case rather than an oversight:
 
-- **Orders** and **products** move money and stock. A write scope for them belongs to
-  the change that ships the endpoint, not ahead of it — a scope you can grant that
-  grants nothing is a broken permission.
+- **Cancelling and refunding an order**, and **products**, move money and stock.
+  `orders:write` stops precisely at the line where they begin: it records shipments,
+  which change no money and no stock. A cancel returns held inventory and a refund
+  returns money, each under its own transaction with its own decisions, so both stay
+  in the console. A write scope for the rest belongs to the change that ships the
+  endpoint, not ahead of it — a scope you can grant that grants nothing is a broken
+  permission.
 - **Renaming and deleting a site.** `sites:write` creates; it deliberately stops
   there. A delete would erase a whole site — screens, versions, products, uploaded
   files — immediately, from one field in a request body, with no hold and no undo.

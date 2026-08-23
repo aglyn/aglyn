@@ -188,6 +188,12 @@ for the how-to.
   Business-tier; the API supports cursor pagination, per-key rate limits,
   idempotent writes, and a consistent error envelope. See the new
   [API reference](https://docs.aglyn.com/api).
+- **[Record a shipment over the API](https://docs.aglyn.com/api/resources/orders#record-a-shipment)** —
+  the new **Orders — record shipments** key permission lets a 3PL, a warehouse
+  system or a label printer mark an order **fulfilled** or **delivered** and attach
+  the carrier and tracking number, so a store can be both sold from and shipped from
+  outside the console. It obeys the same order-status rules the console does, and
+  sending the same request twice records the parcel once.
 
 ## In-console help
 
