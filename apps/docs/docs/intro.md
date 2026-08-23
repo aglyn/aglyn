@@ -9,8 +9,8 @@ description: What Aglyn is, the core concepts, and how to find your way around t
 
 <div className="home-hero">
   <p className="home-hero__lead">
-    Aglyn is a no-code platform for building and running websites. Design pages
-    visually in the Besigner, bind them to your own data, and publish to a fast,
+    Aglyn™ is a no-code platform for building and running websites. Design pages
+    visually in the Besigner™, bind them to your own data, and publish to a fast,
     SEO-ready site — all without writing code. These docs teach you how to use
     Aglyn feature by feature.
   </p>
