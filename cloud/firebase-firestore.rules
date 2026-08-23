@@ -293,6 +293,16 @@ service cloud.firestore {
              'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'sso', 'discount',
              'enterprise',
+             // AGL-1881. Server-owned, and they were client-writable because
+             // the coverage guard could not see them: its universe is
+             // `AglynOrgBilling` + this deny-list + the entitlement resolvers
+             // in `libs/aglyn/src/lib/app-utils` + the seed writer, and all
+             // three of these are written by API ROUTES and declared in none
+             // of the four. `apps/console/app/api/billing/usage-budget`'s own
+             // docblock asserted "the rules deny to every client", which was
+             // simply untrue. The blind spot is the finding; these are the
+             // instance of it.
+             'usageBudget', 'usageAlerts', 'usageAlertsSeeded',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
              'suspendedEnforcement',
