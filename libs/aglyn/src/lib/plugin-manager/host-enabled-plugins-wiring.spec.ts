@@ -72,7 +72,18 @@ describe('per-site plugin enablement wiring (AGL-1014)', () => {
       // plugin pages and widget slots, and must subtract the host deny-list.
       name: 'console enabled-plugin ids hook',
       file: 'apps/console/components/console-plugins-gate.component.tsx',
-      mustContain: ['subtractDisabledPlugins', 'useHostDisabledPlugins'],
+      mustContain: [
+        'subtractDisabledPlugins',
+        'useHostDisabledPlugins',
+        // Both halves (AGL-2486). Subtracting the deny-list alone reports a
+        // `defaultOffPerSite` capability as available on every site that has
+        // never mentioned it — which is how the besigner went on offering
+        // Members blocks for a site whose /signin returns 404. The editor
+        // reads this very set through EnabledPluginsContext, so a regression
+        // here re-opens the component drawer, not merely a nav tab.
+        'applyDefaultOffOptIn',
+        'useHostEnabledPlugins',
+      ],
     },
     {
       // The EDITOR (AGL-1014): `withSitePlugins` wraps every besigner and
@@ -90,7 +101,15 @@ describe('per-site plugin enablement wiring (AGL-1014)', () => {
       // cannot un-register what an earlier site already registered.
       name: 'besigner component drawer',
       file: 'libs/besigner/feature/designer/src/lib/hooks/use-visible-component-categories.ts',
-      mustContain: ['useEnabledPlugins()', 'isFromEnabledPlugin('],
+      mustContain: [
+        'useEnabledPlugins()',
+        'isFromEnabledPlugin(',
+        // Category-level capability gating (AGL-2486). `pluginId` alone
+        // cannot express "this site has no member pages": the Members blocks
+        // are registered by the COMMERCE bundle, so they rode commerce's
+        // verdict and were offered on sites whose /signin returns 404.
+        'isCategoryCapabilityEnabled(',
+      ],
     },
   ]
 

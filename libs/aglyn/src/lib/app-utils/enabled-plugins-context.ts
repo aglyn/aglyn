@@ -16,6 +16,8 @@
  */
 
 import { createContext, useContext } from 'react'
+import { ComponentCategory } from '../foundation/constants/components'
+import { ACCOUNTS_PLUGIN_ID } from '../plugin-manager/enabled-plugins'
 
 /**
  * The EDITOR's view of per-site plugin enablement (AGL-1014).
@@ -55,6 +57,40 @@ export function useEnabledPlugins(): readonly string[] | undefined {
  * An entry with no `pluginId` belongs to no plugin, so no deny-list entry can
  * name it and it passes; so does everything when no set was supplied.
  */
+/**
+ * Component categories whose entries follow a per-site CAPABILITY rather
+ * than the bundle that ships them (AGL-2486).
+ *
+ * The Members blocks — Member sign-in, Member sign-up, Password recovery —
+ * are registered by the COMMERCE bundle, so `pluginId` alone said "commerce
+ * is on, offer them" on sites whose `/signin`, `/signup` and `/recover`
+ * return 404. Zach saw exactly that on `aglyn-org`. An author could drop a
+ * sign-in block on a page, publish it, and find out from a visitor.
+ *
+ * Attribution by category rather than by re-registering the components
+ * under the `accounts` id: re-registering moves where they LOAD from and
+ * would change what sites already using those blocks serve. This map is
+ * read-time only — it decides what the picker OFFERS, never what a page
+ * that already contains one renders.
+ */
+export const CATEGORY_REQUIRED_CAPABILITY: Readonly<Record<string, string>> = {
+  [ComponentCategory.MEMBERS]: ACCOUNTS_PLUGIN_ID,
+}
+
+/**
+ * Whether a category's required capability (if it has one) runs on the site
+ * being edited. Categories with no requirement always pass, as does
+ * everything when no set was supplied.
+ */
+export function isCategoryCapabilityEnabled(
+  category: string | undefined,
+  enabledPluginIds: readonly string[] | undefined,
+): boolean {
+  if (!enabledPluginIds) return true
+  const required = category ? CATEGORY_REQUIRED_CAPABILITY[category] : undefined
+  return !required || enabledPluginIds.includes(required)
+}
+
 export function isFromEnabledPlugin(
   item: { pluginId?: string } | undefined,
   enabledPluginIds: readonly string[] | undefined,
