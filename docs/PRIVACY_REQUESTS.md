@@ -39,8 +39,8 @@ is the failure mode.
 
 | Channel | Where it lands | Status |
 | --- | --- | --- |
-| `privacy@aglyn.com` | Google Group → `zach@aglyn.com` | **The published intake. Confirmed to deliver 2026-08-19 (AGL-1911)** — anyone on the web can post, unmoderated. It sends **no auto-acknowledgement**, so the requester holds no receipt and the clock runs regardless (AGL-2400). |
-| `security@aglyn.com` | Google Group → `zach@aglyn.com` | Vulnerability reports, per `docs.aglyn.com/trust`. Same configuration, same confirmation, same missing acknowledgement. |
+| `privacy@aglyn.com` | Google Group → `zach@aglyn.com` | **The published intake. Confirmed to deliver 2026-08-19 (AGL-1911)** — anyone on the web can post, unmoderated. It sends **no auto-acknowledgement**, so the requester holds no receipt and the clock runs regardless (AGL-2400). There is no DSAR form and nothing in the repo can add the receipt: the fix is a Google Groups auto-reply, drafted ready to paste in `docs/EMAIL_SETUP.md`. |
+| `security@aglyn.com` | Google Group → `zach@aglyn.com` | Vulnerability reports, per `docs.aglyn.com/trust`. Same configuration, same confirmation, same missing acknowledgement — and sharper here, because that page publishes *"We will acknowledge"*, which makes this the one intake where the silence contradicts something we wrote down. |
 | Support ticket | `/admin/support` | Real and working. Staff see a `support.ticketOpened` notification with a deep link. |
 | Phone opt-out ("stop calling me", "delete my number") | `/admin/contact-suppressions` | Real and working (AGL-1592). Its own path — §5. |
 | In-product self-serve | the customer does it themselves | §4. Always offer this first. |
@@ -67,10 +67,20 @@ verification:
 | --- | --- | --- |
 | GDPR / UK GDPR | **1 month** from receipt | +2 months for complex or numerous requests — you must **tell them inside the first month**, with reasons |
 | CCPA / CPRA | **45 days** | +45 days, again with notice inside the first window |
-| Confirmation of receipt | Not required by either, but **send one the same day** | — |
+| Confirmation of receipt | Not required by the GDPR. **Required by the CCPA** where it applies — 11 CCR §7021(b) gives **10 business days** to confirm receipt of a request to know, delete or correct, and to describe in general how we verify and when to expect a response. Send one the same day regardless. | — |
 
 Under Option A the service is global, so treat every request as GDPR-clocked
 unless you know otherwise. One month is the number to work to.
+
+⚠️ The confirmation row said "not required by either" until AGL-2400 checked
+it, which was wrong in the one direction that matters: the CCPA regulations
+make the acknowledgement itself an obligation, not a courtesy, and its required
+contents are exactly what a static auto-reply can carry. Whether the CCPA's
+own thresholds are met yet is a separate question — almost certainly not on
+day one — but the published Privacy Policy §7 grants those rights to
+Californians in terms, which makes it a promise we are held to whether or not
+the statute reaches us, and Terms §19.12 expressly preserves the Texas DTPA.
+`docs/EMAIL_SETUP.md` carries the auto-reply body drafted against this.
 
 **Record the receipt date the moment the mail is read.** There is no DSAR
 tracker today; until there is one, the record is an `adminAudit` row (§7) plus

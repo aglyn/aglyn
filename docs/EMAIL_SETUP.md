@@ -42,7 +42,7 @@ without re-plumbing.
 | `security@aglyn.com` | Privacy Policy §6; Terms §3.3; `docs.aglyn.com/trust` | `zach@aglyn.com` |
 | `abuse@aglyn.com` | Acceptable Use Policy | `zach@aglyn.com` |
 | `dmca@aglyn.com` | Copyright/DMCA Policy | `zach@aglyn.com` |
-| `support@aglyn.com` | Terms; `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL` — printed on the lockdown 503, the quarantine notice, the sanctions 451 and the abuse/counter-notice intakes | `zach@aglyn.com` |
+| `support@aglyn.com` | **No legal document** — it is the value of `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL`, printed on the lockdown 503, the quarantine notice, the sanctions 451 and the abuse/counter-notice intakes | `zach@aglyn.com` |
 
 Also live as groups: `info@`, `hello@`, `help@`, `sales@`, `billing@`,
 `accounting@`, `admin@`, `talent@`, `copyright@`, `webmaster@` (the DMARC `rua`
@@ -74,6 +74,184 @@ above is conclusive.
 Last verified **2026-08-19** (AGL-1911): all six accept unmoderated posts from
 anyone on the web and deliver each message to `zach@aglyn.com`. Each has a
 single member and no auto-acknowledgement — AGL-2400.
+
+### Auto-acknowledgement: what each intake owes a stranger (AGL-2400)
+
+Delivering is not the whole obligation. Four of the six carry a clock that runs
+against the **sender**, and on those the auto-reply is the only artifact the
+sender ends up holding — their own sent copy proves what they wrote, not that
+we received it.
+
+| Address | The clock, and whose it is | Emailed receipt today | Also reachable by form? |
+| --- | --- | --- | --- |
+| `privacy@` | **Theirs.** Privacy Policy §7 is the only published route to a GDPR/CCPA right and the statutory clock starts on receipt. Where the CCPA applies, 11 CCR §7021(b) separately requires us to **confirm receipt within 10 business days** and say when to expect a response. | none | **No.** Email-only — there is no DSAR form anywhere in the product. |
+| `legal@` | **Theirs, and it lapses.** Terms §18.5 gives 30 days from first accepting the Terms to opt out of arbitration. §18.1 requires 60 days of informal resolution before a claim. §19.8 makes this the address for service of legal notices. | none | **No.** Email-only. |
+| `security@` | **Ours.** `docs.aglyn.com/trust` publishes *"We will acknowledge"* — the only acknowledgement we have ever promised in writing, and today we do not keep it. GDPR Art. 33's 72 hours run from awareness, and this inbox is the primary detection channel (`docs/BREACH_NOTIFICATION.md` §1). | none | **No.** Email-only; no `security.txt` either. |
+| `dmca@` | **Both.** A §512(c)(3) notice fixes when our knowledge began. A counter-notice starts the §512(g)(2)(C) put-back window. | none by mail — but see the form column | **Yes**, both directions: `/api/report-abuse?category=dmca` and `/api/counter-notice`, and since AGL-2400 both **email the reference** to anyone who gives an address. |
+| `abuse@` | Neither, in law. The AUP publishes no window and reserves action "at any time and in our sole discretion". | none by mail | **Yes** — `/api/report-abuse`, which emails the `AR-…` reference when the reporter leaves an address. |
+| `support@` | Neither. Pro tickets carry a 7–14 business-day first response, which is a support SLA and **must never be mistaken for a statutory one** (`docs/PRIVACY_REQUESTS.md` §1). | none | Partly — the ticket form needs a sign-in *and* a paid tier, so for everyone else it is email-only. |
+
+So the code half of AGL-2400 is done and the mail half is not: the two intakes
+that already had a reference number now post it to the submitter, and the four
+addresses that are email-only still answer a stranger with silence.
+
+### The Workspace change — Zach's, because these are account settings
+
+**Groups → the group → Settings → Email options → Auto replies**, check
+*Enable auto-reply to non-members outside the organization*, paste the body,
+**Save changes**. Requires the Owner or Manager role. Do the same for
+*…to members outside the organization* if you want a customer who is also a
+group member to get one; nobody is, today.
+
+Two properties of the mechanism shape every body below, and both are worth
+knowing before writing your own:
+
+* **The body is static.** There is no templating — no sender name, no date, no
+  message id, no reference number. The receipt is dated only by the auto-reply
+  mail's own timestamp, which is why each body below tells the sender to keep
+  it and to keep their own sent copy. Anything needing a per-message reference
+  has to be a form, which is exactly why `abuse@` and `dmca@` are the two with
+  reference numbers.
+* **It fires after moderation, when moderation is on.** Ours is off on all six,
+  so it fires on receipt. Do not turn moderation on without re-reading this.
+
+⚠️ **Do not test by sending to the live address.** A test DSAR sitting in the
+privacy inbox is its own small compliance mess, and the row is indistinguishable
+from a real request that was never answered. Verify by reading the settings page
+back — the checkbox and the body render — and, if you want proof of delivery,
+send from a personal address to `support@` only.
+
+#### `privacy@` — the one with a regulator's shape to satisfy
+
+Written to §7021(b)'s three elements (receipt, how we verify, when to expect a
+response) without inventing a deadline of our own. `docs/PRIVACY_REQUESTS.md`
+§2 explains why the number must stay statutory: a self-imposed window shorter
+than the law's is a promise we can miss for free.
+
+> Thank you — this address received your message, and this reply is your
+> record of it. Please keep it, together with your own copy of what you sent;
+> the date you sent it is the date your request was received.
+>
+> If you are exercising a privacy right, here is what happens next. We will
+> first verify that the request comes from the person it concerns, or from
+> someone they have authorised — proportionately, and we will not ask you for
+> identity documents to confirm an email address. We will then respond within
+> the period the law that applies to you allows: one month under the UK and EU
+> GDPR, 45 days under the California CCPA. If your request is complex enough
+> to need the extension those laws permit, we will tell you inside the first
+> period and say why.
+>
+> One thing worth checking before you wait on us. If your request is about
+> personal information held on a site built by one of our customers, that
+> customer is the controller and we are only their processor — you will get a
+> faster and more complete answer by contacting them directly. We will help
+> them respond, as our Data Processing Addendum requires.
+>
+> This is an automated acknowledgement. Nobody has read your message yet.
+
+#### `legal@` — the one where the right lapses
+
+The load-bearing sentence is the second paragraph. An arbitration opt-out under
+§18.5 is effective **on sending**, so the sender's real question is not "will
+you reply" but "did I make it in time" — and that is answerable in a form
+letter.
+
+> Thank you — this address received your message, and this reply is your
+> record of it. Please keep it, together with your own copy of what you sent.
+>
+> If you wrote to opt out of arbitration under section 18.5 of our Terms of
+> Service: your opt-out takes effect on the date you sent it, provided that
+> date is within 30 days of your first accepting the Terms. It does not depend
+> on this reply, on our reading your message, or on our agreeing with it. This
+> email and your own sent copy are together the evidence of that date.
+>
+> If you wrote to begin the informal resolution period under section 18.1, the
+> 60 days start from the date of your message.
+>
+> If this is a formal legal notice under section 19.8, note that some notices
+> must also be sent to Aglyn LLC, Attn: Legal, c/o Northwest Registered Agent,
+> LLC., 5900 Balcones Drive STE 100, Austin, TX 78731.
+>
+> This is an automated acknowledgement. Nobody has read your message yet.
+
+#### `security@` — the one we already promised
+
+`docs.aglyn.com/trust` says "We will acknowledge". The 3-business-day figure
+below is lifted from `SECURITY.md`, which today attaches only to GitHub private
+vulnerability reporting; putting it here **extends that commitment to this
+address**. That is a deliberate choice and it is yours — if you would rather
+not, delete the sentence containing it and the reply still makes the trust page
+true, which is the actual gap.
+
+> Thank you — this address received your report, and this reply is your record
+> of it. Please keep it.
+>
+> We aim to reply personally within 3 business days, and to tell you honestly
+> what we can fix and when. We do not run a bug bounty and cannot offer
+> payment. We will not threaten anyone who reports a problem in good faith,
+> and we ask for a reasonable disclosure window — typically up to 90 days — so
+> a fix can ship before details are public.
+>
+> If you have not heard from a person within 3 business days, please escalate
+> to help@aglyn.com rather than assuming this was read.
+>
+> This is an automated acknowledgement. Nobody has read your report yet.
+
+#### `dmca@` — must not look like a rejection
+
+A §512 notice emailed to the designated agent is valid as sent. The reply may
+offer the form; it may not imply the email did not count.
+
+> Thank you — this address is the designated agent for copyright notices under
+> the DMCA, and it received your message. Your notice or counter-notice is
+> effective as you sent it; nothing below is a condition of that. Please keep
+> this reply and your own sent copy as your record of the date.
+>
+> If you would also like a reference number to quote, our web forms issue one
+> immediately and email it to you: https://aglyn.com/api/report-abuse for a
+> takedown notice, and https://aglyn.com/api/counter-notice for a
+> counter-notice. Using them is optional.
+>
+> A note for counter-notices: we restore access 10 to 14 business days after
+> we receive one, unless the complainant tells us they have filed a court
+> action. That clock runs from when you sent it, not from when we get to it.
+>
+> This is an automated acknowledgement. Nobody has read your message yet.
+
+#### `abuse@` and `support@` — the plain ones
+
+No statutory clock, so no window is stated. Keep them short; the point is only
+that silence stops being ambiguous.
+
+> Thank you — this address received your message, and this reply is your
+> record of it.
+>
+> If you are reporting a site, https://aglyn.com/api/report-abuse gives you a
+> reference number straight away and emails it to you, which makes it much
+> easier for us to find your report if you write again.
+>
+> We read everything sent here. We do not publish what we decide about
+> individual sites.
+>
+> This is an automated acknowledgement. Nobody has read your message yet.
+
+### The second member — also Zach's, and not fixed by anything above
+
+Every one of the six has exactly one member, `zach@aglyn.com`. Because *Who can
+post* is "Anyone on the web" with no moderation, mail is **accepted** the whole
+time that account is unavailable — so a DSAR, a breach report and a §512 notice
+all land silently unread, with no bounce telling the sender to escalate. The
+auto-reply makes this worse in one specific way worth naming: it tells the
+sender their message arrived, which is true, and removes the only signal they
+had that nobody was home.
+
+Adding a second member is one click per group at
+`https://groups.google.com/a/aglyn.com/g/<name>/members` → **Add members**, and
+a personal address that only forwards is enough — the point is that a second
+human can see the queue, not that they triage it. **Nobody but the account
+owner can do this**, and it cannot be worked around from the repo: a group's
+membership is Workspace state. Until a second member exists, treat this half of
+AGL-2400 as open regardless of what the auto-replies say.
 
 ## Current DNS facts (aglyn.com)
 
