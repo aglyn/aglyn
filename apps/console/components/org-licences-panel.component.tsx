@@ -16,7 +16,8 @@
  */
 'use client'
 
-import { AppLink } from '@aglyn/shared-ui-jsx'
+import { ICON_VARIANT_COMPONENT } from '@aglyn/shared-data-enums'
+import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -31,12 +32,14 @@ import {
   TableCell,
   TableHead,
   TableRow,
-  Typography,
 } from '@mui/material'
 import { collection, limit, query, where } from 'firebase/firestore'
 import { useMemo } from 'react'
+import { docsHelp } from '../constants/docs-links'
 import { buildRoute, Route } from '../constants/route-links'
 import { useOrgScope } from '../hooks/use-org-scope'
+import EmptyState from './empty-state.component'
+import type { ReadOutcome } from '../utils/read-outcome'
 
 /**
  * WHICH WORKSPACE HOLDS A LICENCE (AGL-2331).
@@ -71,6 +74,23 @@ import { useOrgScope } from '../hooks/use-org-scope'
  * org and uid resolve: a rules-shaped LIST is evaluated against the QUERY, so
  * a sentinel value is a guaranteed denial retried on the refusal cadence
  * (AGL-1440), not an empty list.
+ *
+ * ## Presentation (AGL-2486)
+ *
+ * Each list is a card, like every sibling Marketplace tab — it shipped as two
+ * bare `subtitle1` headings with a loose sentence under each, which on a page
+ * built from cards reads as an unfinished tab rather than an empty one.
+ *
+ * More than cosmetic: the sentences became `EmptyState`s, so they are now
+ * GATED on the read having succeeded (AGL-1066). "You have not bought
+ * anything" is a claim about someone's purchase history, and a refused or
+ * unfinished read supports no such claim — on a tab whose whole purpose is
+ * answering "do we already own this?", a zero-state produced by a dead
+ * session is an invitation to buy something twice. Both queries are held at
+ * `null` until the scope resolves, which reads as `loading` and can never
+ * reach the zero-state; a listen the server has REFUSED keeps painting from
+ * cache with `status: 'success'`, which is why `serverDenied` is checked
+ * alongside it rather than trusting the status alone.
  */
 export function OrgLicencesPanel({
   orgId,
@@ -85,7 +105,7 @@ export function OrgLicencesPanel({
   const uid = (user as { uid?: string } | null | undefined)?.uid
 
   /** The licences this workspace holds — whoever in it did the buying. */
-  const { data: orgLicences } = useFirestoreCollection<any>(
+  const orgLicencesRead = useFirestoreCollection<any>(
     () =>
       orgId
         ? query(
@@ -97,7 +117,7 @@ export function OrgLicencesPanel({
     { idField: '$id' },
   )
   /** Everything this person has ever bought, in any workspace. */
-  const { data: myPurchases } = useFirestoreCollection<any>(
+  const myPurchasesRead = useFirestoreCollection<any>(
     () =>
       uid
         ? query(
@@ -148,8 +168,27 @@ export function OrgLicencesPanel({
   const live = (rows: any[] | undefined) =>
     (rows ?? []).filter((row) => !row?.refundedAt)
 
-  const held = live(orgLicences)
-  const mine = live(myPurchases)
+  const held = live(orgLicencesRead.data)
+  const mine = live(myPurchasesRead.data)
+
+  /**
+   * "You own nothing here" is a claim about this workspace's purchases, and a
+   * refused read supports no such claim (AGL-1066). Both queries are ALSO
+   * held at `null` until the org and the uid resolve, which the hook reports
+   * as `loading` — so an unresolved scope can never reach the zero-state
+   * either. `serverDenied` is folded in beside `status`: a listen the server
+   * has refused past its retry budget keeps painting whatever the local cache
+   * holds, and `status` alone still reads `success` for it.
+   */
+  const outcome = (read: {
+    status: string
+    serverDenied: boolean
+  }): ReadOutcome =>
+    read.status === 'error' || read.serverDenied === true
+      ? 'unavailable'
+      : read.status === 'success'
+        ? 'loaded'
+        : 'loading'
 
   return (
     <Stack spacing={3}>
@@ -159,13 +198,33 @@ export function OrgLicencesPanel({
           'second workspace needs its own licence.'}
       </Alert>
 
-      <Stack spacing={1}>
-        <Typography variant="subtitle1">{'This workspace'}</Typography>
-        {held.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            {'This workspace holds no paid marketplace licences yet.'}
-          </Typography>
-        ) : (
+      {held.length === 0 ? (
+        <EmptyState
+          read={outcome(orgLicencesRead)}
+          subject="this workspace’s licences"
+          iconPath={ICON_VARIANT_COMPONENT.path}
+          title={'This workspace holds no licences'}
+          description={
+            'Anything bought for this workspace shows up here, whoever on ' +
+            'the team paid for it.'
+          }
+        />
+      ) : (
+        <CardDisplay
+          header={'This workspace'}
+          help={docsHelp('publisherHandbook', {
+            anchor: '#how-installs-work-the-buyer-side',
+            excerpt:
+              'What this workspace owns — installable by any member with ' +
+              'install permission, whoever on the team paid for it.',
+          })}
+          subheader={
+            'Installable by any member with install permission, whoever ' +
+            'on the team bought it'
+          }
+          contentGutterX
+          contentGutterY
+        >
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -198,16 +257,35 @@ export function OrgLicencesPanel({
               ))}
             </TableBody>
           </Table>
-        )}
-      </Stack>
+        </CardDisplay>
+      )}
 
-      <Stack spacing={1}>
-        <Typography variant="subtitle1">{'Bought by you'}</Typography>
-        {mine.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            {'You have not bought anything from the marketplace.'}
-          </Typography>
-        ) : (
+      {mine.length === 0 ? (
+        <EmptyState
+          read={outcome(myPurchasesRead)}
+          subject="your purchases"
+          iconPath={ICON_VARIANT_COMPONENT.path}
+          title={'You have not bought anything yet'}
+          description={
+            'Your own marketplace receipts appear here, across every ' +
+            'workspace you belong to.'
+          }
+        />
+      ) : (
+        <CardDisplay
+          header={'Bought by you'}
+          help={docsHelp('publisherHandbook', {
+            anchor: '#how-installs-work-the-buyer-side',
+            excerpt:
+              'Your own purchases across every workspace you belong to — a ' +
+              'purchase licenses one organization, so this says which.',
+          })}
+          subheader={
+            'Your own receipts, and which workspace each licence landed in'
+          }
+          contentGutterX
+          contentGutterY
+        >
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -248,8 +326,8 @@ export function OrgLicencesPanel({
               })}
             </TableBody>
           </Table>
-        )}
-      </Stack>
+        </CardDisplay>
+      )}
     </Stack>
   )
 }
