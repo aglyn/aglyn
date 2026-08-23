@@ -70,9 +70,10 @@ const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 60_000)
  * `annotate` draws numbered badges + outlines around the located elements
  * before the shot (the legend lives in the docs page that embeds it).
  *
- * `actions` runs before the shutter: `click`, `clickXY`, `hoverXY`,
- * `scroll`, `dblclickXY` (select-then-double-click, for the canvas'
- * in-place text editor), `fill: [selector, value]` and `press: 'Key'`.
+ * `actions` runs before the shutter: `click`, `hover`, `clickXY`,
+ * `hoverXY`, `scroll`, `dblclickXY` (select-then-double-click, for the
+ * canvas' in-place text editor), `fill: [selector, value]` and
+ * `press: 'Key'`. A shot may also set its own `viewport`.
  * A step may carry only `settleMs`, which is how a shot waits for the
  * canvas to finish laying out before its first click.
  *
@@ -572,6 +573,121 @@ const shots = [
       include: ['text=This text is formatted'],
     },
   },
+  // ── Release documentation (AGL-1950, specs A1–A16) ──────────────────
+  //
+  // Only the shots that can actually be staged are here. The rest are
+  // recorded as unfilled in SCREENSHOT_PLAN.md with the reason — the
+  // billing ones need a Stripe customer the seeded org does not have,
+  // three need fixtures the seed does not carry, and A15 is on a release
+  // flag that is still off. A spec whose surface cannot be reached is not
+  // a shot waiting to be run; it is a shot that would have to be faked.
+  //
+  // Several selectors below differ from the pasted specs because the
+  // surfaces moved between 2026-08-18 and now. Each difference is noted
+  // in the plan next to the spec it corrects.
+  {
+    // A3. The funnel is four separate shots rather than one chain: a chain
+    // that fails halfway leaves you guessing which step broke. Every step
+    // up to the last is client-side, which is why these are capturable at
+    // all while A1/A2 are not.
+    out: 'billing-and-plans/retention-survey.png',
+    path: `/${ORG_SLUG}/billing`,
+    waitFor: 'Current plan',
+    actions: [
+      { click: 'button:has-text("Cancel subscription")', settleMs: 2000 },
+    ],
+    clipTo: { locator: '[role="dialog"]' },
+  },
+  {
+    // A4. The reason is picked by VALUE, not by its label: the labels use
+    // a typographic apostrophe ("It’s too expensive") that no plain-quote
+    // selector matches.
+    out: 'billing-and-plans/retention-downsell.png',
+    path: `/${ORG_SLUG}/billing`,
+    waitFor: 'Current plan',
+    actions: [
+      { click: 'button:has-text("Cancel subscription")', settleMs: 2000 },
+      { click: '[role="dialog"] input[type="radio"][value="too_expensive"]', settleMs: 400 },
+      { click: '[role="dialog"] button:has-text("Continue")', settleMs: 3000 },
+    ],
+    clipTo: { locator: '[role="dialog"]' },
+  },
+  {
+    // A5. One winback per organization, ever — but only ACCEPTING it
+    // spends the offer; reaching the step does not, which is what makes
+    // this repeatable. Never click "Apply the discount" here.
+    out: 'billing-and-plans/retention-winback.png',
+    path: `/${ORG_SLUG}/billing`,
+    waitFor: 'Current plan',
+    actions: [
+      { click: 'button:has-text("Cancel subscription")', settleMs: 2000 },
+      { click: '[role="dialog"] input[type="radio"][value="too_expensive"]', settleMs: 400 },
+      { click: '[role="dialog"] button:has-text("Continue")', settleMs: 3000 },
+      { click: '[role="dialog"] button:has-text("No thanks")', settleMs: 3000 },
+    ],
+    clipTo: { locator: '[role="dialog"]' },
+  },
+  {
+    // A6. The last step this run is allowed to reach. `Yes, cancel` ends a
+    // subscription; nothing here clicks it.
+    out: 'billing-and-plans/retention-confirm.png',
+    path: `/${ORG_SLUG}/billing`,
+    waitFor: 'Current plan',
+    actions: [
+      { click: 'button:has-text("Cancel subscription")', settleMs: 2000 },
+      { click: '[role="dialog"] input[type="radio"][value="too_expensive"]', settleMs: 400 },
+      { click: '[role="dialog"] button:has-text("Continue")', settleMs: 3000 },
+      { click: '[role="dialog"] button:has-text("No thanks")', settleMs: 3000 },
+      { click: '[role="dialog"] button:has-text("No thanks")', settleMs: 3000 },
+    ],
+    clipTo: { locator: '[role="dialog"]' },
+  },
+  {
+    // A9. Opening the dialog writes nothing — the key is only created on
+    // submit, which this never presses. The scope list is THIRTEEN rows
+    // now, not the eight the spec was written against, and at 1440×900 the
+    // dialog runs off the bottom of the window; the taller viewport is
+    // what keeps `Media — upload` and the Create button in frame.
+    out: 'api/create-key-scopes.png',
+    path: `/${ORG_SLUG}/settings`,
+    waitFor: 'API keys',
+    viewport: { width: 1440, height: 1500 },
+    actions: [
+      { click: 'text=API keys', settleMs: 3000 },
+      { click: 'button:has-text("Create API key")', settleMs: 2500 },
+      { fill: ['[role="dialog"] input[type="text"]', 'zapier-orders-sync'], settleMs: 300 },
+      // No click on `Datasets — read`: the dialog opens with it already
+      // ticked, which is the state the spec asks for. Clicking it, as the
+      // spec's prose implies, turns it OFF — the first run of this shot
+      // published an unticked box for exactly that reason.
+    ],
+    clipTo: { locator: '[role="dialog"]' },
+  },
+  {
+    // A16. The help tip is `Help: Moving to a lower plan takes effect
+    // later`, not the `Help: Downgrading` the spec guessed. The disclosure
+    // sits well below the fold once expanded, so it is scrolled into view
+    // before the hover — a clip box is clamped to the viewport, and an
+    // element below it resolves to a sliver.
+    out: 'billing-and-plans/lower-tiers-expanded-tip.png',
+    path: `/${ORG_SLUG}/billing`,
+    waitFor: 'Current plan',
+    actions: [
+      { click: 'text=/Looking for something smaller/i', settleMs: 1500 },
+      { scroll: 'button[aria-expanded="true"]', settleMs: 800 },
+      { hover: '[aria-label^="Help: Moving to a lower plan"]', settleMs: 1200 },
+    ],
+    // The stack the spec named spans the full page width, so cropping to
+    // it caught the Enterprise card sitting to the right of the tip and
+    // nothing the section is about. The lower-tier cards are ABOVE this
+    // control, not beneath it as the spec assumed, so there is no crop
+    // that holds both them and the tooltip at a readable size.
+    clipTo: {
+      locator: '[role="tooltip"]',
+      include: ['button[aria-expanded="true"]'],
+      padding: 16,
+    },
+  },
   {
     out: 'besigner/element-search-best-matches.png',
     path: `/${HOST_BASE}/screens/seed-home/versions/seed-home-v1/besigner`,
@@ -852,6 +968,11 @@ async function resolveClipTo(page, clipTo) {
 for (const shot of selected) {
   const page = await context.newPage()
   try {
+    // A taller window for a surface that is genuinely taller than 900px.
+    // `clip` is clamped to the viewport, so a dialog that overflows gets
+    // silently cropped rather than scrolled — and a crop that drops the
+    // last rows of a scope list is the exact failure the plan calls out.
+    if (shot.viewport) await page.setViewportSize(shot.viewport)
     if (shot.stagesDocument) {
       await clearCoEditMirror()
       // …and the PRIVATE half of the same unsaved state. Every shot in a
@@ -909,6 +1030,10 @@ for (const shot of selected) {
         await page.mouse.move(x, y - 32)
         await page.mouse.move(x, y)
       }
+      // Hover by selector, for the tooltips whose whole subject is the
+      // tip. `hoverXY` above is the canvas' version, where no locator can
+      // reach the element.
+      if (action.hover) await scope.locator(action.hover).first().hover()
       if (action.click) await scope.locator(action.click).first().click()
       if (action.waitFor) {
         await page.waitForSelector(`text=${action.waitFor}`, {
