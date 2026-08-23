@@ -326,6 +326,11 @@ A private file:
 
 - has **no public URL** — the normal media link does not exist for it, and **Copy URL is
   hidden** on it in both the card menu and the drawer,
+- **loses any public URL it already had.** Turning Private on revokes the file's public
+  address at the moment you confirm it, so a link you copied and sent last month stops
+  working too. That is the part people expect and the part that is easy to get wrong:
+  a switch that only stopped *new* links would leave the one already in circulation
+  serving the file forever,
 - **cannot be placed on a page**; the picker refuses it and says why,
 - is viewable and downloadable in the console by people who can already see it, through a
   **temporary link that stops working after about fifteen minutes**.
@@ -351,7 +356,14 @@ an embargoed announcement, anything with personal data in it. Don't use it to ke
 off one particular site — that's what sharing is for, and marking it private will just stop
 the image working everywhere.
 
-To publish a private file later, turn Private off. It gets a normal URL from that moment on.
+To publish a private file later, turn Private off. It gets a normal URL from that moment
+on — a **new** one. The address it had before you made it private stays dead, so anything
+still pointing at the old link needs the new one.
+
+One thing none of this reaches: **bytes somebody already downloaded.** Revoking an address
+stops the file being fetched again; it cannot recall a copy that is already on someone's
+disk, in a browser cache or in a web archive. Nothing anyone sells can, and a product that
+implied otherwise would be the more dangerous thing to trust.
 
 ## Reference {#reference}
 

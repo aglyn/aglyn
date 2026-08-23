@@ -321,7 +321,19 @@ export async function rotateDownloadTokenForObject(options: {
 
   try {
     const file = bucket.file(storagePath)
-    const existing = (file?.metadata?.metadata ?? {}) as Record<string, unknown>
+    // FETCHED, not read off the handle (AGL-1881). `bucket.file(path)`
+    // constructs a File whose `.metadata` is `{}` until something populates
+    // it — the prefix scan above gets it free because `bucket.getFiles()`
+    // returns hydrated handles, and this function never called anything that
+    // does. So `existing[DOWNLOAD_TOKEN_METADATA_KEY]` was always undefined
+    // and this returned `no-token` for every object, including the ones that
+    // carried a live raw URL. `no-token` is also the CORRECT benign answer,
+    // which is why nothing looked wrong: a takedown reported "no raw URL to
+    // revoke" and the operator had no way to tell that apart from a
+    // revocation that ran. A control that exists, is wired, and silently
+    // never fires.
+    const [fetched] = await file.getMetadata()
+    const existing = (fetched?.metadata ?? {}) as Record<string, unknown>
     if (!existing[DOWNLOAD_TOKEN_METADATA_KEY]) {
       return { rotated: false, reason: 'no-token' }
     }
@@ -332,6 +344,60 @@ export async function rotateDownloadTokenForObject(options: {
   } catch (error) {
     console.error('[quarantine] token revocation failed', storagePath, error)
     return { rotated: false, reason: 'error' }
+  }
+}
+
+/**
+ * The object's CURRENT raw download URL, rebuilt from the token it already
+ * carries (AGL-1881).
+ *
+ * The publish half of `POST /api/media/folders {action:'set-private'}`.
+ * Turning an asset private now rotates its download token and drops the
+ * media document's `url`, so publishing it again has to put a working `url`
+ * back — for a free-tier workspace, or any asset predating AGL-829, that
+ * field is the ONLY delivery path, and leaving it deleted would make
+ * "Publish" a one-way door.
+ *
+ * **This mints nothing.** It reads the token the object already has and
+ * reassembles the URL from it, so:
+ *
+ *  * every URL handed out before the asset went private stays dead — the
+ *    rotation is not undone, only re-read;
+ *  * an object that never carried a token still does not get one, which is
+ *    the same narrowing {@link rotateDownloadTokenForObject} makes and for
+ *    the same reason: writing one would MINT a public URL for a file that
+ *    never had one.
+ *
+ * Returns `null` when there is nothing to rebuild, so the caller writes no
+ * `url` rather than an empty one.
+ */
+export async function currentDownloadUrlForObject(options: {
+  storagePath?: string | null
+  /** Injectable for tests; defaults to the configured media bucket. */
+  bucket?: any
+}): Promise<string | null> {
+  const storagePath = String(options?.storagePath ?? '').trim()
+  if (!storagePath) return null
+  let bucket: any
+  try {
+    bucket = options.bucket ?? storageBucket()
+  } catch (error) {
+    console.error('[media] storage bucket unavailable', storagePath, error)
+    return null
+  }
+  if (!bucket) return null
+  try {
+    const file = bucket.file(storagePath)
+    const [fetched] = await file.getMetadata()
+    const token = (fetched?.metadata ?? {})[DOWNLOAD_TOKEN_METADATA_KEY]
+    if (!token) return null
+    return (
+      `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/` +
+      `${encodeURIComponent(storagePath)}?alt=media&token=${String(token)}`
+    )
+  } catch (error) {
+    console.error('[media] download url read failed', storagePath, error)
+    return null
   }
 }
 
