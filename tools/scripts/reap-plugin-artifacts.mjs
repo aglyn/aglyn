@@ -17,6 +17,11 @@
  * can never disagree about what counts as an orphan. Same reason the route
  * (not this script) is what `.github/workflows/scheduled-crons.yml` calls.
  */
+// Bot Protection challenges automated clients on app.aglyn.com, so a hand run
+// from a machine the firewall does not know answers 429 with a checkpoint page
+// rather than reaching the route (AGL-2486).
+import { withProbeHeaders } from './lib/probe-headers.mjs'
+
 const apply = process.argv.includes('--apply')
 const baseUrl = process.env.CONSOLE_BASE_URL ?? 'https://app.aglyn.com'
 const cronSecret = process.env.CRON_SECRET
@@ -32,10 +37,10 @@ console.log(`POST ${url}${apply ? '' : ' (dry run)'}`)
 const response = await fetch(url, {
   method: 'POST',
   redirect: 'manual',
-  headers: {
+  headers: withProbeHeaders({
     'content-type': 'application/json',
     'x-cron-secret': cronSecret,
-  },
+  }),
   body: JSON.stringify({ dryRun: !apply }),
 })
 

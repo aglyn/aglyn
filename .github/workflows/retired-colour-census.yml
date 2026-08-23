@@ -143,3 +143,8 @@ jobs:
         run: node tools/scripts/check-retired-colours.mjs --refresh
         env:
           MARKETING_BASE_URL: ${{ vars.MARKETING_BASE_URL }}
+          # Matches the "CI and uptime probe bypass" firewall rule. Without it
+          # every route in the census answers 429 with a Vercel Security
+          # Checkpoint page and the job fails for a reason that has nothing to
+          # do with colours (AGL-2486).
+          AGLYN_PROBE_TOKEN: ${{ secrets.AGLYN_PROBE_TOKEN }}

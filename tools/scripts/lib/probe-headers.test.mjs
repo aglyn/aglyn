@@ -95,22 +95,67 @@ test('withProbeHeaders — the bypass header', async (t) => {
   })
 })
 
+/**
+ * Scripts that must carry the header, DERIVED plus a pinned floor.
+ *
+ * The hand-written list below was the whole guard until AGL-2486, and it
+ * failed in the way a hand-written list fails: `check-retired-colours.mjs`
+ * was written afterwards, fetches https://aglyn.com directly, was never
+ * added — and the census answered `HTTP 429` on all three of its routes for
+ * two days while this test stayed green over the three names it did know.
+ * A guard whose scope is a literal cannot notice a fourth file; that is the
+ * same shape as the bug it was written for, one level up.
+ *
+ * So the set is now discovered: every `tools/scripts/*.mjs` that calls
+ * `fetch(` AND names one of our own hosts in CODE. Comments are stripped
+ * first, deliberately — `setup-stripe.mjs` mentions app.aglyn.com in a usage
+ * example and fetches api.stripe.com only, and sending our bypass token to a
+ * third party is the one thing probe-headers.mjs says never to do.
+ *
+ * The literal names stay as a FLOOR: if the heuristic is ever narrowed by
+ * accident, the three files this guard was born for still fail rather than
+ * quietly leaving the derived set empty.
+ */
+function scriptsThatFetchAnAglynHost(scripts, { readFileSync, readdirSync, join }) {
+  const withoutComments = (source) =>
+    source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  const derived = readdirSync(scripts)
+    .filter((name) => name.endsWith('.mjs'))
+    .filter((name) => {
+      const code = withoutComments(readFileSync(join(scripts, name), 'utf8'))
+      return /fetch\(/.test(code) && /https:\/\/[a-z0-9.-]*aglyn\.(com|app)/.test(code)
+    })
+  return [
+    ...new Set([
+      // The floor — the three the guard was written for (AGL-1611).
+      'probe-uptime.mjs',
+      'legal-doc-diff.mjs',
+      'check-legal-index-dates.mjs',
+      ...derived,
+    ]),
+  ].sort()
+}
+
 test('every script that fetches an Aglyn host uses the helper', async () => {
   // The defect this whole file exists for: the header was added to two of the
   // three live-fetch scripts, so the uptime probe and the drift diff went
   // green while `check-legal-index-dates.mjs` kept failing 429 in the SAME
   // workflow run. Reviewing three files for a missing ternary is exactly the
   // job a guard should hold.
-  const { readFileSync } = await import('node:fs')
+  const { readFileSync, readdirSync } = await import('node:fs')
   const { fileURLToPath } = await import('node:url')
   const { join, dirname } = await import('node:path')
   const scripts = dirname(dirname(fileURLToPath(import.meta.url)))
 
-  for (const name of [
-    'probe-uptime.mjs',
-    'legal-doc-diff.mjs',
-    'check-legal-index-dates.mjs',
-  ]) {
+  const names = scriptsThatFetchAnAglynHost(scripts, { readFileSync, readdirSync, join })
+  // A derived set that collapsed to the floor would pass this test while
+  // covering nothing new, which is the failure the floor cannot catch.
+  assert.ok(
+    names.length > 3,
+    `expected the discovery to find live-fetch scripts beyond the three pinned names, got ${names.join(', ')}`,
+  )
+
+  for (const name of names) {
     const source = readFileSync(join(scripts, name), 'utf8')
     assert.match(
       source,
