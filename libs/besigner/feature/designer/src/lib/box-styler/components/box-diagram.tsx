@@ -15,9 +15,7 @@
  * limitations under the License.
  */
 
-import { alpha, darken } from '@aglyn/shared-ui-theme'
-import { ButtonBase, lighten, styled, Tooltip, Typography } from '@mui/material'
-import { emphasize } from '@mui/system/colorManipulator'
+import { ButtonBase, styled, Tooltip, Typography } from '@mui/material'
 import {
   type ComponentProps,
   forwardRef,
@@ -37,421 +35,166 @@ import type { Measurements } from '../types'
 
 export type { Measurements }
 
-const GAP = 2
-const BTN_SIZE = 20
-const HEIGHT = 216
 /**
- * Thickness of the border band, in px.
+ * The box model, drawn the way browser devtools draws it (AGL-2486).
  *
- * It is 18 rather than the 7 it started at because the band has to carry
- * its own LABEL. Parking `BORDER` outside the ring — where it first went —
- * put the word below and to the right of the margin controls, which reads
- * as "the border is outside the margin": the exact opposite of the box
- * model the diagram exists to teach. A label belongs on the region it
- * names, so the region has to be tall enough to hold one.
+ * The first version of this was louder than the thing it replaced:
+ * saturated fills, diagonal gradient wedges, corner slashes where clipped
+ * trapezoids met, a hatched border band and four coloured tag chips, with a
+ * swatch legend underneath to explain the result. Zach's verdict was that it
+ * "got messed up", and he was right — legibility went backwards while
+ * decoration went forwards, which is the opposite of what "polish the
+ * styling" asked for.
+ *
+ * Devtools has never confused anyone and it uses four quiet fills and
+ * nothing else. So: flat nested rectangles, muted colour, no gradients, no
+ * clip paths, no hatching, no legend. The most salient things in the
+ * control are the four numbers and the four region names, because those are
+ * what an author came to read.
+ *
+ * The layout is a 3x3 grid per region rather than absolutely-positioned
+ * trapezoids — top spans the width, then left / inner / right, then bottom.
+ * That is what removes the corner slashes: there are no clipped shapes left
+ * to leave gaps between them.
  */
-const RING = 18
-
-export type PolyType = {
-  topLX: string
-  topLY: string
-  topRX: string
-  topRY: string
-  btmRX: string
-  btmRY: string
-  btmLX: string
-  btmLY: string
-}
-
-const polygon = (options: PolyType) => {
-  const topL = `${options.topLX || '0%'} ${options.topLY || '0%'}`
-  const topR = `${options.topRX || '0%'} ${options.topRY || '0%'}`
-  const btmR = `${options.btmRX || '0%'} ${options.btmRY || '0%'}`
-  const btmL = `${options.btmLX || '0%'} ${options.btmLY || '0%'}`
-  return `polygon(${topL}, ${topR}, ${btmR}, ${btmL})`
-}
 
 const StyledWrapper = styled('div')(({ theme }) => {
   // In CSS vars mode theme.palette.* always returns static light values;
   // use (theme.vars || theme) so palette refs become live CSS custom-property
   // references that switch when the .dark class toggles on <html>.
   const tv = (theme as any).vars || theme
+
+  /** One nested region: a quiet fill, a hairline edge, room for a label. */
+  const region = (channel: string) => ({
+    display: 'grid',
+    gridTemplateColumns: 'auto minmax(0, 1fr) auto',
+    gridTemplateRows: 'auto minmax(0, 1fr) auto',
+    position: 'relative' as const,
+    borderRadius: 3,
+    border: `1px solid rgba(${channel} / 0.40)`,
+    backgroundColor: `rgba(${channel} / 0.13)`,
+    paddingTop: 13,
+  })
+
   return {
+    ...region(tv.palette.warning.mainChannel),
     width: '100%',
-    height: HEIGHT,
-    display: 'flex',
-    flexDirection: 'column',
-    position: 'relative',
-    textAlign: 'center',
-    overflow: 'hidden',
-    borderStyle: 'dashed',
-    borderWidth: 1,
-    borderRadius: theme.shape.borderRadius,
-    borderColor: tv.palette.warning.dark,
-    padding: 1,
-    // The four regions read as one nested figure rather than four
-    // unrelated shapes, so the ground behind the margin band is the
-    // canvas colour rather than pure black (AGL-2486).
-    backgroundColor: tv.palette.background.paper,
+    fontSize: theme.typography.pxToRem(11),
+    color: tv.palette.text.primary,
 
-    '.marginButton': {
-      overflow: 'hidden',
-      textAlign: 'center',
-      cursor: 'pointer',
-      backfaceVisibility: 'hidden',
-      color: theme.palette.getContrastText(
-        alpha(theme.palette.surface.main, 0.96),
-      ),
-      transition: theme.transitions.create(['filter'], { duration: 120 }),
-      background: [
-        'linear-gradient(',
-        '260deg, ',
-        `${darken(theme.palette.warning.light, 0.06)}, `,
-        `${lighten(theme.palette.warning.light, 0.34)}`,
-        ') content-box',
-      ].join(''),
-
-      '&:hover': { filter: 'brightness(1.06)' },
-
-      '&.marginTop': {
-        width: `calc(100% - ${GAP * 2}px)`,
-        marginLeft: GAP,
-        marginRight: GAP,
-        height: `calc(${BTN_SIZE}% - ${GAP}px)`,
-        borderBottomWidth: 0,
-        clipPath: polygon({
-          topLX: '0%',
-          topLY: '0%',
-          topRX: '100%',
-          topRY: '0%',
-          btmRX: `${100 - BTN_SIZE}%`,
-          btmRY: '100%',
-          btmLX: `${BTN_SIZE}%`,
-          btmLY: '100%',
-        }),
-      },
-
-      '&.marginBottom': {
-        width: `calc(100% - ${GAP}px)`,
-        marginLeft: GAP,
-        borderTopWidth: 0,
-        height: `${BTN_SIZE}%`,
-        clipPath: polygon({
-          topLX: `${BTN_SIZE}%`,
-          topLY: `0%`,
-          topRX: `${100 - BTN_SIZE}%`,
-          topRY: '0%',
-          btmRX: `100%`,
-          btmRY: '100%',
-          btmLX: `0%`,
-          btmLY: `100%`,
-        }),
-      },
-
-      '&.marginLeft': {
-        left: 1,
-        top: 0,
-        position: 'absolute',
-        borderRightWidth: 0,
-        height: `calc(100% - ${GAP}px)`,
-        width: `${BTN_SIZE}%`,
-        clipPath: polygon({
-          topLX: `0%`,
-          topLY: `0%`,
-          topRX: `100%`,
-          topRY: `${BTN_SIZE}%`,
-          btmRX: `100%`,
-          btmRY: `${100 - BTN_SIZE}%`,
-          btmLX: `0%`,
-          btmLY: `100%`,
-        }),
-      },
-
-      '&.marginRight': {
-        right: 1,
-        borderLeftWidth: 0,
-        height: `calc(100% - ${GAP * 2}px)`,
-        width: `${BTN_SIZE}%`,
-        position: 'absolute',
-        clipPath: polygon({
-          topLX: '0%',
-          topLY: `${BTN_SIZE}%`,
-          topRX: '100%',
-          topRY: '0%',
-          btmRX: `100%`,
-          btmRY: '100%',
-          btmLX: `0%`,
-          btmLY: `${100 - BTN_SIZE}%`,
-        }),
-      },
-    },
-
-    // The border band (AGL-2486). The CSS box model puts the border
-    // BETWEEN margin and padding, and a diagram that skips it teaches an
-    // author the wrong shape — the padding they set is inside the border,
-    // not inside the margin. It is drawn, not edited: border width, style
-    // and colour have one home already, in Borders & Shadows, and a second
-    // editor here is exactly the duplication this issue exists to remove.
     '.borderRing': {
-      width: `calc(${BTN_SIZE * 3.4}% - ${GAP * 2}px)`,
-      height: `${BTN_SIZE * 3.4}%`,
-      margin: `${GAP}px auto`,
-      padding: RING,
-      position: 'relative',
-      boxSizing: 'border-box',
-      borderStyle: 'solid',
-      borderWidth: 1,
-      borderColor: tv.palette.info.main,
-      background: `repeating-linear-gradient(45deg, rgba(${tv.palette.info.mainChannel} / 0.30) 0 3px, rgba(${tv.palette.info.mainChannel} / 0.14) 3px 6px) border-box`,
+      ...region(tv.palette.info.mainChannel),
+      gridColumn: 2,
+      gridRow: 2,
+      // The band is the whole ring: border width is not edited here, so it
+      // needs thickness enough to carry its name and nothing more.
+      padding: '13px 7px 7px',
     },
 
     '.paddingContainer': {
-      width: '100%',
-      height: '100%',
-      display: 'flex',
-      flexDirection: 'column',
-      position: 'relative',
-      textAlign: 'center',
-      overflow: 'hidden',
-      borderStyle: 'dashed',
-      borderWidth: 1,
-      borderColor: tv.palette.success.dark,
-      boxSizing: 'border-box',
-    },
-
-    '.paddingButton': {
-      overflow: 'hidden',
-      backfaceVisibility: 'hidden',
-      cursor: 'pointer',
-      transition: theme.transitions.create(['filter'], { duration: 120 }),
-      background: [
-        'linear-gradient(',
-        '65deg, ',
-        `${lighten(theme.palette.secondary.main, 0.7)}, `,
-        `${lighten(theme.palette.primary.main, 0.7)}`,
-        ') content-box',
-      ].join(''),
-      color: theme.palette.getContrastText(
-        lighten(theme.palette.secondary.main, 0.7),
-      ),
-
-      '&:hover': { filter: 'brightness(1.06)' },
-
-      '&.paddingTop': {
-        width: `calc(100% - ${GAP * 2}px)`,
-        height: `calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334))`,
-        marginLeft: GAP,
-        clipPath: polygon({
-          topLX: `0%`,
-          topLY: `0%`,
-          topRX: `100%`,
-          topRY: `0%`,
-          btmRX: `calc(${BTN_SIZE * 2}% + (${
-            100 - BTN_SIZE
-          }% * 0.3333334) - ${GAP}px)`,
-          btmRY: `100%`,
-          btmLX: `calc(${BTN_SIZE}% + (${
-            BTN_SIZE * 2
-          }% * 0.3333334) + ${GAP}px)`,
-          btmLY: `100%`,
-        }),
-      },
-
-      '&.paddingLeft': {
-        position: 'absolute',
-        top: 0,
-        left: 1,
-        height: `calc(100% - ${GAP * 2}px)`,
-        width: `calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334))`,
-        marginTop: GAP,
-        marginBottom: GAP,
-        clipPath: polygon({
-          topLX: `0%`,
-          topLY: `0%`,
-          topRX: `100%`,
-          topRY: `calc(${BTN_SIZE}% + (${
-            BTN_SIZE * 2
-          }% * 0.3333334) + ${GAP}px)`,
-          btmRX: `100%`,
-          btmRY: `calc(${BTN_SIZE * 2}% + (${
-            100 - BTN_SIZE
-          }% * 0.3333334) - ${GAP}px)`,
-          btmLX: `0%`,
-          btmLY: `100%`,
-        }),
-      },
-
-      '&.paddingRight': {
-        position: 'absolute',
-        top: 0,
-        right: 1,
-        height: `calc(100% - ${GAP * 2}px)`,
-        width: `calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334))`,
-        marginTop: GAP,
-        marginBottom: GAP,
-        clipPath: polygon({
-          topLX: `0%`,
-          topLY: `calc(${BTN_SIZE}% + (${
-            BTN_SIZE * 2
-          }% * 0.3333334) + ${GAP}px)`,
-          topRX: `100%`,
-          topRY: `0%`,
-          btmRX: `100%`,
-          btmRY: `100%`,
-          btmLX: `0%`,
-          btmLY: `calc(${BTN_SIZE * 2}% + (${
-            100 - BTN_SIZE
-          }% * 0.3333334) - ${GAP}px)`,
-        }),
-      },
-
-      '&.paddingBottom': {
-        width: `calc(100% - ${GAP * 2}px)`,
-        height: `calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334))`,
-        marginLeft: GAP,
-        marginRight: GAP,
-        clipPath: polygon({
-          topLX: `calc(${BTN_SIZE}% + (${
-            BTN_SIZE * 2
-          }% * 0.3333334) + ${GAP}px)`,
-          topLY: `0%`,
-          topRX: `calc(${BTN_SIZE * 2}% + (${
-            100 - BTN_SIZE
-          }% * 0.3333334) - ${GAP}px)`,
-          topRY: `0%`,
-          btmRX: `100%`,
-          btmRY: `100%`,
-          btmLX: `0%`,
-          btmLY: `100%`,
-        }),
-      },
+      ...region(tv.palette.success.mainChannel),
+      gridColumn: '1 / -1',
+      minHeight: 76,
     },
 
     '.contents': {
-      borderStyle: 'solid',
-      borderWidth: 1,
-      borderColor: tv.palette.text.secondary,
-      color: tv.palette.text.primary,
-      backgroundColor: tv.palette.background.default,
-      width: `calc(${BTN_SIZE}% + (${
-        BTN_SIZE * 2
-      }% * 0.3333334) - ${GAP * 2}px)`,
-      height: `calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334) - ${
-        GAP * 2
-      }px)`,
-      margin: `${GAP}px auto`,
-      position: 'relative',
-      textAlign: 'center',
+      gridColumn: 2,
+      gridRow: 2,
+      minHeight: 30,
+      margin: 3,
+      borderRadius: 3,
+      border: `1px solid rgba(${tv.palette.text.primaryChannel} / 0.20)`,
+      backgroundColor: tv.palette.background.paper,
+      color: tv.palette.text.secondary,
       display: 'flex',
-      flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      fontSize: 11,
+      fontSize: theme.typography.pxToRem(10),
     },
 
-    // The selected side (AGL-2486, Zach 2026-08-23). It was a 2px
-    // outline, which in a control whose whole subject is borders read as
-    // a border artefact rather than as selection — and in a figure of
-    // nested boxes any new LINE is ambiguous by construction. So
-    // selection is a FILL: the side takes the theme's primary colour and
-    // its contrast text, which nothing else in the diagram uses.
-    '.isSelected': {
-      background: [
-        'linear-gradient(',
-        '65deg, ',
-        `${darken(theme.palette.primary.main, 0.14)}, `,
-        `${theme.palette.primary.main}`,
-        ') content-box',
-      ].join(''),
-      color: theme.palette.primary.contrastText,
-      fontWeight: 700,
-      '&:hover': { filter: 'brightness(1.1)' },
-      '&::before': {
-        content: '""',
-        position: 'absolute',
-        inset: 0,
-        boxShadow: `inset 0 0 0 99px rgba(${tv.palette.primary.mainChannel} / 0.001)`,
+    // Every side is a plain, transparent hit area. The region behind it
+    // supplies the colour — a button with a fill of its own would put a
+    // fifth and sixth tone into a figure that has four things to say.
+    '.side': {
+      background: 'none',
+      borderRadius: 2,
+      padding: '1px 5px',
+      minWidth: 26,
+      color: 'inherit',
+      '&:hover': {
+        backgroundColor: `rgba(${tv.palette.text.primaryChannel} / 0.08)`,
       },
     },
+    '.sideTop': { gridColumn: '1 / -1', gridRow: 1, justifySelf: 'center' },
+    '.sideBottom': { gridColumn: '1 / -1', gridRow: 3, justifySelf: 'center' },
+    '.sideLeft': { gridColumn: 1, gridRow: 2, alignSelf: 'center' },
+    '.sideRight': { gridColumn: 3, gridRow: 2, alignSelf: 'center' },
 
-    // A side whose value follows the theme is marked, because the number
-    // alone cannot say so — `16px` and the step that resolves to 16px look
-    // identical and behave completely differently when the theme changes.
+    // A set value is the most salient thing in the control; an unset side
+    // names itself quietly, so it reads as a label rather than a number.
+    '.sideValue': {
+      fontSize: theme.typography.pxToRem(11),
+      fontWeight: 600,
+      lineHeight: 1.25,
+    },
+    '.sideEmpty': {
+      fontSize: theme.typography.pxToRem(10),
+      fontWeight: 400,
+      lineHeight: 1.25,
+      color: tv.palette.text.secondary,
+    },
+
+    /**
+     * Selection, re-checked now that the fills are calm.
+     *
+     * It was a 2px outline, which in a figure made of nested borders read
+     * as one more border. It is a solid primary fill — the only saturated
+     * colour anywhere in the control now, which is exactly why it reads.
+     */
+    '.isSelected': {
+      backgroundColor: tv.palette.primary.main,
+      color: tv.palette.primary.contrastText,
+      '&:hover': { backgroundColor: tv.palette.primary.dark },
+      '& .sideEmpty': { color: 'inherit' },
+    },
+
+    // A value that follows the theme carries a dot: the number alone
+    // cannot say so, since `16px` and the step that resolves to 16px look
+    // identical and behave differently when the theme changes.
     '.themeStep .sideValue::after': {
       content: '""',
       display: 'block',
-      width: 4,
-      height: 4,
+      width: 3,
+      height: 3,
       borderRadius: '50%',
       margin: '1px auto 0',
-      backgroundColor: tv.palette.primary.main,
-    },
-    '.isSelected.themeStep .sideValue::after': {
-      backgroundColor: tv.palette.primary.contrastText,
+      backgroundColor: 'currentColor',
+      opacity: 0.55,
     },
 
-    '.sideValue': {
-      fontSize: 11,
-      fontWeight: 600,
-      lineHeight: 1.1,
-    },
-    '.sideEmpty': {
-      fontSize: 10,
-      opacity: 0.62,
-      fontWeight: 400,
-      lineHeight: 1.1,
-    },
-
+    /**
+     * The region's name, ON the region it names.
+     *
+     * That placement was the real bug in the previous round — `BORDER` sat
+     * outside the ring it labelled, overlapping the margin controls, so it
+     * read as though the border were outside the margin. The placement
+     * stays; the coloured tag chip it used to sit in does not, because four
+     * chips competing with four numbers is what made this hard to read.
+     */
     '.label': {
-      width: 'auto',
       position: 'absolute',
-      textAlign: 'left',
+      top: 2,
+      left: 5,
       pointerEvents: 'none',
-      left: 1,
-      top: 1,
-      zIndex: 1,
-      paddingLeft: theme.spacing(0.5),
-      paddingRight: theme.spacing(0.5),
-      borderBottomRightRadius: theme.shape.borderRadius,
-      color: theme.palette.getContrastText(
-        alpha(theme.palette.surface.main, 0.76),
-      ),
-      backgroundColor: `rgba(${tv.palette.surface.darkChannel} / 0.12)`,
-      fontSize: theme.typography.pxToRem(10),
+      fontSize: theme.typography.pxToRem(9),
+      lineHeight: 1.2,
+      letterSpacing: '0.06em',
       textTransform: 'uppercase',
-      letterSpacing: '0.04em',
-      fontWeight: 600,
-
-      '&.margin': {
-        border: `1px solid ${tv.palette.warning.dark}`,
-        backgroundColor: lighten(theme.palette.warning.dark, 0.48),
-        color: theme.palette.getContrastText(
-          emphasize(theme.palette.warning.dark, 0.48),
-        ),
-      },
-      // On the band it names, same corner as Margin and Padding, so the
-      // three labels step inwards exactly as the regions do.
-      '&.border': {
-        // The one label that IS a hover target — it carries the border
-        // tooltip, now that the ring no longer wraps the padding buttons.
-        pointerEvents: 'auto',
-        cursor: 'help',
-        fontSize: theme.typography.pxToRem(8),
-        lineHeight: 1.4,
-        border: `1px solid ${tv.palette.info.main}`,
-        backgroundColor: lighten(theme.palette.info.main, 0.48),
-        color: theme.palette.getContrastText(
-          emphasize(theme.palette.info.main, 0.48),
-        ),
-      },
-      '&.padding': {
-        border: `1px solid ${tv.palette.success.dark}`,
-        backgroundColor: lighten(theme.palette.success.dark, 0.48),
-        color: theme.palette.getContrastText(
-          emphasize(theme.palette.success.dark, 0.48),
-        ),
-      },
+      fontWeight: 700,
+      color: tv.palette.text.secondary,
     },
+    // The one label that is a hover target: it carries the border tooltip.
+    '.label.border': { pointerEvents: 'auto', cursor: 'help' },
   }
 })
 
@@ -486,6 +229,18 @@ export const SIDE_SHORT: Record<keyof Measurements, string> = {
   paddingLeft: 'Left',
 }
 
+/** Which grid cell a side occupies within its own region. */
+const SIDE_SLOT: Record<keyof Measurements, string> = {
+  marginTop: 'sideTop',
+  marginRight: 'sideRight',
+  marginBottom: 'sideBottom',
+  marginLeft: 'sideLeft',
+  paddingTop: 'sideTop',
+  paddingRight: 'sideRight',
+  paddingBottom: 'sideBottom',
+  paddingLeft: 'sideLeft',
+}
+
 export interface BoxDiagramProps
   extends Omit<ComponentProps<typeof StyledWrapper>, 'onChange' | 'onSelect'> {
   measurements?: Measurements
@@ -500,12 +255,9 @@ export interface BoxDiagramProps
 
 /**
  * Where each side's tooltip opens — OUTWARD, away from the middle of the
- * figure (AGL-2486, Zach 2026-08-23).
- *
- * One placement for all eight cannot work here: this is a set of nested
- * boxes, so whichever direction a tooltip opens it lands on top of a
- * neighbouring target unless the direction is chosen per side. Opening
- * away from the centre is the only choice with no neighbour behind it.
+ * figure. One placement for all eight cannot work in nested boxes: whichever
+ * direction a tooltip opens it lands on a neighbouring target unless the
+ * direction is chosen per side.
  */
 const TOOLTIP_PLACEMENT: Record<
   keyof Measurements,
@@ -539,15 +291,12 @@ export const BoxDiagram = forwardRef<any, BoxDiagramProps>((props, ref) => {
   const ladder = steps ?? []
 
   /**
-   * Exactly ONE tooltip is open, because ONE piece of state says which
-   * (AGL-2486, Zach 2026-08-23).
+   * Exactly ONE tooltip is open, because ONE piece of state says which.
    *
-   * Nine independently-controlled tooltips could and did stack up: the
-   * regions overlap, so a pointer crossing the figure can be inside
-   * several hit areas in quick succession, and each tooltip decided its
-   * own visibility. An enter delay would have hidden that without fixing
-   * it. Naming the hovered target makes more than one open impossible by
-   * construction, and the delay below is then only about calm.
+   * Independently-controlled tooltips could and did stack up: the regions
+   * are adjacent, so a pointer crossing the figure enters several hit areas
+   * in quick succession and each tooltip decided its own visibility. An
+   * enter delay alone would have hidden that without fixing it.
    */
   const [hovered, setHovered] = useState<HoverTarget | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -586,8 +335,8 @@ export const BoxDiagram = forwardRef<any, BoxDiagramProps>((props, ref) => {
       >
         <ButtonBase
           className={[
-            key.startsWith('margin') ? 'marginButton' : 'paddingButton',
-            key,
+            'side',
+            SIDE_SLOT[key],
             isStep ? 'themeStep' : '',
             selected ? 'isSelected' : '',
           ]
@@ -602,8 +351,6 @@ export const BoxDiagram = forwardRef<any, BoxDiagramProps>((props, ref) => {
           onMouseLeave={() => hoverOff(key)}
           onFocus={() => hoverOn(key)}
           onBlur={() => hoverOff(key)}
-          // A click is an answer, not a question — drop the tooltip so it
-          // cannot sit over the editor that just opened beneath it.
           onMouseDown={clearTimer}
           aria-label={SIDE_LABELS[key]}
           aria-pressed={selected}
@@ -623,14 +370,14 @@ export const BoxDiagram = forwardRef<any, BoxDiagramProps>((props, ref) => {
 
   return (
     <StyledWrapper ref={ref} {...rest}>
+      <div className="label margin">{'Margin'}</div>
       {sideButton('marginTop')}
       {sideButton('marginLeft')}
 
       <div className="borderRing">
         {/* The border tooltip hangs off the LABEL, not off the ring.
             Wrapping the ring wrapped every padding button inside it, so
-            hovering padding opened the border tooltip too — that was the
-            second tooltip Zach was seeing. */}
+            hovering padding opened the border tooltip too. */}
         <Tooltip
           open={hovered === 'border'}
           placement="left"
@@ -649,24 +396,17 @@ export const BoxDiagram = forwardRef<any, BoxDiagramProps>((props, ref) => {
         </Tooltip>
 
         <div className="paddingContainer">
+          <div className="label padding">{'Padding'}</div>
           {sideButton('paddingTop')}
           {sideButton('paddingLeft')}
-
-          <div className="contents">
-            <div>{'Content'}</div>
-          </div>
-
+          <div className="contents">{'Content'}</div>
           {sideButton('paddingRight')}
           {sideButton('paddingBottom')}
-
-          <div className="label padding">{'Padding'}</div>
         </div>
       </div>
 
       {sideButton('marginRight')}
       {sideButton('marginBottom')}
-
-      <div className="label margin">{'Margin'}</div>
     </StyledWrapper>
   )
 })

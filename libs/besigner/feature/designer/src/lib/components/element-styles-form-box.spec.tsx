@@ -113,17 +113,17 @@ describe('the box styler in the styles panel (AGL-2486)', () => {
       }
     })
 
-    it('labels the four regions ON the diagram, not just in the legend', async () => {
+    it('labels the four regions ON the diagram itself', async () => {
       await renderPanel({})
       // The first version of this test asked only whether the words
       // appeared ANYWHERE, and passed with the diagram's Border label
-      // deleted — the legend alone satisfied it. Scoping to the diagram
-      // is what makes it a check. Zach hit the same confusion from the
-      // other side: a BORDER label parked outside the ring reads as
-      // "the border is outside the margin".
-      // Scoped to the diagram ROOT (the border ring's own ancestor), not
-      // to the panel — the legend repeats all four words, so a page-wide
-      // query passes with the diagram's labels deleted.
+      // deleted — the swatch legend alone satisfied it. Scoping to the
+      // diagram is what makes it a check. That legend is gone now: four
+      // regions that name themselves do not need a key, and it was
+      // repeating what the on-region labels already said.
+      // Scoped to the diagram ROOT (the border ring's own ancestor)
+      // rather than to the panel, so the assertion cannot be satisfied by
+      // these words appearing anywhere else on the page.
       const diagram = document.querySelector('.borderRing')
         ?.parentElement as HTMLElement
       expect(diagram).toBeTruthy()

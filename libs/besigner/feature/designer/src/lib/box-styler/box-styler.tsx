@@ -28,7 +28,6 @@ import { forwardRef, useCallback, useEffect, useRef, useState } from 'react'
 
 import type { SpacingScaleOption } from '../utils/theme-scale-options'
 import BoxDiagram, { SIDE_LABELS } from './components/box-diagram'
-import Legend, { LegendItem } from './components/legend'
 import SpacingEditor from './components/spacing-editor'
 import type { BoxSpacingValue } from './spacing-value'
 import type { Measurements } from './types'
@@ -208,22 +207,10 @@ export const BoxStyler = forwardRef<any, BoxStylerProps>(
           ) : null}
         </Collapse>
 
-        <Legend
-          direction="row"
-          spacing={1}
-          sx={{
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            mt: 1.5,
-            mb: 1,
-          }}
-        >
-          <LegendItem item={'margin'} />
-          <LegendItem item={'border'} />
-          <LegendItem item={'padding'} />
-          <LegendItem item={'contents'} />
-        </Legend>
+        {/* No legend. It was a swatch key for four regions that now name
+            themselves on the region they label — a diagram that needs a key
+            to be understood is a diagram that is not communicating, and this
+            one was repeating what the labels already said. */}
       </Box>
     )
   },
