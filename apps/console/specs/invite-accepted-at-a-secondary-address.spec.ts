@@ -191,6 +191,27 @@ describe('an invitation addressed to a confirmed secondary is accepted', () => {
     expect(mockInviteSet).toHaveBeenCalledTimes(1)
   })
 
+  it('hands the seat count every address, so it does not bill its own invitee', async () => {
+    /*
+     * WIRING, not arithmetic — `countCollaboratorSeats` is unit-tested in
+     * `libs/aglyn/.../organizations.spec.ts`. What this pins is that the
+     * accept path actually SUPPLIES the aliases.
+     *
+     * The collaborator seat count reads pending invites, and the invite being
+     * consumed is still pending at the moment `upsertOrgMember` runs its cap
+     * check. Keyed by the secondary, it is not the primary the exclusion
+     * carries — so without this argument an org sitting exactly on its cap
+     * refuses the very person it invited. Dropping `seatAliasEmails` from the
+     * call turns this case red and nothing else.
+     */
+    await accept()
+    expect(mockUpsertOrgMember).toHaveBeenCalledWith(
+      expect.objectContaining({
+        seatAliasEmails: expect.arrayContaining(['ada@work.test']),
+      }),
+    )
+  })
+
   it('still works for the PRIMARY address — the ordinary case is untouched', async () => {
     mockInvite = { ...mockInvite, email: 'ada@personal.test' }
     expect((await accept()).status).toBe(200)

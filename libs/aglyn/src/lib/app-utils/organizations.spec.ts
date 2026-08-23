@@ -29,6 +29,7 @@ import {
   canLinkSocialProvider,
   CONSOLE_USER_TYPE_LABELS,
   consoleUserType,
+  countCollaboratorSeats,
   countManagerSeats,
   isSsoGovernedAccount,
   isOrgWideMember,
@@ -457,5 +458,81 @@ describe('memberCanSee (AGL-1037/1038)', () => {
     // conflating the two is how AGL-1026 exposed a whole org.
     expect(memberCanSee(null, ['host:h1'])).toBe(false)
     expect(memberCanSee(undefined, ['org'])).toBe(true)
+  })
+})
+
+describe('countCollaboratorSeats: an account holds several addresses (AGL-2486)', () => {
+  /**
+   * The seat count reads the roster AND every pending invite, then drops the
+   * principal being admitted so a cap check sees usage BEFORE the grant.
+   *
+   * Accepting an invitation at a CONFIRMED SECONDARY address broke that: the
+   * invite still pending at that instant is keyed by the secondary, while the
+   * exclusion carried only the primary. The accepter was counted against a cap
+   * they are the subject of, and an org exactly on its limit refused its own
+   * invitee — "out of seats" for a seat nobody else holds.
+   */
+  const host = 'host-1'
+  /** The roster row the accept is about to write, plus the invite it consumes. */
+  const entries = [
+    { uid: 'other', email: 'bob@acme.test', hostAccess: { [host]: 'editor' } },
+    // The pending invite, addressed to Ada's WORK address.
+    { email: 'ada@work.test', hostAccess: { [host]: 'editor' } },
+  ]
+
+  it('counts an unrelated collaborator, and only them', () => {
+    // Ada is not on the roster yet and holds only the invite; excluding her
+    // by both identities must leave exactly Bob.
+    expect(
+      countCollaboratorSeats(entries, host, {
+        uid: 'ada',
+        email: 'ada@personal.test',
+        emails: ['ada@personal.test', 'ada@work.test'],
+      }),
+    ).toBe(1)
+  })
+
+  it('THE REGRESSION: the primary alone leaves the invite counted', () => {
+    // This is the pre-fix behaviour, pinned so it cannot come back silently.
+    // Two seats for two people, one of whom is the person being admitted.
+    expect(
+      countCollaboratorSeats(entries, host, {
+        uid: 'ada',
+        email: 'ada@personal.test',
+      }),
+    ).toBe(2)
+  })
+
+  it('drops the primary through `emails` too, so the field is not either/or', () => {
+    expect(
+      countCollaboratorSeats(
+        [{ email: 'ada@personal.test', hostAccess: { [host]: 'editor' } }],
+        host,
+        { uid: 'ada', emails: ['ada@personal.test'] },
+      ),
+    ).toBe(0)
+  })
+
+  it('ignores blank and malformed alias entries rather than dropping a key', () => {
+    expect(
+      countCollaboratorSeats(entries, host, {
+        uid: 'ada',
+        email: 'ada@personal.test',
+        emails: ['', '   ', null, undefined],
+      }),
+    ).toBe(2)
+  })
+
+  it('never drops somebody else — an alias is not a wildcard', () => {
+    // The guard rail on the loosening: `emails` may only carry addresses
+    // proven to belong to the principal. If a caller ever passed a stranger's
+    // address, THIS is the seat that would be given away free.
+    expect(
+      countCollaboratorSeats(entries, host, {
+        uid: 'ada',
+        email: 'ada@personal.test',
+        emails: ['ada@work.test'],
+      }),
+    ).toBe(1)
   })
 })
