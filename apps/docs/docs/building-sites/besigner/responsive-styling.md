@@ -30,6 +30,75 @@ and breakpoint-driven component layouts all resolve as they will on a
 real device of that size — the published site is untouched by preview
 mode.
 
+## Style hover, focus and other states {#interaction-states}
+
+Under the breakpoint chip is a second row of chips: **Default**, **Hover**,
+**Active**, **Focus** and **Disabled**. They answer the same question the
+breakpoint chip does — *which version of this element am I editing?*
+
+Pick **Hover** and every field in the panel switches to that element's
+hover styles. Change the background, and you have said "this button is
+darker when you point at it". Pick **Default** again to go back to the
+resting styles.
+
+- **Hover** — while the pointer is over the element.
+- **Active** — while it is being pressed or clicked.
+- **Focus** — while it has keyboard focus (see the note below).
+- **Disabled** — while a form control is disabled.
+
+A chip with a **•** already has styles for that state. Selecting a state
+gives its chip an **×** that clears the whole state at once.
+
+### You can see the state while you style it
+
+You cannot hover an element while working in a side panel, so picking a
+state also **holds it on the canvas**: the element renders as though you
+were hovering it (or pressing it, or focusing it) while you work, and a
+banner says so.
+
+This is a preview. It is not saved, it does not appear in Preview, and it
+never reaches your published page — going back to **Default** ends it, and
+so does selecting a different element.
+
+### Fields you don't touch keep inheriting
+
+A state only overrides what you actually change. Set a hover background
+and the text colour, padding and everything else keep coming from the
+default styles — which is exactly how the browser treats it.
+
+That means setting a value **back** to what the default says removes it
+from the state rather than pinning a duplicate, and clearing a field lets
+the state inherit again.
+
+### States and breakpoints combine
+
+The two chips work together. Choose *MD – Laptop* **and** *Hover* and you
+are editing "the hover style, on laptops and up" — phones keep whatever
+the smaller breakpoints say. The same goes for the dark-scheme scope.
+
+### About Focus {#focus-state}
+
+**Focus** is `:focus-visible` — it applies when someone reaches the element
+with the **keyboard**, and not on an ordinary mouse click.
+
+That is deliberate. The focus ring is how keyboard and screen-reader
+visitors know where they are on your page, and a control that removed it on
+every click would take it away from them too. Styling this state can make
+the indicator match your brand; it is much harder to accidentally delete it.
+
+Two states will not show on every element, and the panel tells you when
+that is the case:
+
+- **Focus** needs something that can be focused — a link, a button, or a
+  field. On a plain Box or Section it never fires.
+- **Disabled** only applies to form controls.
+
+Neither is blocked, because a hover effect on a Box wrapping a link is a
+perfectly good design — you just get a note explaining what will happen.
+
+For anything these chips do not cover — a custom selector, a child element,
+`:nth-child` — the **JSS (sx)** tab takes any selector you can write.
+
 ## Box stylers
 
 The spacing styler is **one diagram** of the element's box, drawn the way

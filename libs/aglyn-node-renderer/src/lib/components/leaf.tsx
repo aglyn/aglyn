@@ -165,7 +165,9 @@ export const Leaf = observer(
       ...rest,
       className: mergedClassName,
       style: mergedStyle,
-      sx: transformSx ? (transformSx(mergedSx) as typeof mergedSx) : mergedSx,
+      sx: transformSx
+        ? (transformSx(mergedSx, node?.$id) as typeof mergedSx)
+        : mergedSx,
     }
 
     // Node identity (AGL-659): components get their node id through a

@@ -47,6 +47,26 @@ export enum DndDropType {
   AFTER = 0x3,
 }
 
+/**
+ * The interaction state the canvas is HOLDING ON for the element being
+ * styled (AGL-2486 item 39).
+ *
+ * You cannot hover an element while working in a side panel, so a state
+ * whose styles you cannot see is a state you cannot design. Selecting a
+ * state in the Styles panel's chip row holds it on the canvas for that one
+ * element; `undefined` is the resting state.
+ *
+ * Canvas UI context only — it is a flag, never a document field, so it
+ * cannot be saved, cannot reach Preview and cannot reach a published page.
+ * The union is declared HERE rather than in the designer so the flag store
+ * and the panel share one source of truth.
+ */
+export type BesignerStateFlag =
+  | 'hover'
+  | 'active'
+  | 'focusVisible'
+  | 'disabled'
+
 export enum BesignerDeviceFlag {
   SCALE = 0x1,
   RESPONSIVE = 0x2,
