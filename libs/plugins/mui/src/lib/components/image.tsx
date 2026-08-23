@@ -39,9 +39,16 @@ export const ID: Aglyn.ComponentId = 'image'
  * is looking at: with everything lazy and everything low, nothing outranked
  * anything, so the order was whatever the network felt like.
  *
- * So the first image gets `loading="eager"` + `fetchpriority="high"` and the
- * rest get `fetchpriority="low"`, which is the browser-level knob that stops
+ * So the first image gets `loading="eager"` and the rest get
+ * `fetchpriority="low"`, which is the browser-level knob that stops
  * below-the-fold images competing with the one above it.
+ *
+ * The first image does NOT get `fetchpriority="high"` any more, and the
+ * reasoning is at the `fetchPriority` prop below. Short version: this
+ * function answers "which image is first", which was being read as "which
+ * element is the LCP", and on any site with a logo in its header those are
+ * different elements — measured on aglyn.com, where the logo took the hint
+ * and the `<h1>` was the LCP at six times its area.
  *
  * Resolved from the tree rather than a render-order counter on purpose: the
  * renderer walks the tree in document order on the server AND on hydrate, but
@@ -288,10 +295,49 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
       alt={decorative ? '' : (alt ?? '')}
       title={decorative ? undefined : title || undefined}
       loading={eager ? 'eager' : 'lazy'}
-      // The ordering signal (AGL-2486). `high` on the one image that is
-      // probably the LCP element; `low` on everything else, so a footer
-      // image cannot be fetched ahead of the section the reader is in.
-      fetchPriority={eager ? 'high' : 'low'}
+      // The ordering signal, ONE-DIRECTIONAL on purpose (AGL-2486).
+      //
+      // `low` on every deferred image, so a footer image cannot be fetched
+      // ahead of the section the reader is in. That half is safe in a way the
+      // other half is not: deprioritising an image that is provably not being
+      // looked at cannot starve whatever the LCP turns out to be.
+      //
+      // The lead image gets NO `fetchpriority` — the browser's `auto` — where
+      // it used to get `high`. `high` is not a statement about this image, it
+      // is a claim that this image outranks everything else in flight,
+      // including the stylesheet and the webfont that a TEXT LCP is waiting
+      // on. We are not in a position to make that claim: the only evidence
+      // behind it was "first `<img>` in document order", and document order's
+      // first image is the HEADER LOGO on any site whose header has one.
+      //
+      // Measured on aglyn.com at a 375x812 viewport, which is what sent this
+      // back: the element carrying `fetchpriority="high"` was the logo at
+      // 145x44 = 6,380 px², while the `<h1>` under it was 343x113 =
+      // 38,893 px² — six times the area, and the element Lighthouse named as
+      // the LCP. So the hint was being spent to make a text LCP arrive later.
+      //
+      // `auto` is not a retreat to the old behaviour. The old bug was that
+      // everything was `lazy`, so the lead image was not discovered until
+      // after layout; it still gets `loading="eager"` above, which is the
+      // discovery fix and the part that actually earned the win. What goes is
+      // only the RANKING claim, back to Chrome's own in-viewport heuristic —
+      // which decides after layout, with the viewport and the geometry this
+      // function provably does not have.
+      //
+      // Deliberately not replaced with a size heuristic: nothing here knows
+      // the rendered size. `width`/`height` are optional author CSS strings,
+      // routinely `100%`, and a logo constrained by its container measures
+      // small while declaring nothing. A guess that fails the same way is not
+      // an improvement on a guess.
+      //
+      // An author who genuinely has an image LCP should be able to SAY so —
+      // but not through this control. The `loading` field is labelled
+      // "Loading" and described in terms of lazy versus eager; an author
+      // picking Eager for the top image is not asserting a priority ranking,
+      // and reading one out of that choice is how the logo got `high` in the
+      // first place. A real priority affordance needs its own control and its
+      // own words. After September 1.
+      fetchPriority={eager ? undefined : 'low'}
       // Decoding off the main thread for the deferred ones — they have no
       // paint deadline, and decoding them synchronously is main-thread time
       // spent on pixels nobody is looking at yet. The eager image keeps the

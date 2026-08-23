@@ -252,7 +252,7 @@ describe('Image loading priority (AGL-2486)', () => {
     expect(firstImageNodeId(Aglyn.canvas.rootNode as any)).toBeUndefined()
   })
 
-  it('loads the first image eagerly at high priority', () => {
+  it('loads the first image eagerly, and claims NO priority ranking for it', () => {
     fillCanvas([
       { $id: 'hero', props: { src: 'https://example.com/hero.png' } },
       { $id: 'below', props: { src: 'https://example.com/below.png' } },
@@ -263,7 +263,10 @@ describe('Image loading priority (AGL-2486)', () => {
     )
     const img = container.querySelector('img')!
     expect(img.getAttribute('loading')).toBe('eager')
-    expect(img.getAttribute('fetchpriority')).toBe('high')
+    // The discovery fix stays; the RANKING claim goes (AGL-2486). `high`
+    // asserts this image outranks the stylesheet and webfont a text LCP is
+    // waiting on, and "first in document order" is not evidence for that.
+    expect(img.getAttribute('fetchpriority')).toBeNull()
     // The eager image keeps the browser default so it can decode in time to
     // paint; forcing async here would be the same mistake in a new place.
     expect(img.getAttribute('decoding')).toBeNull()
@@ -306,7 +309,39 @@ describe('Image loading priority (AGL-2486)', () => {
     )
     const img = eagerBelow.container.querySelector('img')!
     expect(img.getAttribute('loading')).toBe('eager')
-    expect(img.getAttribute('fetchpriority')).toBe('high')
+    // Eager is a LOADING choice, not a priority ranking. The control is
+    // labelled "Loading" and described in terms of lazy versus eager, so an
+    // author picking it for the top image has not asserted that the image
+    // outranks the page's other resources — and reading one out of that
+    // choice is how a header logo came to carry `high` on aglyn.com.
+    expect(img.getAttribute('fetchpriority')).toBeNull()
+  })
+
+  it('THE HEADER LOGO CASE: a small first image takes no priority hint', () => {
+    // The regression this change exists for, in the shape it actually shipped
+    // in. `firstImageNodeId` answers "which image is first in document
+    // order", and on any site with a logo in its header that is the logo —
+    // not a hero, and never the LCP. Measured on aglyn.com at 375x812: the
+    // image holding `fetchpriority="high"` was the logo at 145x44 =
+    // 6,380 px², against an `<h1>` at 343x113 = 38,893 px².
+    //
+    // Nothing here can see the rendered size, which is the point: the fix is
+    // to stop claiming a ranking, not to guess a better one. So the assertion
+    // is simply that the first image — logo or hero, the component cannot
+    // tell them apart — ships no `fetchpriority` at all.
+    fillCanvas([
+      { $id: 'logo', props: { src: 'https://example.com/logo.svg' } },
+      { $id: 'hero', props: { src: 'https://example.com/hero.png' } },
+    ])
+    const { container } = renderAsNode(
+      'logo',
+      <Image src="https://example.com/logo.svg" alt="Aglyn" width="145px" />,
+    )
+    const img = container.querySelector('img')!
+    expect(img.getAttribute('fetchpriority')).toBeNull()
+    // The discovery half is deliberately retained: an above-the-fold logo
+    // should not be lazy either.
+    expect(img.getAttribute('loading')).toBe('eager')
   })
 
   it('stays lazy outside the renderer, where there is no node identity', () => {
