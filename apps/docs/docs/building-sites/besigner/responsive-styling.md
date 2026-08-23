@@ -32,13 +32,135 @@ mode.
 
 ## Box stylers
 
-The margin/padding stylers are fully interactive:
+The spacing styler is **one diagram** of the element's box, drawn the way
+a browser actually builds it: **margin** on the outside, then the
+**border**, then **padding**, and the **content** in the middle. Each
+region is shaded and labelled, and every side shows the value it is
+currently set to.
 
 - Pick the fan-out with **Side / Axis / All**: one side at a time, the
   vertical or horizontal pair together, or all four sides at once.
-- Click any side in the box diagram to edit its value inline, or use the
-  per-side fields — each with a unit menu (px, %, em, rem, vh, vw…).
+- Click any side of the diagram to open its editor.
+- Every side takes either a **spacing step** from your theme or a
+  [custom amount](#spacing-units) with a unit you choose.
+- The **border** ring is shown so the diagram matches what the browser
+  draws. Border width, style and colour are edited under **Borders &
+  Shadows**, not here — there is one place for each.
 - Everything respects the active breakpoint scope.
+
+## Spacing steps & units {#spacing-units}
+
+Space can be set two ways, and the difference matters more than it
+looks.
+
+### Spacing steps (recommended) {#spacing-steps}
+
+A **step** is a rung on your site theme's own spacing ladder — *None*,
+*Tiny*, *Small*, *Medium*, *Large*, and so on. The styler shows what
+each one comes to today (*Medium — 16px*), but it stores the **step**,
+not the 16px.
+
+That is the whole point. If you later retune your theme's spacing, or a
+different theme is applied, everything set to *Medium* moves with it.
+An element set to a fixed `16px` stays at 16px forever and slowly falls
+out of step with the rest of the site.
+
+Reach for a custom amount when you need an exact figure — a hairline
+offset, a value that has to match a specific image — and for everything
+else use a step.
+
+### Custom amounts {#spacing-custom-amounts}
+
+A custom amount is a number plus a **unit**. The unit decides what the
+number is measured *against*, which is why the same number can behave
+completely differently:
+
+| Unit | Measured against | Reach for it when |
+| --- | --- | --- |
+| [`px`](#unit-px) | Nothing — a fixed dot | You need an exact, unchanging amount |
+| [`rem`](#unit-rem) | The page's base text size | You want space that scales with text size |
+| [`em`](#unit-em) | *This element's* text size | Space should track this element's own type |
+| [`%`](#unit-percent) | The **width** of the parent | Space should grow with the container |
+| [`ch`](#unit-ch) | The width of a `0` character | Lining space up with text columns |
+| [`vw` / `vh`](#unit-viewport) | The browser window | Space relative to the whole screen |
+| [`svw` / `svh`](#unit-small-viewport) | The window at its *smallest* | Mobile, where the address bar hides and reappears |
+
+#### px — pixels {#unit-px}
+
+A fixed dot on the screen. `16px` is 16px on every device and never
+changes, whatever the visitor's font settings are.
+
+Predictable, and that is both its strength and its weakness: a visitor
+who has turned their text size up gets bigger words in the same
+unchanged gap, which is how layouts end up cramped. Good for hairlines,
+icon nudges and anything that must line up with a fixed-size image.
+
+#### rem — root ems {#unit-rem}
+
+A multiple of the page's **base text size**, which is normally 16px —
+so `1rem` is usually 16px and `1.5rem` is usually 24px.
+
+The difference from `px` is what happens when someone changes their
+browser's text size for readability: `rem` spacing grows with the text,
+so the layout stays in proportion instead of squeezing. This is the
+usual choice for space that should feel consistent site-wide, and it is
+what your theme's spacing steps are normally built from.
+
+#### em — ems {#unit-em}
+
+A multiple of **this element's own** text size. On a heading set to
+32px, `1em` is 32px; on body text at 16px, the same `1em` is 16px.
+
+Use it when space should stay proportional to the text right there —
+padding inside a button that should look the same whether the button is
+large or small. Because it compounds through nested elements, it is the
+easy one to be surprised by; when in doubt, `rem` is the steadier
+choice.
+
+#### % — percent {#unit-percent}
+
+A share of the **parent element's width**.
+
+The trap worth knowing: for padding and margin, percentages are
+measured against the parent's *width* even for the top and bottom
+sides. `padding-top: 10%` on a 1000px-wide parent is 100px — it has
+nothing to do with the parent's height.
+
+#### ch — character widths {#unit-ch}
+
+The width of the digit `0` in the current font. `20ch` is roughly the
+width of twenty characters.
+
+Its use is lining things up with text: indenting to match a column,
+or holding space for a field that takes about six characters. Because
+it is measured in the current font, it moves when the typeface does.
+
+#### vw & vh — viewport units {#unit-viewport}
+
+A percentage of the **browser window**. `1vw` is 1% of its width,
+`1vh` is 1% of its height — so `50vh` is half the window tall
+regardless of how much content is on the page.
+
+Handy for full-screen hero sections and generous top-of-page spacing.
+Be careful with `vh` on phones, which is what the next unit is for.
+
+#### svw & svh — small viewport units {#unit-small-viewport}
+
+On a phone, the browser's own address bar slides away as you scroll, so
+the window quietly changes height mid-scroll — and anything sized in
+`vh` jumps with it.
+
+The newer units pin that down:
+
+- **`svh`** — the **smallest** the window gets, i.e. with the address
+  bar showing. Space set in `svh` never causes a jump, which is why it
+  is the safer default for anything that has to fit on first paint.
+- **`dvh`** — the window as it is *right now*, changing as the bar
+  hides and reappears.
+- **`lvh`** — the **largest** the window gets, with the bar hidden.
+
+`svw`, `dvw` and `lvw` are the same idea for width. On a desktop
+browser all three are simply the same as `vw`/`vh`.
 
 ## Style groups
 

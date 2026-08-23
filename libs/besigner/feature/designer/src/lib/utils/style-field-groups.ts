@@ -172,13 +172,39 @@ const dimensionField = (
   label: string,
   description: string,
   extra?: Record<string, unknown>,
-) => ({
-  component: FieldComponentType.CSS_DIMENSION,
-  name,
-  label,
-  description,
-  ...extra,
-})
+) => {
+  /**
+   * A field carrying a theme scale AS WELL AS a unit takes the whole row
+   * (AGL-2486, Zach 2026-08-23).
+   *
+   * Font Size showed `2.:` — the value truncated to nothing. The row holds
+   * three controls: the number, the theme-scale picker and the unit
+   * picker. The two pickers claim ~140px of fixed width between them, and
+   * `half` gives the whole field about 156px inside a 375px docked panel,
+   * so the number box — the only one with no width of its own — was left
+   * with single digits.
+   *
+   * The half-width itself is the trap. `half` is `{ xs: 12, sm: 6 }`, and
+   * `sm` is a VIEWPORT breakpoint: on any desktop it is permanently active
+   * regardless of how narrow the panel is, so a rule that reads like
+   * "two-up only when there is room" has in fact always been "two-up". A
+   * three-control field never fitted; nothing measured it.
+   *
+   * This is keyed on the SHAPE, not on the field name, so the next field
+   * given `scaleOptions` gets the row it needs without anyone remembering.
+   */
+  const hasScale = Array.isArray((extra as any)?.scaleOptions)
+    ? (extra as any).scaleOptions.length > 0
+    : false
+  return {
+    component: FieldComponentType.CSS_DIMENSION,
+    name,
+    label,
+    description,
+    ...extra,
+    ...(hasScale ? { FormFieldGridProps: { size: { xs: 12 } } } : {}),
+  }
+}
 
 /**
  * Sizing keys read their bare numbers through MUI's `sizingTransform`,

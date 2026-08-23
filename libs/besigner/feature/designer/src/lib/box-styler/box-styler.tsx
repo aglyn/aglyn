@@ -16,25 +16,42 @@
  */
 
 import {
-  buildCssMeasurement,
-  type Measurement,
-} from '@aglyn/shared-data-enums'
-import {
+  Box,
+  Collapse,
+  Stack,
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
   Typography,
 } from '@mui/material'
-import { forwardRef, useCallback, useState } from 'react'
-import Box, { type BoxProps } from './components/box'
-import BoxButtonStyler from './components/box-button-styler'
-import Contents from './components/contents'
+import { forwardRef, useCallback, useEffect, useRef, useState } from 'react'
+
+import type { SpacingScaleOption } from '../utils/theme-scale-options'
+import BoxDiagram, { SIDE_LABELS } from './components/box-diagram'
 import Legend, { LegendItem } from './components/legend'
-import MarginStyler from './components/margin-styler'
-import PaddingStyler from './components/padding-styler'
+import SpacingEditor from './components/spacing-editor'
+import type { BoxSpacingValue } from './spacing-value'
 import type { Measurements } from './types'
 
 export type { Measurements }
+
+/**
+ * The box/spacing styler — ONE implementation (AGL-2486, item 5).
+ *
+ * There were two, stacked one above the other in the same panel: this
+ * trapezoid diagram, and a second nested-box diagram with eight always-on
+ * number fields below it. Both edited the same eight properties and they
+ * did not agree — the second was built on `parseCssMeasurement`, which
+ * takes a string, so every element carrying a theme spacing step (a
+ * number) showed its padding in the first diagram and "default" in the
+ * second. Worse than confusing: touching a field in the second one
+ * replaced a theme-tracking step with a flattened `Npx` string.
+ *
+ * What survives is the diagram that could already read what was stored,
+ * now with the border band the box model actually has, one editor that
+ * opens under the side you clicked, and the theme's own spacing ladder as
+ * the first answer it offers.
+ */
 
 /** How an edit fans out across the box sides (AGL-334). */
 export type BoxScope = 'each' | 'axis' | 'all'
@@ -70,108 +87,147 @@ export function boxScopeKeys(
   return [key]
 }
 
-export interface BoxStylerProps extends Omit<BoxProps, 'onChange'> {
+export interface BoxStylerProps {
   measurements?: Measurements
-  width?: Measurement
-  height?: Measurement
+  /** The site theme's spacing ladder (AGL-2486). */
+  spacingSteps?: readonly SpacingScaleOption[]
+  /** The element's border shorthand, drawn in the diagram for context. */
+  border?: string
   onChange?: (measurements?: Measurements) => void
 }
 
-export const BoxStyler = forwardRef<any, BoxStylerProps>((
-  { measurements, width, height, onChange, ...rest }: BoxStylerProps,
-  ref,
-) => {
-  const [scope, setScope] = useState<BoxScope>('each')
+export const BoxStyler = forwardRef<any, BoxStylerProps>(
+  ({ measurements, spacingSteps, border, onChange }: BoxStylerProps, ref) => {
+    const [scope, setScope] = useState<BoxScope>('each')
+    const [editing, setEditing] = useState<keyof Measurements | null>(null)
 
-  const handleChange = useCallback(
-    (key: keyof Measurements) => (dimension: Measurement) => {
-      // Persist CSS strings, never {value, unit} objects — sx consumers
-      // (MUI, the tenant runtime) only understand CSS values (AGL-334).
-      const css = buildCssMeasurement(dimension)
-      const res: Measurements = { ...measurements }
-      for (const target of boxScopeKeys(key, scope)) {
-        res[target] = css as any
-      }
-      onChange?.(res)
-    },
-    [onChange, measurements, scope],
-  )
+    /**
+     * The side the collapsing panel keeps showing on the way OUT
+     * (AGL-2486, Zach 2026-08-23).
+     *
+     * `<Collapse in={...}>{editing ? <Editor/> : null}</Collapse>` opens
+     * with an animation and closes with none: the moment `editing` goes
+     * null the child is replaced by `null`, so the content is gone before
+     * `Collapse` has begun its exit and all one sees is a jump. Holding
+     * the last side lets the editor stay mounted for the length of the
+     * exit, and `unmountOnExit` on the Collapse — which runs AFTER the
+     * transition, not instead of it — does the removal. Closing is then
+     * the reverse of opening, which is the whole ask.
+     */
+    const lastEditing = useRef<keyof Measurements | null>(null)
+    useEffect(() => {
+      if (editing) lastEditing.current = editing
+    }, [editing])
+    const shown = editing ?? lastEditing.current
 
-  return (
-    <>
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          mb: 1,
-        }}
-      >
-        <Typography variant="caption" color="text.secondary">
-          {'Apply to'}
-        </Typography>
-        <ToggleButtonGroup
-          size="small"
-          exclusive
-          value={scope}
-          onChange={(event, value) => value && setScope(value)}
+    const handleSelect = useCallback(
+      (key: keyof Measurements) =>
+        setEditing((prev) => (prev === key ? null : key)),
+      [],
+    )
+
+    const handleChange = useCallback(
+      (key: keyof Measurements) => (value: BoxSpacingValue) => {
+        const res: Measurements = { ...measurements }
+        for (const target of boxScopeKeys(key, scope)) {
+          // The value is stored AS GIVEN: a number stays a number so MUI
+          // resolves it through `theme.spacing`, a string stays the CSS
+          // length it already is, and `undefined` clears the property.
+          // The old handler ran everything through `buildCssMeasurement`
+          // first, which is why a step could never be written from here.
+          res[target] = value
+        }
+        onChange?.(res)
+      },
+      [onChange, measurements, scope],
+    )
+
+    return (
+      <Box ref={ref}>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            mb: 1,
+          }}
         >
-          <ToggleButton value="each" sx={{ px: 1, py: 0.25 }}>
-            <Tooltip title="Each side individually">
-              <span>{'Side'}</span>
-            </Tooltip>
-          </ToggleButton>
-          <ToggleButton value="axis" sx={{ px: 1, py: 0.25 }}>
-            <Tooltip title="Vertical or horizontal pair together">
-              <span>{'Axis'}</span>
-            </Tooltip>
-          </ToggleButton>
-          <ToggleButton value="all" sx={{ px: 1, py: 0.25 }}>
-            <Tooltip title="All four sides together">
-              <span>{'All'}</span>
-            </Tooltip>
-          </ToggleButton>
-        </ToggleButtonGroup>
-      </Box>
-
-      <BoxButtonStyler
-        measurements={measurements}
-        scope={scope}
-        onChange={handleChange}
-      />
-
-      <Box ref={ref} {...rest}>
-        <MarginStyler
-          onChange={handleChange}
-          marginTop={measurements?.marginTop}
-          marginRight={measurements?.marginRight}
-          marginBottom={measurements?.marginBottom}
-          marginLeft={measurements?.marginLeft}
-        >
-          <PaddingStyler
-            onChange={handleChange}
-            paddingTop={measurements?.paddingTop}
-            paddingRight={measurements?.paddingRight}
-            paddingBottom={measurements?.paddingBottom}
-            paddingLeft={measurements?.paddingLeft}
+          <Typography variant="caption" color="text.secondary">
+            {'Apply to'}
+          </Typography>
+          <ToggleButtonGroup
+            size="small"
+            exclusive
+            value={scope}
+            onChange={(event, value) => value && setScope(value)}
           >
-            <Contents />
-          </PaddingStyler>
-        </MarginStyler>
+            <ToggleButton value="each" sx={{ px: 1, py: 0.25 }}>
+              <Tooltip title="Each side individually">
+                <span>{'Side'}</span>
+              </Tooltip>
+            </ToggleButton>
+            <ToggleButton value="axis" sx={{ px: 1, py: 0.25 }}>
+              <Tooltip title="Vertical or horizontal pair together">
+                <span>{'Axis'}</span>
+              </Tooltip>
+            </ToggleButton>
+            <ToggleButton value="all" sx={{ px: 1, py: 0.25 }}>
+              <Tooltip title="All four sides together">
+                <span>{'All'}</span>
+              </Tooltip>
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
+
+        <BoxDiagram
+          measurements={measurements}
+          steps={spacingSteps}
+          border={border}
+          editing={editing ?? undefined}
+          onSelect={handleSelect}
+        />
+
+        <Collapse in={Boolean(editing)} unmountOnExit>
+          {shown ? (
+            <Stack sx={{ mt: 1 }}>
+              <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                {SIDE_LABELS[shown]}
+                {scope && scope !== 'each' ? ` (${scope})` : ''}
+              </Typography>
+              <SpacingEditor
+                // Keyed by side so moving between sides remounts the
+                // editor rather than carrying the previous one's custom
+                // latch across.
+                key={shown}
+                value={measurements?.[shown]}
+                steps={spacingSteps}
+                label={SIDE_LABELS[shown]}
+                onChange={handleChange(shown)}
+              />
+            </Stack>
+          ) : null}
+        </Collapse>
 
         <Legend
           direction="row"
           spacing={1}
-          sx={{ alignItems: 'center', justifyContent: 'space-around', mt: 1, mb: 2 }}
+          sx={{
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            mt: 1.5,
+            mb: 1,
+          }}
         >
           <LegendItem item={'margin'} />
+          <LegendItem item={'border'} />
           <LegendItem item={'padding'} />
           <LegendItem item={'contents'} />
         </Legend>
       </Box>
-    </>
-  )
-})
+    )
+  },
+)
 BoxStyler.displayName = 'BoxStyler'
 
 export default BoxStyler

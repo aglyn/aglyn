@@ -772,6 +772,16 @@ const ElementStylesForm = observer(
       [applyStyleValues],
     )
 
+    /**
+     * The border shorthand the box diagram draws for context (AGL-2486).
+     * Read only — border width, style and colour are edited in the
+     * Borders & Shadows section, which is their one home.
+     */
+    const boxBorder =
+      effectiveValues['border'] === undefined
+        ? undefined
+        : `${effectiveValues['border']}`
+
     const boxMeasurements = {
       marginTop: effectiveValues['marginTop'] ?? undefined,
       marginLeft: effectiveValues['marginLeft'] ?? undefined,
@@ -1096,12 +1106,14 @@ const ElementStylesForm = observer(
         <Container gutterY={[2]} dense sx={{ position: 'relative' }}>
           <HelpTip
             title="Margin & padding"
-            excerpt="The box stylers set the element's outer margin and inner padding at the active breakpoint — click a side, then type or drag."
+            excerpt="Click a side of the box to set its space at the active breakpoint — a step from your theme's spacing scale, or an exact amount in the unit of your choice."
             href={besignerDocsUrl('responsiveStyling', '#box-stylers')}
             sx={{ position: 'absolute', top: 0, right: 8, zIndex: 1, fontSize: '0.9em' }}
           />
           <BoxStyler
             measurements={boxMeasurements}
+            spacingSteps={themeScales.spacing}
+            border={boxBorder}
             onChange={handleBoxStylerChange}
           />
         </Container>

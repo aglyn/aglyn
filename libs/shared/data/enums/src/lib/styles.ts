@@ -47,6 +47,17 @@ export enum CssUnit {
   VIEWPORT_HEIGHT = 'vh',
   VIEWPORT_MAX = 'vmax',
   VIEWPORT_MIN = 'vmin',
+  // Small/large/dynamic viewport units (AGL-2486). On a phone the address
+  // bar slides away as the visitor scrolls, so `vh` changes height mid-
+  // scroll and anything sized in it jumps. `svh` is the window at its
+  // SMALLEST (bar showing) and never jumps, `lvh` the largest, `dvh` the
+  // live value. On desktop all three equal `vh`.
+  SMALL_VIEWPORT_WIDTH = 'svw',
+  SMALL_VIEWPORT_HEIGHT = 'svh',
+  LARGE_VIEWPORT_WIDTH = 'lvw',
+  LARGE_VIEWPORT_HEIGHT = 'lvh',
+  DYNAMIC_VIEWPORT_WIDTH = 'dvw',
+  DYNAMIC_VIEWPORT_HEIGHT = 'dvh',
   DPI = 'dpi',
   MILLIMETERS = 'mm',
   CENTIMETERS = 'cm',
@@ -218,7 +229,7 @@ export function parsePaletteTokenCssVar(
  * whoever wrote the style. That distinction is the whole feature: a flattened
  * literal stops following the palette, so a white-label site or a palette
  * change keeps the old colour for ever and nothing reports it. The designer's
- * own chrome already uses this form (`box-styler/components/box.tsx`).
+ * own chrome already uses this form (`box-styler/components/box-diagram.tsx`).
  */
 const PALETTE_CHANNEL_SUFFIX = 'Channel'
 
