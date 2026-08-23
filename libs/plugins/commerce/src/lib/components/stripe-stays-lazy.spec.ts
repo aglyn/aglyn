@@ -131,3 +131,90 @@ describe('Stripe.js stays out of the eager graph', () => {
     expect(specifiers.filter((s) => s.startsWith('@stripe/'))).toEqual([])
   })
 })
+
+/**
+ * Named value imports taken from one module specifier, in source order.
+ * Deliberately a source parse rather than an import of the component: this
+ * file must keep working when the component does NOT compile, which is
+ * precisely the state a bad dependency bump leaves it in.
+ */
+function namedImportsFrom(source: string, specifier: string): string[] {
+  const escaped = specifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = source.match(
+    new RegExp(`^\\s*import\\s+\\{([^}]*)\\}\\s*from\\s*'${escaped}'`, 'm'),
+  )
+  if (!match) return []
+  return match[1]
+    .split(',')
+    .map((part) => part.trim())
+    // `a as b` imports the binding named `a`; the local alias is ours, the
+    // export name is the package's, and it is the package's we are checking.
+    .map((part) => part.replace(/^type\s+/, '').split(/\s+as\s+/)[0].trim())
+    .filter(Boolean)
+}
+
+/**
+ * The check whose absence let a breaking bump look green (AGL-2486).
+ *
+ * `storefront-payment-element.spec.tsx` mocks `@stripe/react-stripe-js` at
+ * the module boundary with a hand-written double. A jest mock does not have
+ * to resemble the module it replaces, so when `@stripe/react-stripe-js` v6
+ * REMOVED `CheckoutProvider` and moved `useCheckout` behind a `/checkout`
+ * subpath — changing its return type from the checkout value to a
+ * `{type:'loading'|'success'|'error'}` union on the way — that suite went on
+ * passing against a v3 shape the installed package no longer had. The build
+ * was the only thing that failed, and it failed somewhere else.
+ *
+ * So this asserts the component's imports against the REAL installed package
+ * rather than against a double. It is in this file, not in the component's
+ * own spec, because this file mocks nothing: a `jest.mock` of `@stripe/*` in
+ * scope would make `require` hand back the very fake we are trying to
+ * distrust.
+ *
+ * It is a contract check, not a version pin — it says nothing about WHICH
+ * version is installed, only that the symbols we import from it exist. An
+ * upgrade that keeps them stays green; one that removes them turns this red
+ * with the missing name in the failure message.
+ */
+describe('the Stripe imports we rely on exist in the installed package', () => {
+  const REACT_STRIPE = '@stripe/react-stripe-js'
+
+  it('exports every symbol the payment element imports from it', () => {
+    const imported = namedImportsFrom(
+      read('storefront-payment-element.tsx'),
+      REACT_STRIPE,
+    )
+
+    // Fail on a silent no-op: if the parse stops finding the import (renamed
+    // file, reformatted import, symbols moved to a subpath) an empty list
+    // would sail through the loop below and prove nothing at all.
+    expect(imported.length).toBeGreaterThan(0)
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const real = require(REACT_STRIPE) as Record<string, unknown>
+    const missing = imported.filter((name) => real[name] === undefined)
+
+    expect({ missing, imported }).toEqual({ missing: [], imported })
+  })
+
+  it('is mocked in the component spec with symbols that really exist', () => {
+    // The double and the real module must name the same things. Otherwise the
+    // component spec is exercising an API that no longer ships, which is the
+    // exact failure this pair of tests exists to make loud.
+    const mocked = [
+      ...read('storefront-payment-element.spec.tsx').matchAll(
+        /jest\.mock\('@stripe\/react-stripe-js',[\s\S]*?\n\}\)\)/g,
+      ),
+    ]
+      .flatMap((block) => [...block[0].matchAll(/^\s{2}([A-Za-z_$][\w$]*):/gm)])
+      .map((entry) => entry[1])
+
+    expect(mocked.length).toBeGreaterThan(0)
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const real = require(REACT_STRIPE) as Record<string, unknown>
+    const fabricated = mocked.filter((name) => real[name] === undefined)
+
+    expect({ fabricated, mocked }).toEqual({ fabricated: [], mocked })
+  })
+})
