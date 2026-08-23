@@ -97,7 +97,7 @@ interface CollectionGroupQuery {
 function collectionGroupQueries(source: string): CollectionGroupQuery[] {
   const out: CollectionGroupQuery[] = []
   const opener = /collectionGroup\(\s*(?:['"]([\w$]+)['"]|([\w$]+))\s*\)/g
-  const starts: { name: string; index: number }[] = []
+  const starts: { name: string; end: number }[] = []
   for (const match of source.matchAll(opener)) {
     const literal = match[1]
     const identifier = match[2]
@@ -105,27 +105,42 @@ function collectionGroupQueries(source: string): CollectionGroupQuery[] {
     // An unresolvable identifier must fail loudly rather than be skipped —
     // a silently ignored query is exactly the hole this spec closes.
     expect(name).toBeTruthy()
-    starts.push({ name: name as string, index: match.index ?? 0 })
+    starts.push({
+      name: name as string,
+      end: (match.index ?? 0) + match[0].length,
+    })
   }
-  starts.forEach((start, position) => {
-    // The chain ends at whichever comes first: a terminal `.get(`, the start
-    // of the next collection group, or an `.orderBy(` belonging to a
-    // different query. Without a bound, one chain swallows every `.where` in
-    // the rest of the file and reports fields its own query never touched.
-    const after = start.index + 1
-    const candidates = [
-      source.indexOf('.get(', after),
-      starts[position + 1]?.index ?? -1,
-      source.indexOf('.orderBy(', after),
-    ].filter((index) => index >= 0)
-    const end = candidates.length > 0 ? Math.min(...candidates) : source.length
-    const chain = source.slice(start.index, end)
-    const fields = [
-      ...new Set(
-        [...chain.matchAll(/\.where\(\s*['"]([\w.]+)['"]/g)].map((m) => m[1]),
-      ),
-    ]
-    out.push({ collectionGroup: start.name, fields })
+  starts.forEach((start) => {
+    // Walk the CONTIGUOUS method chain hanging off this `collectionGroup(...)`
+    // call, rather than slicing text up to some guessed terminator. A slice
+    // swallows `.where` calls belonging to the next query — which it did,
+    // attributing `platformRevenue`'s `paidAt` filter to the billing group.
+    let cursor = start.end
+    const fields: string[] = []
+    for (;;) {
+      const rest = source.slice(cursor)
+      const step = rest.match(/^\s*\.(\w+)\(/)
+      if (!step) break
+      const openIndex = cursor + step[0].length - 1
+      // Consume to the matching close paren so a nested call cannot end the
+      // step early.
+      let depth = 0
+      let index = openIndex
+      for (; index < source.length; index += 1) {
+        if (source[index] === '(') depth += 1
+        else if (source[index] === ')') {
+          depth -= 1
+          if (depth === 0) break
+        }
+      }
+      if (index >= source.length) break
+      if (step[1] === 'where') {
+        const arg = source.slice(openIndex, index).match(/['"]([\w.]+)['"]/)
+        if (arg) fields.push(arg[1])
+      }
+      cursor = index + 1
+    }
+    out.push({ collectionGroup: start.name, fields: [...new Set(fields)] })
   })
   return out
 }

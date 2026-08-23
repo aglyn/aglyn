@@ -61,6 +61,7 @@ export interface RevenuePayload {
   commerceQueryFailed?: boolean
   subscriptionsTruncated?: boolean
   marketplaceTruncated?: boolean
+  contractedTruncated?: boolean
   /** Which sources hit the sweep ceiling, by name — never an anonymous flag. */
   truncatedSources?: string[]
   /** ISO date of the earliest mirrored invoice, or `null` for an empty mirror. */

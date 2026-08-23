@@ -111,7 +111,7 @@ export const SWEEP_CEILING = 50000
  */
 async function sweepAll(
   base: FirebaseFirestore.Query,
-  orderField: string,
+  orderField: string | FirebaseFirestore.FieldPath,
 ): Promise<{ docs: FirebaseFirestore.QueryDocumentSnapshot[]; truncated: boolean }> {
   const ordered = base.orderBy(orderField)
   const docs: FirebaseFirestore.QueryDocumentSnapshot[] = []
@@ -190,13 +190,27 @@ async function handler(request: Request): Promise<Response> {
       // contracted MRR is not recoverable from current org docs and
       // pretending otherwise by filtering on `createdAt` would report today's
       // prices against yesterday's customers.
-      firestore.collection('orgs').get(),
+      //
+      // PAGED like every other sweep here (AGL-2486). This was a bare `.get()`
+      // on the whole collection — no limit at all — which is the same growth
+      // cliff as the row caps this change removed, just without even a cap to
+      // notice. Ordered by document id because there is no filter to ride:
+      // an unfiltered collection ordered by `__name__` needs no index.
+      // Leaving one read on the page unbounded is how the next person
+      // concludes the paging is optional.
+      sweepAll(
+        firestore.collection('orgs'),
+        firebaseAdmin.firestore.FieldPath.documentId(),
+      ),
       // `subscription` lives at `orgs/{orgId}/billing/stripe` since AGL-1028,
-      // so the revenue signal is not on the org doc. One unfiltered
-      // collection-group read rather than a get per org inside the loop,
-      // matching `/api/admin/overview`. No composite index needed: no filter,
-      // no ordering.
-      firestore.collectionGroup(ORG_BILLING_SUBCOLLECTION).get(),
+      // so the revenue signal is not on the org doc. One collection-group
+      // read rather than a get per org inside the loop, matching
+      // `/api/admin/overview`. Still no index needed: no filter, and ordering
+      // a collection group by `__name__` is served without one.
+      sweepAll(
+        firestore.collectionGroup(ORG_BILLING_SUBCOLLECTION),
+        firebaseAdmin.firestore.FieldPath.documentId(),
+      ),
       sweepAll(
         revenue
           .where('paidAt', '>=', range.start)
@@ -397,7 +411,16 @@ async function handler(request: Request): Promise<Response> {
       // reader unable to tell which figure they may still quote.
       subscriptionsTruncated: revenueInPeriod.truncated,
       marketplaceTruncated: marketplaceInPeriod.truncated,
+      // The CONTRACTED base can hit the ceiling too, now that its two reads
+      // are bounded. Reported rather than left implicit: a clipped org sweep
+      // under-reports MRR, which is the same silent-lower-bound fault as a
+      // clipped invoice sweep and deserves the same banner.
+      contractedTruncated:
+        orgsSnapshot.truncated || billingSnapshot.truncated,
       truncatedSources: [
+        orgsSnapshot.truncated || billingSnapshot.truncated
+          ? 'contracted MRR'
+          : null,
         revenueInPeriod.truncated ? 'subscriptions' : null,
         marketplaceInPeriod.truncated ? 'marketplace' : null,
         commerce.truncated ? 'storefront orders' : null,

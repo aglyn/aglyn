@@ -58,10 +58,17 @@ let mockSources: Record<string, Array<Record<string, unknown>> | Error> = {}
 let mockFilters: Record<string, Array<[string, string, unknown]>> = {}
 
 function mockDoc(data: Record<string, unknown>, index: number) {
+  const id = String(data['$id'] ?? `doc-${index}`)
   return {
-    id: String(data['$id'] ?? `doc-${index}`),
+    id,
     exists: true,
-    ref: { id: String(data['$id'] ?? `doc-${index}`) },
+    ref: {
+      id,
+      // The revenue route reaches `org.ref.collection('usage').doc(month)`
+      // for the unbilled-meter read, so an org document has to carry it.
+      collection: () => ({ doc: () => ({ id: `${id}/usage` }) }),
+      parent: { parent: { id } },
+    },
     data: () => data,
     get: (field: string) => data[field],
   }
@@ -128,7 +135,9 @@ function mockQuery(
           return true
         })
       }
-      if (orderField) {
+      if (orderField === '__name__') {
+        rows.sort((a, b) => String(a['$id']).localeCompare(String(b['$id'])))
+      } else if (orderField) {
         rows.sort((a, b) => Number(a[orderField]) - Number(b[orderField]))
       }
       let docs = rows.map(mockDoc)
@@ -146,31 +155,18 @@ function mockQuery(
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
+    // The contracted sweeps order by document id, so the double needs the
+    // same `FieldPath` handle the route reaches for.
+    firestore: { FieldPath: { documentId: () => '__name__' } },
     app: () => ({
       auth: () => ({
         verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args),
       }),
       firestore: () => ({
-        collection: (name: string) =>
-          name === 'orgs'
-            ? {
-                async get() {
-                  const rows = (mockSources['orgs'] as Array<
-                    Record<string, unknown>
-                  >) ?? []
-                  return {
-                    size: rows.length,
-                    empty: rows.length === 0,
-                    docs: rows.map((data, index) => ({
-                      ...mockDoc(data, index),
-                      ref: {
-                        collection: () => ({ doc: () => ({ id: 'usage-ref' }) }),
-                      },
-                    })),
-                  }
-                },
-              }
-            : mockQuery(name),
+        // `orgs` is a PAGED sweep now, so the double must serve it through
+        // the same query builder as everything else — a bespoke `.get()`
+        // shortcut here would have let the unbounded read survive the test.
+        collection: (name: string) => mockQuery(name),
         collectionGroup: (name: string) => mockQuery(name),
         getAll: async () => [],
       }),
@@ -281,6 +277,22 @@ describe('the storefront sweep reads the field the index covers', () => {
     expect(fields.length).toBeGreaterThan(0)
     expect(new Set(fields)).toEqual(new Set(['createdAtMs']))
     expect(fields).not.toContain('createdAt')
+  })
+
+  it('ranges marketplace on createdAt — a top-level collection, not a group', async () => {
+    // The mirror image, and it earns its place: while fixing the orders
+    // query I crossed the two and pointed MARKETPLACE at `createdAtMs`, a
+    // field `marketplacePurchases` does not carry. The collection-group
+    // index guard cannot see that one — marketplace is not a collection
+    // group — so nothing but this would have caught it.
+    mockSources['marketplacePurchases'] = []
+    await call()
+
+    const fields = (mockFilters['marketplacePurchases'] ?? []).map(
+      ([field]) => field,
+    )
+    expect(fields.length).toBeGreaterThan(0)
+    expect(new Set(fields)).toEqual(new Set(['createdAt']))
   })
 
   it('counts an order that only a createdAtMs range can find', async () => {

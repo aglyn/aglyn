@@ -183,6 +183,7 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
   const truncated =
     payload?.subscriptionsTruncated === true ||
     payload?.marketplaceTruncated === true ||
+    payload?.contractedTruncated === true ||
     payload?.attention?.commerceTruncated === true
   const truncatedSources = payload?.truncatedSources ?? []
 
