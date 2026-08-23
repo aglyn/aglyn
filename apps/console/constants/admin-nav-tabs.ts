@@ -120,6 +120,14 @@ export function adminNavTabItems() {
       label: 'Assist signal',
       href: buildRoute(Route.ADMIN_ASSIST_SIGNALS),
     },
+    // Directly before Sales tax, because the two read the same
+    // `platformRevenue` rows for different questions: this one asks what Aglyn
+    // earned, that one asks what is owed to the state (AGL-2486).
+    {
+      id: 'nav-tab-admin-revenue',
+      label: 'Revenue',
+      href: buildRoute(Route.ADMIN_REVENUE),
+    },
     {
       id: 'nav-tab-admin-tax-return',
       label: 'Sales tax',
