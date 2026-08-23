@@ -27,8 +27,20 @@ GET  https://app.aglyn.com/api/health/billing  Stripe webhook delivery (AGL-1924
 GET  https://app.aglyn.com/api/health/error-beacon
                                                console beacon liveness (AGL-1923)
 GET  https://aglyn.com/api/health/error-beacon tenant beacon liveness (AGL-1923)
-HEAD <any>                                     liveness only, touches nothing
+GET  https://app.aglyn.com/api/health/crons    scheduled-job liveness (AGL-1955)
+GET  https://aglyn.com/api/health/render/marketing
+                                               marketing home RENDERS (AGL-2486)
+GET  https://demo.aglyn.app/api/health/render/site
+                                               a tenant site RENDERS (AGL-2486)
+HEAD <any>                                     the SAME probe and status as GET
 ```
+
+:::caution `HEAD` is not a liveness shortcut any more
+It used to return a hardcoded `200` and "touch nothing", which made every one
+of these a check that **could not go red** for the monitors most likely to use
+it. `healthHeadOf(GET)` now runs the same probe and returns the same status
+and headers, minus the body; the per-route memo is what keeps that cheap.
+:::
 
 ```json
 {
@@ -139,8 +151,8 @@ Console: https://console.cloud.google.com/monitoring/uptime?project=aglyn-main
 | `console-health` | `app.aglyn.com/api/health` | HTTP 2xx **and** `$.status == "ok"` | 5 min |
 | `console-imaging` | `app.aglyn.com/api/health` | `$.imaging.ok == true` | 15 min |
 | `tenant-health` | `aglyn.com/api/health` | HTTP 2xx **and** `$.status == "ok"` | 5 min |
-| `marketing-home` | `aglyn.com/` | 2xx and body contains `Aglyn` | 5 min |
-| `customer-site` | `demo.aglyn.app/` | 2xx and body contains `Aglyn Demo` | 5 min |
+| `marketing-home` | `aglyn.com/` → **repoint to** `/api/health/render/marketing` | 2xx and body contains `Aglyn` → `$.status == "ok"` | 5 min |
+| `customer-site` | `demo.aglyn.app/` → **repoint to** `/api/health/render/site` | 2xx and body contains `Aglyn Demo` → `$.status == "ok"` | 5 min |
 | `backup-state` | `app.aglyn.com/api/health/backups` | HTTP 2xx and `$.status == "ok"` | 15 min |
 | `signup-volume` | `app.aglyn.com/api/health/signups` | HTTP 2xx and `$.status == "ok"` | 5 min |
 | `rate-limiter` | `app.aglyn.com/api/health/rate-limits` | HTTP 2xx and `$.status == "ok"` | 5 min |
@@ -357,9 +369,12 @@ Notes that keep these honest:
   Until it exists, the endpoint is watched by the staff Health page
   (Staff → Health, `Scheduled jobs`), by the GitHub probe, and by anything
   that curls it; it answers the same 200/503 either way.
-- `customer-site` asserts on the demo site's own content. If someone renames
-  the demo site's title away from "Aglyn Demo", this check goes red — update
-  the content matcher, don't delete the check.
+- `customer-site` **used to assert on the demo site's own content** — renaming
+  the demo site's title away from "Aglyn Demo" turned it red. The render
+  canary that replaces it (AGL-2486) asserts a resolved host and a non-empty
+  node COUNT instead, so a content edit can no longer page anyone. ⚠️ **The
+  repoint is still owed** — see
+  [Repointing `marketing-home` and `customer-site`](#repointing-the-two-page-checks).
 - Incident emails carry a runbook snippet pointing back at this file. Alert
   fires after ~10 minutes of sustained failure (2+ probe regions), so a single
   blip does not page.
@@ -375,13 +390,19 @@ over the trailing six hours:
 | `console-health`, `console-imaging`, `backup-state`, `signup-volume`, `rate-limiter`, `billing-webhook`, `beacon-heartbeat console` | `app.aglyn.com` | **100%** |
 | `tenant-health` | `aglyn.com/api/health` | **0%** → ✅ fixed 08-23 |
 | `beacon-heartbeat tenant` | `aglyn.com/api/health/error-beacon` | **0%** → ✅ fixed 08-23 |
-| `marketing-home` | `aglyn.com/` | **0%** — still open |
-| `customer-site` | `demo.aglyn.app/` | **0%** — still open |
+| `marketing-home` | `aglyn.com/` | **0%** — fix ready, needs repointing |
+| `customer-site` | `demo.aglyn.app/` | **0%** — fix ready, needs repointing |
 
 **Two of the four were fixed on 2026-08-23** by the `Health endpoint bypass`
 rule (AGL-2486, option 1 below); expect them back at 100% within two check
-periods. The other two probe **real pages**, which a path bypass cannot reach
-— they are still red and still need option 2.
+periods.
+
+The other two probe **real pages**, which a path bypass cannot reach. Their
+fix has SHIPPED but is not applied: `/api/health/render/marketing` and
+`/api/health/render/site` render those pages server-side and grade them, under
+the bypassed prefix. They stay red until someone runs
+[Repointing `marketing-home` and `customer-site`](#repointing-the-two-page-checks),
+which needs the authenticated `gcloud` session a build agent cannot hold.
 
 `tenant-health` ran at 100% through 2026-08-20, 3.9% on 08-21, and 0% since.
 Every one of the four red hosts is served by `aglyn-tenant`, and every one of
@@ -421,13 +442,20 @@ fifty-one hours.
    `/api/health` and `/api/health/error-beacon` answer **200**, `/` still
    answers **429**. This clears `tenant-health` and `beacon-heartbeat tenant`
    only — the two below are unaffected and still open.
-2. **For `marketing-home` and `customer-site`, allowlist Google's uptime
-   checkers by IP.** Those two probe real pages, not health endpoints, so a
-   path rule does not reach them. The list is
-   `gcloud monitoring uptime list-ips` — 54 addresses at time of writing, and
-   Google does change it, so this option carries maintenance the first one
-   does not.
-3. **Last resort: put `x-aglyn-probe` in each GCP check's custom headers.**
+2. ~~**Allowlist Google's uptime checkers by IP.**~~ ⛔ **REJECTED on the
+   merits, 2026-08-23.** `gcloud monitoring uptime list-ips` is 54 addresses
+   across four regions and Google rotates it. Worse than the maintenance: an
+   IP-valued bypass rule is one `check-firewall-posture.mjs` cannot
+   meaningfully assert. Pin all 54 in the posture table and every rotation
+   reads as drift; leave them out and the rule's scope is not asserted at all.
+   A guard that quietly stops guarding is the failure this whole file is
+   about.
+3. ✅ **DONE — move the RENDER to where the bypass already is (AGL-2486).**
+   Two new endpoints under `/api/health` server-render a real page and grade
+   it, so Google's checkers reach them through the rule added in option 1 and
+   no IP list or shared secret is involved. See
+   [Repointing `marketing-home` and `customer-site`](#repointing-the-two-page-checks).
+4. **Last resort: put `x-aglyn-probe` in each GCP check's custom headers.**
    It works, but it copies a shared secret into a second system and fixes only
    the monitor that holds it. `probe-headers.mjs` says not to hand this header
    to third parties for a reason.
@@ -630,6 +658,103 @@ reported.
 Recreate it by hitting the endpoint once, and the next probe clears. **Name
 the clearing event before running any forced-failure test**, and unwind it the
 same day — a check left red is a check about to be muted.
+
+### Repointing `marketing-home` and `customer-site` {#repointing-the-two-page-checks}
+
+**These two checks already exist — they are UPDATED, not created.** Both have
+been at 0% since 2026-08-21 because they fetch `/`, which bot protection
+challenges. The fix is to point them at the render canaries added in
+`AGL-2486`, which live under the bypassed `/api/health` prefix:
+
+| check | new path | replaces fetching |
+| --- | --- | --- |
+| `marketing-home` | `/api/health/render/marketing` | `aglyn.com/` |
+| `customer-site` | `/api/health/render/site` | `demo.aglyn.app/` |
+
+**Keep each check's HOSTNAME as it is.** Only the path and the matcher change.
+`aglyn.com` and `demo.aglyn.app` both serve these endpoints, and leaving the
+hostnames alone means each check still proves DNS, the TLS certificate and
+edge routing *for that hostname* — coverage the old checks had and that a
+render assertion alone would not replace.
+
+:::note What the hostname does and does not cover
+The canary renders a **pinned** host (`AGLYN_CANARY_MARKETING_HOST` /
+`AGLYN_CANARY_SITE_HOST`), not one derived from the request's `Host` header —
+deliberately, so nobody can make our deployment render an arbitrary host by
+choosing a URL. So the hostname you fetch proves DNS/TLS/edge for that name,
+while the render half always grades the same two pinned sites.
+:::
+
+Each endpoint answers the ordinary health contract — `200` with
+`$.status == "ok"`, or **`503`** when the page fails to render — so the
+matcher becomes the same JSON-path matcher the other nine checks use, and
+`marketing-home` and `customer-site` stop being special.
+
+```bash
+# 1. The ids. `update` takes the CHECK ID positionally, so this is the same
+#    name.basename() correction as above — the full resource path is rejected.
+gcloud monitoring uptime list-configs --project=aglyn-main \
+  --filter='displayName~marketing-home' --format='value(name.basename())'
+gcloud monitoring uptime list-configs --project=aglyn-main \
+  --filter='displayName~customer-site' --format='value(name.basename())'
+
+# 2. Repoint each one. --validate-ssl is passed EXPLICITLY: both checks carry
+#    validateSsl: true today, the CLI default is false, and an update that
+#    omits it is exactly how the one check that stays green through an expired
+#    certificate gets created.
+gcloud monitoring uptime update '<marketing-home id>' --project=aglyn-main \
+  --path=/api/health/render/marketing \
+  --validate-ssl=true \
+  --set-status-classes=2xx \
+  --matcher-type=matches-json-path \
+  --json-path='$.status' --json-path-matcher-type=exact-match \
+  --matcher-content='"ok"' \
+  --display-name='marketing-home — aglyn.com/api/health/render/marketing status=ok'
+
+gcloud monitoring uptime update '<customer-site id>' --project=aglyn-main \
+  --path=/api/health/render/site \
+  --validate-ssl=true \
+  --set-status-classes=2xx \
+  --matcher-type=matches-json-path \
+  --json-path='$.status' --json-path-matcher-type=exact-match \
+  --matcher-content='"ok"' \
+  --display-name='customer-site — demo.aglyn.app/api/health/render/site status=ok'
+```
+
+**Confirm before and after**, from an anonymous client — this is the whole
+point, so do not take it on trust:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -A 'Monitor/1.0' \
+  https://aglyn.com/api/health/render/marketing      # expect 200
+curl -s -o /dev/null -w '%{http_code}\n' -A 'Monitor/1.0' \
+  https://demo.aglyn.app/api/health/render/site      # expect 200
+curl -s -A 'Monitor/1.0' https://aglyn.com/api/health/render/marketing | \
+  python3 -m json.tool                                # status: "ok", checks.render.nodeCount > 0
+```
+
+Then re-run the pass-rate query in
+[Verifying the monitor yourself](#verifying-the-monitor-yourself); both should
+return to 100% within two check periods (10 minutes at their 5-minute period).
+
+#### Why these can go red, and how that was proved
+
+A canary that cannot fail is worse than the dark check it replaces. `renderHealth`
+fails a page that resolves no host, 404s, redirects away, composes an **empty
+node tree**, or cannot be loaded at all — a blank page served with a `200` is
+precisely the outage a reachability ping calls healthy.
+`apps/tenant/specs/render-canary-can-go-red.spec.ts` drives the real handlers
+for every one of those shapes on **GET and HEAD alike**, and the assertions
+were verified by mutation: making `HEAD` return a hardcoded `200`, grading an
+empty node tree as healthy, and grading "could not determine" as calm each
+turned exactly the corresponding tests red.
+
+The marker is **structural** — a resolved host and a non-empty node *count*,
+never a string from the page. Two reasons: asserting copy would page whoever is
+on call for an ordinary content edit, and the endpoint is public, so customer
+content must not appear in its body. Both probed hosts are Aglyn's own (`demo`
+is the platform demonstration site the middleware falls back to for
+`app.aglyn.com` and every preview), so no customer can turn these red.
 
 ### What is deliberately NOT watched (the honest list)
 
