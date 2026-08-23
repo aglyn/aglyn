@@ -40,8 +40,10 @@ import SessionHealthBanner from '../components/session-health-banner.component'
 import SessionReauthDialog from '../components/session-reauth-dialog.component'
 import {
   __resetSessionHealth,
+  getSessionHealth,
   reportDeniedRead,
   reportSuccessfulRead,
+  SESSION_STALE_WINDOW_MS,
 } from '../utils/session-health'
 import { __resetSessionReauth } from '../utils/session-reauth'
 
@@ -173,6 +175,54 @@ describe('a session that can no longer read gets the dialog, not a banner', () =
     expect(screen.queryByRole('dialog')).toBeNull()
     // Nor does the `stale` flow leave a banner behind on dismissal — the
     // signed-out flows do, this one deliberately does not.
+    expect(document.querySelectorAll('.MuiAlert-root')).toHaveLength(0)
+  })
+
+  /**
+   * The dismissal must survive the VERDICT going away and coming back.
+   *
+   * This is the case the `serverReads` latch exists for, and the two tests
+   * above do not reach it: reporting more denials of an already-stale
+   * session changes no value the open effect depends on, so React never
+   * re-runs it and they would pass with the latch deleted. Proven — that
+   * mutation left the whole file green.
+   *
+   * What DOES re-run it is the verdict flipping. `prune` drops evidence
+   * after `SESSION_STALE_WINDOW_MS` of quiet, so a tab left open on a dead
+   * session goes `staleSession` false while nothing is being read and true
+   * again on the next two denials — with nothing having recovered in
+   * between. A latch that watched the verdict would re-open the dialog the
+   * user just dismissed, on a schedule, forever. Counting reads that
+   * actually reached the SERVER is what makes "Not now" mean it.
+   */
+  it('stays dismissed when the verdict ages out and comes back', async () => {
+    let clockAt = 1_000_000
+    __resetSessionHealth(() => clockAt)
+    render(<Shell />)
+    goStale()
+    await settle()
+    expect(screen.getByRole('dialog')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /not now/i }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    // Quiet for longer than the window: the evidence ages out and the
+    // verdict really does drop back to false.
+    clockAt += SESSION_STALE_WINDOW_MS + 1
+    act(() => reportDeniedRead('hosts'))
+    await settle()
+    expect(getSessionHealth().staleSession).toBe(false)
+
+    // The same dead session denies one more collection, and the verdict is
+    // back — off new evidence, with no server read anywhere in between.
+    clockAt += 1
+    act(() => reportDeniedRead('media'))
+    await settle()
+    expect(getSessionHealth().staleSession).toBe(true)
+    expect(getSessionHealth().serverReads).toBe(0)
+
+    // Still dismissed. The way back in is the degraded list's own button.
+    expect(screen.queryByRole('dialog')).toBeNull()
     expect(document.querySelectorAll('.MuiAlert-root')).toHaveLength(0)
   })
 
