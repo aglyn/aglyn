@@ -176,10 +176,15 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
   const subscriptions = settled?.subscriptions ?? {}
   const marketplace = settled?.marketplace ?? {}
   const commerce = settled?.commerce ?? {}
+  // TRUNCATION ONLY. `commerceQueryFailed` is deliberately NOT folded in
+  // here: a query that could not run is not a sweep that hit a ceiling, and
+  // reporting the failure as a row cap is what sent this page's own diagnosis
+  // to the wrong half of the system (AGL-2486).
   const truncated =
     payload?.subscriptionsTruncated === true ||
     payload?.marketplaceTruncated === true ||
     payload?.attention?.commerceTruncated === true
+  const truncatedSources = payload?.truncatedSources ?? []
 
   return (
     <DashboardLayout
@@ -232,18 +237,52 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
 
             {truncated ? (
               <Alert severity="warning">
-                <AlertTitle>These figures are a lower bound</AlertTitle>
-                The sweep hit its row cap, so at least one total below is
-                incomplete. Narrow the period rather than quoting these
-                numbers.
+                <AlertTitle>
+                  {truncatedSources.length > 0
+                    ? `A lower bound: ${truncatedSources.join(', ')}`
+                    : 'These figures are a lower bound'}
+                </AlertTitle>
+                {truncatedSources.length > 0
+                  ? `The sweep stopped at its safety ceiling for ${truncatedSources.join(
+                      ', ',
+                    )}, so those totals are incomplete. Every other figure on this page is whole.`
+                  : 'The sweep stopped at its safety ceiling, so at least one total below is incomplete.'}{' '}
+                Narrow the period rather than quoting the incomplete numbers. A
+                period this large is past what a request-time report should
+                compute — the answer is a precomputed monthly rollup, not a
+                bigger ceiling.
+              </Alert>
+            ) : null}
+            {payload?.periodPrecedesCoverage === true ||
+            payload?.settledMirrorEmpty === true ? (
+              <Alert severity="warning">
+                <AlertTitle>
+                  Settled figures do not cover this whole period
+                </AlertTitle>
+                {payload?.settledMirrorEmpty === true
+                  ? `No invoice has ever been recorded, so every settled figure below is unanswerable rather than zero.`
+                  : `Invoices have only been recorded since ${new Date(
+                      String(payload?.settledCoverageStart),
+                    ).toLocaleDateString()}. Anything ${PLATFORM_BRAND_NAME} collected before that was never mirrored, so the settled figures below are a lower bound for this period — not a measured zero.`}{' '}
+                Contracted figures are unaffected: they are point-in-time and
+                read the subscription mirror directly.
+              </Alert>
+            ) : null}
+            {payload?.unbilledMeteredFailed === true ? (
+              <Alert severity="warning">
+                <AlertTitle>Unbilled metered usage could not be read</AlertTitle>
+                The gap below is missing that cause entirely, so its residual is
+                overstated by however much usage went unbilled.
               </Alert>
             ) : null}
             {payload?.commerceQueryFailed === true ? (
               <Alert severity="warning">
                 <AlertTitle>Storefront orders could not be read</AlertTitle>
                 The storefront commission below reads $0 because the query
-                failed, not because there were no sales. This usually means the
-                collection-group index is not deployed.
+                failed, not because there were no sales. The sweep needs the
+                COLLECTION_GROUP index on <code>orders.createdAtMs</code> —
+                check it is still declared in the Firestore index config and
+                actually deployed, since indexes ship separately from the app.
               </Alert>
             ) : null}
             {Number(payload?.attention?.rowsOutsideEveryPeriod ?? 0) > 0 ? (

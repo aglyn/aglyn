@@ -68,20 +68,65 @@ import {
  */
 
 /**
- * Bound on every ranged sweep. Beyond this the summary is a LOWER BOUND and
- * says so — `truncated` on the response — rather than being filed from.
- * Matches the tax return's cap for the same reason: a route must be bounded,
- * and a silently-clipped revenue total is worse than a loud one.
+ * How many rows one Firestore round trip fetches while sweeping a period.
+ *
+ * A page size, NOT a bound on the answer — see `sweepAll`.
  */
-const ROW_CAP = 2000
+const SWEEP_PAGE_SIZE = 500
 
 /**
- * Bound on the ORDERS sweep specifically, which is a collection-group query
- * across every merchant's storefront rather than one platform-level
- * collection. Lower than `ROW_CAP` on purpose: storefront orders are the
- * highest-cardinality source here and the least of Aglyn's own money.
+ * The runaway ceiling on a paged sweep, and deliberately not a "row cap"
+ * (AGL-2486).
+ *
+ * The previous shape was a flat `limit(2000)` (1000 for orders) per source.
+ * That is the wrong instrument for a revenue total and it failed in the worst
+ * available direction: the 2001st invoice of a good month silently stopped
+ * being revenue, and the page said only "at least one total is incomplete"
+ * without naming which. "Raise the number" does not survive growth — it just
+ * moves the month in which the page starts lying.
+ *
+ * So the sweeps PAGE with a cursor and fold everything they find, and this
+ * exists solely so a pathological query cannot burn unbounded reads inside
+ * one serverless request. Reaching it is not a normal operating condition; it
+ * means the period holds more rows than a request-time report should be
+ * computing at all, and the honest fix at that point is a precomputed monthly
+ * rollup, not a bigger number here.
+ *
+ * When it IS reached the response names the SOURCE that hit it, so a lower
+ * bound can never again be reported as an anonymous "some total".
  */
-const ORDER_ROW_CAP = 1000
+export const SWEEP_CEILING = 50000
+
+/**
+ * Page a query to exhaustion, folding as it goes.
+ *
+ * Ordering is required for a cursor, and every caller already filters or
+ * orders on the field passed here, so the paging rides the SAME index the
+ * filter needs and adds no index of its own.
+ *
+ * Returns `truncated` only when the ceiling above actually stopped the sweep —
+ * never for a query that failed, which is a different state with a different
+ * remedy and is reported separately. Conflating the two is how the page came
+ * to blame a row cap for a missing index.
+ */
+async function sweepAll(
+  base: FirebaseFirestore.Query,
+  orderField: string,
+): Promise<{ docs: FirebaseFirestore.QueryDocumentSnapshot[]; truncated: boolean }> {
+  const ordered = base.orderBy(orderField)
+  const docs: FirebaseFirestore.QueryDocumentSnapshot[] = []
+  let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined
+  for (;;) {
+    const page = cursor
+      ? await ordered.startAfter(cursor).limit(SWEEP_PAGE_SIZE).get()
+      : await ordered.limit(SWEEP_PAGE_SIZE).get()
+    if (page.empty) return { docs, truncated: false }
+    docs.push(...page.docs)
+    if (docs.length >= SWEEP_CEILING) return { docs, truncated: true }
+    if (page.size < SWEEP_PAGE_SIZE) return { docs, truncated: false }
+    cursor = page.docs[page.docs.length - 1]
+  }
+}
 
 async function handler(request: Request): Promise<Response> {
   const { method, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -138,6 +183,7 @@ async function handler(request: Request): Promise<Response> {
       revenueUndated,
       marketplaceInPeriod,
       ordersInPeriod,
+      earliestRecorded,
     ] = await Promise.all([
       // Contracted is a POINT-IN-TIME figure — what the book bills right now
       // — so it is deliberately NOT ranged on the period. A past period's
@@ -151,38 +197,69 @@ async function handler(request: Request): Promise<Response> {
       // matching `/api/admin/overview`. No composite index needed: no filter,
       // no ordering.
       firestore.collectionGroup(ORG_BILLING_SUBCOLLECTION).get(),
-      revenue
-        .where('paidAt', '>=', range.start)
-        .where('paidAt', '<', range.end)
-        .limit(ROW_CAP + 1)
-        .get(),
+      sweepAll(
+        revenue
+          .where('paidAt', '>=', range.start)
+          .where('paidAt', '<', range.end),
+        'paidAt',
+      ),
       // Rows a range query can NEVER match: a Firestore inequality cannot see
       // a null field, so an invoice with no readable timestamp is invisible
       // to the sweep above and the settled figure is short by it. Counted so
       // the page can say so instead of quietly under-reporting.
       revenue.where('paidAt', '==', null).limit(50).get(),
-      // Ranged on `createdAt` — a SINGLE-FIELD inequality, served by
-      // Firestore's automatic index, so this cannot be the query that 500s
-      // the page over a composite index nobody deployed.
-      marketplace
-        .where('createdAt', '>=', range.start)
-        .where('createdAt', '<', range.end)
-        .limit(ROW_CAP + 1)
-        .get(),
+      // Ranged on `createdAt` — a SINGLE-FIELD inequality on a TOP-LEVEL
+      // collection, served by Firestore's automatic index. Unlike the orders
+      // sweep below, this one is not a collection group, which is exactly why
+      // the same field name is safe here and was not there.
+      sweepAll(
+        marketplace
+          .where('createdAt', '>=', range.start)
+          .where('createdAt', '<', range.end),
+        'createdAt',
+      ),
       // Storefront orders live per host (`hosts/{hostId}/orders`), so this is
-      // the one collection-GROUP range here. Single-field inequality again,
-      // and capped lower than the rest.
-      firestore
-        .collectionGroup('orders')
-        .where('createdAt', '>=', range.start)
-        .where('createdAt', '<', range.end)
-        .limit(ORDER_ROW_CAP + 1)
-        .get()
+      // the one collection-GROUP range here.
+      //
+      // Ranged on `createdAtMs` — the NUMBER — and not on the `createdAt`
+      // Timestamp beside it, which is the whole reason this page reported
+      // nothing (AGL-2486). Orders carry both: `draft-order.ts`, `pos-order.ts`
+      // and the renewal webhook each write a `serverTimestamp()` and a
+      // `Date.now()` millisecond copy. A collection-group range needs a
+      // COLLECTION_GROUP-scoped single-field index — Firestore's automatic
+      // single-field indexes are COLLECTION scope only, so a collection group
+      // gets no free ride — and the index that exists, is declared in
+      // `fieldOverrides` and is deployed, is on `createdAtMs` (AGL-1793).
+      // Querying `createdAt` therefore answered FAILED_PRECONDITION on every
+      // single request. Verified against production: the `createdAt` form
+      // raises `9 FAILED_PRECONDITION … requires a COLLECTION_GROUP_ASC index
+      // for collection orders and field createdAt`, the `createdAtMs` form
+      // runs. So this is not a missing deploy and must not be "fixed" by
+      // declaring a second index for the redundant field: it is one query
+      // reading the wrong one of two fields that mean the same thing.
+      sweepAll(
+        firestore
+          .collectionGroup('orders')
+          .where('createdAtMs', '>=', range.start.getTime())
+          .where('createdAtMs', '<', range.end.getTime()),
+        'createdAtMs',
+      )
         // A collection-group index this deployment has not built answers with
         // FAILED_PRECONDITION. That must degrade to "commerce not counted",
         // loudly, rather than 500 the whole page and take the subscription
         // and marketplace figures down with it.
         .catch(() => null),
+      // The FIRST invoice the mirror ever recorded, which is what makes an
+      // honest $0 distinguishable from an unanswerable one (AGL-2486).
+      //
+      // `platformRevenue` has only existed since AGL-1811 shipped on
+      // 2026-08-16; every invoice paid before that was never mirrored and no
+      // query can find it. The page offers earlier periods in its dropdown
+      // regardless, so without this it reports a confident $0 for months in
+      // which Aglyn demonstrably collected money — the exact failure that
+      // sent someone looking for a real Starter purchase and finding nothing.
+      // One document, ordered on the automatic single-field index.
+      revenue.orderBy('paidAt').limit(1).get().catch(() => null),
     ])
 
     const billingByOrgId = new Map<string, Record<string, unknown>>()
@@ -200,25 +277,28 @@ async function handler(request: Request): Promise<Response> {
     )
     const contracted = contractedSummary(contractedInput)
 
-    const subscriptionRows: PlatformRevenueRowInput[] = revenueInPeriod.docs
-      .slice(0, ROW_CAP)
-      .map((doc) => ({ id: doc.id, ...(doc.data() as object) }))
+    const subscriptionRows: PlatformRevenueRowInput[] =
+      revenueInPeriod.docs.map((doc) => ({
+        id: doc.id,
+        ...(doc.data() as object),
+      }))
     const marketplaceRows: MarketplaceRevenueRowInput[] =
-      marketplaceInPeriod.docs
-        .slice(0, ROW_CAP)
-        .map((doc) => ({ id: doc.id, ...(doc.data() as object) }))
-    const orderDocs = ordersInPeriod?.docs ?? []
-    const commerceRows: CommerceOrderRowInput[] = orderDocs
-      .slice(0, ORDER_ROW_CAP)
-      .map((doc) => ({ id: doc.id, ...(doc.data() as object) }))
+      marketplaceInPeriod.docs.map((doc) => ({
+        id: doc.id,
+        ...(doc.data() as object),
+      }))
+    const commerceRows: CommerceOrderRowInput[] = (
+      ordersInPeriod?.docs ?? []
+    ).map((doc) => ({ id: doc.id, ...(doc.data() as object) }))
 
     const subscriptions = subscriptionSettledSummary(subscriptionRows)
     const marketplaceSettled = marketplaceSettledSummary(marketplaceRows)
+    // TRUNCATION ONLY — a query that could not run at all is a different
+    // state, reported as `commerceQueryFailed`, and folding it in here is
+    // what made the page blame a row cap for a missing index (AGL-2486).
     const commerce = commerceSettledSummary(
       commerceRows,
-      // `null` means the query could not run at all, which is also a state in
-      // which the figures are not a total.
-      ordersInPeriod === null || orderDocs.length > ORDER_ROW_CAP,
+      ordersInPeriod?.truncated === true,
     )
 
     // Metered usage that was MEASURED and never invoiced (AGL-1878) — a gap
@@ -228,19 +308,50 @@ async function handler(request: Request): Promise<Response> {
     // billed month. Only the unbilled remainder is read, and only for a
     // single-month period, because that is the granularity the rollup keys
     // on; a quarter reports it as not applicable rather than as zero.
+    //
+    // Read by DOCUMENT ID rather than by a collection-group `where` on the
+    // `month` field (AGL-2486). The rollup lives at `orgs/{id}/usage/{month}`
+    // and its document id IS the month, so a direct `getAll` answers the same
+    // question exactly, in one round trip per chunk, and — the part that
+    // matters — needs no index at all.
+    //
+    // The previous form, `collectionGroup('usage').where('month','==',…)`,
+    // needed a COLLECTION_GROUP single-field index on `usage.month` that was
+    // never declared in `cloud/firebase-firestore.indexes.json` and is not
+    // deployed. Verified against production: it raises `9 FAILED_PRECONDITION
+    // … requires a COLLECTION_GROUP_ASC index for collection usage and field
+    // month`. It was wrapped in `.catch(() => null)`, so it had ALWAYS thrown
+    // and this cause had ALWAYS reported $0 — a gap cause that silently could
+    // not fire is worse than one that is absent, because the page showed it as
+    // a measured zero.
     let unbilledMeteredCents = 0
     let unbilledMeteredApplies = false
+    let unbilledMeteredFailed = false
     if (/^\d{4}-\d{2}$/.test(period.trim())) {
       unbilledMeteredApplies = true
-      const usageSnapshot = await firestore
-        .collectionGroup('usage')
-        .where('month', '==', period.trim())
-        .limit(ROW_CAP)
-        .get()
-        .catch(() => null)
-      for (const doc of usageSnapshot?.docs ?? []) {
-        const value = Number(doc.get('meterUnbilledCents') ?? 0)
-        if (Number.isFinite(value) && value > 0) unbilledMeteredCents += value
+      const month = period.trim()
+      const usageRefs = orgsSnapshot.docs.map((org) =>
+        org.ref.collection('usage').doc(month),
+      )
+      try {
+        // `getAll` takes the whole list in one call, but a very large org
+        // book would make one enormous request; chunked so the cost grows in
+        // steps rather than as a single unbounded payload.
+        for (let index = 0; index < usageRefs.length; index += 300) {
+          const chunk = usageRefs.slice(index, index + 300)
+          if (chunk.length === 0) continue
+          const docs = await firestore.getAll(...chunk)
+          for (const doc of docs) {
+            const value = Number(doc.get('meterUnbilledCents') ?? 0)
+            if (Number.isFinite(value) && value > 0) {
+              unbilledMeteredCents += value
+            }
+          }
+        }
+      } catch {
+        // Reported, never silently zeroed — see above.
+        unbilledMeteredFailed = true
+        unbilledMeteredCents = 0
       }
     }
 
@@ -266,16 +377,45 @@ async function handler(request: Request): Promise<Response> {
         commerceTruncated: commerce.truncated,
       },
     }
+    // The mirror's own start date, and whether the requested period predates
+    // it. `paidAt` is stored as a Firestore Timestamp; `toDate` guards the
+    // case where an older row stored something else.
+    const earliestPaidAt: Date | null =
+      earliestRecorded?.docs?.[0]?.get('paidAt')?.toDate?.() ?? null
     return Response.json({
       ...report,
       // Stated rather than implied: a quarter cannot answer the unbilled-meter
       // question, and reporting 0 would read as "nothing was missed".
       unbilledMeteredApplies,
-      // Loud when the collection-group index is absent, so a $0 commerce row
-      // is never mistaken for "no storefront sales".
+      unbilledMeteredFailed,
+      // Loud when the orders sweep could not run, so a $0 commerce row is
+      // never mistaken for "no storefront sales". Kept strictly separate from
+      // truncation: one means "we read part of it", the other means "we read
+      // none of it", and they have different remedies.
       commerceQueryFailed: ordersInPeriod === null,
-      subscriptionsTruncated: revenueInPeriod.size > ROW_CAP,
-      marketplaceTruncated: marketplaceInPeriod.size > ROW_CAP,
+      // NAMED per source. "At least one total is incomplete" leaves the
+      // reader unable to tell which figure they may still quote.
+      subscriptionsTruncated: revenueInPeriod.truncated,
+      marketplaceTruncated: marketplaceInPeriod.truncated,
+      truncatedSources: [
+        revenueInPeriod.truncated ? 'subscriptions' : null,
+        marketplaceInPeriod.truncated ? 'marketplace' : null,
+        commerce.truncated ? 'storefront orders' : null,
+      ].filter(Boolean),
+      /**
+       * How far back the SETTLED base can answer at all (AGL-2486).
+       *
+       * `null` means the mirror is empty. Otherwise any period starting
+       * before this date is partly or wholly unrecorded, and its settled
+       * figures are unanswerable rather than zero — `platformRevenue` began
+       * with AGL-1811 and nothing invoiced before it was ever written. The
+       * page states this instead of printing a confident $0 for a month in
+       * which money demonstrably arrived.
+       */
+      settledCoverageStart: earliestPaidAt ? earliestPaidAt.toISOString() : null,
+      periodPrecedesCoverage:
+        earliestPaidAt !== null && range.start < earliestPaidAt,
+      settledMirrorEmpty: earliestPaidAt === null,
     })
   } catch (error) {
     console.error('[admin/revenue]', error)

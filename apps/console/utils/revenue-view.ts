@@ -57,9 +57,18 @@ export interface RevenuePayload {
   }
   attention?: { rowsOutsideEveryPeriod?: number; commerceTruncated?: boolean }
   unbilledMeteredApplies?: boolean
+  unbilledMeteredFailed?: boolean
   commerceQueryFailed?: boolean
   subscriptionsTruncated?: boolean
   marketplaceTruncated?: boolean
+  /** Which sources hit the sweep ceiling, by name — never an anonymous flag. */
+  truncatedSources?: string[]
+  /** ISO date of the earliest mirrored invoice, or `null` for an empty mirror. */
+  settledCoverageStart?: string | null
+  /** The period starts before the settled mirror existed. */
+  periodPrecedesCoverage?: boolean
+  /** No invoice has ever been mirrored. */
+  settledMirrorEmpty?: boolean
 }
 
 /** Cents to a plain dollar string, no currency symbol. */
