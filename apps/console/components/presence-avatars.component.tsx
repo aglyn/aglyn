@@ -276,20 +276,21 @@ function RoomAvatars({ entries }: { entries: PresenceEntry[] }) {
               size={28}
               data-aglyn-presence-session={entry.key}
               data-aglyn-presence-self={entry.isSelf ? '' : undefined}
-              sx={{
-                // YOU, elsewhere, must never be mistakable for a colleague.
-                // The ring is drawn OUTSIDE the circle, which is why the row
-                // needs real spacing — inside an overlapping group it was the
-                // first thing to be clipped.
-                // Offset 0: the ring hugs the circle. The 2px gap it used
-                // to sit at is the "padding" Zach saw, and it is also what
-                // made overlapping impossible without clipping.
-                ...(entry.isSelf && {
-                  outline: '2px dashed',
-                  outlineColor: 'warning.main',
-                  outlineOffset: 0,
-                }),
-              }}
+              // Your own sessions differ by the ring's FORM, in that session's
+              // own colour — never by a second colour (AGL-2486). Zach: "this
+              // dashed orange border should probably be the user color like
+              // the others". The warning-coloured ring was saying "this is
+              // you" in a language that competed with the colour saying
+              // "this is my cursor"; the monitor badge below already says the
+              // first, and says it unambiguously.
+              //
+              // Only PHOTO chips carry a ring at all — an initials chip's
+              // background is already the session colour — so on those the
+              // badge below is the whole "this one is me" signal. That is
+              // deliberate: one indicator that always means the same thing
+              // beats a ring that means something different depending on
+              // whether a picture loaded.
+              ringStyle={entry.isSelf ? 'dashed' : 'solid'}
             />
             {entry.isSelf ? (
               <Box

@@ -70,22 +70,33 @@ export interface MemberAvatarProps extends Omit<AvatarProps, 'src' | 'alt'> {
   /**
    * The person's name.
    *
-   * NOT `displayName`, and that is not a style preference (AGL-2486). A JSX
-   * prop literally named `displayName` is STRIPPED by this app's compiler:
-   * measured in the browser by passing the identical value under both names
-   * on one element, `name: entry.displayName || 'Someone'` was emitted into
-   * the chunk while the other spelling was absent from it AND from the props
-   * the component received. Every call site here had been passing a prop that
-   * never arrived, so this component fell back to the email — or, where no
-   * email was passed, rendered `?` — from the day it was written.
+   * Called `name` rather than `displayName` for a reason worth keeping
+   * (AGL-2486). A JSX prop of that spelling used to be DELETED from the
+   * browser bundle: `compiler.reactRemoveProperties` in the shared Next config
+   * listed it, so every call site here — the account menu, the account page,
+   * the team page, both member cards and the presence stack — passed a prop
+   * that never arrived, and this component silently fell back to the email or
+   * rendered `?`. It was measured by passing the identical value under two
+   * names on one element and reading the running page: one arrived, the other
+   * was absent from the compiled chunk entirely.
    *
-   * The jest suite never caught it because jest compiles with a different
-   * transform that keeps the prop, so `member-avatar.component.spec.tsx`
-   * asserted two-letter initials from that spelling and went green against a
-   * browser build in which the prop does not exist.
-   * `no-displayname-jsx-prop.spec.ts` is the guard that now fails instead.
+   * That cause is FIXED — `5e8f9fe69` removed the entry and added
+   * `react-remove-properties.test.mjs`, which whitelists the config to
+   * `^data-test` patterns so no real prop can be stripped again. The name here
+   * stays `name` because it is the better name and eight call sites already
+   * use it, not because the hazard is still live.
+   *
+   * The lasting lesson is the one about testing: jest compiles with a
+   * different transform that KEPT the prop, so this file's own spec asserted
+   * two-letter initials and went green against a browser build in which the
+   * prop did not exist.
    */
   name?: string | null
+  /**
+   * How the identity ring is drawn, in the SESSION's colour either way.
+   * `dashed` marks one of your own sessions; solid is everyone else.
+   */
+  ringStyle?: 'solid' | 'dashed'
   /** Rendered pixel size. */
   size?: number
 }
@@ -143,6 +154,7 @@ export function MemberAvatar(props: MemberAvatarProps) {
     name,
     colour,
     colourSeed,
+    ringStyle = 'solid',
     size = 32,
     sx,
     ...rest
@@ -203,7 +215,23 @@ export function MemberAvatar(props: MemberAvatarProps) {
           ? {
               // Outside the circle, like the self ring beside it, so the face
               // is not cropped by its own indicator.
-              outline: '2px solid',
+              //
+              // Still only when there is a PHOTO. An initials avatar's
+              // background already IS the identity colour, so a ring in that
+              // same colour is invisible on it — briefly tried and reverted,
+              // because it bought nothing and contradicted the tested
+              // decision this condition encodes.
+              //
+              // `ringStyle` is a FORM difference in the session's own colour
+              // (AGL-2486).
+              // Presence used to mark your own sessions with a dashed ring in
+              // the warning colour, which Zach read — correctly — as a second
+              // visual language for something the colour already said: "this
+              // dashed orange border should probably be the user color like
+              // the others". The monitor badge in the corner is what actually
+              // says "this one is me"; the ring now only ever says "this is
+              // the colour of my cursor".
+              outline: `2px ${ringStyle}`,
               outlineColor: colour,
               // Flush with the circle, so the chips can overlap without the
               // ring being clipped by its neighbour (AGL-2486).

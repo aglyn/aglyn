@@ -34,7 +34,11 @@ import {
 } from '@aglyn/shared-data-mdi'
 import { isEnterpriseOrg, PLAN_LABELS, type OrgPlan } from '@aglyn/aglyn'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
-import { useUser, useUserPhoto } from '@aglyn/tenant-feature-instance'
+import {
+  useUser,
+  useUserName,
+  useUserPhoto,
+} from '@aglyn/tenant-feature-instance'
 import {
   Box,
   Button,
@@ -121,7 +125,16 @@ export function UserMenu() {
     route: Route.MANAGE_TEAM | Route.MANAGE_BILLING | Route.MANAGE_SUPPORT,
   ) => (orgSlug ? buildRoute(route, { orgSlug }) : orgHome)
 
-  const name = user?.displayName || user?.email || 'Account'
+  // `useUserName`, not `user.displayName` (AGL-2486). That field is empty for
+  // every SSO account — `zach@aglyn.com` has no `displayName` on its auth
+  // record at all — so this menu was showing the EMAIL as the person's name,
+  // repeating it as the address on the line below, and handing
+  // `memberInitials` an address with no space in it, which yields the single
+  // letter `Z` while the presence stack two inches away showed `ZG`. The name
+  // was never missing: `users/{uid}` has held `firstName`/`lastName` for this
+  // account the whole time.
+  const resolvedName = useUserName()
+  const name = resolvedName || 'Account'
   const email = user?.email ?? ''
   const plan = org?.plan
   const planLabel = isEnterpriseOrg(org)
@@ -262,7 +275,12 @@ export function UserMenu() {
             <Typography variant="subtitle2" noWrap>
               {name}
             </Typography>
-            {email ? (
+            {/* Only when it ADDS something (AGL-2486). With no profile name
+                the line above falls back to the address, and printing it
+                again underneath rendered `zach@aglyn.com` twice — which is
+                what a missing name looks like, and what sent this bug
+                hunting in the wrong place. */}
+            {email && email !== name ? (
               <Typography variant="caption" color="text.secondary" noWrap component="div">
                 {email}
               </Typography>

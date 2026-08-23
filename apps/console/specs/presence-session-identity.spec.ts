@@ -98,6 +98,125 @@ describe('no two sessions in a room share a colour', () => {
   })
 })
 
+describe('no two LIVE sessions in a room share a colour', () => {
+  /**
+   * DISJOINTNESS, not determinism (AGL-2486).
+   *
+   * The previous round moved colour from a per-session hash to a room-wide
+   * assignment and reported it fixed. Zach: "we have two users with the same
+   * color, this shouldn't happen" — two `ZG` chips carrying one red ring.
+   *
+   * The allocation WAS disjoint. Its INPUT was every row in the room,
+   * including reaped ones, and his room held 15 rows against a palette of 6.
+   * Once six colours are taken the probe has nowhere to go and the remaining
+   * keys fall back to their raw hash, so the handful of sessions actually
+   * drawn were a subset of a pool that had already collided. Measured over
+   * 2000 seeded rooms of 5 live + 10 dead rows, the pre-fix allocation
+   * collided on 86.1% of them — 12.3% at two live sessions, 98.3% at six.
+   *
+   * "Deterministic and room-wide" only says a session KEEPS its colour. It
+   * says nothing about two sessions DIFFERING, which is the property the
+   * screen needs. So this asserts the property over many rooms rather than
+   * over one hand-picked one: the first version of this test used tidy
+   * synthetic keys, and it passed against the broken code because those keys
+   * happened not to clash.
+   */
+  const NOW_L = 2_000_000_000_000
+  const live = (n: number) => ({
+    displayName: 'Zach Gover',
+    lastSeenAt: NOW_L - 1_000 * n,
+  })
+  const dead = (n: number) => ({
+    displayName: 'Zach Gover',
+    lastSeenAt: NOW_L - 3_600_000 - n,
+  })
+
+  /** Seeded, so a failure is reproducible rather than a Heisenbug. */
+  function makeRandom(seed: number) {
+    let state = seed >>> 0
+    return () => {
+      state = (state * 1664525 + 1013904223) >>> 0
+      return state / 4294967296
+    }
+  }
+  const ALPHABET =
+    'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-'
+
+  for (let liveCount = 2; liveCount <= AVATAR_COLOURS.length; liveCount += 1) {
+    it(`keeps ${liveCount} live sessions on ${liveCount} colours across 300 rooms`, () => {
+      const random = makeRandom(1000 + liveCount)
+      const sessionId = () => {
+        let out = ''
+        for (let i = 0; i < 10; i += 1) {
+          out += ALPHABET[Math.floor(random() * ALPHABET.length)]
+        }
+        return out
+      }
+      const collided: string[] = []
+      for (let room = 0; room < 300; room += 1) {
+        const sessions: Record<string, unknown> = {}
+        for (let i = 0; i < liveCount; i += 1) sessions[sessionId()] = live(i)
+        // Reaped rows, which is what a real room accumulates between sweeps.
+        // On the pre-fix tree these ate the palette before a single visible
+        // session was allocated anything.
+        for (let i = 0; i < 10; i += 1) sessions[sessionId()] = dead(i)
+        const { entries } = projectRoom(
+          { u1: sessions } as never,
+          'viewer',
+          NOW_L,
+        )
+        const colours = entries.map((entry) => entry.colour)
+        if (new Set(colours).size !== liveCount) collided.push(colours.join(','))
+      }
+      expect(collided).toEqual([])
+    })
+  }
+
+  it('agrees between two viewers looking at the same room', () => {
+    // Every viewer must compute the same colour for the same session, or the
+    // ring beside a name in one window will not match the cursor in the
+    // other. The allocation is therefore taken over the whole LIVE room, not
+    // over the subset a given viewer happens to draw.
+    const room = {
+      a: { s1: live(1) },
+      b: { s2: live(2), s3: live(3) },
+      c: { s4: live(4) },
+    } as never
+    const byA = projectRoom(room, 'a', NOW_L)
+    const byB = projectRoom(room, 'b', NOW_L)
+    const colourOf = (result: { entries: { key: string; colour?: string }[] }) =>
+      Object.fromEntries(result.entries.map((e) => [e.key, e.colour]))
+    const a = colourOf(byA)
+    const b = colourOf(byB)
+    const shared = Object.keys(a).filter((key) => key in b)
+    expect(shared.length).toBeGreaterThan(0)
+    for (const key of shared) expect(b[key]).toBe(a[key])
+  })
+
+  it('does not repaint the survivors when a session is reaped', () => {
+    // The reaper removes rows underneath a live room, and a departure must
+    // not reshuffle everyone — that is disjoint and horrible to look at.
+    // Holds because each key keeps its own hashed colour unless an
+    // EARLIER-SORTED session already holds it.
+    const before = projectRoom(
+      { u: { s1: live(1), s2: live(2), s3: live(3) } } as never,
+      'viewer',
+      NOW_L,
+    )
+    const after = projectRoom(
+      { u: { s1: live(1), s3: live(3) } } as never,
+      'viewer',
+      NOW_L,
+    )
+    const colourOf = (
+      result: { entries: { key: string; colour?: string }[] },
+      key: string,
+    ) => result.entries.find((entry) => entry.key === key)?.colour
+    expect(colourOf(after, 'u:s1')).toBe(colourOf(before, 'u:s1'))
+    expect(colourOf(after, 'u:s3')).toBe(colourOf(before, 'u:s3'))
+  })
+})
+
 describe('the room hands the avatar something it can draw', () => {
   it('gives each session its own colour end to end', () => {
     const { entries } = projectRoom(

@@ -409,6 +409,20 @@ function report(
  * honest, and six is already well past the point where the avatars are doing
  * the identifying rather than the colour.
  *
+ * ## What is traded away
+ *
+ * Three properties are wanted and only two are free. Every viewer agreeing is
+ * non-negotiable, and disjointness is the whole point, so the one given up is
+ * total stability: a session keeps its own hashed colour unless an
+ * EARLIER-SORTED session already holds that slot, which means a session CAN
+ * repaint when the colliding session ahead of it leaves or is reaped. Joins
+ * never repaint anyone sorted before them, and a session that does not
+ * collide never moves at all, so in practice this is rare and bounded.
+ *
+ * The alternative — colour by position in the sorted room — is perfectly
+ * disjoint and repaints EVERYONE on every join and leave, which is worse to
+ * look at. Pinning colours permanently would need state nothing here has.
+ *
  * ## Why every viewer computes the same answer
  *
  * The input is the sorted list of every session key in the room INCLUDING the
@@ -459,14 +473,42 @@ export function projectRoom(
   const entries: PresenceEntry[] = []
   const cutoff = now - PRESENCE_STALE_MS
   let ownOtherSessions = 0
-  // Every session key in the room INCLUDING this tab's own, sorted, so the
-  // colour assignment below is computed from the same input by every viewer.
-  const allKeys: string[] = []
+  /**
+   * The keys the palette is allocated over: every LIVE session in the room,
+   * including this tab's own (AGL-2486).
+   *
+   * Both halves of that are load-bearing.
+   *
+   * LIVE, because this used to be every row in the room. A room accumulates
+   * reaped rows between sweeps — Zach's held 15 against a palette of 6 — and
+   * once six colours are taken the allocator has nowhere left to probe, so
+   * everything after falls back to its raw hash and collides. The sessions
+   * actually drawn were a subset of that spoiled pool: two `ZG` chips, one
+   * red ring. Dead rows are not on screen and must not hold a colour.
+   *
+   * INCLUDING THIS TAB, because every viewer has to compute the same
+   * allocation. Each viewer draws a different subset — its own tab is left
+   * out below — so allocating over "what I draw" would give the same session
+   * different colours in two windows, and the ring beside a name would stop
+   * matching the cursor in the other window.
+   */
+  const liveKeys: string[] = []
   for (const [entryUid, sessions] of Object.entries(room ?? {})) {
-    const keys = isSessionMap(sessions) ? Object.keys(sessions) : ['legacy']
-    for (const sessionId of keys) allKeys.push(`${entryUid}:${sessionId}`)
+    const list = isSessionMap(sessions)
+      ? Object.entries(sessions)
+      : ([['legacy', sessions as unknown as PresenceEntry]] as [
+          string,
+          PresenceEntry,
+        ][])
+    for (const [sessionId, entry] of list) {
+      if (!entry || typeof (entry as PresenceEntry).displayName !== 'string') {
+        continue
+      }
+      if (((entry as PresenceEntry).lastSeenAt ?? 0) < cutoff) continue
+      liveKeys.push(`${entryUid}:${sessionId}`)
+    }
   }
-  const colours = assignRoomColours(allKeys)
+  const colours = assignRoomColours(liveKeys)
   for (const [entryUid, sessions] of Object.entries(room ?? {})) {
     // Tolerate the pre-session shape: an entry written by an older client
     // sits directly under the uid rather than under a session.
