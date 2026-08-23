@@ -177,7 +177,14 @@ export function MemberAvatar(props: MemberAvatarProps) {
         // carries no photo, so for the enterprise tier the initials ARE the
         // avatar on every screen.
         bgcolor: colour ?? avatarColourFor(colourSeed || email || label),
-        color: '#fff',
+        // `common.white`, not `#fff` — the same colour, said in the one
+        // spelling the hardcoded-colour ratchet accepts. It is deliberately
+        // NOT `getContrastText` or a mode-aware token: the six background
+        // colours above are fixed identity colours chosen for legibility
+        // under white 11px text, so the foreground has to be fixed with them.
+        // A theme-aware pairing would flip this to black in a light theme and
+        // put black on #d93025.
+        color: 'common.white',
         ...sx,
       }}
       {...rest}
