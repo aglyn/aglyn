@@ -28,6 +28,7 @@ import {
   Typography,
 } from '@mui/material'
 import { type MouseEvent, useState } from 'react'
+import DocsHelpTip from './docs-help-tip.component'
 import MemberAvatar, { memberInitials } from './member-avatar.component'
 import {
   presenceFaultNotice,
@@ -348,6 +349,28 @@ function RoomAvatars({ entries }: { entries: PresenceEntry[] }) {
           </Avatar>
         </Tooltip>
       ) : null}
+      {/* The one route from presence to its documentation (AGL-2486).
+          `liveCoEditing` was a registered help topic with ELEVEN anchors and
+          not a single call site anywhere in the product — the `API_SCOPES`
+          shape again, where a typed, generated promise of a help link reads
+          as coverage and its absence is the only symptom.
+
+          It belongs here rather than on a list row: the per-chip tooltips
+          answer "who is this", and the questions they raise instead — what a
+          room is, why a colleague on another version is invisible, whether
+          any of this locks the document — are exactly the page's headings.
+          A row-level tip would repeat that on every row of every list.
+
+          Rendered only alongside real sessions, since `RoomAvatars` is not
+          mounted when you are alone; an explanation of who is here has
+          nothing to explain to someone working by themselves. */}
+      <DocsHelpTip
+        topic="liveCoEditing"
+        anchor="#whos-here"
+        title="Who else is here"
+        excerpt="One avatar per editing session, in that session's colour. A room is one VERSION of a document, so someone editing a different version will not appear."
+        sx={{ ml: 0.5, fontSize: '0.9em' }}
+      />
     </Stack>
   )
 }
