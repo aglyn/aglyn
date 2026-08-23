@@ -89,4 +89,30 @@ class InlineTextEditStore {
 }
 
 export const inlineTextEdit = new InlineTextEditStore()
+
+/**
+ * Whether an inline text edit is open ON or INSIDE `element` (AGL-2486).
+ *
+ * The one place the "stand down, someone is typing in here" rule is
+ * expressed. Every canvas leaf registers its own pointer handlers, and those
+ * handlers begin by preventing the default — which is the default the
+ * browser uses to place a caret. Asking only "is this leaf the node being
+ * edited?" is not enough, and worse than not enough: a nested run stands its
+ * own leaf down, the event then BUBBLES to the ancestor leaf, and the
+ * ancestor prevents the default instead. The author sees an editor that is
+ * open, styled and completely uninteractive — no caret, no drag-select, no
+ * double-click-to-select-a-word.
+ *
+ * Containment, not identity, and by DOM rather than by node tree: the anchor
+ * is the element that was measured, which is the one thing that is true for
+ * a grafted instance leaf as well as a canvas node, and `contains` answers
+ * for any nesting depth including the element itself.
+ */
+export function isInlineEditWithin(
+  element: Element | null | undefined,
+): boolean {
+  const anchor = inlineTextEdit.anchor
+  return Boolean(anchor && element && element.contains(anchor))
+}
+
 export default inlineTextEdit

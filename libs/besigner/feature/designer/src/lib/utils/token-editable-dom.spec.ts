@@ -197,3 +197,75 @@ describe('materialize / serialize pills (AGL-586)', () => {
     expect(root.innerHTML).toBe('no tokens <i>here</i>')
   })
 })
+
+/**
+ * AGL-2486 — the stand-down rule, expressed once.
+ *
+ * Zach, on the live editor: *"I can't seem to click the text or move the
+ * text cursor or select text"* — the editor open, styled, and completely
+ * uninteractive.
+ *
+ * Every canvas leaf registers pointer handlers that begin by preventing the
+ * default, which is the default the browser uses to place a caret. Standing
+ * a leaf down by IDENTITY was worse than not standing it down at all: a
+ * nested run silenced its own leaf, which stopped it calling
+ * `stopPropagation` too, so the event bubbled to the ancestor leaf and the
+ * ancestor prevented the default instead.
+ */
+describe('isInlineEditWithin (AGL-2486)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { inlineTextEdit, isInlineEditWithin } =
+    require('./inline-text-edit.store') as typeof import('./inline-text-edit.store')
+
+  const node = { $id: 'n1', props: {}, nodes: [] } as any
+  const rect = { left: 0, top: 0, width: 10, height: 10 }
+
+  afterEach(() => {
+    inlineTextEdit.close()
+    document.body.innerHTML = ''
+  })
+
+  it('is false when no edit is open', () => {
+    const el = document.createElement('div')
+    document.body.appendChild(el)
+    expect(isInlineEditWithin(el)).toBe(false)
+  })
+
+  it('is true for the element being edited', () => {
+    const el = document.createElement('div')
+    document.body.appendChild(el)
+    inlineTextEdit.open(node, rect, undefined, el)
+    expect(isInlineEditWithin(el)).toBe(true)
+  })
+
+  /** The nested Span inside a Typography — the shape that broke. */
+  it('is true for an ANCESTOR leaf of the element being edited', () => {
+    const ancestor = document.createElement('div')
+    const span = document.createElement('span')
+    ancestor.appendChild(span)
+    document.body.appendChild(ancestor)
+    inlineTextEdit.open(node, rect, undefined, span)
+
+    expect(isInlineEditWithin(span)).toBe(true)
+    expect(isInlineEditWithin(ancestor)).toBe(true)
+  })
+
+  it('is false for a leaf that merely sits beside it', () => {
+    const parent = document.createElement('div')
+    const edited = document.createElement('span')
+    const sibling = document.createElement('span')
+    parent.append(edited, sibling)
+    document.body.appendChild(parent)
+    inlineTextEdit.open(node, rect, undefined, edited)
+
+    expect(isInlineEditWithin(sibling)).toBe(false)
+  })
+
+  it('is false again once the edit closes', () => {
+    const el = document.createElement('div')
+    document.body.appendChild(el)
+    inlineTextEdit.open(node, rect, undefined, el)
+    inlineTextEdit.close()
+    expect(isInlineEditWithin(el)).toBe(false)
+  })
+})

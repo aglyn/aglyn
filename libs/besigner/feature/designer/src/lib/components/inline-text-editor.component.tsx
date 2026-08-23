@@ -521,7 +521,12 @@ export const InlineTextEditorComponent = observer(
 
       const isInsideTheEditor = (target: Node | null): boolean => {
         if (!target) return false
-        if (editing?.contains(target)) return true
+        // Read LIVE, never the value captured when this effect ran: a click
+        // inside the text is the author placing a caret, and getting that
+        // wrong tears the surface down and rebuilds it on every click, which
+        // looks exactly like a caret that will not move.
+        const live = inPlaceRef.current?.element
+        if (live?.contains(target)) return true
         const overlay = overlayRef.current
         return Boolean(overlay?.contains(target))
       }
