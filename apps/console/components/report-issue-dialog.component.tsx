@@ -36,6 +36,7 @@ import { useState } from 'react'
 import DocsHelpTip from './docs-help-tip.component'
 import { useHostId } from './host-id-provider'
 import useCurrentOrg from '../hooks/use-current-org'
+import { useUrlNamesOrg } from '../hooks/use-url-names-org'
 
 /** Mirrors `REPORT_KINDS` in `app/api/_lib/linear-issues.ts`. */
 const KINDS = [
@@ -75,8 +76,27 @@ export interface ReportIssueDialogProps {
 export function ReportIssueDialog(props: ReportIssueDialogProps) {
   const { open, onClose } = props
   const { data: user } = useUser()
-  const { orgId } = useCurrentOrg()
+  const { orgId: scopedOrgId } = useCurrentOrg()
   const hostId = useHostId()
+  /**
+   * Whether the URL actually names a workspace (AGL-1130).
+   *
+   * `useCurrentOrg()` resolves through `useOrgScope().currentOrg`, which
+   * deliberately falls back to a remembered selection and then to the user's
+   * FIRST org, because org-less pages still need an org to ACT on. That
+   * fallback is right for an action and wrong for a claim — and the org
+   * stamped onto a bug report is a claim about where the reporter was.
+   *
+   * Zach, 2026-08-22, filing from the staff console: "I was in the staff
+   * console and therefore was not viewing an org but those fields said there
+   * was an org attached to it. If we are not viewing an org the org context
+   * should be nothing." AGL-2485 is the evidence — it recorded
+   * `/admin/media-quarantine` as the route and `Test Org` as the
+   * organization, a workspace that page has nothing to do with. A triager
+   * reading that goes looking in the wrong tenant's data.
+   */
+  const urlNamesWorkspace = useUrlNamesOrg()
+  const orgId = urlNamesWorkspace ? scopedOrgId : undefined
   const { enqueueSnackbar } = useSnackbar()
   const pathname = usePathname()
 
