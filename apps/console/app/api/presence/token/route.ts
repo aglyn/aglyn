@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
-import { hostRoleCanWrite, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  type AglynOrgMember,
+  hostRoleCanWrite,
+  hostRoleFor,
+  isOrgWideMember,
+  pluginRequestFromWeb,
+} from '@aglyn/aglyn/server'
 import { deadDocumentPaths } from '../../_lib/presence-reaper'
 import {
   authForPool,
@@ -88,6 +94,34 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Not a member of this site' }, { status: 403 })
     }
 
+    // BARE ORG MEMBERSHIP IS NOT REACH TO THIS SITE (AGL-1881).
+    //
+    // The check above proves the caller is on the org roster. The roster
+    // holds BOTH org managers and site-scoped collaborators — a collaborator
+    // invited to one site is written as `role:'viewer', allHosts:false,
+    // hostAccess:{thatHost}` (`grantHostAccess`). Existence alone therefore
+    // answered a question nobody asked, and `hostId` is caller-supplied: any
+    // org member could name any host in the org and be minted a token for it.
+    // The org doc's `hosts` map is readable by every member, so enumerating
+    // the sibling ids takes one read.
+    //
+    // `hostRoleFor` is the predicate the rules and the ~20 server gates
+    // already share, and `isOrgWideMember` alongside it because the two
+    // disagree on ONE shape deliberately: a pre-`allHosts` legacy row carries
+    // neither the flag nor a `hostAccess` map, and `hostRoleFor` reads that as
+    // "no reach" while `isOrgWideMember` reads it as org-wide — which is the
+    // reading that does not lock a real member out of their own workspace.
+    // Asking both is what keeps this a security fix rather than an outage.
+    const memberData = (membership.data() ?? {}) as Partial<AglynOrgMember>
+    const orgWide = isOrgWideMember(memberData)
+    const rosterHostRole = hostRoleFor(memberData, hostId)
+    const hostRole = ((host.get('memberRoles') ?? {}) as Record<string, string>)[
+      decoded.uid
+    ]
+    if (!orgWide && !rosterHostRole && !hostRole) {
+      return Response.json({ error: 'Not a member of this site' }, { status: 403 })
+    }
+
     // Lockdown verdict (AGL-1506): a locked org/host mints no presence or
     // co-edit token. Host doc already in hand; the org scope rides the
     // member doc's `orgSuspended` projection (also already read) — the org
@@ -119,10 +153,7 @@ async function handler(request: Request): Promise<Response> {
     // here, not to the whole org. A viewer gets presence and no `coeditHost`
     // claim at all, so the RTDB rules refuse their writes outright rather
     // than relying on the client to keep them read-only.
-    const hostRole = ((host.get('memberRoles') ?? {}) as Record<string, string>)[
-      decoded.uid
-    ]
-    const orgRole = membership.get('role') as string | undefined
+    const orgRole = memberData.role
     // `author` (AGL-2334) is a content role, so it belongs on this list.
     // The co-edit claim is what lets the besigner mutate the version document
     // at all — refusing it would have shipped a role that can edit content in
@@ -130,11 +161,20 @@ async function handler(request: Request): Promise<Response> {
     // The publish gate is in the rules, on the publish FIELDS; it is not this
     // claim's job, and narrowing here would break the half of the role that
     // has to work.
+    //
+    // The org-roster arm is bound to `orgWide` (AGL-1881). It used to read
+    // `orgRole === 'editor'` on its own, and a site collaborator can hold
+    // `role:'editor'` with `allHosts:false` — expressible straight from
+    // `/api/orgs/members` — so a member scoped to site A was minted
+    // `coeditHost` for site B and could mutate a live editing session on a
+    // site whose `memberRoles` does not list them. The comment above this
+    // block already claimed the claim "is scoped to the ONE host proven
+    // here"; nothing in the roster arm proved anything about that host.
     const canEdit =
       hostRoleCanWrite(hostRole) ||
-      orgRole === 'owner' ||
-      orgRole === 'admin' ||
-      orgRole === 'editor'
+      hostRoleCanWrite(rosterHostRole) ||
+      (orgWide &&
+        (orgRole === 'owner' || orgRole === 'admin' || orgRole === 'editor'))
 
     // Mint in the caller's OWN pool (AGL-1962). A uid is unique only WITHIN
     // a pool, and `signInWithCustomToken` CREATES the account when the uid is
@@ -150,6 +190,21 @@ async function handler(request: Request): Promise<Response> {
     const tenantId = decoded.firebase?.tenant ?? null
     const token = await authForPool(tenantId).createCustomToken(decoded.uid, {
       presenceOrg: orgId,
+      // Minted but NOT YET READ by any rule (AGL-1881), and deliberately so.
+      //
+      // The co-edit READ rule keys on `presenceOrg` alone, with no `$hostId`
+      // component — so a token minted for one site still reads
+      // `coedit/{orgId}/{anySiteId}/…/nodes`, which is the unsaved canvas of
+      // every sibling site in the org. The gate above stops a collaborator
+      // OBTAINING a token for a site they cannot reach; it cannot narrow a
+      // token they legitimately hold, because that narrowing has to happen in
+      // the rule.
+      //
+      // Adding the claim now and tightening the rule later is the only
+      // ordering that does not break live co-editing: a rule that requires
+      // `presenceHost` must not ship before every token carries it. This half
+      // is additive and inert. See the AGL-1881 report for the deploy order.
+      presenceHost: hostId,
       ...(canEdit ? { coeditHost: hostId } : {}),
     })
 
