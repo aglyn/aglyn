@@ -165,6 +165,11 @@ installing.
   a site disappears from that site's navigation, editor, published pages, and API — other
   sites in the workspace are unaffected, and a site can never enable a plugin the
   workspace has switched off.
+- Most plugins are **on** for a site unless it turns them off. **User Accounts** is the
+  exception: it is **off until a site turns it on**, because it is the one that decides
+  whether the site serves `/signin`, `/signup` and `/recover` — and a sign-in page on a
+  marketing site is worse than a missing one. See
+  [Member accounts](../../guides/member-accounts.md) for what the switch does.
 
 ## Configure
 

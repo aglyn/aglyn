@@ -91,7 +91,7 @@ export function SiteAccountsCard(props: { hostId: string }) {
     <CardDisplay
       header={'Site users'}
       help={docsHelp('members', {
-        anchor: '#4-manage-members-from-the-console',
+        anchor: '#5-manage-members-from-the-console',
         excerpt:
           'Visitors who signed up on your live site — open a row for ' +
           'orders, subscriptions, and suspend/reactivate.',

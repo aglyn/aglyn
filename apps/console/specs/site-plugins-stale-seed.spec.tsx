@@ -109,7 +109,13 @@ describe('SitePluginsCard (AGL-1358)', () => {
     await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
     const [payload, options] = mockSetDoc.mock.calls[0]
     expect(Array.isArray(payload.disabledPlugins)).toBe(true)
-    expect(options).toEqual({ mergeFields: ['disabledPlugins'] })
+    // AGL-2486 added the opt-in companion (`enabledPlugins`) to the same
+    // atomic replace. Both halves of the switchboard travel together, so the
+    // guard this spec is about still stands in front of one write, not two.
+    expect(Array.isArray(payload.enabledPlugins)).toBe(true)
+    expect(options).toEqual({
+      mergeFields: ['disabledPlugins', 'enabledPlugins'],
+    })
   })
 
   it('REFUSES when the host read failed outright, and says so differently', async () => {

@@ -43,7 +43,41 @@ export interface FirstPartyPlugin {
    * staff. Always-on plugins carry no flag.
    */
   releaseFlag?: string
+  /**
+   * OFF for a site until that site turns it on (AGL-2486) — the inversion of
+   * this switchboard's default, and the only field here that changes what an
+   * absent host doc means.
+   *
+   * The per-host field is a DENY-list: a site records what it switches off,
+   * which makes "absent means on" the default for all twelve other bundles.
+   * That is right for a capability whose worst case is an unused nav tab, and
+   * wrong for one whose worst case is a PAGE — `/signin`, `/signup`,
+   * `/recover` were served by every published site on the platform,
+   * including marketing sites whose real sign-in is somewhere else entirely.
+   * A sign-in-shaped page on a brand's own domain that is not that brand's
+   * sign-in is a credential-confusion hazard, so this one defaults closed.
+   *
+   * A site un-defaults it by listing the id in `host.enabledPlugins`. That
+   * list is scoped to default-off ids and cannot widen anything else, so the
+   * AGL-1014 invariant survives intact: a site still can never reach past
+   * what its org enables.
+   */
+  defaultOffPerSite?: boolean
 }
+
+/**
+ * The user-accounts capability (AGL-2486): visitor sign-in, sign-up and
+ * password recovery on a published site.
+ *
+ * It carries no loader manifest entry, and that is deliberate rather than an
+ * oversight. The member blocks and the `membership/*` API handlers already
+ * ship inside the commerce bundle, so there is no separate package to load;
+ * what this id contributes is the SWITCH — the thing the tenant route gate,
+ * the console card and the sitemap all ask. Several catalog ids already have
+ * no tenant bundle (`contacts`, `data`, `logic`), so a manifest-less entry is
+ * the existing shape, not a new one.
+ */
+export const ACCOUNTS_PLUGIN_ID = 'accounts'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   {
@@ -51,6 +85,15 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     label: 'Components',
     alwaysOn: true,
     description: 'The base component and theme library every site builds on.',
+  },
+  {
+    id: ACCOUNTS_PLUGIN_ID,
+    label: 'User Accounts',
+    description:
+      'Visitor accounts on the site: the /signin, /signup and /recover ' +
+      'pages, and the Members blocks. Off for a site until you turn it on.',
+    releaseFlag: 'release_member_accounts',
+    defaultOffPerSite: true,
   },
   { id: 'bookings', label: 'Bookings', description: 'Services, open slots, and paid bookings.', releaseFlag: 'release_bookings' },
   { id: 'commerce', label: 'Commerce', description: 'Products, carts, checkout, orders, POS.', releaseFlag: 'release_commerce_v2' },
@@ -77,6 +120,43 @@ const ALWAYS_ON: readonly string[] = FIRST_PARTY_PLUGINS.filter(
 const FIRST_PARTY_IDS: ReadonlySet<string> = new Set(
   FIRST_PARTY_PLUGINS.map((plugin) => plugin.id),
 )
+
+/**
+ * Ids a SITE does not get until it asks (AGL-2486). See
+ * {@link FirstPartyPlugin.defaultOffPerSite} for why this inversion exists.
+ */
+export const DEFAULT_OFF_PER_SITE_PLUGIN_IDS: ReadonlySet<string> = new Set(
+  FIRST_PARTY_PLUGINS.filter((plugin) => plugin.defaultOffPerSite).map(
+    (plugin) => plugin.id,
+  ),
+)
+
+/** Whether a plugin id is off for a site until that site opts in. */
+export function isDefaultOffPerSite(pluginId: string): boolean {
+  return DEFAULT_OFF_PER_SITE_PLUGIN_IDS.has(pluginId)
+}
+
+/**
+ * Applies a host's `enabledPlugins` OPT-IN list (AGL-2486): subtracts every
+ * default-off id the host has not explicitly asked for.
+ *
+ * Narrow-only, like its deny-list sibling. The list can only ever REMOVE the
+ * default-off subtraction for an id the org already enables — listing an
+ * ordinary id buys nothing, and listing one the org switched off buys
+ * nothing either, because this runs against the org's resolved set.
+ */
+export function applyDefaultOffOptIn(
+  pluginIds: readonly string[],
+  optedIn?: readonly string[] | null,
+): string[] {
+  if (!DEFAULT_OFF_PER_SITE_PLUGIN_IDS.size) return [...pluginIds]
+  const asked = new Set(
+    Array.isArray(optedIn) ? optedIn.map(String) : [],
+  )
+  return pluginIds.filter(
+    (id) => !DEFAULT_OFF_PER_SITE_PLUGIN_IDS.has(id) || asked.has(id),
+  )
+}
 
 /**
  * Whether an `enabledPlugins` id is a first-party BUNDLE (vs a marketplace
@@ -152,15 +232,34 @@ export function subtractDisabledPlugins(
  * OFF, so it can never widen beyond what the org enables, and an absent
  * field means every org-enabled plugin runs (newly installed plugins
  * default to enabled per site until a host admin disables them).
+ *
+ * ONE class of id reads the other way (AGL-2486): a `defaultOffPerSite`
+ * plugin is subtracted unless the host names it in `enabledPlugins`. That
+ * list un-defaults; it does not grant. Both fields are still bounded by the
+ * org's set, and an explicit deny still beats an explicit opt-in — the two
+ * are applied in that order below, so the safe reading wins whenever a
+ * hand-edited or stale doc sets both.
  */
 export function resolveHostEnabledPlugins(
   org?: { enabledPlugins?: string[] } | null,
-  host?: { disabledPlugins?: string[] } | null,
+  host?: { disabledPlugins?: string[]; enabledPlugins?: string[] } | null,
 ): string[] {
   return subtractDisabledPlugins(
-    resolveEnabledPlugins(org),
+    applyDefaultOffOptIn(resolveEnabledPlugins(org), host?.enabledPlugins),
     host?.disabledPlugins,
   )
+}
+
+/**
+ * Whether ONE plugin runs on this site — the host-aware counterpart of
+ * {@link isPluginEnabled}, and the form every route gate wants.
+ */
+export function isHostPluginEnabled(
+  org: { enabledPlugins?: string[] } | null | undefined,
+  host: { disabledPlugins?: string[]; enabledPlugins?: string[] } | null | undefined,
+  pluginId: string,
+): boolean {
+  return resolveHostEnabledPlugins(org, host).includes(pluginId)
 }
 
 export function isPluginEnabled(

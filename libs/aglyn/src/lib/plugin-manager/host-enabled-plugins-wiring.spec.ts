@@ -113,10 +113,21 @@ describe('per-site plugin enablement wiring (AGL-1014)', () => {
       'libs/aglyn/src/lib/foundation/definitions/platform.types.ts',
     )
     expect(types).toContain('disabledPlugins?: string[]')
+    // The AGL-2486 opt-in companion. A deny-list cannot express "off until
+    // asked", so a default-off capability needs its own field — and it is
+    // useless unless the host document actually declares it.
+    expect(types).toContain('enabledPlugins?: string[]')
   })
 
-  it('the rules restrict the deny-list to site admins', () => {
+  it('the rules restrict BOTH per-site plugin fields to site admins', () => {
     const rules = read('cloud/firebase-firestore.rules')
-    expect(rules).toContain("hasAny(['disabledPlugins'])")
+    // One `hasAny` list, not two branches: the opt-in key is the one that
+    // makes `/signin` exist on a live site, so an editor able to write it
+    // could stand up a sign-in page on the org's marketing domain. Asserting
+    // the keys share a list is what stops a later edit splitting them and
+    // leaving the newer one open.
+    expect(rules).toContain(
+      "hasAny(['disabledPlugins', 'enabledPlugins'])",
+    )
   })
 })

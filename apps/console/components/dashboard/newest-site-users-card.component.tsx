@@ -56,7 +56,7 @@ export function NewestSiteUsersCard(props: { hostId: string }) {
     <CardDisplay
       header={'Newest site users'}
       help={docsHelp('members', {
-        anchor: '#4-manage-members-from-the-console',
+        anchor: '#5-manage-members-from-the-console',
         excerpt:
           'The five newest visitor accounts on this site — the Users page ' +
           'has the full, searchable list.',

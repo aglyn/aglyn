@@ -358,12 +358,25 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
         {memberDenied ? (
           <>
             <h1 style={{ fontSize: 22 }}>{'This page is for members'}</h1>
-            <p style={{ opacity: 0.8 }}>
-              <a href="/signin">{'Sign in'}</a>
-              {' or '}
-              <a href="/signup">{'create an account'}</a>
-              {' to view it.'}
-            </p>
+            {/*
+              Only offer the member pages when this site actually serves them
+              (AGL-2486). With User Accounts off, `/signin` and `/signup` are
+              404s, so linking them would send a visitor who already hit one
+              dead end straight to another — and it would advertise a
+              sign-in page the site does not have.
+            */}
+            {props.memberAuthRoutes ? (
+              <p style={{ opacity: 0.8 }}>
+                <a href="/signin">{'Sign in'}</a>
+                {' or '}
+                <a href="/signup">{'create an account'}</a>
+                {' to view it.'}
+              </p>
+            ) : (
+              <p style={{ opacity: 0.8 }}>
+                {'You need an account on this site to view it.'}
+              </p>
+            )}
           </>
         ) : (
           <p style={{ opacity: 0.7 }}>{'Checking your membership…'}</p>

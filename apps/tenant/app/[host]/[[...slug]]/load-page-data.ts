@@ -489,6 +489,46 @@ const loadPageDataCached = cache(
     // Membership routes (AGL-109): fixed sign-in/up surfaces per site,
     // plus /recover for password recovery (AGL-552).
     if (path === 'signin' || path === 'signup' || path === 'recover') {
+      // Per-site user accounts (AGL-2486). Until this, the three addresses
+      // below were served by EVERY published site — no plugin check, no
+      // entitlement, no flag — so a marketing site whose real sign-in lives
+      // somewhere else still answered `/signin` with a working member form.
+      // `aglyn.com/signin` was the example that found it, against a console
+      // that signs in at `app.aglyn.com`. A sign-in-shaped page on a brand's
+      // own domain that is not that brand's sign-in is credential confusion,
+      // and it was indexable.
+      //
+      // The gate is the ordinary per-site switchboard (AGL-1014/416/422) —
+      // deliberately not a switch of its own, because a second switching
+      // model for one capability is how the two drift apart. `accounts` is
+      // simply the first id the catalog marks `defaultOffPerSite`, so an
+      // absent host field means OFF here and ON everywhere else.
+      //
+      // It is computed BEFORE the designation lookup below on purpose: a
+      // gate placed after it would 404 the built-in form while still serving
+      // a host's designed sign-in screen at the same address, which is the
+      // half-closed door this issue is about.
+      const authEnabledPlugins = await filterEnabledPluginsByReleaseFlags(
+        // Per-site enablement (AGL-1014): org set minus this host's
+        // deny-list, minus the default-off ids it has not opted into.
+        Aglyn.resolveHostEnabledPlugins(
+          orgRes.org as never,
+          hostRes.host as never,
+        ),
+        { orgId: (orgRes.org as { $id?: string })?.$id ?? null },
+      )
+      if (!authEnabledPlugins.includes(Aglyn.ACCOUNTS_PLUGIN_ID)) {
+        // A REAL 404, not a soft one (AGL-2342): `page.tsx` maps this to
+        // `notFound()`, the `[host]/not-found` boundary answers with a 404
+        // status, and the site's own designed 404 renders there. Returning
+        // `props` with a `noindex` directive instead would tell a crawler
+        // this address is a real page and merely ask it not to look — and
+        // `noindex` is a request, not a status.
+        return {
+          notFound: true,
+          revalidate: 60, // never=false, always=1, since=SECONDS
+        }
+      }
       // Designable auth screens (AGL-553): a host can designate a
       // besigner-built screen per auth route (host doc `authScreens`, set
       // from Setup like `errorScreens`); it renders through the normal
@@ -516,18 +556,10 @@ const loadPageDataCached = cache(
           if (designatedNodes) {
             // The member auth blocks live in the commerce plugin, so the
             // client needs the real enabled-plugin set (same gate as the
-            // published-screen path below).
-            const authEnabledPlugins =
-              await filterEnabledPluginsByReleaseFlags(
-                // Per-site enablement (AGL-1014): org set minus this host's deny-list.
-              Aglyn.resolveHostEnabledPlugins(
-                orgRes.org as never,
-                hostRes.host as never,
-              ),
-                {
-                  orgId: (orgRes.org as { $id?: string })?.$id ?? null,
-                },
-              )
+            // published-screen path below). Resolved once at the top of this
+            // branch, because the capability check and the client's plugin
+            // list must be the SAME set — computing it twice is how they
+            // come to disagree.
             return {
               props: JSON.parse(
                 JSON.stringify({
@@ -813,6 +845,22 @@ const loadPageDataCached = cache(
           })
         }
       }
+      // Does this site actually HAVE the member pages to send them to
+      // (AGL-2486)? The built-in denial prompt links to `/signin` and
+      // `/signup`, and with user accounts off those addresses now 404 — so
+      // an ungated prompt would walk a visitor from one dead end to another.
+      // A capability that is off but still linked is the same bug wearing a
+      // different hat, which is why this reads the SAME resolved set the
+      // route gate does rather than a cheaper local guess.
+      const memberAuthRoutes = (
+        await filterEnabledPluginsByReleaseFlags(
+          Aglyn.resolveHostEnabledPlugins(
+            orgRes.org as never,
+            hostRes.host as never,
+          ),
+          { orgId: (orgRes.org as { $id?: string })?.$id ?? null },
+        )
+      ).includes(Aglyn.ACCOUNTS_PLUGIN_ID)
       return {
         props: JSON.parse(
           JSON.stringify({
@@ -822,6 +870,7 @@ const loadPageDataCached = cache(
             },
             nodes: null,
             memberScreen: true,
+            memberAuthRoutes,
             unauthorizedNodes,
           }),
         ),

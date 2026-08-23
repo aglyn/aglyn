@@ -16,9 +16,10 @@
  */
 'use client'
 
+import { ACCOUNTS_PLUGIN_ID } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { MenuItem, Stack, TextField, Typography } from '@mui/material'
+import { Alert, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import {
   collection,
   deleteField,
@@ -100,12 +101,21 @@ export function AuthScreensCard(props: AuthScreensCardProps) {
   )
 
   const authScreens = host?.authScreens ?? {}
+  /**
+   * Does this site serve the three addresses at all (AGL-2486)? Designating
+   * a screen for `/signin` while User Accounts is off produces a page nobody
+   * can reach — the route 404s — so the card has to say so rather than let
+   * an admin configure a dead address and assume it works.
+   */
+  const userAccountsOn = Array.isArray(host?.enabledPlugins)
+    ? host.enabledPlugins.map(String).includes(ACCOUNTS_PLUGIN_ID)
+    : false
 
   return (
     <CardDisplay
       header="Sign-in & sign-up pages"
       help={docsHelp('members', {
-        anchor: '#1-the-built-in-sign-in-and-sign-up-pages',
+        anchor: '#2-the-built-in-sign-in-and-sign-up-pages',
         excerpt:
           'Replace the built-in membership forms at /signin, /signup, ' +
           'and /recover with screens you design.',
@@ -120,6 +130,13 @@ export function AuthScreensCard(props: AuthScreensCardProps) {
           '/signup, and /recover. Assigned screens are kept out of ' +
           'search results.'}
       </Typography>
+      {!userAccountsOn && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          {'User Accounts is off for this site, so /signin, /signup and ' +
+            '/recover return 404 and nothing assigned here is reachable. ' +
+            'Turn it on under Admin \u2192 Plugins \u2192 Site plugins.'}
+        </Alert>
+      )}
       <Stack spacing={2}>
         {AUTH_SLOTS.map((slot) => (
           <TextField

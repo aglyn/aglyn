@@ -92,6 +92,14 @@ export interface Props {
   protectedScreen?: boolean
   /** Members-only screen (AGL-109): nodes arrive via /api/membership. */
   memberScreen?: boolean
+  /**
+   * Whether this site serves `/signin` and `/signup` at all (AGL-2486) —
+   * i.e. whether the per-site User Accounts capability is on. The members-
+   * only denial prompt links to both, and with the capability off those
+   * addresses 404, so the prompt drops the links rather than offering a
+   * visitor a second dead end.
+   */
+  memberAuthRoutes?: boolean
   /** Membership form route (AGL-109/552): 'signin' | 'signup' | 'recover'. */
   membershipPage?: string
   /** Rendered as the custom not-found screen (noindex, AGL-87). */

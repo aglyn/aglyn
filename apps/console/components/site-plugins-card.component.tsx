@@ -19,6 +19,7 @@
 import {
   classifyEnabledPlugins,
   FIRST_PARTY_PLUGINS,
+  isDefaultOffPerSite,
   resolveEnabledPlugins,
 } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
@@ -81,6 +82,14 @@ export default function SitePluginsCard(props: { hostId: string }) {
     setDoc,
   } = useHost({ hostId })
   const [disabled, setDisabled] = useState<string[]>([])
+  /**
+   * The AGL-2486 OPT-IN list: `defaultOffPerSite` ids this site has turned
+   * ON. Held separately from `disabled` because it is the other half of the
+   * same switchboard read in the other direction — a deny-list cannot say
+   * "off until asked", which is precisely what a member sign-in page needs
+   * to be on a site that has no members.
+   */
+  const [optedIn, setOptedIn] = useState<string[]>([])
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(false)
 
@@ -95,6 +104,16 @@ export default function SitePluginsCard(props: { hostId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [host?.disabledPlugins])
 
+  useEffect(() => {
+    if (!dirty)
+      setOptedIn(
+        Array.isArray(host?.enabledPlugins)
+          ? host.enabledPlugins.map(String)
+          : [],
+      )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [host?.enabledPlugins])
+
   // Only ORG-ENABLED plugins are listed: what the org has switched off does
   // not exist for any of its sites, so there is nothing to toggle here.
   const orgEnabled = useMemo(() => resolveEnabledPlugins(org), [org])
@@ -107,14 +126,26 @@ export default function SitePluginsCard(props: { hostId: string }) {
     [],
   )
 
+  /**
+   * One switch, two fields. A `defaultOffPerSite` row records CONSENT in
+   * `enabledPlugins`; every other row records refusal in `disabledPlugins`.
+   * Which list a row writes follows from the catalog, never from the row's
+   * position or label, so adding a second default-off plugin needs no edit
+   * here.
+   */
   const toggle = (id: string) => {
     setDirty(true)
-    setDisabled((current) =>
+    const flip = (current: string[]) =>
       current.includes(id)
         ? current.filter((item) => item !== id)
-        : [...current, id],
-    )
+        : [...current, id]
+    if (isDefaultOffPerSite(id)) setOptedIn(flip)
+    else setDisabled(flip)
   }
+
+  /** Is this row's switch in the ON position? */
+  const isOn = (id: string, alwaysOn: boolean) =>
+    alwaysOn || (isDefaultOffPerSite(id) ? optedIn.includes(id) : !disabled.includes(id))
 
   const save = async () => {
     setBusy(true)
@@ -132,9 +163,14 @@ export default function SitePluginsCard(props: { hostId: string }) {
           // never REMOVE an id, so re-enabling would silently not persist.
           // Which is also why a stale seed is dangerous rather than merely
           // wasteful: the array it replaces is the whole deny-list.
+          //
+          // Both lists go in ONE write (AGL-2486). They are two halves of a
+          // single switchboard state, and saving them separately would let a
+          // failure land between them — leaving a site opted into member
+          // pages by a field the other half was meant to qualify.
           await setDoc(
-            { disabledPlugins: disabled },
-            { mergeFields: ['disabledPlugins'] },
+            { disabledPlugins: disabled, enabledPlugins: optedIn },
+            { mergeFields: ['disabledPlugins', 'enabledPlugins'] },
           )
         },
       )
@@ -200,7 +236,7 @@ export default function SitePluginsCard(props: { hostId: string }) {
               secondaryAction={
                 <Switch
                   edge="end"
-                  checked={row.alwaysOn || !disabled.includes(row.id)}
+                  checked={isOn(row.id, row.alwaysOn)}
                   disabled={row.alwaysOn || busy}
                   onChange={() => toggle(row.id)}
                   slotProps={{

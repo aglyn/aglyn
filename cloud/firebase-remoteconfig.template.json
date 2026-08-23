@@ -49,6 +49,13 @@
       "description": "Marketplace browsing, publishing and plugin installs.",
       "valueType": "JSON"
     },
+    "release_member_accounts": {
+      "defaultValue": {
+        "value": "{\"enabled\": true, \"rolloutPercent\": 0}"
+      },
+      "description": "Visitor accounts on published sites: /signin, /signup, /recover and the Members blocks (AGL-2486). Platform kill switch; per-site enablement is the User Accounts toggle.",
+      "valueType": "JSON"
+    },
     "release_commerce_v2": {
       "defaultValue": {
         "value": "true"

@@ -1037,6 +1037,14 @@ service cloud.firestore {
       // `disabledPlugins` is the per-site plugin boundary (AGL-1014) — an
       // owner/admin control, so an editor (or collaborator) must not be able
       // to widen their own site's plugin set by rewriting the deny-list.
+      // `enabledPlugins` is the same boundary read the other way (AGL-2486):
+      // the opt-in list that un-defaults a `defaultOffPerSite` capability,
+      // today just User Accounts. It has to sit in the SAME admin tier, and
+      // for a sharper reason than its sibling: writing this key is what makes
+      // `/signin`, `/signup` and `/recover` exist on the live site. An editor
+      // who could write it could stand up a sign-in page on the org's
+      // marketing domain, which is the credential-confusion hazard the whole
+      // capability exists to close.
       // `cnameAttachmentPending`/`cnameDetachmentPending` join `cname` for the
       // same reason `cname` is here at all (AGL-1364). `liveCustomDomain`
       // refuses to redirect on THREE conditions and only one of them was
@@ -1090,7 +1098,7 @@ service cloud.firestore {
                      'projectId', 'projectNumber']) &&
           (hostMemberRole(hostId) == 'admin' ||
             !request.resource.data.diff(resource.data).affectedKeys()
-              .hasAny(['disabledPlugins'])) &&
+              .hasAny(['disabledPlugins', 'enabledPlugins'])) &&
           // `screens` is the ROUTING MAP, and registering a path in it is
           // what makes a page reachable on the live site — see
           // `publishScreenRoute`, which writes this key and the screen doc's

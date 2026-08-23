@@ -72,6 +72,7 @@ const mockHostDoc = {
   redirects: { 'redirect-1': true },
   notFoundScreenId: 'screen-404',
   disabledPlugins: ['bookings'],
+  enabledPlugins: ['accounts'],
   analytics: { gaMeasurementId: 'G-SECRET' },
   maintenance: true,
 }
@@ -114,6 +115,10 @@ describe('GET /api/host response projection (AGL-2192)', () => {
     expect(raw).not.toContain('screen-investors')
     expect(raw).not.toContain('notFoundScreenId')
     expect(raw).not.toContain('disabledPlugins')
+    // The AGL-2486 opt-in companion. Which sites serve member pages is
+    // the site's business, not a fact the public host lookup hands out —
+    // and the guard only proves that while the fixture carries the field.
+    expect(raw).not.toContain('enabledPlugins')
     expect(raw).not.toContain('G-SECRET')
   })
 

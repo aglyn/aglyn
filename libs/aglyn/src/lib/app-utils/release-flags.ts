@@ -37,6 +37,7 @@ export type ReleaseFlagKey =
   | 'release_workflows'
   | 'release_redirects'
   | 'release_commerce_v2'
+  | 'release_member_accounts'
   | 'release_marketplace'
   | 'release_marketing'
   | 'release_email'
@@ -119,6 +120,16 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'Full ecommerce wave: catalog/variants, cart + checkout, digital ' +
       'goods, reservations, POS, and the repriced commerce tiers ' +
       '(AGL-276..331).',
+    defaultEnabled: true,
+  },
+  {
+    key: 'release_member_accounts',
+    label: 'User Accounts',
+    description:
+      'Visitor accounts on published sites: the /signin, /signup and ' +
+      '/recover pages and the Members blocks (AGL-2486). Platform-wide ' +
+      'kill switch only — whether a given SITE serves those pages is the ' +
+      'per-site User Accounts toggle, which is off until a site opts in.',
     defaultEnabled: true,
   },
   {

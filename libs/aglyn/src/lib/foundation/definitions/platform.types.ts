@@ -290,6 +290,19 @@ export interface AglynHost extends AglynDocument {
    * Writable by site ADMINS only (rules); always-on ids are ignored.
    */
   disabledPlugins?: string[]
+  /**
+   * Per-site plugin OPT-IN list (AGL-2486): the `defaultOffPerSite` plugin
+   * ids this site has explicitly turned on. Today that is `accounts` — the
+   * user-accounts capability behind `/signin`, `/signup` and `/recover`.
+   *
+   * The companion of `disabledPlugins` above, not a duplicate of it, because
+   * a deny-list cannot express "off until asked": absent means ON there, and
+   * every published site was therefore serving member pages whether or not
+   * it had members. This field is what an absent value means OFF for, and it
+   * is read ONLY for ids the catalog marks default-off, so it can never
+   * widen a site past its org. Writable by site ADMINS only (rules).
+   */
+  enabledPlugins?: string[]
   /** Site languages (AGL-164), e.g. ['en', 'es']; first is the default
    * unless `defaultLocale` says otherwise. */
   locales?: string[]
