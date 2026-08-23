@@ -181,7 +181,14 @@ jobs:
     # spread — a bound below the real distribution turns honest slow runs into
     # cancellations, which is the AGL-2378 mistake.
     timeout-minutes: 90
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '11 * * * *'
+    # `inputs.full` is READ here. It was declared and then ignored, so every
+    # manual dispatch ran the 90-minute sweep whatever the box said — including
+    # a dispatch whose only purpose was to check the fast path. A declared input
+    # that nothing reads is worse than no input: the UI offers a choice that
+    # silently does not exist.
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.full) ||
+      github.event.schedule == '11 * * * *'
     steps:
       - uses: actions/checkout@v7
         with:
