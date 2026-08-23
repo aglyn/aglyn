@@ -30,7 +30,9 @@ import {
   buildVisibilityFields,
   elementPropsComponentMapper,
   inheritedAltPatch,
+  isFormattedText,
   useDebouncedCommit,
+  withoutFormatting,
 } from './element-props-form.component'
 
 // Regression guard for AGL-567: committing an attribute edit runs
@@ -481,5 +483,100 @@ describe('the Screen picker and a target the host has lost (AGL-1893)', () => {
     )
     expect(deps.length).toBeGreaterThan(0)
     expect(depsList).toContain('nodeProps,')
+  })
+})
+
+/**
+ * AGL-2486 — the two fields that disagreed about which one is the content.
+ *
+ * The renderer draws `props.html` in preference to `children`, while this
+ * panel's Text field edits `children`. On a formatted node, typing in that
+ * field therefore changed a prop nothing renders: the field appeared to do
+ * nothing at all.
+ *
+ * The resolution: the canvas owns formatted text, the panel shows it
+ * read-only and says why, and dropping the formatting is explicit and
+ * undoable. The alternative — letting a plain edit silently clear `html` —
+ * was rejected because its failure mode is typing one character and losing
+ * every link in the paragraph, invisible until the damage is done. Merging
+ * plain text back into markup was rejected too: mapping arbitrary text onto
+ * a marked-up tree has no correct answer once the edit is structural.
+ */
+describe('formatted text is owned by the canvas (AGL-2486)', () => {
+  const node = (props: Record<string, unknown>, componentId = 'muiTypography') =>
+    ({ $id: 'n1', componentId, props, nodes: [] }) as any
+
+  describe('isFormattedText', () => {
+    it('is true when the node carries markup the renderer prefers', () => {
+      expect(
+        isFormattedText(
+          node({ children: 'Your entire web presence. ', html: 'a <div>b</div>' }),
+        ),
+      ).toBe(true)
+    })
+
+    it('is false with no html at all', () => {
+      expect(isFormattedText(node({ children: 'plain' }))).toBe(false)
+    })
+
+    /**
+     * `''` and absent are the same document — the renderer gates on
+     * `Boolean(html)` — so an empty string must not put the field into a
+     * read-only state nothing can explain (d7ba450b5).
+     */
+    it('is false for an empty html string', () => {
+      expect(isFormattedText(node({ children: 'plain', html: '' }))).toBe(false)
+    })
+
+    it('is false for a component instance, whose text rides propValues', () => {
+      expect(
+        isFormattedText(
+          node({ html: '<b>x</b>' }, Aglyn.REUSABLE_INSTANCE_COMPONENT_ID),
+        ),
+      ).toBe(false)
+    })
+
+    it('is false with no node', () => {
+      expect(isFormattedText(undefined)).toBe(false)
+    })
+  })
+
+  describe('withoutFormatting', () => {
+    it('drops the markup', () => {
+      expect(
+        withoutFormatting({ children: 'a b', html: 'a <div>b</div>' }),
+      ).not.toHaveProperty('html')
+    })
+
+    /**
+     * `children` is deliberately untouched: it already holds the plain
+     * reading of the markup, and since `richTextToPlain` keeps line breaks
+     * that reading has the author's breaks in it. The element goes on saying
+     * the same thing in the same shape.
+     */
+    it('keeps the words, and every other prop', () => {
+      expect(
+        withoutFormatting({
+          children: 'Your entire web \npresence. ',
+          html: 'Your entire web <div>presence. </div>',
+          component: 'span',
+          variant: 'h3',
+        }),
+      ).toEqual({
+        children: 'Your entire web \npresence. ',
+        component: 'span',
+        variant: 'h3',
+      })
+    })
+
+    it('does not mutate the props it was given', () => {
+      const props = { children: 'a', html: '<b>a</b>' }
+      withoutFormatting(props)
+      expect(props.html).toBe('<b>a</b>')
+    })
+
+    it('copes with a node that has no props yet', () => {
+      expect(withoutFormatting(undefined)).toEqual({})
+    })
   })
 })

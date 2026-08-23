@@ -126,6 +126,39 @@ const AutoSaveOnChange = memo(function AutoSaveOnChange({
  * @TODO ⚠️ remove and reimplement following PR merge
  *   https://github.com/data-driven-forms/react-forms/pull/1218
  */
+/**
+ * Whether a node's text is FORMATTED — it carries a `html` prop the renderer
+ * draws in preference to `children` (AGL-2486).
+ *
+ * An instance is excluded: its text rides `propValues`, not a `html` prop of
+ * its own, so the question does not arise there.
+ */
+export function isFormattedText(
+  node: Aglyn.NodeSchema<any> | undefined | null,
+): boolean {
+  if (!node) return false
+  if (node.componentId === Aglyn.REUSABLE_INSTANCE_COMPONENT_ID) return false
+  const html = (node.props as { html?: unknown } | undefined)?.html
+  return typeof html === 'string' && html.length > 0
+}
+
+/**
+ * The same props with the formatting dropped and the words kept
+ * (AGL-2486).
+ *
+ * `children` is deliberately untouched. It already holds the plain reading
+ * of the markup — and since `richTextToPlain` keeps line breaks, that
+ * reading has the author's breaks in it — so the element goes on saying the
+ * same thing in the same shape, in a form this panel can edit.
+ */
+export function withoutFormatting(
+  props: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const next = { ...(props ?? {}) }
+  delete next['html']
+  return next
+}
+
 export const ElementPropsFormTemplate = forwardRef<
   any,
   FormTemplateRenderProps
@@ -616,6 +649,26 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       Aglyn.getKnownPluginInstallsVersion,
     )
 
+    /**
+     * Whether this element's text is FORMATTED, i.e. it carries a `html`
+     * prop that the renderer draws in preference to `children` (AGL-2486).
+     *
+     * When it does, the two fields disagree about which one is the content:
+     * the canvas draws `html`, and this panel's Text field edits `children`,
+     * so typing here changes a prop nothing renders. The field appears to do
+     * nothing, which is the worst of the three possible behaviours.
+     *
+     * The alternative considered and rejected was letting a plain edit
+     * silently clear `html`. Its failure mode is typing one character and
+     * losing every link in the paragraph, with no sign until the damage is
+     * done. Merging plain text back into markup was rejected too: mapping
+     * arbitrary text onto a marked-up tree has no correct answer once the
+     * edit is structural. So the canvas owns formatted text, this field
+     * shows it read-only and says why, and dropping the formatting is an
+     * explicit, undoable act — see {@link handleRemoveFormatting}.
+     */
+    const hasFormattedText = isFormattedText(node)
+
     const attributes = useMemo(() => {
       const entityListFor = (component: Aglyn.FieldComponentType) => {
         switch (component) {
@@ -760,6 +813,22 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
             ],
           }
         }
+        // Formatted text is owned by the canvas (AGL-2486). Shown, with
+        // the reason, rather than silently editable into a prop the
+        // renderer ignores.
+        if (field.name === 'children' && hasFormattedText) {
+          return {
+            ...field,
+            component: TOKEN_TEXT_FIELD_COMPONENT,
+            multiline: true,
+            isReadOnly: true,
+            description:
+              'This text is formatted — double-click the element on the ' +
+              'canvas to edit it. Remove formatting to edit it here.',
+            tokenOptions: insertOptions,
+            tokenLabelContext,
+          }
+        }
         if (
           (field.component === Aglyn.FieldComponentType.TEXT_FIELD ||
             field.component === Aglyn.FieldComponentType.TEXTAREA) &&
@@ -796,6 +865,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         return known
       })
     }, [
+      hasFormattedText,
       rawAttributes,
       screens,
       labels,
@@ -987,6 +1057,25 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       () => (rawAttributes ?? []).some((field: any) => field?.name === 'alt'),
       [rawAttributes],
     )
+    /**
+     * Drops the formatting and keeps the words (AGL-2486).
+     *
+     * Destructive to formatting and labelled as such. It is ONE
+     * `updateNodeProps`, so it is one undo entry — undo restores the markup,
+     * not merely the text, which is what makes offering it honest.
+     *
+     * `children` is left exactly as it is: since the projection keeps line
+     * breaks it already holds the plain reading of the markup, so the
+     * element goes on saying the same thing in the same shape.
+     */
+    const handleRemoveFormatting = useCallback(() => {
+      if (!node?.$id) return
+      const current = (Aglyn.canvas.toJSON().nodes as Record<string, any>)[
+        node.$id
+      ]
+      Aglyn.canvas.updateNodeProps(node, withoutFormatting(current?.props))
+    }, [node])
+
     const handleBrowseMedia = useCallback(
       (propName: string) => () => {
         // Written through verbatim: the host app decides the persisted form
@@ -1152,6 +1241,20 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                       mb: -1,
                     }}
                   >
+                    {/* The escape hatch beside the read-only field
+                        (AGL-2486). Named for what it DOES — it throws the
+                        formatting away — and it is one `updateNodeProps`,
+                        so a single undo brings the markup back. */}
+                    {hasFormattedText ? (
+                      <Button
+                        size="small"
+                        color="warning"
+                        onClick={handleRemoveFormatting}
+                        sx={{ mr: 'auto', textTransform: 'none' }}
+                      >
+                        {'Remove formatting'}
+                      </Button>
+                    ) : null}
                     <HelpTip
                       title="Editing text"
                       excerpt="The Text attribute and double-clicking the element on the canvas edit the same value. Rich text is opt-in per element."
