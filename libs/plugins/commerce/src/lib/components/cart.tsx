@@ -48,7 +48,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { StorefrontPaymentElementFallback } from './storefront-payment-element'
+import { StorefrontPaymentElementFallback } from './storefront-payment-element-fallback'
 
 /**
  * The Payment Element (AGL-1944), lazily. Stripe.js and its React wrapper are

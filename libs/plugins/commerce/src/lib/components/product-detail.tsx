@@ -41,7 +41,7 @@ import { CART_UPDATED_EVENT } from './cart'
 import { ID as PRODUCT_REVIEWS_ID } from './product-reviews'
 import { ID as RELATED_PRODUCTS_ID } from './related-products'
 import { readLocalWishlist, toggleWishlist } from './wishlist'
-import { StorefrontPaymentElementFallback } from './storefront-payment-element'
+import { StorefrontPaymentElementFallback } from './storefront-payment-element-fallback'
 
 /**
  * The Payment Element (AGL-1944), behind a lazy boundary rather than a plain
