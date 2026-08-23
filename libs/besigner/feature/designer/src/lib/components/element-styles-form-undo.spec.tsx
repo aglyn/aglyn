@@ -84,7 +84,22 @@ describe('styles panel undo/redo re-sync (AGL-2486)', () => {
       .queryAllByRole('button', { pressed: true })
       .map((button) => button.getAttribute('value'))
 
-  const box = (label: string) => screen.getByLabelText(label) as HTMLInputElement
+  const box = (label: string) =>
+    screen.getByLabelText(label) as HTMLInputElement
+
+  /**
+   * Corner Radius is a preset picker with a raw escape hatch (AGL-2486), so
+   * a hand-authored `4px` lives in the control's OWN text box rather than
+   * in the field's only input. The visible label names the select, so the
+   * raw box carries a qualified one.
+   */
+  const rawBox = (label: string) => box(`${label} custom value`)
+
+  /** Border is a thickness box + line-style picker (AGL-2486). */
+  const borderThickness = () => box('Border thickness')
+  const setBorderThickness = (value: string) => {
+    fireEvent.change(borderThickness(), { target: { value } })
+  }
 
   const type = (label: string, value: string) => {
     fireEvent.change(box(label), { target: { value } })
@@ -140,19 +155,22 @@ describe('styles panel undo/redo re-sync (AGL-2486)', () => {
     const node = seedNode({ borderRadius: '4px' })
     render(panel(node))
     await open('Borders & Shadows')
-    expect(box('Corner Radius').value).toBe('4px')
+    // A hand-authored radius opens the control's raw box holding it — the
+    // round-trip promise, checked here through the live panel rather than
+    // only in the control's own spec.
+    expect(rawBox('Corner Radius').value).toBe('4px')
 
-    type('Corner Radius', '12px')
+    fireEvent.change(rawBox('Corner Radius'), { target: { value: '12px' } })
     settle()
     expect(live().sx).toEqual({ borderRadius: '12px' })
 
     await undo()
     expect(live().sx).toEqual({ borderRadius: '4px' })
-    expect(box('Corner Radius').value).toBe('4px')
+    expect(rawBox('Corner Radius').value).toBe('4px')
 
     await redo()
     expect(live().sx).toEqual({ borderRadius: '12px' })
-    expect(box('Corner Radius').value).toBe('12px')
+    expect(rawBox('Corner Radius').value).toBe('12px')
   })
 
   it('does not write the stale reading back on the next edit', async () => {
@@ -163,15 +181,15 @@ describe('styles panel undo/redo re-sync (AGL-2486)', () => {
     render(panel(node))
     await open('Borders & Shadows')
 
-    type('Corner Radius', '12px')
+    fireEvent.change(rawBox('Corner Radius'), { target: { value: '12px' } })
     settle()
     await undo()
 
-    type('Border', '2px dashed')
+    setBorderThickness('2')
     settle()
     expect(live().sx).toEqual({
       borderRadius: '4px',
-      border: '2px dashed',
+      border: '2px solid',
     })
   })
 
@@ -185,16 +203,18 @@ describe('styles panel undo/redo re-sync (AGL-2486)', () => {
     render(panel(node))
     await open('Borders & Shadows')
 
-    type('Corner Radius', '12p')
+    fireEvent.change(rawBox('Corner Radius'), { target: { value: '12p' } })
     act(() => {
       Aglyn.canvas.transact(() => {
         live().sx = { ...(live().sx as object), border: '3px dotted' } as any
       })
     })
     await act(async () => undefined)
-    expect(box('Corner Radius').value).toBe('12p')
-    // …while the field nobody is typing in DOES take the new value.
-    expect(box('Border').value).toBe('3px dotted')
+    expect(rawBox('Corner Radius').value).toBe('12p')
+    // …while the field nobody is typing in DOES take the new value. The
+    // border editor shows it split across its two controls now, so the
+    // thickness box is where the 3 lands.
+    expect(borderThickness().value).toBe('3')
   })
 
   it('keeps an in-progress edit while the document changes underneath', async () => {
@@ -206,13 +226,13 @@ describe('styles panel undo/redo re-sync (AGL-2486)', () => {
     render(panel(node))
     await open('Borders & Shadows')
 
-    type('Corner Radius', '12p')
+    fireEvent.change(rawBox('Corner Radius'), { target: { value: '12p' } })
     act(() => {
       Aglyn.canvas.transact(() => {
         live().sx = { ...(live().sx as object), opacity: '0.5' } as any
       })
     })
     await act(async () => undefined)
-    expect(box('Corner Radius').value).toBe('12p')
+    expect(rawBox('Corner Radius').value).toBe('12p')
   })
 })

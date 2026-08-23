@@ -96,8 +96,37 @@ describe('styles panel field labels (AGL-2486)', () => {
     // The negative control. MUI hides a real placeholder itself, so an
     // empty text box keeps its label centred — shrinking every label in
     // the panel would be a different change, not this fix.
+    //
+    // Retargeted from Border (AGL-2486, Zach 2026-08-22): Border is a
+    // thickness box plus a line-style picker now, and its label is pinned
+    // ON PURPOSE — see the test below. Line Height is a plain text box and
+    // is what this control was always checking.
+    await renderGroup('typography')
+    expect(label('Line Height').getAttribute('data-shrink')).toBe('false')
+  })
+
+  it('pins a composed editor’s label above its adornments', async () => {
+    // The other half of the same overlap (Zach 2026-08-22). `Border
+    // Bottom` is thirteen characters in a half-width column with a
+    // line-style picker parked in the box's right-hand end, so a floating
+    // label has nowhere to go and prints straight over the picker. The
+    // border editors therefore pin their label, which also settles the
+    // group's rhythm: Border Color, Corner Radius and Shadow already sat
+    // under a pinned one.
     await renderGroup('borders')
-    expect(label('Border').getAttribute('data-shrink')).toBe('false')
+    for (const name of ['Border', 'Border Bottom', 'Outline']) {
+      expect(label(name).getAttribute('data-shrink')).toBe('true')
+    }
+  })
+
+  it('pins a preset picker’s label over its rendered empty option', async () => {
+    // Same shape as Background Fill above: `displayEmpty` draws "Not set"
+    // in the box, and MUI only floats a label once it thinks there is a
+    // value — so the label sat on the placeholder.
+    await renderGroup('borders')
+    expect(screen.getAllByText('Not set').length).toBeGreaterThan(0)
+    expect(label('Corner Radius').getAttribute('data-shrink')).toBe('true')
+    expect(label('Shadow').getAttribute('data-shrink')).toBe('true')
   })
 
   it('shrinks a length label when a keyword unit is its whole value', async () => {

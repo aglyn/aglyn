@@ -20,8 +20,11 @@ import { createTheme } from '@mui/material/styles'
 
 import { buildStyleFieldGroups } from './style-field-groups'
 import {
+  buildCornerRadiusChoices,
+  buildFontFamilyChoices,
   buildFontSizeScaleOptions,
   buildFontWeightScaleOptions,
+  buildShadowChoices,
   buildStyleThemeScales,
   buildZIndexScaleOptions,
 } from './theme-scale-options'
@@ -96,9 +99,7 @@ describe('theme scales for the styles panel (AGL-2486)', () => {
     expect(values).toContain('fontWeightBold')
     expect(values).toContain('700')
     // The theme-following answer comes first.
-    expect(values.indexOf('fontWeightBold')).toBeLessThan(
-      values.indexOf('700'),
-    )
+    expect(values.indexOf('fontWeightBold')).toBeLessThan(values.indexOf('700'))
   })
 
   it('offers nothing rather than guessing when there is no theme', () => {
@@ -106,9 +107,11 @@ describe('theme scales for the styles panel (AGL-2486)', () => {
     // host does not define — that would be a scale that resolves to nothing.
     expect(buildFontSizeScaleOptions(undefined)).toEqual([])
     expect(buildZIndexScaleOptions(undefined)).toEqual([])
-    expect(buildFontWeightScaleOptions(undefined).every((option) =>
-      /^[0-9]+$/.test(option.value),
-    )).toBe(true)
+    expect(
+      buildFontWeightScaleOptions(undefined).every((option) =>
+        /^[0-9]+$/.test(option.value),
+      ),
+    ).toBe(true)
     expect(buildFontSizeScaleOptions({ typography: {} })).toEqual([])
   })
 
@@ -132,5 +135,121 @@ describe('theme scales for the styles panel (AGL-2486)', () => {
     // value — the negative control for "the scale is an offer".
     expect(field('fontWeight')['scaleOptions']).toEqual([])
     expect(field('zIndex')['scaleOptions']).toEqual([])
+  })
+})
+
+/**
+ * The preset lists behind the three fields that stopped being raw CSS
+ * (AGL-2486, Zach 2026-08-22).
+ *
+ * Same standard as the scales above: the claim is not "a list appears", it
+ * is that the value STORED keeps following the theme. Corner radius is
+ * checked through MUI's own sx pipeline for exactly that reason — a preset
+ * that stopped being a number would render nothing at all and no snapshot
+ * of the menu would say so.
+ */
+describe('preset choices (AGL-2486)', () => {
+  it('stores a rounding preset as a NUMBER MUI multiplies by shape.borderRadius', () => {
+    const rounded = buildCornerRadiusChoices(theme as any).find(
+      (choice) => choice.label === 'Rounded',
+    )!
+    expect(typeof rounded.value).toBe('number')
+    // Through MUI itself, not restated: 2 × the default shape radius.
+    // MUI hands emotion the bare number and emotion appends the unit, so
+    // the value out of `styleFunctionSx` is 8, not '8px' — asserting the
+    // string here would have been asserting a step that happens later.
+    expect(
+      styleFunctionSx({ theme, sx: { borderRadius: rounded.value } }),
+    ).toEqual({ borderRadius: 8 })
+    expect(rounded.hint).toBe('8px')
+  })
+
+  it('follows a host that retuned its corner radius', () => {
+    const chunky = createTheme({ shape: { borderRadius: 10 } })
+    const rounded = buildCornerRadiusChoices(chunky as any).find(
+      (choice) => choice.label === 'Rounded',
+    )!
+    expect(rounded.hint).toBe('20px')
+    expect(
+      styleFunctionSx({ theme: chunky, sx: { borderRadius: rounded.value } }),
+    ).toEqual({ borderRadius: 20 })
+  })
+
+  it('keeps the two shape presets OFF the theme scale, on purpose', () => {
+    // A pill and a circle are shapes, not spacing decisions — a theme
+    // multiple cannot express either.
+    const labels = buildCornerRadiusChoices(theme as any)
+    expect(labels.find((choice) => choice.label === 'Pill')!.value).toBe(
+      '9999px',
+    )
+    expect(labels.find((choice) => choice.label === 'Circle')!.value).toBe(
+      '50%',
+    )
+  })
+
+  it('names every shadow preset by what it looks like, not by its CSS', () => {
+    for (const choice of buildShadowChoices()) {
+      expect(choice.label).not.toMatch(/px|rgba|shadow:/i)
+      expect(choice.label.length).toBeGreaterThan(0)
+    }
+    // "No shadow" is a real value — it removes one a component is drawing —
+    // and is distinct from clearing the field.
+    expect(buildShadowChoices()[0]).toEqual({
+      value: 'none',
+      label: 'No shadow',
+    })
+  })
+
+  it('leads the font list with the SITE theme’s own faces', () => {
+    const branded = createTheme({
+      typography: { fontFamily: 'Poppins, sans-serif' },
+    })
+    const choices = buildFontFamilyChoices(branded as any)
+    expect(choices[0]).toEqual({
+      value: 'Poppins, sans-serif',
+      label: 'Theme default font',
+      hint: 'Poppins',
+    })
+    // …and the web-safe stacks are still offered after them.
+    expect(choices.map((choice) => choice.value)).toContain('Georgia, serif')
+  })
+
+  it('offers a heading face separately when the theme has one', () => {
+    const twoFaced = createTheme({
+      typography: {
+        fontFamily: 'Inter, sans-serif',
+        h1: { fontFamily: 'Playfair Display, serif' },
+      },
+    })
+    const labels = buildFontFamilyChoices(twoFaced as any).map((c) => c.label)
+    expect(labels).toContain('Theme default font')
+    expect(labels).toContain('Theme heading font')
+  })
+
+  it('offers one entry per face, however many variants share it', () => {
+    // A theme using one family everywhere must not list it four times.
+    const single = createTheme({ typography: { fontFamily: 'Inter, sans' } })
+    const values = buildFontFamilyChoices(single as any).map((c) => c.value)
+    expect(values.filter((value) => value === 'Inter, sans')).toHaveLength(1)
+    expect(new Set(values).size).toBe(values.length)
+  })
+
+  it('still offers web-safe stacks with no theme at all', () => {
+    // A theme still loading must not leave the picker empty — the field
+    // would read as broken rather than as "nothing to choose yet".
+    const choices = buildFontFamilyChoices(undefined)
+    expect(choices.length).toBeGreaterThan(0)
+    expect(choices.map((choice) => choice.value)).toContain('Georgia, serif')
+  })
+
+  it('reaches the panel fields, not just the builders', () => {
+    const withScales = buildStyleFieldGroups(['#123456'], {
+      themeScales: scales,
+    }).flatMap((group) => group.fields)
+    const field = (name: string) =>
+      withScales.find((entry) => entry.name === name) as Record<string, any>
+    expect(field('borderRadius')['choices']).toBe(scales.cornerRadius)
+    expect(field('boxShadow')['choices']).toBe(scales.shadow)
+    expect(field('fontFamily')['choices']).toBe(scales.fontFamily)
   })
 })

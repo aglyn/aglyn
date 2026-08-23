@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import type { ThemeScaleOption } from '@aglyn/shared-ui-jsx-forms'
+import type {
+  PresetChoiceOption,
+  ThemeScaleOption,
+} from '@aglyn/shared-ui-jsx-forms'
 
 /**
  * The theme scales the styles panel offers for Font Size, Font Weight and
@@ -42,6 +45,10 @@ export interface ThemeScaleSource {
    * `'16px'`); raw theme options carry the bare unit number. Both are
    * accepted because both reach these builders. */
   spacing?: ((factor: number) => string | number) | number
+  /** `shape.borderRadius` — the unit a bare `borderRadius` number multiplies. */
+  shape?: { borderRadius?: number | string }
+  /** `theme.shadows`, MUI's 25-entry elevation ladder. */
+  shadows?: ReadonlyArray<string>
 }
 
 /** `mobileStepper` → `Mobile stepper`. */
@@ -267,6 +274,12 @@ export interface StyleThemeScales {
   zIndex: ThemeScaleOption[]
   /** The box styler's spacing ladder (AGL-2486, item 5). */
   spacing: SpacingScaleOption[]
+  /** Corner-radius presets on the theme's shape scale (AGL-2486). */
+  cornerRadius: PresetChoiceOption[]
+  /** Drop-shadow presets named by what they look like (AGL-2486). */
+  shadow: PresetChoiceOption[]
+  /** The theme's own faces, then web-safe stacks (AGL-2486). */
+  fontFamily: PresetChoiceOption[]
 }
 
 export function buildStyleThemeScales(
@@ -277,5 +290,209 @@ export function buildStyleThemeScales(
     fontWeight: buildFontWeightScaleOptions(theme),
     zIndex: buildZIndexScaleOptions(theme),
     spacing: buildSpacingScaleOptions(theme),
+    cornerRadius: buildCornerRadiusChoices(theme),
+    shadow: buildShadowChoices(),
+    fontFamily: buildFontFamilyChoices(theme),
   }
+}
+
+/* ── Corner radius ────────────────────────────────────────────────────── */
+
+/**
+ * MUI's own unit for a bare `borderRadius` number, and its default.
+ *
+ * `borderRadius: 2` renders 8px because MUI multiplies the number by
+ * `shape.borderRadius` (4 unless a host changed it) — the same
+ * theme-following arithmetic `spacing` gets, and the reason the presets
+ * below store NUMBERS. A host that set `shape.borderRadius: 6` gets a
+ * ladder of its own without anyone editing this file.
+ */
+const DEFAULT_SHAPE_RADIUS = 4
+
+function shapeRadiusUnit(theme: ThemeScaleSource | undefined): number {
+  const raw = theme?.shape?.borderRadius
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw
+  // A theme may carry a CSS length (`'4px'`); read the leading number so
+  // the hints stay right rather than silently reverting to the default.
+  if (typeof raw === 'string') {
+    const parsed = Number.parseFloat(raw)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return DEFAULT_SHAPE_RADIUS
+}
+
+/**
+ * The rounding ladder, named the way an author describes a shape rather
+ * than the way CSS spells one (AGL-2486, Zach 2026-08-22).
+ *
+ * Corner Radius was a text box whose helper offered "8px, 50%, or a theme
+ * spacing number" — three value systems in one sentence, two of which are
+ * wrong (it is the SHAPE scale, not the spacing scale). Every rung here is
+ * a theme multiple except the two that cannot be: a pill needs a radius
+ * larger than the box can ever be, and a circle is a percentage.
+ */
+const RADIUS_STEPS: ReadonlyArray<{ step: number; label: string }> = [
+  { step: 0, label: 'Square' },
+  { step: 1, label: 'Slightly rounded' },
+  { step: 2, label: 'Rounded' },
+  { step: 3, label: 'More rounded' },
+  { step: 4, label: 'Very rounded' },
+]
+
+/**
+ * A radius large enough that any box reads as a pill (CSS clamps a radius
+ * to half the shorter side), expressed in px rather than as a theme
+ * multiple because it is deliberately NOT following the theme — a pill is
+ * a shape, not a spacing decision.
+ */
+const PILL_RADIUS = '9999px'
+
+/** Corner-radius presets, with what each resolves to in THIS theme. */
+export function buildCornerRadiusChoices(
+  theme: ThemeScaleSource | undefined,
+): PresetChoiceOption[] {
+  const unit = shapeRadiusUnit(theme)
+  const options: PresetChoiceOption[] = RADIUS_STEPS.map(({ step, label }) => ({
+    value: step,
+    label,
+    hint: `${step * unit}px`,
+    // The menu tile draws the real shape, so the choice is made by looking.
+    preview: `${step * unit}px`,
+  }))
+  options.push({ value: PILL_RADIUS, label: 'Pill', preview: PILL_RADIUS })
+  options.push({
+    value: '50%',
+    label: 'Circle',
+    hint: 'square elements only',
+    preview: '50%',
+  })
+  return options
+}
+
+/* ── Shadow ───────────────────────────────────────────────────────────── */
+
+/**
+ * Drop-shadow presets named by what they LOOK like (AGL-2486).
+ *
+ * The old select offered `Subtle` / `Medium` / `Large` and a helper telling
+ * the author to *"type any CSS box-shadow under Classes & custom CSS"* —
+ * a control advertising its own inadequacy and sending them to a different
+ * section. The presets now say what they do, `No shadow` is offered as the
+ * real value it is (a component or the theme may be drawing one), and the
+ * escape hatch is a `Custom…` entry in this very control.
+ *
+ * The values are literal CSS rather than `theme.shadows` indices for one
+ * reason: MUI's `boxShadow` sx key IS declared with `themeKey: 'shadows'`,
+ * so a bare number resolves against the elevation ladder — but that ladder
+ * is 25 near-identical Material elevations, which is a worse menu for an
+ * author than four shadows that visibly differ. A host's own ladder is
+ * still reachable through Custom…, and any number already stored keeps
+ * resolving exactly as before because this control does not rewrite values
+ * it did not touch.
+ */
+export function buildShadowChoices(): PresetChoiceOption[] {
+  return [
+    { value: 'none', label: 'No shadow' },
+    {
+      value: '0 1px 3px rgba(0,0,0,0.2)',
+      label: 'Soft — sits on the page',
+    },
+    {
+      value: '0 4px 12px rgba(0,0,0,0.15)',
+      label: 'Lifted — floats a little',
+    },
+    {
+      value: '0 12px 32px rgba(0,0,0,0.25)',
+      label: 'Raised — floats well above',
+    },
+    {
+      value: 'inset 0 2px 6px rgba(0,0,0,0.2)',
+      label: 'Inset — pressed into the page',
+    },
+  ]
+}
+
+/* ── Font family ──────────────────────────────────────────────────────── */
+
+/**
+ * The typography variants whose own `fontFamily` is worth offering. A theme
+ * that gives headings a display face and body a text face has TWO answers
+ * an author should be able to pick, and neither of them is a font name they
+ * have to know how to spell.
+ */
+const FONT_FAMILY_VARIANTS: ReadonlyArray<{ key: string; label: string }> = [
+  { key: 'h1', label: 'Theme heading font' },
+  { key: 'body1', label: 'Theme body font' },
+  { key: 'button', label: 'Theme button font' },
+]
+
+/**
+ * Web-safe stacks, offered AFTER the theme's own faces.
+ *
+ * Deliberately short and generic: these are the families that render
+ * without a webfont on every platform, so picking one can never cost a
+ * page-load or leave a visitor on a fallback the author never saw. Anything
+ * else — a Google font, a licensed face — is a Custom… value, which is the
+ * honest place for it because it also needs the font to be loaded.
+ */
+const WEB_SAFE_FONTS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: 'system-ui, sans-serif', label: 'System sans-serif' },
+  { value: 'Georgia, serif', label: 'Georgia (serif)' },
+  { value: '"Times New Roman", Times, serif', label: 'Times (serif)' },
+  { value: 'Arial, Helvetica, sans-serif', label: 'Arial (sans-serif)' },
+  { value: 'Verdana, Geneva, sans-serif', label: 'Verdana (sans-serif)' },
+  {
+    value: '"Trebuchet MS", Helvetica, sans-serif',
+    label: 'Trebuchet (sans-serif)',
+  },
+  { value: '"Courier New", Courier, monospace', label: 'Courier (monospace)' },
+]
+
+/** The first word of a stack, for a hint that fits a narrow menu row. */
+function firstFamily(stack: string): string {
+  const first = stack.split(',')[0] ?? ''
+  return first.trim().replace(/^["']|["']$/g, '')
+}
+
+/**
+ * Font-family choices: the SITE THEME's own faces first, then web-safe
+ * stacks (AGL-2486, Zach 2026-08-23 — *"font family should be a selection
+ * and then option for custom"*).
+ *
+ * The old field was free text carrying the advice *"Prefer theme typography
+ * when possible"* — advice with no way to act on it. Leading with the
+ * theme's faces makes the recommended answer the first one in reach, and
+ * every row renders its own label in its own face so the choice can be made
+ * by looking.
+ *
+ * A theme face is stored as the resolved STACK rather than as a token path,
+ * because MUI declares `fontFamily` with `themeKey: 'typography'` and
+ * `typography.fontFamily` is the only path that resolves — `h1.fontFamily`
+ * does not. Duplicates are collapsed so a theme using one face everywhere
+ * offers it once.
+ */
+export function buildFontFamilyChoices(
+  theme: ThemeScaleSource | undefined,
+): PresetChoiceOption[] {
+  const typography = theme?.typography
+  const options: PresetChoiceOption[] = []
+  const seen = new Set<string>()
+  const push = (value: string, label: string) => {
+    const stack = value.trim()
+    if (stack === '' || seen.has(stack)) return
+    seen.add(stack)
+    options.push({ value: stack, label, hint: firstFamily(stack) })
+  }
+  if (typography) {
+    const base = typography['fontFamily']
+    if (typeof base === 'string') push(base, 'Theme default font')
+    for (const { key, label } of FONT_FAMILY_VARIANTS) {
+      const variant = typography[key]
+      if (!variant || typeof variant !== 'object') continue
+      const family = (variant as Record<string, unknown>)['fontFamily']
+      if (typeof family === 'string') push(family, label)
+    }
+  }
+  for (const font of WEB_SAFE_FONTS) push(font.value, font.label)
+  return options
 }

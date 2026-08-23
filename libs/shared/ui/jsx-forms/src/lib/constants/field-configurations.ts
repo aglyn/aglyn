@@ -21,6 +21,7 @@ import {
   FieldBreakpointSpan,
   FieldCheckbox,
   FieldColorPicker,
+  FieldCssBorder,
   FieldCssDimension,
   FieldCssGradient,
   FieldDatePicker,
@@ -28,6 +29,7 @@ import {
   FieldFieldArray,
   FieldIconSelect,
   FieldPlainText,
+  FieldPresetChoice,
   FieldRadio,
   FieldSelect,
   FieldSlider,
@@ -79,6 +81,16 @@ export const FIELD_MAP_TEXT_FIELD: ExtendedMapperComponent = {
 export const FIELD_MAP_CSS_DIMENSION: ExtendedMapperComponent = {
   ...fieldSharedOptions,
   component: FieldCssDimension,
+}
+/** Thickness + line style for a border shorthand (AGL-2486). */
+export const FIELD_MAP_CSS_BORDER: ExtendedMapperComponent = {
+  ...fieldSharedOptions,
+  component: FieldCssBorder,
+}
+/** Named presets + raw escape hatch for radius/shadow/font (AGL-2486). */
+export const FIELD_MAP_PRESET_CHOICE: ExtendedMapperComponent = {
+  ...fieldSharedOptions,
+  component: FieldPresetChoice,
 }
 /** Per-breakpoint span/offset row, persisted as one string (AGL-2486). */
 export const FIELD_MAP_BREAKPOINT_SPAN: ExtendedMapperComponent = {

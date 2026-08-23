@@ -24,6 +24,7 @@ import {
   buildStyleFieldGroups,
   computeEffectiveStyleValues,
   computeStylePartial,
+  HALF_WIDTH_DESCRIPTION_LIMIT,
   isSchemeScopedStyleField,
   pickStyleValues,
   SCHEME_SCOPED_STYLE_FIELDS,
@@ -173,9 +174,10 @@ describe('style field groups (AGL-540/587)', () => {
   // here rather than in a screenshot.
   describe('length editors', () => {
     const componentOf = (name: string) =>
-      [...groups.flatMap((group) => group.fields), ...flexGridGroup.fields].find(
-        (field) => field.name === name,
-      )?.['component']
+      [
+        ...groups.flatMap((group) => group.fields),
+        ...flexGridGroup.fields,
+      ].find((field) => field.name === name)?.['component']
 
     it.each([
       'width',
@@ -197,13 +199,11 @@ describe('style field groups (AGL-540/587)', () => {
 
     it.each([
       // A NUMBER in these means a theme multiple, not pixels: `gap: 2` is
-      // 16px (× the spacing unit) and `borderRadius: 2` is 8px (×
-      // shape.borderRadius). A px picker would show "2" and turn the next
-      // nudge into 3px — a silent 8× shrink.
+      // 16px (× the spacing unit). A px picker would show "2" and turn the
+      // next nudge into 3px — a silent 8× shrink.
       'gap',
       'rowGap',
       'columnGap',
-      'borderRadius',
       // Unitless by convention; a unit picker would push px onto 1.5.
       'lineHeight',
     ])('keeps %s free text — its bare number is not pixels', (name) => {
@@ -369,13 +369,23 @@ describe('style field groups (AGL-540/587)', () => {
       const gradient =
         'linear-gradient(242deg, var(--mui-palette-primary-main, #00B0FF) 0%, ' +
         '#7A5CF0 55%, var(--mui-palette-secondary-main, #E040FB) 100%)'
-      const sx = applyStylePartialToSx({}, { backgroundImage: gradient }, null, null)
+      const sx = applyStylePartialToSx(
+        {},
+        { backgroundImage: gradient },
+        null,
+        null,
+      )
       expect(sx['backgroundImage']).toBe(gradient)
       expect(
         computeEffectiveStyleValues(sx, null, null)['backgroundImage'],
       ).toBe(gradient)
       // And unsetting it removes the property rather than pinning ''.
-      const cleared = applyStylePartialToSx(sx, { backgroundImage: '' }, null, null)
+      const cleared = applyStylePartialToSx(
+        sx,
+        { backgroundImage: '' },
+        null,
+        null,
+      )
       expect(cleared['backgroundImage']).toBeUndefined()
     })
 
@@ -451,7 +461,9 @@ describe('style field groups (AGL-540/587)', () => {
         const fill = (opts?: { isInstanceOverride?: boolean }) =>
           buildStyleFieldGroups(['#123456'], opts)
             .find((group) => group.$id === 'colors')!
-            .fields.find((candidate) => candidate.name === 'backgroundImage') as any
+            .fields.find(
+              (candidate) => candidate.name === 'backgroundImage',
+            ) as any
         // On a plain node an unset fill paints nothing; on an instance it
         // paints the COMPONENT's fill, and a control that called that
         // state "Default" (or worse, "Solid color") is what made the
@@ -472,7 +484,9 @@ describe('style field groups (AGL-540/587)', () => {
         const fill = (opts?: { isInstanceOverride?: boolean }) =>
           buildStyleFieldGroups(['#123456'], opts)
             .find((group) => group.$id === 'colors')!
-            .fields.find((candidate) => candidate.name === 'backgroundImage') as any
+            .fields.find(
+              (candidate) => candidate.name === 'backgroundImage',
+            ) as any
         for (const variant of [fill(), fill({ isInstanceOverride: true })]) {
           expect(variant.description).toContain(
             'makes every visitor’s browser contact that host',
@@ -483,6 +497,157 @@ describe('style field groups (AGL-540/587)', () => {
           )
         }
       })
+    })
+  })
+
+  /**
+   * Plain-English controls for the fields that were raw CSS shorthand
+   * (AGL-2486, Zach 2026-08-22: *"This is not very friendly for someone who
+   * does not know code."*).
+   *
+   * Asserted at the DECLARATION end, like the length editors above, so a
+   * field that quietly reverts to a text box fails here rather than in a
+   * screenshot nobody takes.
+   */
+  describe('friendly controls (AGL-2486)', () => {
+    const allFields = [
+      ...groups.flatMap((group) => group.fields),
+      ...flexGridGroup.fields,
+    ]
+    const fieldOf = (name: string) =>
+      allFields.find((field) => field.name === name)
+    const componentOf = (name: string) => fieldOf(name)?.['component']
+
+    it.each([
+      'border',
+      'borderTop',
+      'borderRight',
+      'borderBottom',
+      'borderLeft',
+      'outline',
+    ])(
+      'gives %s a thickness box and a line-style picker, not shorthand grammar',
+      (name) => {
+        expect(componentOf(name)).toBe(FieldComponentType.CSS_BORDER)
+      },
+    )
+
+    it.each(['borderRadius', 'boxShadow', 'fontFamily'])(
+      'gives %s named presets with a Custom… escape hatch',
+      (name) => {
+        expect(componentOf(name)).toBe(FieldComponentType.PRESET_CHOICE)
+      },
+    )
+
+    it('feeds each preset field the SITE theme’s own answers', () => {
+      const themed = buildStyleFieldGroups(['#123456'], {
+        themeScales: {
+          fontSize: [],
+          fontWeight: [],
+          zIndex: [],
+          spacing: [],
+          cornerRadius: [{ value: 2, label: 'Rounded', hint: '8px' }],
+          shadow: [{ value: 'none', label: 'No shadow' }],
+          fontFamily: [{ value: 'Georgia, serif', label: 'Theme body font' }],
+        },
+      })
+      const field = (name: string) =>
+        themed.flatMap((group) => group.fields).find((f) => f.name === name)
+      expect(field('borderRadius')?.['choices']).toEqual([
+        { value: 2, label: 'Rounded', hint: '8px' },
+      ])
+      expect(field('boxShadow')?.['choices']).toEqual([
+        { value: 'none', label: 'No shadow' },
+      ])
+      expect(field('fontFamily')?.['choices']).toEqual([
+        { value: 'Georgia, serif', label: 'Theme body font' },
+      ])
+    })
+
+    it('never leaves a preset field without its Custom… way out', () => {
+      // A theme still loading offers no choices at all. The control must
+      // still be usable — the escape hatch is unconditional — so the only
+      // thing a spec can pin here is that the field does not degrade to
+      // something ELSE when the list is empty.
+      const bare = buildStyleFieldGroups(['#123456'])
+      const names = ['borderRadius', 'boxShadow', 'fontFamily']
+      for (const name of names) {
+        const field = bare
+          .flatMap((group) => group.fields)
+          .find((entry) => entry.name === name)
+        expect(field?.['component']).toBe(FieldComponentType.PRESET_CHOICE)
+        expect(field?.['choices']).toEqual([])
+      }
+    })
+
+    it('stops telling the author to go type CSS in another section', () => {
+      // The old Shadow caption was "Pick a preset here, or type any CSS
+      // box-shadow under Classes & custom CSS" — a control advertising its
+      // own inadequacy and sending them elsewhere.
+      const shadow = fieldOf('boxShadow')
+      expect(shadow?.['description']).not.toMatch(/custom CSS/i)
+      expect(shadow?.['description']).not.toMatch(/box-shadow/i)
+      // …and no field's visible caption asks for shorthand grammar. The
+      // CSS spelling still lives in the tooltip and the docs, which is
+      // where the escape hatch is explained.
+      for (const field of allFields) {
+        if (field['help']) continue
+        expect(String(field['description'])).not.toMatch(/\b\d+px solid\b/)
+      }
+    })
+  })
+
+  /**
+   * ROW RHYTHM (AGL-2486, Zach 2026-08-22: *"Lot's of spacing in here…
+   * compared to here."*).
+   *
+   * Both halves of this are invisible in the source — an orphan depends on
+   * a field's NEIGHBOURS, and a wrapped caption depends on a width nobody
+   * writes down — so they are checked over the built groups. Without this,
+   * the next field added restores exactly the layout Zach rejected and
+   * nothing says so.
+   */
+  describe('row rhythm (AGL-2486)', () => {
+    const allGroups = [...groups, flexGridGroup]
+    const isHalf = (field: Record<string, unknown>) =>
+      Boolean(
+        (field['FormFieldGridProps'] as { size?: { sm?: number } })?.size?.sm,
+      )
+
+    it.each(allGroups.map((group) => [group.label, group] as const))(
+      '%s leaves no half-width field alone in its row',
+      (_label, group) => {
+        const orphans: string[] = []
+        let run: string[] = []
+        for (const field of group.fields) {
+          if (isHalf(field)) {
+            run.push(field.name)
+            continue
+          }
+          if (run.length % 2 === 1) orphans.push(run[run.length - 1])
+          run = []
+        }
+        if (run.length % 2 === 1) orphans.push(run[run.length - 1])
+        // Z-Index and Opacity were the two Zach pointed at: each sat alone
+        // in the left column with the whole right half of the row empty.
+        expect(orphans).toEqual([])
+      },
+    )
+
+    it('keeps every half-width caption short enough not to wrap three deep', () => {
+      const tooLong = allGroups
+        .flatMap((group) => group.fields)
+        .filter(
+          (field) =>
+            isHalf(field) &&
+            typeof field['description'] === 'string' &&
+            (field['description'] as string).length >
+              HALF_WIDTH_DESCRIPTION_LIMIT,
+        )
+        .map(
+          (field) => `${field.name} (${String(field['description']).length})`,
+        )
+      expect(tooLong).toEqual([])
     })
   })
 

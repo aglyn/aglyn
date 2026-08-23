@@ -21,7 +21,10 @@ import {
   describeCssColorProblem,
   expandSxAliases,
 } from '@aglyn/shared-data-enums'
-import type { ThemeScaleOption } from '@aglyn/shared-ui-jsx-forms'
+import type {
+  PresetChoiceOption,
+  ThemeScaleOption,
+} from '@aglyn/shared-ui-jsx-forms'
 import { besignerDocsUrl } from './docs-help'
 import { readSxValue, type SxBreakpoint, writeSxValue } from './responsive-sx'
 import type { StyleThemeScales } from './theme-scale-options'
@@ -74,7 +77,7 @@ const STYLE_FIELD_HELP: Record<string, { title: string; excerpt: string }> = {
   borderRadius: {
     title: 'Corner Radius',
     excerpt:
-      'A bare number is a theme multiple, not pixels — 2 renders 8px (2 × the theme corner radius). Add a unit (8px, 50%) for an exact radius.',
+      'Pick a rounding preset, or Custom… for an exact value. In Custom, a bare number is a theme multiple, not pixels — 2 renders 8px (2 × the theme corner radius). Add a unit (8px, 50%) for an exact radius.',
   },
   gap: {
     title: 'Gap',
@@ -149,7 +152,93 @@ const textField = (
   ...extra,
 })
 
+/**
+ * ROW RHYTHM (AGL-2486, Zach 2026-08-22).
+ *
+ * Zach, comparing POSITION & OVERFLOW against BORDERS & SHADOWS: *"Lot's of
+ * spacing in here… compared to here."* The two groups read as different
+ * panels, and neither was wrong on its own — the difference was two things
+ * this file controls and nothing else does.
+ *
+ * **1. Orphaned half-width fields.** `Z-Index` and `Opacity` each sat alone
+ * in the left column with the entire right half of the row empty, because
+ * they were declared `half` next to a full-width neighbour. A half-width
+ * field is a promise that something shares its row; when nothing does, the
+ * group gains a row of dead space for no information. So the rule is now:
+ * **every run of consecutive half-width fields has EVEN length.** It is
+ * enforced by a spec over the built groups rather than by review, because
+ * the failure is invisible in the source — you have to look at the
+ * neighbours, and neighbours change.
+ *
+ * **2. Helper text that wraps to three and four lines.** `half` is
+ * `{ xs: 12, sm: 6 }` and `sm` is a VIEWPORT breakpoint, so on any desktop
+ * it is permanently active however narrow the docked panel is — about
+ * 170px per column. "Stacking order for positioned elements — a theme
+ * layer, or a raw number." took four lines there and made one field as tall
+ * as a pair. So a half-width field's description is capped at
+ * {@link HALF_WIDTH_DESCRIPTION_LIMIT} characters, which is two lines at
+ * that width, and the spec fails the build if one grows past it. The longer
+ * explanation goes where there is room for it: the tooltip and the docs.
+ *
+ * A full-width field is never an orphan and has a whole row to wrap in, so
+ * it carries no length cap — that is what it is FOR, and it is the right
+ * home for a control with three sub-controls (see {@link dimensionField})
+ * or a genuinely long caption (Background Fill's url() egress warning).
+ */
 const half = { FormFieldGridProps: { size: { xs: 12, sm: 6 } } }
+
+/**
+ * Longest description a HALF-width field may carry: two lines at the ~170px
+ * a half column gets in the docked panel. Measured against the panel's own
+ * 0.75rem caption type, not guessed.
+ */
+export const HALF_WIDTH_DESCRIPTION_LIMIT = 52
+
+/**
+ * A border editor: thickness box + line-style picker (AGL-2486). Replaces
+ * the free-text shorthand box an author had to type `1px solid` into.
+ *
+ * The PERSISTED value is unchanged — still one CSS shorthand string — so
+ * every existing document renders exactly as before, and a value the pair
+ * cannot model (`1px solid #f00`, `thin dashed`) falls back to a raw text
+ * box inside the same control rather than being clobbered.
+ */
+const borderField = (
+  name: string,
+  label: string,
+  description: string,
+  extra?: Record<string, unknown>,
+) => ({
+  component: FieldComponentType.CSS_BORDER,
+  name,
+  label,
+  description,
+  ...extra,
+})
+
+/**
+ * A named-preset picker with a Custom… escape hatch (AGL-2486) — corner
+ * radius, drop shadow and font family.
+ *
+ * `choices` come from the SITE theme where the property has one
+ * ({@link StyleThemeScales}), so the recommended answer is the first one in
+ * reach rather than advice in a helper line. An empty list still leaves a
+ * usable control: the Custom… entry and the raw box are always there.
+ */
+const presetField = (
+  name: string,
+  label: string,
+  description: string,
+  choices: PresetChoiceOption[],
+  extra?: Record<string, unknown>,
+) => ({
+  component: FieldComponentType.PRESET_CHOICE,
+  name,
+  label,
+  description,
+  choices,
+  ...extra,
+})
 
 /**
  * A length field: number box + unit picker (AGL-1219) instead of a
@@ -284,6 +373,7 @@ const selectField = (
   label: string,
   description: string,
   values: string[],
+  extra?: Record<string, unknown>,
 ) => ({
   component: FieldComponentType.SELECT,
   name,
@@ -293,6 +383,7 @@ const selectField = (
     { value: '', label: 'Default' },
     ...values.map((value) => ({ value, label: value })),
   ],
+  ...extra,
 })
 
 /**
@@ -359,8 +450,11 @@ function styleFieldGroups(
           component: FieldComponentType.SELECT,
           name: 'display',
           label: 'Display Variant',
-          description:
-            'The display property specifies the display behavior (the type of rendering box) of an element.',
+          // Was "The display property specifies the display behavior (the
+          // type of rendering box) of an element." — a restatement of the
+          // CSS spec that tells an author nothing they can act on.
+          description: 'How this element flows on the page.',
+          ...half,
           options: [
             { value: '', label: 'Default' },
             { value: 'block', label: 'Block' },
@@ -391,8 +485,8 @@ function styleFieldGroups(
           component: FieldComponentType.SELECT,
           name: 'float',
           label: 'Float',
-          description:
-            'The float property is used for positioning and formatting content e.g. let an image float left to the text in a container.',
+          description: 'Let text wrap around this element.',
+          ...half,
           options: [
             { value: '', label: 'Default' },
             {
@@ -427,14 +521,14 @@ function styleFieldGroups(
         colorField(
           'color',
           'Text Color',
-          'The text color of the element',
+          'The colour of the text inside.',
           presetColors,
           half,
         ),
         colorField(
           'backgroundColor',
           'Background Color',
-          'A solid background color, or a theme color that follows the site palette.',
+          'A solid colour behind the content.',
           presetColors,
           half,
         ),
@@ -472,54 +566,62 @@ function styleFieldGroups(
       $id: 'sizing',
       label: 'Sizing',
       fields: [
-        dimensionField('width', 'Width', 'CSS width, e.g. 320px, 50%, 20rem.', {
+        dimensionField('width', 'Width', 'How wide the element is.', {
           ...muiSizing,
           ...half,
         }),
-        dimensionField('height', 'Height', 'CSS height, e.g. 240px or 100vh.', {
+        dimensionField('height', 'Height', 'How tall the element is.', {
           ...muiSizing,
           ...half,
         }),
-        dimensionField(
-          'minWidth',
-          'Min Width',
-          'Lower bound for the element width.',
-          { ...muiSizing, ...half },
-        ),
-        dimensionField(
-          'maxWidth',
-          'Max Width',
-          'Upper bound for the element width.',
-          { ...muiSizing, ...half },
-        ),
-        dimensionField(
-          'minHeight',
-          'Min Height',
-          'Lower bound for the element height.',
-          { ...muiSizing, ...half },
-        ),
-        dimensionField(
-          'maxHeight',
-          'Max Height',
-          'Upper bound for the element height.',
-          { ...muiSizing, ...half },
-        ),
+        dimensionField('minWidth', 'Min Width', 'Never narrower than this.', {
+          ...muiSizing,
+          ...half,
+        }),
+        dimensionField('maxWidth', 'Max Width', 'Never wider than this.', {
+          ...muiSizing,
+          ...half,
+        }),
+        dimensionField('minHeight', 'Min Height', 'Never shorter than this.', {
+          ...muiSizing,
+          ...half,
+        }),
+        dimensionField('maxHeight', 'Max Height', 'Never taller than this.', {
+          ...muiSizing,
+          ...half,
+        }),
       ],
     },
     {
       $id: 'typography',
       label: 'Typography',
       fields: [
+        // The face comes FIRST, and it is a picker (AGL-2486, Zach
+        // 2026-08-23: *"font family should be a selection and then option
+        // for custom"*). It was a free-text box carrying the advice
+        // "Prefer theme typography when possible" — advice with no way to
+        // act on it. The site theme's own faces lead the list, each row
+        // renders its own name in its own face, and a hand-typed stack
+        // still opens the control in its custom state holding that value.
+        presetField(
+          'fontFamily',
+          'Font Family',
+          'The typeface. The theme’s own fonts are listed first.',
+          options?.themeScales?.fontFamily ?? [],
+          { previewKind: 'font' },
+        ),
         // Number + unit AND the theme's type scale (AGL-2486). Picking
         // `h4.fontSize` stores that token path, which MUI resolves against
         // `theme.typography` at render — so the heading keeps moving with
         // the type scale instead of being pinned to the pixels it had on
         // the day it was styled. A raw length is still one keystroke away.
+        // Full width is forced by `dimensionField`: three controls in one
+        // row never fitted a half column.
         dimensionField(
           'fontSize',
           'Font Size',
-          'CSS font size, e.g. 18px or 1.25rem — or a size from the theme’s type scale.',
-          { ...half, scaleOptions: options?.themeScales?.fontSize ?? [] },
+          'How big the text is — or a size from the theme’s type scale.',
+          { scaleOptions: options?.themeScales?.fontSize ?? [] },
         ),
         // The theme's named weights first, then the CSS ladder, and any raw
         // value typed straight in (AGL-2486). `fontWeightBold` follows a
@@ -527,37 +629,33 @@ function styleFieldGroups(
         themeScaleField(
           'fontWeight',
           'Font Weight',
-          'Thickness of the glyph strokes — a theme weight, or a raw value like 700.',
+          'How bold the text is.',
           options?.themeScales?.fontWeight ?? [],
           half,
         ),
         textField(
-          'fontFamily',
-          'Font Family',
-          'Font stack, e.g. Georgia, serif. Prefer theme typography when possible.',
-        ),
-        textField(
           'lineHeight',
           'Line Height',
-          'Line box height, e.g. 1.5 or 28px.',
+          'Space between lines of text.',
           half,
         ),
         dimensionField(
           'letterSpacing',
           'Letter Spacing',
-          'Tracking between characters, e.g. 0.5px or 0.02em.',
+          'Space between letters.',
           half,
         ),
         selectField(
           'textTransform',
           'Text Transform',
-          'Capitalization applied to the rendered text.',
+          'Force capitals or lower case.',
           ['none', 'uppercase', 'lowercase', 'capitalize'],
+          half,
         ),
         selectField(
           'textDecoration',
           'Text Decoration',
-          'Decorative line on the text.',
+          'A line under, over or through the text.',
           ['none', 'underline', 'overline', 'line-through'],
         ),
       ],
@@ -566,16 +664,23 @@ function styleFieldGroups(
       $id: 'borders',
       label: 'Borders & Shadows',
       fields: [
-        textField(
+        // A border is three obvious choices — how thick, what kind of
+        // line, what colour — and until AGL-2486 the panel asked for all
+        // three as CSS shorthand grammar typed into a text box. Thickness
+        // and line style are now the control; the colour sits beside it,
+        // where it has to live for a THEME colour to resolve (MUI reads
+        // `borderColor` against the palette, and the shorthand's colour
+        // slot is plain CSS that would drop a token on the floor).
+        borderField(
           'border',
           'Border',
-          'Border shorthand, e.g. 1px solid or 2px dashed.',
+          'A line around the whole element.',
           half,
         ),
         colorField(
           'borderColor',
           'Border Color',
-          'Color for the border shorthand above.',
+          'What colour that line is.',
           presetColors,
           half,
         ),
@@ -583,105 +688,105 @@ function styleFieldGroups(
         // between columns and a left accent rail are all far more common
         // than a box outlined on four sides, and the shorthand above
         // cannot express any of them — `border` writes all four.
-        textField(
+        borderField(
           'borderTop',
           'Border Top',
-          'Border on the top edge only, e.g. 1px solid.',
+          'A line along the top edge only.',
           half,
         ),
-        textField(
+        borderField(
           'borderRight',
           'Border Right',
-          'Border on the right edge only, e.g. 1px solid.',
+          'A line along the right edge only.',
           half,
         ),
-        textField(
+        borderField(
           'borderBottom',
           'Border Bottom',
-          'Border on the bottom edge only, e.g. 1px solid.',
+          'A line along the bottom edge only.',
           half,
         ),
-        textField(
+        borderField(
           'borderLeft',
           'Border Left',
-          'Border on the left edge only, e.g. 1px solid.',
+          'A line along the left edge only.',
           half,
         ),
-        textField(
+        presetField(
           'borderRadius',
           'Corner Radius',
-          'Rounded corners, e.g. 8px, 50%, or a theme spacing number.',
+          'How rounded the corners are.',
+          options?.themeScales?.cornerRadius ?? [],
           half,
         ),
-        textField(
+        borderField(
           'outline',
           'Outline',
-          'Outline shorthand drawn outside the border, e.g. 2px solid.',
+          'A ring drawn outside the border.',
           half,
         ),
-        {
-          component: FieldComponentType.SELECT,
-          name: 'boxShadow',
-          label: 'Shadow',
-          description:
-            'Drop shadow. Pick a preset here, or type any CSS box-shadow ' +
-            'under Classes & custom CSS.',
-          options: [
-            { value: '', label: 'Default' },
-            { value: 'none', label: 'None' },
-            { value: '0 1px 3px rgba(0,0,0,0.2)', label: 'Subtle' },
-            { value: '0 4px 12px rgba(0,0,0,0.15)', label: 'Medium' },
-            { value: '0 12px 32px rgba(0,0,0,0.25)', label: 'Large' },
-          ],
-        },
+        // The shadow control no longer sends the author somewhere else to
+        // type CSS: the presets say what they look like and Custom… is in
+        // this control. Full width because the preset names are sentences
+        // ("Lifted — floats a little"), which is the point of them.
+        presetField(
+          'boxShadow',
+          'Shadow',
+          'A soft shadow that lifts the element off the page.',
+          options?.themeScales?.shadow ?? [],
+          { previewKind: 'shadow' },
+        ),
       ],
     },
     {
       $id: 'position',
       label: 'Position & Overflow',
       fields: [
+        // Full width because it is the master control the four offsets
+        // depend on, and because its caption has to say so.
         selectField(
           'position',
           'Position',
-          'Positioning scheme; offsets below apply to non-static elements.',
+          'How the element is placed. The four offsets below only apply once this is something other than Static.',
           ['static', 'relative', 'absolute', 'fixed', 'sticky'],
         ),
-        dimensionField('top', 'Top', 'Offset from the top edge.', half),
-        dimensionField('right', 'Right', 'Offset from the right edge.', half),
+        dimensionField('top', 'Top', 'Distance from the top edge.', half),
+        dimensionField('right', 'Right', 'Distance from the right edge.', half),
         dimensionField(
           'bottom',
           'Bottom',
-          'Offset from the bottom edge.',
+          'Distance from the bottom edge.',
           half,
         ),
-        dimensionField('left', 'Left', 'Offset from the left edge.', half),
-        // The theme's stacking layers, not a guessed number (AGL-2486).
-        // `modal` is 1300 today and stays right if the host re-tunes its
-        // layers; a hand-typed 1300 next to the modal is a coin toss.
+        dimensionField('left', 'Left', 'Distance from the left edge.', half),
+        // Z-Index and Opacity were the two fields Zach pointed at: each sat
+        // alone in the left column with the whole right half of its row
+        // empty. They are a PAIR now, and the long explanation of what a
+        // stacking layer is moved to the docs where there is room for it.
         themeScaleField(
           'zIndex',
           'Z-Index',
-          'Stacking order for positioned elements — a theme layer, or a raw number.',
+          'Which element sits in front.',
           options?.themeScales?.zIndex ?? [],
           half,
         ),
+        textField('opacity', 'Opacity', '0 is invisible, 1 is solid.', {
+          type: 'number',
+          ...half,
+        }),
         selectField(
           'overflow',
           'Overflow',
-          'What happens to content that does not fit the element box.',
+          'Content that does not fit.',
           ['visible', 'hidden', 'clip', 'scroll', 'auto'],
-        ),
-        textField(
-          'opacity',
-          'Opacity',
-          'Element transparency from 0 (invisible) to 1 (opaque).',
-          { type: 'number', ...half },
+          half,
         ),
         selectField(
           'cursor',
           'Cursor',
-          'Pointer shown while hovering the element.',
+          'Pointer shape on hover.',
           ['default', 'pointer', 'text', 'move', 'grab', 'not-allowed'],
+          half,
         ),
       ],
     },
@@ -721,76 +826,52 @@ export function buildFlexGridGroup(): StyleFieldGroup {
         textField(
           'gap',
           'Gap',
-          'Shorthand for row-gap and column-gap, e.g. 16px or 1rem.',
+          'Space between the children, in both directions.',
         ),
-        textField(
-          'rowGap',
-          'Row Gap',
-          "Size of the gutter between the container's rows.",
-          half,
-        ),
-        textField(
-          'columnGap',
-          'Column Gap',
-          "Size of the gutter between the container's columns.",
-          half,
-        ),
+        textField('rowGap', 'Row Gap', 'Space between rows.', half),
+        textField('columnGap', 'Column Gap', 'Space between columns.', half),
         // Container: the grid it defines for them.
         textField(
           'gridTemplateColumns',
           'Grid Columns',
-          'Column track list for display: grid, e.g. repeat(3, 1fr).',
+          'The columns this element lays its children out in — e.g. repeat(3, 1fr) for three equal ones.',
         ),
         textField(
           'gridTemplateRows',
           'Grid Rows',
-          'Row track list for display: grid, e.g. auto 1fr auto.',
+          'The rows this element lays its children out in — e.g. auto 1fr auto.',
         ),
         selectField(
           'gridAutoFlow',
           'Grid Auto Flow',
-          'How auto-placed grid items fill the tracks.',
+          'The order children fill the grid in.',
           ['row', 'column', 'dense', 'row dense', 'column dense'],
         ),
         // Child: where THIS element sits in its own parent's layout.
-        textField(
-          'gridColumn',
-          'Grid Column',
-          'Column placement of this item, e.g. span 2 or 1 / 3.',
-          half,
-        ),
-        textField(
-          'gridRow',
-          'Grid Row',
-          'Row placement of this item, e.g. span 2 or 1 / 3.',
-          half,
-        ),
+        textField('gridColumn', 'Grid Column', 'Which columns it spans.', half),
+        textField('gridRow', 'Grid Row', 'Which rows it spans.', half),
         // Per-item flex sizing (AGL-587): grow/shrink/basis/order live
         // together — they all describe this element as a flex/grid child.
-        textField(
-          'flexGrow',
-          'Flex Grow',
-          "Sets the flex grow factor of a flex item's main size.",
-          { type: 'number', ...half },
-        ),
+        textField('flexGrow', 'Flex Grow', 'Share of spare space it takes.', {
+          type: 'number',
+          ...half,
+        }),
         textField(
           'flexShrink',
           'Flex Shrink',
-          'How much this flex item shrinks when space is tight.',
+          'How readily it gives space back.',
           { type: 'number', ...half },
         ),
         dimensionField(
           'flexBasis',
           'Flex Basis',
-          'Initial main size of this flex item, e.g. 200px or 30%.',
+          'Its size before growing or shrinking.',
           half,
         ),
-        textField(
-          'order',
-          'Order',
-          'Visual order of this flex/grid item within its container.',
-          { type: 'number', ...half },
-        ),
+        textField('order', 'Order', 'Where it sits among its siblings.', {
+          type: 'number',
+          ...half,
+        }),
       ],
     }),
   )

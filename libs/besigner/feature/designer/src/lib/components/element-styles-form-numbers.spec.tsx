@@ -19,7 +19,7 @@ import * as Aglyn from '@aglyn/aglyn'
 // The panel's BoxStyler reads `palette.surface`, which only the editor's
 // own theme carries — a bare `createTheme()` renders the panel not at all.
 import { consoleThemeCssVar, ThemeProvider } from '@aglyn/shared-ui-theme'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 
 import { applyStylePartialToSx } from '../utils/style-field-groups'
 import { ATTRIBUTE_COMMIT_DEBOUNCE_MS } from './element-props-form.component'
@@ -155,20 +155,48 @@ describe('styles panel numeric values (AGL-2486)', () => {
       Aglyn.canvas.reset()
     })
 
-    it('keeps Corner Radius a theme multiple when it is retyped', async () => {
+    it('keeps Corner Radius a theme multiple when it is picked', async () => {
       // The reported shape, end to end: a node carrying the theme default
-      // as a NUMBER, opened and nudged the way an author would.
+      // as a NUMBER, opened and nudged the way an author would. Corner
+      // Radius is a preset picker now (AGL-2486), so "nudged" is choosing
+      // the next rung — but the guarantee under test is unchanged and is
+      // the reason the rungs are numbers: what lands in `sx` has to stay a
+      // NUMBER, or MUI stops multiplying it by `shape.borderRadius` and the
+      // declaration is dropped by the CSS parser.
+      //
+      // Two layers guarantee that and this test covers the OUTCOME, not
+      // either layer: the control emits the option'''s own value, and
+      // `normalizeStyleValue` would rescue it even if the control regressed
+      // to a string. The control-level half is pinned separately in
+      // `preset-choice.spec.tsx` — a mutation proved this test alone cannot
+      // see it.
       await renderPanel({ borderRadius: 2 }, 'Borders & Shadows')
-      expect(
-        (screen.getByLabelText('Corner Radius') as HTMLInputElement).value,
-      ).toBe('2')
-      type('Corner Radius', '3')
+      act(() => {
+        fireEvent.mouseDown(screen.getByLabelText('Corner Radius'))
+      })
+      act(() => {
+        fireEvent.click(
+          within(screen.getByRole('listbox')).getByText('More rounded'),
+        )
+      })
+      act(() => jest.advanceTimersByTime(ATTRIBUTE_COMMIT_DEBOUNCE_MS))
       expect(live().sx).toEqual({ borderRadius: 3 })
+      expect(typeof (live().sx as any).borderRadius).toBe('number')
     })
 
     it('takes an explicit unit as the string it is', async () => {
+      // Through the raw escape hatch, which is where a hand-typed length
+      // goes now — and it must NOT be coerced to a number.
       await renderPanel({ borderRadius: 2 }, 'Borders & Shadows')
-      type('Corner Radius', '8px')
+      act(() => {
+        fireEvent.mouseDown(screen.getByLabelText('Corner Radius'))
+      })
+      act(() => {
+        fireEvent.click(
+          within(screen.getByRole('listbox')).getByText('Custom…'),
+        )
+      })
+      type('Corner Radius custom value', '8px')
       expect(live().sx).toEqual({ borderRadius: '8px' })
     })
 

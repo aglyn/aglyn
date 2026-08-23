@@ -328,14 +328,16 @@ properties:
   else (a gradient, a `url(…)`) and the field says so and refuses it,
   rather than saving a value the browser would silently drop.
 - **Sizing** — width, height, and the min/max bounds for both.
-- **Typography** — font size, weight, family, line height, letter
-  spacing, text transform, and text decoration.
-- **Borders & Shadows** — border shorthand, border color (with your
-  theme palette in the picker), a border field per edge (top, right,
-  bottom, left) for dividers and accent rails, corner radius, outline,
-  and a shadow preset menu (Subtle / Medium / Large / None). The
+- **Typography** — **Font Family** first (a menu, see
+  [picking a font](#picking-a-font)), then font size, weight, line
+  height, letter spacing, text transform, and text decoration.
+- **Borders & Shadows** — a **Border** editor (thickness box + line-style
+  menu) with its color beside it, the same editor per edge (top, right,
+  bottom, left) for dividers and accent rails, a **Corner Radius**
+  preset menu, an **Outline**, and a **Shadow** preset menu. The
   shorthand draws all four edges; use the per-edge fields when you want
-  a rule under a header or a line between columns.
+  a rule under a header or a line between columns. See
+  [borders without CSS](#borders-without-css).
 - **Position & Overflow** — position scheme with top/right/bottom/left
   offsets, z-index, overflow, opacity, and cursor.
 
@@ -350,12 +352,70 @@ a unit menu**, the same pairing as the box stylers, so you type the
 number and pick px, %, rem, vh, `auto` and the rest from the menu
 rather than typing the unit yourself. Anything richer than a plain
 length (`calc(100% - 2rem)`, `min-content`, a `{{token}}` binding) stays
-editable as text and is never rewritten. Gap, corner radius, and line
-height stay plain text fields: a bare number there means a *theme*
-multiple, not pixels. Gap, row gap, column gap, corner radius and line
-height each carry a **?** you can hover for the exact rule, and they are
-the only fields that do — every other field explains itself in the line
-printed under it.
+editable as text and is never rewritten. Gap and line height stay plain
+text fields: a bare number there means a *theme* multiple, not pixels.
+Gap, row gap, column gap, corner radius and line height each carry a
+**?** you can hover for the exact rule, and they are the only fields
+that do — every other field explains itself in the line printed under
+it.
+
+### Borders without CSS
+
+A border is three choices — how thick, what kind of line, and what
+colour — and the panel asks for them as three controls rather than as a
+line of CSS you have to remember the grammar of.
+
+- **Thickness** is the number box. It is always in pixels, and the box
+  says so, so there is no unit to type.
+- **Line style** is the menu beside it: *Solid line*, *Dashed line*,
+  *Dotted line*, *Double line*, and *No line*.
+- **Colour** is the **Border Color** field next to it, which opens on
+  your theme palette first so a border can follow the site's colours
+  instead of freezing a hex.
+
+Type a thickness with no style picked and you get a solid line — a
+thickness on its own draws nothing at all, which is a common way to end
+up wondering why the border never appeared. Choosing *No line* is a
+real setting, not the same as clearing the field: it **removes** a
+border a component or the theme is drawing, where clearing hands the
+decision back to them.
+
+**Corner Radius** is a menu of shapes — *Square*, *Slightly rounded*,
+*Rounded*, *More rounded*, *Very rounded*, *Pill*, and *Circle* — each
+showing the corner it produces and what it works out to in your theme.
+The rounding presets are multiples of your theme's corner radius, so a
+site that retunes that value moves every element styled this way with
+it.
+
+**Shadow** is a menu of named shadows — *No shadow*, *Soft*, *Lifted*,
+*Raised*, and *Inset* — each drawn on a small tile in the menu so you
+can pick the one that looks right.
+
+Every one of these menus ends with **Custom…**, which opens a text box
+for raw CSS: a border shorthand with a colour in it, a `clamp()` radius,
+a multi-layer `box-shadow`. Values already saved that way keep working
+and open in that text box automatically — nothing you wrote by hand is
+replaced by the nearest preset. Edit a custom border back into a plain
+thickness-and-style and the two controls come back on their own.
+
+### Picking a font
+
+**Font Family** is a menu, not a text box, and it leads with **your
+site theme's own faces** — the default font, and the heading and button
+faces where your theme sets them separately. Each entry is drawn in the
+face it names, so you can choose by looking rather than by knowing how
+a font stack is spelled.
+
+Below the theme's faces are web-safe stacks (System sans-serif, Georgia,
+Times, Arial, Verdana, Trebuchet, Courier) that render everywhere with
+no webfont to load.
+
+Picking a theme face is the recommended answer: it keeps the element
+moving with the site's typography instead of pinning it to a name.
+**Custom…** at the end of the menu takes any font stack you type — and
+a stack already saved on an element opens there automatically, so
+nothing you set before is lost. Remember that a custom face only renders
+for visitors whose browser can get the font.
 
 Every control **applies immediately** — toggles and switches on click,
 text fields on a short pause in typing (or when focus leaves the
