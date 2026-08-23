@@ -621,6 +621,164 @@ describe('undo against a co-editor (AGL-1958)', () => {
 })
 
 /**
+ * AGL-2486 — an ECHO is not a peer edit, and marking it killed undo.
+ *
+ * Regression, found on Zach's own screen the night same-account sessions
+ * started counting as co-editors. Symptom: undo consumed its entry and
+ * changed nothing. Read live off the failing tab —
+ *
+ *     _epoch: 3   past: 0   future: 1   canUndo: false
+ *     _foreignAt: { C3rodYc1Gd: 3, … }
+ *
+ * — where `C3rodYc1Gd` is the node HE had just edited, stamped foreign.
+ *
+ * The mirror is per node and every session republishes what it holds, so a
+ * value you wrote comes back to you from another session — your own second
+ * tab most of all. The room drops your own TAB's echoes by session id, but
+ * not another session's echo of your value. `applyRemoteNode` marked it
+ * anyway, with a fresh epoch, therefore newer than every snapshot on your
+ * stack, so `withForeignNodes` laid the live value back over each one.
+ *
+ * The fix is not "ignore my own account". A different value from your other
+ * tab IS a real concurrent edit with its own undo stack and stays protected.
+ * The fix is that an apply which changed nothing records nothing.
+ */
+describe('an echo is not a peer edit (AGL-2486)', () => {
+  const ROOT = Aglyn.CANVAS_ROOT_ELEMENT_ID
+
+  const TREE = {
+    [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['mine'] },
+    mine: {
+      $id: 'mine',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'v0' },
+    },
+  }
+
+  const children = (nodeId: string): string | undefined =>
+    (Aglyn.canvas.nodes.get(nodeId) as { props?: { children?: string } })?.props
+      ?.children
+
+  /** A session OTHER than this tab publishing `node`. */
+  const remote = (nodeId: string, node: Record<string, unknown>) =>
+    applyRemoteNode(nodeId, {
+      by: 'my-other-tab',
+      at: Date.now(),
+      json: JSON.stringify(node),
+    })
+
+  const localEdit = (nodeId: string, text: string) =>
+    Aglyn.canvas.transact(() => {
+      const node = Aglyn.canvas.nodes.get(nodeId) as {
+        props: { children?: string }
+      }
+      node.props.children = text
+    })
+
+  /** What the peer sends back: exactly what this canvas already holds. */
+  const echoOf = (nodeId: string) =>
+    JSON.parse(
+      JSON.stringify(Aglyn.canvas.nodes.get(nodeId)?.toJSON()),
+    ) as Record<string, unknown>
+
+  beforeEach(() => {
+    flushRemoteReconcile()
+    Aglyn.canvas.reset()
+    Aglyn.canvas.setNodes(TREE as never)
+    Aglyn.canvas.updateInitialNodes()
+  })
+
+  afterAll(() => {
+    Aglyn.canvas.reset()
+  })
+
+  it('still undoes my edit after another session echoes it back to me', () => {
+    localEdit('mine', 'my edit')
+
+    // My other tab applied my edit and republished it. Same value, so this
+    // apply moves nothing — but it used to stamp the node foreign at a fresh
+    // epoch, newer than the snapshot my undo is about to restore.
+    remote('mine', echoOf('mine'))
+    flushRemoteReconcile()
+
+    Aglyn.canvas.undo()
+
+    // Before the fix this read 'my edit': the entry was consumed and the
+    // overlay put the live value straight back.
+    expect(children('mine')).toBe('v0')
+  })
+
+  it('records no mark at all for an apply that changes nothing', () => {
+    expect(Aglyn.canvas.hasRemoteEdits).toBe(false)
+
+    remote('mine', echoOf('mine'))
+    flushRemoteReconcile()
+
+    // `hasRemoteEdits` is the flag the draft prompt reads to stop offering
+    // Restore. An echo must not trip it either, or a pure round-trip of your
+    // own work retires your crash net.
+    expect(Aglyn.canvas.hasRemoteEdits).toBe(false)
+  })
+
+  it('still protects a genuinely different value from another session', () => {
+    localEdit('mine', 'my edit')
+
+    // Not an echo — my other tab really did change it. This is a concurrent
+    // edit with its own undo stack, and it stays protected.
+    remote('mine', {
+      $id: 'mine',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'their edit' },
+    })
+    flushRemoteReconcile()
+
+    Aglyn.canvas.undo()
+
+    expect(children('mine')).toBe('their edit')
+    expect(Aglyn.canvas.hasRemoteEdits).toBe(true)
+  })
+
+  it('undoes a structural step after an echo of the parent list', () => {
+    // The most damaging shape: the parent's child list echoes back, and
+    // every insert and delete on the document is undone through it.
+    Aglyn.canvas.transact(() => {
+      Aglyn.canvas.setNode(
+        {
+          $id: 'added',
+          componentId: 'muiTypography',
+          props: { children: 'added' },
+        } as never,
+        ROOT,
+      )
+    })
+    expect(Aglyn.canvas.nodes.get(ROOT)?.nodes).toContain('added')
+
+    remote(ROOT, echoOf(ROOT))
+    flushRemoteReconcile()
+
+    Aglyn.canvas.undo()
+
+    expect(Aglyn.canvas.nodes.has('added')).toBe(false)
+    expect(Aglyn.canvas.nodes.get(ROOT)?.nodes).not.toContain('added')
+  })
+
+  it('redo survives an echo too', () => {
+    localEdit('mine', 'my edit')
+    Aglyn.canvas.undo()
+    expect(children('mine')).toBe('v0')
+
+    remote('mine', echoOf('mine'))
+    flushRemoteReconcile()
+
+    Aglyn.canvas.redo()
+
+    expect(children('mine')).toBe('my edit')
+  })
+})
+
+/**
  * AGL-2486 — the same rule, for the OTHER direction of the history stack.
  *
  * The AGL-1958 block above asserts undo, and its one redo case has a peer

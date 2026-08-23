@@ -83,6 +83,18 @@ import { TAB_SESSION_ID, type PresenceSession } from './use-presence'
  * honest in both directions: it rewinds *your* edits and leaves theirs
  * alone.
  *
+ * **A node only counts as touched when the value actually moved** — the mark
+ * is passed the node's serialization from before the apply, and an apply
+ * that changed nothing records nothing (AGL-2486). The mirror is per node
+ * and every session republishes what it holds, so a value you wrote comes
+ * back to you from another session, your own second tab most of all once
+ * same-account sessions count as co-editors. The room drops your own TAB's
+ * echoes by session id (see the `by` check below) but cannot drop another
+ * session's echo of your value. Marking that echo stamped YOUR node foreign
+ * at a fresh epoch — newer than every snapshot on your stack — and the
+ * overlay then laid the live value back over each one, so undo consumed its
+ * entry and changed nothing at all.
+ *
  * **Redo is protected by the same overlay, not left out of it** (AGL-2486).
  * That is worth stating because the shape invites the opposite guess: a
  * `future` entry replays a state that existed BEFORE the undo, so it looks
@@ -399,13 +411,19 @@ export function applyRemoteNode(nodeId: string, entry: MirrorEntry): boolean {
   try {
     const node = JSON.parse(entry.json)
     recordPrior(nodeId)
+    // Captured BEFORE the apply so the mark can tell a peer edit from an
+    // echo of a value this canvas already holds — see `markRemoteNode`.
+    // Every session republishes what it holds, so your own edit comes back
+    // from your other tab, and marking that echo made your own undo a no-op
+    // (AGL-2486).
+    const previousJson = Aglyn.canvas.serializeNode(nodeId)
     Aglyn.canvas.setNodes({ [nodeId]: node } as never, true)
     // Keeping this out of local undo (above) stops a remote edit being
     // rewound by an undo it is not part of. The mark is the other half:
     // it stops the snapshots ALREADY on the stack — every one of which
     // predates this change — from rolling it back and republishing the
     // rollback to its author (AGL-1958).
-    Aglyn.canvas.markRemoteNode(nodeId)
+    Aglyn.canvas.markRemoteNode(nodeId, previousJson)
     scheduleRemoteReconcile()
     return true
   } catch {

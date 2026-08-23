@@ -602,11 +602,54 @@ export class CanvasManager {
    *
    * Measured before this fix: a peer's edit came back reverted, and a node
    * the peer had CREATED was deleted outright.
+   *
+   * ## An apply that changed nothing is not a peer edit (AGL-2486)
+   *
+   * `previousJson` is the node's serialization from BEFORE the apply. When
+   * the apply left it byte-for-byte identical, this records nothing: no
+   * mark, no epoch bump. That is not an optimisation, it is the difference
+   * between a peer edit and an ECHO, and getting it wrong broke undo
+   * outright.
+   *
+   * The mirror is per node and every session in the room republishes what it
+   * holds, so a value you wrote can come back to you from ANOTHER SESSION —
+   * your own second tab most of all, which is ordinary once same-account
+   * sessions count as co-editors. The room already drops your own tab's
+   * echoes by session id, but not another session's echo of your value.
+   *
+   * Marking that echo is fatal because the mark is what {@link
+   * restoreSnapshot} reads. It lands with a FRESH epoch, therefore newer
+   * than every snapshot already on your stack, so the overlay puts the live
+   * value back over each one of them. Undo then consumed its entry and
+   * changed nothing at all — measured on the running editor, one account,
+   * two tabs on one screen: `past: 0, future: 1, canUndo: false`, the node
+   * still holding the edit that had just been undone.
+   *
+   * Note what this deliberately does NOT do: it does not ask whose session
+   * or whose account the change came from. A genuinely different value from
+   * your other tab is a real concurrent edit with its own undo stack and is
+   * protected like any other. "Foreign" keeps its one meaning — a session
+   * other than this tab moved this node — and the defect was counting a
+   * non-change as a change.
    */
-  public markRemoteNode(nodeId: NodeId): this {
+  public markRemoteNode(nodeId: NodeId, previousJson?: string): this {
     if (!nodeId) return this
+    if (previousJson !== undefined) {
+      const live = this.nodes.get(nodeId)
+      const nowJson = live ? JSON.stringify(live.toJSON()) : undefined
+      if (nowJson === previousJson) return this
+    }
     this._foreignAt.set(nodeId, ++this._epoch)
     return this
+  }
+  /**
+   * A node's serialization as it stands right now, for handing back to
+   * {@link markRemoteNode} after an apply — the "before" half of the echo
+   * test. `undefined` when the node is not in the map.
+   */
+  public serializeNode(nodeId: NodeId): string | undefined {
+    const node = this.nodes.get(nodeId)
+    return node ? JSON.stringify(node.toJSON()) : undefined
   }
   /**
    * Restores a history snapshot, keeping every node a remote session has
