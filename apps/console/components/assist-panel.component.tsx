@@ -616,7 +616,15 @@ export function AssistPanelComponent() {
               zIndex: (theme) => theme.zIndex.drawer - 1,
             }}
           >
-            <MdiIcon path={mdiChatQuestionOutline.path} />
+            {/* Sized at the call site (AGL-2486). `MdiIcon` defaults to
+                `fontSize="inherit"`, which is right for the startIcon and
+                caption slots most of this file uses it in — but inside a
+                Fab the inherited size is the BUTTON typography, 14px, so
+                the glyph painted at 14px in a 48px control and read as
+                broken. `medium` is the 24px MUI puts in its own FABs. Not
+                fixed in `MdiIcon`: that default is depended on across the
+                console, including twice in this file. */}
+            <MdiIcon path={mdiChatQuestionOutline.path} fontSize="medium" />
           </Fab>
         </Tooltip>
       )}
@@ -642,7 +650,10 @@ export function AssistPanelComponent() {
               alignItems: 'center',
             }}
           >
-            <MdiIcon path={mdiChatQuestionOutline.path} />
+            {/* Same reason as the launcher: this one sits beside an `h6`
+                title in a plain Stack, so `inherit` gave it the 16px body
+                size against a 20px heading. */}
+            <MdiIcon path={mdiChatQuestionOutline.path} fontSize="medium" />
             <Typography variant="h6" sx={{ flexGrow: 1 }}>
               {`${branding.productName} Assist`}
             </Typography>
@@ -666,7 +677,9 @@ export function AssistPanelComponent() {
                 aria-label={`Close ${branding.productName} Assist`}
                 onClick={() => setOpen(false)}
               >
-                <MdiIcon path={mdiClose.path} />
+                {/* An IconButton does not set a font-size of its own, so
+                    `inherit` reached the same 14px button typography. */}
+                <MdiIcon path={mdiClose.path} fontSize="medium" />
               </IconButton>
             </Tooltip>
           </Stack>
@@ -864,7 +877,10 @@ export function AssistPanelComponent() {
                     {busy ? (
                       <CircularProgress size={20} />
                     ) : (
-                      <MdiIcon path={mdiSend.path} />
+                      // 20px to match the CircularProgress it swaps with
+                      // on the line above — at the inherited 14px the
+                      // button visibly grew its contents while busy.
+                      <MdiIcon path={mdiSend.path} sx={{ fontSize: 20 }} />
                     )}
                   </IconButton>
                 </span>
