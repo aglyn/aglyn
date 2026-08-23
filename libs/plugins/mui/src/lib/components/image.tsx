@@ -255,13 +255,32 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
           : undefined
       }
       // `100vw` is the honest answer only for an image that really is full
-      // bleed. When the author pinned a pixel width, saying `100vw` made the
-      // browser pick the 1280w or 1920w candidate to fill a 320px slot on
-      // every screen — which is most of what "Improve image delivery" is
-      // reporting (AGL-2486). A pinned width describes the slot exactly, so
-      // it is the better `sizes`; anything else (%, vw, auto, calc) still
-      // falls back to the old value rather than guessing.
-      sizes={isCdnUrl ? (pinnedWidth ?? '100vw') : undefined}
+      // bleed, and almost none are. Measured on the live published page
+      // (AGL-2486): the hero sits in a 158px slot, `sizes="100vw"` made the
+      // browser select the largest candidate, and because the source is only
+      // 499px wide there is no WebP variant at that width — so it fell back
+      // to the 366 KB ORIGINAL. One lie about the slot cost both the right
+      // size and the right format.
+      //
+      // Three cases, in order:
+      //
+      // 1. A pinned pixel width describes the slot exactly. Best answer.
+      // 2. Otherwise, `sizes="auto"` hands the decision to the browser, which
+      //    resolves it against the element's REAL laid-out width — the only
+      //    correct answer for a width that cannot be read statically (`100%`,
+      //    `calc()`, or unset). In the same 158px slot this selects `?w=320`,
+      //    a variant that exists, instead of the original.
+      // 3. ...but `auto` is only defined for `loading="lazy"`. Verified in
+      //    Chrome: an EAGER image with `sizes="auto"` fell back to the bare
+      //    original exactly as `100vw` did. The LCP image is deliberately
+      //    eager, so it keeps `100vw` — overfetching, but never underfetching,
+      //    which is the wrong way to be wrong for the image the reader is
+      //    waiting on. Telling it its true slot needs the intrinsic size the
+      //    media reference deliberately does not carry.
+      //
+      // A browser without `auto` treats it as an invalid `sizes` and falls
+      // back to `100vw`, i.e. exactly today's behaviour.
+      sizes={isCdnUrl ? (pinnedWidth ?? (eager ? '100vw' : 'auto')) : undefined}
       // Unset alt keeps rendering `alt=""` exactly as it always has —
       // existing documents must not change output (AGL-1305). Decorative
       // ON forces `alt=""` over any alt text and suppresses the tooltip,

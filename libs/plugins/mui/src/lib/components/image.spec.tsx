@@ -327,11 +327,38 @@ describe('Image sizes (AGL-2486)', () => {
     expect(container.querySelector('img')!.getAttribute('sizes')).toBe('320px')
   })
 
-  it('keeps 100vw for a width it cannot read as a fixed slot', () => {
+  it('lets the browser measure a fluid slot on a lazy image', () => {
+    // `sizes="auto"` resolves to the element's REAL laid-out width, which is
+    // the only correct answer for a width we cannot read statically. Measured
+    // against the live CDN in a 158px slot at DPR 1.75: `100vw` selected the
+    // bare original (366 KB, no WebP variant at that width), `auto` selected
+    // `?w=320` — the variant that actually exists.
     for (const width of [undefined, '100%', '50vw', 'calc(100% - 2rem)']) {
       const { container } = render(<Image src={CDN} alt="fluid" width={width} />)
-      expect(container.querySelector('img')!.getAttribute('sizes')).toBe('100vw')
+      expect(container.querySelector('img')!.getAttribute('loading')).toBe('lazy')
+      expect(container.querySelector('img')!.getAttribute('sizes')).toBe('auto')
     }
+  })
+
+  it('keeps 100vw on an EAGER fluid image, because auto is inert there', () => {
+    // Not an oversight and not symmetry for its own sake: `sizes="auto"` is
+    // only defined for `loading="lazy"`. Verified in Chrome against the live
+    // CDN — an eager image with `sizes="auto"` fell back to the bare original
+    // exactly as `100vw` did. So the LCP image, which is deliberately eager,
+    // has to keep an explicit answer, and `100vw` is the only safe one until
+    // it can be told its real slot.
+    fillCanvas([{ $id: 'hero', props: { src: CDN } }])
+    const { container } = renderAsNode('hero', <Image src={CDN} alt="hero" />)
+    const img = container.querySelector('img')!
+    expect(img.getAttribute('loading')).toBe('eager')
+    expect(img.getAttribute('sizes')).toBe('100vw')
+  })
+
+  it('prefers a pinned pixel slot over auto, on a lazy image too', () => {
+    const { container } = render(<Image src={CDN} alt="thumb" width="240px" />)
+    const img = container.querySelector('img')!
+    expect(img.getAttribute('loading')).toBe('lazy')
+    expect(img.getAttribute('sizes')).toBe('240px')
   })
 
   it('sets no sizes at all for a non-CDN url, which has no variants', () => {
