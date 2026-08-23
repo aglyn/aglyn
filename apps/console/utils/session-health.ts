@@ -83,10 +83,26 @@ export interface SessionHealthState {
   staleSession: boolean
   /** Collection keys that exhausted their retries, most recent last. */
   deniedCollections: string[]
+  /**
+   * How many reads have reached the SERVER since this page loaded.
+   *
+   * The episode counter (AGL-2486). A stale verdict on its own cannot tell
+   * "still the same dead session the user was already asked about" from "a
+   * fresh failure": {@link prune} drops evidence after
+   * {@link SESSION_STALE_WINDOW_MS} of quiet, so `staleSession` flips back to
+   * false on an idle tab and true again on the next two denials — with
+   * nothing having changed. Anything that must act ONCE per episode (the
+   * automatic re-auth prompt) latches on this number instead, because it
+   * moves only when a read actually reaches the server, which is the one
+   * event that ends an episode.
+   */
+  serverReads: number
 }
 
 /** Collection key → when it last exhausted its retries. */
 const denials = new Map<string, number>()
+/** Monotonic; see {@link SessionHealthState.serverReads}. */
+let serverReads = 0
 const listeners = new Set<(state: SessionHealthState) => void>()
 
 /** Injectable clock so tests do not sleep. */
@@ -105,6 +121,7 @@ export function getSessionHealth(): SessionHealthState {
   return {
     staleSession: deniedCollections.length >= SESSION_STALE_MIN_COLLECTIONS,
     deniedCollections,
+    serverReads,
   }
 }
 
@@ -147,6 +164,11 @@ export function reportDeniedRead(collection = 'unknown'): void {
  * still always the server's, which is the part that matters.
  */
 export function reportSuccessfulRead(): void {
+  // Counted BEFORE the early return, and unconditionally: this number exists
+  // to date an episode, and an episode can end with the evidence already
+  // pruned away. Bumping it only when there was evidence left to clear would
+  // leave a latch armed against a recovery that really happened.
+  serverReads++
   if (!denials.size) return
   denials.clear()
   publish()
@@ -163,6 +185,7 @@ export function subscribeSessionHealth(
 /** Test seam: reset the store and (optionally) pin the clock. */
 export function __resetSessionHealth(clock?: () => number): void {
   denials.clear()
+  serverReads = 0
   now = clock ?? (() => Date.now())
 }
 

@@ -268,9 +268,15 @@ export function SessionReauthDialog() {
 
   if (state.dismissed) {
     // "Not now" (only shown once the local user is signed out): the route
-    // stays, cached content stays, and this is the way back in. The
-    // `stale` trigger's persistent affordance is the session-health
-    // banner, so no second banner for it here.
+    // stays, cached content stays, and this is the way back in.
+    //
+    // The `stale` trigger gets NO banner here, and since AGL-2486 there is
+    // no session-health banner behind it either — that was the whole point
+    // of the change. Its user is still signed in and the page still works
+    // off cache, so a dismissal leaves them exactly as they were; the way
+    // back in is offered by the degraded lists themselves (`EmptyState`
+    // reads this same store). Nothing re-opens this dialog on its own until
+    // a read has reached the server again.
     if (!state.requiresSignIn) return null
     return (
       <Alert

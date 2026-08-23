@@ -18,8 +18,14 @@
 
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { Alert, Box, Button, CircularProgress, Stack, Typography } from '@mui/material'
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import type { ReadOutcome } from '../utils/read-outcome'
+import {
+  getSessionReauth,
+  reopenSessionReauth,
+  subscribeSessionReauth,
+  type SessionReauthState,
+} from '../utils/session-reauth'
 
 export interface EmptyStateProps {
   /** MDI path (e.g. `ICON_VARIANT_HOST_GROUP.path`) shown above the title. */
@@ -71,11 +77,22 @@ export interface EmptyStateProps {
  * is exactly what every surface forgot; putting it here means a new list
  * cannot render a zero-state without answering the question first.
  *
- * The degraded branch deliberately borrows the shape and the promises of the
- * AGL-1063 session banner — "nothing has been deleted", signing in again
- * fixes it — rather than restating its diagnosis. The banner knows whether
- * the SESSION is at fault; a single list does not, and a list that guessed
- * would be the AGL-1179 mistake at the surface instead of in a log.
+ * ## The degraded branch says only what a list can know (AGL-2486)
+ *
+ * It used to end "if the banner above asks you to sign in again, that fixes
+ * it". There is no banner above any more — a stale session opens the re-auth
+ * dialog directly — and pointing at it was already the weaker half of a
+ * message told twice. What survives is the part only this surface knows:
+ * THIS list is incomplete, and nothing has been deleted. The diagnosis stays
+ * where the evidence is; a list that guessed at it would be the AGL-1179
+ * mistake at the surface instead of in a log.
+ *
+ * The one exception is not a guess either. When the session store says a
+ * stale-session prompt is up and DISMISSED, the dialog has deliberately
+ * taken itself off screen and left no way back — so the degraded lists
+ * become the way back, offering the same dialog rather than a retry that
+ * cannot succeed. Read from the store that owns the verdict, never inferred
+ * from this list's own denial.
  */
 export function EmptyState({
   iconPath,
@@ -86,6 +103,14 @@ export function EmptyState({
   subject = 'this list',
   onRetry,
 }: EmptyStateProps) {
+  const [reauth, setReauth] = useState<SessionReauthState>(getSessionReauth)
+  useEffect(() => subscribeSessionReauth(setReauth), [])
+  // Both halves matter: `stale` is the only reason whose dialog leaves the
+  // user signed in and the page usable, and `dismissed` is what means the
+  // way back in has gone. An UNdismissed prompt is already on screen.
+  const dismissedStalePrompt =
+    reauth.reason === 'stale' && reauth.dismissed === true
+
   // A read still in flight is not an answer. Rendering the frame with a
   // spinner keeps the page from jumping when the rows arrive, and — more to
   // the point — keeps the zero-state's sentence out of the load window.
@@ -104,7 +129,13 @@ export function EmptyState({
       <Alert
         severity="warning"
         action={
-          onRetry ? (
+          dismissedStalePrompt ? (
+            // Retrying is what cannot work here — every server read is being
+            // refused — so the button offers the thing that does.
+            <Button color="inherit" size="small" onClick={reopenSessionReauth}>
+              {'Sign in again'}
+            </Button>
+          ) : onRetry ? (
             <Button color="inherit" size="small" onClick={onRetry}>
               {'Try again'}
             </Button>
@@ -112,8 +143,7 @@ export function EmptyState({
         }
       >
         {`${subject.charAt(0).toUpperCase()}${subject.slice(1)} could not be ` +
-          'loaded, so this list is incomplete. Nothing has been deleted. If ' +
-          'the banner above asks you to sign in again, that fixes it.'}
+          'loaded, so this list is incomplete. Nothing has been deleted.'}
       </Alert>
     )
   }

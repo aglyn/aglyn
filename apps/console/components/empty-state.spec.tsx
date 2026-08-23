@@ -40,6 +40,12 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 
 import EmptyState from './empty-state.component'
+import {
+  __resetSessionReauth,
+  dismissSessionReauth,
+  getSessionReauth,
+  requestSessionReauth,
+} from '../utils/session-reauth'
 
 const CTA = <button type="button">{'Create site'}</button>
 
@@ -91,14 +97,17 @@ describe('EmptyState gates its claim on the read', () => {
     expect(screen.queryByRole('button', { name: 'Create site' })).toBeNull()
   })
 
-  it('defers to the session banner rather than diagnosing the session', () => {
+  it('does not diagnose the session, and no longer points at a banner', () => {
     render(<EmptyState read="unavailable" subject="your sites" title="x" />)
 
     // AGL-1179: a surface that concluded "your session is stale" from its own
     // single denial sent two people to sign out over a URL that did not
-    // exist. One list is not evidence about the session; the banner is.
+    // exist. One list is not evidence about the session.
     expect(screen.queryByText(/your session is stale/i)).toBeNull()
-    expect(screen.getByText(/banner above/i)).toBeTruthy()
+    // AGL-2486: and there is no banner above to defer to any more — a stale
+    // session opens the dialog itself, so this said the same thing twice.
+    expect(screen.queryByText(/banner above/i)).toBeNull()
+    expect(screen.queryByText(/sign in again/i)).toBeNull()
   })
 
   it('offers a retry that actually re-runs the read', () => {
@@ -114,5 +123,79 @@ describe('EmptyState gates its claim on the read', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /try again/i }))
     expect(onRetry).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * AGL-2486. A stale session opens the re-auth dialog on its own, and "Not
+ * now" closes it with nothing left on screen to bring it back. The degraded
+ * lists become that affordance — and only then: this component must not turn
+ * its own denial into a sign-in prompt (AGL-1179).
+ */
+describe('when a stale-session prompt has been dismissed', () => {
+  afterEach(() => __resetSessionReauth())
+
+  it('still offers only a retry while no prompt is pending', () => {
+    __resetSessionReauth()
+    render(
+      <EmptyState
+        read="unavailable"
+        subject="your sites"
+        title="x"
+        onRetry={() => void 0}
+      />,
+    )
+    expect(screen.getByRole('button', { name: /try again/i })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /sign in again/i })).toBeNull()
+  })
+
+  it('offers only a retry while the dialog is still UP', () => {
+    __resetSessionReauth()
+    requestSessionReauth('stale')
+    render(
+      <EmptyState
+        read="unavailable"
+        subject="your sites"
+        title="x"
+        onRetry={() => void 0}
+      />,
+    )
+    // The dialog is on screen; a second way to open it is noise.
+    expect(screen.queryByRole('button', { name: /sign in again/i })).toBeNull()
+  })
+
+  it('becomes the way back in once it is dismissed', () => {
+    __resetSessionReauth()
+    requestSessionReauth('stale')
+    dismissSessionReauth()
+    render(
+      <EmptyState
+        read="unavailable"
+        subject="your sites"
+        title="x"
+        onRetry={() => void 0}
+      />,
+    )
+    // Retrying is exactly what cannot work against a session denying every
+    // server read, so it is replaced rather than joined.
+    expect(screen.queryByRole('button', { name: /try again/i })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /sign in again/i }))
+    expect(getSessionReauth().dismissed).toBe(false)
+  })
+
+  it('leaves an idle/revoked prompt alone — that one keeps its own banner', () => {
+    __resetSessionReauth()
+    requestSessionReauth('idle')
+    dismissSessionReauth()
+    render(
+      <EmptyState
+        read="unavailable"
+        subject="your sites"
+        title="x"
+        onRetry={() => void 0}
+      />,
+    )
+    expect(screen.getByRole('button', { name: /try again/i })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /sign in again/i })).toBeNull()
   })
 })
