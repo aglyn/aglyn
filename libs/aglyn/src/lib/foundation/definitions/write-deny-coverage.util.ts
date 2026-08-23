@@ -572,3 +572,54 @@ export function readFieldsOf(
   }
   return [...found].sort()
 }
+
+/**
+ * Comments stripped from a TYPESCRIPT source, with string literals respected.
+ *
+ * `stripComments` above scans rules files, where no string ever contains a
+ * comment delimiter. TypeScript sources are not that: `apps/console/app/api/
+ * media/upload-url/route.ts` builds a download URL from a template literal
+ * containing `https://`, and a scan that does not know it is inside a string
+ * reads that `//` as a line comment and deletes the rest of the line. On a
+ * guard that parses an object literal out of a route, that is not a crash —
+ * it is a SHORTER field list, silently, which is the failure mode AGL-2004
+ * described one level down.
+ *
+ * A separate function rather than a widened `stripComments`, because the two
+ * inputs have genuinely different grammars and three shipped guards depend on
+ * the rules-file behaviour exactly as it is. Same single left-to-right scan,
+ * with quotes as a third state.
+ */
+export function stripTypeScriptComments(source: string): string {
+  let out = ''
+  let index = 0
+  while (index < source.length) {
+    const pair = source.slice(index, index + 2)
+    if (pair === '/*') {
+      const end = source.indexOf('*/', index + 2)
+      index = end < 0 ? source.length : end + 2
+      continue
+    }
+    if (pair === '//') {
+      const end = source.indexOf('\n', index + 2)
+      if (end < 0) break
+      // Keep the newline so line-oriented reasoning downstream survives.
+      out += '\n'
+      index = end + 1
+      continue
+    }
+    const character = source[index]
+    if (character === "'" || character === '"' || character === '`') {
+      let cursor = index + 1
+      while (cursor < source.length && source[cursor] !== character) {
+        cursor += source[cursor] === '\\' ? 2 : 1
+      }
+      out += source.slice(index, Math.min(cursor + 1, source.length))
+      index = cursor + 1
+      continue
+    }
+    out += character
+    index += 1
+  }
+  return out
+}
