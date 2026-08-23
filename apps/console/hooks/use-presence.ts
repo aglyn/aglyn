@@ -887,6 +887,30 @@ export function usePresence(options: {
   /** Currently selected node, broadcast so others can see where you are. */
   selectedNodeId?: string
   /**
+   * WATCH the room without joining it (AGL-2486).
+   *
+   * For the surfaces that report presence without being an editing session —
+   * a document's detail page, where Zach's ask is to "identify who is
+   * currently in the document already BEFORE joining". Reading someone's
+   * answer to that question must not change it: if merely opening a detail
+   * page announced you, then everybody browsing would be reported as editing,
+   * and the signal the page exists to give would be the thing it destroys.
+   *
+   * It suppresses every WRITE — the announce, the `onDisconnect` arm, the
+   * heartbeat, the selection and cursor broadcasts, and the removal on
+   * unmount — and keeps the mint and the room subscription, which is exactly
+   * what the RTDB rules already split: reading a room is gated on
+   * `presenceOrg`, writing a session node additionally on `auth.uid === $uid`.
+   * So an observer needs no rules change; it simply never exercises the
+   * second half.
+   *
+   * `ownOtherSessions` keeps its meaning and is the reason your own row is
+   * still drawn here: an observer has no session of its own in the room, so
+   * every row it sees — including one of your own tabs — is somebody
+   * genuinely in the document.
+   */
+  observeOnly?: boolean
+  /**
    * Broadcast pointer position over the canvas (AGL-677). Off by default:
    * it is the highest-frequency thing in the room, and only the editing
    * surfaces want it.
@@ -908,6 +932,7 @@ export function usePresence(options: {
     selectedNodeId,
     broadcastCursor,
     getCanvasRoot,
+    observeOnly = false,
   } = options
   const { data: user } = useUser()
   const uid = (user as { uid?: string } | undefined)?.uid
@@ -1298,12 +1323,15 @@ export function usePresence(options: {
     // one, which is exactly the set of moments the row and its handler have
     // to be re-established. A `false` needs no action: the server is already
     // applying the handler we armed.
-    const unsubscribeConnected = onValue(
-      ref(database, '.info/connected'),
-      (snapshot) => {
-        if (snapshot.val() === true) void announce()
-      },
-    )
+    // An OBSERVER never announces, so it never arms a disconnect handler and
+    // never has a row to re-establish — there is nothing for a reconnection
+    // to heal. Subscribing to `.info/connected` at all would only buy a
+    // listener whose callback does nothing.
+    const unsubscribeConnected = observeOnly
+      ? () => undefined
+      : onValue(ref(database, '.info/connected'), (snapshot) => {
+          if (snapshot.val() === true) void announce()
+        })
 
     // The last room snapshot, re-projected on a timer as well as on change.
     // Staleness is a function of the CLOCK, not of RTDB traffic: a ghost
@@ -1418,16 +1446,39 @@ export function usePresence(options: {
      */
     const heartbeat = setInterval(() => {
       project()
+      // An observer still re-projects — staleness is a function of the clock,
+      // so a room nobody is writing to must still fade — but it writes no
+      // liveness, because it has no session to keep alive.
+      if (observeOnly) return
       void update(meRef, { displayName, lastSeenAt: Date.now() }).catch(
         () => undefined,
       )
     }, PRESENCE_HEARTBEAT_MS)
 
-    meRefHolder.current = meRef
+    meRefHolder.current = observeOnly ? null : meRef
     return () => {
       meRefHolder.current = null
       clearInterval(heartbeat)
       unsubscribe()
+      /**
+       * TEAR THE CONNECTION LISTENER DOWN TOO (AGL-2486).
+       *
+       * It was created and never unsubscribed, and because this effect
+       * re-runs on `docId` and `versionId`, moving between documents left one
+       * live `.info/connected` listener per room visited — each still holding
+       * the `meRef` of a room already left. The removal below is a one-shot,
+       * but the listener is not: the next reconnection fired the OLD room's
+       * `announce()` and wrote the row back, so a single wifi blip put you
+       * into every document you had opened that session and left you there
+       * until the reaper swept.
+       *
+       * That is the same class of defect as the leak this listener was added
+       * to fix, arriving from the other direction — a row that outlives the
+       * session, saying somebody is editing a document they have navigated
+       * away from.
+       */
+      unsubscribeConnected()
+      if (observeOnly) return
       void remove(meRef).catch(() => undefined)
     }
     // `selectedNodeId` is deliberately NOT a dependency: it changes on every
@@ -1437,7 +1488,16 @@ export function usePresence(options: {
     // `versionId` is in the list because it is part of the ROOM KEY: moving
     // between versions of one document must leave the old room and join the
     // new one, exactly as moving between documents does.
-  }, [session, uid, docType, docId, versionId, displayName, photoURL])
+  }, [
+    session,
+    uid,
+    docType,
+    docId,
+    versionId,
+    displayName,
+    photoURL,
+    observeOnly,
+  ])
 
   // 3. Broadcast where we are looking, without disturbing the subscription.
   useEffect(() => {

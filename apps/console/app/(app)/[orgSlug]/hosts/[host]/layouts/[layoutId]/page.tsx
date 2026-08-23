@@ -51,6 +51,7 @@ import { useCallback, useMemo, useState } from 'react'
 import ArtifactNotFound from '../../../../../../../components/artifact-not-found.component'
 import HostDisplayNameComponent from '../../../../../../../components/host-display-name.component'
 import { useHostId, useHostSubdomain } from '../../../../../../../components/host-id-provider'
+import DocumentPresenceLive from '../../../../../../../components/document-presence-live.component'
 import DashboardLayout from '../../../../../../../components/layouts/dashboard.layout'
 import { buildRoute, Route } from '../../../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../../../constants/shared'
@@ -298,19 +299,33 @@ const LayoutDetails: NextPageWithLayout<Record<string, never>> = () => {
       // the bottom of a card (AGL-702).
       // Withheld when there is no layout: Open Besigner would mint a
       // version document under an id that has none (AGL-706).
+      // Presence sits BESIDE the button that would join the room (AGL-2486).
+      // Zach: "identify who is currently in the document already before
+      // joining" — so it belongs where the joining decision is made, not in a
+      // card further down the page. It watches without announcing: a page
+      // that joined on arrival would report every browser as an editor.
       headerRight={
         notFound ? null : (
-          <Button
-            size="small"
-            variant="contained"
-            disabled={opening}
-            onClick={handleOpen()}
-            startIcon={
-              <MdiIcon color="inherit" path={ICON_VARIANT_BESIGNER.path} />
-            }
-          >
-            {opening ? 'Opening…' : 'Open Besigner'}
-          </Button>
+          <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
+            <DocumentPresenceLive
+              hostId={hostId}
+              docType="layout"
+              docId={layoutId}
+              // The version Open Besigner would actually take you to.
+              versionId={publishedVersionId ?? versions[0]?.$id}
+            />
+            <Button
+              size="small"
+              variant="contained"
+              disabled={opening}
+              onClick={handleOpen()}
+              startIcon={
+                <MdiIcon color="inherit" path={ICON_VARIANT_BESIGNER.path} />
+              }
+            >
+              {opening ? 'Opening…' : 'Open Besigner'}
+            </Button>
+          </Stack>
         )
       }
     >

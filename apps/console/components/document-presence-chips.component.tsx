@@ -46,12 +46,45 @@ import type { PresentPerson } from '../hooks/use-presence-summary'
 /** Enough to read at a glance; past this a row says how many more. */
 const MAX_ROW_CHIPS = 3
 
+/**
+ * WHAT THE CHIPS ARE COUNTING, which is not the same thing on both surfaces.
+ *
+ * A presence room is one VERSION of a document. A list row names a DOCUMENT,
+ * so its chips are the summary's roll-up across every version — and the copy
+ * has to say so, because "2 people are in this" beside a row whose Open button
+ * goes to version 7 reads as "2 people are in version 7", which may be false.
+ * The reader is about to make a decision on that sentence.
+ *
+ * A detail page subscribes to one real room, so it can say `version` and mean
+ * it. The two never share wording by accident: the scope is required at every
+ * call site that is not a plain list row.
+ */
+export type PresenceChipScope = 'document' | 'version'
+
+/** The sentence the chips carry, in the only two scopes that exist. */
+export function presenceChipTooltip(
+  names: string[],
+  scope: PresenceChipScope,
+): string {
+  const who =
+    names.length === 1
+      ? `${names[0]} is`
+      : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} are`
+  if (scope === 'version') return `${who} editing this version right now.`
+  // Deliberately hedged. The roll-up cannot tell you WHICH version, and a row
+  // that quietly implies "the one you are about to open" is the lie this
+  // feature is most likely to tell.
+  return `${who} in this document right now — possibly in a different version.`
+}
+
 export function DocumentPresenceChips({
   people,
   size = 20,
+  scope = 'document',
 }: {
   people: PresentPerson[]
   size?: number
+  scope?: PresenceChipScope
 }) {
   // Nothing at all when the document is empty. A list of fifty rows must not
   // grow fifty empty slots to say "nobody", and the sparse case IS the common
@@ -62,15 +95,7 @@ export function DocumentPresenceChips({
   const names = people.map((person) => person.displayName)
 
   return (
-    <Tooltip
-      title={
-        people.length === 1
-          ? `${names[0]} is editing this right now.`
-          : `${names.slice(0, -1).join(', ')} and ${
-              names[names.length - 1]
-            } are editing this right now.`
-      }
-    >
+    <Tooltip title={presenceChipTooltip(names, scope)}>
       <Stack
         direction="row"
         data-aglyn-document-presence={String(people.length)}

@@ -36,6 +36,8 @@ import { useCurrentOrg } from '../hooks/use-current-org'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import { useHostId, useHostSubdomain } from './host-id-provider'
+import DocumentPresenceChips from './document-presence-chips.component'
+import usePresenceSummary from '../hooks/use-presence-summary'
 import { openHostEmailVersion } from '../utils/open-host-email-version'
 
 /** Groups the flat catalog by owning plugin, preserving catalog order. */
@@ -73,6 +75,15 @@ export function SiteEmailsCard() {
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
   const hostId = useHostId()
+  /**
+   * Who is already in each email template, beside its name (AGL-2486).
+   *
+   * ONE request for the whole card. An email's presence room is keyed on its
+   * template KEY rather than a generated id — `presenceRoomPath(org, 'email',
+   * templateKey, versionId)` — which is exactly what this list already keys
+   * its rows on, so the row and the room agree without a lookup.
+   */
+  const { peopleIn } = usePresenceSummary(hostId)
   const orgSlug = useOrgSlug()
   // Org-scoped copy names the org's RESOLVED product name (AGL-2319).
   const { branding } = useBranding()
@@ -229,7 +240,15 @@ export function SiteEmailsCard() {
                   }}
                 >
                   <Stack spacing={0.25} sx={{ flexGrow: 1 }}>
-                    <Typography variant="body2">{email.name}</Typography>
+                    <Stack
+                      direction="row"
+                      sx={{ alignItems: 'center', gap: 0.5 }}
+                    >
+                      <Typography variant="body2">{email.name}</Typography>
+                      <DocumentPresenceChips
+                        people={peopleIn('email', email.key)}
+                      />
+                    </Stack>
                     <Typography variant="caption" color="text.secondary">
                       {email.description}
                     </Typography>
