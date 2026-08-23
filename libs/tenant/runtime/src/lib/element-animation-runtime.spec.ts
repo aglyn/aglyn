@@ -67,6 +67,9 @@ const html = `
   <div id="a" class="aglyn-anim aglyn-anim--slide-up" data-aglyn-anim-trigger="scroll"></div>
   <div id="b" class="aglyn-anim aglyn-anim--fade" data-aglyn-anim-trigger="scroll" data-aglyn-anim-repeat="1"></div>
   <div id="c" class="aglyn-anim aglyn-anim--fade" data-aglyn-anim-trigger="load"></div>
+  <div id="g" class="aglyn-anim-group aglyn-anim--fade" data-aglyn-anim-trigger="scroll">
+    <span id="g1"></span><span id="g2"></span>
+  </div>
 `
 
 function boot() {
@@ -93,7 +96,38 @@ describe('the inline scroll runtime (AGL-2486)', () => {
 
   it('observes scroll-triggered elements and ONLY those', () => {
     const observer = boot()
-    expect([...observer.observed].map((node) => node.id).sort()).toEqual(['a', 'b'])
+    expect([...observer.observed].map((node) => node.id).sort()).toEqual([
+      'a',
+      'b',
+      'g',
+    ])
+  })
+
+  it('watches a stagger HOST, not its children', () => {
+    // The whole reason stagger costs no extra JS: a row of twelve cards is
+    // one observer entry, one callback and one class write, not twelve —
+    // and the twelve would all land during scroll, on the main thread.
+    const observer = boot()
+    const observed = [...observer.observed].map((node) => node.id)
+    expect(observed).toContain('g')
+    expect(observed).not.toContain('g1')
+    expect(observed).not.toContain('g2')
+  })
+
+  it('reveals a staggered row by marking the host', () => {
+    // The runtime knows nothing about groups; it matches the trigger
+    // ATTRIBUTE, and the stylesheet turns the host's class into the
+    // children's animation. Narrowing the selector back to `.aglyn-anim`
+    // would leave every staggered row invisible for good.
+    const observer = boot()
+    // Driven through what the observer ACTUALLY watches, not a synthetic
+    // entry for the host. Firing `el('g')` directly would pass even if the
+    // selector never matched a host, because the callback marks whatever it
+    // is handed — a green that proves nothing about the selector.
+    observer.fire(
+      [...observer.observed].map((target) => ({ target, isIntersecting: true })),
+    )
+    expect(el('g').classList.contains('aglyn-anim--in')).toBe(true)
   })
 
   it('reveals an element when it enters the viewport', () => {

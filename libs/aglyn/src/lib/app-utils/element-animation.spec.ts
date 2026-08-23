@@ -20,9 +20,13 @@
 import {
   ANIMATION_DEFAULT_DELAY_MS,
   ANIMATION_DEFAULT_DURATION_MS,
+  ANIMATION_DEFAULT_EASE,
+  ANIMATION_DEFAULT_STAGGER_STEP_MS,
   ANIMATION_DEFAULT_TRIGGER,
+  ANIMATION_EASINGS,
   ANIMATION_MAX_DELAY_MS,
   ANIMATION_MAX_DURATION_MS,
+  ANIMATION_MAX_STAGGER_STEP_MS,
   nodePropsAnimate,
   resolveElementAnimation,
 } from './element-animation'
@@ -49,8 +53,15 @@ describe('resolveElementAnimation (AGL-2486)', () => {
 
   it('emits the class, attributes and custom properties for a preset', () => {
     const resolved = resolveElementAnimation({ aglynAnimation: 'slide-up' })
-    expect(resolved?.className).toBe('aglyn-anim aglyn-anim--slide-up')
+    expect(resolved?.className).toBe(
+      'aglyn-anim aglyn-anim--slide-up aglyn-anim-ease--smooth',
+    )
     expect(resolved?.attributes).toEqual({ 'data-aglyn-anim-trigger': 'scroll' })
+    // The INLINE style is still exactly the two properties it was before
+    // easing and stagger existed. Easing rides a class and the stagger step is
+    // written only for a host, so an ordinary animated element's style
+    // attribute did not grow — which is what keeps every already-published
+    // page byte-identical.
     expect(resolved?.style).toEqual({
       '--aglyn-anim-duration': `${ANIMATION_DEFAULT_DURATION_MS}ms`,
       '--aglyn-anim-delay': `${ANIMATION_DEFAULT_DELAY_MS}ms`,
@@ -160,6 +171,131 @@ describe('resolveElementAnimation (AGL-2486)', () => {
       expect(resolved?.attributes['data-aglyn-anim-repeat']).toBeUndefined()
     })
   })
+
+  describe('easing', () => {
+    it('defaults to the curve every page already used', () => {
+      // Easing shipped after the presets did. Any other default would have
+      // silently re-timed every animation already published.
+      const resolved = resolveElementAnimation({ aglynAnimation: 'fade' })
+      expect(resolved?.ease).toBe(ANIMATION_DEFAULT_EASE)
+      expect(resolved?.className).toContain(
+        `aglyn-anim-ease--${ANIMATION_DEFAULT_EASE}`,
+      )
+    })
+
+    it('emits a class for every easing the vocabulary offers', () => {
+      // Driven off the exported list rather than a literal, so adding an id
+      // without a stylesheet rule is caught by the assets spec's counterpart
+      // to this test rather than shipping as an element with no easing.
+      for (const ease of ANIMATION_EASINGS) {
+        const resolved = resolveElementAnimation({
+          aglynAnimation: 'fade',
+          aglynAnimationEase: ease,
+        })
+        expect(resolved?.ease).toBe(ease)
+        expect(resolved?.className).toContain(`aglyn-anim-ease--${ease}`)
+      }
+    })
+
+    it('refuses an unknown easing rather than emitting a dead class', () => {
+      // Same rule the preset follows: this string reaches a class name, and a
+      // class no rule matches is an element with no timing function at all.
+      const resolved = resolveElementAnimation({
+        aglynAnimation: 'fade',
+        aglynAnimationEase: 'cubic-bezier(9,9,9,9)',
+      })
+      expect(resolved?.ease).toBe(ANIMATION_DEFAULT_EASE)
+      expect(resolved?.className).not.toContain('cubic-bezier')
+    })
+
+    it('never lets an author value reach the class verbatim', () => {
+      // The one injection shape this field has: the id is concatenated into a
+      // class name, so anything not on the list must be dropped, not escaped.
+      const resolved = resolveElementAnimation({
+        aglynAnimation: 'fade',
+        aglynAnimationEase: 'smooth" onload="x',
+      })
+      expect(resolved?.className).not.toContain('onload')
+    })
+  })
+
+  describe('stagger', () => {
+    it('is off unless asked for, and costs nothing when off', () => {
+      const resolved = resolveElementAnimation({ aglynAnimation: 'fade' })
+      expect(resolved?.stagger).toBe(false)
+      expect(resolved?.className).toContain('aglyn-anim ')
+      expect(resolved?.className).not.toContain('aglyn-anim-group')
+      expect(resolved?.style['--aglyn-anim-step']).toBeUndefined()
+    })
+
+    it('swaps the base class, so a host never animates itself as well', () => {
+      // The two base classes are mutually exclusive by construction. An
+      // element carrying both would play its own entrance AND its children's,
+      // which is two fades over the same pixels.
+      const resolved = resolveElementAnimation({
+        aglynAnimation: 'slide-up',
+        aglynAnimationStagger: true,
+      })
+      expect(resolved?.stagger).toBe(true)
+      expect(resolved?.className.split(' ')).toContain('aglyn-anim-group')
+      expect(resolved?.className.split(' ')).not.toContain('aglyn-anim')
+    })
+
+    it('publishes the step as a custom property the children inherit', () => {
+      const resolved = resolveElementAnimation({
+        aglynAnimation: 'fade',
+        aglynAnimationStagger: true,
+        aglynAnimationStaggerStep: 120,
+      })
+      expect(resolved?.staggerStepMs).toBe(120)
+      expect(resolved?.style['--aglyn-anim-step']).toBe('120ms')
+    })
+
+    it('defaults and clamps the step, because the gap MULTIPLIES', () => {
+      const unset = resolveElementAnimation({
+        aglynAnimation: 'fade',
+        aglynAnimationStagger: true,
+      })
+      expect(unset?.staggerStepMs).toBe(ANIMATION_DEFAULT_STAGGER_STEP_MS)
+      const huge = resolveElementAnimation({
+        aglynAnimation: 'fade',
+        aglynAnimationStagger: true,
+        aglynAnimationStaggerStep: 99999,
+      })
+      expect(huge?.staggerStepMs).toBe(ANIMATION_MAX_STAGGER_STEP_MS)
+      // A number input stores its value as a string.
+      const asString = resolveElementAnimation({
+        aglynAnimation: 'fade',
+        aglynAnimationStagger: true,
+        aglynAnimationStaggerStep: '150',
+      })
+      expect(asString?.staggerStepMs).toBe(150)
+    })
+
+    it('is refused for hover, which has to reverse cleanly', () => {
+      // The ladder only ever feeds `animation-delay`; a hover effect is a
+      // transition and would strand half a row mid-flight on pointer-out.
+      const resolved = resolveElementAnimation({
+        aglynAnimation: 'zoom-in',
+        aglynAnimationTrigger: 'hover',
+        aglynAnimationStagger: true,
+        aglynAnimationStaggerStep: 120,
+      })
+      expect(resolved?.stagger).toBe(false)
+      expect(resolved?.className).not.toContain('aglyn-anim-group')
+      expect(resolved?.style['--aglyn-anim-step']).toBeUndefined()
+    })
+
+    it('keeps the trigger attribute, so one observer entry serves the row', () => {
+      // The runtime watches the HOST, not the children. Losing this attribute
+      // would leave every child hidden with nothing to reveal them.
+      const resolved = resolveElementAnimation({
+        aglynAnimation: 'fade',
+        aglynAnimationStagger: true,
+      })
+      expect(resolved?.attributes['data-aglyn-anim-trigger']).toBe('scroll')
+    })
+  })
 })
 
 describe('nodePropsAnimate (AGL-2486)', () => {
@@ -174,6 +310,11 @@ describe('nodePropsAnimate (AGL-2486)', () => {
       { aglynAnimation: 'barrel-roll' },
       { aglynAnimation: 'fade' },
       { aglynAnimation: 'zoom-out' },
+      // A stagger host is still an animating node, and the tenant must ship
+      // the sheet for it — the children have no animation props of their own,
+      // so if the host did not count, a staggered row would be the one shape
+      // that is hidden with no stylesheet to reveal it.
+      { aglynAnimation: 'fade', aglynAnimationStagger: true },
     ]
     for (const props of cases) {
       expect(nodePropsAnimate(props)).toBe(

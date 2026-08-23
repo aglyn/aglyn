@@ -93,6 +93,9 @@ describe('Leaf element animation (AGL-2486)', () => {
         aglynAnimationDuration: 300,
         aglynAnimationDelay: 0,
         aglynAnimationRepeat: true,
+        aglynAnimationEase: 'steady',
+        aglynAnimationStagger: true,
+        aglynAnimationStaggerStep: 120,
       })
       const attrs = el.getAttributeNames().join(' ').toLowerCase()
       expect(attrs).not.toContain('aglynanimation')
@@ -105,6 +108,57 @@ describe('Leaf element animation (AGL-2486)', () => {
       const attrs = el.getAttributeNames().join(' ').toLowerCase()
       expect(attrs).not.toContain('aglynanimation')
       expect(el.className).not.toContain('aglyn-anim')
+    })
+  })
+
+  it('renders the chosen easing as a class, never as a raw curve', () => {
+    const el = renderNode({
+      aglynAnimation: 'fade',
+      aglynAnimationEase: 'overshoot',
+    })
+    expect(el.className).toContain('aglyn-anim-ease--overshoot')
+    // The curve itself lives in the tenant's stylesheet. If it ever reached
+    // the element, author-chosen CSS would be bypassing the sheet entirely.
+    expect(el.getAttribute('style')).not.toContain('cubic-bezier')
+  })
+
+  describe('a stagger host', () => {
+    it('carries the group class INSTEAD of the animated class', () => {
+      // Both would mean the host plays its own entrance on top of running its
+      // children's — two fades over the same pixels.
+      const el = renderNode({
+        aglynAnimation: 'slide-up',
+        aglynAnimationStagger: true,
+        aglynAnimationStaggerStep: 120,
+      })
+      const classes = el.className.split(' ')
+      expect(classes).toContain('aglyn-anim-group')
+      expect(classes).not.toContain('aglyn-anim')
+      expect(classes).toContain('aglyn-anim--slide-up')
+    })
+
+    it('publishes the step for its children to inherit', () => {
+      const el = renderNode({
+        aglynAnimation: 'fade',
+        aglynAnimationStagger: true,
+        aglynAnimationStaggerStep: 120,
+      })
+      expect(el.style.getPropertyValue('--aglyn-anim-step')).toBe('120ms')
+    })
+
+    it('is still observed, because the trigger attribute stays on the host', () => {
+      const el = renderNode({
+        aglynAnimation: 'fade',
+        aglynAnimationStagger: true,
+      })
+      expect(el.getAttribute('data-aglyn-anim-trigger')).toBe('scroll')
+    })
+
+    it('writes no step at all when it is not a host', () => {
+      // Keeps an ordinary animated element's style attribute exactly what it
+      // was before stagger existed.
+      const el = renderNode({ aglynAnimation: 'fade' })
+      expect(el.style.getPropertyValue('--aglyn-anim-step')).toBe('')
     })
   })
 

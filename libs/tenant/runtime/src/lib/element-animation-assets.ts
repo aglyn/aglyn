@@ -54,23 +54,69 @@
  * Every keyframe animates `opacity` and `transform` only. Neither affects
  * layout, so an entrance animation contributes nothing to CLS — the element
  * occupies its final box from the first frame.
+ *
+ * ## Stagger costs no extra JS and no extra observer entry
+ *
+ * A staggered row is ONE element as far as this file's runtime is concerned:
+ * the host is what the observer watches, and the children play off the class
+ * the observer puts on it. The per-child offset is a `:nth-child` ladder in
+ * the sheet, so twelve cards arriving one after another cost twelve CSS
+ * declarations and zero JS — where a runtime would have cost twelve
+ * observer entries, twelve callbacks and twelve style writes on the main
+ * thread, during scroll.
  */
 
 import {
   ANIMATION_CLASS,
   ANIMATION_DELAY_VAR,
   ANIMATION_DURATION_VAR,
+  ANIMATION_EASE_CLASS_PREFIX,
+  ANIMATION_EASINGS,
+  ANIMATION_GROUP_CLASS,
   ANIMATION_IN_CLASS,
   ANIMATION_PRESET_CLASS_PREFIX,
   ANIMATION_READY_CLASS,
   ANIMATION_REPEAT_ATTR,
+  ANIMATION_STAGGER_MAX_CHILDREN,
+  ANIMATION_STAGGER_OFFSET_VAR,
+  ANIMATION_STAGGER_STEP_VAR,
   ANIMATION_TRIGGER_ATTR,
   NODE_ANIMATION_TRIGGER_PROP,
   nodePropsAnimate,
+  type AnimationEase,
 } from '@aglyn/aglyn/server'
 
-/** Shared easing. A gentle decelerate; nothing overshoots or bounces. */
-const EASE = 'cubic-bezier(.16,1,.3,1)'
+/**
+ * The easing curves, keyed by the ids `@aglyn/aglyn` publishes.
+ *
+ * The ids live in the shared module and the CURVES live here, so a page that
+ * animates nothing carries neither. Every one of these is a plain
+ * `cubic-bezier`; none is a spring, because a spring is not expressible in
+ * CSS and buying one would mean buying a JS runtime.
+ *
+ * `overshoot` is the only curve that leaves the 0–1 range, and it does so on
+ * the way IN only (`.34,1.56,.64,1` is the standard "back out"), so an
+ * element settles rather than oscillating. Like every other rule here it sits
+ * inside the reduced-motion gate.
+ *
+ * Typed as a total record so adding an id to `ANIMATION_EASINGS` without a
+ * curve is a compile error rather than an element with no easing.
+ */
+const EASE_CURVES: Record<AnimationEase, string> = {
+  smooth: 'cubic-bezier(.16,1,.3,1)',
+  steady: 'linear',
+  'gentle-start': 'cubic-bezier(.4,0,1,1)',
+  'gentle-end': 'cubic-bezier(0,0,.2,1)',
+  'gentle-both': 'cubic-bezier(.4,0,.2,1)',
+  overshoot: 'cubic-bezier(.34,1.56,.64,1)',
+}
+
+/**
+ * The curve an element gets when it carries no easing class at all — which is
+ * every element authored before easing shipped. Deliberately the same string
+ * `EASE` used to be, so nothing that already exists moves.
+ */
+const EASE = EASE_CURVES.smooth
 
 /**
  * Per-preset custom properties. One rule per preset sets the keyframe name
@@ -126,10 +172,67 @@ const PRESETS: Array<{
 const NAME_VAR = '--aglyn-anim-name'
 const HOVER_VAR = '--aglyn-anim-hover'
 const HOVER_OPACITY_VAR = '--aglyn-anim-hover-opacity'
+/**
+ * Set by the easing class rules and read by the timing rules. Not exported:
+ * the renderer writes a CLASS, never this property, so an author cannot get a
+ * raw curve of their own into the page through it.
+ */
+const EASE_VAR = '--aglyn-anim-ease'
 
 const ANIMATED = `.${ANIMATION_CLASS}`
+const GROUP = `.${ANIMATION_GROUP_CLASS}`
+/**
+ * Everything the timing rules apply to: a plain animated element, and the
+ * CHILDREN of a stagger host. The host itself is deliberately absent — it
+ * sets the custom properties its children inherit and animates nothing.
+ */
+const TARGETS = `${ANIMATED},${GROUP}>*`
 const DURATION = `var(${ANIMATION_DURATION_VAR},600ms)`
 const DELAY = `var(${ANIMATION_DELAY_VAR},0ms)`
+const STEP = `var(${ANIMATION_STAGGER_STEP_VAR},90ms)`
+const TIMING = `var(${EASE_VAR},${EASE})`
+/**
+ * The author's own delay plus whatever rung of the stagger ladder this child
+ * landed on. A plain animated element never matches a ladder rule, so its
+ * offset falls back to `0ms` and the sum is exactly the delay it had before
+ * stagger existed.
+ */
+const TOTAL_DELAY = `calc(${DELAY} + var(${ANIMATION_STAGGER_OFFSET_VAR},0ms))`
+
+/**
+ * The stagger ladder: one rule per rung, each pushing a child one more STEP
+ * behind the one before it.
+ *
+ * The index has to come from CSS rather than the renderer. The renderer sees
+ * a node, not a position — and a node that knew its index would have to
+ * re-render every time a sibling was inserted, which is exactly what an
+ * author does while building a row of cards.
+ *
+ * The first child gets NO rule: `var(--aglyn-anim-stagger,0ms)` already falls
+ * back to zero, so emitting `calc(STEP * 0)` would be a rule that changes
+ * nothing. The last rung is `:nth-child(n+N)` rather than an Nth rule, so a
+ * collection with two hundred rows shares the final rung instead of leaving
+ * its tail invisible for half a minute.
+ */
+const STAGGER_LADDER: string[] = [
+  // Reset first, and it must STAY first. A nested stagger host's own ladder
+  // rule has identical specificity (one class + one pseudo-class against two
+  // classes), so source order is the only thing that lets the inner host win
+  // for its own children. What this catches is the other case: an animated
+  // element deeper inside a staggered child, which would otherwise INHERIT
+  // its ancestor's rung and start late for no reason an author could see.
+  `${GROUP}>* ${ANIMATED}{${ANIMATION_STAGGER_OFFSET_VAR}:0ms}`,
+  ...Array.from(
+    { length: ANIMATION_STAGGER_MAX_CHILDREN - 2 },
+    (_unused, index) => {
+      const nth = index + 2
+      return `${GROUP}>*:nth-child(${nth}){${ANIMATION_STAGGER_OFFSET_VAR}:calc(${STEP} * ${nth - 1})}`
+    },
+  ),
+  `${GROUP}>*:nth-child(n+${ANIMATION_STAGGER_MAX_CHILDREN}){${ANIMATION_STAGGER_OFFSET_VAR}:calc(${STEP} * ${
+    ANIMATION_STAGGER_MAX_CHILDREN - 1
+  })}`,
+]
 
 /**
  * The stylesheet. Built once at module load, not per request.
@@ -145,29 +248,44 @@ export const ELEMENT_ANIMATION_STYLE_TEXT = [
     (preset) =>
       `@keyframes aglyn-anim-${preset.id}{from{${preset.from}}to{opacity:1;transform:none}}`,
   ),
-  // Per-preset custom properties.
+  // Per-preset custom properties. Keyed on the preset class ALONE, not on the
+  // base class as well: a stagger host carries `aglyn-anim-group` rather than
+  // `aglyn-anim`, and its children read these through inheritance, so a rule
+  // that required the base class would leave a whole staggered row with no
+  // keyframe name.
   ...PRESETS.map(
     (preset) =>
-      `${ANIMATED}.${ANIMATION_PRESET_CLASS_PREFIX}${preset.id}{${NAME_VAR}:aglyn-anim-${preset.id};${HOVER_VAR}:${preset.hover}${
+      `.${ANIMATION_PRESET_CLASS_PREFIX}${preset.id}{${NAME_VAR}:aglyn-anim-${preset.id};${HOVER_VAR}:${preset.hover}${
         preset.hoverOpacity ? `;${HOVER_OPACITY_VAR}:${preset.hoverOpacity}` : ''
       }}`,
   ),
+  // Per-easing custom property, same shape and the same inheritance.
+  ...ANIMATION_EASINGS.map(
+    (ease) =>
+      `.${ANIMATION_EASE_CLASS_PREFIX}${ease}{${EASE_VAR}:${EASE_CURVES[ease]}}`,
+  ),
   // Shared timing for the keyframe triggers.
-  `${ANIMATED}{animation-duration:${DURATION};animation-delay:${DELAY};animation-timing-function:${EASE};animation-fill-mode:both}`,
+  `${TARGETS}{animation-duration:${DURATION};animation-delay:${TOTAL_DELAY};animation-timing-function:${TIMING};animation-fill-mode:both}`,
+  // The stagger ladder — no-ops for every element that is not inside a host.
+  ...STAGGER_LADDER,
   // On load: plays as soon as the element is parsed. No JS involved at all.
-  `${ANIMATED}[${ANIMATION_TRIGGER_ATTR}=load]{animation-name:var(${NAME_VAR})}`,
-  // On scroll: plays when the runtime marks it as entered.
-  `${ANIMATED}[${ANIMATION_TRIGGER_ATTR}=scroll].${ANIMATION_IN_CLASS}{animation-name:var(${NAME_VAR})}`,
+  `${ANIMATED}[${ANIMATION_TRIGGER_ATTR}=load],${GROUP}[${ANIMATION_TRIGGER_ATTR}=load]>*{animation-name:var(${NAME_VAR})}`,
+  // On scroll: plays when the runtime marks it as entered. For a stagger host
+  // the ONE observed element is the host, and its children play off its class
+  // — one observer entry for a whole row, not one per card.
+  `${ANIMATED}[${ANIMATION_TRIGGER_ATTR}=scroll].${ANIMATION_IN_CLASS},${GROUP}[${ANIMATION_TRIGGER_ATTR}=scroll].${ANIMATION_IN_CLASS}>*{animation-name:var(${NAME_VAR})}`,
   // The ONLY rule that hides anything, and it is scoped under a class the
   // inline runtime adds to <html>. No JS (or no IntersectionObserver) means
   // the class is never added, the rule never matches, and every element is
   // visible in its final state. `opacity` rather than `display`/`visibility`
   // so the content stays in the accessibility tree and in the DOM a crawler
   // reads either way.
-  `html.${ANIMATION_READY_CLASS} ${ANIMATED}[${ANIMATION_TRIGGER_ATTR}=scroll]:not(.${ANIMATION_IN_CLASS}){opacity:0}`,
+  `html.${ANIMATION_READY_CLASS} ${ANIMATED}[${ANIMATION_TRIGGER_ATTR}=scroll]:not(.${ANIMATION_IN_CLASS}),html.${ANIMATION_READY_CLASS} ${GROUP}[${ANIMATION_TRIGGER_ATTR}=scroll]:not(.${ANIMATION_IN_CLASS})>*{opacity:0}`,
   // On hover: a transition, never a keyframe run, so it reverses cleanly when
-  // the pointer leaves.
-  `${ANIMATED}[${ANIMATION_TRIGGER_ATTR}=hover]{transition:transform ${DURATION} ${EASE} ${DELAY},opacity ${DURATION} ${EASE} ${DELAY}}`,
+  // the pointer leaves. Staggering is refused for hover upstream, so this rule
+  // reads the author's plain delay rather than the ladder's sum — a
+  // transition has no `animation-delay` to add a rung to.
+  `${ANIMATED}[${ANIMATION_TRIGGER_ATTR}=hover]{transition:transform ${DURATION} ${TIMING} ${DELAY},opacity ${DURATION} ${TIMING} ${DELAY}}`,
   `${ANIMATED}[${ANIMATION_TRIGGER_ATTR}=hover]:hover{transform:var(${HOVER_VAR},none);opacity:var(${HOVER_OPACITY_VAR},1)}`,
   '}',
 ].join('')
@@ -187,13 +305,19 @@ export const ELEMENT_ANIMATION_STYLE_ID = 'aglyn-element-animation-style'
  * `opacity:0` forever, because the hide rule applies the moment the ready
  * class is on `<html>`.
  *
+ * The selector is the trigger ATTRIBUTE alone rather than the base class,
+ * because there are now two base classes — an element that animates itself
+ * and a stagger host whose children animate. Both carry the attribute, only
+ * the renderer ever writes it, and matching on it keeps the runtime unaware
+ * that the second shape exists.
+ *
  * Written in ES5 with short locals because it ships as source; there is no
  * minifier in this path.
  */
 export const ELEMENT_ANIMATION_SCRIPT_TEXT = `(function(){var w=window,d=document;if(!w.IntersectionObserver||!w.MutationObserver)return;d.documentElement.classList.add(${JSON.stringify(
   ANIMATION_READY_CLASS,
 )});var S=${JSON.stringify(
-  `.${ANIMATION_CLASS}[${ANIMATION_TRIGGER_ATTR}=scroll]`,
+  `[${ANIMATION_TRIGGER_ATTR}=scroll]`,
 )},I=${JSON.stringify(ANIMATION_IN_CLASS)},R=${JSON.stringify(
   ANIMATION_REPEAT_ATTR,
 )};var o=new w.IntersectionObserver(function(es){for(var i=0;i<es.length;i++){var e=es[i],t=e.target,r=t.getAttribute(R)==='1';if(e.isIntersecting){t.classList.add(I);if(!r)o.unobserve(t)}else if(r)t.classList.remove(I)}},{rootMargin:'0px 0px -10% 0px'});var q=0,scan=function(){q=0;var n=d.querySelectorAll(S);for(var i=0;i<n.length;i++)o.observe(n[i])};scan();if(d.readyState==='loading')d.addEventListener('DOMContentLoaded',scan);var m=new w.MutationObserver(function(){if(q)return;q=w.requestAnimationFrame?w.requestAnimationFrame(scan):w.setTimeout(scan,0)});var start=function(){if(d.body)m.observe(d.body,{childList:true,subtree:true})};if(d.body)start();else d.addEventListener('DOMContentLoaded',start)})()`

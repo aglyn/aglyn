@@ -451,9 +451,23 @@ export function buildVisibilityFields(
  *
  * Presets rather than a keyframes box, because the audience includes people
  * who have never written CSS: an author picks "Slide up", "on scroll into
- * view", and two numbers. The four dials are the ones that actually change how
- * an animation FEELS; everything else (easing, distance, the difference
- * between a transition and a keyframe run) is decided for them.
+ * view", and adjusts a few obvious knobs. Zach named the knobs — duration,
+ * delay, easing — plus stagger, and this is that list and nothing more. There
+ * is deliberately no keyframe editor and no general trigger picker; the
+ * things that are NOT offered (the distance a slide travels, the difference
+ * between a transition and a keyframe run, arbitrary curves) are decided for
+ * the author, and an author who needs them has the sx tab.
+ *
+ * Easing is a named list, never a `cubic-bezier()` text box. That keeps the
+ * curve out of author free-text — the id becomes a class and the curve is
+ * looked up in the tenant's own stylesheet — so there is nothing here for the
+ * sx sanitizer to have to catch.
+ *
+ * "Stagger children" is the one control that changes WHAT animates rather
+ * than how: the element stops animating and its children animate in
+ * sequence instead. It reads as a switch rather than a separate "Stagger"
+ * preset because stagger is orthogonal to fade/slide/zoom — a "Stagger"
+ * preset would have had to answer "stagger which animation?".
  *
  * Offered on every element, unlike the visibility directives above, because an
  * animation is meaningful on any node on any screen — there is no context in
@@ -474,6 +488,13 @@ export function buildAnimationFields(): Array<Record<string, unknown>> {
     is: Aglyn.ANIMATION_PRESETS.filter(
       (preset) => preset !== Aglyn.ANIMATION_NONE,
     ),
+  }
+  // Stagger is an entrance idea. Named rather than inlined twice so the
+  // switch and its step field can never drift apart and leave a step control
+  // visible for a trigger that ignores it.
+  const staggerable = {
+    when: Aglyn.NODE_ANIMATION_TRIGGER_PROP,
+    is: ['scroll', 'load'],
   }
   const help = (label: string, description: string) => ({
     label,
@@ -541,6 +562,55 @@ export function buildAnimationFields(): Array<Record<string, unknown>> {
       type: 'number',
       condition: animated,
       initialValue: Aglyn.ANIMATION_DEFAULT_DELAY_MS,
+    },
+    {
+      name: Aglyn.NODE_ANIMATION_EASE_PROP,
+      ...help(
+        'Easing',
+        'The shape of the motion — whether it starts fast and settles, moves ' +
+          'at one speed, or overshoots slightly before landing.',
+      ),
+      component: Aglyn.FieldComponentType.SELECT,
+      condition: animated,
+      initialValue: Aglyn.ANIMATION_DEFAULT_EASE,
+      options: [
+        { value: 'smooth', label: 'Smooth' },
+        { value: 'steady', label: 'Steady' },
+        { value: 'gentle-start', label: 'Gentle start' },
+        { value: 'gentle-end', label: 'Gentle end' },
+        { value: 'gentle-both', label: 'Gentle start and end' },
+        { value: 'overshoot', label: 'Slight overshoot' },
+      ],
+    },
+    {
+      name: Aglyn.NODE_ANIMATION_STAGGER_PROP,
+      ...help(
+        'Stagger children',
+        'Animate the things inside this element one after another, instead ' +
+          'of animating the element as a whole. Turn this on for a row of ' +
+          'cards or a list.',
+      ),
+      component: Aglyn.FieldComponentType.SWITCH,
+      // Not offered for hover: a hover effect has to reverse the moment the
+      // pointer leaves, and a staggered one would strand half a row.
+      condition: [animated, staggerable],
+    },
+    {
+      name: Aglyn.NODE_ANIMATION_STAGGER_STEP_PROP,
+      ...help(
+        'Stagger step (ms)',
+        `How much later each one starts than the one before it. ` +
+          `${Aglyn.ANIMATION_DEFAULT_STAGGER_STEP_MS} is a natural default; ` +
+          `anything over ${Aglyn.ANIMATION_MAX_STAGGER_STEP_MS} is capped, ` +
+          `because this gap multiplies down the row.`,
+      ),
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      type: 'number',
+      // `is` accepts the string form too: a switch that has been round-tripped
+      // through a text-shaped store comes back as `'true'`, and a step field
+      // that silently stopped appearing would be blamed on the switch.
+      condition: [animated, staggerable, { when: Aglyn.NODE_ANIMATION_STAGGER_PROP, is: [true, 'true'] }],
+      initialValue: Aglyn.ANIMATION_DEFAULT_STAGGER_STEP_MS,
     },
     {
       name: Aglyn.NODE_ANIMATION_REPEAT_PROP,

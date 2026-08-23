@@ -54,7 +54,7 @@ export const Leaf = observer(
       style: propsStyle,
       [Aglyn.NODE_HIDE_IF_PROP]: _hideIf,
       [Aglyn.NODE_HIDE_UNLESS_PROP]: _hideUnless,
-      // Element animation (AGL-2486): the five reserved animation props come
+      // Element animation (AGL-2486): the reserved animation props come
       // out here for the same reason the visibility directives above do —
       // they are directives to the RENDERER, and spreading them onto the
       // element would land `aglynanimation="slide-up"` as an unknown DOM
@@ -67,6 +67,9 @@ export const Leaf = observer(
       [Aglyn.NODE_ANIMATION_DURATION_PROP]: _animationDuration,
       [Aglyn.NODE_ANIMATION_DELAY_PROP]: _animationDelay,
       [Aglyn.NODE_ANIMATION_REPEAT_PROP]: _animationRepeat,
+      [Aglyn.NODE_ANIMATION_EASE_PROP]: _animationEase,
+      [Aglyn.NODE_ANIMATION_STAGGER_PROP]: _animationStagger,
+      [Aglyn.NODE_ANIMATION_STAGGER_STEP_PROP]: _animationStaggerStep,
       ...resolvedProps
     } = (node?.resolvedProps ?? node?.props ?? {}) as Record<string, any>
 
@@ -81,6 +84,9 @@ export const Leaf = observer(
       [Aglyn.NODE_ANIMATION_DURATION_PROP]: _animationDuration,
       [Aglyn.NODE_ANIMATION_DELAY_PROP]: _animationDelay,
       [Aglyn.NODE_ANIMATION_REPEAT_PROP]: _animationRepeat,
+      [Aglyn.NODE_ANIMATION_EASE_PROP]: _animationEase,
+      [Aglyn.NODE_ANIMATION_STAGGER_PROP]: _animationStagger,
+      [Aglyn.NODE_ANIMATION_STAGGER_STEP_PROP]: _animationStaggerStep,
     })
     const Factory = Aglyn.components.getFactory(node?.componentId)
     const Component = isValidElementType(Factory) ? Factory : DefaultComponent
