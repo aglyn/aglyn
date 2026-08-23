@@ -373,10 +373,15 @@ over the trailing six hours:
 | Check | Host | Pass rate |
 | --- | --- | --- |
 | `console-health`, `console-imaging`, `backup-state`, `signup-volume`, `rate-limiter`, `billing-webhook`, `beacon-heartbeat console` | `app.aglyn.com` | **100%** |
-| `tenant-health` | `aglyn.com/api/health` | **0%** |
-| `beacon-heartbeat tenant` | `aglyn.com/api/health/error-beacon` | **0%** |
-| `marketing-home` | `aglyn.com/` | **0%** |
-| `customer-site` | `demo.aglyn.app/` | **0%** |
+| `tenant-health` | `aglyn.com/api/health` | **0%** → ✅ fixed 08-23 |
+| `beacon-heartbeat tenant` | `aglyn.com/api/health/error-beacon` | **0%** → ✅ fixed 08-23 |
+| `marketing-home` | `aglyn.com/` | **0%** — still open |
+| `customer-site` | `demo.aglyn.app/` | **0%** — still open |
+
+**Two of the four were fixed on 2026-08-23** by the `Health endpoint bypass`
+rule (AGL-2486, option 1 below); expect them back at 100% within two check
+periods. The other two probe **real pages**, which a path bypass cannot reach
+— they are still red and still need option 2.
 
 `tenant-health` ran at 100% through 2026-08-20, 3.9% on 08-21, and 0% since.
 Every one of the four red hosts is served by `aglyn-tenant`, and every one of
@@ -406,14 +411,16 @@ fifty-one hours.
 
 #### What to do, in preference order
 
-1. **Bypass bot protection on the health PATHS of `aglyn-tenant`.** Best
-   option, and it is the one that makes AGL-1148 actually deliverable: those
-   endpoints are already public, unauthenticated and free of secrets — they
-   are designed to be read by anything — so challenging them protects nothing
-   and breaks the only thing watching them. It also fixes the endpoints for
-   **any** monitor chosen later, not just GCP's, and needs no shared secret.
-   Vercel → `aglyn-tenant` → Firewall → add a **Bypass** rule matching
-   `Request Path` starts with `/api/health`.
+1. ~~**Bypass bot protection on the health PATHS of `aglyn-tenant`.**~~
+   ✅ **DONE 2026-08-23 (AGL-2486).** Bypass rule `Health endpoint bypass`,
+   one `path pre /api/health` group, added with `PATCH` / `rules.insert` and
+   declared in `tools/scripts/lib/firewall-posture.mjs`. Those endpoints are
+   public, unauthenticated and free of secrets, so challenging them protected
+   nothing and broke the only thing watching them; needing no shared secret,
+   the fix also covers any monitor chosen later. Verified anonymously:
+   `/api/health` and `/api/health/error-beacon` answer **200**, `/` still
+   answers **429**. This clears `tenant-health` and `beacon-heartbeat tenant`
+   only — the two below are unaffected and still open.
 2. **For `marketing-home` and `customer-site`, allowlist Google's uptime
    checkers by IP.** Those two probe real pages, not health endpoints, so a
    path rule does not reach them. The list is
@@ -501,6 +508,7 @@ gcloud monitoring uptime create \
   --resource-labels=host=app.aglyn.com,project_id=aglyn-main \
   --path=/api/health/crons \
   --port=443 --protocol=https --request-method=get \
+  --validate-ssl=true \
   --status-classes=2xx \
   --matcher-type=matches-json-path \
   --json-path='$.status' --json-path-matcher-type=exact-match \
@@ -509,13 +517,23 @@ gcloud monitoring uptime create \
 
 # 2. Read back the generated check id — the alert policy filters on it, and
 #    it is generated from the display name plus a random suffix, so it
-#    CANNOT be predicted and must not be guessed.
+#    CANNOT be predicted and must not be guessed. `name.basename()` prints the
+#    bare id; `value(name)` would print the full resource path, and pasting
+#    that into the filter below yields a policy that matches no time series
+#    and therefore never fires.
 gcloud monitoring uptime list-configs --project=aglyn-main \
-  --filter='displayName~scheduled-jobs' --format='value(name)'
+  --filter='displayName~scheduled-jobs' --format='value(name.basename())'
 ```
 
-Then create the policy, substituting the id from step 2 (the part after
-`uptimeCheckConfigs/`):
+:::caution `--validate-ssl` defaults to FALSE on the CLI
+All eleven existing checks have `validateSsl: true`, because the console
+checkbox is on by default — the CLI's is not. Omitting the flag creates the
+one check in the set that would keep reporting green through an expired or
+invalid certificate on `app.aglyn.com`. Verified against the live configs on
+2026-08-23 (AGL-2486): 11 of 11 `true`.
+:::
+
+Then create the policy, substituting the id from step 2:
 
 ```bash
 CHECK_ID='<paste the id from step 2>'
@@ -563,7 +581,9 @@ curl -s -X POST \
    **Create uptime check**.
 2. Protocol **HTTPS**, Resource type **URL**, Hostname `app.aglyn.com`,
    Path `/api/health/crons`. **Next.**
-3. Response validation: check timeout **10s**; **Content matching** on →
+3. Response validation: check timeout **10s**; leave **Validate SSL
+   certificates** checked (it is on by default here — this is the setting
+   Option A has to pass explicitly); **Content matching** on →
    Response content type **JSON**, matcher **Matches JSON path**,
    JSON path `$.status`, JSON path matcher **Exact match**,
    Content `"ok"` (with the quotes). Accepted status codes: **2xx**. **Next.**
@@ -574,6 +594,25 @@ curl -s -X POST \
 5. Title `scheduled-jobs — app.aglyn.com/api/health/crons status=ok`,
    frequency **15 minutes**. **Test** — it should come back green — then
    **Create**.
+
+#### Confirm the new check matches the known-good one
+
+Whichever option you took, diff the created config against `backup-state` —
+the check this one was modelled on. Every field but the path, the display
+name and the generated id should be identical, so anything else the diff
+prints is a mistake worth fixing before you trust the check.
+
+```bash
+dump() {  # dump <displayName filter>
+  gcloud monitoring uptime list-configs --project=aglyn-main \
+    --filter="displayName~$1" --format=json |
+    python3 -c 'import json,sys; c=json.load(sys.stdin)[0]; c.pop("name",None); c.pop("displayName",None); c["httpCheck"].pop("path",None); print(json.dumps(c,indent=2,sort_keys=True))'
+}
+diff <(dump backup-state) <(dump scheduled-jobs) && echo "IDENTICAL apart from path/name/id"
+```
+
+An empty diff is the pass. In particular it catches a missing
+`"validateSsl": true`, which nothing else in this runbook would surface.
 
 #### Prove it can go red before trusting it
 
