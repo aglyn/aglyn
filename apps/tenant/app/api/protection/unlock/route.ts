@@ -17,7 +17,10 @@
 
 import composeScreenNodes from '@aglyn/tenant-runtime/compose-screen-nodes'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
-import { consumeRateLimit } from '@aglyn/tenant-data-admin'
+import {
+  consumeRateLimit,
+  visitorContentRefusal,
+} from '@aglyn/tenant-data-admin'
 import { createHash, timingSafeEqual } from 'crypto'
 
 export const dynamic = 'force-dynamic'
@@ -73,6 +76,19 @@ export async function POST(request: Request): Promise<Response> {
       },
     )
   }
+
+  // A FULL takedown stops this route serving the site (AGL-2495). The
+  // middleware's matcher excludes `/api`, so before this line a locked host
+  // 503'd every page while this route still composed and returned the
+  // protected screen's node tree to anyone holding the password — which is
+  // the site continuing to publish through its own takedown. Placed AFTER
+  // the brute-force counter so a lock cannot be used to mine free guesses,
+  // and BEFORE the screen read so a locked host pays nothing.
+  //
+  // Read-only locks are untouched: `lockdownBlocks(state, 'read')` is true
+  // only for `full`, so a site that is still serving still unlocks.
+  const down = await visitorContentRefusal({ hostId })
+  if (down) return down
 
   try {
     const screenRes = await getScreen({ hostId, screenId })

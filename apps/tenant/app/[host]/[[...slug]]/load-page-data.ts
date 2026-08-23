@@ -1111,6 +1111,42 @@ export async function loadNotFoundScreen(
     const hostRes = await getHost({ host: hostParam })
     if (hostRes.error || !hostRes.host) return null
     const hostId = hostRes.host.$id as Aglyn.HostUid
+
+    /*
+     * THE SAME LOCKDOWN BRANCH `loadPageData` APPLIES, BECAUSE THIS PATH DOES
+     * NOT GO THROUGH IT (AGL-2495).
+     *
+     * Found by the AGL-1621 drill's coverage sweep. `/api/screen/not-found`
+     * delegates every gate to this loader — that is the security decision its
+     * sibling `/api/screen/nodes` documents — but the delegation was only
+     * true of `loadPageData`. This function is a second entry point, and it
+     * read the host, composed the screen and returned the node tree without
+     * ever resolving a verdict. The tenant middleware excludes `/api` from
+     * its matcher, so under a full org or host takedown every page 503'd
+     * while this route kept handing out the site's own designed 404 — header,
+     * footer, nav and all — to anyone who asked for a missing URL.
+     *
+     * `null` is the right refusal here rather than a 423: the route's
+     * contract is already "null means fall back to the platform status
+     * screen", which is exactly what a visitor to a locked site should see.
+     * Read-only locks render normally, matching the branch above — a
+     * read-only lock is a write freeze and the site is still serving.
+     */
+    const lockdownState = Aglyn.resolveLockdown(
+      {
+        platform: await getPlatformLockdown(),
+        org: Aglyn.normalizeOrgLockdown(
+          (await getOrgBilling({ hostId })).org as any,
+        ),
+        host: Aglyn.normalizeHostLockdown(hostRes.host as any),
+        domain: hostParam.startsWith(CNAME_HOST_PREFIX)
+          ? await getDomainLockdown(hostParam.slice(CNAME_HOST_PREFIX.length))
+          : null,
+      },
+      Date.now(),
+    )
+    if (lockdownState && !Aglyn.isReadOnlyLockdown(lockdownState)) return null
+
     const screenId = resolveNotFoundScreenId(hostRes.host)
     if (!screenId) return null
     const screenRes = await getScreen({

@@ -15,6 +15,14 @@
  * limitations under the License.
  */
 
+// lockdown-423: exempt — subject-less cron entrypoint. The beat carries no org, no
+// host and no user: it authenticates a shared secret and then runs whichever
+// registered jobs are due, each of which sweeps across every site. There is no
+// single verdict this route could ask for. The obligation is pushed one level down
+// instead — each registered job resolves the lockdown for the host it is about to
+// touch (`publish-schedule-job.ts` is the model) — and the JOB half of
+// `lockdown-tenant-api-coverage.spec.ts` is what holds that.
+
 import {
   listPluginJobs,
   pluginJobKey,

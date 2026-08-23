@@ -25,8 +25,9 @@ import { join, relative, resolve } from 'path'
  * AGL-1501 wired the verdict into six chokepoints and deferred the rest;
  * the deferred set is exactly the kind of inventory that rots. So this
  * spec holds the TOTAL surface, discovered rather than listed (the
- * `media-create-shape.spec.ts` posture): every `route.ts` under
- * `apps/console/app/api` must be one of —
+ * `media-create-shape.spec.ts` posture): every App Router handler under
+ * `apps/console/app` — `route.{ts,tsx,js,jsx}`, inside `app/api` or not
+ * (widened by AGL-2495, see the walk root below) — must be one of —
  *
  *  1. WIRED — carries the `lockdownRefusal` two-line idiom, or the
  *     original AGL-1501 pair (`getLockdownVerdict` + `lockdownJsonResponse`,
@@ -51,6 +52,30 @@ import { join, relative, resolve } from 'path'
  */
 const REPO_ROOT = resolve(__dirname, '../../..')
 const CONSOLE_API = 'apps/console/app/api'
+/**
+ * The walk root is the whole `app` tree, not `app/api` (AGL-2495).
+ *
+ * Two blind spots, found by the AGL-1621 drill by reading this file rather
+ * than trusting its green:
+ *
+ *  - LOCATION. `apps/console/app/auth/handoff/start/route.ts` is a real
+ *    route handler outside `app/api`, and it had been carrying a
+ *    `// lockdown-423: exempt —` marker that NO GUARD HAD EVER READ. A
+ *    marker nobody reads is decoration that looks like coverage — the
+ *    `feedback_written_but_never_read` shape — and the fix is to read it,
+ *    not to delete it.
+ *  - EXTENSION. Next accepts `route.js|jsx|ts|tsx`; this walk hardcoded
+ *    `route.ts`, so a `route.tsx` handler was invisible. Nobody had to
+ *    exploit that deliberately; it was one file extension away.
+ *
+ * `CONSOLE_API` survives as the ADMIN-prefix test only, which is still
+ * scoped to `app/api/admin/`.
+ */
+const CONSOLE_APP = 'apps/console/app'
+
+/** Every App Router handler spelling (AGL-2495). */
+export const isRouteFile = (name: string): boolean =>
+  /^route\.(?:ts|tsx|js|jsx|mjs|cjs)$/.test(name)
 
 const SKIP_DIRS = new Set([
   'node_modules',
@@ -80,10 +105,7 @@ function walk(absoluteDir: string, keep: (name: string) => boolean): string[] {
 const read = (absolutePath: string) => readFileSync(absolutePath, 'utf8')
 const repoPath = (absolutePath: string) => relative(REPO_ROOT, absolutePath)
 
-const ROUTES = walk(
-  resolve(REPO_ROOT, CONSOLE_API),
-  (name) => name === 'route.ts',
-)
+const ROUTES = walk(resolve(REPO_ROOT, CONSOLE_APP), isRouteFile)
   .map(repoPath)
   .sort()
 
@@ -160,6 +182,33 @@ describe('AGL-1506 · every org-scoped console API route answers the 423', () =>
       'apps/console/app/api/[...pluginApi]/route.ts',
     ]) {
       expect(`${anchor}: ${byFile.get(anchor)?.kind}`).toBe(`${anchor}: wired`)
+    }
+    // ANTI-VACUITY for the widened root (AGL-2495): the search itself works
+    // — it finds the file it is SUPPOSED to find. Without this the widening
+    // is unfalsifiable: a root that resolved to nothing new, or a walk that
+    // silently stopped recursing outside `app/api`, would pass every
+    // assertion in this file while the marker in that route went on being
+    // unread. Named explicitly, and asserted on its CLASSIFICATION rather
+    // than its mere presence.
+    const outsideApi = ROUTES.filter(
+      (file) => !file.startsWith(`${CONSOLE_API}/`),
+    )
+    expect(outsideApi).toContain(
+      'apps/console/app/auth/handoff/start/route.ts',
+    )
+    expect(
+      `handoff: ${byFile.get('apps/console/app/auth/handoff/start/route.ts')?.kind}`,
+    ).toBe('handoff: exempt')
+  })
+
+  it('reads every App Router handler spelling, not just route.ts', () => {
+    // The extension blind spot, held as a predicate so it is proven without
+    // planting a fixture handler in a live app.
+    for (const name of ['route.ts', 'route.tsx', 'route.js', 'route.jsx']) {
+      expect(`${name}: ${isRouteFile(name)}`).toBe(`${name}: true`)
+    }
+    for (const name of ['page.tsx', 'route.spec.ts', 'my-route.ts']) {
+      expect(`${name}: ${isRouteFile(name)}`).toBe(`${name}: false`)
     }
   })
 

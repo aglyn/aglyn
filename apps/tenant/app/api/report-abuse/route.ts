@@ -15,6 +15,13 @@
  * limitations under the License.
  */
 
+// lockdown-423: exempt — the abuse intake must stay open while a site is locked.
+// A suspended host is the single most likely subject of a report and the reporter
+// who has just seen the 503 notice is the most motivated one, so refusing here
+// would close the intake precisely when it matters. Stated already in "Three
+// refusals this route deliberately does NOT make" above; this is that decision in
+// the machine-readable form the coverage guard reads.
+
 /**
  * PUBLIC ABUSE REPORT INTAKE (AGL-1964) — `GET` renders the form, `POST`
  * accepts it. No authentication, no App Check, no JavaScript required.

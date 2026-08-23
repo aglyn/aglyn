@@ -15,6 +15,11 @@
  * limitations under the License.
  */
 
+// lockdown-423: via libs/tenant/data/admin/src/lib/server/serve-media-cdn.ts
+// `lockdownStopsMediaDelivery` (AGL-1520) resolves platform/org/host state inside
+// the shared handler and stops the bytes, so the gate travels with the handler to
+// both apps rather than being re-derived at each mount point.
+
 import { runLegacyHandler } from '@aglyn/aglyn/server'
 import { serveMediaCdn } from '@aglyn/tenant-data-admin'
 
