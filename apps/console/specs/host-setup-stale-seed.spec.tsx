@@ -190,6 +190,12 @@ jest.mock('../components/favicon-card.component', () => nullCard)
 jest.mock('../components/search-indexing-card.component', () => nullCard)
 jest.mock('../components/consent-banner-card.component', () => nullCard)
 jest.mock('../components/social-image-card.component', () => nullCard)
+// The SEO tab's entity-logo picker (AGL-2486) — a media pick beside the
+// favicon and social-image cards, stubbed for the same reason they are: this
+// suite is about the theme form's write correctness, and an unstubbed card
+// only contributes its own Firestore and media-resolver surface to the mock
+// budget.
+jest.mock('../components/entity-logo-card.component', () => nullCard)
 jest.mock('../components/business-details-card.component', () => nullCard)
 jest.mock('../components/logo-card.component', () => nullCard)
 jest.mock('../components/error-screens-card.component', () => nullCard)

@@ -55,6 +55,7 @@ import CustomDomainCard from '../../../../../../components/custom-domain-card.co
 import SiteBrandingBadgeCard from '../../../../../../components/site-branding-badge-card.component'
 import SiteEmailsCard from '../../../../../../components/site-emails-card.component'
 import FaviconCard from '../../../../../../components/favicon-card.component'
+import EntityLogoCard from '../../../../../../components/entity-logo-card.component'
 import SearchIndexingCard from '../../../../../../components/search-indexing-card.component'
 import ConsentBannerCard from '../../../../../../components/consent-banner-card.component'
 import SocialImageCard from '../../../../../../components/social-image-card.component'
@@ -320,6 +321,15 @@ const seoSchema: FormSchema = {
           component: FieldComponentType.TEXT_FIELD,
           name: 'seo.entity.logo',
           label: 'Logo',
+          type: 'text',
+          // The field stays a URL box on purpose (AGL-2486): an externally
+          // hosted logo is legitimate schema.org output. What it lacked was
+          // any way to reach the library the image is usually already in —
+          // that is the Entity logo card below, exactly as the favicon has
+          // had one since AGL-134.
+          helperText:
+            'A full URL to the publisher’s logo — or pick one from your ' +
+            'media library in the Entity logo card below',
         },
       ],
     },
@@ -833,6 +843,16 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                           <>
                             <div style={{ marginTop: 24 }}>
                               <FaviconCard hostId={hostId} />
+                            </div>
+                            {/* The publisher's logo for JSON-LD (AGL-2486).
+                                A card for the same reason the favicon is
+                                one — it is a media pick, and a cleared
+                                value has to reach Firestore as `''` rather
+                                than being dropped by the form stack
+                                (AGL-1191). Beside the Entity fields it
+                                belongs to. */}
+                            <div style={{ marginTop: 24 }}>
+                              <EntityLogoCard hostId={hostId} />
                             </div>
                             {/* Site-wide default social card (AGL-1337). A
                                 card for the same reason the favicon is one:
