@@ -200,6 +200,28 @@ parse_load() { # parse_load <uptime output>
   printf '%s\n' "$1" | sed -e 's/.*load average[s]*: *//' -e 's/[, ].*//' | tr -d ' '
 }
 
+# normalize_projects <nx output> -> a space-separated project list.
+#
+# `nx show projects` prints ONE NAME PER LINE on a TTY and a JSON ARRAY when
+# stdout is a pipe — which, inside this script, is always. Measured:
+#
+#   $ nx show projects --affected ... | od -c
+#   [   "   t   e   n   a   n   t   "   ,   "   t   e   n   a   n   t   -   e   2   e   "   ]  \n
+#
+# The first version of this matched `*" tenant "*` against that string, which
+# cannot match, so a one-file change under apps/tenant reported "NO app
+# affected" and ran ZERO production builds. The gate said so out loud rather
+# than printing a green build row — that line is why this was caught on the
+# first measured run instead of on release day — but it was still the wrong
+# answer, and the wrong answer in the direction of proving less.
+#
+# Handles both shapes: strip JSON punctuation, then collapse whitespace. A
+# plain newline-separated list passes through unharmed, so this stays correct
+# whichever way a future nx decides to print.
+normalize_projects() {
+  printf '%s' "$1" | tr -d '[]"' | tr ',\n' '  ' | tr -s ' ' | sed 's/^ //;s/ $//'
+}
+
 # choose_parallelism -> sets PARALLEL and MAX_WORKERS when either is `auto`.
 choose_parallelism() {
   local cores load band p w
@@ -398,6 +420,26 @@ self_test() {
   choose_parallelism
   _assert "an explicit --parallel/--max-workers is NOT overridden" "3/1" "$PARALLEL/$MAX_WORKERS"
   unset -f cpu_count load_1m
+
+  # PROJECT-LIST PARSING. `nx show projects` prints a JSON array into a pipe
+  # and one name per line on a TTY. Getting this wrong made a one-file change
+  # under apps/tenant report "NO app affected" and skip the tenant production
+  # build — the fast path proving LESS than it said. Both real shapes.
+  _assert "nx JSON array parses" "tenant tenant-e2e" \
+    "$(normalize_projects '["tenant","tenant-e2e"]')"
+  _assert "newline-separated list parses" "tenant tenant-e2e" \
+    "$(normalize_projects 'tenant
+tenant-e2e')"
+  _assert "an empty list stays empty" "" "$(normalize_projects '[]')"
+  # The membership test the build phase actually performs, on real output.
+  _apps() { local out="" a; for a in console tenant docs; do
+      case " $(normalize_projects "$1") " in *" $a "*) out="$out $a" ;; esac
+    done; echo "${out# }"; }
+  _assert "a tenant-only diff selects the tenant production build" "tenant" \
+    "$(_apps '["tenant","tenant-e2e"]')"
+  _assert "a tools-only diff selects no production build" "" "$(_apps '[]')"
+  _assert "a two-app diff selects both" "console tenant" \
+    "$(_apps '["console","tenant","aglyn"]')"
 
   # --fresh-cache MUST NOT delete the shared cache. Now that the cache is
   # stable and shared between gate runs, `rm -rf "$NX_CACHE_DIRECTORY"` would
@@ -647,7 +689,7 @@ if [ "$AFFECTED" = 1 ]; then
     exit 68
   fi
   AFFECTED_BASE_SHA=$(git -C "$WT" rev-parse "$AFFECTED_BASE")
-  AFFECTED_PROJECTS=$(npx nx show projects --affected --base="$AFFECTED_BASE_SHA" --head="$GATE_SHA" 2>/dev/null | tr '\n' ' ')
+  AFFECTED_PROJECTS=$(normalize_projects "$(npx nx show projects --affected --base="$AFFECTED_BASE_SHA" --head="$GATE_SHA" 2>/dev/null)")
   # An empty answer is ambiguous — it is either "nothing changed" or "nx could
   # not read the graph". Distinguish them, because the second one silently
   # gates nothing while exiting 0.
