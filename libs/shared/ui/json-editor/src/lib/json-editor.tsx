@@ -37,6 +37,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import { Else, If, Then, When } from 'react-if'
@@ -85,28 +86,70 @@ const JsonEditorRaw = forwardRef<any, JsonEditorProps>(
       validate,
       ...rest
     } = props
-    const [data, setData] = useState(
-      JSON.stringify(defaultValue || {}, null, 2),
+    /** The stored document, as the text a buffer is seeded from. */
+    const documentText = useMemo(
+      () => JSON.stringify(defaultValue || {}, null, 2),
+      [defaultValue],
     )
+    const [data, setData] = useState(documentText)
     const [warnOpen, setWarnOpen] = useState(true)
     const [saveError, setSaveError] = useState<string | null>(null)
     const closeWarn = useCallback(() => setWarnOpen(false), [])
 
-    useEffect(() => {
-      setData(prev => {
-        const parsed = JSON.stringify(defaultValue || {}, null, 2)
-        return prev === parsed ? prev : parsed
-      })
-    }, [defaultValue])
+    /**
+     * The document text this buffer was seeded from, or `null` while closed.
+     *
+     * `data !== seededFrom.current` is therefore "the author has typed
+     * something that is not yet saved", which is the one question both the
+     * re-seed below and the backdrop guard need answered.
+     */
+    const seededFrom = useRef<string | null>(null)
 
-    const parsedValue = useMemo<iJSON>(() => {
-      try {
-        return JSON.parse(data)
-      } catch (e) {
-        console.warn('Error occurred in JsonEditor during parse', e)
-        return {}
+    /**
+     * Seed the buffer, and NEVER re-seed one that has been typed into
+     * (AGL-2486 item 17).
+     *
+     * `defaultValue` is `Aglyn.canvas.nestedNodes` at every call site — a
+     * freshly built object, from a MobX store this dialog re-renders with.
+     * The previous version compared the incoming document against the BUFFER
+     * and re-seeded whenever they differed, which is true by definition the
+     * moment the author types: any canvas change, autosave or co-edit echo
+     * then replaced their work in progress with the stored document.
+     *
+     * Re-seeding a PRISTINE buffer is still right — nothing is lost, and the
+     * dialog should not show a document the canvas has moved past.
+     */
+    useEffect(() => {
+      if (!open) {
+        // A closed dialog holds nothing: the next open seeds from whatever
+        // the document says then, rather than from a buffer walked away from.
+        seededFrom.current = null
+        return
       }
-    }, [data])
+      setData(prev => {
+        if (seededFrom.current !== null && prev !== seededFrom.current) {
+          return prev
+        }
+        seededFrom.current = documentText
+        return documentText
+      })
+    }, [documentText, open])
+
+    /**
+     * Why the buffer does not parse, or `null` when it does.
+     *
+     * Surfaced as a live, NON-destructive notice: a half-written document is
+     * allowed to be invalid, so the only thing to do about it is say so.
+     */
+    const parseError = useMemo<string | null>(() => {
+      if (!open) return null
+      try {
+        JSON.parse(data)
+        return null
+      } catch (e: any) {
+        return e?.message ?? 'Invalid JSON'
+      }
+    }, [data, open])
 
     const handleChange = useCallback((value: any) => {
       setData(value)
@@ -114,10 +157,13 @@ const JsonEditorRaw = forwardRef<any, JsonEditorProps>(
     }, [])
     const handleClose = useCallback<OnClose>(
       (event, reason) => {
+        // A stray click outside a 95vw dialog must not destroy an unsaved
+        // buffer. Cancel and Escape are deliberate acts and still close.
+        if (reason === 'backdropClick' && data !== seededFrom.current) return
         setSaveError(null)
         onClose && onClose(event, reason)
       },
-      [onClose],
+      [onClose, data],
     )
     const handleSave = useCallback(
       (event: any) => {
@@ -126,8 +172,8 @@ const JsonEditorRaw = forwardRef<any, JsonEditorProps>(
         let value: iJSON
         try {
           value = JSON.parse(data)
-        } catch (parseError: any) {
-          setSaveError(parseError?.message ?? 'Invalid JSON')
+        } catch (error: any) {
+          setSaveError(error?.message ?? 'Invalid JSON')
           return
         }
         const problem = validate?.(value)
@@ -183,6 +229,13 @@ const JsonEditorRaw = forwardRef<any, JsonEditorProps>(
             <Alert severity="error" sx={{ mx: 3, mb: 1 }}>
               {saveError}
             </Alert>
+          ) : parseError ? (
+            <Alert severity="warning" sx={{ mx: 3, mb: 1 }}>
+              {'Not valid JSON yet — '}
+              {parseError}
+              {'. Your text is kept exactly as typed; Save JSON works again '}
+              {'once it parses.'}
+            </Alert>
           ) : null}
           <When condition={open}>
             <If condition={warnOpen}>
@@ -223,11 +276,31 @@ const JsonEditorRaw = forwardRef<any, JsonEditorProps>(
                 </Box>
               </Then>
               <Else>
-                {/* eslint-disable-next-line @typescript-eslint/no-unnecessary-condition */}
+                {/*
+                  `value` is the author's buffer VERBATIM, and nothing else
+                  (AGL-2486 item 17).
+
+                  It used to be `JSON.stringify(JSON.parse(data) ?? {})`, whose
+                  parse fell back to `{}`. `@monaco-editor/react` treats `value`
+                  as authoritative — on every change it runs
+                  `executeEdits(fullModelRange, value)` — so the first keystroke
+                  that left the buffer transiently unparseable replaced the
+                  whole document on screen with `{}`. A comma does that, which
+                  is exactly how it was reported. Worse, that overwrite is made
+                  with `onChange` suppressed, so `data` kept the text the editor
+                  no longer showed and there was nothing to recover from.
+
+                  Feeding the buffer back unchanged means the prop always equals
+                  `editor.getValue()`, so the effect's `value !==` guard never
+                  fires from typing and no keystroke can rewrite the document.
+                  It also stops the buffer being re-indented under the cursor
+                  whenever the author's valid text was not already 2-space
+                  pretty-printed.
+                */}
                 <Editor
                   height="100%"
-                  defaultValue={data}
-                  value={JSON.stringify(parsedValue, null, 2)}
+                  defaultValue={documentText}
+                  value={data}
                   onChange={handleChange}
                 />
               </Else>
