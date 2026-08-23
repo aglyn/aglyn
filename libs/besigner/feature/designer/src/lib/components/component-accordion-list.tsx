@@ -19,7 +19,7 @@ import { REUSABLE_COMPONENT_CATEGORY } from '@aglyn/aglyn'
 import { DragType } from '@aglyn/besigner'
 import { mergeRefs } from '@aglyn/shared-ui-jsx'
 import { DragOverlay } from '@dnd-kit/core'
-import { Box, Grid, Stack } from '@mui/material'
+import { Box, Grid, Stack, Typography } from '@mui/material'
 import { Observer, observer } from 'mobx-react-lite'
 import { useCallback, useState } from 'react'
 import { describeElement } from '../utils/describe-element'
@@ -40,6 +40,14 @@ export type ComponentGridGroupItemData = {
 }
 
 NodeCard.displayName = 'NodeCard'
+
+/**
+ * Reserved height of the docked detail band, in pixels.
+ *
+ * Fixed rather than content-sized: the band sits below a scrolling grid, so
+ * anything that changes its height moves every card above it.
+ */
+const DETAIL_REGION_HEIGHT = 232
 
 interface ComponentAccordionListProp {}
 
@@ -184,27 +192,34 @@ export const ComponentAccordionList = observer(
             />
           </Box>
         )}
-        {detailFor ? (
-          <Box
-            sx={{
-              flex: '0 0 auto',
-              p: 1,
-              borderTop: 1,
-              borderColor: 'divider',
-              backgroundColor: 'surface.main',
-              // Bounded: a heavily-restricted element must not eat the
-              // column it is being described in.
-              maxHeight: '40%',
-              overflowY: 'auto',
-            }}
-          >
+        {/* ALWAYS mounted, never conditional. Appearing only on hover made
+            the region push the grid up as it opened, which slid the card out
+            from under the pointer, which ended the hover, which closed the
+            region again — a flicker the panel could not settle out of. The
+            band holds its own height whether or not anything is hovered. */}
+        <Box
+          sx={{
+            flex: '0 0 auto',
+            p: 1,
+            borderTop: 1,
+            borderColor: 'divider',
+            backgroundColor: 'surface.main',
+            height: DETAIL_REGION_HEIGHT,
+            overflowY: 'auto',
+          }}
+        >
+          {detailFor ? (
             <ElementDetailView
               detail={describeElement(detailFor)}
               node={detailFor}
               dense
             />
-          </Box>
-        ) : null}
+          ) : (
+            <Typography variant="caption" color="textSecondary">
+              {'Point at an element to see what it does.'}
+            </Typography>
+          )}
+        </Box>
       </Stack>
     )
   },

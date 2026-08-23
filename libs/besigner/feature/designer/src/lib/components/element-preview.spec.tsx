@@ -39,6 +39,21 @@ const PRESET = {
   },
 }
 
+/** A component that renders REAL dom, so "did it draw" is answerable. */
+const CONTENTFUL_COMPONENT_ID = 'preview-spec-banner'
+
+const CONTENTFUL_PRESET = {
+  $id: 'preview-spec-contentful',
+  type: Aglyn.NodeType.PRESET,
+  displayName: 'Banner',
+  category: Aglyn.ComponentCategory.LAYOUT,
+  data: {
+    $id: null,
+    componentId: CONTENTFUL_COMPONENT_ID,
+    props: { children: 'Northwind Coffee' },
+  },
+}
+
 const renderPreview = (node: any = PRESET) =>
   render(
     <ThemeProvider theme={theme}>
@@ -48,6 +63,15 @@ const renderPreview = (node: any = PRESET) =>
 
 describe('ElementPreview (AGL-2486)', () => {
   beforeAll(() => {
+    Aglyn.components.registerComponent(
+      ((props: any) => <div>{props?.children}</div>) as any,
+      {
+        $id: CONTENTFUL_COMPONENT_ID,
+        pluginId: 'mui',
+        displayName: 'Banner',
+        category: Aglyn.ComponentCategory.LAYOUT,
+      } as Aglyn.ComponentSchema,
+    )
     Aglyn.components.registerComponent((() => null) as any, {
       $id: PREVIEW_COMPONENT_ID,
       pluginId: 'mui',
@@ -105,6 +129,20 @@ describe('ElementPreview (AGL-2486)', () => {
     const css = cssFor(box.className)
     expect(css).toContain('overflow:hidden')
     expect(css).toMatch(/height:\s*160px/)
+  })
+
+  it('actually draws the element, not just an empty frame', () => {
+    // The assertion the other four were missing. Isolation, inertness and
+    // bounding all pass just as well against a preview that renders nothing
+    // at all — which is exactly what the first version shipped as.
+    const { container } = renderPreview(CONTENTFUL_PRESET)
+    const box = container.querySelector(
+      '[data-testid="element-preview"]',
+    ) as HTMLElement
+    const host = box.querySelector('[data-preview-root]') as HTMLElement
+    const shadow = host?.shadowRoot
+    expect(shadow).toBeTruthy()
+    expect(shadow.textContent).toContain('Northwind')
   })
 
   it('renders nothing at all for an item with no nodes to draw', () => {

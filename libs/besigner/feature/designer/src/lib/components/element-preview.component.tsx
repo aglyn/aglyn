@@ -49,6 +49,9 @@ const STAGE_WIDTH = 1280
 /** Never blow a small element up past life size; only ever scale down. */
 const MAX_SCALE = 1
 
+/** Below this a preview is a smudge; better to show a short empty band. */
+const MIN_HEIGHT = 40
+
 export interface ElementPreviewProps {
   /** The picker item — a preset in both drawers. */
   node: any
@@ -94,14 +97,20 @@ export const ElementPreview = observer((props: ElementPreviewProps) => {
     if (!data) return undefined
     try {
       const store = new Aglyn.CanvasManager(Aglyn.aglyn)
-      // Parented to the synthetic root, which is the branch of
-      // `processNodesToDenormalized` that wraps a single nested node in a
-      // plain `div` root — the same shape the drawer's own insert takes.
+      // Seed an empty root, then insert through the SAME path the drawer
+      // uses. Handing `preset.data` straight to `processNodesToDenormalized`
+      // looks equivalent and is not: it keys nodes by `$id` and maps each
+      // child to `i.$id`, and a preset's nodes carry `$id: null` until they
+      // are minted — so every child was filtered out and the preview drew an
+      // empty root. `addNodeFromPreset` runs `createDuplicateNode` first,
+      // which is what assigns them.
       store.setNodes(
         store.processNodesToDenormalized([
-          { ...data, parentId: Aglyn.NODE_ROOT_ID } as any,
+          { $id: Aglyn.NODE_ROOT_ID, componentId: 'div', nodes: [] } as any,
         ]),
       )
+      const rootNode = store.getNode(Aglyn.NODE_ROOT_ID)
+      store.addNodeFromPreset(node, rootNode)
       return store
     } catch (error) {
       // A preset the renderer cannot compose must cost the picker nothing.
@@ -118,23 +127,39 @@ export const ElementPreview = observer((props: ElementPreviewProps) => {
   const linkValue = useMemo(() => ({ suppressNavigation: true }), [])
 
   const boxRef = useRef<HTMLDivElement>(null)
-  const [scale, setScale] = useState(height / STAGE_WIDTH)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [scale, setScale] = useState(0)
+  // The box shrinks to the SCALED CONTENT rather than standing at its cap.
+  // Most elements are wide and short — a Nav Bar is 1280x70 — so scaling to
+  // the column width leaves a ~12px strip, and a fixed-height box renders it
+  // as a sliver marooned at the top of a white rectangle. Measured, not
+  // assumed: the content decides, the cap only stops a Footer running away.
+  const [contentHeight, setContentHeight] = useState(0)
 
   useLayoutEffect(() => {
-    const el = boxRef.current
-    if (!el) return
+    const box = boxRef.current
+    if (!box) return
     const fit = () => {
-      const width = el.clientWidth
+      const width = box.clientWidth
       if (width) setScale(Math.min(MAX_SCALE, width / STAGE_WIDTH))
+      const natural = contentRef.current?.scrollHeight
+      if (natural) setContentHeight(natural)
     }
     fit()
     if (typeof ResizeObserver === 'undefined') return
     const observer = new ResizeObserver(fit)
-    observer.observe(el)
+    observer.observe(box)
+    if (contentRef.current) observer.observe(contentRef.current)
     return () => observer.disconnect()
-  }, [])
+  }, [root])
 
   if (!root) return null
+
+  // Below MIN_HEIGHT there is nothing to look at; above `height` a tall
+  // element is clipped rather than allowed to grow the surface.
+  const scaledHeight = contentHeight
+    ? Math.max(MIN_HEIGHT, Math.min(height, Math.ceil(contentHeight * scale)))
+    : height
 
   return (
     <Box
@@ -144,7 +169,7 @@ export const ElementPreview = observer((props: ElementPreviewProps) => {
       sx={{
         position: 'relative',
         width: 1,
-        height,
+        height: scaledHeight,
         overflow: 'hidden',
         borderRadius: 1,
         border: 1,
@@ -158,13 +183,28 @@ export const ElementPreview = observer((props: ElementPreviewProps) => {
     >
       <InertStage>
         <Box
+          ref={contentRef}
           sx={{
             width: STAGE_WIDTH,
             transform: `scale(${scale})`,
             transformOrigin: 'top left',
           }}
         >
-          <PreviewShadowDom mode="closed">
+          {/* The host needs its own box. `:host { all: initial }` inside the
+              shadow root resets the host's display to `inline`, and an inline
+              box with no intrinsic size collapses the whole preview to
+              nothing — the canvas viewport never hits this because its host
+              is a styled component carrying width and min-height. Outer
+              styles beat `:host`, so setting it here is what wins. */}
+          {/* Open, unlike the canvas viewport's closed root: the canvas
+              closes it to keep the editor's own tooling from reaching in and
+              treating site DOM as editable, and none of that applies to an
+              inert thumbnail. Open is inspectable and testable. */}
+          <PreviewShadowDom
+            mode="open"
+            data-preview-root
+            style={{ display: 'block', width: '100%' }}
+          >
             <Aglyn.SiteContext.Provider
               // No `hostId`: data-backed elements take their own placeholder
               // branch rather than fetching a site's real content into a
