@@ -25,6 +25,7 @@ import { taxPeriodRange } from '../../../../utils/server/tx-return'
 import {
   commerceSettledSummary,
   contractedSummary,
+  orgAttribution,
   marketplaceSettledSummary,
   revenueGap,
   subscriptionSettledSummary,
@@ -96,6 +97,17 @@ const SWEEP_PAGE_SIZE = 500
  * bound can never again be reported as an anonymous "some total".
  */
 export const SWEEP_CEILING = 50000
+
+/**
+ * How many orgs the per-org attribution returns (AGL-2486).
+ *
+ * A bound on the RESPONSE, not on a sweep: the totals above it are computed
+ * from every org regardless. Beyond this the payload carries the remainder as
+ * figures (`omittedMrrUsd` / `omittedSettledCents`) so the table still adds
+ * up, rather than silently showing a partial accounting — which is the same
+ * fault as the row cap this route used to have.
+ */
+const ATTRIBUTION_ROW_LIMIT = 100
 
 /**
  * Page a query to exhaustion, folding as it goes.
@@ -369,6 +381,14 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
+    // WHO produced the numbers. Built from the same rows the totals folded,
+    // so the table reconciles to the figures above it by construction.
+    const attribution = orgAttribution(
+      contractedInput,
+      subscriptionRows,
+      ATTRIBUTION_ROW_LIMIT,
+    )
+
     const settled = {
       subscriptions,
       marketplace: marketplaceSettled,
@@ -439,6 +459,26 @@ async function handler(request: Request): Promise<Response> {
       periodPrecedesCoverage:
         earliestPaidAt !== null && range.start < earliestPaidAt,
       settledMirrorEmpty: earliestPaidAt === null,
+      attribution,
+      /**
+       * Whether the period has already ended (AGL-2486).
+       *
+       * The gap compares CONTRACTED — a run-rate measured right now — against
+       * SETTLED cash for the selected period. For the month in progress those
+       * are roughly the same instant and the difference is meaningful. For a
+       * CLOSED period they are not: contracted is measured today, after any
+       * subscription that collected during the period may have ended, so the
+       * remainder is an artefact of measuring two different instants and not
+       * a shortfall or a surplus.
+       *
+       * A past period's contracted base is NOT recoverable — org documents
+       * carry only current state and nothing snapshots MRR per month — so the
+       * honest options were to compare against the period's own base
+       * (impossible) or to stop presenting a difference (this). The page
+       * therefore shows both figures for a closed period and computes no gap,
+       * rather than labelling a known, modelled artefact "unexplained".
+       */
+      periodIsClosed: range.end.getTime() <= Date.now(),
     })
   } catch (error) {
     console.error('[admin/revenue]', error)

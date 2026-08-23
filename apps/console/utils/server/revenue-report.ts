@@ -126,6 +126,43 @@ export interface ContractedSummary {
   discountUsd: number
 }
 
+/**
+ * What bucket an org falls in, resolved ONCE (AGL-2486).
+ *
+ * `contractedSummary` and the per-org attribution both need this, and a second
+ * copy is how a page comes to show a total of two comped orgs beside a table
+ * naming three. `inactive` is a genuinely free org — neither billing nor
+ * comped, and counted in neither.
+ */
+export type OrgRevenueState =
+  | 'collecting'
+  | 'trialing'
+  | 'pastDue'
+  | 'comped'
+  | 'inactive'
+
+export function classifyOrgRevenueState(
+  billing: Record<string, unknown> | null | undefined,
+): OrgRevenueState {
+  const doc = billing as any
+  if (!isBillingSubscription(doc)) {
+    // A paid plan with no subscription behind it is a comp / override / dark
+    // launch. A genuinely free org is neither, and is not counted.
+    const plan = doc?.plan
+    return plan && plan !== 'free' ? 'comped' : 'inactive'
+  }
+  // Read the same way `isBillingSubscription` reads it: the mirrored
+  // `billingStatus` first, the inline `subscription.status` as fallback for
+  // orgs the AGL-1028 backfill has not reached.
+  const status =
+    (typeof doc?.billingStatus === 'string' && doc.billingStatus) ||
+    doc?.subscription?.status ||
+    ''
+  if (status === TRIALING_STATUS) return 'trialing'
+  if (PAST_DUE_STATUSES.has(status)) return 'pastDue'
+  return 'collecting'
+}
+
 function emptySlice(): ContractedSlice {
   return { orgs: 0, listPriceUsd: 0, mrrUsd: 0 }
 }
@@ -162,30 +199,18 @@ export function contractedSummary(
   }
   for (const entry of orgs ?? []) {
     const billing = entry?.billing as any
-    if (!isBillingSubscription(billing)) {
-      // A paid plan with no subscription behind it is a comp / override /
-      // dark launch. A genuinely free org is neither, and is not counted.
-      const plan = billing?.plan
-      if (plan && plan !== 'free') summary.compedOrgs += 1
+    const state = classifyOrgRevenueState(billing)
+    if (state === 'comped') {
+      summary.compedOrgs += 1
       continue
     }
+    if (state === 'inactive') continue
     const listPriceUsd = orgListPriceMonthlyUsd(billing)
     const mrrUsd = orgMonthlyRevenueUsd(billing)
     addToSlice(summary.total, listPriceUsd, mrrUsd)
-    // Read the same way `isBillingSubscription` reads it: the mirrored
-    // `billingStatus` first, the inline `subscription.status` as fallback
-    // for orgs the AGL-1028 backfill has not reached.
-    const status =
-      (typeof billing?.billingStatus === 'string' && billing.billingStatus) ||
-      billing?.subscription?.status ||
-      ''
-    if (status === TRIALING_STATUS) {
-      addToSlice(summary.trialing, listPriceUsd, mrrUsd)
-    } else if (PAST_DUE_STATUSES.has(status)) {
-      addToSlice(summary.pastDue, listPriceUsd, mrrUsd)
-    } else {
-      addToSlice(summary.collecting, listPriceUsd, mrrUsd)
-    }
+    if (state === 'trialing') addToSlice(summary.trialing, listPriceUsd, mrrUsd)
+    else if (state === 'pastDue') addToSlice(summary.pastDue, listPriceUsd, mrrUsd)
+    else addToSlice(summary.collecting, listPriceUsd, mrrUsd)
   }
   summary.discountUsd = usd(
     summary.total.listPriceUsd - summary.total.mrrUsd,
@@ -347,33 +372,50 @@ export function subscriptionSettledSummary(
     internalTrafficCents: 0,
   }
   for (const row of rows ?? []) {
-    const gross = cents(row?.grossCents)
-    const tax = cents(row?.taxCents)
-    // Reversals are CUMULATIVE on the row (the webhook maintains them that
-    // way so a redelivery converges), so they are summed as stored — never
-    // derived from a delta here.
-    //
-    // Clamped to the row's own gross: a refund larger than the charge is a
-    // data fault, and letting it run negative would silently CREATE revenue
-    // on a neighbouring row when the fold continues.
-    const refunded = Math.min(gross, Math.max(0, cents(row?.refundedCents)))
+    const { gross, tax, refunded, earned } = invoiceEarnedCents(row)
     out.transactionCount += 1
     out.grossCents += gross
     out.taxCents += tax
     out.netCents += gross - tax
     out.refundedCents += refunded
     out.chargedBackCents += Math.max(0, cents(row?.chargedBackCents))
-    // Stripe refunds the tax alongside the charge, so the revenue reversed is
-    // the refund's share of the row's own NET, not its gross. A full refund
-    // therefore nets this row to exactly zero — the same GROSS→NET scaling
-    // the billing webhook applies when it nets the GA4 figure.
-    const netReversed =
-      gross > 0 ? Math.round((refunded * (gross - tax)) / gross) : 0
-    const earned = gross - tax - netReversed
     out.netOfReversalsCents += earned
     if (row?.internalTraffic === true) out.internalTrafficCents += earned
   }
   return out
+}
+
+/**
+ * One invoice's arithmetic, in ONE place (AGL-2486).
+ *
+ * Extracted so the per-org attribution and the headline total cannot drift:
+ * an attribution whose rows do not sum to the figure above them is worse than
+ * no attribution at all, because it invites the reader to trust the smaller
+ * number they can see the working for.
+ *
+ * Reversals are CUMULATIVE on the row (the webhook maintains them that way so
+ * a redelivery converges), so they are read as stored — never derived from a
+ * delta. Clamped to the row's own gross: a refund larger than the charge is a
+ * data fault, and letting it run negative would silently CREATE revenue on a
+ * neighbouring row when the fold continues.
+ *
+ * Stripe refunds the tax alongside the charge, so the revenue reversed is the
+ * refund's share of the row's own NET, not its gross. A full refund therefore
+ * nets the row to exactly zero — the same GROSS→NET scaling the billing
+ * webhook applies when it nets the GA4 figure.
+ */
+export function invoiceEarnedCents(row: PlatformRevenueRowInput | null): {
+  gross: number
+  tax: number
+  refunded: number
+  earned: number
+} {
+  const gross = cents(row?.grossCents)
+  const tax = cents(row?.taxCents)
+  const refunded = Math.min(gross, Math.max(0, cents(row?.refundedCents)))
+  const netReversed =
+    gross > 0 ? Math.round((refunded * (gross - tax)) / gross) : 0
+  return { gross, tax, refunded, earned: gross - tax - netReversed }
 }
 
 /**
@@ -676,4 +718,153 @@ export function totalEarnedCents(settled: {
     cents(settled?.marketplace?.commissionNetCents) +
     cents(settled?.commerce?.commissionNetCents)
   )
+}
+
+/** One org's contribution to both bases, for the "who did what" table. */
+export interface OrgAttributionRow {
+  orgId: string
+  /** The org's display name, or its id when it has none. Never blank. */
+  name: string
+  plan: string
+  state: OrgRevenueState
+  /** Contracted MRR this org contributes TODAY. 0 for comped and inactive. */
+  mrrUsd: number
+  listPriceUsd: number
+  /** Settled cash IN THE PERIOD, net of tax and reversals. */
+  settledCents: number
+  /** Invoices behind `settledCents`. */
+  invoices: number
+  /** Money handed back in the period. Already deducted from `settledCents`. */
+  refundedCents: number
+}
+
+export interface OrgAttribution {
+  rows: OrgAttributionRow[]
+  /** Orgs with a contribution that did not fit the cap. */
+  omittedOrgs: number
+  omittedMrrUsd: number
+  omittedSettledCents: number
+  /** Orgs considered, including the ones contributing nothing. */
+  totalOrgs: number
+}
+
+/**
+ * Who produced the numbers (AGL-2486).
+ *
+ * Zach: *"We need to also list the sources of these numbers in a more visual
+ * way, show which orgs did what"*. A staff revenue page whose totals cannot be
+ * traced to a customer is a page nobody can act on — the point of seeing a gap
+ * is knowing whose card to chase, and "Comped / staff override: 2" is useless
+ * until it names the two.
+ *
+ * ## The rows must RECONCILE to the totals
+ *
+ * Every figure here comes from the same helpers the headline figures do —
+ * `classifyOrgRevenueState` for the bucket, `orgMonthlyRevenueUsd` for MRR,
+ * `invoiceEarnedCents` for settled cash. An attribution that recomputed any of
+ * them would eventually disagree with the total above it, and a reader shown
+ * two numbers trusts the one with visible working. So there is no second
+ * implementation, only a second grouping.
+ *
+ * ## Why it is CAPPED, and why the remainder is carried rather than dropped
+ *
+ * This is a response payload, not a sweep — at six orgs it is nothing, at six
+ * hundred thousand it is the page's whole weight. So it returns the largest
+ * contributors and reports what it left out AS FIGURES, not just a count:
+ * shown rows plus `omitted*` always equals the total, so the table can be
+ * trusted to be a complete accounting even when it is not a complete list.
+ * Silently truncating an attribution table is the same fault as the row cap
+ * this page already had once.
+ *
+ * An org contributing nothing to either base — no subscription, no cash, not
+ * comped — is not a row. It is not attribution, it is a customer list.
+ */
+export function orgAttribution(
+  orgs: readonly ContractedOrgInput[],
+  settledRows: readonly PlatformRevenueRowInput[],
+  limit = 100,
+): OrgAttribution {
+  const settledByOrg = new Map<
+    string,
+    { settledCents: number; invoices: number; refundedCents: number }
+  >()
+  for (const row of settledRows ?? []) {
+    const orgId = String((row as any)?.orgId ?? '')
+    if (!orgId) continue
+    const { earned, refunded } = invoiceEarnedCents(row)
+    const entry = settledByOrg.get(orgId) ?? {
+      settledCents: 0,
+      invoices: 0,
+      refundedCents: 0,
+    }
+    entry.settledCents += earned
+    entry.invoices += 1
+    entry.refundedCents += refunded
+    settledByOrg.set(orgId, entry)
+  }
+
+  const rows: OrgAttributionRow[] = []
+  for (const entry of orgs ?? []) {
+    const billing = entry?.billing as any
+    const orgId = entry?.orgId
+    if (!orgId) continue
+    const state = classifyOrgRevenueState(billing)
+    const billingOrg = state === 'collecting' || state === 'trialing' || state === 'pastDue'
+    const settled = settledByOrg.get(orgId)
+    settledByOrg.delete(orgId)
+    const mrrUsd = billingOrg ? orgMonthlyRevenueUsd(billing) : 0
+    // Nothing to attribute: no live subscription, no cash this period, and
+    // not a comp anyone needs to see named.
+    if (state === 'inactive' && !settled) continue
+    rows.push({
+      orgId,
+      name: String(billing?.name ?? '').trim() || orgId,
+      plan: String(billing?.plan ?? 'free'),
+      state,
+      mrrUsd: usd(mrrUsd),
+      listPriceUsd: usd(billingOrg ? orgListPriceMonthlyUsd(billing) : 0),
+      settledCents: settled?.settledCents ?? 0,
+      invoices: settled?.invoices ?? 0,
+      refundedCents: settled?.refundedCents ?? 0,
+    })
+  }
+
+  // Cash whose org document is GONE — an erased or deleted workspace still
+  // has invoices, and dropping them would make the rows sum below the total.
+  // Surfaced as a row rather than folded into "omitted", because "we were
+  // paid by an org that no longer exists" is a fact someone should see.
+  for (const [orgId, settled] of settledByOrg) {
+    rows.push({
+      orgId,
+      name: `${orgId} (no org record)`,
+      plan: 'unknown',
+      state: 'inactive',
+      mrrUsd: 0,
+      listPriceUsd: 0,
+      settledCents: settled.settledCents,
+      invoices: settled.invoices,
+      refundedCents: settled.refundedCents,
+    })
+  }
+
+  // Biggest contributor first, cash before run-rate: the reader is nearly
+  // always chasing money that did or did not arrive.
+  rows.sort(
+    (a, b) =>
+      b.settledCents - a.settledCents ||
+      b.mrrUsd - a.mrrUsd ||
+      a.name.localeCompare(b.name),
+  )
+  const kept = rows.slice(0, Math.max(0, limit))
+  const dropped = rows.slice(Math.max(0, limit))
+  return {
+    rows: kept,
+    omittedOrgs: dropped.length,
+    omittedMrrUsd: usd(dropped.reduce((sum, row) => sum + row.mrrUsd, 0)),
+    omittedSettledCents: dropped.reduce(
+      (sum, row) => sum + row.settledCents,
+      0,
+    ),
+    totalOrgs: (orgs ?? []).length,
+  }
 }

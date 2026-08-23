@@ -24,6 +24,7 @@ import {
 import {
   commerceSettledSummary,
   contractedSummary,
+  orgAttribution,
   marketplaceSettledSummary,
   revenueGap,
   subscriptionSettledSummary,
@@ -420,5 +421,110 @@ describe('the earned total excludes everything that is not Aglyn margin', () => 
       subscriptions.grossCents + marketplace.grossCents + commerce.applicationFeeCents
     expect(earned).toBeLessThan(naive)
     expect(earned).toBeLessThan(naive - marketplace.sellerTransferCents)
+  })
+})
+
+/**
+ * Per-org attribution (AGL-2486) — "show which orgs did what".
+ *
+ * The assertions that matter are the RECONCILIATION ones: a table whose rows
+ * do not sum to the figure above it is worse than no table, because a reader
+ * trusts the number they can see the working for.
+ */
+describe('orgAttribution', () => {
+  const paying = (orgId: string, name: string, mrr = 'starter') => ({
+    orgId,
+    billing: {
+      name,
+      plan: mrr,
+      billingStatus: 'active',
+      subscription: { status: 'active', interval: 'month' },
+    },
+  })
+  const invoice = (orgId: string, grossCents: number, taxCents = 0) => ({
+    id: `in_${orgId}_${grossCents}`,
+    orgId,
+    grossCents,
+    taxCents,
+  })
+
+  it('names the comped orgs the summary only counts', () => {
+    const orgs = [
+      { orgId: 'o1', billing: { name: 'Aglyn LLC', plan: 'enterprise' } },
+      { orgId: 'o2', billing: { name: 'Personal', plan: 'starter' } },
+      { orgId: 'o3', billing: { name: 'Free Co', plan: 'free' } },
+    ]
+    const summary = contractedSummary(orgs)
+    const attribution = orgAttribution(orgs, [])
+    const comped = attribution.rows.filter((row) => row.state === 'comped')
+
+    // The COUNT and the NAMES must agree — this is the whole point.
+    expect(comped).toHaveLength(summary.compedOrgs)
+    expect(comped.map((row) => row.name).sort()).toEqual([
+      'Aglyn LLC',
+      'Personal',
+    ])
+    // A genuinely free org contributes nothing and is not a row.
+    expect(attribution.rows.some((row) => row.orgId === 'o3')).toBe(false)
+  })
+
+  it('reconciles settled cash to subscriptionSettledSummary exactly', () => {
+    const rows = [invoice('o1', 2500), invoice('o1', 1000, 100), invoice('o2', 700)]
+    const total = subscriptionSettledSummary(rows)
+    const attribution = orgAttribution(
+      [paying('o1', 'One'), paying('o2', 'Two')],
+      rows,
+    )
+    const summed = attribution.rows.reduce(
+      (sum, row) => sum + row.settledCents,
+      0,
+    )
+    expect(summed).toBe(total.netOfReversalsCents)
+    // And the per-org split is the real one, not everything on one row.
+    const byId = Object.fromEntries(
+      attribution.rows.map((row) => [row.orgId, row]),
+    )
+    expect(byId['o1'].invoices).toBe(2)
+    expect(byId['o2'].invoices).toBe(1)
+  })
+
+  it('reconciles contracted MRR to contractedSummary exactly', () => {
+    const orgs = [paying('o1', 'One'), paying('o2', 'Two')]
+    const summary = contractedSummary(orgs)
+    const attribution = orgAttribution(orgs, [])
+    const summed = attribution.rows.reduce((sum, row) => sum + row.mrrUsd, 0)
+    expect(summed).toBeCloseTo(summary.total.mrrUsd, 2)
+    expect(summed).toBeGreaterThan(0)
+  })
+
+  it('keeps cash from an org whose document no longer exists', () => {
+    // An erased workspace still has invoices. Dropping them would make the
+    // rows sum BELOW the total, which is the failure this guards.
+    const rows = [invoice('gone', 5000)]
+    const total = subscriptionSettledSummary(rows)
+    const attribution = orgAttribution([], rows)
+    expect(attribution.rows).toHaveLength(1)
+    expect(attribution.rows[0].settledCents).toBe(total.netOfReversalsCents)
+    expect(attribution.rows[0].name).toContain('no org record')
+  })
+
+  it('carries the omitted remainder as FIGURES when it caps', () => {
+    const orgs = Array.from({ length: 5 }, (_, index) =>
+      paying(`o${index}`, `Org ${index}`),
+    )
+    const rows = orgs.map((org, index) => invoice(org.orgId, (index + 1) * 100))
+    const total = subscriptionSettledSummary(rows)
+    const attribution = orgAttribution(orgs, rows, 2)
+
+    expect(attribution.rows).toHaveLength(2)
+    expect(attribution.omittedOrgs).toBe(3)
+    // Shown + omitted still equals the true total: the table is a complete
+    // ACCOUNTING even when it is not a complete list.
+    const shown = attribution.rows.reduce((s, r) => s + r.settledCents, 0)
+    expect(shown + attribution.omittedSettledCents).toBe(
+      total.netOfReversalsCents,
+    )
+    // And it kept the LARGEST contributors, not an arbitrary two.
+    expect(attribution.rows[0].settledCents).toBe(500)
   })
 })

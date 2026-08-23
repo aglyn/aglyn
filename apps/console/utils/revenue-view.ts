@@ -70,6 +70,54 @@ export interface RevenuePayload {
   periodPrecedesCoverage?: boolean
   /** No invoice has ever been mirrored. */
   settledMirrorEmpty?: boolean
+  /** The selected period has already ended — see `periodIsClosed` on the route. */
+  periodIsClosed?: boolean
+  attribution?: {
+    rows?: {
+      orgId?: string
+      name?: string
+      plan?: string
+      state?: string
+      mrrUsd?: number
+      listPriceUsd?: number
+      settledCents?: number
+      invoices?: number
+      refundedCents?: number
+    }[]
+    omittedOrgs?: number
+    omittedMrrUsd?: number
+    omittedSettledCents?: number
+    totalOrgs?: number
+  }
+}
+
+/**
+ * A cent figure as money, with the SIGN OUTSIDE the currency symbol.
+ *
+ * `$${dollars(-2500)}` rendered `$-25.00`, which reads as a broken template
+ * rather than a negative amount. Every figure that can go negative goes
+ * through this (AGL-2486).
+ */
+export function money(cents: unknown): string {
+  const parsed = Number(cents ?? 0)
+  const safe = Number.isFinite(parsed) ? parsed : 0
+  return `${safe < 0 ? '-' : ''}$${dollars(Math.abs(safe))}`
+}
+
+/** The same, for a USD number rather than cents. */
+export function usdMoney(value: unknown): string {
+  const parsed = Number(value ?? 0)
+  const safe = Number.isFinite(parsed) ? parsed : 0
+  return `${safe < 0 ? '-' : ''}$${usdDollars(Math.abs(safe))}`
+}
+
+/** How an org's revenue state reads to a human. */
+export const ORG_STATE_LABELS: Record<string, string> = {
+  collecting: 'Active and collecting',
+  trialing: 'Trialing',
+  pastDue: 'Past due',
+  comped: 'Comped / staff override',
+  inactive: 'No live subscription',
 }
 
 /** Cents to a plain dollar string, no currency symbol. */
@@ -199,6 +247,17 @@ export interface GapCause {
   cents: number
   /** What to actually do about it. */
   action: string
+  /**
+   * Whether this cause is measured OVER THE PERIOD rather than as of today.
+   *
+   * `reversed` and `unbilledMetered` are period-scoped facts. `pastDue` and
+   * `trialing` are read off the contracted base, which is a run-rate measured
+   * NOW — so for a closed period they describe the book today, not the book
+   * that produced that period's cash, and showing them as causes of a
+   * historical difference is the same category error as the gap itself
+   * (AGL-2486).
+   */
+  periodScoped: boolean
 }
 
 /**
@@ -215,6 +274,7 @@ export function gapCauses(payload: RevenuePayload | null): GapCause[] {
   return [
     {
       id: 'pastDue',
+      periodScoped: false,
       label: 'Past due — contracted, owed, not collected',
       cents: Number(causes.pastDueCents ?? 0),
       action:
@@ -224,6 +284,7 @@ export function gapCauses(payload: RevenuePayload | null): GapCause[] {
     },
     {
       id: 'trialing',
+      periodScoped: false,
       label: 'Trialing — contracted, converts later',
       cents: Number(causes.trialingCents ?? 0),
       action:
@@ -233,6 +294,7 @@ export function gapCauses(payload: RevenuePayload | null): GapCause[] {
     },
     {
       id: 'reversed',
+      periodScoped: true,
       label: 'Refunded and charged back — a loss',
       cents: Number(causes.reversedCents ?? 0),
       action:
@@ -242,6 +304,7 @@ export function gapCauses(payload: RevenuePayload | null): GapCause[] {
     },
     {
       id: 'unbilledMetered',
+      periodScoped: true,
       label: 'Metered usage measured but never invoiced',
       cents: Number(causes.unbilledMeteredCents ?? 0),
       action:
