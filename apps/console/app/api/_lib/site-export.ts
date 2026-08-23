@@ -46,6 +46,11 @@ export const EXPORT_COLLECTION_LIMITS: Record<string, number> = {
   functions: 100,
   workflows: 100,
   actions: 100,
+  // Custom content authors (AGL-2486). Well under `AUTHORS_MAX_PER_HOST`
+  // (200) on purpose: the cap bounds a site's masthead, this bounds a
+  // BUNDLE, and a site that genuinely holds 200 bylines is not the site
+  // anyone round-trips through a manifest.
+  authors: 100,
   services: 50,
   collections: 20,
   datasets: 50,
@@ -256,6 +261,12 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
   // Interactions have no `RESOURCES` entry at all: all three creators write
   // the document client-direct, so this list comes from them, not from a route.
   actions: ['name', 'trigger', 'steps', 'enabled'],
+  // Custom content authors (AGL-2486). The list is the `author` RESOURCES
+  // entry's `fields`, which is what the console can write; `$id` is
+  // structural and re-keyed by the import, and it is what `entries.authorId`
+  // points at — so dropping this collection from the bundle would restore a
+  // site whose every byline referenced a document the bundle did not carry.
+  authors: ['type', 'name', 'url', 'image', 'jobTitle', 'worksFor', 'sameAs', 'bio'],
   services: [
     'name',
     'description',
@@ -306,6 +317,12 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
     'seoTitle',
     'seoDescription',
     'authorName',
+    // The custom-author reference (AGL-2486), which travels WITH the byline
+    // for the AGL-2418 reason: exporting the name and dropping the record it
+    // resolves against silently downgrades every restored post from a typed
+    // Person/Organization author to a bare name, and the loss is invisible —
+    // a byline still prints.
+    'authorId',
     'categoryId',
     // Legacy free-typed bucket, still read as the fallback everywhere.
     'category',

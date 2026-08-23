@@ -30,6 +30,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   Alert,
+  Avatar,
   Button,
   Chip,
   Dialog,
@@ -82,6 +83,7 @@ import {
 import useFirestoreCollection from '../../../../../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../../../../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../../../../../hooks/use-host-activity-logger'
+import HubTabs from '../../../../../../components/hub-tabs.component'
 import MediaPickerDialog from '../../../../../../components/media/media-picker-dialog.component'
 import {
   applyCommandToSource,
@@ -105,6 +107,27 @@ const slugify = (value: string) =>
  * opens the Manage categories dialog instead of assigning a value.
  */
 const MANAGE_CATEGORIES_VALUE = '__manage__'
+
+/**
+ * Entries tab id (AGL-2486); `/content?tab=entries` deep links land here.
+ * The value the collection deep-link (`?collection=`) has always assumed.
+ */
+const ENTRIES_TAB_ID = 'entries'
+/** Authors tab id (AGL-2486); `/content?tab=authors` deep links here. */
+const AUTHORS_TAB_ID = 'authors'
+
+/**
+ * Sentinel option in the entry editor's Author Select (AGL-2486): publish
+ * under a one-off byline typed on the entry instead of an author record.
+ *
+ * It exists for two reasons and both are back-compat. Every entry written
+ * before this feature carries a free-typed `authorName` and nothing else, and
+ * the Select has to be able to REPRESENT that state rather than silently
+ * re-attributing the post the first time someone opens it. And a guest byline
+ * used once is a legitimate thing not to want a record for.
+ */
+const CUSTOM_BYLINE_VALUE = '__custom__'
+
 
 /**
  * Content collections manager (AGL-81): collections (e.g. Blog) with
@@ -135,6 +158,34 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     () => doc(firestore, 'hosts', hostId),
     [firestore, hostId],
     { idField: '$id' },
+  )
+  /**
+   * Custom content authors (AGL-2486): `hosts/{hostId}/authors`.
+   *
+   * Host-scoped for the reason the collections above are — the byline belongs
+   * to the SITE that publishes it, resolves inside the same document tree the
+   * entry lives in, and serialises alongside `host.seo.entity`, which is a
+   * field of the host document. See `content-authors.ts`.
+   *
+   * Read unpaginated: `AUTHORS_MAX_PER_HOST` is the ceiling, and a masthead
+   * that needs paging is not a masthead.
+   */
+  const { data: authorDocs } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'hosts', hostId, 'authors'),
+        limit(Aglyn.AUTHORS_MAX_PER_HOST),
+      ),
+    [firestore, hostId],
+    { idField: '$id' },
+  )
+  const authors = useMemo<Aglyn.ContentAuthorRecord[]>(
+    () =>
+      (authorDocs ?? [])
+        .map((item: any) => Aglyn.normalizeContentAuthor(item, item.$id))
+        .filter((item): item is Aglyn.ContentAuthorRecord => Boolean(item))
+        .sort((a, b) => String(a.name).localeCompare(String(b.name))),
+    [authorDocs],
   )
   // Entry-template screens (AGL-105): assignable per collection.
   const { data: screenDocs } = useFirestoreCollection<any>(
@@ -456,6 +507,12 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
      * Article/BlogPosting wants.
      */
     authorName: string
+    /**
+     * The author RECORD this entry publishes under (AGL-2486), or `''` for
+     * the one-off byline in `authorName`. Empty with an empty `authorName`
+     * means "the site", which is what `Article.author` falls back to.
+     */
+    authorId: string
     // Category taxonomy (AGL-582): entries reference the collection's
     // categories by stable id (lookup, not typed) so renames never touch
     // entries. `legacyCategory` is the old free-typed string, shown
@@ -465,9 +522,9 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     tags: string
   } | null>(null)
   // Media picker target: entry cover image or an inline body image.
-  const [pickerTarget, setPickerTarget] = useState<'cover' | 'body' | null>(
-    null,
-  )
+  const [pickerTarget, setPickerTarget] = useState<
+    'cover' | 'body' | 'authorImage' | null
+  >(null)
   // Body editing mode (AGL-582): the WYSIWYG surface is the default; the
   // raw markdown textarea (with live preview) stays one tab away. Both
   // edit the same markdown-lite string, so switching re-parses/serializes.
@@ -675,6 +732,25 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
             // Entry model v2 (AGL-582): SEO overrides + taxonomy.
             seoTitle: editor.seoTitle.trim(),
             seoDescription: editor.seoDescription.trim(),
+            /**
+             * Byline, in BOTH shapes (AGL-2486).
+             *
+             * `authorId` is the reference and wins at render; `authorName` is
+             * written beside it as the resolved name, and that denormalization
+             * is deliberate rather than redundant. It is what keeps a byline
+             * on the page when the author record is later deleted, when an
+             * entry is restored from a bundle whose authors did not come with
+             * it, and on any reader that has the entry but not the masthead —
+             * `resolveEntryAuthor` falls through a dangling id to exactly this
+             * field. The RECORD still wins whenever it exists, so renaming an
+             * author updates every post at render time, unchanged.
+             *
+             * Choosing the custom byline clears the id rather than leaving a
+             * stale one to win over what was just typed.
+             */
+            ...(editor.authorId
+              ? { authorId: editor.authorId }
+              : { authorId: deleteField() }),
             authorName: editor.authorName.trim(),
             // Category lookup (AGL-582): the entry stores the STABLE
             // categoryId; picking one clears the legacy free-typed field.
@@ -914,6 +990,168 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     })
   }, [selected, deleteBusy, user, hostId, enqueueSnackbar, logActivity])
 
+  /* ── Authors (AGL-2486) ───────────────────────────────────────────────── */
+
+  /**
+   * The author being edited, or null. Mirrors the entry editor's shape: the
+   * dialog owns a draft, `sameAs` stays a NEWLINE-SEPARATED string while
+   * editing (one profile per line reads better than a comma soup of URLs) and
+   * is saved as `string[]`.
+   */
+  const [authorEditor, setAuthorEditor] = useState<{
+    id: string | null
+    type: string
+    name: string
+    url: string
+    image: string
+    jobTitle: string
+    worksFor: string
+    sameAs: string
+    bio: string
+  } | null>(null)
+  const [authorBusy, setAuthorBusy] = useState(false)
+
+  const openAuthor = useCallback((author?: Aglyn.ContentAuthorRecord) => {
+    setAuthorEditor({
+      id: author?.$id ?? null,
+      // Stored as the numeric `HostEntityType`; held as a string here only
+      // because a MUI Select value is one. `contentAuthorSchemaType` coerces
+      // on the way back, which is the same helper that forgives the string
+      // form the Setup → SEO → Entity form has always written.
+      type: String(
+        Aglyn.contentAuthorSchemaType(author?.type) === 'Person'
+          ? Aglyn.HostEntityType.PERSON
+          : Aglyn.HostEntityType.ORGANIZATION,
+      ),
+      name: author?.name ?? '',
+      url: author?.url ?? '',
+      image: author?.image ?? '',
+      jobTitle: author?.jobTitle ?? '',
+      worksFor: author?.worksFor ?? '',
+      sameAs: (author?.sameAs ?? []).join('\n'),
+      bio: author?.bio ?? '',
+    })
+  }, [])
+
+  const handleSaveAuthor = useCallback(async () => {
+    if (!authorEditor || authorBusy) return
+    const name = authorEditor.name.trim()
+    if (!name) {
+      return void enqueueSnackbar('An author needs a name', {
+        variant: 'warning',
+        persist: false,
+      })
+    }
+    const isPerson =
+      Number(authorEditor.type) === Aglyn.HostEntityType.PERSON
+    const sameAs = authorEditor.sameAs
+      .split(/[\n,]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, Aglyn.AUTHOR_SAME_AS_MAX)
+    /**
+     * The Person-only fields are dropped rather than stored when the author
+     * is an Organization, and this is the branch rather than a cosmetic one:
+     * `jobTitle` and `worksFor` are not defined on `schema.org/Organization`,
+     * so carrying them would either publish invalid structured data or leave
+     * a value that reappears the moment somebody flips the type back — a
+     * field the editor cannot see and cannot clear.
+     */
+    const data = {
+      type: isPerson
+        ? Aglyn.HostEntityType.PERSON
+        : Aglyn.HostEntityType.ORGANIZATION,
+      name,
+      url: authorEditor.url.trim(),
+      image: authorEditor.image.trim(),
+      jobTitle: isPerson ? authorEditor.jobTitle.trim() : '',
+      worksFor: isPerson ? authorEditor.worksFor.trim() : '',
+      sameAs,
+      bio: authorEditor.bio.trim(),
+    }
+    setAuthorBusy(true)
+    try {
+      if (authorEditor.id) {
+        // Update stays client-direct: it creates no document, so it consumes
+        // no slot under `AUTHORS_MAX_PER_HOST` — the `actions` split.
+        await updateDoc(
+          doc(firestore, 'hosts', hostId, 'authors', authorEditor.id),
+          { ...data, updatedAt: Timestamp.now() },
+        )
+      } else {
+        /**
+         * A NEW author is created by the server (AGL-2486), like an entry
+         * (AGL-2266): `hosts/{hostId}/authors` is a client-creatable host
+         * subcollection, and one with no cap is unbounded Firestore documents
+         * mintable from the browser against a $0 subscription. The rules deny
+         * the client create and /api/hosts/resources counts live rows against
+         * `AUTHORS_MAX_PER_HOST` before writing.
+         *
+         * Unlike the entry there is no second write: an author carries no
+         * `deleteField()` sentinels, so the route's field allow-list can hold
+         * the whole payload.
+         */
+        await createResource({
+          hostId,
+          resource: 'author',
+          data,
+        })
+      }
+    } catch (error: any) {
+      setAuthorBusy(false)
+      return void enqueueSnackbar(
+        error?.message ?? 'Could not save the author',
+        { variant: 'error' },
+      )
+    }
+    setAuthorBusy(false)
+    setAuthorEditor(null)
+    enqueueSnackbar(authorEditor.id ? 'Author saved' : 'Author created', {
+      variant: 'success',
+      persist: false,
+    })
+    logActivity(authorEditor.id ? 'Updated author' : 'Created author', {
+      type: 'content',
+      id: authorEditor.id ?? name,
+      name,
+    })
+  }, [
+    authorEditor,
+    authorBusy,
+    firestore,
+    hostId,
+    createResource,
+    enqueueSnackbar,
+    logActivity,
+  ])
+
+  const handleDeleteAuthor = useCallback(
+    (author: Aglyn.ContentAuthorRecord) => async () => {
+      const ok = await confirm({
+        title: `Delete "${author.name}"?`,
+        // Said plainly because it is the question an editor actually has.
+        // Entries keep their byline: the resolved name is stored on the entry
+        // beside the reference, and `resolveEntryAuthor` falls through a
+        // dangling id to it and then to the site.
+        description:
+          'Entries published under this author keep their byline as plain ' +
+          'text, but lose the link, portrait and profile links in their ' +
+          'structured data. This cannot be undone.',
+      })
+      if (!ok) return
+      await deleteDoc(
+        doc(firestore, 'hosts', hostId, 'authors', String(author.$id)),
+      )
+      enqueueSnackbar('Author deleted', { variant: 'success', persist: false })
+      logActivity('Deleted author', {
+        type: 'content',
+        id: String(author.$id),
+        name: String(author.name),
+      })
+    },
+    [confirm, firestore, hostId, enqueueSnackbar, logActivity],
+  )
+
   return (
     <>
       <DashboardLayout
@@ -943,6 +1181,19 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
         }
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+          {/* Tabs, not a second route (AGL-2486): an author is managed
+              ALONGSIDE the entries that reference it, and `HubTabs` is the
+              strip the settings hub, the marketplace and every plugin console
+              page already use — it owns the `?tab=` mirroring, the
+              deep-linking and the small-screen collapse, so there is nothing
+              here to get subtly different. */}
+          <HubTabs
+            navHeader="Content"
+            tabs={[
+              {
+                id: ENTRIES_TAB_ID,
+                label: 'Collections & Entries',
+                content: (
           <CardDisplay
             header={'Collections & Entries'}
             help={docsHelp('buildABlog')}
@@ -1032,6 +1283,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                       seoTitle: '',
                       seoDescription: '',
                       authorName: '',
+                      authorId: '',
                       categoryId: '',
                       legacyCategory: '',
                       tags: '',
@@ -1089,6 +1341,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                           seoTitle: entry.seoTitle ?? '',
                           seoDescription: entry.seoDescription ?? '',
                           authorName: entry.authorName ?? '',
+                          authorId: entry.authorId ?? '',
                           categoryId: entry.categoryId ?? '',
                           legacyCategory: entry.category ?? '',
                           tags: Array.isArray(entry.tags)
@@ -1202,6 +1455,148 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
             </Stack>
           )}
           </CardDisplay>
+                ),
+              },
+              {
+                id: AUTHORS_TAB_ID,
+                label: 'Authors',
+                content: (
+                  <CardDisplay
+                    header={'Authors'}
+                    help={docsHelp('buildABlog', {
+                      anchor: '#authors',
+                      excerpt:
+                        'Publish entries under a pen name, a guest ' +
+                        'contributor or the company — a Person or an ' +
+                        'Organization, emitted as JSON-LD structured data.',
+                    })}
+                    contentGutterX
+                    contentGutterY
+                    contentBordered="all"
+                  >
+                    <Stack spacing={2}>
+                      <Stack
+                        direction="row"
+                        spacing={2}
+                        sx={{ alignItems: 'center' }}
+                      >
+                        <Typography variant="body2" color="text.secondary" sx={{ flexGrow: 1 }}>
+                          {'Bylines your entries can be published under — ' +
+                            'they need not match the account that wrote the ' +
+                            'post. Each one becomes the Article’s ' +
+                            'schema.org author.'}
+                        </Typography>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="primary"
+                          onClick={() => openAuthor()}
+                        >
+                          {'New author'}
+                        </Button>
+                      </Stack>
+                      {authors.length === 0 ? (
+                        <Typography variant="body2" color="text.secondary">
+                          {'No authors yet. Entries fall back to a one-off ' +
+                            'byline, or to the site’s publisher entity from ' +
+                            'Setup → SEO.'}
+                        </Typography>
+                      ) : (
+                        <Table size="small">
+                          <TableHead
+                            sx={{
+                              '& .MuiTableCell-head': {
+                                height: TABLE_HEAD_HEIGHT,
+                              },
+                            }}
+                          >
+                            <TableRow>
+                              <TableCell>{'Author'}</TableCell>
+                              <TableCell>{'Type'}</TableCell>
+                              <TableCell>{'Entries'}</TableCell>
+                              <TableCell align="right">{'Actions'}</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {authors.map((author) => (
+                              <TableRow
+                                key={author.$id}
+                                hover
+                                onClick={() => openAuthor(author)}
+                                sx={{ cursor: 'pointer' }}
+                              >
+                                <TableCell>
+                                  <Stack
+                                    direction="row"
+                                    spacing={1}
+                                    sx={{ alignItems: 'center' }}
+                                  >
+                                    <Avatar
+                                      src={
+                                        Aglyn.resolveMediaSrc(author.image, {
+                                          hostId,
+                                        }) || undefined
+                                      }
+                                      sx={{ width: 28, height: 28 }}
+                                    >
+                                      {String(author.name ?? '?').slice(0, 1)}
+                                    </Avatar>
+                                    <span>{author.name}</span>
+                                  </Stack>
+                                  {author.jobTitle ? (
+                                    <Typography
+                                      variant="caption"
+                                      color="text.secondary"
+                                      component="div"
+                                    >
+                                      {author.jobTitle}
+                                    </Typography>
+                                  ) : null}
+                                </TableCell>
+                                <TableCell>
+                                  <Chip
+                                    size="small"
+                                    label={Aglyn.contentAuthorSchemaType(
+                                      author.type,
+                                    )}
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  {/* Counted off the SELECTED collection's
+                                      loaded entries only — the listener holds
+                                      one collection at a time, so this is a
+                                      hint about where a byline is in use, not
+                                      a site-wide total it cannot know. */}
+                                  {
+                                    entries.filter(
+                                      (entry: any) =>
+                                        entry.authorId === author.$id,
+                                    ).length
+                                  }
+                                </TableCell>
+                                <TableCell align="right">
+                                  <Button
+                                    size="small"
+                                    color="error"
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      void handleDeleteAuthor(author)()
+                                    }}
+                                  >
+                                    {'Delete'}
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </Stack>
+                  </CardDisplay>
+                ),
+              },
+            ]}
+          />
         </Container>
       </DashboardLayout>
       <Dialog
@@ -1533,17 +1928,78 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
               helperText="Comma-separated, e.g. nextjs, seo"
             />
           </Stack>
+          {/* Byline (AGL-2486). A record, a one-off string, or the site —
+              and the Select has to be able to say all three, because an
+              entry written before this feature is in the middle state and
+              opening its editor must not re-attribute it. */}
           <TextField
+            select
             label="Author"
-            value={editor?.authorName ?? ''}
-            onChange={(event) =>
-              setEditor((prev) =>
-                prev ? { ...prev, authorName: event.target.value } : prev,
-              )
+            value={
+              editor?.authorId
+                ? editor.authorId
+                : editor?.authorName
+                  ? CUSTOM_BYLINE_VALUE
+                  : ''
             }
+            onChange={(event) => {
+              const value = event.target.value
+              setEditor((prev) => {
+                if (!prev) return prev
+                if (value === CUSTOM_BYLINE_VALUE) {
+                  // Keep whatever was typed; only drop the record reference.
+                  return { ...prev, authorId: '' }
+                }
+                if (!value) return { ...prev, authorId: '', authorName: '' }
+                return {
+                  ...prev,
+                  authorId: value,
+                  // The resolved name travels with the id — see the save.
+                  authorName:
+                    authors.find((author) => author.$id === value)?.name ??
+                    prev.authorName,
+                }
+              })
+            }}
             size="small"
-            helperText="Byline for this entry — falls back to the site name"
-          />
+            helperText="Byline for this entry — falls back to the site entity"
+          >
+            <MenuItem value="">{'The site (publisher entity)'}</MenuItem>
+            {authors.map((author) => (
+              <MenuItem key={author.$id} value={author.$id}>
+                {`${author.name} · ${Aglyn.contentAuthorSchemaType(author.type)}`}
+              </MenuItem>
+            ))}
+            {editor?.authorId &&
+            !authors.some((author) => author.$id === editor.authorId) ? (
+              // The referenced author was deleted. Keep the Select valid and
+              // show the id, exactly as the category Select does — the post
+              // still renders (the stored name is the fallback), and the
+              // editor can see what to move it off.
+              <MenuItem value={editor.authorId}>
+                {`${editor.authorId} (deleted)`}
+              </MenuItem>
+            ) : null}
+            <MenuItem value={CUSTOM_BYLINE_VALUE}>
+              {'Custom byline…'}
+            </MenuItem>
+          </TextField>
+          {!editor?.authorId ? (
+            <TextField
+              label="Custom byline"
+              value={editor?.authorName ?? ''}
+              onChange={(event) =>
+                setEditor((prev) =>
+                  prev ? { ...prev, authorName: event.target.value } : prev,
+                )
+              }
+              size="small"
+              helperText={
+                'A one-off name for this entry — published as a Person. ' +
+                'Leave blank to attribute the piece to the site.'
+              }
+            />
+          ) : null}
           <TextField
             label="SEO title"
             value={editor?.seoTitle ?? ''}
@@ -1722,6 +2178,168 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      {/* Author editor (AGL-2486). The Person/Organization Select is a real
+          branch: the fields below it change with it, because `jobTitle` and
+          `worksFor` are not defined on `schema.org/Organization` and a form
+          that offers them for one is a form that invites invalid markup. */}
+      <Dialog
+        open={Boolean(authorEditor)}
+        onClose={() => setAuthorEditor(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {authorEditor?.id ? 'Edit author' : 'New author'}
+        </DialogTitle>
+        <DialogContent
+          sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}
+        >
+          <TextField
+            select
+            label="Type"
+            size="small"
+            value={
+              authorEditor?.type ?? String(Aglyn.HostEntityType.ORGANIZATION)
+            }
+            onChange={(event) =>
+              setAuthorEditor((prev) =>
+                prev ? { ...prev, type: event.target.value } : prev,
+              )
+            }
+            helperText={
+              'Person or Organization — they are different schema.org types ' +
+              'with different fields, not a label.'
+            }
+          >
+            <MenuItem value={String(Aglyn.HostEntityType.PERSON)}>
+              {'Person'}
+            </MenuItem>
+            <MenuItem value={String(Aglyn.HostEntityType.ORGANIZATION)}>
+              {'Organization'}
+            </MenuItem>
+          </TextField>
+          <TextField
+            label="Name"
+            size="small"
+            required
+            value={authorEditor?.name ?? ''}
+            onChange={(event) =>
+              setAuthorEditor((prev) =>
+                prev ? { ...prev, name: event.target.value } : prev,
+              )
+            }
+            helperText="The byline, exactly as it should read"
+          />
+          <TextField
+            label="URL"
+            size="small"
+            value={authorEditor?.url ?? ''}
+            onChange={(event) =>
+              setAuthorEditor((prev) =>
+                prev ? { ...prev, url: event.target.value } : prev,
+              )
+            }
+            helperText="Author page or personal site"
+          />
+          <Stack direction="row" spacing={2} sx={{ alignItems: 'flex-start' }}>
+            <TextField
+              label={
+                Number(authorEditor?.type) === Aglyn.HostEntityType.PERSON
+                  ? 'Portrait'
+                  : 'Logo'
+              }
+              size="small"
+              sx={{ flexGrow: 1 }}
+              value={authorEditor?.image ?? ''}
+              onChange={(event) =>
+                setAuthorEditor((prev) =>
+                  prev ? { ...prev, image: event.target.value } : prev,
+                )
+              }
+              helperText={
+                'Pick from the media library, or paste a URL — an external ' +
+                'avatar is a legitimate answer.'
+              }
+            />
+            <Button
+              size="small"
+              variant="outlined"
+              sx={{ mt: 0.5 }}
+              onClick={() => setPickerTarget('authorImage')}
+            >
+              {'Choose…'}
+            </Button>
+          </Stack>
+          {Number(authorEditor?.type) === Aglyn.HostEntityType.PERSON ? (
+            <>
+              <TextField
+                label="Job title"
+                size="small"
+                value={authorEditor?.jobTitle ?? ''}
+                onChange={(event) =>
+                  setAuthorEditor((prev) =>
+                    prev ? { ...prev, jobTitle: event.target.value } : prev,
+                  )
+                }
+                helperText="schema.org/Person jobTitle, e.g. Staff Writer"
+              />
+              <TextField
+                label="Works for"
+                size="small"
+                value={authorEditor?.worksFor ?? ''}
+                onChange={(event) =>
+                  setAuthorEditor((prev) =>
+                    prev ? { ...prev, worksFor: event.target.value } : prev,
+                  )
+                }
+                helperText="The organization they write for"
+              />
+            </>
+          ) : null}
+          <TextField
+            label="Profile links"
+            size="small"
+            multiline
+            minRows={2}
+            value={authorEditor?.sameAs ?? ''}
+            onChange={(event) =>
+              setAuthorEditor((prev) =>
+                prev ? { ...prev, sameAs: event.target.value } : prev,
+              )
+            }
+            helperText={
+              `One URL per line — emitted as schema.org sameAs, up to ` +
+              `${Aglyn.AUTHOR_SAME_AS_MAX}.`
+            }
+          />
+          <TextField
+            label="Bio"
+            size="small"
+            multiline
+            minRows={2}
+            value={authorEditor?.bio ?? ''}
+            onChange={(event) =>
+              setAuthorEditor((prev) =>
+                prev ? { ...prev, bio: event.target.value } : prev,
+              )
+            }
+            helperText={
+              'Shown beside the byline. Not structured data — a marketing ' +
+              'sentence is not a schema.org description of a person.'
+            }
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAuthorEditor(null)}>{'Cancel'}</Button>
+          <Button
+            variant="contained"
+            disabled={authorBusy || !authorEditor?.name?.trim()}
+            onClick={handleSaveAuthor}
+          >
+            {authorBusy ? 'Saving…' : 'Save'}
+          </Button>
+        </DialogActions>
+      </Dialog>
       <MediaPickerDialog
         hostId={hostId}
         open={pickerTarget != null}
@@ -1758,7 +2376,15 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
             const alt = Aglyn.inheritedMediaAlt({
               assetAlt: (media as any).alt,
             }) ?? ''
-            if (pickerTarget === 'cover') {
+            if (pickerTarget === 'authorImage') {
+              // The author's portrait / logo (AGL-2486). Through
+              // `mediaNodeSrc` like every other pick on this page, so it is
+              // stored as a `media:` REFERENCE rather than the object's
+              // current location — an AGL-1215 folder move would 404 a raw
+              // URL permanently. The tenant resolves it to an absolute URL
+              // for the JSON-LD with the same helper `og:image` uses.
+              setAuthorEditor((prev) => (prev ? { ...prev, image: src } : prev))
+            } else if (pickerTarget === 'cover') {
               setEditor((prev) =>
                 prev
                   ? {

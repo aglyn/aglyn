@@ -44,6 +44,9 @@ export type HostResourceKind =
   // and needs `parentId` (the content collection it belongs to).
   | 'action'
   | 'entry'
+  // AGL-2486: custom content authors, a flat host subcollection with a flat
+  // platform cap — the `action` shape (create denied, update/delete open).
+  | 'author'
 
 /**
  * Creates a quota-governed host resource through the console API

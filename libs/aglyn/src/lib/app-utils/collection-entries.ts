@@ -157,8 +157,21 @@ export interface CollectionEntryRecord {
   title?: string
   slug?: string
   excerpt?: string
-  /** Per-entry byline (AGL-686); falls back to the site as author. */
+  /**
+   * Per-entry byline (AGL-686); falls back to the site as author.
+   *
+   * Since AGL-2486 this is either the legacy free-typed string or the NAME of
+   * the author record `authorId` points at, denormalized by the tenant runtime
+   * so the byline block, the `{{entry.author}}` token and the RSS feed all
+   * keep reading one field.
+   */
   authorName?: string
+  /**
+   * Reference into `hosts/{hostId}/authors` (AGL-2486) — the custom author
+   * this entry publishes under. Absent on every entry written before it, and
+   * on any entry whose editor chose a one-off byline instead of a record.
+   */
+  authorId?: string
   body?: string
   coverImage?: string
   /** Search-result title override (AGL-582); falls back to `title`. */

@@ -1758,6 +1758,47 @@ describe('hosts', () => {
   })
 
   /**
+   * `authors` — the same split, one collection over (AGL-2486).
+   *
+   * Custom content authors are a NEW host subcollection, and a new
+   * subcollection the browser can create is the AGL-1360 / AGL-2266 hole
+   * freshly dug: unbounded Firestore documents against a $0 subscription.
+   * /api/hosts/resources owns the create and counts live rows against
+   * `AUTHORS_MAX_PER_HOST`.
+   *
+   * Update and delete stay open, and that is the decision rather than an
+   * omission: the Authors tab edits a record in place and removes one
+   * outright, neither operation creates a document, and the delete frees a
+   * slot under the cap. A deleted author does not orphan its posts —
+   * `resolveEntryAuthor` falls through a dangling `authorId` to the entry's
+   * own `authorName` and then to the site's publisher entity.
+   */
+  it('an editor cannot create an author client-direct (AGL-2486)', async () => {
+    await mustDeny(
+      'creating a hosts/{hostId}/authors document',
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'authors', 'agl2486-new'), {
+        name: 'Minted from the browser',
+      }),
+    )
+    // The server path — /api/hosts/resources uses the Admin SDK — still lands.
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'hosts', HOST, 'authors', 'agl2486-new'),
+        { name: 'Created by the route' },
+      )
+    })
+    // And the two operations the Authors tab really makes stay client-side.
+    await assertSucceeds(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'authors', 'agl2486-new'), {
+        jobTitle: 'Staff writer',
+      }),
+    )
+    await assertSucceeds(
+      deleteDoc(doc(authed(EDITOR), 'hosts', HOST, 'authors', 'agl2486-new')),
+    )
+  })
+
+  /**
    * The seat-recycling half (AGL-1367). Deleting a roster row revokes
    * NOTHING — real access lives in `orgs/{orgId}/members/{uid}.hostAccess`,
    * which is `write: false`, projected into the frozen `memberRoles` — but

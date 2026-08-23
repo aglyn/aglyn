@@ -16,12 +16,16 @@
  */
 
 import {
+  AUTHORS_MAX_PER_HOST,
   type CollectionCategory,
   collectionCategorySlug,
   collectionTotalPages,
+  type ContentAuthorRecord,
   entryMatchesCategoryRoute,
   hostCollectionKind,
+  normalizeContentAuthor,
   resolveCollectionCategoryBySlug,
+  resolveEntryAuthor,
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
@@ -69,8 +73,21 @@ export interface CollectionEntrySummary {
   title: string
   slug: string
   excerpt?: string
-  /** Per-entry byline (AGL-686); falls back to the site as author. */
+  /**
+   * The byline TEXT (AGL-686). Either the entry's own legacy free-typed
+   * string or — since AGL-2486 — the name of the author record `authorId`
+   * points at, resolved here so every downstream reader (the Entry Meta
+   * block, `{{entry.author}}`, the RSS feed) keeps asking one field.
+   */
   authorName?: string
+  /** Reference into `hosts/{hostId}/authors` (AGL-2486). */
+  authorId?: string
+  /**
+   * The resolved author RECORD (AGL-2486) — what `Article.author` is built
+   * from. Null when the entry names no author, in which case the page falls
+   * back to the site's publisher entity exactly as it always has.
+   */
+  author?: ContentAuthorRecord | null
   body?: string
   coverImage?: string
   /** `og:image:alt` for the cover (AGL-2417); travels WITH `coverImage`. */
@@ -101,12 +118,24 @@ function mapEntryFields(
   | 'coverImageAlt'
   | 'seoTitle'
   | 'seoDescription'
+  | 'authorName'
+  | 'authorId'
   | 'categoryId'
   | 'category'
   | 'tags'
 > {
   return {
     excerpt: value['excerpt'] ?? '',
+    // The byline was DECLARED on `CollectionEntrySummary` (AGL-686) and
+    // mapped by nobody, so `entry.authorName` was `undefined` on every entry
+    // this loader returned — which is every routed entry page and every
+    // Collection entries block. The console collected the field, the rules
+    // stored it, the JSON-LD builder read it and the Entry Meta block printed
+    // it, and all three saw nothing, because the one hop between Firestore
+    // and them dropped it (AGL-2486). Written but never read, in the
+    // direction that leaves no error behind.
+    authorName: value['authorName'] ?? '',
+    authorId: value['authorId'] ?? '',
     coverImage: value['coverImage'] ?? '',
     coverImageAlt: value['coverImageAlt'] ?? '',
     seoTitle: value['seoTitle'] ?? '',
@@ -134,6 +163,67 @@ function mapCollectionCategories(value: unknown): CollectionCategory[] {
         item.name.trim() !== '',
     )
     .map((item) => ({ id: item.id, name: item.name }))
+}
+
+/**
+ * Resolve the author RECORDS a set of entries reference (AGL-2486).
+ *
+ * Costs ZERO reads when no entry names an `authorId`, which is every site
+ * that has not adopted custom authors and every entry written before them —
+ * the check is on the ids already in hand, not a probe of the collection. When
+ * ids are present it is one `getAll` of the DISTINCT ones, bounded by
+ * {@link AUTHORS_MAX_PER_HOST} and by the ≤100-entry page above it, rather
+ * than a read per entry.
+ *
+ * Fail-open, like every other read in this file: an authors read that throws
+ * leaves the entries with their legacy `authorName` (or the site entity) and
+ * the page renders. A byline is not worth a 500.
+ */
+async function attachEntryAuthors(
+  hostId: string,
+  entries: CollectionEntrySummary[],
+): Promise<void> {
+  const ids = [
+    ...new Set(
+      entries
+        .map((entry) => (entry.authorId ?? '').trim())
+        .filter(Boolean),
+    ),
+  ].slice(0, AUTHORS_MAX_PER_HOST)
+  let authors: ContentAuthorRecord[] = []
+  if (ids.length) {
+    try {
+      const authorsRef = firebaseAdmin
+        .app()
+        .firestore()
+        .collection('hosts')
+        .doc(hostId)
+        .collection('authors')
+      const snapshots = await firebaseAdmin
+        .app()
+        .firestore()
+        .getAll(...ids.map((id) => authorsRef.doc(id)))
+      authors = snapshots
+        .map((snapshot) =>
+          snapshot.exists
+            ? normalizeContentAuthor(snapshot.data(), snapshot.id)
+            : null,
+        )
+        .filter((author): author is ContentAuthorRecord => Boolean(author))
+    } catch (error) {
+      console.error(error)
+    }
+  }
+  for (const entry of entries) {
+    const author = resolveEntryAuthor(entry, authors)
+    entry.author = author
+    // The byline TEXT is denormalized onto the field everything downstream
+    // already reads, so a record-backed author needs no change in the Entry
+    // Meta block, the token map, the fallback nodes or the RSS feed. A record
+    // WINS over the legacy string on the same entry: picking an author is the
+    // more recent statement of who wrote it.
+    if (author?.name) entry.authorName = author.name
+  }
 }
 
 /**
@@ -297,8 +387,17 @@ async function readPublishedCollectionSource(options: {
       options.collectionSlug,
     )
     if (!collectionDoc) return { entries: [], categories: [] }
+    const entries = await listLiveEntries(
+      collectionDoc.ref.collection('entries'),
+    )
+    // The compose-time source feeds the Collection entries block, whose byline
+    // reads `authorName` — so a record-backed author has to be resolved here
+    // too, or the block prints nothing for the entries a list page shows
+    // (AGL-2486). This result is the cached one, which is what keeps the extra
+    // read amortized across every page of the site that carries the block.
+    await attachEntryAuthors(options.hostId, entries)
     return {
-      entries: await listLiveEntries(collectionDoc.ref.collection('entries')),
+      entries,
       categories: mapCollectionCategories(collectionDoc.get('categories')),
     }
   } catch (error) {
@@ -382,11 +481,13 @@ export async function getCollectionContent(options: {
               }
             : null,
         }
+        await attachEntryAuthors(hostId, [data.entry])
       }
       return data
     }
 
     data.entries = await listLiveEntries(entriesRef)
+    await attachEntryAuthors(hostId, data.entries)
 
     // Category filter (AGL-1321). Applied HERE, before pagination, because
     // the two have to describe the same set: counting pages over the whole

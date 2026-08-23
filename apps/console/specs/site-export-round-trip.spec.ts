@@ -241,6 +241,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/collection-entries',
   ),
+  // And `AUTHORS_MAX_PER_HOST` (AGL-2486). A stub of `undefined` here is not
+  // a missing number, it is a REFUSED import: `held + n <= undefined` is
+  // false, so the cap leg falls straight to its 403.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/content-authors'),
   // `compress` too — the seed below must be packed by the same encoder the
   // besigner writes with, and re-exporting it here keeps the spec off a
   // relative deep import into another project (@nx/enforce-module-boundaries).
@@ -587,6 +591,26 @@ const SEEDS: Array<{
     },
   },
   {
+    // Custom content authors (AGL-2486) — the byline `entries.authorId`
+    // points at. Seeded as a PERSON with every field the branch defines, so
+    // the "every permitted field is one a document actually carries" guard
+    // below is exercising the real shape rather than a stub.
+    collection: 'authors',
+    path: 'hosts/host-1/authors',
+    id: 'author-1',
+    doc: {
+      // `HostEntityType.PERSON`; the same enum the site's SEO entity uses.
+      type: 2,
+      name: 'Ada Lovelace',
+      url: 'https://example.com/ada',
+      image: 'media:host-1/media-1',
+      jobTitle: 'Principal Engineer',
+      worksFor: 'Analytical Engines Ltd',
+      sameAs: ['https://example.com/@ada'],
+      bio: 'Writes about compilers.',
+    },
+  },
+  {
     collection: 'services',
     path: 'hosts/host-1/services',
     id: 'service-1',
@@ -647,6 +671,10 @@ const SEEDS: Array<{
       seoTitle: 'Shipping the export',
       seoDescription: 'How the bundle works',
       authorName: 'Zach',
+      // The record the byline resolves against (AGL-2486). Exported WITH the
+      // name, so a restored post keeps a typed Person author rather than
+      // silently downgrading to a bare string.
+      authorId: 'author-1',
       categoryId: 'category-1',
       category: 'Releases',
       tags: ['release'],

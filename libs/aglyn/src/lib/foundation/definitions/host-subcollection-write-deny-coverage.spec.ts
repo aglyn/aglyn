@@ -335,6 +335,15 @@ const EDITOR_WRITABLE_HOST_SUBCOLLECTIONS: Record<string, string> = {
     'card toggles `enabled` and both surfaces retire one by stamping ' +
     '`deletedAt`, and the cap counts LIVE rows so that soft delete frees a ' +
     'slot.',
+  authors:
+    'Custom content authors — the byline an entry is published under, ' +
+    'created and edited on the Content page\'s Authors tab (AGL-2486). ' +
+    'CREATE is API-only for the `actions` reason: a client-creatable host ' +
+    'subcollection with no cap is unbounded Firestore documents against a ' +
+    '$0 subscription, so /api/hosts/resources holds ' +
+    '`AUTHORS_MAX_PER_HOST`. Update and delete stay client-side — the tab ' +
+    'edits a record in place and removes one, neither creates a document, ' +
+    'and the delete frees a slot under the cap.',
   overlays: 'Modal/drawer overlays, written by the interaction builder dialog.',
   experiments:
     'A/B variants, created and retired by the interactions provider.',
