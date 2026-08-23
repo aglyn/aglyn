@@ -38,7 +38,11 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { getApp, getApps, initializeApp, type FirebaseApp } from 'firebase/app'
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check'
-import { connectAuthEmulator } from 'firebase/auth'
+import { type Auth, connectAuthEmulator } from 'firebase/auth'
+import {
+  AVATAR_COLOURS,
+  avatarColourFor,
+} from '../components/member-avatar.component'
 import { signInWithPooledCustomToken } from '../utils/pooled-custom-token'
 import {
   type Database,
@@ -122,13 +126,126 @@ export type PresenceStatus =
   | 'live'
   | 'unauthorized'
   | 'error'
+  /**
+   * This build has no presence backend at all — a self-host deployment that
+   * did not configure the Realtime Database (`project_self_host_docker_byo_
+   * firebase`). Deliberately NOT `error`: nothing is broken, the feature was
+   * never switched on, and telling an operator to "try again" about a
+   * deployment decision wastes their afternoon.
+   */
+  | 'unconfigured'
+
+/**
+ * What the reader should DO about it (AGL-2486).
+ *
+ * Zach, on the first version of this: "what does this mean? It gives the
+ * users no course of action on how to fix it." The old tooltip ended at
+ * `Failed at: broker (500)` — a stage name and a status code, in front of a
+ * customer. `stage` and `code` are still carried, because whoever debugs this
+ * next needs them; they are just no longer the message.
+ *
+ * The kind is what selects the words. Four, because there are exactly four
+ * different things the reader can do: nothing (it was never set up), sign in
+ * again, ask for access, or retry and report.
+ */
+export type PresenceFaultKind =
+  /** Never configured on this deployment. Not a bug; no remedy needed. */
+  | 'unconfigured'
+  /** The session is stale, revoked or disabled. Remedy: sign in again. */
+  | 'signed-out'
+  /** Authenticated, but not admitted here. Remedy: ask a site admin. */
+  | 'not-allowed'
+  /** Something that should have worked did not. Remedy: retry, then report. */
+  | 'broken'
 
 export interface PresenceFault {
+  /** The remedy class — what the reader can actually do. */
+  kind: PresenceFaultKind
   /** Which leg failed, so the next person knows where to look. */
-  stage: 'broker' | 'sign-in' | 'announce' | 'room'
+  stage: 'config' | 'broker' | 'sign-in' | 'announce' | 'room'
   /** HTTP status or Firebase error code, whichever applies. */
   code: string
   message: string
+}
+
+/** Plain-language failure copy: what happened, and what to do about it. */
+export interface PresenceNotice {
+  /** One sentence naming the situation in the reader's terms. */
+  title: string
+  /** What to do. Empty only when there is genuinely nothing to do. */
+  remedy: string
+  /**
+   * The two things that must be said every time, and were the two things the
+   * old copy got right: an empty stack is not proof you are alone, and none
+   * of this touches your own work.
+   */
+  caution: string
+  /** `stage (code) — message`, for the details affordance. Never the lead. */
+  detail: string
+}
+
+/**
+ * The words for a fault. Pure and exported so the copy can be asserted in a
+ * spec rather than read off a screenshot.
+ *
+ * "Your work is safe" is not reassurance for its own sake — it is the single
+ * most load-bearing fact on this tooltip. Presence failing looks, from the
+ * canvas, exactly like the editor having lost its connection, and the
+ * reasonable response to that belief is to stop working or to start copying
+ * things out. Saving is a different subsystem entirely (Firestore, with the
+ * AGL-674 concurrent-edit guard still running), and saying so is what keeps a
+ * cosmetic outage cosmetic.
+ */
+export function presenceFaultNotice(fault: PresenceFault | null): PresenceNotice {
+  const detail = fault
+    ? `${fault.stage} (${fault.code}) — ${fault.message}`
+    : ''
+  // Said on every branch, in the same words, because it is true on every
+  // branch. The first half is the warning Zach kept; the second is the one
+  // that stops a cosmetic failure from reading as data loss.
+  const caution =
+    'An empty stack does NOT mean you are alone — someone else may be ' +
+    'editing this screen without appearing here. Your own editing is ' +
+    'unaffected and your work is saved normally.'
+  switch (fault?.kind) {
+    case 'unconfigured':
+      return {
+        title: 'Live collaboration is not set up on this deployment.',
+        remedy:
+          'Nothing is broken and there is nothing to retry. Whoever runs ' +
+          'this deployment can turn it on by configuring a Realtime ' +
+          'Database for it.',
+        caution,
+        detail,
+      }
+    case 'signed-out':
+      return {
+        title: 'Your sign-in is no longer valid, so live collaboration could not start.',
+        remedy: 'Sign out and sign back in, then reopen this screen.',
+        caution,
+        detail,
+      }
+    case 'not-allowed':
+      return {
+        title:
+          'You can edit this screen, but this account was not admitted to ' +
+          'its live session.',
+        remedy:
+          'Ask an admin of this site to check your access, then reload. ' +
+          'Your editing permissions are unchanged either way.',
+        caution,
+        detail,
+      }
+    default:
+      return {
+        title: 'Live collaboration is not running right now.',
+        remedy:
+          'Reload the page to try again. If it keeps happening, sign out ' +
+          'and back in — and tell support, quoting the details below.',
+        caution,
+        detail,
+      }
+  }
 }
 
 export interface PresenceState {
@@ -165,6 +282,14 @@ export interface PresenceState {
 
 export interface PresenceSession {
   orgId: string
+  /**
+   * The auth instance this session signed into, kept so a rules refusal can
+   * report WHICH org the presence token was actually scoped to (AGL-2486).
+   * Without it, `permission_denied` names the path it was refused and says
+   * nothing about the claim that refused it, which is the only half that
+   * identifies the cause.
+   */
+  auth: Auth
   /** The one host the broker proved the caller against. */
   hostId: string
   /**
@@ -192,27 +317,52 @@ export const TAB_SESSION_ID =
   typeof window === 'undefined' ? 'ssr' : createResourceUid()
 
 /**
- * Stable per-user colour. Deterministic so the same person is the same
- * colour for everyone in the room, without coordinating.
+ * A colour per SESSION, not per person (AGL-2486).
+ *
+ * Zach: "We should also see the same avatar repeated for each of its active
+ * sessions all with a different presence color not just consolidated into
+ * one." Seeding on `uid:sessionId` is what makes that work: two windows of
+ * one account draw the same face in two different colours, and — because the
+ * colour is WRITTEN INTO the room entry by the session it belongs to —
+ * everyone else sees that session in that same colour too, including the
+ * cursor and the selection box the overlays draw from `entry.colour`.
+ *
+ * Seeding on the uid alone, which is what this did, made every one of a
+ * person's sessions identical: indistinguishable avatars, and two cursors in
+ * one colour fighting over the canvas.
  */
-const COLOURS = [
-  '#e8710a',
-  '#1a73e8',
-  '#12b5cb',
-  '#9334e6',
-  '#d93025',
-  '#188038',
-]
-function colourFor(uid: string): string {
-  let hash = 0
-  for (let index = 0; index < uid.length; index += 1) {
-    hash = (hash * 31 + uid.charCodeAt(index)) >>> 0
-  }
-  return COLOURS[hash % COLOURS.length]
+function colourFor(seed: string): string {
+  return avatarColourFor(seed)
+}
+
+/** Which palette slot a key hashes to. One hash, shared by both callers. */
+function colourIndexFor(key: string): number {
+  return AVATAR_COLOURS.indexOf(avatarColourFor(key))
 }
 
 /** Secondary Firebase app holding the presence-scoped session. */
 const PRESENCE_APP_NAME = 'AGLYN_PRESENCE'
+
+/**
+ * The Realtime Database this deployment presences into, or '' when it has
+ * none (AGL-2486).
+ *
+ * Read off the ALREADY-INITIALISED primary app rather than from an env
+ * constant, so it reflects what the running build was actually configured
+ * with — a self-host deployment that brings its own Firebase
+ * (`project_self_host_docker_byo_firebase`) is exactly the case where the two
+ * can disagree, and the app's own options are the ones the SDK would use.
+ *
+ * Never throws. `getApp` throws when the named app is not registered yet, and
+ * a config PROBE that can itself fail is not a probe.
+ */
+function presenceDatabaseUrl(): string {
+  try {
+    return String(getApp(FIREBASE_CLIENT_APP_NAME).options?.databaseURL ?? '')
+  } catch {
+    return ''
+  }
+}
 
 /**
  * Record a fault once, in both places that matter.
@@ -235,6 +385,61 @@ function report(
 }
 
 /**
+ * A DISTINCT colour for every session in the room (AGL-2486).
+ *
+ * ## Why hashing was not enough
+ *
+ * Each session used to pick its own colour by hashing `uid:sessionId` into a
+ * six-entry palette and writing the result into its own RTDB row. Independent
+ * picks from a six-wide palette collide about one time in six, which is
+ * exactly what Zach saw: "sometimes our same user gets the same color" — two
+ * discs purple in one screenshot, purple and orange in the next. Nothing was
+ * wrong with the input's uniqueness; the OUTPUT space was small and nobody
+ * was reconciling it. Two sessions sharing a colour defeats the entire point
+ * of drawing them separately, and it does it to the cursors and selection
+ * boxes on the canvas too, which are drawn from the same value.
+ *
+ * ## What this does instead
+ *
+ * Assigns over the WHOLE room at once. Each key keeps its hashed colour when
+ * that slot is free, and otherwise takes the next free slot — so a collision
+ * is resolved instead of shipped, while a session that never collides keeps
+ * the colour it would have had. Past the palette size the hash is used
+ * unchanged: a seventh simultaneous session repeats a colour, which is
+ * honest, and six is already well past the point where the avatars are doing
+ * the identifying rather than the colour.
+ *
+ * ## Why every viewer computes the same answer
+ *
+ * The input is the sorted list of every session key in the room INCLUDING the
+ * viewer's own, and the walk is deterministic. Two people looking at the same
+ * room therefore assign identically, which is what lets them say "the purple
+ * cursor" and mean the same person. Seeding from the key rather than from a
+ * list position is what keeps a colour stable across re-renders and reloads.
+ */
+export function assignRoomColours(keys: string[]): Record<string, string> {
+  const assigned: Record<string, string> = {}
+  const taken = new Set<number>()
+  // Sorted, not insertion-ordered: `Object.keys` order depends on how the
+  // RTDB snapshot arrived, so two viewers could otherwise walk the same room
+  // in different orders and resolve a collision to different colours.
+  for (const key of [...keys].sort()) {
+    const start = colourIndexFor(key)
+    let index = start
+    if (taken.size < AVATAR_COLOURS.length) {
+      let step = 0
+      while (taken.has(index) && step < AVATAR_COLOURS.length) {
+        index = (index + 1) % AVATAR_COLOURS.length
+        step += 1
+      }
+    }
+    taken.add(index)
+    assigned[key] = AVATAR_COLOURS[index]
+  }
+  return assigned
+}
+
+/**
  * Turn one RTDB room snapshot into what the UI draws.
  *
  * Pure, exported and taking `now` as an argument so the staleness rule can be
@@ -254,6 +459,14 @@ export function projectRoom(
   const entries: PresenceEntry[] = []
   const cutoff = now - PRESENCE_STALE_MS
   let ownOtherSessions = 0
+  // Every session key in the room INCLUDING this tab's own, sorted, so the
+  // colour assignment below is computed from the same input by every viewer.
+  const allKeys: string[] = []
+  for (const [entryUid, sessions] of Object.entries(room ?? {})) {
+    const keys = isSessionMap(sessions) ? Object.keys(sessions) : ['legacy']
+    for (const sessionId of keys) allKeys.push(`${entryUid}:${sessionId}`)
+  }
+  const colours = assignRoomColours(allKeys)
   for (const [entryUid, sessions] of Object.entries(room ?? {})) {
     // Tolerate the pre-session shape: an entry written by an older client
     // sits directly under the uid rather than under a session.
@@ -265,6 +478,19 @@ export function projectRoom(
         ][])
     for (const [sessionId, entry] of list) {
       if (!entry) continue
+      // A presence entry ALWAYS carries a string `displayName` — the RTDB
+      // rules refuse a session node without one, and the client's own
+      // fallback chain ends at 'Someone', so an entry lacking it is not an
+      // entry. It is a stray field under a malformed uid node, or a fixture
+      // somebody left behind (an agent wrote two `zzTESTCOLLAB` rows into
+      // PRODUCTION on 2026-08-22, one of them into Zach's own org). Rendered,
+      // those became the `?` discs Zach reported: `String(undefined ?? '')`
+      // is empty, and empty initials draw a question mark.
+      //
+      // Skipped rather than defaulted, because a phantom collaborator is
+      // worse than a missing one — it draws a cursor and a selection box over
+      // an element nobody has selected.
+      if (typeof (entry as PresenceEntry).displayName !== 'string') continue
       if (entryUid === uid && sessionId === TAB_SESSION_ID) continue
       // Reaped by AGE, on read, never written back. `onDisconnect` misses
       // often enough that a room accumulates ghosts of people who left —
@@ -274,11 +500,15 @@ export function projectRoom(
       if ((entry.lastSeenAt ?? 0) < cutoff) continue
       const isSelf = entryUid === uid
       if (isSelf) ownOtherSessions += 1
+      const key = `${entryUid}:${sessionId}`
       entries.push({
         ...entry,
         uid: entryUid,
         sessionId,
-        key: `${entryUid}:${sessionId}`,
+        key,
+        // The ASSIGNED colour wins over whatever the session wrote, because
+        // only the room as a whole can guarantee two sessions differ.
+        colour: colours[key] ?? entry.colour,
         isSelf,
       })
     }
@@ -374,6 +604,24 @@ export const PRESENCE_STALE_MS = 3 * PRESENCE_HEARTBEAT_MS
 
 /** `initializeAppCheck` throws if it runs twice for one app. */
 let presenceAppCheckStarted = false
+
+/**
+ * The presence app's auth, created ONCE per page with in-memory persistence.
+ *
+ * Memoised because `initializeAuth` throws if it runs twice for one app, and
+ * this hook re-runs its exchange on every remount and every document change.
+ * `getAuth` is NOT the fallback for a failed init — that would silently hand
+ * back the cross-tab-synced instance this exists to avoid, which is the bug
+ * wearing the fix's clothes. There is no such failure path anyway: this is
+ * the only caller, and it is memoised.
+ */
+let presenceAuthInstance: Auth | null = null
+function presenceAuth(app: FirebaseApp): Auth {
+  if (!presenceAuthInstance) {
+    presenceAuthInstance = createAuthInstance(app, 'ephemeral')
+  }
+  return presenceAuthInstance
+}
 
 /**
  * An SSO identity carries NO profile on the Firebase user object (AGL-675).
@@ -504,6 +752,11 @@ export function usePresence(options: {
   const uid = (user as { uid?: string } | undefined)?.uid
   // A primitive, so it is safe in effect 1's dependency list — see the note
   // below on why that list must stay primitives-only.
+  // NOT used to build the presence auth instance any more — see
+  // `presenceAuth`. Still read, and still a dependency below, because it is
+  // the signal that the ORIGIN's persistence policy changed, and a presence
+  // session minted under the old one should be re-established rather than
+  // left running.
   const authPersistence = useAuthPersistence()
   // `user` is a NEW OBJECT on every render, so depending on it re-runs
   // these effects forever: effect 1 re-minted a token each pass, and
@@ -517,12 +770,21 @@ export function usePresence(options: {
   })
   // An SSO user has none of these on the user object, so the IdP claims are
   // the fallback rather than the email address — see `readIdpProfile`.
-  const displayName = String(
-    (user as { displayName?: string } | undefined)?.displayName ||
-      idp.displayName ||
-      (user as { email?: string } | undefined)?.email ||
-      'Someone',
-  ).slice(0, 80)
+  // `.trim() || 'Someone'` closes the last hole in the chain (AGL-2486): a
+  // provider that asserts a name of `" "` satisfies every `||` above and then
+  // renders as a question mark on everyone else's screen, because empty
+  // initials have nothing to draw. The chain must end at a real string, not
+  // merely at a defined one — and it is worth ending it HERE, in the writer,
+  // so no reader has to defend against it.
+  const displayName =
+    String(
+      (user as { displayName?: string } | undefined)?.displayName ||
+        idp.displayName ||
+        (user as { email?: string } | undefined)?.email ||
+        'Someone',
+    )
+      .slice(0, 80)
+      .trim() || 'Someone'
   const photoURL =
     (user as { photoURL?: string } | undefined)?.photoURL || idp.photoURL
   // The token getter is called inside an effect that must NOT depend on
@@ -554,10 +816,33 @@ export function usePresence(options: {
     setFault(null)
     void (async () => {
       try {
+        // IS THERE A PRESENCE BACKEND AT ALL? (AGL-2486)
+        //
+        // Asked FIRST, and asked of configuration rather than of a failed
+        // call, because "this deployment never had live collaboration" and
+        // "live collaboration is broken" need different words and only one of
+        // them is a bug. A self-host install that brings its own Firebase may
+        // simply not have a Realtime Database; without this check it would
+        // mint a token, sign in, and then show an operator a red badge and a
+        // network error about a service they deliberately did not configure.
+        if (!presenceDatabaseUrl()) {
+          if (active) {
+            report(setStatus, setFault, 'unconfigured', {
+              kind: 'unconfigured',
+              stage: 'config',
+              code: 'no-database-url',
+              message:
+                'This deployment has no Realtime Database configured, which ' +
+                'is where presence lives.',
+            })
+          }
+          return
+        }
         const idToken = await getIdTokenRef.current?.()
         if (!idToken) {
           if (active) {
             report(setStatus, setFault, 'error', {
+              kind: 'signed-out',
               stage: 'sign-in',
               code: 'no-id-token',
               message: 'The console session produced no ID token.',
@@ -596,15 +881,25 @@ export function usePresence(options: {
             })
             .catch(() => '')
           if (active) {
+            // 401 is the broker saying the SESSION is the problem, and it is
+            // the only one of these the reader can fix alone. 403 is a
+            // membership answer — a different person has to act. Everything
+            // else is ours to fix, including the 500 the SSO revocation bug
+            // produced, which is why that one no longer arrives here at all.
+            const status = response.status
             report(
               setStatus,
               setFault,
-              response.status === 401 || response.status === 403
-                ? 'unauthorized'
-                : 'error',
+              status === 401 || status === 403 ? 'unauthorized' : 'error',
               {
+                kind:
+                  status === 401
+                    ? 'signed-out'
+                    : status === 403
+                      ? 'not-allowed'
+                      : 'broken',
                 stage: 'broker',
-                code: String(response.status),
+                code: String(status),
                 message: detail || 'The presence broker refused this session.',
               },
             )
@@ -615,6 +910,7 @@ export function usePresence(options: {
         if (!active) return
         if (!token) {
           report(setStatus, setFault, 'error', {
+            kind: 'broken',
             stage: 'broker',
             code: 'no-token',
             message: 'The presence broker returned 200 with no token.',
@@ -634,13 +930,40 @@ export function usePresence(options: {
         // BEFORE the first authenticated call on this app, not after — the
         // sign-in below is itself App Check enforced.
         startPresenceAppCheck(presenceApp)
-        // Persistence class INHERITED from the provider's instance, never
-        // re-decided here (AGL-1379). Presence is a second Firebase app on
-        // the same origin, so a bare `getAuth(presenceApp)` — which is what
-        // this was — takes the SDK default and writes a refresh token to
-        // IndexedDB even on an origin the provider deliberately kept clean.
-        // Configuring only the shared provider would have left exactly that.
-        const auth = createAuthInstance(presenceApp, authPersistence)
+        // ALWAYS EPHEMERAL, never the provider's class (AGL-2486).
+        //
+        // ## The bug
+        //
+        // This inherited `authPersistence`, which is `durable` on
+        // `*.aglyn.com` — and `durable` means `getAuth(app)`, whose default is
+        // IndexedDB persistence, which Firebase Auth SYNCHRONISES ACROSS TABS.
+        // There is one `AGLYN_PRESENCE` app per browser profile, so there was
+        // one presence session per browser profile, and every tab signed into
+        // it with a token scoped to ITS OWN org. The newest sign-in silently
+        // took over every other tab.
+        //
+        // Reproduced deterministically on 2026-08-22: with a test-org screen
+        // open and an aglyn-org screen opened after it, the first tab's room
+        // read was refused —
+        //   `presence/hz_KgetqSq/screen/4L_o499p_p: permission_denied`
+        //   `[presence token is scoped to org jWmGooWE3L ...]`
+        // — the diagnostic below prints exactly that. This is what Zach saw
+        // as presence "going away after a period of not editing" and the
+        // error coming back: nothing to do with idling, everything to do with
+        // whichever tab last re-minted. Two accounts in two windows made it
+        // constant, and it also explains why a single tab, or two tabs on the
+        // SAME org, looked perfectly healthy in testing.
+        //
+        // ## Why ephemeral is right, not just a workaround
+        //
+        // A presence session is per TAB by construction — `TAB_SESSION_ID`
+        // keys the room entry — it is re-minted on every mount, and it can do
+        // nothing except presence. Persisting it buys nothing and costs
+        // correctness. It is also strictly MORE conservative than AGL-1379
+        // asked for: in-memory writes no refresh token anywhere, so the
+        // "origin the provider deliberately kept clean" stays cleaner than
+        // inheriting `durable` ever left it.
+        const auth = presenceAuth(presenceApp)
         if (FIREBASE_AUTH_EMULATOR_ENABLED) {
           try {
             connectAuthEmulator(auth, 'http://localhost:9099', {
@@ -672,7 +995,7 @@ export function usePresence(options: {
           }
         }
         if (active) {
-          setSession({ orgId, hostId, canEdit: Boolean(canEdit), database })
+          setSession({ orgId, hostId, canEdit: Boolean(canEdit), database, auth })
         }
       } catch (error) {
         // Quiet for the USER — an editor that will not open because nobody
@@ -682,6 +1005,14 @@ export function usePresence(options: {
         // that presence is off rather than implying the room is empty.
         if (!active) return
         report(setStatus, setFault, 'error', {
+          // A custom-token exchange that the pool refuses is an
+          // authentication answer, not an outage, and the reader can act on
+          // it. Everything else on this leg is ours.
+          kind: String(
+            (error as { code?: string } | undefined)?.code ?? '',
+          ).startsWith('auth/')
+            ? 'signed-out'
+            : 'broken',
           stage: 'sign-in',
           code: String(
             (error as { code?: string } | undefined)?.code ?? 'unknown',
@@ -709,13 +1040,18 @@ export function usePresence(options: {
     void set(meRef, {
       displayName,
       lastSeenAt: Date.now(),
-      colour: colourFor(uid),
+      colour: colourFor(`${uid}:${TAB_SESSION_ID}`),
       ...(photoURL ? { photoURL: String(photoURL).slice(0, 512) } : {}),
       ...(selectedNodeIdRef.current
         ? { selectedNodeId: selectedNodeIdRef.current }
         : {}),
     }).catch((error) =>
       report(setStatus, setFault, 'error', {
+        kind: String((error as { code?: string })?.code ?? '')
+          .toUpperCase()
+          .includes('PERMISSION')
+          ? 'not-allowed'
+          : 'broken',
         stage: 'announce',
         code: String((error as { code?: string })?.code ?? 'unknown'),
         message: String((error as { message?: string })?.message ?? error).slice(
@@ -757,20 +1093,56 @@ export function usePresence(options: {
         // gated on `presenceOrg`, so this is what a bad or missing claim
         // looks like from the client. It used to be one `console.warn` that
         // said "lost the room" and named neither the path nor the code.
-        report(
-          setStatus,
-          setFault,
-          String((error as { code?: string })?.code ?? '').includes('permission')
-            ? 'unauthorized'
-            : 'error',
-          {
-            stage: 'room',
-            code: String((error as { code?: string })?.code ?? 'unknown'),
-            message: `${roomPath}: ${String(
-              (error as { message?: string })?.message ?? error,
-            ).slice(0, 160)}`,
-          },
-        )
+        // `toUpperCase`, because RTDB spells this `PERMISSION_DENIED` on the
+        // message and `permission-denied`/`permission_denied` on the code
+        // depending on the transport. A case-sensitive `includes('permission')`
+        // silently classified a real rules refusal as a generic outage and
+        // told the reader to reload, forever.
+        const refused = `${(error as { code?: string })?.code ?? ''}`
+          .toUpperCase()
+          .includes('PERMISSION')
+        report(setStatus, setFault, refused ? 'unauthorized' : 'error', {
+          kind: refused ? 'not-allowed' : 'broken',
+          stage: 'room',
+          code: String((error as { code?: string })?.code ?? 'unknown'),
+          message: `${roomPath}: ${String(
+            (error as { message?: string })?.message ?? error,
+          ).slice(0, 160)}`,
+        })
+        // WHICH CLAIM REFUSED IT (AGL-2486).
+        //
+        // `permission_denied` names the PATH it refused and nothing about the
+        // token, so a room read failing because the presence session belongs
+        // to a different org — or to a different PERSON — was indistinguishable
+        // from a rules bug, from a broken mint, and from a genuine access
+        // decision. That ambiguity is what made this take a day. The claim is
+        // read after the fact and appended, so the refusal still surfaces
+        // instantly and gets more precise a moment later.
+        void (async () => {
+          try {
+            const claims = (
+              await session.auth.currentUser?.getIdTokenResult()
+            )?.claims
+            if (!claims) return
+            const tokenOrg = String(claims['presenceOrg'] ?? 'none')
+            if (tokenOrg === session.orgId && claims['user_id'] === uid) return
+            setFault((current) =>
+              current && current.stage === 'room'
+                ? {
+                    ...current,
+                    message:
+                      `${current.message} [presence token is scoped to ` +
+                      `org ${tokenOrg} as uid ${String(
+                        claims['user_id'] ?? '?',
+                      )}, but this room is org ${session.orgId} for uid ` +
+                      `${uid} — the session was taken over by another tab]`,
+                  }
+                : current,
+            )
+          } catch {
+            // A diagnostic that can fail must not become a second failure.
+          }
+        })()
         setEntries([])
         setPeople([])
         setOwnOtherSessions(0)

@@ -18,29 +18,37 @@
 
 import { mdiAlertCircleOutline, mdiMonitorMultiple } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
-import { Avatar, AvatarGroup, Box, Stack, Tooltip } from '@mui/material'
-import type { PresencePerson, PresenceState } from '../hooks/use-presence'
+import {
+  Avatar,
+  AvatarGroup,
+  Box,
+  Popover,
+  Stack,
+  Tooltip,
+  Typography,
+} from '@mui/material'
+import { type MouseEvent, useState } from 'react'
+import MemberAvatar, { memberInitials } from './member-avatar.component'
+import {
+  presenceFaultNotice,
+  type PresenceEntry,
+  type PresenceState,
+} from '../hooks/use-presence'
 
 /**
- * Initials for an identity that may have no picture at all.
+ * Initials for a presence entry, delegated to the ONE member-avatar answer
+ * (AGL-2486).
  *
- * NOT a broken-image fallback (AGL-2486). Every SSO identity here has an
- * empty `photoURL` — `zach@aglyn.com`'s IdP asserts no picture and the
- * profile carries none — so for a whole class of account the initials ARE
- * the avatar, and they have to look deliberate rather than like a picture
- * that failed to load.
- *
- * Two initials where the name gives two, because a room of single letters
- * collides constantly and the colour alone is only six values wide.
+ * This file used to carry its own `initialsFor`, which split on whitespace.
+ * `MemberAvatar` already had `memberInitials`, built on `splitDisplayName`
+ * (AGL-1127) — the console's existing answer to "one provider string, two
+ * name fields" — and it also falls back to the local part of an email, which
+ * the whitespace split rendered as `?` for every invited-but-unnamed account.
+ * Two parsers for one job is how a person ends up with two different sets of
+ * initials on two screens.
  */
 export function initialsFor(displayName: string): string {
-  const words = String(displayName ?? '')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-  if (!words.length) return '?'
-  if (words.length === 1) return words[0].slice(0, 2).toUpperCase()
-  return `${words[0][0]}${words[words.length - 1][0]}`.toUpperCase()
+  return memberInitials(displayName)
 }
 
 /**
@@ -61,100 +69,208 @@ export function initialsFor(displayName: string): string {
  * which shipped first for exactly this reason.
  */
 export function PresenceAvatars({ presence }: { presence: PresenceState }) {
-  const { people, status } = presence
-  if (status === 'unauthorized' || status === 'error') {
+  const { entries, status } = presence
+  if (
+    status === 'unauthorized' ||
+    status === 'error' ||
+    status === 'unconfigured'
+  ) {
     return <PresenceFaultBadge presence={presence} />
   }
-  if (!people.length) return null
+  if (!entries.length) return null
+  return <RoomAvatars entries={entries} />
+}
 
+/**
+ * Presence is off, and says what to do about it (AGL-2486).
+ *
+ * ## What changed, and why
+ *
+ * This badge previously led with `Failed at: broker (500)`. Zach: "what does
+ * this mean? It gives the users no course of action on how to fix it." A
+ * stage name and an HTTP status are the two things a customer can do least
+ * with, and they were the whole sentence.
+ *
+ * So the order is inverted. The lead is what happened in the reader's terms
+ * and what they can do about it; the caution Zach kept — an empty stack is
+ * NOT proof you are alone — stays on every branch; and stage/code/message
+ * move behind a details affordance, still one click away for whoever is
+ * debugging this, no longer in the way of whoever is not.
+ *
+ * ## Why the detail is not just a longer tooltip
+ *
+ * A tooltip long enough to hold the remedy AND the technical detail is a
+ * tooltip nobody reaches the end of. The detail is also the part people need
+ * to COPY into a support message, which a hover-only surface cannot give
+ * them. Hence a click-latched popover.
+ *
+ * ## Not-a-bug is drawn differently
+ *
+ * `unconfigured` gets a neutral colour and no alarm. A deployment that never
+ * configured a Realtime Database is behaving exactly as its operator set it
+ * up; painting that the same warning colour as a live outage is how people
+ * learn to ignore the warning colour.
+ */
+function PresenceFaultBadge({ presence }: { presence: PresenceState }) {
+  const { status, fault } = presence
+  const notice = presenceFaultNotice(fault)
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+  const notABug = status === 'unconfigured'
   return (
-    <Stack direction="row" sx={{ alignItems: 'center' }}>
-      <RoomAvatars people={people} />
-    </Stack>
+    <>
+      <Tooltip
+        title={
+          <Box>
+            <Box sx={{ fontWeight: 600 }}>{notice.title}</Box>
+            <Box sx={{ mt: 0.5 }}>{notice.remedy}</Box>
+            <Box sx={{ mt: 0.5 }}>{notice.caution}</Box>
+            <Box sx={{ mt: 0.5, opacity: 0.75 }}>
+              Click for technical details.
+            </Box>
+          </Box>
+        }
+      >
+        <Avatar
+          component="button"
+          onClick={(event: MouseEvent<HTMLElement>) =>
+            setAnchor(anchor ? null : event.currentTarget)
+          }
+          data-aglyn-presence-fault={fault ? fault.stage : 'unknown'}
+          data-aglyn-presence-fault-kind={fault ? fault.kind : 'broken'}
+          aria-label={
+            notABug
+              ? 'Live collaboration is not set up on this deployment'
+              : 'Live collaboration is unavailable'
+          }
+          sx={{
+            width: 28,
+            height: 28,
+            mr: 1,
+            border: 0,
+            p: 0,
+            cursor: 'pointer',
+            bgcolor: notABug ? 'action.selected' : 'warning.main',
+            color: notABug ? 'text.secondary' : 'warning.contrastText',
+          }}
+        >
+          <MdiIcon path={mdiAlertCircleOutline.path} size={0.7} />
+        </Avatar>
+      </Tooltip>
+      <Popover
+        open={Boolean(anchor)}
+        anchorEl={anchor}
+        onClose={() => setAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Box sx={{ p: 2, maxWidth: 360 }}>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>
+            {notice.title}
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            {notice.remedy}
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 1.5 }}>
+            {notice.caution}
+          </Typography>
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            Technical details
+          </Typography>
+          <Box
+            component="pre"
+            data-aglyn-presence-fault-detail=""
+            sx={{
+              m: 0,
+              mt: 0.5,
+              p: 1,
+              borderRadius: 1,
+              bgcolor: 'action.hover',
+              fontSize: 11,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+            }}
+          >
+            {notice.detail || 'No further detail was reported.'}
+          </Box>
+        </Box>
+      </Popover>
+    </>
   )
 }
 
 /**
- * Presence is off, and says so (AGL-2486).
+ * How many sessions get their own avatar before the rest become a count.
  *
- * The fault detail rides the `title` so it is one hover away rather than one
- * source-dive away — `stage` names the leg that failed (broker, sign-in,
- * announce, room) and `code` is the HTTP status or Firebase error code.
+ * Six, not four: with one avatar PER SESSION rather than per person, a pair
+ * working in two windows each already fills four slots, and collapsing at
+ * that point would hide exactly the thing Zach asked to be able to see.
  */
-function PresenceFaultBadge({ presence }: { presence: PresenceState }) {
-  const { status, fault } = presence
-  const reason =
-    status === 'unauthorized'
-      ? 'This account is not allowed in this document\u2019s presence room'
-      : 'Presence could not start'
-  return (
-    <Tooltip
-      title={
-        `${reason}. Nobody will be shown here, and an empty stack does NOT ` +
-        'mean you are alone. ' +
-        (fault
-          ? `Failed at: ${fault.stage} (${fault.code}) \u2014 ${fault.message}`
-          : '')
-      }
-    >
-      <Avatar
-        data-aglyn-presence-fault={fault ? fault.stage : 'unknown'}
-        aria-label="Live presence is unavailable"
-        sx={{
-          width: 28,
-          height: 28,
-          mr: 1,
-          bgcolor: 'warning.main',
-          color: 'warning.contrastText',
-        }}
-      >
-        <MdiIcon path={mdiAlertCircleOutline.path} size={0.7} />
-      </Avatar>
-    </Tooltip>
-  )
-}
+const MAX_VISIBLE_SESSIONS = 6
 
-function RoomAvatars({ people }: { people: PresencePerson[] }) {
+/**
+ * One avatar per open SESSION (AGL-2486).
+ *
+ * Zach: "We should also see the same avatar repeated for each of its active
+ * sessions all with a different presence color not just consolidated into
+ * one." So the same face appears once per window that has this document
+ * open — yours and everyone else's alike — each in the colour that session
+ * draws its cursor and its selection box in. The stack and the canvas are
+ * then readable against each other: the orange caret belongs to the orange
+ * avatar.
+ *
+ * ## Spacing
+ *
+ * A `MuiAvatarGroup` was used here, which overlaps its children by a negative
+ * margin. That is right for a row of DIFFERENT faces and wrong for this: two
+ * sessions of one person are the same face, so overlapping them produced the
+ * collision Zach reported — one avatar half-hidden behind an identical one,
+ * with the ring that distinguishes them clipped by the neighbour. A plain
+ * row with a real gap costs a few pixels and makes N sessions legible, and
+ * the trailing margin keeps the cluster off the control beside it.
+ */
+function RoomAvatars({ entries }: { entries: PresenceEntry[] }) {
+  const visible = entries.slice(0, MAX_VISIBLE_SESSIONS)
+  const overflow = entries.length - visible.length
   return (
-    <AvatarGroup
-      max={4}
-      sx={{
-        mr: 1,
-        '& .MuiAvatar-root': {
-          width: 28,
-          height: 28,
-          fontSize: 12,
-          fontWeight: 600,
-          borderWidth: 2,
-        },
-      }}
+    <Stack
+      direction="row"
+      // `gap`, not the overlap an AvatarGroup applies — and 8px of it, not
+      // 4: the self ring is drawn 2px OUTSIDE the circle at a 2px offset, so
+      // a 4px gap leaves two adjacent rings touching, which is the collision
+      // in Zach's screenshot in a smaller size.
+      //
+      // PADDING for the outer spacing, never margin. This sits inside a MUI
+      // `Stack` whose own child-spacing rule (`& > :not(style) ~ :not(style)`)
+      // sets the children's margins and outranks `sx` — measured here, `mr:
+      // 1.5` computed to `0px` while the 8px on the left came from the parent
+      // rather than from this component at all. Padding is untouched by that
+      // rule, so it is the one that actually holds.
+      sx={{ alignItems: 'center', gap: 1, pl: 0.5, pr: 1 }}
+      data-aglyn-presence-sessions={String(entries.length)}
     >
-      {people.map((person) => (
-        <Tooltip key={person.uid} title={describe(person)}>
+      {visible.map((entry) => (
+        <Tooltip key={entry.key} title={describe(entry)}>
           <Box sx={{ position: 'relative', display: 'inline-flex' }}>
-            <Avatar
-              // Undefined rather than an empty string: an empty `src` makes
-              // the browser request the PAGE and then fail, which is how a
-              // deliberate initials avatar starts logging 404s.
-              src={person.photoURL || undefined}
-              alt={person.displayName}
-              data-aglyn-presence-self={person.isSelf ? '' : undefined}
+            <MemberAvatar
+              displayName={entry.displayName}
+              photoURL={entry.photoURL}
+              colour={entry.colour}
+              size={28}
+              data-aglyn-presence-session={entry.key}
+              data-aglyn-presence-self={entry.isSelf ? '' : undefined}
               sx={{
-                bgcolor: person.colour ?? 'primary.main',
                 // YOU, elsewhere, must never be mistakable for a colleague.
-                // A dashed ring in the warning colour is the same language
-                // the old own-sessions badge used, kept on the avatar itself
-                // now that your other tab has become a full participant.
-                ...(person.isSelf && {
+                // The ring is drawn OUTSIDE the circle, which is why the row
+                // needs real spacing — inside an overlapping group it was the
+                // first thing to be clipped.
+                ...(entry.isSelf && {
                   outline: '2px dashed',
                   outlineColor: 'warning.main',
-                  outlineOffset: 1,
+                  outlineOffset: 2,
                 }),
               }}
-            >
-              {initialsFor(person.displayName)}
-            </Avatar>
-            {person.isSelf ? (
+            />
+            {entry.isSelf ? (
               <Box
                 aria-hidden
                 sx={{
@@ -176,34 +292,49 @@ function RoomAvatars({ people }: { people: PresencePerson[] }) {
           </Box>
         </Tooltip>
       ))}
-    </AvatarGroup>
+      {overflow > 0 ? (
+        <Tooltip
+          title={`${overflow} more session${overflow === 1 ? '' : 's'} has this document open.`}
+        >
+          <Avatar
+            data-aglyn-presence-overflow={String(overflow)}
+            sx={{
+              width: 28,
+              height: 28,
+              fontSize: 11,
+              fontWeight: 600,
+              bgcolor: 'action.selected',
+              color: 'text.secondary',
+            }}
+          >
+            {`+${overflow}`}
+          </Avatar>
+        </Tooltip>
+      ) : null}
+    </Stack>
   )
 }
 
 /**
- * What the tooltip says, and why the two cases read so differently.
+ * What the tooltip says about ONE session, and why your own reads as a
+ * hazard rather than as company.
  *
- * Your own other session is a HAZARD, not company: two tabs are two
- * independent `CanvasManager`s, so the second save quietly replaces the
- * first and the concurrent-edit guard does not fire, because the stamp moved
- * on *your* write (AGL-674). They also share one local draft key (AGL-1256),
- * last writer wins. A colleague at least trips the guard.
+ * Two windows of your own account are two independent `CanvasManager`s, so
+ * the second save quietly replaces the first and the concurrent-edit guard
+ * does NOT fire — the stamp moved on *your* write (AGL-674). They also share
+ * one local draft key (AGL-1256), last writer wins. A colleague at least
+ * trips the guard; you do not, which is why the wording is sharper for you
+ * than for them.
  */
-export function describe(person: PresencePerson): string {
-  const places =
-    person.sessions === 1 ? 'one other place' : `${person.sessions} other places`
-  if (person.isSelf) {
+export function describe(entry: PresenceEntry): string {
+  if (entry.isSelf) {
     return (
-      `This is YOU, in ${places} \u2014 another tab, or this account signed in ` +
-      'elsewhere. Nothing merges between them: whichever one saves last wins, ' +
-      'and it will not warn you, because both are you.'
+      'This is YOU, in another window or tab. Nothing merges between them: ' +
+      'whichever one saves last wins, and it will not warn you, because ' +
+      'both are you.'
     )
   }
-  return (
-    `${person.displayName} is editing this too` +
-    (person.sessions > 1 ? ` (in ${person.sessions} places)` : '') +
-    ' \u2014 saves are not merged.'
-  )
+  return `${entry.displayName} has this open too \u2014 saves are not merged.`
 }
 
 PresenceAvatars.displayName = 'PresenceAvatars'

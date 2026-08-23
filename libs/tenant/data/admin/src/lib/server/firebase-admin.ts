@@ -168,6 +168,89 @@ export const layoutVersionConverter =
  * same three checks itself, and doing both would buy one answer with two
  * round trips.
  */
+/**
+ * The pool to ask about a verified token's account (AGL-2486).
+ *
+ * ## The bug this exists to fix
+ *
+ * `BaseAuth.verifyIdToken` does NOT reject a token minted in a GCIP tenant.
+ * Only `TenantAwareAuth` overrides it to compare `firebase.tenant` against
+ * its own id; the project-level handle checks a signature, an issuer and an
+ * audience, all of which are project-wide. So an SSO user's ID token verifies
+ * perfectly through `firebaseAdmin.app().auth()` — and every console API
+ * route verifies exactly that way.
+ *
+ * The revocation check then ran `getUser(uid)` on that same project-level
+ * handle. A tenant uid is not in the project pool: measured on production
+ * 2026-08-22, `zach@aglyn.com` is `IHumyGGhGxZKjVV26qCRx5Okf573` in
+ * `aglyn-org-y5v14` and a project-level `getUser` of that uid throws
+ * `auth/user-not-found`. `assertIdTokenNotRevoked` reads "not found" as
+ * "account deleted" — correctly, and fail-CLOSED by design — and threw
+ * `auth/id-token-revoked`. Every SSO user was therefore refused at every door
+ * that verifies a Bearer token, with whatever the route's catch-all produced;
+ * on `/api/presence/token` that was a 500 and live co-editing simply never
+ * started for them.
+ *
+ * ## Why the existing guard did not catch it
+ *
+ * `no-project-level-auth-lookup.spec.ts` reads the RECEIVER NAME of a
+ * `.getUser(` call, and `assertIdTokenNotRevoked` names its parameter `pool`
+ * precisely so that it passes. The name was honest about the contract and
+ * said nothing about the ARGUMENT, which was the project-level handle at the
+ * only call site there is. A guard that reads a name proves a name.
+ *
+ * ## What this does
+ *
+ * Sends the lookup to the pool named by the token's own `firebase.tenant`
+ * claim, so the contract `assertIdTokenNotRevoked` documents ("the lookup is
+ * asked of the pool the token belongs to") becomes structurally true instead
+ * of being an assumption about the caller. One place, so a route written next
+ * year inherits it — the same reasoning that put the revocation check here.
+ *
+ * Returns the handle unchanged for a project-pool token and for an auth
+ * already scoped to that same tenant.
+ *
+ * Returns NULL when the token names a tenant this handle cannot reach — and
+ * the caller then SKIPS the check rather than asking the wrong pool. That is
+ * the whole lesson of this bug: "not found in the pool I happened to ask" is
+ * not evidence that an account was deleted, it is evidence that the question
+ * went to the wrong place, and `assertIdTokenNotRevoked` already models "we
+ * could not ask" as fail-open. Falling back to the verifying handle would
+ * re-create the exact outage in the one configuration where routing fails.
+ * Unreachable in practice — the project-level `Auth` always has a
+ * `tenantManager`, and a `TenantAwareAuth` holding a token for a DIFFERENT
+ * tenant has already thrown `auth/mismatching-tenant-id` before this runs.
+ *
+ * The tenant handle is deliberately NOT wrapped in `revocationCheckedAuth`:
+ * it is used only for `getUser`, and re-wrapping would put the revocation
+ * check inside the revocation check.
+ */
+function revocationPool(
+  auth: object,
+  decoded: DecodedIdToken,
+): Pick<BaseAuth, 'getUser'> | null {
+  const self = auth as unknown as Pick<BaseAuth, 'getUser'>
+  const tenantId = decoded?.firebase?.tenant
+  // `typeof`, not a truthy test: `strictNullChecks` is off repo-wide, so a
+  // bare `!tenantId` narrows nothing and would also swallow a real id.
+  if (typeof tenantId !== 'string' || !tenantId) return self
+  // Already the right pool — a route that verified through
+  // `authForPool(tenantId)` has nothing to switch to, and `TenantAwareAuth`
+  // has no `tenantManager` to ask anyway.
+  if ((auth as { tenantId?: string }).tenantId === tenantId) return self
+  const tenantManager = (auth as { tenantManager?: () => unknown })
+    .tenantManager
+  if (typeof tenantManager !== 'function') return null
+  try {
+    const manager = tenantManager.call(auth) as {
+      authForTenant: (id: string) => Pick<BaseAuth, 'getUser'>
+    }
+    return manager.authForTenant(tenantId)
+  } catch {
+    return null
+  }
+}
+
 function revocationCheckedAuth<T extends object>(target: T): T {
   return new Proxy(target, {
     get(auth, prop, receiver) {
@@ -182,13 +265,20 @@ function revocationCheckedAuth<T extends object>(target: T): T {
           // wrapper.
           const decoded = await verify.apply(auth, args)
           if (args[1] === true) return decoded
-          // `auth`, not `receiver`: the lookup must land on the pool that
-          // verified the token (AGL-2005), and it must not re-enter this
-          // proxy.
-          await assertIdTokenNotRevoked(
-            auth as unknown as Pick<BaseAuth, 'getUser'>,
-            decoded,
-          )
+          // The pool the TOKEN belongs to, which is not always the pool that
+          // verified it — see `revocationPool`. Never `receiver`: the lookup
+          // must not re-enter this proxy.
+          const pool = revocationPool(auth, decoded)
+          // `=== null`, not `!pool`: `strictNullChecks` is off repo-wide, so
+          // a falsy test narrows nothing here.
+          if (pool === null) {
+            console.warn(
+              '[auth] revocation check skipped: no handle for tenant',
+              decoded?.firebase?.tenant,
+            )
+            return decoded
+          }
+          await assertIdTokenNotRevoked(pool, decoded)
           return decoded
         }
       }

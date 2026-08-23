@@ -51,7 +51,6 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { TabContext, TabList, TabPanel } from '@mui/lab'
 import {
   Alert,
-  Avatar,
   Box,
   Button,
   Chip,
@@ -81,6 +80,7 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
+import MemberAvatar from '../../../../components/member-avatar.component'
 import AccountEmailsCard from '../../../../components/account-emails-card.component'
 import AccountIdentitiesCard from '../../../../components/account-identities-card.component'
 import CardDisplayFormTemplate from '../../../../components/card-display-form-template'
@@ -734,25 +734,25 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
     >
       <Stack spacing={2.5} sx={{ maxWidth: 560 }}>
         <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
-          <Avatar
+          <MemberAvatar
             // The edited field first, so the card previews what Save would
             // do; the auth `photoURL` when it is empty, so clearing the field
             // shows what the console will actually fall back to. That used to
             // include a Gravatar step, removed in AGL-1683 — with nothing
-            // stored, the initial below is now what everyone else sees, and
-            // this card shows exactly that.
-            src={photoUrl.trim() || resolvedPhotoUrl || undefined}
-            slotProps={{ img: { referrerPolicy: 'no-referrer' } }}
-            sx={{
-              width: 72,
-              height: 72,
-              fontSize: 28,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            {(user?.displayName || user?.email || '?').slice(0, 1).toUpperCase()}
-          </Avatar>
+            // stored, the initials are now what everyone else sees, and this
+            // card has to show exactly that.
+            //
+            // `MemberAvatar`, not a bare `Avatar` (AGL-2486): this card
+            // promises "shown across the console", and it was the one place
+            // rendering a DIFFERENT avatar from the one the console actually
+            // shows — one grey letter here, two coloured initials everywhere
+            // else. A preview that does not match is worse than none.
+            photoURL={photoUrl.trim() || resolvedPhotoUrl || undefined}
+            displayName={user?.displayName}
+            email={user?.email}
+            size={72}
+            sx={{ border: '1px solid', borderColor: 'divider' }}
+          />
           <Stack spacing={0.25}>
             <Typography variant="subtitle2">{'Your avatar'}</Typography>
             <Typography variant="caption" color="text.secondary">

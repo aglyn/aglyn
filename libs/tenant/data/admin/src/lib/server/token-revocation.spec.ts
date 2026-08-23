@@ -56,11 +56,26 @@ let tenantRecord: any = userRecord()
 let projectGetUserError: any = null
 let poolsAsked: (string | null)[] = []
 let verifyArgs: unknown[][] = []
+/**
+ * The tenant a PROJECT-level `verifyIdToken` reports on the token it just
+ * accepted (AGL-2486).
+ *
+ * Not a convenience knob — it is the behaviour firebase-admin actually has,
+ * and modelling it wrong is what let the bug hide. `BaseAuth.verifyIdToken`
+ * does NOT reject a GCIP-tenant token: only `TenantAwareAuth` overrides it to
+ * compare `firebase.tenant` with its own id (see
+ * `node_modules/firebase-admin/lib/auth/tenant-manager.js`). So the project
+ * handle resolves an SSO token happily, with the tenant claim intact — which
+ * is exactly the state every console route was in, and the state this double
+ * could not previously represent.
+ */
+let projectVerifyTenant: string | null = null
 
 const poolAuth = (poolId: string | null) => ({
   verifyIdToken: jest.fn(async (...args: unknown[]) => {
     verifyArgs.push(args)
-    return decodedToken(poolId ? { firebase: { tenant: poolId } } : {})
+    const tenant = poolId ?? projectVerifyTenant
+    return decodedToken(tenant ? { firebase: { tenant } } : {})
   }),
   getUser: jest.fn(async (_uid: string) => {
     poolsAsked.push(poolId)
@@ -124,6 +139,7 @@ beforeEach(() => {
   projectRecord = userRecord()
   tenantRecord = userRecord()
   projectGetUserError = null
+  projectVerifyTenant = null
   poolsAsked = []
   verifyArgs = []
   resetTokenRevocationCache()
@@ -195,6 +211,67 @@ describe('the check is asked of the pool the account lives in (AGL-2005)', () =>
     await expect(
       auth.tenantManager().authForTenant('t1').verifyIdToken('token'),
     ).rejects.toMatchObject({ code: 'auth/id-token-revoked' })
+    expect(poolsAsked).toEqual(['t1'])
+  })
+
+  /**
+   * THE CASE THE TEST ABOVE DOES NOT COVER, and the one that shipped broken
+   * (AGL-2486).
+   *
+   * The test above verifies through `authForTenant('t1')` — the caller has
+   * already chosen the right pool, so nothing is left to get wrong. No
+   * console route does that. All ~117 of them call
+   * `firebaseAdmin.app().auth().verifyIdToken(bearer)` on the PROJECT handle,
+   * which accepts an SSO token and hands back its tenant claim.
+   *
+   * Against the pre-fix tree the lookup then went to the project pool, where
+   * an SSO uid does not exist. Measured on production 2026-08-22:
+   * `zach@aglyn.com` is `IHumyGGhGxZKjVV26qCRx5Okf573` in `aglyn-org-y5v14`,
+   * and a project-level `getUser` of that uid throws `auth/user-not-found`.
+   * `assertIdTokenNotRevoked` reads a missing record as a deleted account and
+   * refuses — correctly, given what it was told — so EVERY SSO user was
+   * turned away from every Bearer door. On `/api/presence/token` that
+   * surfaced as a 500 and live co-editing never started for them.
+   *
+   * `poolsAsked` is the assertion that matters. Asserting only that the call
+   * resolves would pass on a build that asked the wrong pool and happened to
+   * find a record there — which is the forged-twin situation AGL-1962
+   * describes, and it is how this stayed invisible.
+   */
+  it('reads the TENANT record for an SSO token verified at PROJECT level', async () => {
+    projectVerifyTenant = 't1'
+    projectGetUserError = Object.assign(new Error('no such user'), {
+      code: 'auth/user-not-found',
+    })
+    const auth = firebaseAdmin.app().auth()
+    await expect(auth.verifyIdToken('sso-token')).resolves.toMatchObject({
+      uid: 'u1',
+    })
+    expect(poolsAsked).toEqual(['t1'])
+  })
+
+  it('still asks the PROJECT pool for a project-pool token', async () => {
+    // The negative control. A fix that simply always reached for a tenant
+    // handle would break every ordinary account and this is what would say
+    // so.
+    const auth = firebaseAdmin.app().auth()
+    await expect(auth.verifyIdToken('plain-token')).resolves.toMatchObject({
+      uid: 'u1',
+    })
+    expect(poolsAsked).toEqual([null])
+  })
+
+  it('refuses an SSO token whose TENANT record is revoked', async () => {
+    // Routing to the right pool must not turn the check off: the tenant
+    // pool's own revocation stamp still has to refuse.
+    projectVerifyTenant = 't1'
+    tenantRecord = userRecord({
+      tokensValidAfterTime: validAfter(now - 60_000),
+    })
+    const auth = firebaseAdmin.app().auth()
+    await expect(auth.verifyIdToken('sso-token')).rejects.toMatchObject({
+      code: 'auth/id-token-revoked',
+    })
     expect(poolsAsked).toEqual(['t1'])
   })
 })

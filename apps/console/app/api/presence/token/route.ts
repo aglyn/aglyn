@@ -156,8 +156,30 @@ async function handler(request: Request): Promise<Response> {
     // before exchanging this, or the token is rejected as cross-pool.
     return Response.json({ token, orgId, canEdit, tenantId }, { status: 200 })
   } catch (error) {
-    console.error(error)
-    return Response.json({ error: 'Could not start presence' }, { status: 500 })
+    // AN AUTHENTICATION ANSWER IS NOT A SERVER FAULT (AGL-2486).
+    //
+    // Every `auth/…` failure landed here and came back 500 "Could not start
+    // presence", which is how the SSO revocation bug above presented: a
+    // stale, revoked or disabled session read as "our broker is broken",
+    // pointed the reader at the server, and offered no remedy at all — the
+    // one thing the caller could actually do (sign in again) was the one
+    // thing nothing said. `reason` travels so the editor can name a remedy
+    // instead of a status code.
+    const code = String((error as { code?: string })?.code ?? '')
+    if (code.startsWith('auth/')) {
+      console.warn('[presence/token] refused:', code)
+      return Response.json(
+        { error: 'Your sign-in is no longer valid', reason: code },
+        { status: 401 },
+      )
+    }
+    // A real fault. Logged with a tag, because an untagged `console.error(e)`
+    // in a process serving 117 routes is a stack with no subject.
+    console.error('[presence/token] failed:', error)
+    return Response.json(
+      { error: 'Could not start presence', reason: 'broker-error' },
+      { status: 500 },
+    )
   }
 }
 

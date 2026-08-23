@@ -20,7 +20,50 @@ import { splitDisplayName } from '@aglyn/shared-util-tools'
 import { Avatar, type AvatarProps } from '@mui/material'
 import { useMemo } from 'react'
 
+/**
+ * Six colours, spaced around the wheel and all legible under white text at
+ * 11px (AGL-2486).
+ *
+ * NOT a generated hue: an unconstrained hash lands on yellows and pale greens
+ * that fail contrast against the white initials, and one unreadable person in
+ * a members list is worse than two people sharing a colour.
+ */
+export const AVATAR_COLOURS = [
+  '#e8710a',
+  '#1a73e8',
+  '#12b5cb',
+  '#9334e6',
+  '#d93025',
+  '#188038',
+]
+
+/**
+ * A stable colour for a seed — deterministic, so the same identity is the
+ * same colour on every screen and for every viewer without anything being
+ * coordinated or stored.
+ *
+ * The SEED is the caller's choice and it matters. Member surfaces seed on the
+ * email, so a rename does not repaint someone. Presence seeds on
+ * `uid:sessionId`, because Zach asked for one avatar per open SESSION each in
+ * its own colour, matching the cursor that session draws.
+ */
+export function avatarColourFor(seed: string): string {
+  let hash = 0
+  const text = String(seed ?? '')
+  for (let index = 0; index < text.length; index += 1) {
+    hash = (hash * 31 + text.charCodeAt(index)) >>> 0
+  }
+  return AVATAR_COLOURS[hash % AVATAR_COLOURS.length]
+}
+
 export interface MemberAvatarProps extends Omit<AvatarProps, 'src' | 'alt'> {
+  /**
+   * Overrides the seeded colour. Presence passes the session's own colour so
+   * the avatar matches the cursor and selection box drawn on the canvas.
+   */
+  colour?: string
+  /** Seed for the colour when none is given; defaults to email, then name. */
+  colourSeed?: string
   /** The member's stored photo, when the roster has one. */
   photoURL?: string | null
   email?: string | null
@@ -76,7 +119,16 @@ export function memberInitials(
  * console cannot read from the client at all (AGL-1122).
  */
 export function MemberAvatar(props: MemberAvatarProps) {
-  const { photoURL, email, displayName, size = 32, sx, ...rest } = props
+  const {
+    photoURL,
+    email,
+    displayName,
+    colour,
+    colourSeed,
+    size = 32,
+    sx,
+    ...rest
+  } = props
   const src = useMemo(() => {
     const stored = String(photoURL ?? '').trim()
     return stored || undefined
@@ -95,6 +147,19 @@ export function MemberAvatar(props: MemberAvatarProps) {
         height: size,
         // Two letters need to fit the same circle one did.
         fontSize: size * (initials.length > 1 ? 0.36 : 0.45),
+        fontWeight: 600,
+        // COLOUR, not the SDK's grey (AGL-2486). Zach, seeing the account
+        // menu next to the presence stack: "I like how we created the named
+        // avatars for no profile picture let's do the same". The grey letter
+        // was not a neutral choice — MUI's `colorDefault` is the same grey it
+        // uses for an image that FAILED to load, so a deliberate initials
+        // avatar was rendering as a broken one. It matters most for SSO
+        // accounts, which have no picture at all: `zach@aglyn.com`
+        // authenticates through `saml.aglyn-workspace`, whose assertion
+        // carries no photo, so for the enterprise tier the initials ARE the
+        // avatar on every screen.
+        bgcolor: colour ?? avatarColourFor(colourSeed || email || label),
+        color: '#fff',
         ...sx,
       }}
       {...rest}

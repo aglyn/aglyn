@@ -36,7 +36,6 @@ import { isEnterpriseOrg, PLAN_LABELS, type OrgPlan } from '@aglyn/aglyn'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useUser, useUserPhoto } from '@aglyn/tenant-feature-instance'
 import {
-  Avatar,
   Box,
   Button,
   Divider,
@@ -51,6 +50,7 @@ import {
 } from '@mui/material'
 import { useColorScheme } from '@mui/material/styles'
 import { type ReactNode, useState } from 'react'
+import MemberAvatar from './member-avatar.component'
 import ReportIssueDialog from './report-issue-dialog.component'
 import { buildDocsUrl } from '../constants/docs-links'
 import { buildRoute, Route } from '../constants/route-links'
@@ -205,13 +205,19 @@ export function UserMenu() {
           aria-haspopup="menu"
           sx={{ p: 0.5 }}
         >
-          <Avatar
-            src={userPhotoUrl}
-            slotProps={{ img: { referrerPolicy: 'no-referrer' } }}
-            sx={{ width: 30, height: 30 }}
-          >
-            {name.slice(0, 1).toUpperCase()}
-          </Avatar>
+          {/* The SAME avatar the presence stack draws (AGL-2486). This was a
+              single grey letter on the SDK's default grey, sitting inches from
+              a coloured two-initial avatar of the same person — and for every
+              SSO account, which has no picture at all, the grey letter was the
+              whole identity. Zach: "I like how we created the named avatars
+              for no profile picture let's do the same". Seeded on the email
+              rather than the display name so the colour survives a rename. */}
+          <MemberAvatar
+            displayName={name}
+            email={email}
+            photoURL={userPhotoUrl}
+            size={30}
+          />
         </IconButton>
       </Tooltip>
       <Popover
@@ -246,13 +252,12 @@ export function UserMenu() {
             gap: 1,
           }}
         >
-          <Avatar
-            src={userPhotoUrl}
-            slotProps={{ img: { referrerPolicy: 'no-referrer' } }}
-            sx={{ width: 36, height: 36 }}
-          >
-            {name.slice(0, 1).toUpperCase()}
-          </Avatar>
+          <MemberAvatar
+            displayName={name}
+            email={email}
+            photoURL={userPhotoUrl}
+            size={36}
+          />
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography variant="subtitle2" noWrap>
               {name}
