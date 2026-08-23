@@ -72,10 +72,32 @@ convenience. Full lockdown is for takedowns: abuse, compromise, a workspace that
 must stop existing publicly right now.
 
 Read-only is available on the **platform**, **workspace (org)** and **site
-(host)** scopes. It is **refused** on the `user` and `feature` scopes, because
-neither has a milder setting to offer — a user lock's teeth are the Firebase
-account disable and token revoke, and every feature key already names a single
-write. The route answers 400 rather than silently arming a full lock.
+(host)** scopes. It is **refused** on the `user`, `feature` and `domain`
+scopes, because none has a milder setting to offer — a user lock's teeth are
+the Firebase account disable and token revoke, every feature key already names
+a single write, and a domain lock stops serving one **name** while read-only is
+defined as continuing to serve it. The route answers 400 rather than silently
+arming a full lock, and the card hides the mode dropdown on those scopes rather
+than offering a choice that will be rejected.
+
+:::warning The `domain` scope used to accept it, and lied
+
+Until AGL-1621 a `domain` lock armed with `mode: "read-only"` returned **200**
+and was stored as a **full takedown**. The scope arrived after read-only mode
+did, was never added to the refusal list, and its carrier write never gained the
+line that persists the field — so the mode was dropped on the floor and the
+document read back as `full`, because absent means full. An operator asked for
+the lighter action, was told it worked, and a whole custom domain went dark.
+
+Persisting the field would have been the wrong repair. Read-only has no
+enforcement surface at that scope at all: every path that resolves a domain lock
+is a path that **serves** (the edge verdict, the page loader, the locked
+notice), and neither write gate resolves the domain scope — both are keyed by
+host id, a domain lock by hostname, and a site can carry several attached names.
+A stored read-only domain lock would have refused nothing anywhere while this
+console reported LOCKED.
+
+:::
 
 Staff writes bypass read-only exactly as they bypass everything else, which is
 the whole point: you perform the migration while the world keeps reading.

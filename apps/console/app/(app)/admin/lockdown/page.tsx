@@ -208,6 +208,23 @@ interface ActionLogEntry {
   confirmed: boolean
 }
 
+/**
+ * The scopes where `mode: 'read-only'` is a real, enforced choice — the
+ * three the route accepts it on. Everywhere else the route returns 400, so
+ * the control is HIDDEN rather than offered and rejected.
+ *
+ * `user` (AGL-1511): a user lock's teeth are the Auth `disabled` flag and
+ * token revocation, which have no milder setting.
+ * `feature` (AGL-1511): every feature key names a write; "read-only
+ * checkout" describes nothing. (Not selectable in this card anyway — the
+ * feature checklist above owns that scope.)
+ * `domain` (AGL-1621): a domain lock stops serving ONE NAME; read-only is
+ * defined as continuing to serve. Nothing anywhere would refuse, and this
+ * card used to offer the choice, send it, and be told 200 for a full
+ * takedown.
+ */
+const READ_ONLY_SCOPES = new Set(['platform', 'org', 'host'])
+
 const timeOf = (ms: number) => new Date(ms).toLocaleTimeString()
 
 /**
@@ -843,7 +860,14 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                     label="Scope"
                     value={scope}
                     onChange={(event) => {
-                      setScope(event.target.value)
+                      const next = event.target.value
+                      setScope(next)
+                      // A stale `read-only` left over from another scope
+                      // would hide the ENFORCEMENT control too (it hides
+                      // whenever the mode is read-only) and quietly force
+                      // `standard` on a lock the operator may have meant as a
+                      // takedown. Snap back to the shipped default instead.
+                      if (!READ_ONLY_SCOPES.has(next)) setMode('full')
                       // The panel below described the OLD target. Keeping it
                       // visible next to a new one is how an operator ends up
                       // reading a reassuring "NOT LOCKED" about something
@@ -881,10 +905,19 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                   />
                   {/* Read-only is refused server-side on the user scope
                       (AGL-1511) — a user lock's teeth are the Auth disable
-                      and token revoke, which have no milder setting — so the
-                      control is hidden there rather than offering a choice
-                      the route will reject. */}
-                  {scope !== 'user' ? modeField(mode, setMode) : null}
+                      and token revoke, which have no milder setting — and on
+                      the domain scope (AGL-1621) — a domain lock stops
+                      serving ONE NAME, and read-only is defined as continuing
+                      to serve it, so nothing anywhere would refuse. Both
+                      hide the control rather than offering a choice the route
+                      will reject.
+
+                      Hiding it here is half the fix: this card used to offer
+                      read-only for `domain`, send it, and get a 200 back for
+                      a full takedown, because the route dropped the field on
+                      the floor. The route refuses it now; this stops the
+                      operator being walked into the refusal. */}
+                  {READ_ONLY_SCOPES.has(scope) ? modeField(mode, setMode) : null}
                   {/* Hidden — not merely disabled — while the lock is
                       read-only, because the route refuses that combination
                       outright (a read-only takedown would keep serving the
@@ -922,7 +955,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                           action: 'lock',
                           scope,
                           targetId: targetId.trim(),
-                          mode: scope === 'user' ? 'full' : mode,
+                          mode: READ_ONLY_SCOPES.has(scope) ? mode : 'full',
                           // Sent explicitly on every lock, including the
                           // default: the route would infer `standard` from
                           // an absent field anyway, but stating it keeps

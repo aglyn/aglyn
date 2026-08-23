@@ -693,27 +693,64 @@ async function handler(request: Request): Promise<Response> {
         { status: 400 },
       )
     }
-    // Read-only is refused on the two scopes where it would be a LIE rather
-    // than a milder lock, instead of being quietly accepted and downgraded:
-    //
-    //  - `user` — the user lock's teeth are the Firebase Auth `disabled`
-    //    flag and refresh-token revocation. Those are all-or-nothing; a
-    //    "read-only user" would be an ordinary full lockout wearing a label
-    //    that says otherwise, which is the worst of both.
-    //  - `feature` — a feature lock already names a single capability, and
-    //    every one of them (signups, uploads, checkout, installs, ai-assist)
-    //    IS a write. "Read-only checkout" describes nothing.
-    //
-    // An operator who asked for the gentler lock and silently got the harder
-    // one is the failure this refusal exists to prevent.
-    if (action === 'lock' && mode === 'read-only' && (scope === 'user' || scope === 'feature')) {
+    // Read-only is refused on the scopes where it would be a LIE rather than
+    // a milder lock, instead of being quietly accepted and downgraded. An
+    // operator who asked for the gentler lock and silently got the harder one
+    // is the failure this refusal exists to prevent — and, in the `domain`
+    // case below, the failure it did NOT prevent until AGL-1621.
+    const READ_ONLY_REFUSED: Record<string, string> = {
+      //  - `user` — the user lock's teeth are the Firebase Auth `disabled`
+      //    flag and refresh-token revocation. Those are all-or-nothing; a
+      //    "read-only user" would be an ordinary full lockout wearing a label
+      //    that says otherwise, which is the worst of both.
+      user:
+        'read-only has no meaning at the user scope — a user lock is ' +
+        'all-or-nothing. Use scope platform, org or host, or lock user in full.',
+      //  - `feature` — a feature lock already names a single capability, and
+      //    every one of them (signups, uploads, checkout, installs, ai-assist)
+      //    IS a write. "Read-only checkout" describes nothing.
+      feature:
+        'read-only has no meaning at the feature scope — a feature lock is ' +
+        'all-or-nothing. Use scope platform, org or host, or lock feature in full.',
+      //  - `domain` (AGL-1513, refused since AGL-1621) — this one shipped
+      //    ACCEPTED and was the bug. The scope arrived after AGL-1511, was
+      //    never added to this list, and its carrier write never got the
+      //    `mode` spread the other carriers have; so `mode: 'read-only'`
+      //    returned 200, was dropped on the floor, and the document read back
+      //    through `lockdownMode()` as `full` — the absent-means-full
+      //    fail-safe doing its job on a value the operator had supplied. An
+      //    operator asked for the lighter action, was told it worked, and a
+      //    whole custom domain went dark.
+      //
+      //    Persisting the field instead would have been the wrong repair,
+      //    because read-only has NO enforcement surface at this scope:
+      //
+      //      * every path that knows about the domain scope is a path that
+      //        SERVES — the edge verdict (`mode !== 'read-only'` decides
+      //        `blocked`), the page loader (`!isReadOnlyLockdown` decides the
+      //        maintenance fallback), and the locked-notice route itself. All
+      //        three keep serving under read-only, by design;
+      //      * and neither write gate resolves the domain scope at all.
+      //        `getSiteLockdown` and `getLockdownVerdict` compose
+      //        platform/org/host(/user), never `domain`, and they cannot: both
+      //        are keyed by hostId, while a domain lock is keyed by HOSTNAME,
+      //        and a site can carry several attached names. The write path
+      //        never learns which name the request arrived on.
+      //
+      //    So a stored read-only domain lock would refuse nothing anywhere
+      //    while the console reported LOCKED. It is also the same
+      //    contradiction the read-only takedown refusal names one block down:
+      //    a domain lock exists to stop serving THIS NAME (hijack, dispute,
+      //    abuse), and read-only is defined as continuing to serve it.
+      domain:
+        'read-only has no meaning at the domain scope — a domain lock stops ' +
+        'serving one name, and read-only keeps serving it. Nothing would ' +
+        'refuse. Lock the domain in full, or use scope org or host for a ' +
+        'read-only freeze across the whole site.',
+    }
+    if (action === 'lock' && mode === 'read-only' && READ_ONLY_REFUSED[scope]) {
       return Response.json(
-        {
-          error:
-            `read-only has no meaning at the ${scope} scope — a ${scope} lock ` +
-            `is all-or-nothing. Use scope platform, org or host, or lock ` +
-            `${scope} in full.`,
-        },
+        { error: READ_ONLY_REFUSED[scope] },
         { status: 400 },
       )
     }
