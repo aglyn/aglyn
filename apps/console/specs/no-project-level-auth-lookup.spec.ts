@@ -103,13 +103,76 @@ const ROOTS = [
  */
 const EXEMPT = /auth-pools\.ts$/
 
+/**
+ * The CODE on each line, with comments blanked out and the line numbering
+ * intact (AGL-2486).
+ *
+ * The guard used to scan raw lines, and on 2026-08-23 it went red on a DOC
+ * COMMENT — `firebase-admin.ts` had just gained a comment explaining that
+ * `assertIdTokenNotRevoked` names its parameter `pool`, which is precisely
+ * why this guard missed a real bug. Prose describing the pattern tripped the
+ * detector for the pattern.
+ *
+ * Blanked rather than removed so `index + 1` still reports the true line, and
+ * so the previous-line receiver lookup below still sees the line it expects
+ * — deleting comment lines would silently shift both.
+ *
+ * Block state is carried ACROSS lines, which is the whole point: a JSDoc
+ * block is many lines and only its first carries the opener. `//` is honoured
+ * only outside quotes, so a `'https://…'` in real code is not mistaken for
+ * the start of a comment — the failure that would matter here is a FALSE
+ * NEGATIVE, a real call hidden behind an over-eager stripper.
+ */
+function codeLines(source: string): string[] {
+  let inBlock = false
+  return source.split('\n').map((line) => {
+    let out = ''
+    let quote: string | null = null
+    for (let i = 0; i < line.length; i += 1) {
+      const two = line.slice(i, i + 2)
+      if (inBlock) {
+        if (two === '*/') {
+          inBlock = false
+          out += '  '
+          i += 1
+        } else {
+          out += ' '
+        }
+        continue
+      }
+      if (quote) {
+        out += line[i]
+        if (line[i] === '\\') {
+          out += line[i + 1] ?? ''
+          i += 1
+        } else if (line[i] === quote) quote = null
+        continue
+      }
+      if (line[i] === "'" || line[i] === '"' || line[i] === '`') {
+        quote = line[i]
+        out += line[i]
+        continue
+      }
+      if (two === '//') return out + ' '.repeat(line.length - i)
+      if (two === '/*') {
+        inBlock = true
+        out += '  '
+        i += 1
+        continue
+      }
+      out += line[i]
+    }
+    return out
+  })
+}
+
 describe('project-level auth lookups (AGL-1122)', () => {
   it('are not used anywhere in the console, the tenant app, or libs', () => {
     const offenders: string[] = []
     for (const file of ROOTS.flatMap((root) => [...sourceFiles(root)])) {
       if (EXEMPT.test(file)) continue
       const source = readFileSync(file, 'utf8')
-      const lines = source.split('\n')
+      const lines = codeLines(source)
       lines.forEach((line, index) => {
         for (const call of FORBIDDEN) {
           const at = line.indexOf(`.${call}(`)
