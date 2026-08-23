@@ -7,7 +7,10 @@ name: Scheduled console crons
 # console, using the routes' x-cron-secret auth path.
 #
 # Requires:
-#   - secret  CRON_SECRET       — same value as the console Vercel env var
+#   - secret  CRON_SECRET        — same value as the console Vercel env var
+#   - secret  AGLYN_PROBE_TOKEN  — Vercel Bot Protection bypass; see the POST
+#                                  step. Without it the console challenges
+#                                  this workflow with a 429 checkpoint page.
 #   - var     CONSOLE_BASE_URL   — optional; defaults to https://app.aglyn.com
 #
 # Set CONSOLE_BASE_URL only if your console is not on the default host (a
@@ -271,12 +274,45 @@ jobs:
         env:
           BASE_URL: ${{ vars.CONSOLE_BASE_URL || 'https://app.aglyn.com' }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          # Bot Protection was turned on for aglyn-console on 2026-08-21
+          # (AGL-2483) and answers an unrecognised automated client with a
+          # 429 "Vercel Security Checkpoint" HTML page — NOT a 403, and not
+          # anything the response handling below would read as auth. The
+          # console's "Machine traffic bypass" rule names the cron paths
+          # explicitly, and `/api/campaigns/process-scheduled` (AGL-2134)
+          # landed AFTER that list was written, so every */15 run of that one
+          # route was challenged for 51 hours while the other eleven passed —
+          # which is why this workflow's history reads as intermittent rather
+          # than broken.
+          #
+          # This is the same header every other CI caller of our own hosts
+          # sends (`uptime-probe.yml`, the legal drift scripts) and it matches
+          # the console's header-scoped "CI and uptime probe bypass" rule, so
+          # it fixes every cron route at once rather than one path at a time.
+          # It bypasses the bot CHALLENGE and nothing else: `x-cron-secret` is
+          # still compared timing-safely by the route, and a wrong secret is
+          # still a 401.
+          #
+          # Absent (a fork, a local run), the header is simply not sent —
+          # see tools/scripts/lib/probe-headers.mjs for why that direction.
+          AGLYN_PROBE_TOKEN: ${{ secrets.AGLYN_PROBE_TOKEN }}
           ROUTE: ${{ steps.route.outputs.path }}
           FORCE: ${{ github.event.inputs.force }}
         run: |
           if [ -z "$CRON_SECRET" ]; then
             echo "CRON_SECRET secret is not set on this repo" >&2
             exit 1
+          fi
+          # An ARRAY, not a string: a `-H "x-aglyn-probe: "` with an empty
+          # value is not the same request as no header at all, and curl reads
+          # a bare `-H "name:"` as "suppress this header" — neither is what an
+          # unconfigured checkout should send.
+          probe=()
+          if [ -n "$AGLYN_PROBE_TOKEN" ]; then
+            probe=(-H "x-aglyn-probe: ${AGLYN_PROBE_TOKEN}")
+          else
+            echo "note: AGLYN_PROBE_TOKEN is not set; this POST will be challenged" >&2
+            echo "      by Vercel Bot Protection on any host that has it enabled." >&2
           fi
           url="${BASE_URL}${ROUTE}"
           echo "POST $url${FORCE:+ (force=$FORCE)}"
@@ -285,11 +321,11 @@ jobs:
           # invocation.
           if [ "$FORCE" = "true" ]; then
             code=$(curl -sS --max-time 300 -o /tmp/cron-body -w '%{http_code}' \
-              -X POST "$url" -H "x-cron-secret: ${CRON_SECRET}" \
+              -X POST "$url" -H "x-cron-secret: ${CRON_SECRET}" "${probe[@]}" \
               -H 'content-type: application/json' -d '{"force":true}')
           else
             code=$(curl -sS --max-time 300 -o /tmp/cron-body -w '%{http_code}' \
-              -X POST "$url" -H "x-cron-secret: ${CRON_SECRET}")
+              -X POST "$url" -H "x-cron-secret: ${CRON_SECRET}" "${probe[@]}")
           fi
           echo "HTTP $code"
           echo "--- response ---"
@@ -327,7 +363,7 @@ jobs:
             fi
             echo "--- chunk $pages (cursor $cursor) ---"
             code=$(curl -sS --max-time 300 -o /tmp/cron-body -w '%{http_code}' \
-              -X POST "$url" -H "x-cron-secret: ${CRON_SECRET}" \
+              -X POST "$url" -H "x-cron-secret: ${CRON_SECRET}" "${probe[@]}" \
               -H 'content-type: application/json' \
               -d "{\"cursor\":\"${cursor}\"}")
             echo "HTTP $code"
