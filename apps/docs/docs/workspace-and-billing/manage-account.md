@@ -138,10 +138,20 @@ Your avatar, shown in the account menu, on the workspace team roster, and beside
 your activity. Pick an image from the organization's
 [media library](../content-and-data/media/overview.md) or paste an `https` image URL.
 
-Leave it empty and Aglyn falls back to the photo your sign-in provider gave us, and
+Never set one and Aglyn falls back to the photo your sign-in provider gave us, and
 then to your initials, drawn by Aglyn. Nothing about you is sent to an outside
 avatar service to work out what to show. The preview beside the field shows exactly
 what everyone else sees.
+
+**Clearing the field is different from never having set one.** Emptying it and
+saving removes your picture and keeps it removed — signing in again does not put
+your provider's photo back. Save an image here again whenever you want that
+prefill returned.
+
+If your company signs you in through its own identity provider and this is blank,
+that provider is most likely not sending a picture — many cannot, including Google
+Workspace SAML, which has no photo attribute to map. Set one here: the media
+library accepts an upload, or paste an `https` link.
 
 ## Basic info
 

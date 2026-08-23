@@ -172,4 +172,114 @@ describe('seedUserProfile', () => {
     await seedUserProfile('uid-1', { displayName: undefined, firestore })
     expect(firestore.writes).toEqual([])
   })
+
+  /**
+   * AGL-2486 item 38 — REMOVING YOUR AVATAR HAS TO STICK.
+   *
+   * Absent-only protects an avatar somebody SET. It does nothing for one they
+   * REMOVED, because removing it is what makes the field absent again, and
+   * absent is the condition that makes this seed write. So the next sign-in
+   * put the directory thumbnail back — from the customer's own IdP, silently,
+   * every time, forever. `propagateMemberPhoto` already refuses this on the
+   * roster row and says why; this document had no equivalent.
+   *
+   * The account that PROMPTED the item is the one whose IdP asserts nothing
+   * at all, so these deliberately run both assertions: one carrying a picture
+   * and one carrying none. A double that always supplies a picture would
+   * prove nothing about the real `aglyn-org-y5v14` account, whose auth
+   * record, SAML provider entry and profile row are all photo-less.
+   */
+  describe('the photoUrlErasedAt marker', () => {
+    it('does not re-seed an avatar the user removed', async () => {
+      const firestore = fakeFirestore({
+        firstName: 'Zach',
+        lastName: 'Gover',
+        // What Manage Account leaves behind on a clear: the field DELETED
+        // (so it is absent here, not '') plus the marker.
+        photoUrlErasedAt: '2026-08-23T00:00:00.000Z',
+      })
+      const result = await seedUserProfile('uid-1', {
+        photoUrl: 'https://directory.example/thumb.png',
+        firestore,
+      })
+      expect(result).toEqual({ created: false, fields: [] })
+      expect(firestore.writes).toEqual([])
+      expect(firestore.state.data).not.toHaveProperty('photoUrl')
+    })
+
+    it('still seeds the avatar when there is no marker', async () => {
+      // The baseline the guard is measured against. Without this, deleting
+      // the whole photo branch would leave the test above green.
+      const firestore = fakeFirestore({ firstName: 'Zach', lastName: 'Gover' })
+      const result = await seedUserProfile('uid-1', {
+        photoUrl: 'https://directory.example/thumb.png',
+        firestore,
+      })
+      expect(result.fields).toEqual(['photoUrl'])
+      expect(firestore.state.data).toMatchObject({
+        photoUrl: 'https://directory.example/thumb.png',
+      })
+    })
+
+    it('seeds again once the marker is dropped, which is what saving a photo does', async () => {
+      // Reversible BY THE PERSON IT PROTECTS and only by them: Manage Account
+      // clears the marker on any save that stores a photo, so opting back
+      // into IdP prefill is just setting an avatar.
+      const firestore = fakeFirestore({ firstName: 'Zach' })
+      const result = await seedUserProfile('uid-1', {
+        photoUrl: 'https://directory.example/thumb.png',
+        firestore,
+      })
+      expect(result.fields).toEqual(['photoUrl'])
+    })
+
+    it('leaves an uploaded avatar alone whether or not a marker is present', async () => {
+      // The ORIGINAL invariant, which the marker must not weaken: a photo the
+      // user chose is never replaced by the directory's.
+      for (const extra of [{}, { photoUrlErasedAt: '2026-08-23T00:00:00.000Z' }]) {
+        const firestore = fakeFirestore({
+          photoUrl: 'https://cdn.example/uploaded.png',
+          ...extra,
+        })
+        await seedUserProfile('uid-1', {
+          photoUrl: 'https://directory.example/thumb.png',
+          firestore,
+        })
+        expect(firestore.state.data).toMatchObject({
+          photoUrl: 'https://cdn.example/uploaded.png',
+        })
+        expect(firestore.writes).toEqual([])
+      }
+    })
+
+    it('writes no photo for the assertion that carries none, marker or not', async () => {
+      // THE MEASURED ACCOUNT. `resolveIdpPhotoUrl` returns '' for the live
+      // SAML assertion and both callers pass `|| null`, so this is the input
+      // the real SSO account produces on every sign-in. The marker must not
+      // turn that into a write, and its absence must not either.
+      for (const extra of [{}, { photoUrlErasedAt: '2026-08-23T00:00:00.000Z' }]) {
+        const firestore = fakeFirestore({ firstName: 'Zach', ...extra })
+        const result = await seedUserProfile('uid-1', {
+          photoUrl: null,
+          firestore,
+        })
+        expect(result.fields).not.toContain('photoUrl')
+        expect(firestore.state.data).not.toHaveProperty('photoUrl')
+      }
+    })
+
+    it('does not let the marker block the other seeded fields', async () => {
+      // Scoped to the photo. A guard that short-circuited the whole seed
+      // would silently stop prefilling names and addresses too.
+      const firestore = fakeFirestore({
+        photoUrlErasedAt: '2026-08-23T00:00:00.000Z',
+      })
+      const result = await seedUserProfile('uid-1', {
+        displayName: 'Zach Gover',
+        photoUrl: 'https://directory.example/thumb.png',
+        firestore,
+      })
+      expect(result.fields.sort()).toEqual(['firstName', 'lastName'])
+    })
+  })
 })
