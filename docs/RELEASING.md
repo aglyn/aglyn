@@ -134,6 +134,7 @@ tools/gate.sh                      # gate origin/main, all phases
 tools/gate.sh --ref <sha>          # gate a specific commit
 tools/gate.sh --phases build       # one phase, same isolation
 tools/gate.sh --keep               # keep the worktree for triage
+tools/gate.sh --no-install         # refuse on lockfile drift, never install
 ```
 
 It provisions a detached worktree at `/private/tmp/aglyn-gate/<stamp>/wt`, runs
@@ -196,6 +197,34 @@ A trailing filter returns _its own_ status, which is how a red production build
 once got reported as green. For the same reason the build phase names
 `console:build:production` and `tenant:build:production` explicitly: a bare
 `nx run-many -t build` has gone green while both Next production builds errored.
+
+**It installs when the lockfile moves.** The gate clones this checkout's
+`node_modules`, which is honest only while the gated ref wants the same
+packages. It does not, on every dependency bump — and a measured dependabot
+branch would have been gated against cypress 15.20.1 while its lockfile said
+15.21.0 (plus vitest, `@swc/core` and `eslint-plugin-storybook`). So
+provisioning is decided per tree, per lockfile:
+
+| gated ref's lockfile vs this checkout's | what happens |
+|---|---|
+| same | clone this checkout's tree (fast) |
+| differs, tree cached under that hash | clone the cache (fast) |
+| differs, no cache | **`npm ci`**, then cache it under the hash |
+| differs, `--no-install` | **refuse, exit 1** |
+
+Only the first gate of a dependency change pays for the install. It installs
+rather than refusing because `.npmrc` sets `legacy-peer-deps=true`, so npm
+accepts a broken peer graph **silently** — mobx 7 against a package peering
+`mobx ^6.3.0` raised nothing at install time and failed at runtime inside
+`makeObservable`. Only running the tests against the real tree catches that.
+The summary always ends with a `provisioning:` line naming how each tree got
+its packages.
+
+**It snapshots itself.** `bash` reads a script lazily, by byte offset, so
+editing `tools/gate.sh` while a run is in flight corrupts that run — the
+symptom is a syntax error on a line number with nothing wrong with it. The gate
+copies itself into its gate root and re-execs the copy, so a run is immune from
+startup onward and callers do not have to know the hazard exists.
 
 The guard phase is **derived from the CI workflows** (`nx-ci.yml` and
 `tools-guards.yml`) rather than listed here, so a guard added to CI is gated
