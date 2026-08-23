@@ -248,6 +248,18 @@ export interface PresetSchema<P = JSX.AnyProps> extends PresetII {
   displayName?: string
   description?: string
   category?: string | ComponentCategory
+  /**
+   * Extra words this element should be findable by in the element picker —
+   * synonyms and the name people reach for when it is not the name we chose
+   * ("picture" for Image, "dropdown" for Select).
+   *
+   * Search terms only; never rendered. A hit here ranks BELOW every hit on a
+   * name, so a tag widens what the picker finds without letting a synonym
+   * outrank the element actually called that (AGL-2486).
+   */
+  tags?: string[]
+  /** Alias of {@link tags}; both are searched. */
+  keywords?: string[]
   icon?: MdiIconProps
   data: NodeSchemaNested<P>
   /**
@@ -466,6 +478,19 @@ export interface ComponentSchema<P = any> {
   subtitle?: string
   description?: string
   category?: string | ComponentCategory
+
+  /**
+   * Extra words this element should be findable by in the element picker —
+   * synonyms and the name people reach for when it is not the name we chose
+   * ("picture" for Image, "dropdown" for Select).
+   *
+   * Search terms only; never rendered. A hit here ranks BELOW every hit on a
+   * name, so a tag widens what the picker finds without letting a synonym
+   * outrank the element actually called that (AGL-2486).
+   */
+  tags?: string[]
+  /** Alias of {@link tags}; both are searched. */
+  keywords?: string[]
 
   /**
    * Icon props for display around besigner

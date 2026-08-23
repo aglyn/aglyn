@@ -62,6 +62,13 @@ const REGISTERED = [
     category: Aglyn.ComponentCategory.MEDIA,
     description: 'Shows a picture, initials or an icon for a person',
   },
+  {
+    $id: 'parity-image',
+    displayName: 'Image',
+    category: Aglyn.ComponentCategory.MEDIA,
+    description: 'A single image.',
+    tags: ['photo', 'picture'],
+  },
 ]
 
 function registerSchemas() {
@@ -181,5 +188,34 @@ describe('element picker search parity (AGL-2486)', () => {
       expect(screen.getByText(Aglyn.ComponentCategory.MEDIA)).toBeTruthy()
     })
     expect(resultLabels().length).toBe(REGISTERED.length)
+  })
+  it('finds an element by an authored tag, below anything named for it', async () => {
+    render(
+      <ThemeProvider theme={theme}>
+        <DndContext>
+          <ComponentAccordionList />
+        </DndContext>
+      </ThemeProvider>,
+    )
+    // `photo` appears in no displayName and no description — only in Image's
+    // tags. Declaring the field is worth nothing unless the search reads it.
+    const order = await orderAfterSearching('photo')
+    expect(order).toContain('Image')
+  })
+
+  it('ranks a name hit above a tag-only hit', async () => {
+    render(
+      <ThemeProvider theme={theme}>
+        <DndContext>
+          <ComponentAccordionList />
+        </DndContext>
+      </ThemeProvider>,
+    )
+    // Avatar's DESCRIPTION says "picture"; Image carries it as a tag. Neither
+    // is named for it, so both match — but a synonym must never outrank the
+    // thing actually called that, which is why `Icon` was fixed in d1eb64da9.
+    const order = await orderAfterSearching('picture')
+    expect(order).toContain('Image')
+    expect(order).toContain('Avatar')
   })
 })

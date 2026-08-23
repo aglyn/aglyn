@@ -34,6 +34,11 @@ const FUSE_KEYS = [
   'description',
   'subtitle',
   'category',
+  // Authored synonyms. `rankPickerItems` has always ranked these; until
+  // AGL-2486 nothing could SET them and the fuzzy pass never looked at
+  // them, so the ranking was scoring a field that did not exist.
+  'tags',
+  'keywords',
   'pluginId',
   'kind',
   '$id',
