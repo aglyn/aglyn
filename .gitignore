@@ -91,3 +91,29 @@ vite.config.*.timestamp*
 # copy is not optional — the build FAILS if it cannot be produced, because the
 # only alternative is `@monaco-editor/loader`'s jsDelivr default.
 /apps/console/public/monaco/
+
+# Next writes these on `next dev` startup — `generate-agent-files.js`, called
+# from `app-info-log.js` in the `next` package. Both files carry a
+# `BEGIN:nextjs-agent-rules` block telling agents to read the bundled docs
+# because this Next version differs from their training data, and `next dev`
+# RE-ADDS the block, so deleting them is futile: they came back for every
+# agent in this shared checkout, four permanently-untracked files that are
+# exactly the condition a `git add -A` accident needs (AGL-2486).
+#
+# Ignored rather than committed for two reasons. They are generated and
+# pinned to one Next version, so a committed copy rots against the pin like
+# the Monaco rule above; and `apps/*/CLAUDE.md` is one line, `@AGENTS.md`,
+# a Claude Code IMPORT directive — committing it would load Next's guidance
+# into every agent's context repo-wide, which is a deliberate decision to
+# take on its own, not a side effect of a dependency's dev server.
+#
+# Listed as four EXACT anchored paths, not `**/AGENTS.md`: these are the only
+# two Next apps in the workspace (`apps/console`, `apps/tenant` — the only
+# `next.config.js` files), and a hand-written AGENTS.md or CLAUDE.md anywhere
+# else, including the repo root, stays tracked as normal. Add a third Next
+# app and its pair shows up untracked, which is the right moment to decide
+# about it rather than have this rule decide silently.
+/apps/console/AGENTS.md
+/apps/console/CLAUDE.md
+/apps/tenant/AGENTS.md
+/apps/tenant/CLAUDE.md
