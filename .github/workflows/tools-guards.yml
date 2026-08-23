@@ -450,6 +450,40 @@ jobs:
 
       - run: npm run check:hardcoded-colours
 
+      # AGL-1621. Same two-step order, and the reason is the sharpest one in
+      # this file: on 2026-08-23 a scripted edit dropped a closing paren from
+      # two `hasAny(…)` expressions in cloud/firebase-firestore.rules and the
+      # ENTIRE suite stayed green. The three deny-coverage guards read the
+      # rules as text and assert about FIELD NAMES — the `hasAny` regex reads
+      # between `[` and `]` and cannot care what follows the `]`, and the
+      # block walkers count braces, never parens. 47 assertions passed against
+      # a file the Firestore compiler rejects. A human reading the diff caught
+      # it.
+      #
+      # `npm run test:rules` does compile the file, but it lives in
+      # emulator-guards.yml, whose push trigger moved to `production` in the
+      # freeze — as did rules-drift.yml's. So on `main` NOTHING answered "does
+      # this file parse", on the file that is the last line of defence for
+      # every customer's document.
+      #
+      # The self-test first, and it is not ceremony: its fixtures include the
+      # exact dropped-paren mutation, plus the shapes the scanner must NOT
+      # fire on (delimiters inside comments and strings, and the AGL-2004
+      # phantom-block-comment case). A balance scanner that cried wolf on the
+      # real 141KB file would be deleted within a day, and then nothing would
+      # check again.
+      #
+      # No JVM is added to this job on purpose. The guard's structural tier —
+      # the tier that catches this bug class — is pure node and runs in
+      # milliseconds; its second tier compiles with the real Rules compiler
+      # through the emulator's upload endpoint and engages automatically
+      # wherever `firebase` + `java` already exist (a developer's machine,
+      # tools/gate.sh, emulator-guards.yml). The output always STATES which
+      # tiers ran, so a green here is never mistaken for a grammar check.
+      - run: npm run test:rules-parse
+
+      - run: npm run check:rules-parse
+
       # AGL-2486. `compiler.reactRemoveProperties` deletes JSX props from the
       # BROWSER build only, and jest's transform keeps them — so a prop being
       # erased in production still renders under test and its spec passes.
