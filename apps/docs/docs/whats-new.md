@@ -10,7 +10,55 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## August 2026 — knowing what happened (newest)
+## August 2026 — the canvas, up close (newest)
+
+- **[Style hover, focus and the other states](building-sites/besigner/responsive-styling.md#interaction-states)** —
+  a row of chips under the breakpoint chip: **Default**, **Hover**, **Active**,
+  **Focus** and **Disabled**. Pick one and the whole styles panel switches to that
+  state, with the element **held in it on the canvas** so you can see what you are
+  doing. Fields you don't touch keep inheriting, states combine with breakpoints, and
+  Focus is `:focus-visible` — [keyboard focus](building-sites/besigner/responsive-styling.md#focus-state),
+  so styling it can essentially only add an indicator, never remove one.
+- **[Text is edited on the element itself](building-sites/besigner/text-editing.md#edit-inline)** —
+  double-click and you are typing into the real heading, at its real size and weight,
+  with the page reflowing around you. The selection chrome stands aside while you
+  type. **Escape** cancels, **Enter** commits a plain element, and a wrapped line of
+  inline text is now outlined
+  [line box by line box](building-sites/besigner/text-editing.md#wrapped-outlines)
+  instead of by one rectangle covering its neighbours.
+- **[Formatted text belongs to the canvas](building-sites/besigner/text-editing.md#the-text-attribute)** —
+  once an element carries bold, links or lists, the panel's **Text** field shows it
+  read-only and says why, rather than letting a plain edit silently throw the markup
+  away. **[Remove formatting](building-sites/besigner/text-editing.md#remove-formatting)**
+  keeps every word and line break, drops the formatting, and is one undo step.
+- **[One box styler, on your theme's spacing ladder](building-sites/besigner/responsive-styling.md#box-stylers)** —
+  margin, border, padding and contents in a single diagram, with the sides named in
+  words rather than as `mt` / `ml`, and a value shown on each side once it is set.
+  Space is set from [nine named steps](building-sites/besigner/responsive-styling.md#spacing-steps)
+  that follow your theme, or an exact amount whose
+  [unit is explained where you pick it](building-sites/besigner/responsive-styling.md#spacing-units).
+- **[Rooms are per version](building-sites/besigner/live-co-editing.md#per-version-rooms)** —
+  co-editing pairs you with the people on **the same version** of a document, matching
+  where the live edits actually flow. Two people on different versions no longer see
+  an avatar promising a connection that isn't there.
+- **[See who's in a document before you open it](building-sites/besigner/live-co-editing.md#presence-in-lists)** —
+  avatars on the row in the Screens and Layouts lists and the Components, Templates
+  and Site emails cards.
+- **[User accounts are a switch per site](guides/member-accounts.md)** — visitor
+  sign-in is **off until you turn it on**, so a brochure site does not quietly serve
+  `/signin`, `/signup` and `/recover`. Turning it on serves them and puts the Members
+  elements in the editor; turning it back off hides the pages and
+  [deletes nothing](guides/member-accounts.md).
+- **[Report an issue asks the right questions](workspace-and-billing/report-an-issue.md#what-to-write)** —
+  the dialog says plainly [what it is and is not for](workspace-and-billing/report-an-issue.md#is-it-us-or-your-site),
+  then asks per-kind: what you were doing and whether it happens every time for a bug,
+  what you are trying to do that you can't for an idea. A question is checked against
+  the documentation first, and often answered without filing anything.
+- **[Assist shows its sources](getting-started/aglyn-assist.md#answers-straight-from-the-documentation)** —
+  every written answer now lists the documentation sections it drew on, as links you
+  can follow.
+
+## August 2026 — knowing what happened
 
 - **[Bandwidth, and what happens past it](workspace-and-billing/billing-and-plans/bandwidth.md)** —
   every plan's monthly traffic allowance is now enforceable. On a paid plan the extra is
