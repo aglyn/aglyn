@@ -171,11 +171,23 @@ export const DraggableDroppable = observer(
         }
       }
       function handleMouseOver(e: Event) {
+        // Same stand-down: a hover repaint while the author is typing is
+        // both pointless and a re-render of the subtree they are editing.
+        if (inlineTextEdit.node?.$id === node?.$id) return
         e.preventDefault()
         e.stopPropagation()
         Besigner.focus.setHoveredNode(node)
       }
       function handleMouseDown(e: Event) {
+        // Stand down while this node IS the editing surface (AGL-2486).
+        // These handlers open with `preventDefault`, which is what suppresses
+        // the focus change a mousedown would otherwise cause — harmless when
+        // the text lives in an overlay, fatal once the leaf itself is
+        // contentEditable, because it is also how a caret gets placed. Left
+        // in, clicking into your own sentence to fix a word would re-select
+        // the node instead of moving the caret, and dragging would contend
+        // with selecting text for the same gesture.
+        if (inlineTextEdit.node?.$id === node?.$id) return
         e.preventDefault()
         e.stopPropagation()
         // Element-picker capture (AGL-574): while the interaction builder is

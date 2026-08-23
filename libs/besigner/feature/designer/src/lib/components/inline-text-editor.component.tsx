@@ -35,13 +35,10 @@ import {
 import { clampToViewport, useAnchoredRect } from '../hooks/use-anchored-rect'
 import useInsertTokenOptions from '../hooks/use-insert-token-options'
 import {
-  type AnchorTextStyle,
-  readAnchorTextStyle,
-} from '../utils/anchor-text-style'
-import {
-  createInlineEditLayoutGhost,
-  type InlineEditLayoutGhost,
-} from '../utils/inline-edit-layout-ghost'
+  beginInPlaceEdit,
+  type InPlaceEditSurface,
+  selectionOf,
+} from '../utils/in-place-edit-surface'
 import { inlineTextEdit } from '../utils/inline-text-edit.store'
 import {
   richTextToPlain,
@@ -78,32 +75,13 @@ const RICH_COMMANDS: Array<{ command: string; label: string; title: string }> =
 const EMPTY_RECT = { left: 0, top: 0, width: 0, height: 0 }
 
 /**
- * In-place editing (AGL-2486). Zach: *"Can we also make it so we are not
- * seeing a text box we are editing it in? We see/edit it exactly how it
- * appears"*.
+ * The fallback editor, for an edit with no element to type into — opened
+ * with no anchor, or on an anchor already detached from the document.
  *
- * Everything that made the surface look like a form control is gone: no
- * background, no border, no shadow, no radius. What is left is a dashed
- * outline, because the author still has to be able to tell that editing has
- * begun and where the run ends — and an outline is drawn OUTSIDE the box,
- * so unlike a border it moves no text. The element's own type is layered on
- * top of this by {@link readAnchorTextStyle}.
- */
-const IN_PLACE_SURFACE_SX = {
-  bgcolor: 'transparent',
-  border: 0,
-  borderRadius: 0,
-  boxShadow: 'none',
-  outlineWidth: '1px',
-  outlineStyle: 'dashed',
-  outlineColor: 'tertiary.main',
-  outlineOffset: '2px',
-}
-
-/**
- * The pre-AGL-2486 box, kept as the fallback for when the element's
- * rendered type cannot be read — an editor opened with no anchor, or an
- * anchor already detached. A legible box beats text painted in a guess.
+ * Deliberately OPAQUE. It floats over content that cannot re-flow with it,
+ * and a see-through surface in that position is what drew two texts over
+ * each other; covering what it stands on is honest, blending with it is not.
+ * Everything else edits the canvas leaf itself and needs no surface here.
  */
 const BOXED_SURFACE_SX = {
   p: 0.5,
@@ -163,22 +141,19 @@ export const InlineTextEditorComponent = observer(
     const anchor = inlineTextEdit.anchor
     const live = useAnchoredRect(anchor, rect ?? EMPTY_RECT)
     /**
-     * The element's RENDERED typography, read once per edit (AGL-2486).
-     * `undefined` means it could not be read, and the surface falls back to
-     * the old box rather than painting the author's text in a guess.
+     * Whether the canvas leaf ITSELF is the editing surface (AGL-2486).
+     *
+     * When it is, this component renders only the toolbar: there is no
+     * second rectangle to keep in sync with the text, so the text cannot
+     * move or restyle when editing begins and the layout re-flows because
+     * the element really did grow. That is the
+     * transparent-if-and-only-if-reserved invariant satisfied by
+     * construction rather than by a check.
+     *
+     * When it is not — no element to type into — the opaque fallback
+     * overlay is used instead.
      */
-    const [anchorStyle, setAnchorStyle] = useState<
-      AnchorTextStyle | undefined
-    >(undefined)
-    /**
-     * Whether the document is actually RESERVING space for what is being
-     * typed (AGL-2486). It gates the in-place look, because transparency is
-     * only honest when the layout tracks: a see-through surface that grows
-     * past a box the document never grew draws the author's text over its
-     * neighbour, which is worse than the box it replaced. Transparent if and
-     * only if reserved.
-     */
-    const [spaceIsReserved, setSpaceIsReserved] = useState(false)
+    const [inPlaceActive, setInPlaceActive] = useState(false)
     const overlayRef = useRef<HTMLElement>(null)
     const plainRef = useRef<HTMLDivElement>(null)
     const richRef = useRef<HTMLDivElement>(null)
@@ -203,8 +178,19 @@ export const InlineTextEditorComponent = observer(
      * no caret and no typing.
      */
     const seededRef = useRef(false)
-    /** Sizes the document to the live text — see createInlineEditLayoutGhost. */
-    const ghostRef = useRef<InlineEditLayoutGhost | undefined>(undefined)
+    /** The canvas leaf while it IS the editing surface — see beginInPlaceEdit. */
+    const inPlaceRef = useRef<InPlaceEditSurface | undefined>(undefined)
+    /**
+     * Latest handlers for the listeners bound onto the leaf. They are bound
+     * once per edit, so they must not close over a stale render.
+     */
+    const handlersRef = useRef({
+      keyDown: (_e: KeyboardEvent<HTMLDivElement>) => undefined as void,
+      richKeyDown: (_e: KeyboardEvent<HTMLDivElement>) => undefined as void,
+      blur: () => undefined as void,
+      click: (_e: MouseEvent<HTMLDivElement>) => undefined as void,
+      mouseDown: (_e: MouseEvent<HTMLDivElement>) => undefined as void,
+    })
     // The insert picker / pill popover take focus (portal + autofocus
     // search) — commit-on-blur must stand down while one is open, or the
     // editor would commit and close under the open menu (AGL-586).
@@ -234,10 +220,20 @@ export const InlineTextEditorComponent = observer(
         0
 
     const activeEditable = useCallback(
-      () => (rich ? richRef.current : plainRef.current),
+      () =>
+        inPlaceRef.current?.element ??
+        (rich ? richRef.current : plainRef.current),
       [rich],
     )
 
+    /**
+     * Opens the edit: builds the content once, and puts it in the canvas
+     * leaf itself wherever that is possible (AGL-2486).
+     *
+     * The builder is shared deliberately. In-place and the fallback overlay
+     * must show the SAME thing — the same pills, the same markup, the same
+     * plain-text seed — or the two paths would drift into two editors.
+     */
     useEffect(() => {
       if (!node) return
       committedRef.current = false
@@ -252,64 +248,81 @@ export const InlineTextEditorComponent = observer(
           : ''
       const resolve = (token: string) =>
         resolveTokenLabel(token, labelContextRef.current)
-      if (rich) {
-        const initial =
-          typeof props?.html === 'string' && props.html
-            ? (props.html as string)
-            : escapeHtml(text)
-        // Set once on open — contentEditable manages its own DOM after.
-        const raf = requestAnimationFrame(() => {
-          if (richRef.current) {
-            richRef.current.innerHTML = initial
-            // Raw {{tokens}} in the stored markup become pills (AGL-586).
-            materializeTokenPillsInElement(richRef.current, resolve)
-            richRef.current.focus()
-            // Place the caret at the end of the content.
-            const selection = window.getSelection()
-            if (selection) {
-              const range = document.createRange()
-              range.selectNodeContents(richRef.current)
-              range.collapse(false)
-              selection.removeAllRanges()
-              selection.addRange(range)
-            }
-            seededRef.current = true
-          }
-        })
-        return () => cancelAnimationFrame(raf)
-      }
-      // Plain mode: build text nodes + pills once, then the browser owns
-      // the DOM (same contract as rich mode).
-      const raf = requestAnimationFrame(() => {
-        const editable = plainRef.current
-        if (!editable) return
-        editable.textContent = ''
+
+      const build = (target: HTMLElement) => {
+        if (rich) {
+          const initial =
+            typeof props?.html === 'string' && props.html
+              ? (props.html as string)
+              : escapeHtml(text)
+          target.innerHTML = initial
+          // Raw {{tokens}} in the stored markup become pills (AGL-586).
+          materializeTokenPillsInElement(target, resolve)
+          return
+        }
+        // Plain mode: text nodes + pills, then the browser owns the DOM.
+        target.textContent = ''
         for (const segment of parseTokenSegments(text)) {
           if (segment.type === 'token') {
-            editable.appendChild(
+            target.appendChild(
               createTokenPillElement(
-                document,
+                target.ownerDocument,
                 segment.token ?? segment.value,
                 resolve(segment.token ?? segment.value),
               ),
             )
           } else {
-            editable.appendChild(document.createTextNode(segment.value))
+            target.appendChild(target.ownerDocument.createTextNode(segment.value))
           }
         }
+      }
+
+      // The element itself, whenever there is one to edit.
+      const surface = beginInPlaceEdit(anchor, build)
+      if (surface) {
+        inPlaceRef.current = surface
+        seededRef.current = true
+        setInPlaceActive(true)
+        surface.element.focus()
+        const selection = surface.selection()
+        if (selection) {
+          const range = surface.element.ownerDocument.createRange()
+          range.selectNodeContents(surface.element)
+          // Caret at the end, never select-all: the author double-clicked a
+          // word to edit it, and replacing the lot on the next keystroke is
+          // how a heading gets destroyed by a typo.
+          range.collapse(false)
+          selection.removeAllRanges()
+          selection.addRange(range)
+        }
+        return () => {
+          surface.dispose()
+          inPlaceRef.current = undefined
+          setInPlaceActive(false)
+        }
+      }
+
+      // No element to edit — the OPAQUE overlay. Built on a frame because
+      // the surface it writes into has not rendered yet, which is the race
+      // `seededRef` exists for.
+      setInPlaceActive(false)
+      const raf = requestAnimationFrame(() => {
+        const editable = rich ? richRef.current : plainRef.current
+        if (!editable) return
+        build(editable)
         editable.focus()
-        // Select-all on open (the textarea behavior this surface replaced).
         const selection = window.getSelection()
         if (selection) {
           const range = document.createRange()
           range.selectNodeContents(editable)
+          if (rich) range.collapse(false)
           selection.removeAllRanges()
           selection.addRange(range)
         }
         seededRef.current = true
       })
       return () => cancelAnimationFrame(raf)
-    }, [node, rich, propTarget])
+    }, [node, rich, propTarget, anchor])
 
     /**
      * Writes `next` only when it is a different document (AGL-2486).
@@ -340,11 +353,12 @@ export const InlineTextEditorComponent = observer(
       if (current && seededRef.current) {
         // updateNodeProps REPLACES the props object — spread the existing
         // props so variant/component/etc. survive the text edit.
-        if (rich && richRef.current) {
+        const surface = activeEditable()
+        if (rich && surface) {
           // Pills serialize back to raw tokens BEFORE sanitizing (the
           // sanitizer strips attributes, and pill labels must never
           // reach storage) — on a clone, the live DOM stays intact.
-          const clone = richRef.current.cloneNode(true) as HTMLElement
+          const clone = surface.cloneNode(true) as HTMLElement
           replacePillsWithTokenText(clone)
           const sanitized = sanitizeRichText(clone.innerHTML)
           const plain = richTextToPlain(sanitized)
@@ -363,9 +377,9 @@ export const InlineTextEditorComponent = observer(
           if (hasMarkup) nextProps['html'] = sanitized
           else delete nextProps['html']
           commitProps(current, nextProps)
-        } else if (plainRef.current) {
+        } else if (surface) {
           let value = serializeTokenSegments(
-            readTokenSegmentsFromDom(plainRef.current),
+            readTokenSegmentsFromDom(surface),
           )
           // An emptied contentEditable leaves a stray <br> behind.
           if (value === '\n') value = ''
@@ -402,7 +416,7 @@ export const InlineTextEditorComponent = observer(
         }
       }
       inlineTextEdit.close()
-    }, [rich, commitProps])
+    }, [rich, commitProps, activeEditable])
 
     const cancel = useCallback(() => {
       committedRef.current = true
@@ -419,55 +433,46 @@ export const InlineTextEditorComponent = observer(
     const commitRef = useRef(commit)
     commitRef.current = commit
 
-    useEffect(() => {
-      setAnchorStyle(node ? readAnchorTextStyle(anchor) : undefined)
-    }, [node, anchor])
-
     /**
-     * Takes the element's own text out of the layout and puts a live-sized
-     * stand-in in its place, so the document re-flows AS the author types
-     * (AGL-2486) — and decides, by whether that succeeded, whether this
-     * editor is allowed to be transparent at all.
+     * Wires the editing handlers onto the LEAF while it is the surface.
      *
-     * The two are one decision on purpose. A see-through surface over a
-     * layout that does not move is how `presence.` ended up drawn across the
-     * sibling `One canvas.`: the surface gained a line, the reserved box did
-     * not, and both texts were visible in the same pixels. Boxed-and-opaque
-     * covers what it replaces; transparent blends with it. Only the second
-     * needs the document to keep up, so only the second is offered when it
-     * does.
+     * Imperatively, because the element belongs to the canvas renderer and
+     * not to this component's JSX — the same reason `contentEditable` is set
+     * as a DOM property. Registered once per edit and torn down with it.
+     *
+     * No `input` handler is needed any more, and that absence is the point:
+     * the element being typed into IS the element being laid out, so the
+     * card, the row and the siblings re-flow on their own. The stand-in that
+     * used to reproduce that effect for an overlay is gone with the overlay.
      */
     useEffect(() => {
-      if (!node) return
-      // A hidden stand-in carrying the live text, so the card, the row and
-      // the siblings re-flow as it is typed. When one cannot be made — an
-      // inline run, or an element already gone — the editor stays BOXED
-      // rather than going transparent over a layout that will not move.
-      const ghost = createInlineEditLayoutGhost(anchor)
-      ghostRef.current = ghost
-      setSpaceIsReserved(Boolean(ghost))
+      const surface = inPlaceActive ? inPlaceRef.current : undefined
+      const element = surface?.element
+      if (!element) return
+      const onKeyDown = (event: Event) =>
+        (rich ? handlersRef.current.richKeyDown : handlersRef.current.keyDown)(
+          event as unknown as KeyboardEvent<HTMLDivElement>,
+        )
+      const onBlur = () => handlersRef.current.blur()
+      const onClick = (event: Event) =>
+        handlersRef.current.click(
+          event as unknown as MouseEvent<HTMLDivElement>,
+        )
+      const onMouseDown = (event: Event) =>
+        handlersRef.current.mouseDown(
+          event as unknown as MouseEvent<HTMLDivElement>,
+        )
+      element.addEventListener('keydown', onKeyDown)
+      element.addEventListener('blur', onBlur)
+      element.addEventListener('click', onClick)
+      element.addEventListener('mousedown', onMouseDown)
       return () => {
-        ghost?.dispose()
-        ghostRef.current = undefined
-        setSpaceIsReserved(false)
+        element.removeEventListener('keydown', onKeyDown)
+        element.removeEventListener('blur', onBlur)
+        element.removeEventListener('click', onClick)
+        element.removeEventListener('mousedown', onMouseDown)
       }
-    }, [node, anchor])
-
-    /**
-     * Every keystroke re-sizes the document, and NOTHING else (AGL-2486).
-     *
-     * Reflow and commit are deliberately different events. This writes only
-     * to a hidden DOM stand-in, so the co-editing mirror — a mobx autorun
-     * over the serialized node map — sees nothing, undo records nothing, and
-     * no keystroke is broadcast. The single `updateNodeProps` at commit
-     * remains the only thing that reaches the store.
-     */
-    const handleSurfaceInput = useCallback(
-      (event: { currentTarget: HTMLElement }) => {
-        ghostRef.current?.update(event.currentTarget)
-      },
-      [],
-    )
+    }, [inPlaceActive, rich])
 
     /**
      * Click-away commits, because on this canvas blur never arrives
@@ -509,22 +514,49 @@ export const InlineTextEditorComponent = observer(
      */
     useEffect(() => {
       if (!node) return
+      const editing = inPlaceRef.current?.element
+      const root = editing?.getRootNode() as ShadowRoot | Document | undefined
+      const host =
+        root && 'host' in root ? (root as ShadowRoot).host : undefined
+
+      const isInsideTheEditor = (target: Node | null): boolean => {
+        if (!target) return false
+        if (editing?.contains(target)) return true
+        const overlay = overlayRef.current
+        return Boolean(overlay?.contains(target))
+      }
+
       const handlePointerDownAway = (event: Event) => {
         if (menuOpenRef.current) return
-        const overlay = overlayRef.current
         const target = event.target as Node | null
-        if (overlay && target && overlay.contains(target)) return
+        // Inside the CLOSED canvas root, an event seen from the document has
+        // already been retargeted to the host, so it cannot say whether the
+        // click landed on the text being edited or beside it. The listener on
+        // the root itself sees the real target and has already decided; this
+        // one must not overrule it with a guess.
+        if (host && target === host) return
+        if (isInsideTheEditor(target)) return
         commitRef.current()
       }
+
       document.addEventListener('pointerdown', handlePointerDownAway, true)
+      // Second listener, INSIDE the shadow root, for the clicks the first one
+      // is blind to — including a click on the very element being edited,
+      // which must move the caret rather than end the edit.
+      if (root && root !== document) {
+        root.addEventListener('pointerdown', handlePointerDownAway, true)
+      }
       return () => {
         document.removeEventListener('pointerdown', handlePointerDownAway, true)
+        if (root && root !== document) {
+          root.removeEventListener('pointerdown', handlePointerDownAway, true)
+        }
       }
-    }, [node])
+    }, [node, inPlaceActive])
 
-    /** Shift+Enter in plain mode: a literal newline, DOM kept flat. */
     const insertPlainNewline = useCallback(() => {
-      const selection = window.getSelection()
+      const editable = activeEditable()
+      const selection = editable ? selectionOf(editable) : null
       if (!selection || selection.rangeCount === 0) return
       const range = selection.getRangeAt(0)
       range.deleteContents()
@@ -534,7 +566,7 @@ export const InlineTextEditorComponent = observer(
       range.collapse(true)
       selection.removeAllRanges()
       selection.addRange(range)
-    }, [])
+    }, [activeEditable])
 
     const handleKeyDown = useCallback(
       (event: KeyboardEvent<HTMLDivElement>) => {
@@ -577,16 +609,16 @@ export const InlineTextEditorComponent = observer(
         // execCommand is deprecated but universally supported and keeps this
         // dependency-free; the output is normalized by the sanitizer anyway.
         document.execCommand(command)
-        richRef.current?.focus()
+        activeEditable()?.focus()
       },
-      [],
+      [activeEditable],
     )
 
     const handleLink = useCallback(() => {
       const url = window.prompt('Link URL (https://…)')
       if (url) document.execCommand('createLink', false, url)
-      richRef.current?.focus()
-    }, [])
+      activeEditable()?.focus()
+    }, [activeEditable])
 
     /** Pill clicks (delegated): offer Replace/Remove (AGL-586). */
     const handleEditableClick = useCallback(
@@ -613,11 +645,19 @@ export const InlineTextEditorComponent = observer(
       [],
     )
 
+    handlersRef.current = {
+      keyDown: handleKeyDown,
+      richKeyDown: handleRichKeyDown,
+      blur: handleEditableBlur,
+      click: handleEditableClick,
+      mouseDown: handleEditableMouseDown,
+    }
+
     /** The toolbar {x}: captures the live selection, opens the picker. */
     const handleInsertOpen = useCallback(
       (event: MouseEvent<HTMLElement>) => {
         const editable = activeEditable()
-        const selection = window.getSelection()
+        const selection = editable ? selectionOf(editable) : null
         const range =
           selection && selection.rangeCount > 0
             ? selection.getRangeAt(0)
@@ -672,7 +712,7 @@ export const InlineTextEditorComponent = observer(
         savedRangeRef.current = null
         editable.focus()
         // Caret lands just after the pill, ready to keep typing.
-        const selection = window.getSelection()
+        const selection = selectionOf(editable)
         if (selection) {
           const after = document.createRange()
           after.setStartAfter(pill)
@@ -723,16 +763,17 @@ export const InlineTextEditorComponent = observer(
       typeof window === 'undefined' ? Infinity : window.innerWidth
     const viewportHeight =
       typeof window === 'undefined' ? Infinity : window.innerHeight
-    // In place, the surface takes the element's EXACT width: text-align and
-    // every wrap point are decided by it, and 120px of slack would re-flow
-    // the very line the author is looking at (AGL-2486).
+    // The fallback overlay is ALWAYS the opaque box (AGL-2486). It exists
+    // only for an edit with no element to type into, and an element that is
+    // not there cannot re-flow — so a see-through surface over it would be
+    // exactly what the invariant forbids. In-place editing needs no surface
+    // here at all: the leaf is the surface, and this component renders only
+    // the toolbar.
+    //
     // Built as plain records and cast ONCE, the way `tokenPillContainerSx`
-    // is: MUI's `sx` union cannot absorb a computed spread of arbitrary CSS
-    // longhands and reports every neighbouring key as the error instead.
-    const inPlace = Boolean(anchorStyle) && spaceIsReserved
-    const surfaceSx: Record<string, unknown> = inPlace
-      ? { ...IN_PLACE_SURFACE_SX, ...anchorStyle }
-      : BOXED_SURFACE_SX
+    // is: MUI's `sx` union cannot absorb a computed spread and reports every
+    // neighbouring key as the error instead.
+    const surfaceSx: Record<string, unknown> = BOXED_SURFACE_SX
     const richSurfaceSx = {
       width: '100%',
       minHeight: live.height,
@@ -754,9 +795,7 @@ export const InlineTextEditorComponent = observer(
       wordBreak: 'break-word',
       ...tokenPillContainerSx,
     } as SystemStyleObject<Theme>
-    const minWidth = inPlace
-      ? Math.max(live.width, 24)
-      : Math.max(live.width, 120)
+    const minWidth = Math.max(live.width, 120)
     const TOOLBAR_CLEARANCE = 48
     const KEEP_VISIBLE = 80
 
@@ -774,28 +813,29 @@ export const InlineTextEditorComponent = observer(
             TOOLBAR_CLEARANCE,
           ),
           minWidth,
-          ...(inPlace
-            ? { width: live.width, maxWidth: 'none' }
-            : { maxWidth: '90vw' }),
+          maxWidth: '90vw',
           zIndex: (theme) => theme.zIndex.modal,
         }}
       >
-        {rich ? (
-          <>
-            <Paper
-              elevation={4}
-              sx={{
-                position: 'absolute',
-                top: -40,
-                left: 0,
-                px: 0.5,
-                py: 0.25,
-                display: 'flex',
-                gap: 0.25,
-                alignItems: 'center',
-              }}
-            >
-              {RICH_COMMANDS.map(({ command, label, title }) => (
+        {/* The toolbar survives in-place editing — B / I / U, lists, link
+            and the {} token control are the reason this editor exists at
+            all, and it is chrome, not text, so it stays an overlay above
+            the run being edited rather than inside it. */}
+        <Paper
+          elevation={4}
+          sx={{
+            position: 'absolute',
+            top: -40,
+            left: 0,
+            px: 0.5,
+            py: 0.25,
+            display: 'flex',
+            gap: 0.25,
+            alignItems: 'center',
+          }}
+        >
+          {rich
+            ? RICH_COMMANDS.map(({ command, label, title }) => (
                 <IconButton
                   key={command}
                   size="small"
@@ -815,81 +855,56 @@ export const InlineTextEditorComponent = observer(
                 >
                   {label}
                 </IconButton>
-              ))}
-              <IconButton
-                size="small"
-                title="Insert link"
-                onMouseDown={keepFocus}
-                onClick={handleLink}
-                sx={{ width: 28, height: 28, fontSize: 13, borderRadius: 0.5 }}
-              >
-                {'🔗'}
-              </IconButton>
-              {insertButton}
-              <Button
-                size="small"
-                color="primary"
-                onMouseDown={keepFocus}
-                onClick={commit}
-              >
-                {'Done'}
-              </Button>
-            </Paper>
-            <Box
-              ref={richRef}
-              contentEditable
-              suppressContentEditableWarning
-              role="textbox"
-              aria-label="Edit rich text"
-              onKeyDown={handleRichKeyDown}
-              onInput={handleSurfaceInput}
-              onBlur={handleEditableBlur}
-              onClick={handleEditableClick}
-              onMouseDown={handleEditableMouseDown}
-              sx={richSurfaceSx}
-            />
-          </>
-        ) : (
-          <>
-            {/* Plain mode grew a mini toolbar for the insert picker
-                (AGL-586); Enter still commits, Escape still cancels. */}
-            <Paper
-              elevation={4}
-              sx={{
-                position: 'absolute',
-                top: -40,
-                left: 0,
-                px: 0.5,
-                py: 0.25,
-                display: 'flex',
-                gap: 0.25,
-                alignItems: 'center',
-              }}
+              ))
+            : null}
+          {rich ? (
+            <IconButton
+              size="small"
+              title="Insert link"
+              onMouseDown={keepFocus}
+              onClick={handleLink}
+              sx={{ width: 28, height: 28, fontSize: 13, borderRadius: 0.5 }}
             >
-              {insertButton}
-              <Button
-                size="small"
-                color="primary"
-                onMouseDown={keepFocus}
-                onClick={commit}
-              >
-                {'Done'}
-              </Button>
-            </Paper>
-            <Box
-              ref={plainRef}
-              contentEditable
-              suppressContentEditableWarning
-              role="textbox"
-              aria-label="Edit text"
-              onKeyDown={handleKeyDown}
-              onInput={handleSurfaceInput}
-              onBlur={handleEditableBlur}
-              onClick={handleEditableClick}
-              onMouseDown={handleEditableMouseDown}
-              sx={plainSurfaceSx}
-            />
-          </>
+              {'\u{1F517}'}
+            </IconButton>
+          ) : null}
+          {insertButton}
+          <Button
+            size="small"
+            color="primary"
+            onMouseDown={keepFocus}
+            onClick={commit}
+          >
+            {'Done'}
+          </Button>
+        </Paper>
+        {/* No surface at all when the leaf is the surface (AGL-2486). */}
+        {inPlaceActive ? null : rich ? (
+          <Box
+            ref={richRef}
+            contentEditable
+            suppressContentEditableWarning
+            role="textbox"
+            aria-label="Edit rich text"
+            onKeyDown={handleRichKeyDown}
+            onBlur={handleEditableBlur}
+            onClick={handleEditableClick}
+            onMouseDown={handleEditableMouseDown}
+            sx={richSurfaceSx}
+          />
+        ) : (
+          <Box
+            ref={plainRef}
+            contentEditable
+            suppressContentEditableWarning
+            role="textbox"
+            aria-label="Edit text"
+            onKeyDown={handleKeyDown}
+            onBlur={handleEditableBlur}
+            onClick={handleEditableClick}
+            onMouseDown={handleEditableMouseDown}
+            sx={plainSurfaceSx}
+          />
         )}
         <InsertTokenMenu
           anchorEl={insertMenu?.anchorEl ?? null}

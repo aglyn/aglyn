@@ -18,33 +18,44 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
+import { selectionOf } from '../utils/in-place-edit-surface'
 import { inlineTextEdit } from '../utils/inline-text-edit.store'
 import InlineTextEditorComponent from './inline-text-editor.component'
 
 /**
- * AGL-2486 — editing the text where it lives, not in a box on top of it.
+ * AGL-2486 — the canvas leaf IS the editing surface.
  *
- * Zach: *"Can we also make it so we are not seeing a text box we are editing
- * it in? We see/edit it exactly how it appears"*. A 96px display heading
- * edited as small body text in a white `background.paper` box with a 2px
- * border — the size, weight, colour and alignment of the real element all
- * lost at exactly the moment the author needs to see them, and the real text
- * still showing through underneath, offset from what was being typed.
+ * Zach: *"We see/edit it exactly how it appears"*, then *"the original
+ * allocated space is not reflecting changes"*, then *"The reserved space is
+ * still not updating as we are editing text live"* with two texts drawn over
+ * each other, and finally *"No don't go back to the inlined boxed editor,
+ * just finish the project"*.
  *
- * The bar Zach set is that the text does not visibly move, resize or
- * restyle when editing begins. These tests hold that bar on the three things
- * that decide it: the surface WEARS the element's rendered type, it stops
- * drawing a box, and the element stops painting the same words underneath.
+ * Every one of those is the same defect: an overlay is a rectangle, the
+ * thing it stands in for is a flow of line boxes, and the two geometries can
+ * always disagree. Editing the element directly does not solve that; it
+ * deletes it. There is no second rectangle, so the text cannot move or
+ * restyle, and the layout re-flows because the element really did grow.
  */
-describe('the inline text editor edits in place (AGL-2486)', () => {
+describe('the canvas leaf is the editing surface (AGL-2486)', () => {
+  let updateNodeProps: jest.SpyInstance
+
+  beforeEach(() => {
+    updateNodeProps = jest
+      .spyOn(Aglyn.canvas, 'updateNodeProps')
+      .mockImplementation((() => undefined) as any)
+  })
   afterEach(() => {
     act(() => inlineTextEdit.close())
+    updateNodeProps.mockRestore()
     document.body.innerHTML = ''
   })
 
-  const node = (children = 'One canvas.') =>
+  const rect = { left: 480, top: 300, width: 534, height: 104 }
+
+  const plainNode = (children: string) =>
     ({
-      $id: 'agl2486-inplace',
+      $id: 'agl2486-leaf',
       type: 'node',
       componentId: 'text',
       props: { children },
@@ -52,477 +63,250 @@ describe('the inline text editor edits in place (AGL-2486)', () => {
       nodes: [],
     }) as any
 
-  /**
-   * A canvas leaf as the renderer builds one: the display type on the leaf
-   * root, and the text itself in the `<aglyn-text>` child (`leaf.tsx`).
-   */
-  const displayHeading = () => {
-    const leaf = document.createElement('div')
-    leaf.setAttribute('data-aglyn', 'leaf:agl2486-inplace')
-    leaf.style.fontFamily = 'Anton, sans-serif'
+  const richNode = (children: string, html?: string) =>
+    ({
+      $id: 'agl2486-leaf-rich',
+      type: 'node',
+      componentId: 'rich-text',
+      props: html ? { children, html } : { children },
+      componentSchema: {
+        flags: { richTextEditable: Aglyn.FEATURE_FLAG.ENABLED },
+      },
+      nodes: [],
+    }) as any
+
+  /** A canvas leaf as the renderer builds one: text inside `<aglyn-text>`. */
+  const leafFor = (text: string, tag = 'div') => {
+    const leaf = document.createElement(tag)
+    leaf.setAttribute('data-aglyn', 'leaf:agl2486-leaf')
     leaf.style.fontSize = '96px'
-    leaf.style.fontWeight = '700'
-    leaf.style.lineHeight = '104px'
-    leaf.style.letterSpacing = '-2px'
-    leaf.style.textAlign = 'center'
-    leaf.style.textTransform = 'uppercase'
-    leaf.style.color = 'rgb(41, 98, 255)'
-    leaf.style.paddingLeft = '12px'
-    const text = document.createElement('aglyn-text')
-    text.textContent = 'One canvas.'
-    leaf.appendChild(text)
+    const inner = document.createElement('aglyn-text')
+    inner.textContent = text
+    leaf.appendChild(inner)
     document.body.appendChild(leaf)
-    leaf.getBoundingClientRect = () =>
-      ({
-        left: 480,
-        top: 300,
-        width: 534,
-        height: 104,
-        right: 1014,
-        bottom: 404,
-        x: 480,
-        y: 300,
-        toJSON: () => ({}),
-      }) as DOMRect
     return leaf
   }
 
-  const overlay = () =>
-    document.querySelector(
-      '[data-aglyn="overlay:inline-text-editor"]',
-    ) as HTMLElement
-
-  const openOn = async (anchor?: HTMLElement) => {
+  const openOn = async (node: any, anchor?: HTMLElement) => {
     render(<InlineTextEditorComponent />)
-    act(() =>
-      inlineTextEdit.open(
-        node(),
-        { left: 480, top: 300, width: 534, height: 104 },
-        undefined,
-        anchor,
-      ),
-    )
-    const surface = await screen.findByRole('textbox', { name: 'Edit text' })
+    act(() => inlineTextEdit.open(node, rect, undefined, anchor))
     await waitFor(() =>
-      expect(surface.textContent && surface.textContent.length > 0).toBe(true),
+      expect(screen.getByRole('button', { name: 'Done' })).toBeTruthy(),
     )
-    return surface
   }
 
-  it('types in the element’s own font, size, weight and colour', async () => {
-    const surface = await openOn(displayHeading())
-    const style = window.getComputedStyle(surface)
+  it('makes the element itself editable, in its own place', async () => {
+    const leaf = leafFor('One canvas.')
+    await openOn(plainNode('One canvas.'), leaf)
 
-    expect(style.fontFamily).toBe('Anton, sans-serif')
-    expect(style.fontSize).toBe('96px')
-    expect(style.fontWeight).toBe('700')
-    expect(style.color).toBe('rgb(41, 98, 255)')
-  })
-
-  it('keeps the element’s alignment, spacing and case', async () => {
-    const surface = await openOn(displayHeading())
-    const style = window.getComputedStyle(surface)
-
-    expect(style.textAlign).toBe('center')
-    expect(style.lineHeight).toBe('104px')
-    expect(style.letterSpacing).toBe('-2px')
-    expect(style.textTransform).toBe('uppercase')
+    expect(leaf.getAttribute('contenteditable')).toBe('true')
+    expect(leaf.getAttribute('data-aglyn-editing')).toBe('')
+    expect(leaf.textContent).toBe('One canvas.')
   })
 
   /**
-   * The overlay is positioned on the element's BORDER box, so the first
-   * character only lands on the same pixel if the box insets match too.
+   * The whole point. A second rectangle is what could disagree with the
+   * document's geometry, so in place there must not BE one.
    */
-  it('reproduces the element’s padding so the text starts in the same place', async () => {
-    const surface = await openOn(displayHeading())
-    expect(window.getComputedStyle(surface).paddingLeft).toBe('12px')
+  it('renders no second surface to disagree with the layout', async () => {
+    const leaf = leafFor('One canvas.')
+    await openOn(plainNode('One canvas.'), leaf)
+
+    expect(screen.queryByRole('textbox')).toBeNull()
   })
 
-  it('no longer draws a box around what is being edited', async () => {
-    const surface = await openOn(displayHeading())
-    const style = window.getComputedStyle(surface)
+  it('keeps the toolbar, which is chrome rather than text', async () => {
+    const leaf = leafFor('bold me')
+    await openOn(richNode('bold me'), leaf)
 
-    // The white `background.paper` fill and the 2px ring are what made this
-    // read as a form control sitting on top of the design.
-    expect(['transparent', 'rgba(0, 0, 0, 0)']).toContain(
-      style.backgroundColor,
+    // By title: the accessible name of these is their glyph, which is not
+    // what the control MEANS.
+    for (const title of [
+      'Bold',
+      'Italic',
+      'Underline',
+      'Bulleted list',
+      'Numbered list',
+      'Insert link',
+      'Insert data',
+    ]) {
+      expect(document.querySelector(`button[title="${title}"]`)).toBeTruthy()
+    }
+    expect(screen.getByRole('button', { name: 'Done' })).toBeTruthy()
+  })
+
+  it('renders a stored token as an atomic pill inside the element', async () => {
+    const leaf = leafFor('Hi {{entry.title}}!')
+    await openOn(plainNode('Hi {{entry.title}}!'), leaf)
+
+    const pill = leaf.querySelector('[data-token]') as HTMLElement
+    expect(pill).toBeTruthy()
+    expect(pill.getAttribute('contenteditable')).toBe('false')
+    expect(leaf.textContent).toBe('Hi Title!')
+  })
+
+  it('commits what was typed into the element', async () => {
+    const node = plainNode('One canvas.')
+    const leaf = leafFor('One canvas.')
+    await openOn(node, leaf)
+
+    leaf.appendChild(document.createTextNode(' Two.'))
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+
+    expect(updateNodeProps).toHaveBeenCalledWith(
+      node,
+      expect.objectContaining({ children: 'One canvas. Two.' }),
     )
-    expect(style.borderWidth === '' || style.borderWidth === '0px').toBe(true)
-    expect(style.boxShadow === '' || style.boxShadow === 'none').toBe(true)
   })
 
   /**
-   * An outline is drawn OUTSIDE the box, so unlike a border it moves no
-   * text — the author still gets told that editing has begun and where the
-   * run ends.
+   * React's children are PARKED BY REFERENCE, not serialized. The same
+   * objects go back under the same parent, so React's fibers still point at
+   * live nodes in their expected places — an equal-looking copy would leave
+   * a later unmount calling `removeChild` on a node that is not there.
    */
-  it('still marks the run being edited, without moving it', async () => {
-    const surface = await openOn(displayHeading())
-    expect(window.getComputedStyle(surface).outlineStyle).toBe('dashed')
-  })
+  describe('giving the element back to React', () => {
+    it('restores the very same child nodes, not copies', async () => {
+      const leaf = leafFor('One canvas.')
+      const original = leaf.firstChild
 
-  it('takes the element’s exact width, so nothing re-wraps', async () => {
-    await openOn(displayHeading())
-    expect(window.getComputedStyle(overlay()).width).toBe('534px')
-  })
-
-  /**
-   * Zach: *"When updating text the original allocated space is not
-   * reflecting changes until after you click out"*. Editing a card heading
-   * that grew to two lines, the surface overlapped the paragraph beneath it:
-   * the card had not grown, the grid row had not grown, the sibling cards
-   * had not moved. An overlay contributes nothing to layout, so the document
-   * kept the OLD text's geometry while the new text was drawn on top of it.
-   *
-   * The element's own text goes `display: none` and a hidden stand-in in its
-   * place carries what has been typed so far — so every box between the leaf
-   * and the page measures the new text, live, while the overlay paints the
-   * only visible copy.
-   */
-  describe('the layout tracks the text as it is typed', () => {
-    const ghostOf = (leaf: HTMLElement) =>
-      leaf.querySelector('[data-aglyn-layout-ghost]') as HTMLElement | null
-
-    it('takes the element’s own text out of the layout', async () => {
-      const leaf = displayHeading()
-      await openOn(leaf)
-      const text = leaf.querySelector('aglyn-text') as HTMLElement
-      // `display`, not `visibility`: a hidden run still occupies its OLD
-      // box, so the element could never shrink.
-      expect(text.style.display).toBe('none')
-    })
-
-    it('stands in for it with the current text, painting nothing', async () => {
-      const leaf = displayHeading()
-      await openOn(leaf)
-      const ghost = ghostOf(leaf)
-
-      expect(ghost).toBeTruthy()
-      expect(ghost?.textContent).toBe('One canvas.')
-      expect(ghost?.style.visibility).toBe('hidden')
-      expect(ghost?.getAttribute('aria-hidden')).toBe('true')
-    })
-
-    it('re-sizes the document on every keystroke', async () => {
-      const leaf = displayHeading()
-      const surface = await openOn(leaf)
-
-      surface.textContent = 'One canvas, and a much longer heading than before'
-      fireEvent.input(surface)
-
-      expect(ghostOf(leaf)?.textContent).toBe(
-        'One canvas, and a much longer heading than before',
-      )
-    })
-
-    /**
-     * Reflow is not commit. The mirror diffs the serialized node map on a
-     * mobx autorun, so a keystroke that reached the node would be broadcast
-     * to every co-editor and recorded as an undo step.
-     */
-    it('does not touch the node while typing', async () => {
-      const updateNodeProps = jest
-        .spyOn(Aglyn.canvas, 'updateNodeProps')
-        .mockImplementation((() => undefined) as any)
-      try {
-        const leaf = displayHeading()
-        const surface = await openOn(leaf)
-
-        surface.textContent = 'typing'
-        fireEvent.input(surface)
-        surface.textContent = 'typing more'
-        fireEvent.input(surface)
-
-        expect(updateNodeProps).not.toHaveBeenCalled()
-      } finally {
-        updateNodeProps.mockRestore()
-      }
-    })
-
-    /** The icon, adornment or nested child beside the text stays visible. */
-    it('hides only the text, never the whole leaf', async () => {
-      const leaf = displayHeading()
-      await openOn(leaf)
-      expect(leaf.style.visibility).toBe('')
-      expect(leaf.style.display).toBe('')
-    })
-
-    it('gives the element its own text back when the editor closes', async () => {
-      const leaf = displayHeading()
-      await openOn(leaf)
-      const text = leaf.querySelector('aglyn-text') as HTMLElement
+      await openOn(plainNode('One canvas.'), leaf)
+      expect(leaf.firstChild).not.toBe(original)
 
       act(() => inlineTextEdit.close())
 
-      expect(text.style.display).toBe('')
-      expect(ghostOf(leaf)).toBeNull()
+      expect(leaf.firstChild).toBe(original)
+      expect(leaf.textContent).toBe('One canvas.')
     })
 
-    /**
-     * Rich text renders through `dangerouslySetInnerHTML`, so React does not
-     * track those children individually — it re-sets `innerHTML` wholesale
-     * when the html prop changes and otherwise leaves the subtree alone.
-     * Parking them is therefore safe here in a way it would never be for
-     * children React created, and the reserved space tracks for rich text
-     * too.
-     */
-    describe('rich text, whose content came from an html prop', () => {
-      const richLeaf = () => {
-        const leaf = displayHeading()
-        leaf.querySelector('aglyn-text')?.remove()
-        // The exact stored markup from yFjgqiG2wm / C3rodYc1Gd.
-        leaf.innerHTML = 'Your entire web <div>presence. </div>'
-        return leaf
-      }
+    it('stops being editable', async () => {
+      const leaf = leafFor('One canvas.')
+      await openOn(plainNode('One canvas.'), leaf)
 
-      it('reserves space for it as well', async () => {
-        const leaf = richLeaf()
-        await openOn(leaf)
-        expect(ghostOf(leaf)).toBeTruthy()
-      })
+      act(() => inlineTextEdit.close())
 
-      /**
-       * MARKUP, not text: the breaks live in the markup, and a plain-text
-       * stand-in would measure a two-line heading as one — understating
-       * exactly the height that matters.
-       */
-      it('stands in with the markup, so a break still costs a line', async () => {
-        const leaf = richLeaf()
-        await openOn(leaf)
-        expect(ghostOf(leaf)?.innerHTML).toContain('<div>')
-      })
+      expect(leaf.hasAttribute('contenteditable')).toBe(false)
+      expect(leaf.hasAttribute('data-aglyn-editing')).toBe(false)
+    })
 
-      it('parks the original out of the layout rather than deleting it', async () => {
-        const leaf = richLeaf()
-        await openOn(leaf)
-        const parked = leaf.querySelector(
-          '[data-aglyn-layout-parked]',
-        ) as HTMLElement
-        expect(parked).toBeTruthy()
-        expect(parked.style.display).toBe('none')
-        expect(parked.innerHTML).toBe('Your entire web <div>presence. </div>')
-      })
+    it('gives it back even when the edit was committed', async () => {
+      const leaf = leafFor('One canvas.')
+      const original = leaf.firstChild
+      await openOn(plainNode('One canvas.'), leaf)
 
-      it('gives the original back on close', async () => {
-        const leaf = richLeaf()
-        await openOn(leaf)
+      fireEvent.click(screen.getByRole('button', { name: 'Done' }))
 
-        act(() => inlineTextEdit.close())
-
-        expect(leaf.innerHTML).toBe('Your entire web <div>presence. </div>')
-        expect(ghostOf(leaf)).toBeNull()
-        expect(leaf.querySelector('[data-aglyn-layout-parked]')).toBeNull()
-      })
+      expect(leaf.firstChild).toBe(original)
+      expect(leaf.hasAttribute('contenteditable')).toBe(false)
     })
   })
 
   /**
-   * Zach, on the second attempt: *"The reserved space is still not updating
-   * as we are editing text live"* — with the edited run and its sibling
-   * drawn over each other, an overflowing `presence.` sharing pixels with
-   * `One canvas.`
-   *
-   * The node was a `Span`-component Typography nested inside another
-   * Typography, with a sibling beneath it in the same parent. The overlay is
-   * positioned and sized from `getBoundingClientRect()`, and for an inline
-   * run on one line that rect is the width of the TEXT, not the width
-   * available to it — so the surface wraps as soon as typing exceeds the
-   * run's current width, while the real text, which wraps at the parent's
-   * width, has not wrapped at all. The surface gains a line the reserved box
-   * has not, and it lands on the neighbour.
-   *
-   * No ghost can fix that: the mismatch is in the OVERLAY's geometry, not
-   * the document's. So inline keeps the opaque box, which covers what it
-   * replaces instead of blending with it. The invariant is the point —
-   * transparent if and only if reserved.
+   * With the leaf itself editable, a click inside it is the author placing a
+   * caret — the single most common gesture in an editor. Committing on it
+   * would make the text impossible to correct.
    */
-  describe('an inline run keeps the opaque box (AGL-2486)', () => {
-    const inlineRun = () => {
-      const parent = document.createElement('div')
-      const span = document.createElement('span')
-      span.setAttribute('data-aglyn', 'leaf:agl2486-inplace')
-      span.style.fontSize = '96px'
-      const text = document.createElement('aglyn-text')
-      text.textContent = 'One canvas.'
-      span.appendChild(text)
-      const sibling = document.createElement('span')
-      sibling.textContent = 'Your entire web presence.'
-      parent.append(span, sibling)
-      document.body.appendChild(parent)
-      span.getBoundingClientRect = () =>
-        ({
-          left: 480, top: 300, width: 300, height: 104,
-          right: 780, bottom: 404, x: 480, y: 300, toJSON: () => ({}),
-        }) as DOMRect
-      return span
-    }
+  describe('click-away, now that the surface is the element', () => {
+    it('does not commit when the click lands in the text being edited', async () => {
+      const leaf = leafFor('One canvas.')
+      await openOn(plainNode('One canvas.'), leaf)
 
-    it('does not reserve space it cannot reserve correctly', async () => {
-      const span = inlineRun()
-      await openOn(span)
-      expect(
-        span.querySelector('[data-aglyn-layout-ghost]'),
-      ).toBeNull()
+      fireEvent.pointerDown(leaf)
+
+      expect(updateNodeProps).not.toHaveBeenCalled()
+      expect(inlineTextEdit.node).toBeTruthy()
+      expect(leaf.getAttribute('contenteditable')).toBe('true')
     })
 
-    it('stays opaque, so two texts are never drawn over each other', async () => {
-      const span = inlineRun()
-      const surface = await openOn(span)
-      const style = window.getComputedStyle(surface)
+    it('commits when the click lands somewhere else', async () => {
+      const node = plainNode('One canvas.')
+      const leaf = leafFor('One canvas.')
+      await openOn(node, leaf)
+      leaf.appendChild(document.createTextNode(' Two.'))
 
+      const elsewhere = document.createElement('div')
+      document.body.appendChild(elsewhere)
+      // The canvas leaf handler prevents this default, which is why no blur
+      // follows it (524ebd4fc).
+      elsewhere.addEventListener('pointerdown', (e) => e.preventDefault())
+      fireEvent.pointerDown(elsewhere)
+
+      expect(updateNodeProps).toHaveBeenCalledWith(
+        node,
+        expect.objectContaining({ children: 'One canvas. Two.' }),
+      )
+      expect(inlineTextEdit.node).toBeUndefined()
+    })
+  })
+
+  /**
+   * Unchanged from `d7ba450b5`: a commit that changes nothing must not
+   * dirty the document, or the co-editing mirror replays a phantom edit to
+   * every joiner for seven days.
+   */
+  it('is still not an edit when nothing was typed', async () => {
+    const leaf = leafFor('Be first through the door')
+    await openOn(richNode('Be first through the door'), leaf)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+
+    expect(updateNodeProps).not.toHaveBeenCalled()
+  })
+
+  /**
+   * The fallback, and the invariant that governs it: an edit with no element
+   * to type into gets a surface, and that surface is OPAQUE. A see-through
+   * one over a layout that cannot re-flow is what drew two texts over each
+   * other.
+   */
+  describe('with no element to edit', () => {
+    it('falls back to a surface of its own', async () => {
+      await openOn(plainNode('One canvas.'), undefined)
+      const surface = await screen.findByRole('textbox', { name: 'Edit text' })
+      expect(surface).toBeTruthy()
+    })
+
+    it('and that surface is opaque', async () => {
+      await openOn(plainNode('One canvas.'), undefined)
+      const surface = await screen.findByRole('textbox', { name: 'Edit text' })
+      const style = window.getComputedStyle(surface)
       expect(['transparent', 'rgba(0, 0, 0, 0)']).not.toContain(
         style.backgroundColor,
       )
       expect(style.borderWidth).toBe('2px')
     })
-
-    it('leaves the element\u2019s own text exactly as it was', async () => {
-      const span = inlineRun()
-      await openOn(span)
-      const text = span.querySelector('aglyn-text') as HTMLElement
-
-      expect(text.style.display).toBe('')
-      expect(text.style.visibility).toBe('')
-      expect(span.textContent).toBe('One canvas.')
-    })
-  })
-
-  /**
-   * The invariant both of the above are instances of. Transparency is only
-   * honest when the layout tracks; a see-through surface that grows past a
-   * box the document never grew draws the author's text over its neighbour,
-   * which is worse than the box it replaced.
-   */
-  describe('transparent if and only if reserved', () => {
-    it('is transparent exactly when a stand-in is holding the space', async () => {
-      const leaf = displayHeading()
-      const surface = await openOn(leaf)
-      const transparent = ['transparent', 'rgba(0, 0, 0, 0)'].includes(
-        window.getComputedStyle(surface).backgroundColor,
-      )
-      const reserved = Boolean(
-        leaf.querySelector('[data-aglyn-layout-ghost]'),
-      )
-      expect(transparent).toBe(reserved)
-      expect(reserved).toBe(true)
-    })
-
-    it('is opaque exactly when nothing is holding it', async () => {
-      const surface = await openOn(undefined)
-      const transparent = ['transparent', 'rgba(0, 0, 0, 0)'].includes(
-        window.getComputedStyle(surface).backgroundColor,
-      )
-      expect(transparent).toBe(false)
-      expect(document.querySelectorAll('[data-aglyn-layout-ghost]').length).toBe(0)
-    })
-  })
-
-  /**
-   * Degrading to the old box beats painting the author's text in a guess.
-   * An editor opened with no anchor — an older call site, or a node whose
-   * element has gone — has nothing to read.
-   */
-  describe('with no element to read', () => {
-    it('falls back to the legible box', async () => {
-      const surface = await openOn(undefined)
-      const style = window.getComputedStyle(surface)
-
-      expect(style.backgroundColor).not.toBe('transparent')
-      expect(style.borderWidth).toBe('2px')
-    })
-
-    it('leaves nothing hidden on the way out', async () => {
-      await openOn(undefined)
-      act(() => inlineTextEdit.close())
-      expect(
-        document.querySelectorAll('[style*="visibility"]').length,
-      ).toBe(0)
-    })
-  })
-
-  /**
-   * Tokens stay PILLS while editing, and this is the one place in-place
-   * editing deliberately does not show what the canvas shows.
-   *
-   * The canvas renders a binding as its RESOLVED value (`node-leaf.tsx`
-   * calls `Aglyn.resolveBindings`), or as `{{Name}}` with the preview
-   * toggle off. What is stored is neither — it is `{{var:id}}`. Editing the
-   * resolved text would mean typing over the result of a binding and
-   * destroying the binding to do it, and there is no keystroke that could
-   * put it back. A pill is the honest shape: one atomic thing, not editable
-   * from the inside, replaceable and removable through the popover it
-   * already has. It inherits the element's type (`fontSize: 0.8em`), so it
-   * sits on the same line at the same scale rather than re-flowing it.
-   */
-  it('renders a binding as an atomic pill in the element’s own type', async () => {
-    const leaf = displayHeading()
-    render(<InlineTextEditorComponent />)
-    act(() =>
-      inlineTextEdit.open(
-        {
-          ...node('Hi {{entry.title}}!'),
-          props: { children: 'Hi {{entry.title}}!' },
-        } as any,
-        { left: 480, top: 300, width: 534, height: 104 },
-        undefined,
-        leaf,
-      ),
-    )
-    const surface = await screen.findByRole('textbox', { name: 'Edit text' })
-    await waitFor(() =>
-      expect(surface.querySelector('[data-token]')).toBeTruthy(),
-    )
-
-    const pill = surface.querySelector('[data-token]') as HTMLElement
-    expect(pill.getAttribute('contenteditable')).toBe('false')
-    expect(window.getComputedStyle(pill).fontSize).toBe('0.8em')
-    // The surface around it is still the element's own type.
-    expect(window.getComputedStyle(surface).fontSize).toBe('96px')
   })
 })
 
 /**
- * Guards the seam the in-place look depends on: the editor asks the DOM what
- * the element renders, rather than trying to re-derive it from the node's
- * `sx`. Variant defaults, the site theme, breakpoint objects, palette tokens
- * and the device-preview transform all resolve on the way to the screen.
+ * The canvas renders into `mode="closed"` (`viewport-frame.component.tsx`),
+ * so `document.getSelection()` cannot see a caret inside it. What still
+ * works is that a node INSIDE the tree can always reach its own root —
+ * `getRootNode()` returns the `ShadowRoot` whatever its mode — and Chrome
+ * implements `ShadowRoot.getSelection()`.
  */
-describe('readAnchorTextStyle (AGL-2486)', () => {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { readAnchorTextStyle, findAnchorTextElement } =
-    require('../utils/anchor-text-style') as typeof import('../utils/anchor-text-style')
-
+describe('selectionOf reads the caret across a closed shadow root (AGL-2486)', () => {
   afterEach(() => {
     document.body.innerHTML = ''
   })
 
-  it('reads the rendered value, not the authored one', () => {
+  it('asks the element’s own root, not the document', () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const root = host.attachShadow({ mode: 'closed' })
+    const inner = document.createElement('p')
+    root.appendChild(inner)
+
+    const scoped = {} as Selection
+    ;(root as unknown as { getSelection: () => Selection }).getSelection =
+      () => scoped
+
+    expect(selectionOf(inner)).toBe(scoped)
+  })
+
+  it('falls back to the document for a light-DOM element', () => {
     const el = document.createElement('div')
-    el.style.fontSize = '96px'
     document.body.appendChild(el)
-    expect(readAnchorTextStyle(el)?.fontSize).toBe('96px')
-  })
-
-  it('has no answer for an element that is not in the document', () => {
-    expect(readAnchorTextStyle(document.createElement('div'))).toBeUndefined()
-  })
-
-  it('has no answer without an anchor', () => {
-    expect(readAnchorTextStyle(undefined)).toBeUndefined()
-  })
-
-  it('finds the text child in preference to the leaf', () => {
-    const leaf = document.createElement('div')
-    const text = document.createElement('aglyn-text')
-    leaf.appendChild(text)
-    document.body.appendChild(leaf)
-    expect(findAnchorTextElement(leaf)).toBe(text)
-  })
-
-  it('falls back to the leaf when rich text rendered no text child', () => {
-    const leaf = document.createElement('div')
-    leaf.innerHTML = '<strong>bold</strong>'
-    document.body.appendChild(leaf)
-    expect(findAnchorTextElement(leaf)).toBe(leaf)
+    expect(selectionOf(el)).toBe(document.getSelection())
   })
 })
