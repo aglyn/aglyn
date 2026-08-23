@@ -64,3 +64,15 @@ export const BRAND = {
 export const PRODUCT_NAME = {
   BESIGNER: 'Besigner',
 }
+
+/**
+ * The trademark attribution, or an empty string once the platform has been
+ * rebranded.
+ *
+ * A self-hosted deployment running its own name must NOT claim Aglyn's marks —
+ * the source is Apache-2.0 and yours to run, the names are not. See NOTICE.
+ */
+export const TRADEMARK_NOTICE =
+  PLATFORM_BRAND_NAME === 'Aglyn'
+    ? `Aglyn\u2122 and ${PRODUCT_NAME.BESIGNER}\u2122 are trademarks of Aglyn LLC.`
+    : ''

@@ -428,7 +428,11 @@ const config: Config = {
       ],
       copyright: `Copyright © ${new Date().getFullYear()} ${
         env('DOCS_ORGANIZATION_NAME') ?? 'Aglyn LLC'
-      }. Aglyn™ and Besigner™ are trademarks of Aglyn LLC. Built with Docusaurus.`,
+      }.${
+        env('DOCS_ORGANIZATION_NAME')
+          ? ''
+          : ' Aglyn™ and Besigner™ are trademarks of Aglyn LLC.'
+      } Built with Docusaurus.`,
     },
     prism: {
       theme: prismThemes.github,

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { BRAND, CURRENT_YEAR } from '@aglyn/shared-data-enums'
+import { BRAND, CURRENT_YEAR, TRADEMARK_NOTICE } from '@aglyn/shared-data-enums'
 import { Typography, type TypographyProps } from '@mui/material'
 import { forwardRef } from 'react'
 
@@ -26,6 +26,7 @@ const CopyrightComponent = forwardRef<any, CopyrightProps>((props, ref) => {
   return (
     <Typography ref={ref} variant="subtitle2" {...rest}>
       {CURRENT_YEAR} &copy; {BRAND.ORG_NAME_LEGAL}
+      {TRADEMARK_NOTICE && ` ${TRADEMARK_NOTICE}`}
       {children}
     </Typography>
   )
