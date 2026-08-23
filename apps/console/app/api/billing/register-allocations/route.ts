@@ -107,24 +107,46 @@ async function handler(request: Request): Promise<Response> {
         .limit(200)
         .get()
       const sites = await Promise.all(
-        hosts.docs.map(async (host) => ({
-          hostId: host.id,
-          displayName: host.get('displayName') ?? null,
-          // The live register count, from a server aggregate — the number a
-          // console listener holds is a LOWER bound (AGL-1738) and this one
-          // decides whether releasing a seat would strand a running register.
-          registers: Number(
-            (await host.ref.collection('registers').count().get()).data()
-              .count ?? 0,
-          ),
-          allocatedSeats: pool.byHost[host.id] ?? 0,
-          cap: resolveHostRegisterCap(org, host.id),
-        })),
+        hosts.docs.map(async (host) => {
+          const cap = resolveHostRegisterCap(org, host.id)
+          return {
+            hostId: host.id,
+            displayName: host.get('displayName') ?? null,
+            // The live register count, from a server aggregate — the number a
+            // console listener holds is a LOWER bound (AGL-1738) and this one
+            // decides whether releasing a seat would strand a running
+            // register.
+            registers: Number(
+              (await host.ref.collection('registers').count().get()).data()
+                .count ?? 0,
+            ),
+            allocatedSeats: pool.byHost[host.id] ?? 0,
+            // See the `planCapPerSite` note below — same wire contract, per
+            // site. Enterprise resolves this to `UNLIMITED`, and the card was
+            // comparing a live register count against the `null` that became.
+            cap: Number.isFinite(cap) ? cap : 0,
+            capUnlimited: !Number.isFinite(cap),
+          }
+        }),
       )
+      const planCapPerSite = resolveOrgEntitlements(org).posRegisters
       return Response.json(
         {
           pool,
-          planCapPerSite: resolveOrgEntitlements(org).posRegisters,
+          // Enterprise sets `posRegisters: UNLIMITED`, which is
+          // `Number.POSITIVE_INFINITY`, and `JSON.stringify(Infinity)` is
+          // `null`. Sent raw, the card read `Number(null)` = 0 and told the
+          // customer "Every site can run null registers on your current
+          // plan" — and, because `1 > null` is TRUE, flagged a site running
+          // one register as "1 over the limit" on a plan that has no limit.
+          //
+          // An explicit flag rather than a magic number, for the AGL-2482
+          // reason: `null` on the wire cannot distinguish "unlimited" from
+          // "the field is missing", and the card has to tell those apart —
+          // one is the most expensive plan on the price list, the other is a
+          // payload it must refuse.
+          planCapPerSite: Number.isFinite(planCapPerSite) ? planCapPerSite : 0,
+          planCapPerSiteUnlimited: !Number.isFinite(planCapPerSite),
           sites,
         },
         { status: 200 },
@@ -211,7 +233,10 @@ async function handler(request: Request): Promise<Response> {
       {
         ok: true,
         pool: updated,
-        hostCap: planCap + seats,
+        // Same wire contract as the `get` above: an UNLIMITED plan cap would
+        // serialise as `null` here too.
+        hostCap: Number.isFinite(planCap) ? planCap + seats : 0,
+        hostCapUnlimited: !Number.isFinite(planCap),
         strandedRegisters,
       },
       { status: 200 },

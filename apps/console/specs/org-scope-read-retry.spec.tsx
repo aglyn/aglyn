@@ -76,6 +76,10 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
 
 jest.mock('next/navigation', () => ({
   useParams: () => ({}),
+  // The provider reads the pathname too, so an unmatched route still resolves
+  // the workspace its URL names (AGL-2486). '/' names none, which is what this
+  // suite wants: it is about the LISTEN, not about resolution.
+  usePathname: () => '/',
 }))
 
 function Probe() {

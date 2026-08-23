@@ -1008,7 +1008,7 @@
           "business": "$0.50",
           "scale": "$0.40",
           "advanced": "$0.25",
-          "agency": "$0.20",
+          "agency": "—",
           "enterprise": "Custom"
         }
       }

@@ -32,6 +32,11 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import {
+  formatQuotaLimit,
+  isUnlimitedQuota,
+  restoreQuotaLimit,
+} from '@aglyn/aglyn'
 
 /** One site's row, as `/api/billing/register-allocations` reports it. */
 interface AllocationSite {
@@ -40,8 +45,13 @@ interface AllocationSite {
   /** Live register count from a SERVER aggregate, not a listener. */
   registers: number
   allocatedSeats: number
-  /** Plan cap + this site's allocated seats. */
+  /**
+   * Plan cap + this site's allocated seats — already rehydrated, so an
+   * uncapped plan is `UNLIMITED` here and not the `null` the wire carried.
+   */
   cap: number
+  /** The route's explicit flag; `cap` is a placeholder `0` when true. */
+  capUnlimited?: boolean
 }
 
 interface AllocationState {
@@ -53,7 +63,34 @@ interface AllocationState {
   }
   /** The register cap every site gets from the PLAN alone (AGL-1775). */
   planCapPerSite: number
+  /** The route's explicit flag; `planCapPerSite` is `0` when true. */
+  planCapPerSiteUnlimited?: boolean
   sites: AllocationSite[]
+}
+
+/**
+ * Put the `UNLIMITED` sentinel back where `JSON.stringify` flattened it.
+ *
+ * `UNLIMITED` is `Number.POSITIVE_INFINITY` and `JSON.stringify(Infinity)` is
+ * `null`, so an Enterprise payload arrived with every cap nulled. The display
+ * was the visible half — "Every site can run null registers on your current
+ * plan" — but the comparisons were the damaging half: `1 > null` is TRUE, so
+ * a site running one register on an uncapped plan was flagged "1 over the
+ * limit". Rehydrating HERE, once, means every comparison below is ordinary
+ * arithmetic that is simply correct (AGL-2482; AGL-2223 is the same class).
+ */
+function hydrate(payload: AllocationState): AllocationState {
+  return {
+    ...payload,
+    planCapPerSite: restoreQuotaLimit(
+      payload?.planCapPerSite,
+      payload?.planCapPerSiteUnlimited,
+    ),
+    sites: (payload?.sites ?? []).map((site) => ({
+      ...site,
+      cap: restoreQuotaLimit(site?.cap, site?.capUnlimited),
+    })),
+  }
 }
 
 export interface BillingRegisterAllocationsCardProps {
@@ -156,7 +193,7 @@ export default function BillingRegisterAllocationsCardComponent({
       .then((outcome) => {
         if (cancelled) return
         if (!outcome.ok) return void setLoadState('error')
-        setState(outcome.payload as AllocationState)
+        setState(hydrate(outcome.payload as AllocationState))
         setLoadState('loaded')
       })
       // A rejected fetch — offline, a wedged route — never reached the
@@ -281,9 +318,12 @@ export default function BillingRegisterAllocationsCardComponent({
       {pool.purchased === 0 ? (
         <Alert severity="info">
           You haven’t bought any POS register seats yet. Every site can run{' '}
-          {plural(planCapPerSite, 'register', 'registers')} on your current
-          plan. Add register seats under <strong>Plan add-ons</strong> above
-          ($89/mo each), then assign them to a site here.
+          {isUnlimitedQuota(planCapPerSite)
+            ? 'as many registers as it needs'
+            : plural(planCapPerSite, 'register', 'registers')}{' '}
+          on your current plan. Add register seats under{' '}
+          <strong>Plan add-ons</strong> above ($89/mo each), then assign them to
+          a site here.
         </Alert>
       ) : pool.available === 0 ? (
         <Alert severity="info">
@@ -320,7 +360,15 @@ export default function BillingRegisterAllocationsCardComponent({
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
                     {plural(site.registers, 'register', 'registers')} running ·
-                    can run {site.cap}
+                    can run {formatQuotaLimit(site.cap).toLowerCase()}
+                    {/*
+                      `site.cap` is rehydrated, so an uncapped plan compares as
+                      `registers > Infinity` — false. Before that it compared
+                      against the `null` the wire carried, and `1 > null` is
+                      TRUE: an Enterprise site running one register was told it
+                      was "1 over the limit" directly beneath a readout of
+                      "can run null".
+                    */}
                     {site.registers > site.cap
                       ? ` · ${site.registers - site.cap} over the limit`
                       : ''}

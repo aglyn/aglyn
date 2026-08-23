@@ -15,19 +15,39 @@
  * limitations under the License.
  */
 
+import { getTenantEmail } from '@aglyn/shared-util-email'
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
+import { entityPageTitle } from '../../../../../../../../../entity-page-title'
 
 // Title-only shell (AGL-1059): the page is a client component, and a client
 // component cannot export `metadata` — so its title lives here, in the
 // nearest server layout. The suffix comes from the root title template.
+//
+// The one route in the AGL-2486 sweep whose title names the entity properly
+// ON THE SERVER, with no client upgrade and no id fallback: an email template
+// is identified by `templateKey`, and the key's human name comes from the
+// STATIC catalog — `getTenantEmail` is an array lookup over product data
+// compiled into the bundle, not a read of anything this org owns. So there is
+// no document to authorize and nothing a stranger could learn from the title
+// that `TENANT_EMAILS` does not already tell every reader of the source.
+//
+// Unknown keys fall back to the key itself rather than dropping the subject:
+// a URL naming a template we do not ship is still a distinct tab, and a
+// silently container-only title is the bug this issue is about.
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ host: string }>
+  params: Promise<{ host: string; templateKey: string }>
 }): Promise<Metadata> {
-  const { host } = await params
-  return { title: `Email besigner · ${host}` }
+  const { host, templateKey } = await params
+  return {
+    title: entityPageTitle({
+      subject: getTenantEmail(templateKey)?.name || templateKey,
+      noun: 'Email besigner',
+      scope: host,
+    }),
+  }
 }
 
 export default function EmailBesignerTitleLayout({

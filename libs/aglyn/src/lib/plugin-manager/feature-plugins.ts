@@ -291,6 +291,20 @@ export interface ConsoleWidget {
  * Console half of the pattern: everything a feature contributes to the
  * console shell. Declarative — the shell owns rendering and applies the
  * feature-flag gate, so extensions cannot bypass entitlements.
+ *
+ * That sentence describes `apps/console/utils/extension-entitlement.ts`,
+ * which the plugin route and `PluginWidgetSlot` both call before they mount
+ * anything an extension registered (AGL-2484). It was an aspiration until
+ * then: the route resolved the entitlement and handed it to the extension as
+ * the `entitled` PROP, and the widget slot did not resolve it at all, so
+ * enforcement rested on each extension policing itself — which one
+ * first-party page did not do.
+ *
+ * What the gate covers, exactly: a `featureFlag` refuses to RENDER the
+ * extension's page body and its widgets. Nav items stay visible on purpose.
+ * Hiding the tab would hide the only route most workspaces have to the page
+ * that sells the feature, and a nav entry leading to the shell's own upgrade
+ * notice bypasses nothing.
  */
 export interface ConsoleExtension {
   pluginId: PluginId

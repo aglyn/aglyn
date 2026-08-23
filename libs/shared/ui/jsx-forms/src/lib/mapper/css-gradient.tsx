@@ -52,7 +52,10 @@ import {
   useColorPickerTokenOptions,
 } from '../components/color-picker-tokens'
 import { useFieldApi } from '../vendor/data-driven-forms'
-import FormFieldGrid, { type FormFieldGridProps } from './form-field-grid'
+import FormFieldGrid, {
+  buildFieldClear,
+  type FormFieldGridProps,
+} from './form-field-grid'
 import type { BaseFieldProps } from './types'
 import { type ExtendedFieldMeta, validationError } from './validation-error'
 
@@ -345,6 +348,8 @@ export interface CssGradientProps extends BaseFieldProps {
    * keeps painting rather than nothing painting.
    */
   unsetLabel?: string
+  /** Offer the reset-to-unset affordance (AGL-2486). */
+  clearable?: boolean
   ColorPickerProps?: Partial<AglynColorPickerProps>
   FormFieldGridProps?: FormFieldGridProps
 }
@@ -362,6 +367,7 @@ export const CssGradientField = (props: CssGradientProps) => {
     help,
     presetColors,
     unsetLabel = 'Default',
+    clearable,
     ColorPickerProps,
     FormFieldGridProps = {},
     // Free-text leftovers from an attribute schema that must never reach
@@ -496,8 +502,19 @@ export const CssGradientField = (props: CssGradientProps) => {
     [draft, options],
   )
 
+  // Back to unset in one click (AGL-2486) — including out of the raw-CSS
+  // fallback, which the fill-type select cannot leave on its own because it
+  // is disabled while a raw value is held.
+  const clear = buildFieldClear({
+    clearable,
+    label,
+    hasValue: value !== '',
+    locked,
+    onClear: () => commit({ ...emptyDraft, raw: undefined }),
+  })
+
   return (
-    <FormFieldGrid help={help} {...FormFieldGridProps}>
+    <FormFieldGrid help={help} clear={clear} {...FormFieldGridProps}>
       <MuiTextField
         {...rest}
         select
@@ -520,6 +537,13 @@ export const CssGradientField = (props: CssGradientProps) => {
           // Without displayEmpty a MUI Select renders NOTHING for `''`,
           // which would show the unset state as a broken control.
           select: { displayEmpty: true },
+          // …and `displayEmpty` alone prints the label ON TOP of the option
+          // it just drew (AGL-2486). MUI shrinks a label when the input
+          // reports itself FILLED, and an empty Select reports the
+          // opposite no matter what it is rendering — so the unset choice
+          // and the field name landed in the same few pixels and neither
+          // could be read. A rendered option is content; say so.
+          inputLabel: { shrink: true },
         }}
       >
         <MenuItem value="">{unsetLabel}</MenuItem>

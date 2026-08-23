@@ -266,6 +266,47 @@ function nextBookableStart(): number {
   return slots[0].startsAtMs
 }
 
+/**
+ * The Nth OPEN slot, rather than the first one plus N × 6 hours (AGL-2486).
+ *
+ * The offset arithmetic was a clock-dependent test. `computeOpenSlots` walks
+ * a 15-minute grid in absolute epoch terms and keeps only instants where
+ * `minutes + duration <= window.end`, so on this fixture — 60 minutes against
+ * windows that end at 1440 — nothing may START after 23:00. The fixture reads
+ * as open 24/7 and is not: a slot cannot span midnight.
+ *
+ * `nextBookableStart()` is `now + 3 days` rounded up to the grid, so the
+ * offsets moved with the wall clock. Measured: at 23:45 local the four
+ * bookers landed at 04:45 / 10:45 / 16:45 / 22:45 and the suite was green; at
+ * 00:29 they landed at 05:45 / 11:45 / 17:45 / 23:45 and the fourth 409'd
+ * with "Slot unavailable" — the same tree, an hour apart. Two tests failed
+ * naming Stripe params and a status code, neither of which was the fault.
+ *
+ * Asking the model for real slots removes the arithmetic entirely: whatever
+ * it returns is open by construction, at any hour the suite happens to run.
+ * The stride keeps them far enough apart that a slot one test holds cannot
+ * collide with the next — consecutive open slots are 15 minutes apart and the
+ * service books 60, so four is the minimum and eight is margin.
+ */
+function nthBookableStart(index: number): number {
+  const from = Date.now() + 3 * 24 * 60 * 60_000
+  const stride = 8
+  const wanted = index * stride
+  const slots = computeOpenSlots(
+    service,
+    from,
+    from + 7 * 24 * 60 * 60_000,
+    [],
+    wanted + 1,
+  )
+  if (slots.length <= wanted) {
+    throw new Error(
+      `the fixture service has ${slots.length} open slots, needed ${wanted + 1}`,
+    )
+  }
+  return slots[wanted].startsAtMs
+}
+
 const makeRes = () => {
   const res: any = {
     statusCode: 0,
@@ -504,7 +545,7 @@ describe('a merchant-set service rate is charged and recorded (AGL-2028)', () =>
       body: {
         hostId: 'host-1',
         serviceId: 'service-1',
-        startsAtMs: nextBookableStart() + booker * 6 * 60 * 60_000,
+        startsAtMs: nthBookableStart(booker),
         name: 'Dana',
         email: `dana-tax-${booker}@example.com`,
       },

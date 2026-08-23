@@ -31,7 +31,7 @@ import { consolePluginLoader } from '../constants/console-plugin-loader'
 import { useHostDisabledPlugins } from './host-id-provider'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useReleaseFlags } from '../hooks/use-release-flags'
-import { useUrlNamesOrg } from '../hooks/use-url-names-org'
+import { useUrlNamedOrg, useUrlNamesOrg } from '../hooks/use-url-names-org'
 import { loadOrgRealmPlugins } from '../utils/realm-plugins.client'
 
 /**
@@ -82,13 +82,26 @@ export function useEnabledPluginIds(): string[] {
   // `disabledPlugins` deny-list is subtracted, so nav tabs, plugin pages
   // and widget slots all read the per-site set. [] off host routes.
   const hostDisabled = useHostDisabledPlugins()
+  // There is no "current workspace's" plugin set on a route that names no
+  // workspace (AGL-2486). `useEffectiveEnabledPlugins` reads `useCurrentOrg`,
+  // which falls back to a remembered org, so this answered with THAT org's
+  // plugins off org routes. The gate below already refuses to LOAD plugins
+  // there, but the registry is a session-wide union — so a staff user who
+  // visited their own workspace first saw their own entitled widgets on
+  // `/admin/orgs/{someone-else}`, a page about a different org entirely.
+  // Gating here rather than at each consumer is the same reasoning as the
+  // analytics mount gate: a filter every lister must remember to apply is a
+  // filter that will eventually be forgotten.
+  const namedOrg = useUrlNamedOrg()
   return useMemo(
     () =>
-      subtractDisabledPlugins(
-        enabledKey.split(',').filter(Boolean),
-        hostDisabled,
-      ),
-    [enabledKey, hostDisabled],
+      namedOrg
+        ? subtractDisabledPlugins(
+            enabledKey.split(',').filter(Boolean),
+            hostDisabled,
+          )
+        : [],
+    [enabledKey, hostDisabled, namedOrg],
   )
 }
 

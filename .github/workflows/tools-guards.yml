@@ -286,6 +286,20 @@ jobs:
       # no install, well under a second.
       - run: npm run test:gate-script
 
+      # AGL-2486. The guards phase is no longer a serial loop inside gate.sh —
+      # it is tools/scripts/run-guards.mjs, which DERIVES the guard list from
+      # this file and nx-ci.yml and runs it concurrently (1m09s -> ~15s). That
+      # makes the derivation load-bearing for every gate run: a query that
+      # silently matches nothing would exit green having gated nothing, which
+      # is precisely the shape gate.sh's own self-test exists to refuse.
+      #
+      # So the self-test asserts the derivation is non-empty and finds named
+      # guards, that a missing workflow file derives ZERO (so the caller's
+      # refusal is reachable), and that every guard in the repo-wide set is
+      # both a real npm script and actually wired into CI — a set member that
+      # is neither would be a guard nothing runs, protected from narrowing.
+      - run: npm run test:run-guards
+
       # AGL-1882. The comparator behind `check:backup-copies`, which asks the
       # one question `/api/health/backups` structurally cannot: does ANY copy
       # of production data live outside the production GCP project? Every
@@ -422,6 +436,13 @@ jobs:
 
       - run: npm run check:hardcoded-colours
 
+      # AGL-2486. `compiler.reactRemoveProperties` deletes JSX props from the
+      # BROWSER build only, and jest's transform keeps them — so a prop being
+      # erased in production still renders under test and its spec passes.
+      # `displayName` sat in that list and silently blanked a real prop at
+      # eight call sites for weeks. This is the only place that list is read.
+      - run: npm run test:react-remove-properties
+
       # Brand-literal ratchet (AGL-2170), the same shape and the same sweep
       # roots as the colour one above. AGL-2153 made the platform brand
       # configuration so a self-host operator can rename the product without
@@ -446,6 +467,15 @@ jobs:
       # knows the shape of.
       - run: npm run test:jsx-barrel
       - run: npm run check:jsx-barrel
+
+      # The same rule for the OTHER barrel a published page imports statically
+      # (AGL-2486). `catch-all-client.tsx` opens with `import * as Aglyn from
+      # '@aglyn/aglyn'`, and nothing watched that entry — which is how
+      # `firebase/auth` and `acorn` each came to ship to anonymous visitors of
+      # every customer site, for -48,643 B and -39,035 B gzipped respectively.
+      # Its forced reds live in the same test file and replay exactly those two
+      # regressions, so the gate is known to catch the thing it was built for.
+      - run: npm run check:aglyn-barrel
 
       # NEXT_PUBLIC access form (AGL-2037, AGL-2172). Next substitutes only the
       # dot form, so a bracket read in a client-reachable module is `undefined`

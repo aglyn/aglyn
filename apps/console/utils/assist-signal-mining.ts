@@ -74,6 +74,8 @@ export interface AssistSignalRow {
   docsPaths: string[]
   stopReason: string | null
   feedback: 'up' | 'down' | null
+  /** Served with no model call — docs retrieval or a cache hit (AGL-2486). */
+  deflected: boolean
 }
 
 export interface DocsGapRow {
@@ -167,6 +169,22 @@ export interface AssistMiningReport {
     cacheReadTokens: number
     cacheWriteTokens: number
     estCostUsd: number
+    /**
+     * Turns answered with NO model call — docs retrieval or an answer-cache
+     * hit (AGL-2486). Counted separately from `messages`, which is every
+     * turn, so `deflected / messages` is the deflection rate.
+     */
+    deflected: number
+    /**
+     * That rate, or `null` when nothing was scanned.
+     *
+     * Nullable rather than 0 for the reason `costUsd` on a reservation is:
+     * "no turns were scanned" and "every turn cost a model call" are opposite
+     * findings, and 0 says the second one when the truth is the first. This
+     * is the headline number for whether Assist is affordable to leave on,
+     * and it must not be able to report a false alarm on an idle month.
+     */
+    deflectionRate: number | null
     /** Share of billable prompt tokens served from cache, or null at zero. */
     cacheReadRate: number | null
     /**
@@ -228,6 +246,11 @@ export function assistSignalRow(
     docsPaths: rawPaths.map((path) => String(path)).filter(Boolean),
     stopReason: data['stopReason'] == null ? null : String(data['stopReason']),
     feedback: feedback === 'up' || feedback === 'down' ? feedback : null,
+    // Strict `=== true`, so a signal written before the field existed reads
+    // as "served by a model" rather than as deflected. Defaulting the other
+    // way would credit historic turns with a saving that never happened and
+    // make the rate look best on the day it shipped.
+    deflected: data['deflected'] === true,
   }
 }
 
@@ -264,6 +287,8 @@ export function mineAssistSignals(
     cacheReadTokens: 0,
     cacheWriteTokens: 0,
     estCostUsd: 0,
+    deflected: 0,
+    deflectionRate: null as number | null,
     cacheReadRate: null as number | null,
     byTier: {} as Record<string, CostSplit>,
     byModel: {} as Record<string, CostSplit>,
@@ -288,6 +313,7 @@ export function mineAssistSignals(
     totals.cacheReadTokens += row.cacheReadTokens
     totals.cacheWriteTokens += row.cacheWriteTokens
     totals.estCostUsd += row.estCostUsd
+    if (row.deflected) totals.deflected += 1
     addToSplit(totals.byTier, row.tier, row.estCostUsd)
     addToSplit(totals.byModel, row.model, row.estCostUsd)
     const stop = row.stopReason ?? 'none'
@@ -385,6 +411,9 @@ export function mineAssistSignals(
   const billablePrompt = totals.inputTokens + totals.cacheReadTokens
   totals.cacheReadRate = billablePrompt
     ? totals.cacheReadTokens / billablePrompt
+    : null
+  totals.deflectionRate = totals.messages
+    ? totals.deflected / totals.messages
     : null
 
   const docsGaps = [...gaps.values()]

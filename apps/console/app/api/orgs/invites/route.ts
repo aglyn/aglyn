@@ -50,6 +50,7 @@ import {
   notifyOrgAdmins,
   resolveOrgMembership,
   upsertOrgMember,
+  verifiedAccountEmails,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 
@@ -132,9 +133,15 @@ async function handler(request: Request): Promise<Response> {
         return Response.json({ invites: [] }, { status: 200 })
       }
       const firestore = firebaseAdmin.app().firestore()
+      // Every confirmed address on the account (AGL-2486), so an invitation
+      // sent to a secondary shows up in the banner too — otherwise `accept`
+      // would honour an invite the person can never see. Bounded by
+      // MAX_ACCOUNT_EMAILS, which is what keeps this inside Firestore's
+      // 30-value ceiling on `in`.
+      const addresses = [email, ...(await verifiedAccountEmails(decoded.uid))]
       const snapshot = await firestore
         .collectionGroup('invites')
-        .where('email', '==', email)
+        .where('email', 'in', Array.from(new Set(addresses)).slice(0, 30))
         .where('acceptedAt', '==', null)
         .limit(20)
         .get()
@@ -565,7 +572,39 @@ async function handler(request: Request): Promise<Response> {
         return Response.json({ error: 'Invite already accepted' }, { status: 409 })
       }
       const email = String(decoded.email ?? '').toLowerCase()
-      if (!email || email !== invite['email'] || !decoded.email_verified) {
+      /*
+       * An invitation may arrive at ANY confirmed address on the account
+       * (AGL-2486), not only the primary — GitHub's behaviour, and the
+       * decision recorded for this issue.
+       *
+       * It is safe for a reason worth stating, because the neighbouring SSO
+       * path deliberately does NOT do this. An invitation is an explicit
+       * grant the ORG made to a person it chose: somebody with permission
+       * typed this address and picked this role. Matching it against the
+       * recipient's other confirmed mailboxes decides only WHICH inbox the
+       * org's own grant may land in. It cannot manufacture a grant, and
+       * adding an address to your account still gives you access to nothing.
+       *
+       * Contrast `/api/auth/sso-jit`, which matches the address the IdP
+       * asserted and nothing else. There the org is not choosing anybody —
+       * the IdP's assertion IS the org's statement about who this is — so
+       * widening the match to addresses the account holder added would let
+       * them pull in an invitation inside the one flow whose entire premise
+       * is that the IdP is the authority.
+       *
+       * `verifiedAccountEmails` returns CONFIRMED addresses only; the
+       * uniqueness index guarantees no other account holds any of them, and
+       * `email_verified` on the token is still required, so an account that
+       * has not confirmed its own primary accepts nothing.
+       */
+      const acceptableEmails = email
+        ? [email, ...(await verifiedAccountEmails(decoded.uid))]
+        : []
+      if (
+        !email ||
+        !acceptableEmails.includes(String(invite['email'] ?? '')) ||
+        !decoded.email_verified
+      ) {
         return Response.json({
           error: 'This invite is for a different (or unverified) email',
         }, { status: 403 })

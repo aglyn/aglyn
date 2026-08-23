@@ -7,12 +7,12 @@
   "apps/console/app/api/_lib/linear-issues.ts": 1,
   "apps/console/components/staff-reversal-recovery-card.component.tsx": 1,
   "apps/console/utils/tx-return-webfile.ts": 18,
-  "apps/docs/docusaurus.config.ts": 4,
+  "apps/docs/docusaurus.config.ts": 6,
   "apps/docs/src/pages/status.tsx": 1,
   "apps/tenant/middleware.ts": 1,
   "libs/aglyn/src/lib/foundation/constants/_internal.ts": 3,
   "libs/shared/data/enums/src/lib/aglyn-applications.ts": 1,
-  "libs/shared/data/enums/src/lib/aglyn.ts": 1,
+  "libs/shared/data/enums/src/lib/aglyn.ts": 3,
   "libs/shared/ui/jsx/src/lib/const/svg-icons.tsx": 6,
   "libs/shared/ui/theme/src/lib/util/generate-component-class-keys.ts": 2
 }

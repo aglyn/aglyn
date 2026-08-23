@@ -26,6 +26,9 @@ import {
   type FormFieldGridProps,
   validationError,
 } from '../mapper'
+// Deep import rather than through the barrel: this is a sibling module in
+// the same lib and the barrel is edited by everything.
+import { buildFieldClear } from '../mapper/form-field-grid'
 import {
   useFieldApi,
   type UseFieldApiComponentConfig,
@@ -56,6 +59,10 @@ import {
   useState,
 } from 'react'
 import {
+  paletteTokenToAlphaCssVar,
+  parsePaletteTokenAlphaCssVar,
+} from '@aglyn/shared-data-enums'
+import {
   ColorTokenGrid,
   type ColorPickerTokenOption,
   rgbColorToCss,
@@ -68,6 +75,8 @@ interface TextFieldColorSwatchProps extends Partial<InputAdornmentProps> {
   color: string
   /** Set when the value is a theme token — renders the split swatch. */
   token?: ColorPickerTokenOption
+  /** Opacity the token carries, 0–1 (AGL-2486). */
+  tokenAlpha?: number
   IconButtonProps?: Partial<IconButtonProps>
 }
 
@@ -83,7 +92,7 @@ const Swatch = styled('span', {
 
 const TextFieldColorSwatch = forwardRef<any, TextFieldColorSwatchProps>(
   (props, ref) => {
-    const { color, token, IconButtonProps, ...rest } = props
+    const { color, token, tokenAlpha, IconButtonProps, ...rest } = props
 
     return (
       <InputAdornment ref={ref} position={'start'} {...rest}>
@@ -96,7 +105,11 @@ const TextFieldColorSwatch = forwardRef<any, TextFieldColorSwatchProps>(
               borderRadius: "50%"
             }}>
             {token ? (
-              <TokenSwatch light={token.light} dark={token.dark} />
+              <TokenSwatch
+                light={token.light}
+                dark={token.dark}
+                alpha={tokenAlpha}
+              />
             ) : (
               <Swatch color={color} />
             )}
@@ -116,6 +129,8 @@ type InternalColorPickerProps = Partial<TextFieldProps> & {
   FormControlProps?: Partial<MuiFormControlProps>
   PopperProps?: Partial<PopperProps>
   presetColors?: string[]
+  /** Offer the reset-to-unset affordance (AGL-2486). */
+  clearable?: boolean
 }
 
 export type ColorPickerProps = InternalColorPickerProps &
@@ -148,6 +163,7 @@ export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
       inputProps,
       InputProps,
       presetColors,
+      clearable,
       FormFieldGridProps,
       FormControlProps,
       ColorPickerProps,
@@ -195,9 +211,43 @@ export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
     // hex/rgb value re-opens on the custom stage. `stage` only tracks an
     // explicit in-session choice — it resets whenever the popper opens.
     const tokenOptions = useColorPickerTokenOptions()
+    // A token carrying an author-chosen opacity (AGL-2486). It is stored as
+    // `rgba(var(--mui-palette-primary-mainChannel, 31 41 55) / 0.12)` — still
+    // a REFERENCE, so the site palette keeps driving it — and reading it back
+    // here is what makes the picker re-open on the token with its slider at
+    // 12% instead of on the custom stage showing an opaque string.
+    const alphaToken = useMemo(
+      () => parsePaletteTokenAlphaCssVar(value),
+      [value],
+    )
+    const tokenPath = alphaToken ? alphaToken.path : value
+    const tokenAlpha = alphaToken ? alphaToken.alpha : 1
     const activeToken = useMemo(
-      () => tokenOptions.find((option) => option.value === value),
-      [tokenOptions, value],
+      () => tokenOptions.find((option) => option.value === tokenPath),
+      [tokenOptions, tokenPath],
+    )
+
+    /**
+     * The value a token + opacity pair is STORED as. A fully opaque token
+     * stays the bare palette path (`primary.main`) — MUI's own sx resolution
+     * handles it, and nothing about the shipped format changes for the
+     * overwhelmingly common case. Only a real alpha reaches for the channel
+     * form.
+     */
+    const writeToken = useCallback(
+      (path: string, opacity: number) => {
+        if (!(opacity < 1)) return path
+        const option = tokenOptions.find((entry) => entry.value === path)
+        // The literal fallback: what the token resolves to today, so a render
+        // path that skips substitution still paints the right colour at the
+        // right opacity.
+        return paletteTokenToAlphaCssVar(
+          path,
+          opacity,
+          option ? (option.light ?? option.dark) : undefined,
+        )
+      },
+      [tokenOptions],
     )
     const [stage, setStage] = useState<'tokens' | 'custom' | undefined>()
     const effectiveStage =
@@ -215,11 +265,24 @@ export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
     )
 
     const handleTokenSelect = useCallback(
-      (tokenPath: string, e: any) => {
-        handleChange(tokenPath, e)
+      (picked: string, e: any) => {
+        // Keeps the opacity across a token change: an author dialling a wash
+        // to 12% and then trying it in secondary is adjusting ONE decision.
+        handleChange(writeToken(picked, tokenAlpha), e)
         setOpen(false)
       },
-      [handleChange],
+      [handleChange, writeToken, tokenAlpha],
+    )
+
+    // Dragging the slider must not close the popper — this is the one control
+    // in the picker an author adjusts continuously, so it commits live like
+    // every other field in the styles panel and leaves the palette open.
+    const handleOpacityChange = useCallback(
+      (opacity: number) => {
+        if (!activeToken) return
+        handleChange(writeToken(activeToken.value, opacity), undefined)
+      },
+      [activeToken, handleChange, writeToken],
     )
 
     const startAdornment = useMemo(
@@ -227,6 +290,7 @@ export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
         <TextFieldColorSwatch
           color={value}
           token={activeToken}
+          tokenAlpha={tokenAlpha}
           IconButtonProps={{
             onClick: () => {
               setStage(undefined)
@@ -235,11 +299,26 @@ export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
           }}
         />
       ),
-      [value, activeToken],
+      [value, activeToken, tokenAlpha],
     )
 
+    // The way back to "no colour" (AGL-2486). A colour picker has no empty
+    // swatch and the text box re-parses whatever is left in it, so before
+    // this there was no click anywhere in the panel that took a colour off
+    // again — only another colour.
+    const clear = buildFieldClear({
+      clearable,
+      label,
+      hasValue: value !== '' && value !== undefined && value !== null,
+      locked: Boolean(isDisabled || isReadOnly),
+      onClear: () => {
+        setOpen(false)
+        handleChange('', undefined)
+      },
+    })
+
     return (
-      <FormFieldGrid ref={ref} help={help} {...FormFieldGridProps}>
+      <FormFieldGrid ref={ref} help={help} clear={clear} {...FormFieldGridProps}>
         <ClickAwayListener onClickAway={handleClickAway}>
           <div>
             <MuiTextField
@@ -284,9 +363,22 @@ export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
               {effectiveStage === 'tokens' ? (
                 <ColorTokenGrid
                   options={tokenOptions}
-                  value={value}
+                  value={tokenPath}
                   onSelect={handleTokenSelect}
                   onCustom={() => setStage('custom')}
+                  // Only once a token is picked: there is nothing to make
+                  // translucent while the field is empty, and an opacity on a
+                  // literal is already expressible through the custom
+                  // picker's own alpha channel.
+                  opacity={tokenAlpha}
+                  onOpacityChange={
+                    activeToken ? handleOpacityChange : undefined
+                  }
+                  // The picker itself offers the way back, not just the
+                  // field's corner (AGL-2486): an author who opened the
+                  // palette to change a colour is exactly the author who
+                  // wants to take it off.
+                  onClear={clear && !clear.hidden ? clear.onClear : undefined}
                 />
               ) : (
                 <Paper sx={{ p: 0.5 }}>

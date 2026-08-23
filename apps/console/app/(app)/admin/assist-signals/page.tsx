@@ -242,6 +242,35 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
                 <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
                   <Chip label={`${totals.messages.toLocaleString()} turns`} />
                   <Chip label={`${money(totals.estCostUsd)} estimated`} />
+                  {/*
+                   * The headline number for whether Assist is affordable to
+                   * leave on (AGL-2486): the share of turns answered from the
+                   * docs index or the answer cache, with no model call and no
+                   * provider spend. Placed beside the money rather than with
+                   * the token chips because it is the thing that MOVES the
+                   * money — every point of it is a turn that cost nothing.
+                   *
+                   * Success above half, because that is the point at which
+                   * the cheap path is carrying the feature rather than
+                   * trimming it.
+                   */}
+                  <Chip
+                    // `?? 0` on the count, and it is not defensive noise: this
+                    // whole object is JSON off `/api/admin/assist-signals`,
+                    // and a chip that throws on a missing number takes the
+                    // ENTIRE staff page down with it rather than rendering a
+                    // dash. The rate beside it is legitimately nullable —
+                    // `percent` renders that — so the two are handled
+                    // differently on purpose.
+                    label={`answered free ${percent(totals.deflectionRate)} (${(
+                      totals.deflected ?? 0
+                    ).toLocaleString()})`}
+                    color={
+                      totals.deflectionRate != null && totals.deflectionRate > 0.5
+                        ? 'success'
+                        : 'default'
+                    }
+                  />
                   <Chip
                     label={`${totals.inputTokens.toLocaleString()} in / ${totals.outputTokens.toLocaleString()} out`}
                   />

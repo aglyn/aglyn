@@ -30,7 +30,7 @@ import {
   UNLIMITED,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
-import { AppLink, CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import {
@@ -61,6 +61,7 @@ import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth, useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
+import CardColumns from '../../../../../components/card-columns.component'
 import StaffOnly from '../../../../../components/staff-only.component'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import PluginWidgetSlot from '../../../../../components/plugin-widget-slot.component'
@@ -71,6 +72,7 @@ import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import StaffHostFormCountersChips from '../../../../../components/staff-host-form-counters.component'
 import StaffOrgActions from '../../../../../components/staff-org-actions.component'
+import StaffOrgRefundCard from '../../../../../components/staff-org-refund-card.component'
 import { useImpersonationReason } from '../../../../../components/staff-impersonation-dialog.component'
 import StaffOrgUsageTable, {
   type StaffOrgUsageMonth,
@@ -282,6 +284,11 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     stripeError?: string
   } | null>(null)
   const [billingError, setBillingError] = useState<string | null>(null)
+  // Bumped by the refund card (AGL-2486): a settled refund changes the
+  // invoice history beside it, and a panel still showing the pre-refund
+  // figures is exactly the readout an operator would use to decide whether
+  // to refund again.
+  const [billingNonce, setBillingNonce] = useState(0)
   useEffect(() => {
     if (!isStaff || !orgId || !user) return
     let active = true
@@ -310,7 +317,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     return () => {
       active = false
     }
-  }, [isStaff, orgId, user])
+  }, [isStaff, orgId, user, billingNonce])
 
   // Metered usage (AGL-939): the last 12 monthly rollups from
   // /api/admin/org-usage — the endpoint the list page's Usage dialog already
@@ -1009,11 +1016,12 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                 />
               </Stack>
             </CardDisplay>
-            <GridItems
-              spacing={3}
+            {/* Balanced columns, not six rigid rows of two (AGL-2486):
+                `Effective entitlements` is a long table and used to leave the
+                whole area beside it dead. */}
+            <CardColumns
               items={[
                 {
-                  size: { xs: 12, md: 6 },
                   children: (
                     // Labelled + grouped, owner resolved to a person, org id
                     // copyable (AGL-938).
@@ -1033,7 +1041,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 },
                 {
-                  size: { xs: 12, md: 6 },
                   children: (
                     // Direct editing (AGL-358).
                     <CardDisplay
@@ -1205,7 +1212,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 },
                 {
-                  size: { xs: 12, md: 6 },
                   children: (
                     <CardDisplay
                       header={`Sites (${(hostDocs ?? []).length})`}
@@ -1290,7 +1296,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 },
                 {
-                  size: { xs: 12, md: 6 },
                   children: (
                     <CardDisplay
                       header={`Members (${(memberDocs ?? []).length})`}
@@ -1357,7 +1362,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 },
                 {
-                  size: { xs: 12, md: 6 },
                   children: (
                     <CardDisplay
                       header={'Effective entitlements'}
@@ -1432,7 +1436,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 },
                 {
-                  size: { xs: 12, md: 6 },
                   children: (
                     // Metered usage (AGL-939): consumption alongside the
                     // plan and its limits — the thing staff open this page
@@ -1463,7 +1466,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 },
                 {
-                  size: { xs: 12, md: 6 },
                   children: (
                     <CardDisplay
                       header={'Billing history & payment method'}
@@ -1572,7 +1574,19 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 },
                 {
-                  size: { xs: 12, md: 6 },
+                  children: (
+                    // Refunds from the org page (AGL-2486). Sits directly
+                    // after the invoice history on purpose: the charge an
+                    // operator is about to refund is the one they were just
+                    // reading about, and until now the next step was to leave
+                    // for the Stripe dashboard — where nothing recorded why.
+                    <StaffOrgRefundCard
+                      orgId={orgId}
+                      onRefunded={() => setBillingNonce((nonce) => nonce + 1)}
+                    />
+                  ),
+                },
+                {
                   children: (
                     // Per-org discount (AGL-1105).
                     <CardDisplay
@@ -1732,7 +1746,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 },
                 {
-                  size: { xs: 12, md: 6 },
                   children: (
                     // Enterprise custom billing (AGL-1110).
                     <CardDisplay
@@ -1899,7 +1912,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 },
                 {
-                  size: { xs: 12, md: 6 },
                   children: (
                     <CardDisplay
                       header={'Recent admin actions on this organization'}
@@ -2002,7 +2014,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 },
                 {
-                  size: { xs: 12, md: 6 },
                   children: (
                     <CardDisplay
                       header={'Success manager'}
@@ -2091,7 +2102,6 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   ),
                 },
                 {
-                  size: { xs: 12, md: 6 },
                   children: (
                     <CardDisplay
                       header={'Staff notes'}

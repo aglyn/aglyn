@@ -34,6 +34,13 @@ import useBesignerDocument from './use-besigner-document'
 const mockCanvas = {
   isInitialSame: true,
   didSetInitial: false,
+  /**
+   * Whether a co-editor has touched this canvas (AGL-2486). Modelled rather
+   * than omitted: the draft prompt reads it to decide whether restoring is
+   * still a private act, and an absent property would read as "nobody else
+   * is here" for every case in this file.
+   */
+  hasRemoteEdits: false,
   reset: jest.fn(),
   setNodes: jest.fn(),
   processNodesToDenormalized: jest.fn((value: unknown) => value),
@@ -45,8 +52,26 @@ const mockCanvas = {
   updateInitialNodes: jest.fn(
     (_nodes?: Record<string, unknown>, _options?: { confirmed?: boolean }) => {
       mockCanvas.didSetInitial = true
+      mockCanvas.isInitialConfirmed = _options?.confirmed ?? true
     },
   ),
+  /** Mirrors `CanvasManager._initialConfirmed`, which defaults to true. */
+  isInitialConfirmed: true,
+  /**
+   * Stands in for the real `isEqual(_initial, serializeNodes())` check inside
+   * `confirmInitialNodes`. The stub has no node map to compare, so the
+   * "author edited while the write was in flight" case is expressed here —
+   * modelled rather than assumed, because a double that always confirms
+   * would report AGL-1262 as green whatever the hook did.
+   */
+  canvasMatchesInitial: true,
+  confirmInitialNodes: jest.fn(() => {
+    if (!mockCanvas.didSetInitial) return false
+    if (mockCanvas.isInitialConfirmed) return true
+    if (!mockCanvas.canvasMatchesInitial) return false
+    mockCanvas.isInitialConfirmed = true
+    return true
+  }),
   applyNodes: jest.fn(),
   toJSON: jest.fn((): { nodes: Record<string, unknown> } => ({
     nodes: { root: {} },
@@ -103,6 +128,8 @@ describe('useBesignerDocument', () => {
     jest.restoreAllMocks()
     mockCanvas.isInitialSame = true
     mockCanvas.didSetInitial = false
+    mockCanvas.isInitialConfirmed = true
+    mockCanvas.canvasMatchesInitial = true
     mockCanvas.toJSON.mockReturnValue({ nodes: { root: {} } })
   })
 

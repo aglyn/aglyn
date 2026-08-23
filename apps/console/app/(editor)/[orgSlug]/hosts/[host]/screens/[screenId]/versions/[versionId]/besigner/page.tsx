@@ -129,6 +129,7 @@ import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
 import useHostRole from '../../../../../../../../../../hooks/use-host-role'
+import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
 
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
@@ -224,6 +225,9 @@ function BesignerPage(props) {
     hostId,
     screenId,
   })
+  // The browser tab names THIS document, not just its site (AGL-2486).
+  // The server put the id in the title; this swaps in the loaded name.
+  useDeclareDocumentSubject(screenId, screenResult?.data?.displayName)
   const layoutId = screenResult?.data?.layoutId
   const {doc: layoutResult} = useLayout({
     hostId,
@@ -973,7 +977,11 @@ function BesignerPage(props) {
     <EntityPickerProvider hostId={hostId}>
     <ReusableComponentsProvider hostId={hostId}>
     <BindingPickerProvider hostId={hostId}>
-            <BesignerDraftAlertComponent draft={draft} noun="screen" />
+            <BesignerDraftAlertComponent
+              draft={draft}
+              noun="screen"
+              remoteChanged={remoteChanged}
+            />
     {/* Email documents run no client JS (AGL-587): disable interaction
         capabilities so the attributes panel never offers the section. */}
     <InteractionsProvider
@@ -1182,7 +1190,7 @@ function BesignerPage(props) {
             {/* Surfaced as soon as their save lands, not on Save — finding
                 out after twenty more minutes of editing is the bad
                 version of this (AGL-674). */}
-            {remoteChanged ? (
+            {remoteChanged && !draft.available ? (
               <BesignerConflictAlertComponent noun="screen" />
             ) : null}
             {layoutId ? (

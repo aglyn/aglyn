@@ -46,8 +46,12 @@ The styles panel organizes every control into accordions, and every
 field has exactly one home — no custom CSS needed for the common
 properties:
 
-- **Flexbox & Grids** — the container controls: alignment and
-  direction toggles plus the gap, row-gap, and column-gap fields.
+- **Flexbox & Grid** — everything about laying an element out as a flex
+  or grid container, and about where it sits inside its own parent:
+  alignment and direction toggles, wrapping, the gap / row-gap /
+  column-gap fields, the grid column and row track lists with auto-flow,
+  and the per-item controls — grid column/row placement, flex grow, flex
+  shrink, flex basis, and order.
 - **Layout** — display variant and float.
 - **Colors** — text color, background color, and **Background Fill**
   (see [gradient backgrounds](#gradient-backgrounds)). Both pickers open
@@ -68,9 +72,11 @@ properties:
   a rule under a header or a line between columns.
 - **Position & Overflow** — position scheme with top/right/bottom/left
   offsets, z-index, overflow, opacity, and cursor.
-- **Grid & Flex Child** — grid template columns/rows, auto-flow, and
-  the per-item controls: grid column/row placement, flex grow, flex
-  shrink, flex basis, and order.
+
+Every field also carries a **✕** at its top-right once it holds a value.
+That is how a style goes back to *unset* — which is not the same as
+typing a default: an unset field is the one the theme, or the component
+an instance was made from, gets to answer.
 
 Length fields — width, height, the min/max bounds, font size, letter
 spacing, the position offsets, and flex basis — are a **number box plus

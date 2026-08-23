@@ -178,6 +178,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ...jest.requireActual(
     '../../../../../../libs/tenant/data/admin/src/lib/server/assist-usage',
   ),
+  // The REAL cache, spliced by path (AGL-2486). Stubbing it would prove only
+  // that the route calls something; the point of the tests below is that a
+  // repeated question is served from Firestore and never reaches Anthropic,
+  // and that a turn carrying history is not cached at all.
+  ...jest.requireActual(
+    '../../../../../../libs/tenant/data/admin/src/lib/server/assist-answer-cache',
+  ),
   firebaseAdmin: {
     app: () => ({
       auth: () => ({
@@ -249,9 +256,26 @@ function post(body: unknown, token = 'user-token'): Request {
   })
 }
 
+/**
+ * The question every model-path test asks.
+ *
+ * A DIAGNOSTIC, deliberately (AGL-2486). It used to be "How do I publish my
+ * first screen?", which is now answered from the docs index with no model
+ * call at all — so every test below would have asserted against a mocked
+ * Anthropic response the route never requested, and `armUpstream`'s unarmed
+ * guard would not have fired because the fetch is simply never made.
+ *
+ * A diagnostic escapes deflection through the INTENT gate rather than by
+ * scoring badly, which is what makes it a stable choice: it stays an
+ * escalation however the docs corpus or the confidence thresholds move.
+ * Picking a question that merely retrieves weakly would tie this whole file
+ * to `assist-deflection.ts`'s tuning. The deflected path has its own tests.
+ */
+const QUESTION = "Why isn't my custom domain verifying?"
+
 const QUESTION_BODY = (orgId: string) => ({
   orgId,
-  question: 'How do I publish my first screen?',
+  question: QUESTION,
   history: [],
   // A real console route shape (screens live under a host), so the level-2
   // view registry resolves it to an actual screen rather than the
@@ -373,10 +397,17 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks())
 
 describe('the gate ladder — every guard forced red once', () => {
-  it('501 without ANTHROPIC_API_KEY', async () => {
+  it('501 without ANTHROPIC_API_KEY — for a question needing a model', async () => {
+    // Below the membership check since AGL-2486, not above it: the key gate
+    // now guards the ESCALATION, so it is only reached by a caller who got
+    // through everything else and asked something the docs cannot answer.
+    seedOrgs()
     delete process.env.ANTHROPIC_API_KEY
     const response = await POST(post(QUESTION_BODY(FREE_ORG)))
     expect(response.status).toBe(501)
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringContaining('ANTHROPIC_API_KEY'),
+    })
   })
 
   it('401 without a bearer token', async () => {
@@ -543,6 +574,237 @@ describe('the gate ladder — every guard forced red once', () => {
  * caller saw a 4xx: a refusal that still bumped `assistMessagesDaily` would
  * leave the billing defect exactly where it was.
  */
+/**
+ * Retrieval-first: the questions that cost nothing (AGL-2486).
+ *
+ * `mockFetch` throws on any unarmed call, so "the model was never reached" is
+ * asserted twice over in every test here — once by `not.toHaveBeenCalled()`
+ * and once by the fact that a stray call would have thrown rather than
+ * quietly returned a mock.
+ */
+describe('a docs-answerable question costs nothing', () => {
+  /** In the docs index, and measured as deflected — see the deflection spec. */
+  const DOCS_QUESTION = 'How do I publish my first screen?'
+
+  const docsBody = (orgId: string) => ({
+    ...QUESTION_BODY(orgId),
+    question: DOCS_QUESTION,
+  })
+
+  it('answers from the docs with no model call at all', async () => {
+    seedOrgs()
+    const response = await POST(post(docsBody(FREE_ORG)))
+    expect(response.status).toBe(200)
+    expect(response.headers.get('X-Assist-Served-By')).toBe('docs')
+    expect(mockFetch).not.toHaveBeenCalled()
+    const events = await readEvents(response)
+    const text = events
+      .filter((event) => event.type === 'delta')
+      .map((event) => String(event.text))
+      .join('')
+    expect(text.length).toBeGreaterThan(100)
+    // Grounded and linked, or it is not an answer this route may give.
+    expect(text).toMatch(/\]\(https?:\/\/[^)]+\)/)
+  })
+
+  it('THE POINT: it answers with no ANTHROPIC_API_KEY set at all', async () => {
+    // What lets Assist be switched on while the production key is still
+    // held. The paired negative is the 501 test above: the same deployment,
+    // a question the docs cannot answer, refuses.
+    seedOrgs()
+    delete process.env.ANTHROPIC_API_KEY
+    const response = await POST(post(docsBody(FREE_ORG)))
+    expect(response.status).toBe(200)
+    expect(response.headers.get('X-Assist-Served-By')).toBe('docs')
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('spends no message: a free workspace AT its daily cap is still answered', async () => {
+    // The cap exists to bound provider spend. This path has none, so the cap
+    // must not bind — and a test that only checked the counter did not move
+    // would pass even if the request were refused outright.
+    seedOrgs()
+    mockDocs.set(`orgs/${FREE_ORG}/counters/assistMessagesDaily`, { [TODAY]: 10 })
+    const response = await POST(post(docsBody(FREE_ORG)))
+    expect(response.status).toBe(200)
+    expect(mockFetch).not.toHaveBeenCalled()
+    expect(
+      mockDocs.get(`orgs/${FREE_ORG}/counters/assistMessagesDaily`),
+    ).toMatchObject({ [TODAY]: 10 })
+  })
+
+  it('meters as deflected, at zero cost, in the same monthly rollup', async () => {
+    seedOrgs()
+    const response = await POST(post(docsBody(FREE_ORG)))
+    const events = await readEvents(response)
+    const done = events.find((event) => event.type === 'done')
+    expect(done?.exchangeId).toBeTruthy()
+    const signal = mockDocs.get(
+      `orgs/${FREE_ORG}/assistSignals/${done?.exchangeId}`,
+    ) as Record<string, unknown>
+    expect(signal).toMatchObject({
+      deflected: true,
+      model: 'docs-retrieval',
+      inputTokens: 0,
+      outputTokens: 0,
+      estCostUsd: 0,
+    })
+    // Cited pages are recorded, so the docs-gap loop still sees what the
+    // free path answered from — the corpus is the product here.
+    expect((signal['docsPaths'] as string[]).length).toBeGreaterThan(0)
+    const rollup = mockDocs.get(`orgs/${FREE_ORG}/assistUsage/${MONTH}`) as Record<
+      string,
+      unknown
+    >
+    expect(rollup).toMatchObject({ deflected: 1, estCostUsd: 0 })
+    // `messages` counts what the RESERVATION moved. A deflected turn takes
+    // none, so the two counters must not be the same number.
+    expect(rollup['messages'] ?? 0).toBe(0)
+  })
+
+  it('a FOLLOW-UP on the same question escalates — history is the missing half', async () => {
+    seedOrgs()
+    armUpstream()
+    const response = await POST(
+      post({
+        ...docsBody(FREE_ORG),
+        history: [
+          { role: 'user', text: 'how do domains work' },
+          { role: 'assistant', text: 'you connect one in settings' },
+        ],
+      }),
+    )
+    await response.text()
+    expect(response.headers.get('X-Assist-Served-By')).toBeNull()
+    expect(mockFetch).toHaveBeenCalled()
+  })
+
+  it('the released-off flag still closes the DOCS path too', async () => {
+    // A cheap path is still the feature. "It costs nothing" is not a reason
+    // to serve a workspace the flag says does not have it.
+    seedOrgs()
+    mockFlagOn = false
+    const response = await POST(post(docsBody(FREE_ORG)))
+    expect(response.status).toBe(404)
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('the ai-assist kill switch still closes the DOCS path too', async () => {
+    seedOrgs()
+    mockFeatureLockdown = new Response(JSON.stringify({ error: 'locked' }), {
+      status: 423,
+    })
+    const response = await POST(post(docsBody(FREE_ORG)))
+    expect(response.status).toBe(423)
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * The answer cache (AGL-2486) — the second lever, after deflection.
+ *
+ * Deflection already takes the questions that recur most, so what this catches
+ * is the residue: a docs-shaped question retrieval was not confident enough
+ * about, asked again in the same words. Small, but free.
+ */
+describe('an identical question does not buy a second completion', () => {
+  it('serves the repeat from cache and calls the model exactly once', async () => {
+    seedOrgs()
+    armUpstream()
+    const first = await POST(post(QUESTION_BODY(FREE_ORG)))
+    const firstText = (await readEvents(first))
+      .filter((event) => event.type === 'delta')
+      .map((event) => String(event.text))
+      .join('')
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+
+    const second = await POST(post(QUESTION_BODY(FREE_ORG)))
+    expect(second.status).toBe(200)
+    expect(second.headers.get('X-Assist-Served-By')).toBe('cache')
+    // The assertion that matters: no SECOND upstream call.
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    const secondText = (await readEvents(second))
+      .filter((event) => event.type === 'delta')
+      .map((event) => String(event.text))
+      .join('')
+    expect(secondText).toBe(firstText)
+  })
+
+  it('a cache hit spends no message — the counter stays where it was', async () => {
+    seedOrgs()
+    armUpstream()
+    await (await POST(post(QUESTION_BODY(FREE_ORG)))).text()
+    const afterFirst = (
+      mockDocs.get(`orgs/${FREE_ORG}/counters/assistMessagesDaily`) as Record<
+        string,
+        number
+      >
+    )[TODAY]
+    expect(afterFirst).toBe(1)
+    await (await POST(post(QUESTION_BODY(FREE_ORG)))).text()
+    expect(
+      (
+        mockDocs.get(`orgs/${FREE_ORG}/counters/assistMessagesDaily`) as Record<
+          string,
+          number
+        >
+      )[TODAY],
+    ).toBe(1)
+  })
+
+  it('meters the hit as a cache hit, distinct from a docs deflection', async () => {
+    // One sentinel for both would make the deflection rate and the cache hit
+    // rate the same unreadable number — they are different savings.
+    seedOrgs()
+    armUpstream()
+    await (await POST(post(QUESTION_BODY(FREE_ORG)))).text()
+    const second = await POST(post(QUESTION_BODY(FREE_ORG)))
+    const done = (await readEvents(second)).find((event) => event.type === 'done')
+    expect(
+      mockDocs.get(`orgs/${FREE_ORG}/assistSignals/${done?.exchangeId}`),
+    ).toMatchObject({ model: 'assist-cache', deflected: true, estCostUsd: 0 })
+  })
+
+  it('NEVER caches a refusal — a bad turn must not become a bad week', async () => {
+    seedOrgs()
+    armUpstream('refusal', false)
+    await (await POST(post(QUESTION_BODY(FREE_ORG)))).text()
+    expect(mockDocs.get(`orgs/${FREE_ORG}/counters/assistAnswerCache`)).toBeUndefined()
+  })
+
+  it('NEVER caches a turn that carried history — the key cannot describe it', async () => {
+    // The answer was composed against a conversation the key knows nothing
+    // about, so replaying it for anyone asking the same final question would
+    // hand them somebody else's thread.
+    seedOrgs()
+    armUpstream()
+    await (
+      await POST(
+        post({
+          ...QUESTION_BODY(FREE_ORG),
+          history: [
+            { role: 'user', text: 'how do domains work' },
+            { role: 'assistant', text: 'you connect one in settings' },
+          ],
+        }),
+      )
+    ).text()
+    expect(mockDocs.get(`orgs/${FREE_ORG}/counters/assistAnswerCache`)).toBeUndefined()
+  })
+
+  it('a DIFFERENT workspace does not read this one\'s entry', async () => {
+    // The cache is org-scoped by path, so this is true by construction — and
+    // asserted anyway, because "by construction" is what every leak was
+    // before someone moved the construction.
+    seedOrgs()
+    armUpstream()
+    await (await POST(post(QUESTION_BODY(FREE_ORG)))).text()
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    await (await POST(post(QUESTION_BODY(PRO_ORG)))).text()
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+  })
+})
+
 describe('metering is refused for an org the request did not name (AGL-1934)', () => {
   /** Everything the caller sent, minus the page they sent it from. */
   const askFrom = (context: unknown) => ({
@@ -1109,7 +1371,7 @@ describe('the green path', () => {
     expect(request.messages[0].role).toBe('user')
     expect(request.messages[0].content).toBe('and then?')
     expect(request.messages[request.messages.length - 1].content).toBe(
-      'How do I publish my first screen?',
+      QUESTION,
     )
   })
 
@@ -1181,7 +1443,7 @@ describe('the green path', () => {
     // The conversation still reads forwards: the budget is spent backwards,
     // but a reversed transcript would be a subtler kind of broken.
     expect(request.messages[request.messages.length - 1].content).toBe(
-      'How do I publish my first screen?',
+      QUESTION,
     )
   })
 
@@ -1209,7 +1471,7 @@ describe('the green path', () => {
       'you connect one in settings',
       'and a subdomain?',
       'same place',
-      'How do I publish my first screen?',
+      QUESTION,
     ])
   })
 

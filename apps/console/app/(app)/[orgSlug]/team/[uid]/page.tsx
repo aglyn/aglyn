@@ -309,7 +309,7 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
                   <MemberAvatar
                     photoURL={member?.photoURL}
                     email={member?.email}
-                    displayName={String(displayName)}
+                    name={String(displayName)}
                     size={48}
                   />
                   <Stack sx={{ minWidth: 0 }}>

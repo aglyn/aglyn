@@ -122,7 +122,8 @@ export interface TokenEditableHandle {
 
 interface TokenEditableInputProps {
   /** Serialized field value (raw token grammar). */
-  tokenValue: string
+  /** Typed loosely on purpose: a schema `initialValue` can be a number. */
+  tokenValue: string | number | null
   onTokenValueChange: (next: string) => void
   multiline?: boolean
   labelContextRef: MutableRefObject<TokenLabelContext>
@@ -159,13 +160,20 @@ const renderSegments = (
  * `inputComponent`), so the border, label notch, focus ring and disabled
  * styling all come from the real TextField machinery.
  */
-const TokenEditableInput = memo(
+/**
+ * Exported for the AGL-2486 regression test only — a numeric model value must
+ * not spin this into "Maximum update depth exceeded". `TokenTextField` needs a
+ * `<Form>` context (`useFieldApi`), so the loop cannot be reached through it
+ * without standing up react-form-renderer around a bug that lives entirely in
+ * this inner component.
+ */
+export const TokenEditableInput = memo(
   forwardRef<unknown, TokenEditableInputProps>(function TokenEditableInput(
     props,
     ref,
   ) {
     const {
-      tokenValue,
+      tokenValue: rawTokenValue,
       onTokenValueChange,
       multiline,
       labelContextRef,
@@ -178,6 +186,36 @@ const TokenEditableInput = memo(
       onBlur,
       ...rest
     } = props
+    /**
+     * The model value as TEXT, whatever the schema actually stored.
+     *
+     * `tokenValue` is typed `string`, but `strictNullChecks` is off repo-wide
+     * and a schema's `initialValue` reaches this untouched — so a numeric
+     * default arrives as a NUMBER. That was not hypothetical: the element
+     * animation fields (AGL-2486) declare `TEXT_FIELD` with
+     * `ANIMATION_DEFAULT_DURATION_MS = 600` and `ANIMATION_DEFAULT_DELAY_MS =
+     * 0`, and the attributes memo rewrites TEXT_FIELD to this editor.
+     *
+     * The damage was an INFINITE RENDER LOOP, not a mis-render. `emit`
+     * serializes segments and stores a STRING in `lastEmittedRef`, and the
+     * sync effect below skips on `tokenValue === lastEmittedRef.current`.
+     * `600 === '600'` is false, so the guard never held: every render
+     * re-parsed the model and bumped `version`, and React eventually threw
+     * "Maximum update depth exceeded".
+     *
+     * Coerced at the boundary rather than fixed at the one call site, because
+     * the next numeric default would reintroduce it. `null`/`undefined`
+     * become `''` explicitly — `String(null)` is the string "null", which
+     * would render the word in the box, and `0` must survive as "0" rather
+     * than being swallowed as falsy.
+     */
+    const tokenValue =
+      typeof rawTokenValue === 'string'
+        ? rawTokenValue
+        : rawTokenValue === null || rawTokenValue === undefined
+          ? ''
+          : String(rawTokenValue)
+
     const editableRef = useRef<HTMLDivElement | null>(null)
     const segmentsRef = useRef<TokenSegment[] | null>(null)
     if (segmentsRef.current == null) {

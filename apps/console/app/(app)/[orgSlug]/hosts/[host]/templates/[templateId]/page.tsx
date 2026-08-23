@@ -58,6 +58,7 @@ import { useOrgSlug } from '../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../../../../../../hooks/use-firestore-doc'
 import UseTemplateDialog from '../../../../../../../components/templates/use-template-dialog.component'
+import { useDeclareDocumentSubject } from '../../../../../../../components/document-subject'
 
 /** Human label + colour for the frozen `source.type` (AGL-666/687). */
 function sourceLabel(source: { type?: string; version?: string } | undefined) {
@@ -117,6 +118,9 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
     [firestore, hostId, templateId],
     { idField: '$id' },
   )
+  // The browser tab names THIS document, not just its site (AGL-2486).
+  // The server put the id in the title; this swaps in the loaded name.
+  useDeclareDocumentSubject(templateId, template?.displayName)
   // Three states, not two (AGL-706): a document that is still loading and one
   // that does not exist both arrive as `undefined`, and rendering an empty
   // editable form for the second made a mistyped id look like data loss.

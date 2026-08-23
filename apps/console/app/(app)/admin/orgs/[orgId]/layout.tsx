@@ -17,13 +17,32 @@
 
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
+import { entityPageTitle } from '../../../../entity-page-title'
 import { segmentTitle } from '../../../../page-title'
 
 // Title-only shell (AGL-1059): the page is a client component, and a client
 // component cannot export `metadata` — so its title lives here, in the
 // nearest server layout.  re-declares the brand template so
 // it keeps applying to the titled routes nested below (AGL-1059).
-export const metadata: Metadata = { title: segmentTitle('Staff organization') }
+//
+// The subject wraps INSIDE `segmentTitle` (AGL-2486), not around it: this
+// layout has titled routes below it, so what it declares must stay the
+// `{ default, template }` object — `entityPageTitle` builds the DEFAULT
+// string that object carries. Returning a bare string here would strip the
+// brand off `/admin/orgs/{id}/host/{id}`, which is the AGL-1059 regression
+// the sibling test in `page-title.spec.ts` exists to catch.
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ orgId: string }>
+}): Promise<Metadata> {
+  const { orgId } = await params
+  return {
+    title: segmentTitle(
+      entityPageTitle({ subject: orgId, noun: 'Staff organization' }),
+    ),
+  }
+}
 
 export default function AdminOrgTitleLayout({
   children,

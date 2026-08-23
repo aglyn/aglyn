@@ -16,7 +16,8 @@
  */
 
 import { styled, useTheme } from '@aglyn/shared-ui-theme'
-import { Box, Button, ButtonBase, Paper, Typography } from '@mui/material'
+import { Box, Button, ButtonBase, Paper, Slider, Typography } from '@mui/material'
+import { alpha as muiAlpha } from '@mui/material/styles'
 import { createContext, useContext, useMemo } from 'react'
 
 /**
@@ -67,6 +68,16 @@ export const COLOR_PICKER_TOKEN_PATHS: ReadonlyArray<{
   // the AGL-1186 rotation; `surface` is a real palette entry, so "Surface"
   // names it rather than `background.paper` (which is Paper).
   { path: 'tertiary.main', label: 'Tertiary' },
+  // The tertiary shades the theme has derived all along (AGL-2486).
+  // `createResponsiveTheme` runs `addShadeVariants` over `tertiary` exactly
+  // as it does over primary and secondary, so these resolve; the picker
+  // simply never offered them, and an author who wanted the accent's dark
+  // step had to hardcode a hex. `tertiary` is a FOREGROUND colour family, so
+  // its `dark` slot is the AA-checked accent-text shade rather than a naive
+  // darken — which is why the swatch resolves it out of the live palette
+  // instead of deriving a preview of its own.
+  { path: 'tertiary.light', label: 'Tertiary light' },
+  { path: 'tertiary.dark', label: 'Tertiary dark' },
   { path: 'surface.main', label: 'Surface' },
   // The pale accent washes used as tile fills (AGL-1244). Offered right after
   // the accent they belong to, because the pairing IS the token: a tile filled
@@ -179,17 +190,55 @@ export function useColorPickerTokenOptions(): ColorPickerTokenOption[] {
 }
 
 /**
+ * The transparency chequerboard drawn UNDER a partly transparent swatch
+ * (AGL-2486). Without it a token at 12% reads as "a very pale colour" and an
+ * author cannot tell 12% opacity from a tint token — which is the one
+ * distinction the opacity control exists to make.
+ */
+const SWATCH_CHECKER =
+  'repeating-conic-gradient(rgba(128, 128, 128, 0.45) 0% 25%, ' +
+  'transparent 0% 50%) 0 0 / 8px 8px'
+
+/** The colour a swatch paints, alpha applied when the author chose one. */
+function swatchPaint(color: string, opacity: number): string {
+  if (opacity >= 1) return color
+  try {
+    return muiAlpha(color, opacity)
+  } catch {
+    // `alpha()` throws on anything it cannot parse (a named colour, an
+    // unresolved `var()`). A preview is not worth an exception, and the
+    // chequerboard behind still says "this is transparent".
+    return color
+  }
+}
+
+/**
  * Split swatch showing a token's light + dark resolutions side by side
  * (left/light, right/dark) so authors see how the reference adapts per
  * scheme. Falls back to a solid fill when only one scheme is known.
+ *
+ * `alpha` previews the opacity the author has chosen for the token
+ * (AGL-2486) over a chequerboard, so the swatch shows what will actually
+ * render rather than the token's opaque colour.
  */
 export const TokenSwatch = styled('span', {
   shouldForwardProp: (propName) =>
-    propName !== 'light' && propName !== 'dark' && propName !== 'size',
-})<{ light?: string; dark?: string; size?: number }>(
-  ({ theme, light, dark, size = 22 }) => {
-    const lightColor = light ?? dark ?? 'transparent'
-    const darkColor = dark ?? light ?? 'transparent'
+    propName !== 'light' &&
+    propName !== 'dark' &&
+    propName !== 'size' &&
+    propName !== 'alpha',
+})<{ light?: string; dark?: string; size?: number; alpha?: number }>(
+  ({ theme, light, dark, size = 22, alpha: opacity }) => {
+    // `0` is a legitimate opacity and `strictNullChecks` is off repo-wide, so
+    // the default is spelled out rather than left to `??` on a falsy number.
+    const amount =
+      typeof opacity === 'number' && Number.isFinite(opacity) ? opacity : 1
+    const lightColor = swatchPaint(light ?? dark ?? 'transparent', amount)
+    const darkColor = swatchPaint(dark ?? light ?? 'transparent', amount)
+    const paint =
+      lightColor === darkColor
+        ? `linear-gradient(${lightColor}, ${lightColor})`
+        : `linear-gradient(105deg, ${lightColor} 0%, ${lightColor} 49.9%, ${darkColor} 50.1%, ${darkColor} 100%)`
     return {
       width: size,
       height: size,
@@ -197,10 +246,7 @@ export const TokenSwatch = styled('span', {
       display: 'inline-flex',
       borderRadius: '50%',
       border: `1px solid ${theme.palette.divider}`,
-      background:
-        lightColor === darkColor
-          ? lightColor
-          : `linear-gradient(105deg, ${lightColor} 0%, ${lightColor} 49.9%, ${darkColor} 50.1%, ${darkColor} 100%)`,
+      background: amount >= 1 ? paint : `${paint}, ${SWATCH_CHECKER}`,
     }
   },
 )
@@ -242,10 +288,36 @@ export const ColorTokenGrid = (props: {
   value: string
   onSelect: (tokenPath: string, event: unknown) => void
   onCustom: () => void
+  /**
+   * Takes the colour off entirely (AGL-2486). Omitted where there is
+   * nothing to clear, or where the caller has no unset state to offer —
+   * a gradient stop always has a colour, so it never passes this.
+   */
+  onClear?: () => void
   /** Overrides the "Theme colors" heading. */
   title?: string
+  /**
+   * Opacity applied to the picked token, 0–1 (AGL-2486). Omitting
+   * `onOpacityChange` hides the control entirely, so a caller with nowhere to
+   * store an alpha never shows one.
+   */
+  opacity?: number
+  onOpacityChange?: (opacity: number) => void
 }) => {
-  const { options, value, onSelect, onCustom, title = 'Theme colors' } = props
+  const {
+    options,
+    value,
+    onSelect,
+    onCustom,
+    onClear,
+    title = 'Theme colors',
+    opacity,
+    onOpacityChange,
+  } = props
+  // Spelled out rather than `opacity ?? 1`: `0` is a legitimate opacity and
+  // `strictNullChecks` is off repo-wide.
+  const amount =
+    typeof opacity === 'number' && Number.isFinite(opacity) ? opacity : 1
   return (
     <Paper sx={{ p: 1, width: 248 }}>
       <Typography
@@ -281,16 +353,62 @@ export const ColorTokenGrid = (props: {
               '&:hover': { backgroundColor: 'action.hover' },
             }}
           >
-            <TokenSwatch light={option.light} dark={option.dark} size={18} />
+            <TokenSwatch
+              light={option.light}
+              dark={option.dark}
+              size={18}
+              alpha={option.value === value ? amount : 1}
+            />
             <Typography variant="caption" noWrap>
               {option.label}
             </Typography>
           </ButtonBase>
         ))}
       </Box>
+      {/* Alpha ON the token, not instead of it (AGL-2486). The value stays a
+          palette reference and the opacity rides alongside it, so a palette
+          change still reaches a 12% wash — which is the whole reason this is
+          a control here rather than a hex the author types with an alpha
+          already baked in. */}
+      {onOpacityChange ? (
+        <Box sx={{ px: 0.5, pt: 0.5 }}>
+          <Typography
+            variant="caption"
+            component="label"
+            color="text.secondary"
+            id="aglyn-color-token-opacity"
+            sx={{ display: 'block' }}
+          >
+            {`Opacity ${Math.round(amount * 100)}%`}
+          </Typography>
+          <Slider
+            size="small"
+            min={0}
+            max={1}
+            step={0.01}
+            value={amount}
+            aria-labelledby="aglyn-color-token-opacity"
+            onChange={(_event, next) =>
+              onOpacityChange(Array.isArray(next) ? next[0] : next)
+            }
+            sx={{ mt: -0.5 }}
+          />
+        </Box>
+      ) : null}
       <Button size="small" fullWidth sx={{ mt: 0.5 }} onClick={onCustom}>
         Custom color…
       </Button>
+      {onClear ? (
+        <Button
+          size="small"
+          fullWidth
+          color="inherit"
+          sx={{ mt: 0.25, color: 'text.secondary' }}
+          onClick={onClear}
+        >
+          Clear color
+        </Button>
+      ) : null}
     </Paper>
   )
 }

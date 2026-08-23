@@ -18,6 +18,7 @@
 import { hostRoleCanWrite, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   ACTIONS_MAX_PER_HOST,
+  AUTHORS_MAX_PER_HOST,
   checkEntitlement,
   checkHostRegisterQuota,
   checkQuota,
@@ -380,6 +381,39 @@ const RESOURCES: Record<string, {
       'categoryId',
       'category',
       'tags',
+      // The custom-author reference (AGL-2486). An allow-list narrower than
+      // its caller loses authoring input silently, which is the failure this
+      // table's own comment calls the worse one.
+      'authorId',
+    ],
+  },
+  /**
+   * Custom content authors (AGL-2486): `hosts/{hostId}/authors/{authorId}`,
+   * the byline a post is published under.
+   *
+   * Server-created for the AGL-2266 reason and no other — a new host
+   * subcollection the client could create is unbounded Firestore documents
+   * mintable from the browser against a $0 subscription. `AUTHORS_MAX_PER_HOST`
+   * is a flat platform cap, not a plan dimension: no `OrgEntitlements` key,
+   * every plan gets the same number, nothing here is priced.
+   *
+   * Update and delete stay client-direct, exactly like `action`: neither
+   * creates a document, so neither can raise the count the cap is about, and
+   * the authors tab edits a record in place.
+   */
+  author: {
+    collection: 'authors',
+    maxPerHost: AUTHORS_MAX_PER_HOST,
+    label: 'authors',
+    fields: [
+      'type',
+      'name',
+      'url',
+      'image',
+      'jobTitle',
+      'worksFor',
+      'sameAs',
+      'bio',
     ],
   },
 }

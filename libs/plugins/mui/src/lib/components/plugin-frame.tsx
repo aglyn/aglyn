@@ -311,12 +311,20 @@ const PluginFrame = forwardRef<HTMLIFrameElement, PluginFrameProps>(
             }}
             src={src}
             title={title ?? 'Plugin'}
-            // See SANDBOX NOTE — safe only because src is a cross-origin.
-            sandbox="allow-scripts allow-same-origin"
-            referrerPolicy="no-referrer"
             loading="lazy"
             onError={() => setState('error')}
             {...rest}
+            // AFTER the spread, deliberately (AGL-2484). See SANDBOX NOTE —
+            // this pair is safe only because `src` is a dedicated
+            // cross-origin, and JSX resolves a duplicate attribute by taking
+            // the LAST one, so listing them before `{...rest}` made the
+            // frame's only containment overridable by whatever a caller
+            // happened to spread in. No caller passes either today and
+            // `PluginFrameProps` declares neither; the props here do arrive
+            // from renderers that forward author-controlled bags, which is
+            // how "no caller does this" stops being true.
+            sandbox="allow-scripts allow-same-origin"
+            referrerPolicy="no-referrer"
             // MERGE, never replace (AGL-1284). The spread in the old literal
             // LOOKED like a merge and merged nothing — it folded in a local
             // conditional, not the node's `sx`, so every style an author set

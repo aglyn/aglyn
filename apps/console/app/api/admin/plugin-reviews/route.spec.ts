@@ -642,3 +642,112 @@ describe('a takedown and a restore re-derive the offer (AGL-2368)', () => {
     expect(mirror()).toBe(VERSION)
   })
 })
+
+/**
+ * The listing-positioning criterion is REQUIRED, not advisory (AGL-2484).
+ *
+ * The audit that produced Publisher Agreement §3(h) found that a listing
+ * could disparage Aglyn's plans or be pitched as a way around paying for a
+ * tier with nothing in the review flow naming it — and a reviewer cannot
+ * reject for something no criterion names. Adding a row to an array does
+ * not fix that on its own: the row has to be one the route counts.
+ *
+ * Everything else in this file seeds the checklist from
+ * `REQUIRED_CHECKLIST_IDS`, so `positioning` losing `required: true` would
+ * leave every one of those assertions green. These name it.
+ */
+describe('the positioning criterion gates the customer-facing verdicts', () => {
+  /** The full required checklist minus one id, ticked against these bytes. */
+  function seedVersionWithout(missing: string): void {
+    seedVersion()
+    const path = `marketplaceListings/${LISTING}/pluginVersions/${VERSION}`
+    const version = docs.get(path) as Record<string, unknown>
+    const checklist = version['reviewChecklist'] as Record<string, unknown>
+    expect(checklist[missing]).toBeDefined()
+    delete checklist[missing]
+  }
+
+  it('counts positioning among the required items at all', () => {
+    expect(mockChecklist.REQUIRED_CHECKLIST_IDS).toContain('positioning')
+  })
+
+  it('refuses to APPROVE a version when only positioning is outstanding', async () => {
+    seedListing()
+    seedVersionWithout('positioning')
+
+    const response = await POST(
+      post({ listingId: LISTING, action: 'approve-version', version: VERSION }),
+    )
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toMatchObject({
+      outstanding: ['positioning'],
+    })
+    // Nothing landed: not the verdict, not the mirror on the listing.
+    const version = docs.get(
+      `marketplaceListings/${LISTING}/pluginVersions/${VERSION}`,
+    ) as Record<string, unknown>
+    expect(version['reviewState']).toBe(undefined)
+    expect(
+      (docs.get(`marketplaceListings/${LISTING}`) as Record<string, unknown>)[
+        'latestApprovedVersion'
+      ],
+    ).toBe(undefined)
+  })
+
+  it('refuses to LIST — the moment the plugin becomes installable', async () => {
+    seedListing()
+    seedVersionWithout('positioning')
+
+    const response = await POST(post({ listingId: LISTING, action: 'list' }))
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toMatchObject({
+      outstanding: ['positioning'],
+    })
+    expect(
+      (docs.get(`marketplaceListings/${LISTING}`) as Record<string, unknown>)[
+        'reviewStatus'
+      ],
+    ).toBe('in_review')
+  })
+
+  it('refuses to VERIFY — the badge on top', async () => {
+    seedListing()
+    seedVersionWithout('positioning')
+
+    const response = await POST(post({ listingId: LISTING, action: 'verify' }))
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toMatchObject({
+      outstanding: ['positioning'],
+    })
+  })
+
+  it('CONTROL: the same calls succeed once positioning is ticked', async () => {
+    seedListing()
+    seedVersion()
+
+    const approved = await POST(
+      post({ listingId: LISTING, action: 'approve-version', version: VERSION }),
+    )
+    expect(approved.status).toBe(200)
+
+    const listed = await POST(post({ listingId: LISTING, action: 'list' }))
+    expect(listed.status).toBe(200)
+  })
+
+  it('CONTROL: rejecting never needs the checklist', async () => {
+    // A reviewer must be able to throw out a listing they have already
+    // decided against — including one they are rejecting FOR its positioning.
+    seedListing()
+    seedVersionWithout('positioning')
+
+    const response = await POST(
+      post({
+        listingId: LISTING,
+        action: 'reject',
+        category: 'not-as-described',
+        reason: 'The listing is sold as a way out of the Business plan.',
+      }),
+    )
+    expect(response.status).toBe(200)
+  })
+})

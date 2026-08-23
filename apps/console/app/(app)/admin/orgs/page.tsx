@@ -42,11 +42,11 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
-import StaffFreeWorkspaceCapCard from '../../../../components/staff-free-workspace-cap-card.component'
+import StaffListPaginationControls from '../../../../components/staff-list-pagination.component'
 import StaffOrgActions, {
   overrideCount,
 } from '../../../../components/staff-org-actions.component'
@@ -58,6 +58,7 @@ import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import { useStaffListPagination } from '../../../../hooks/use-staff-list-pagination'
 
 /**
  * Staff organization management (AGL-238, grown from the AGL-42 tenant
@@ -77,47 +78,38 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
   // the `isStaff() || isOrgMember()` rule and rides App Check. `/api/admin/orgs`
   // reads it with the service account (bypasses both), so staff reliably see
   // EVERY org, with cursor pagination (`after` = the last doc id).
-  const [orgDocs, setOrgDocs] = useState<any[]>([])
-  const [pageIndex, setPageIndex] = useState(0)
-  const [hasMore, setHasMore] = useState(false)
-  const [loading, setLoading] = useState(true)
-  // `after` cursor (the last doc id) for the START of each page; page 0 has none.
-  const pageCursorsRef = useRef<Array<string | null>>([null])
-
-  const loadPage = useCallback(
-    async (index: number) => {
-      setLoading(true)
-      try {
-        const idToken = await (user as { getIdToken?: () => Promise<string> })
-          ?.getIdToken?.()
-        const after = pageCursorsRef.current[index] ?? ''
-        const response = await fetch(
-          `/api/admin/orgs${after ? `?after=${encodeURIComponent(after)}` : ''}`,
-          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
-        )
-        const payload = await response.json()
-        if (!response.ok) throw new Error(payload?.error ?? 'Failed')
-        setOrgDocs(payload.orgs ?? [])
-        setHasMore(Boolean(payload.hasMore))
-        // Remember where the NEXT page starts (the last doc id on this one).
-        if (payload.hasMore && payload.nextCursor) {
-          pageCursorsRef.current[index + 1] = payload.nextCursor
-        }
-        setPageIndex(index)
-      } catch (error) {
-        console.error(error)
-        enqueueSnackbar('Could not load organizations', { variant: 'error' })
-      } finally {
-        setLoading(false)
+  //
+  // The Previous/Next machinery itself moved to `useStaffListPagination`
+  // (AGL-2486) — it was written here and the Users list had none, and the
+  // cheap fix for that was a second copy of this block. The page size is the
+  // route's (`PAGE_SIZE`, 25), not the screen's; nothing here decides it.
+  const fetchOrgsPage = useCallback(
+    async (cursor: string | null) => {
+      const idToken = await (user as { getIdToken?: () => Promise<string> })
+        ?.getIdToken?.()
+      const response = await fetch(
+        `/api/admin/orgs${cursor ? `?after=${encodeURIComponent(cursor)}` : ''}`,
+        { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
+      )
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload?.error ?? 'Failed')
+      return {
+        rows: (payload.orgs ?? []) as any[],
+        hasMore: Boolean(payload.hasMore),
+        nextCursor: payload.nextCursor ?? null,
       }
     },
-    [user, enqueueSnackbar],
+    [user],
   )
-  // Initial load; also the target for the post-mutation refresh.
-  useEffect(() => {
-    void loadPage(0)
-  }, [loadPage])
-  const refresh = useCallback(() => void loadPage(pageIndex), [loadPage, pageIndex])
+  const reportOrgsError = useCallback(() => {
+    enqueueSnackbar('Could not load organizations', { variant: 'error' })
+  }, [enqueueSnackbar])
+  const pagination = useStaffListPagination<any>({
+    fetchPage: fetchOrgsPage,
+    onError: reportOrgsError,
+  })
+  // `refresh` re-reads the page currently shown — the post-mutation target.
+  const { rows: orgDocs, loading, refresh } = pagination
 
   // Search/sort (AGL-135) over the current page.
   const [search, setSearch] = useState('')
@@ -192,14 +184,6 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <StaffOnly>
-            {/* The free-workspace ceiling (AGL-2265). It belongs above the
-                org list because it is the only control on this page that is
-                about the POPULATION of workspaces rather than about one of
-                them, and because it is the answer to the question the list
-                keeps raising: why does this account have so many. */}
-            <StaffFreeWorkspaceCapCard />
-          </StaffOnly>
           {/* Card-framed header + filters (AGL-385), consistent with the
               user-management page. */}
           <StaffOnly>
@@ -377,34 +361,9 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
               )}
               {/* Pagination (AGL-878): each page is a fresh Admin-SDK read via
                   /api/admin/orgs, so the list is complete and never flickers.
-                  Always shown so the control is visible even on a single page. */}
-              {orgDocs.length > 0 ? (
-                <Stack
-                  direction="row"
-                  spacing={1.5}
-                  sx={{ mt: 1, alignItems: 'center' }}
-                >
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    disabled={loading || pageIndex === 0}
-                    onClick={() => void loadPage(pageIndex - 1)}
-                  >
-                    {'Previous'}
-                  </Button>
-                  <Typography variant="caption" color="text.secondary">
-                    {`Page ${pageIndex + 1} · ${orgDocs.length} shown`}
-                  </Typography>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    disabled={loading || !hasMore}
-                    onClick={() => void loadPage(pageIndex + 1)}
-                  >
-                    {'Next'}
-                  </Button>
-                </Stack>
-              ) : null}
+                  Always shown so the control is visible even on a single page.
+                  Shared with the Users list since AGL-2486. */}
+              <StaffListPaginationControls pagination={pagination} />
               </Stack>
             </CardDisplay>
           </StaffOnly>

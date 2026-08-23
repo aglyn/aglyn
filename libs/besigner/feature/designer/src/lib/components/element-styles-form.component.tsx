@@ -67,6 +67,7 @@ import { Container, HelpTip, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useHostThemeDocument } from '@aglyn/shared-ui-theme'
 import { objectFlatten } from '@aglyn/shared-util-vendor'
 import {
+  Alert,
   Chip,
   FormControlLabel,
   FormHelperText,
@@ -100,14 +101,21 @@ import {
 } from '../utils/responsive-sx'
 import {
   applyStylePartialToSx,
-  buildFlexGapGroup,
+  buildFlexGridGroup,
   buildStyleFieldGroups,
   computeEffectiveStyleValues,
   computeStylePartial,
   pickStyleValues,
   styleGroupFieldNames,
 } from '../utils/style-field-groups'
+import {
+  filterStyleGroup,
+  matchesStyleQuery,
+  STYLE_SECTION_ENTRIES,
+  styleFieldEntry,
+} from '../utils/style-field-search'
 import { getNodeStyleTarget } from '../utils/style-target'
+import { buildStyleThemeScales } from '../utils/theme-scale-options'
 import {
   readHiddenBands,
   VISIBILITY_BAND_LABELS,
@@ -475,21 +483,27 @@ const justifySelf: ButtonGroupFormControl = {
 }
 
 /**
- * The Flexbox & Grids container toggles, in panel order (AGL-1458).
+ * The Flexbox & Grid alignment toggles, in panel order (AGL-1458).
  *
  * A list rather than eight literal call sites because every one of them
  * needs the same two wirings — the change handler AND the effective value
  * — and the shipped panel gave them only the first. One render site is one
  * place for that pair to be right.
+ *
+ * Ordered container-first, then the two per-ITEM properties (AGL-2486).
+ * `Align self` and `Justify self` describe how this element sits inside
+ * its parent, not how it arranges its own children, and reading them in
+ * the middle of the container list was half of why the panel needed a
+ * second layout section to put the rest of the per-item properties in.
  */
 const FLEXBOX_TOGGLES: ButtonGroupFormControl[] = [
+  flexDirection,
+  flexWrap,
+  justifyContent,
   alignItems,
   alignContent,
-  alignSelf,
-  flexWrap,
-  flexDirection,
   justifyItems,
-  justifyContent,
+  alignSelf,
   justifySelf,
 ]
 
@@ -542,17 +556,45 @@ export interface ElementStylesFormProps extends Partial<FormRendererProps> {
  * `applyStyleValues` call — no per-group "Save Element" buttons — and
  * every style field has exactly one home:
  *
- * - Flexbox & Grids: container toggles + the gap controls.
+ * - Flexbox & Grid: the alignment toggles plus every typed layout field
+ *   (gaps, grid tracks, item placement, flex-child sizing) — one section
+ *   since AGL-2486, where it used to be two.
  * - Visibility: device-band switches.
  * - Layout / Colors / Sizing / Typography / Borders & Shadows /
- *   Position & Overflow / Grid & Flex Child: the accordion field groups
- *   from `buildStyleFieldGroups`.
- * - Top level: breakpoint chip, BoxStyler, and the text-align toggle.
+ *   Position & Overflow: the accordion field groups from
+ *   `buildStyleFieldGroups`.
+ * - Top level: search box, breakpoint chip, BoxStyler, and the text-align
+ *   toggle.
+ *
+ * The search box (AGL-2486) filters every one of those by property name AND
+ * by the words a non-developer would use — `rounded` finds Corner Radius —
+ * hiding sections with no match and opening the ones that have one. See
+ * `style-field-search.ts`; the filtered group is also what each form SAVES
+ * through, so hiding a field can never clear it.
  */
 const ElementStylesForm = observer(
   forwardRef<any, ElementStylesFormProps>((props, ref) => {
-    const { node } = props
+    const { node: selectedNode } = props
     const deleteElementCallback = useDeleteElementCallback()
+
+    // The node as the CANVAS currently holds it (AGL-2486).
+    //
+    // Undo and redo restore a whole-document snapshot through
+    // `CanvasManager.setNodes`, which mints fresh node instances and
+    // replaces the map. The selection holds a node OBJECT, not an id, so
+    // after an undo the aside panel handed this component a DETACHED copy
+    // — the canvas rolled back and every field here kept reading the value
+    // that had just been undone, then wrote it back over the restored one
+    // on the next edit. Looking the id up in the map re-attaches the panel
+    // to what the canvas renders, and — read inside an `observer` — is
+    // also what makes an undo re-render the panel at all.
+    //
+    // The fallback keeps a node the map does not have (a spec's hand-built
+    // schema, a node deleted while its panel is still mounted) rendering
+    // rather than blanking the panel.
+    const node = (selectedNode?.$id
+      ? (Aglyn.canvas.getNode(selectedNode.$id) ?? selectedNode)
+      : selectedNode) as Aglyn.NodeSchema | undefined
 
     // The definition behind a selected instance (AGL-1332): the panel needs
     // its node tree to offer the leaves an author may style. Read from the
@@ -622,15 +664,26 @@ const ElementStylesForm = observer(
     // instance an unset Background Fill is the component's gradient, not
     // no gradient, and the control that could not tell those apart was
     // the bug.
+    // The theme's own scales for font size, font weight and z-index
+    // (AGL-2486, item 12). Read off the SITE theme, so a host that retuned
+    // its type scale or added a stacking layer offers its own values — and
+    // the option list names what each token resolves to, which is the only
+    // thing that makes `h4.fontSize` legible to an author.
+    const themeScales = useMemo(
+      () => buildStyleThemeScales(siteTheme as any),
+      [siteTheme],
+    )
     const styleGroups = useMemo(
       () =>
         buildStyleFieldGroups(presetColors, {
           isInstanceOverride: target.isInstanceOverride,
+          themeScales,
         }),
-      [presetColors, target.isInstanceOverride],
+      [presetColors, target.isInstanceOverride, themeScales],
     )
-    // Container gap controls, rendered inside Flexbox & Grids (AGL-587).
-    const gapGroup = useMemo(() => buildFlexGapGroup(), [])
+    // Every typed layout field, rendered under the alignment toggles in
+    // the single Flexbox & Grid section (AGL-2486).
+    const flexGridGroup = useMemo(() => buildFlexGridGroup(), [])
 
     // Breakpoint-scoped editing (AGL-333): when the artboard preview is a
     // device size, style edits write into that breakpoint's slice of the
@@ -819,6 +872,62 @@ const ElementStylesForm = observer(
       [node?.$id],
     )
 
+    // Panel search (AGL-2486, item 13). The panel is seven accordions plus
+    // the box stylers and the toggles, so "which section is Corner Radius
+    // in?" was a question every author had to answer from memory. Filtering
+    // is derived from the query on every render rather than held in state:
+    // one source of truth, and no way for the list to disagree with the box.
+    const [query, setQuery] = useState('')
+    const search = query.trim()
+    const searching = search !== ''
+    const handleSearchChange = useCallback(
+      (event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value),
+      [],
+    )
+    // While searching, a section that HAS a match opens itself — a hit
+    // hidden inside a collapsed accordion is not a hit. Keyed on the search
+    // MODE rather than the text so this re-seeds the accordions once, when
+    // searching starts or stops, not on every keystroke.
+    const accordionKey = searching ? 'search' : 'browse'
+    const matchesSection = useCallback(
+      (key: keyof typeof STYLE_SECTION_ENTRIES) =>
+        matchesStyleQuery(STYLE_SECTION_ENTRIES[key], search),
+      [search],
+    )
+    const visibleFlexboxToggles = useMemo(
+      () =>
+        FLEXBOX_TOGGLES.filter((schema) =>
+          matchesStyleQuery(styleFieldEntry(schema as any), search),
+        ),
+      [search],
+    )
+    const visibleFlexGridGroup = useMemo(
+      () => filterStyleGroup(flexGridGroup, search),
+      [flexGridGroup, search],
+    )
+    const visibleStyleGroups = useMemo(
+      () =>
+        styleGroups
+          .map((group) => filterStyleGroup(group, search))
+          .filter((group): group is typeof styleGroups[number] =>
+            Boolean(group),
+          ),
+      [styleGroups, search],
+    )
+    // Nothing anywhere answered the query — said once, rather than leaving
+    // the author looking at a panel that has silently emptied itself.
+    const hasResults =
+      !searching ||
+      Boolean(
+        visibleStyleGroups.length ||
+          visibleFlexboxToggles.length ||
+          visibleFlexGridGroup ||
+          matchesSection('box') ||
+          matchesSection('textAlign') ||
+          matchesSection('visibility') ||
+          matchesSection('classes'),
+      )
+
     // Re-seeds a group form's initial values when the selection, the
     // override target or the artboard scope changes (AGL-540/588/1332).
     const formSeedKey =
@@ -827,6 +936,29 @@ const ElementStylesForm = observer(
 
     return (
       <>
+        {/* Find a style by what it is called OR by what an author would
+            call it (AGL-2486, item 13): `rounded` finds Corner Radius,
+            `shadow` finds the shadow preset, `see through` finds Opacity. */}
+        <Container gutterY={[1]} dense>
+          <TextField
+            fullWidth
+            size="small"
+            margin="dense"
+            type="search"
+            value={query}
+            onChange={handleSearchChange}
+            label="Search styles"
+            placeholder="rounded, shadow, spacing…"
+          />
+        </Container>
+        {hasResults ? null : (
+          <Container gutterY={[1]} dense>
+            <Alert severity="info" sx={{ fontSize: '0.8125rem' }}>
+              {`No style matches “${search}”. Try a plainer word — ` +
+                '“rounded”, “shadow”, “spacing”, “hide”.'}
+            </Alert>
+          </Container>
+        )}
         <Container gutterY={[1]} dense>
           <Tooltip
             title={
@@ -960,6 +1092,7 @@ const ElementStylesForm = observer(
             ))}
           </Container>
         ) : null}
+        {matchesSection('box') ? (
         <Container gutterY={[2]} dense sx={{ position: 'relative' }}>
           <HelpTip
             title="Margin & padding"
@@ -972,6 +1105,8 @@ const ElementStylesForm = observer(
             onChange={handleBoxStylerChange}
           />
         </Container>
+        ) : null}
+        {matchesSection('textAlign') ? (
         <Container gutterY={[2]} dense>
           <TextAlignToggleButtonGroup
             onChange={handleTextAlignChange}
@@ -1013,13 +1148,23 @@ const ElementStylesForm = observer(
             }}
           />
         </Container>
+        ) : null}
 
+        {/* One layout section, not two (AGL-2486). `Flexbox & Grids` and
+            `Grid & Flex Child` described the same two CSS layout models
+            from different ends and split them by a line the property names
+            did not follow — `Align self` sat with the container controls
+            while `Grid Columns`, a container property, sat under "Flex
+            Child". Every property both sections carried is here. */}
+        {visibleFlexboxToggles.length || visibleFlexGridGroup ? (
         <Accordion
-          summary="Flexbox & Grids"
+          key={`flex-grid:${accordionKey}`}
+          expanded={searching}
+          summary="Flexbox & Grid"
           help={{
-            title: 'Flexbox & grid alignment',
+            title: 'Flexbox & grid layout',
             excerpt:
-              'Configure the selected element as a flex or grid container — alignment, wrapping, direction, and gaps between children.',
+              'Configure the selected element as a flex or grid container — alignment, wrapping, direction, gaps and track lists — and place it inside its own parent’s layout.',
             href: besignerDocsUrl('responsiveStyling', '#style-groups'),
           }}
         >
@@ -1031,7 +1176,7 @@ const ElementStylesForm = observer(
               highlighted the same authoring correctly on the same node.
               Rendered from a list rather than eight hand-wired call sites
               so a toggle added later cannot arrive read-only again. */}
-          {FLEXBOX_TOGGLES.map((schema) => (
+          {visibleFlexboxToggles.map((schema) => (
             <ToggleButtonFormControl
               key={schema.name}
               onChange={handleFlexboxChange(schema.name as string)}
@@ -1039,25 +1184,40 @@ const ElementStylesForm = observer(
               value={effectiveValues[schema.name as string] ?? ''}
             />
           ))}
-          {/* Container gaps live with the container toggles (AGL-587);
-              they apply immediately like everything else. */}
-          <FormRenderer
-            key={formSeedKey}
-            FormTemplate={ElementStylesFormTemplate}
-            componentMapper={componentMapper}
-            onSubmit={handleGroupSave(styleGroupFieldNames(gapGroup))}
-            initialValues={pickStyleValues(
-              styleGroupFieldNames(gapGroup),
-              effectiveValues,
-            )}
-            schema={{ fields: gapGroup.fields }}
-          />
+          {/* Gaps, grid tracks, item placement and flex-child sizing —
+              the typed half of the same section. They apply immediately
+              like everything else. */}
+          {visibleFlexGridGroup ? (
+            <FormRenderer
+              key={formSeedKey}
+              FormTemplate={ElementStylesFormTemplate}
+              componentMapper={componentMapper}
+              keepDirtyOnReinitialize
+              // The SAVE stays scoped to the whole group even while the
+              // panel shows a filtered subset (AGL-2486): a partial does not
+              // carry the hidden fields, and `computeStylePartial` would
+              // then write `undefined` over every one of them — a search
+              // would silently clear the styles it was only meant to hide.
+              onSubmit={handleGroupSave(
+                styleGroupFieldNames(visibleFlexGridGroup),
+              )}
+              initialValues={pickStyleValues(
+                styleGroupFieldNames(visibleFlexGridGroup),
+                effectiveValues,
+              )}
+              schema={{ fields: visibleFlexGridGroup.fields }}
+            />
+          ) : null}
         </Accordion>
+        ) : null}
 
         {/* Responsive visibility (AGL-562): hide the element on whole
             device bands — e.g. hide the desktop link cluster on mobile
             and show a menu button instead. */}
+        {matchesSection('visibility') ? (
         <Accordion
+          key={`visibility:${accordionKey}`}
+          expanded={searching}
           summary="Visibility"
           help={{
             title: 'Visibility per device band',
@@ -1086,16 +1246,18 @@ const ElementStylesForm = observer(
               'resize the window (or publish) to see the effect.'}
           </FormHelperText>
         </Accordion>
+        ) : null}
 
         {/* First-class style groups (AGL-540/587). Each form is keyed on
             the node + breakpoint so switching selection or artboard
             scope re-seeds the initial values; edits apply immediately
             through the shared debounced template. */}
-        {styleGroups.map((group) => {
+        {visibleStyleGroups.map((group) => {
           const fieldNames = styleGroupFieldNames(group)
           return (
             <Accordion
-              key={group.$id}
+              key={`${group.$id}:${accordionKey}`}
+              expanded={searching}
               summary={group.label}
               help={{
                 title: `${group.label} styles`,
@@ -1108,6 +1270,16 @@ const ElementStylesForm = observer(
                 key={formSeedKey}
                 FormTemplate={ElementStylesFormTemplate}
                 componentMapper={componentMapper}
+                // Re-seed from the document, but never over the caret
+                // (AGL-2486). Changing `initialValues` is what carries an
+                // undo into these fields; on its own it also resets the
+                // field being typed in the moment a SIBLING key in the same
+                // group moves. `keepDirtyOnReinitialize` draws the line
+                // where it belongs: a field whose value still equals what
+                // was last stored takes the new reading, and one the author
+                // has since changed keeps their characters until the
+                // debounced commit stores them.
+                keepDirtyOnReinitialize
                 onSubmit={handleGroupSave(fieldNames)}
                 initialValues={pickStyleValues(fieldNames, effectiveValues)}
                 schema={{ fields: group.fields }}
@@ -1116,7 +1288,10 @@ const ElementStylesForm = observer(
           )
         })}
 
+        {matchesSection('classes') ? (
         <Accordion
+          key={`classes:${accordionKey}`}
+          expanded={searching}
           summary="Classes & custom CSS"
           help={{
             title: 'Custom classes & CSS',
@@ -1135,6 +1310,7 @@ const ElementStylesForm = observer(
             overrideKey={overrideKey}
           />
         </Accordion>
+        ) : null}
 
         <Container gutterY={[2]} dense>
           <FormControl margin="none" fullWidth>

@@ -1,0 +1,359 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * BOTH BASES, AND THE GAP, REACH THE SCREEN (AGL-2486).
+ *
+ * Zach asked for contracted and settled revenue "both, side by side" — and
+ * the gap between them is the part that does the work, because two totals
+ * with a reader left to subtract has wasted the decision.
+ *
+ * ASSERTED BY RENDERING, not by reading the helpers. The sibling AGL-2163
+ * defect on the tax-return page was exactly a correct helper the page never
+ * called: figures that existed only in a JSON response nobody sees. So every
+ * number below is looked up in the rendered DOM.
+ *
+ * The fixture amounts are deliberately DISTINCT per figure, so no assertion
+ * can be satisfied by a different figure that happens to be nearby — the
+ * failure mode where a page renders one number four times and every
+ * `getByText` passes.
+ *
+ * The prose assertions are not decoration either. "Refunds are a loss" and
+ * "the pass-through is not revenue" are accounting positions this page is
+ * required to STATE, not merely to compute correctly; a future edit that
+ * tidies the copy away would leave the arithmetic right and the page
+ * misleading, and that is precisely what these catch.
+ */
+
+import type { ReactNode } from 'react'
+import { render, screen, waitFor } from '@testing-library/react'
+import type { RevenuePayload } from '../utils/revenue-view'
+
+jest.mock('@aglyn/shared-data-enums', () => ({
+  __esModule: true,
+  ICON_VARIANT_SYMBOL_SECURE: { path: 'M0 0' },
+}))
+jest.mock('@aglyn/shared-ui-jsx', () => ({
+  __esModule: true,
+  Container: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  CardDisplay: ({
+    header,
+    children,
+  }: {
+    header?: ReactNode
+    children?: ReactNode
+  }) => (
+    <section>
+      <h2>{header}</h2>
+      {children}
+    </section>
+  ),
+  GridItems: ({ items }: { items: Array<{ children: ReactNode }> }) => (
+    <div>
+      {items.map((item, index) => (
+        <div key={index}>{item.children}</div>
+      ))}
+    </div>
+  ),
+}))
+jest.mock('@aglyn/tenant-feature-instance', () => ({
+  __esModule: true,
+  useUser: () => ({ data: { getIdToken: async () => 'token' } }),
+}))
+jest.mock('../components/layouts/dashboard.layout', () => ({
+  __esModule: true,
+  default: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+}))
+// StaffOnly is a pass-through HERE and nowhere else: the 404 gate is real
+// product behaviour with its own coverage, and this suite is about what a
+// staff member sees once through it.
+jest.mock('../components/staff-only.component', () => ({
+  __esModule: true,
+  default: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+}))
+jest.mock('../hooks/use-is-staff', () => ({
+  __esModule: true,
+  useIsStaff: () => true,
+}))
+jest.mock('../constants/docs-links', () => ({
+  __esModule: true,
+  docsHelp: () => undefined,
+}))
+jest.mock('../constants/route-links', () => ({
+  __esModule: true,
+  buildRoute: () => '/admin',
+  Route: { ADMIN_OVERVIEW: 'ADMIN_OVERVIEW', ADMIN_REVENUE: 'ADMIN_REVENUE' },
+}))
+
+import AdminRevenue from '../app/(app)/admin/revenue/page'
+
+/**
+ * Every figure a distinct magnitude, so a match is unambiguous:
+ * contracted $9,100.00 · collecting $6,100.00 · trialing $1,700.00 ·
+ * past-due $1,300.00 · settled-earned $4,321.00 · subscription settled
+ * $3,100.00 · marketplace commission $811.00 · storefront take $410.00 ·
+ * reversals $260.00 · unbilled meter $170.00 · pass-through $930.00.
+ */
+const payload: RevenuePayload = {
+  period: '2026-07',
+  periodStart: '2026-07-01T00:00:00.000Z',
+  periodEnd: '2026-08-01T00:00:00.000Z',
+  contracted: {
+    total: { orgs: 14, listPriceUsd: 9800, mrrUsd: 9100 },
+    collecting: { orgs: 9, listPriceUsd: 6500, mrrUsd: 6100 },
+    trialing: { orgs: 3, listPriceUsd: 1700, mrrUsd: 1700 },
+    pastDue: { orgs: 2, listPriceUsd: 1300, mrrUsd: 1300 },
+    compedOrgs: 5,
+    discountUsd: 700,
+  },
+  settled: {
+    subscriptions: {
+      transactionCount: 22,
+      grossCents: 355_000,
+      taxCents: 19_000,
+      netCents: 336_000,
+      refundedCents: 26_000,
+      chargedBackCents: 9_000,
+      netOfReversalsCents: 310_000,
+      internalTrafficCents: 4_500,
+    },
+    marketplace: {
+      transactionCount: 7,
+      grossCents: 240_000,
+      taxCents: 12_000,
+      sellerTransferCents: 146_900,
+      commissionCents: 90_000,
+      commissionRefundedCents: 8_900,
+      commissionNetCents: 81_100,
+      estimatedProcessingCostCents: 14_700,
+    },
+    commerce: {
+      transactionCount: 31,
+      grossCents: 1_540_000,
+      applicationFeeCents: 134_000,
+      processingPassThroughCents: 93_000,
+      commissionCents: 41_000,
+      commissionRefundedCents: 0,
+      commissionNetCents: 41_000,
+      subscriptionOrders: 4,
+      truncated: false,
+    },
+    totalEarnedCents: 432_100,
+  },
+  gap: {
+    collectingMrrCents: 610_000,
+    settledSubscriptionCents: 310_000,
+    gapCents: 300_000,
+    causes: {
+      trialingCents: 170_000,
+      pastDueCents: 130_000,
+      reversedCents: 26_000,
+      discountCents: 70_000,
+      unbilledMeteredCents: 17_000,
+    },
+    unexplainedCents: 257_000,
+  },
+  attention: { rowsOutsideEveryPeriod: 0, commerceTruncated: false },
+  unbilledMeteredApplies: true,
+  commerceQueryFailed: false,
+  subscriptionsTruncated: false,
+  marketplaceTruncated: false,
+}
+
+beforeEach(() => {
+  global.fetch = jest.fn(async () => ({
+    ok: true,
+    json: async () => payload,
+  })) as never
+})
+
+describe('the revenue page shows both bases (AGL-2486)', () => {
+  it('renders contracted and settled as separate headline figures', async () => {
+    render(<AdminRevenue />)
+    // Contracted MRR — the book as it stands. Unique on the page.
+    expect(await screen.findByText('$9,100.00')).toBeTruthy()
+    // Settled and earned — cash Aglyn kept. A DIFFERENT number, so neither
+    // assertion can be satisfied by the other. It appears twice by design:
+    // once as the headline and once as the earned breakdown's total.
+    expect((await screen.findAllByText(/4,321\.00/)).length).toBeGreaterThan(0)
+    // The two headline figures are genuinely different figures.
+    expect(screen.queryByText('$9,100.00')).not.toBeNull()
+    expect(screen.queryAllByText('$9,100.00')).toHaveLength(1)
+  })
+
+  it('states that the two columns are not two attempts at one number', async () => {
+    render(<AdminRevenue />)
+    await waitFor(() =>
+      expect(
+        screen.getByText(/not two attempts at the same number/i),
+      ).toBeTruthy(),
+    )
+  })
+})
+
+describe('the gap is decomposed into named causes', () => {
+  it('shows the gap itself and each cause as its own figure', async () => {
+    render(<AdminRevenue />)
+    // Should-have-collected, settled, and the gap: three distinct amounts.
+    // Several appear twice by design — the org-treatment table states the
+    // same slice the gap compares against, and the earned breakdown restates
+    // the settled subscription line — so presence, not uniqueness, is the
+    // claim here. $3,000.00 (the gap itself) IS unique, and is asserted so.
+    expect((await screen.findAllByText('$6,100.00')).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('$3,100.00')).length).toBeGreaterThan(0)
+    expect(await screen.findByText('$3,000.00')).toBeTruthy()
+    // Each named cause carries its own amount.
+    expect((await screen.findAllByText('$1,700.00')).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('$1,300.00')).length).toBeGreaterThan(0)
+    expect(await screen.findByText('$170.00')).toBeTruthy() // unbilled meter
+  })
+
+  it('shows the unexplained residual rather than absorbing it', async () => {
+    render(<AdminRevenue />)
+    expect(await screen.findByText('$2,570.00')).toBeTruthy()
+    await waitFor(() =>
+      expect(screen.getByText(/Unexplained residual/i)).toBeTruthy(),
+    )
+  })
+
+  it('names past-due as dunning, with something to do about it', async () => {
+    render(<AdminRevenue />)
+    await waitFor(() =>
+      expect(screen.getByText(/This is dunning/i)).toBeTruthy(),
+    )
+  })
+})
+
+describe('comped, trialing and past-due are stated in the UI, not just in code', () => {
+  it('gives each org state a row saying what it contributes', async () => {
+    render(<AdminRevenue />)
+    await waitFor(() => expect(screen.getByText('Trialing')).toBeTruthy())
+    expect(screen.getByText('Past due')).toBeTruthy()
+    expect(screen.getByText('Comped / staff override')).toBeTruthy()
+    // The comped count reaches the screen…
+    expect(screen.getByText('5')).toBeTruthy()
+    // …and the reason a comp carries no dollar figure is stated, not implied.
+    expect(
+      screen.getByText(/would invent revenue that never existed/i),
+    ).toBeTruthy()
+  })
+})
+
+describe('the accounting positions are STATED, not merely computed', () => {
+  it('says a refund is a loss and that Stripe keeps its fee', async () => {
+    render(<AdminRevenue />)
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          /Stripe does not return its processing fee on a refund/i,
+        ),
+      ).toBeTruthy(),
+    )
+    // And the reversal figure itself is on screen as a deduction.
+    expect(screen.getByText('−$260.00')).toBeTruthy()
+  })
+
+  it('says card processing passed through at cost is not revenue', async () => {
+    render(<AdminRevenue />)
+    await waitFor(() =>
+      expect(screen.getByText(/It is a recovery, not earnings/i)).toBeTruthy(),
+    )
+    // The pass-through is subtracted as its own line…
+    expect(screen.getByText('−$930.00')).toBeTruthy()
+    // …and the storefront take that survives it is a smaller, distinct figure.
+    expect(screen.getByText('$410.00')).toBeTruthy()
+  })
+
+  it('does not present the storefront fee itself as earnings', async () => {
+    render(<AdminRevenue />)
+    await waitFor(() =>
+      expect(screen.getByText('$1,340.00')).toBeTruthy(),
+    )
+    // The fee appears exactly once, on the gross-vs-net table. If it were
+    // being reported as earnings it would also appear in the earned
+    // breakdown, which instead carries the $410.00 take.
+    expect(screen.getAllByText('$1,340.00')).toHaveLength(1)
+  })
+
+  it('flags the marketplace processing cost it cannot recover', async () => {
+    render(<AdminRevenue />)
+    await waitFor(() =>
+      expect(
+        screen.getByText(/NOT recovered — the commission above is gross of it/i),
+      ).toBeTruthy(),
+    )
+  })
+
+  it('flags storefront renewals that absorb the card cost', async () => {
+    render(<AdminRevenue />)
+    await waitFor(() =>
+      expect(
+        screen.getByText(/4 storefront subscription renewals recover no card cost/i),
+      ).toBeTruthy(),
+    )
+  })
+
+  it('says sales tax is the state money, and shows it as a deduction', async () => {
+    render(<AdminRevenue />)
+    await waitFor(() =>
+      expect(screen.getByText(/Held and remitted, never revenue/i)).toBeTruthy(),
+    )
+    expect(screen.getByText('−$190.00')).toBeTruthy()
+  })
+})
+
+describe('a figure that cannot be trusted is never shown as a total', () => {
+  it('warns when a sweep was truncated', async () => {
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({ ...payload, subscriptionsTruncated: true }),
+    })) as never
+    render(<AdminRevenue />)
+    await waitFor(() =>
+      expect(screen.getByText(/These figures are a lower bound/i)).toBeTruthy(),
+    )
+  })
+
+  it('says a $0 storefront figure means "not counted" when the query failed', async () => {
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({ ...payload, commerceQueryFailed: true }),
+    })) as never
+    render(<AdminRevenue />)
+    await waitFor(() =>
+      expect(
+        screen.getByText(/because the query failed, not because there were no sales/i),
+      ).toBeTruthy(),
+    )
+  })
+
+  it('says undated invoices are invisible to every period', async () => {
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        ...payload,
+        attention: { rowsOutsideEveryPeriod: 3, commerceTruncated: false },
+      }),
+    })) as never
+    render(<AdminRevenue />)
+    await waitFor(() =>
+      expect(
+        screen.getByText(/invisible to every period/i),
+      ).toBeTruthy(),
+    )
+  })
+})

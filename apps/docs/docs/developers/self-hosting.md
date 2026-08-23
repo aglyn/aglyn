@@ -424,7 +424,7 @@ after; the values are baked into the static output.
 | `DOCS_ERROR_BEACON_ENDPOINT` | The browser error beacon installs no handlers |
 | `DOCS_STATUS_TARGETS` | `/status` probes nothing and says so |
 | `DOCS_URL` | The canonical origin is `https://docs.aglyn.com` |
-| `DOCS_ORGANIZATION_NAME` | The footer copyright reads `Aglyn LLC` |
+| `DOCS_ORGANIZATION_NAME` | The footer copyright reads `Aglyn LLC`, followed by Aglyn's trademark attribution. Setting it replaces the name and drops the attribution — a rebranded build must not claim our marks. |
 
 The rule to hold on to for the first three: **unset means off, never ours.**
 They previously defaulted to Aglyn's GA4 property, Aglyn's error collector and

@@ -20,7 +20,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react'
 
 import {
   applyStylePartialToSx,
-  buildFlexGapGroup,
+  buildFlexGridGroup,
   buildStyleFieldGroups,
   computeEffectiveStyleValues,
   computeStylePartial,
@@ -101,7 +101,7 @@ describe('styles panel length fields (AGL-1219)', () => {
     // An unregistered component type makes the form renderer throw, which
     // blanks the whole panel rather than one field (AGL-584's failure).
     const declared = new Set(
-      [...groups, buildFlexGapGroup()]
+      [...groups, buildFlexGridGroup()]
         .flatMap((group) => group.fields)
         .map((field) => field['component'] as string),
     )

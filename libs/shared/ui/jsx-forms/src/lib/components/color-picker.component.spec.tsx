@@ -18,7 +18,11 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 
 import { FormRenderer } from '../vendor/data-driven-forms'
-import { ColorPickerTokensContext } from './color-picker-tokens'
+import {
+  buildColorTokenOptions,
+  COLOR_PICKER_TOKEN_PATHS,
+  ColorPickerTokensContext,
+} from './color-picker-tokens'
 import ColorPickerComponent from './color-picker.component'
 
 const tokens = [
@@ -171,5 +175,133 @@ describe('ColorPickerComponent help tip (AGL-1220)', () => {
     // would pass against a component that renders a tip unconditionally.
     renderWithHelp(undefined)
     expect(screen.queryByRole('button', { name: /border color/i })).toBeNull()
+  })
+})
+
+/**
+ * Alpha on a theme token (AGL-2486, item 6).
+ *
+ * `alpha()` was used all over the product's own chrome and nowhere an author
+ * could reach it: there was no way to say "primary.main at 12%" in the styles
+ * panel at all. The interesting half is not the slider, it is the STORED
+ * shape — `rgba(var(--mui-palette-primary-mainChannel, 17 17 17) / 0.12)`,
+ * a palette reference with a literal fallback, resolved against the host
+ * palette at render by `resolvePaletteVarsSx`. Flattening to
+ * `rgba(17, 17, 17, 0.12)` here would look identical on the canvas and quietly
+ * stop following the palette for ever, so these tests assert the reference.
+ */
+describe('ColorPickerComponent token alpha (AGL-2486)', () => {
+  const opacitySlider = () =>
+    screen.getByRole('slider', { name: 'Opacity 100%' }) as HTMLInputElement
+
+  it('offers no opacity control until a token is picked', () => {
+    // The negative control: without it a test that finds the slider proves
+    // nothing about when it appears.
+    renderField()
+    fireEvent.focus(input())
+    expect(screen.queryByRole('slider')).toBeNull()
+  })
+
+  it('stores the bare token path while the colour is fully opaque', () => {
+    // Nothing about the shipped format changes for the common case.
+    renderField('primary.main')
+    fireEvent.focus(input())
+    expect(opacitySlider()).toBeTruthy()
+    expect(input().value).toBe('primary.main')
+  })
+
+  it('stores a REFERENCE plus alpha, not a flattened rgba', () => {
+    renderField('primary.main')
+    fireEvent.focus(input())
+    fireEvent.change(opacitySlider(), { target: { value: '0.12' } })
+    expect(input().value).toBe(
+      'rgba(var(--mui-palette-primary-mainChannel, 17 17 17) / 0.12)',
+    )
+    // The fallback is the token's colour TODAY, so a render path that skips
+    // substitution still paints the right colour at the right opacity — but
+    // the reference is what the palette drives.
+    expect(input().value).toContain('--mui-palette-primary-mainChannel')
+  })
+
+  it('round-trips: a stored alpha token re-opens on its own swatch', () => {
+    // The value must not read as an opaque literal on the way back in —
+    // that is what would strand an author on the custom stage unable to see
+    // which token they had chosen.
+    renderField('rgba(var(--mui-palette-primary-mainChannel, 17 17 17) / 0.4)')
+    fireEvent.focus(input())
+    expect(sketchPicker()).toBeNull()
+    expect(
+      screen
+        .getByRole('button', { name: 'Primary' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true')
+    expect(screen.getByRole('slider', { name: 'Opacity 40%' })).toBeTruthy()
+  })
+
+  it('carries the opacity across a change of token', () => {
+    renderField('rgba(var(--mui-palette-primary-mainChannel, 17 17 17) / 0.4)')
+    fireEvent.focus(input())
+    fireEvent.click(screen.getByRole('button', { name: 'Surface' }))
+    expect(input().value).toBe(
+      'rgba(var(--mui-palette-background-paperChannel, 255 255 255) / 0.4)',
+    )
+  })
+
+  it('drops back to the bare path when the opacity returns to 100%', () => {
+    renderField('rgba(var(--mui-palette-primary-mainChannel, 17 17 17) / 0.4)')
+    fireEvent.focus(input())
+    fireEvent.change(screen.getByRole('slider', { name: 'Opacity 40%' }), {
+      target: { value: '1' },
+    })
+    expect(input().value).toBe('primary.main')
+  })
+})
+
+/**
+ * The tertiary shades the theme has derived all along (AGL-2486, item 6).
+ * `createResponsiveTheme` runs `addShadeVariants` over `tertiary`; the picker
+ * offered `Primary light`/`Primary dark` but stopped at plain `Tertiary`, so
+ * an author who wanted the accent's dark step had to hardcode a hex.
+ */
+describe('ColorPickerComponent tertiary shades (AGL-2486)', () => {
+  /** A site palette shaped the way `createResponsiveTheme` leaves one. */
+  const palette = {
+    primary: { main: '#00B0FF', light: '#66D3FF', dark: '#0077B3' },
+    // `tertiary` is a FOREGROUND family, so `dark` is the AA-checked accent
+    // text shade rather than a naive darken of `main`.
+    tertiary: { main: '#334155', light: '#64748B', dark: '#0F172A' },
+  }
+
+  it('offers the tertiary shades the theme already derives', () => {
+    expect(COLOR_PICKER_TOKEN_PATHS.map((entry) => entry.path)).toEqual(
+      expect.arrayContaining(['tertiary.light', 'tertiary.dark']),
+    )
+  })
+
+  it('previews what the palette actually resolves them to', () => {
+    // Not a shade derived here: the swatch has to show the accessible
+    // colour the theme computed, or it advertises a colour nothing paints.
+    const options = buildColorTokenOptions(palette, undefined)
+    const dark = options.find((option) => option.value === 'tertiary.dark')
+    expect(dark?.label).toBe('Tertiary dark')
+    expect(dark?.light).toBe('#0F172A')
+    expect(
+      options.find((option) => option.value === 'tertiary.light')?.light,
+    ).toBe('#64748B')
+  })
+
+  it('drops them on a palette that has no tertiary at all', () => {
+    // The negative control, and the reason listing brand-only slots is free.
+    const options = buildColorTokenOptions({ primary: palette.primary }, undefined)
+    expect(
+      options.some((option) => option.value.startsWith('tertiary.')),
+    ).toBe(false)
+  })
+
+  it('stores tertiary.dark as a token path like any other shade', () => {
+    renderField(undefined, buildColorTokenOptions(palette, undefined) as any)
+    fireEvent.focus(input())
+    fireEvent.click(screen.getByRole('button', { name: 'Tertiary dark' }))
+    expect(input().value).toBe('tertiary.dark')
   })
 })

@@ -35,6 +35,84 @@ import {
 export const UNLIMITED = Number.POSITIVE_INFINITY
 
 /**
+ * Is this quota value "no cap"? (AGL-2482; AGL-2223 is the same class.)
+ *
+ * WHY A PREDICATE AND NOT `x === UNLIMITED`. `UNLIMITED` is
+ * `Number.POSITIVE_INFINITY`, and `JSON.stringify(Infinity)` is **`null`** —
+ * so the moment an entitlement crosses a route boundary the sentinel is gone
+ * and `=== UNLIMITED` is false for a plan that really is uncapped. Worse, the
+ * client then reads `Number(null)`, which is `0`, and `Number.isFinite(0)` is
+ * TRUE: the value sails through every guard written to reject a payload that
+ * cannot state the terms, and the console renders a cap of zero for the most
+ * expensive plan on the price list.
+ *
+ * So: `Infinity`, `null`, `undefined` and `NaN` all read as unlimited here.
+ *
+ * THIS IS A BACKSTOP, NOT THE FIX. `null` on the wire genuinely cannot
+ * distinguish "unlimited" from "the field is missing", and answering
+ * "unlimited" for a missing field is the permissive direction — the same
+ * shape as `checkQuota(undefined)` resolving to Free. A route that serialises
+ * a quota must therefore send a FINITE number plus an explicit boolean flag
+ * (see `/api/billing/storage-overage`), and the client must rebuild the
+ * sentinel from the flag with `restoreQuotaLimit` before it does arithmetic.
+ * This predicate exists so that a surface which has not been given the flag
+ * still renders "Unlimited" instead of `0`, `null` or `Infinity`.
+ */
+export function isUnlimitedQuota(limit: number | null | undefined): boolean {
+  return limit == null || !Number.isFinite(limit)
+}
+
+/**
+ * A quota cap, written the way every surface in the console must write it:
+ * `Unlimited` for an uncapped plan, the number otherwise.
+ *
+ * ONE implementation on purpose. Six surfaces had grown their own copy of the
+ * `limit === UNLIMITED ? 'Unlimited' : String(limit)` line and a seventh
+ * category — the ones that interpolated the raw number — shipped
+ * "Every site can run null registers on your current plan" and
+ * "Screen limit reached (Infinity)" to customers.
+ *
+ * @param limit The cap. Non-finite, `null` and `undefined` are unlimited.
+ * @param unit Appended to a finite number only — `MB`, `registers`. Never
+ *   appended to `Unlimited`, because "Unlimited MB" reads as a typo.
+ */
+export function formatQuotaLimit(
+  limit: number | null | undefined,
+  unit?: string,
+): string {
+  if (isUnlimitedQuota(limit)) return 'Unlimited'
+  return unit ? `${limit} ${unit}` : String(limit)
+}
+
+/**
+ * Rebuild the `UNLIMITED` sentinel a JSON round-trip flattened, from the
+ * explicit flag the route sent alongside the number.
+ *
+ * The client half of the wire contract. Once this has run, every comparison
+ * downstream is ordinary arithmetic that happens to be correct: `used >
+ * Infinity` is false, `Math.max(0, used - Infinity)` is `0`, and nothing has
+ * to remember that this particular number might be a `null` in disguise.
+ *
+ * That mattered more than the display did. `1 > null` is **true**, so a site
+ * on an unlimited plan was reported "1 over the limit" while the readout
+ * beside it said `1/∞` — a false limit warning on a plan that has no limit.
+ *
+ * @param value The finite number the route sent (or the `null` it sent for a
+ *   pre-fix payload).
+ * @param unlimited The route's explicit flag. `undefined` means the route has
+ *   not been taught to send one, and then `value` decides — non-finite reads
+ *   as unlimited, which is the `isUnlimitedQuota` backstop.
+ */
+export function restoreQuotaLimit(
+  value: number | null | undefined,
+  unlimited?: boolean,
+): number {
+  if (unlimited === true) return UNLIMITED
+  if (unlimited === false) return Number(value)
+  return isUnlimitedQuota(value) ? UNLIMITED : Number(value)
+}
+
+/**
  * Plan → default entitlements. Versioned with the app so pricing changes are
  * code-reviewed; per-org overrides live on `org.entitlements` and win
  * key-by-key. Tier table aligned to the Tenant Billing & SaaS Plans proposal
@@ -901,7 +979,13 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDatasetMonthlyUsd: 1,
     extraDataGbMonthlyUsd: 0.25,
     extraApiRequestsUsdPer1k: 0.15,
-    extraContactsUsdPer1k: 0.2,
+    // NULL, not 0.2, because Agency's `contactsPerHost` is UNLIMITED and an
+    // uncapped band has no "over" (2026-08-21, Zach). The rate was unreachable
+    // — `checkContactQuota` computes `Math.max(0, used - Infinity)`, which is
+    // 0 at every usage level — so no charge changes; what changes is that we
+    // stop advertising a fee we could never collect. The plan card and
+    // `/pricing` both already suppress the suffix when this is null.
+    extraContactsUsdPer1k: null,
     meteredInfraPassThrough: true,
   },
   // Enterprise (AGL-1118) has NO list price — every figure here is the

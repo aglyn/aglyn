@@ -20,7 +20,7 @@ import { SX_SCHEME_DARK_KEY } from '@aglyn/aglyn-node-renderer'
 import { readSxValue, writeSxValue } from './responsive-sx'
 import {
   applyStylePartialToSx,
-  buildFlexGapGroup,
+  buildFlexGridGroup,
   buildStyleFieldGroups,
   computeEffectiveStyleValues,
   computeStylePartial,
@@ -58,10 +58,12 @@ const BASE_PANEL_KEYS = [
 
 describe('style field groups (AGL-540/587)', () => {
   const groups = buildStyleFieldGroups(['#123456'])
-  const gapGroup = buildFlexGapGroup()
+  const flexGridGroup = buildFlexGridGroup()
 
   it('gives every consolidated field exactly one home', () => {
     const labels = groups.map((group) => group.label)
+    // `Grid & Flex Child` is gone (AGL-2486): its fields live in the one
+    // Flexbox & Grid section, which the panel renders itself.
     expect(labels).toEqual([
       'Layout',
       'Colors',
@@ -69,9 +71,11 @@ describe('style field groups (AGL-540/587)', () => {
       'Typography',
       'Borders & Shadows',
       'Position & Overflow',
-      'Grid & Flex Child',
     ])
-    const names = groups.flatMap(styleGroupFieldNames)
+    const names = [
+      ...groups.flatMap(styleGroupFieldNames),
+      ...styleGroupFieldNames(flexGridGroup),
+    ]
     for (const expected of [
       // Layout (ex loose base form, AGL-587).
       'display',
@@ -120,8 +124,9 @@ describe('style field groups (AGL-540/587)', () => {
       'gridAutoFlow',
       'gridColumn',
       'gridRow',
-      // Per-item flex fields live together in Grid & Flex Child
-      // (flexGrow/flexBasis moved out of the loose base form, AGL-587).
+      // Per-item flex fields live with the rest of the layout properties
+      // (out of the loose base form in AGL-587, out of the second layout
+      // accordion in AGL-2486).
       'flexGrow',
       'flexShrink',
       'flexBasis',
@@ -131,18 +136,30 @@ describe('style field groups (AGL-540/587)', () => {
     }
   })
 
-  it('keeps the container gap controls in their own Flexbox & Grids home', () => {
-    expect(styleGroupFieldNames(gapGroup)).toEqual([
+  it('holds every typed layout field in one section (AGL-2486)', () => {
+    // Container spacing, the tracks it defines, then where this element
+    // sits in its own parent — one reading order instead of two accordions
+    // four sections apart.
+    expect(styleGroupFieldNames(flexGridGroup)).toEqual([
       'gap',
       'rowGap',
       'columnGap',
+      'gridTemplateColumns',
+      'gridTemplateRows',
+      'gridAutoFlow',
+      'gridColumn',
+      'gridRow',
+      'flexGrow',
+      'flexShrink',
+      'flexBasis',
+      'order',
     ])
   })
 
   it('keeps field names unique across groups and off panel-owned keys', () => {
     const names = [
       ...groups.flatMap(styleGroupFieldNames),
-      ...styleGroupFieldNames(gapGroup),
+      ...styleGroupFieldNames(flexGridGroup),
     ]
     expect(new Set(names).size).toBe(names.length)
     for (const name of names) {
@@ -156,7 +173,7 @@ describe('style field groups (AGL-540/587)', () => {
   // here rather than in a screenshot.
   describe('length editors', () => {
     const componentOf = (name: string) =>
-      [...groups.flatMap((group) => group.fields), ...gapGroup.fields].find(
+      [...groups.flatMap((group) => group.fields), ...flexGridGroup.fields].find(
         (field) => field.name === name,
       )?.['component']
 
@@ -214,7 +231,7 @@ describe('style field groups (AGL-540/587)', () => {
   describe('help tips', () => {
     const allFields = [
       ...groups.flatMap((group) => group.fields),
-      ...gapGroup.fields,
+      ...flexGridGroup.fields,
     ]
     const helpOf = (name: string) =>
       allFields.find((field) => field.name === name)?.['help'] as

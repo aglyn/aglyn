@@ -35,7 +35,10 @@ import DDFSelectImport from '@data-driven-forms/common/select'
 import parseInternalValue from '@data-driven-forms/common/select/parse-internal-value'
 
 import { useFieldApi } from '../vendor/data-driven-forms'
-import FormFieldGrid, { type FormFieldGridProps } from './form-field-grid'
+import FormFieldGrid, {
+  buildFieldClear,
+  type FormFieldGridProps,
+} from './form-field-grid'
 import type { BaseFieldProps, OptionValue, SelectOption, SelectValue } from './types'
 import { type ExtendedFieldMeta, validationError } from './validation-error'
 
@@ -55,6 +58,8 @@ export interface SelectProps<T = OptionValue> extends BaseFieldProps {
   loadingMessage?: string
   loadingText?: string
   placeholder?: string
+  /** Offer the reset-to-unset affordance (AGL-2486). */
+  clearable?: boolean
   FormFieldGridProps?: FormFieldGridProps
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   TextFieldProps?: Record<string, any>
@@ -163,6 +168,7 @@ function InternalSelect<T = OptionValue>({
   inputProps = {},
   isClearable,
   isDisabled,
+  clearable,
   loadingText = 'Loading...',
   // @data-driven-forms/common always injects classNamePrefix (a
   // react-select concern) into its SelectComponent; keep it out of the
@@ -178,8 +184,25 @@ function InternalSelect<T = OptionValue>({
     [value, isMulti],
   )
 
+  // Selects ship with `disableClearable` on by default here, so the
+  // Autocomplete's own ✕ never appears and a chosen option could not be
+  // taken back off (AGL-2486). One affordance for every field type beats
+  // flipping that default, which would move the control for some fields
+  // and not others.
+  const clear = buildFieldClear({
+    clearable,
+    label,
+    hasValue: Array.isArray(internalValue)
+      ? internalValue.length > 0
+      : internalValue !== undefined &&
+        internalValue !== null &&
+        internalValue !== '',
+    locked: Boolean(isDisabled),
+    onClear: () => onChange(createValue(null, !!isMulti)),
+  })
+
   return (
-    <FormFieldGrid help={help} {...FormFieldGridProps}>
+    <FormFieldGrid help={help} clear={clear} {...FormFieldGridProps}>
       <Autocomplete
         filterSelectedOptions={hideSelectedOptions}
         disabled={isDisabled}

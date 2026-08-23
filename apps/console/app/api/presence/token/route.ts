@@ -16,6 +16,7 @@
  */
 
 import { hostRoleCanWrite, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { deadSessionKeys } from '../../_lib/presence-reaper'
 import {
   authForPool,
   emailUnverifiedResponse,
@@ -152,12 +153,61 @@ async function handler(request: Request): Promise<Response> {
       ...(canEdit ? { coeditHost: hostId } : {}),
     })
 
+    // TIDY THE ROOM WE ARE ABOUT TO LET SOMEBODY INTO (AGL-2486).
+    //
+    // The durable half of presence cleanup — see `presence-reaper.ts` for why
+    // it lives on the join rather than on a schedule, and why the threshold
+    // cannot evict a live session.
+    //
+    // Deliberately AFTER everything the caller depends on and wrapped so it
+    // can never fail the request: a caller must always get their token, even
+    // if the sweep throws, and housekeeping must never be able to break the
+    // feature it is housekeeping for.
+    const docType = String(body?.docType ?? '')
+    const docId = String(body?.docId ?? '')
+    if (docType && docId && /^[A-Za-z0-9_-]{1,64}$/.test(docId)) {
+      try {
+        const roomRef = firebaseAdmin
+          .database()
+          .ref(`presence/${orgId}/${docType}/${docId}`)
+        const room = (await roomRef.get()).val()
+        const dead = deadSessionKeys(room, Date.now())
+        await Promise.all(
+          dead.map((key) => roomRef.child(key).remove()),
+        )
+      } catch (sweepError) {
+        console.warn('[presence/token] room sweep skipped:', sweepError)
+      }
+    }
+
     // The client must put its presence auth instance in the same tenant
     // before exchanging this, or the token is rejected as cross-pool.
     return Response.json({ token, orgId, canEdit, tenantId }, { status: 200 })
   } catch (error) {
-    console.error(error)
-    return Response.json({ error: 'Could not start presence' }, { status: 500 })
+    // AN AUTHENTICATION ANSWER IS NOT A SERVER FAULT (AGL-2486).
+    //
+    // Every `auth/…` failure landed here and came back 500 "Could not start
+    // presence", which is how the SSO revocation bug above presented: a
+    // stale, revoked or disabled session read as "our broker is broken",
+    // pointed the reader at the server, and offered no remedy at all — the
+    // one thing the caller could actually do (sign in again) was the one
+    // thing nothing said. `reason` travels so the editor can name a remedy
+    // instead of a status code.
+    const code = String((error as { code?: string })?.code ?? '')
+    if (code.startsWith('auth/')) {
+      console.warn('[presence/token] refused:', code)
+      return Response.json(
+        { error: 'Your sign-in is no longer valid', reason: code },
+        { status: 401 },
+      )
+    }
+    // A real fault. Logged with a tag, because an untagged `console.error(e)`
+    // in a process serving 117 routes is a stack with no subject.
+    console.error('[presence/token] failed:', error)
+    return Response.json(
+      { error: 'Could not start presence', reason: 'broker-error' },
+      { status: 500 },
+    )
   }
 }
 

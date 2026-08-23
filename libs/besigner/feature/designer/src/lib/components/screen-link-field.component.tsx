@@ -186,8 +186,14 @@ export function ScreenLinkValuePicker(props: ScreenLinkValuePickerProps) {
         helperText={external ? undefined : helperText}
         fullWidth
         // Without displayEmpty a MUI Select renders NOTHING for `''`, which
-        // reads as a broken control rather than "no screen chosen".
-        slotProps={{ select: { displayEmpty: true } }}
+        // reads as a broken control rather than "no screen chosen" — and
+        // `displayEmpty` alone then prints the label ON TOP of the option
+        // it just drew, because an empty Select reports itself unfilled no
+        // matter what it is rendering (AGL-2486).
+        slotProps={{
+          select: { displayEmpty: true },
+          inputLabel: { shrink: true },
+        }}
       >
         <MenuItem value="">{resolvedEmptyLabel}</MenuItem>
         {unknownScreen ? (

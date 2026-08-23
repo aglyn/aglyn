@@ -600,12 +600,31 @@ export function AssistPanelComponent() {
             onClick={() => setOpen(true)}
             sx={{
               position: 'fixed',
-              right: 20,
-              bottom: 20,
+              // Insets, not constants (AGL-2486). The console chrome leaves
+              // the bottom-right corner empty, but the besigner does not:
+              // its properties panel is a full-height column on that edge,
+              // and a fixed launcher lands on the Styles form and its
+              // scrollbar. A surface that owns the corner publishes these
+              // variables to move the launcher clear of itself; everywhere
+              // else the fallback is the corner it has always used. Read as
+              // CSS rather than passed as props so the offset can follow a
+              // panel the launcher knows nothing about — one that is
+              // resizable and collapsible — without this component growing
+              // a dependency on the editor.
+              right: 'var(--aglyn-assist-inset-right, 20px)',
+              bottom: 'var(--aglyn-assist-inset-bottom, 20px)',
               zIndex: (theme) => theme.zIndex.drawer - 1,
             }}
           >
-            <MdiIcon path={mdiChatQuestionOutline.path} />
+            {/* Sized at the call site (AGL-2486). `MdiIcon` defaults to
+                `fontSize="inherit"`, which is right for the startIcon and
+                caption slots most of this file uses it in — but inside a
+                Fab the inherited size is the BUTTON typography, 14px, so
+                the glyph painted at 14px in a 48px control and read as
+                broken. `medium` is the 24px MUI puts in its own FABs. Not
+                fixed in `MdiIcon`: that default is depended on across the
+                console, including twice in this file. */}
+            <MdiIcon path={mdiChatQuestionOutline.path} fontSize="medium" />
           </Fab>
         </Tooltip>
       )}
@@ -631,7 +650,10 @@ export function AssistPanelComponent() {
               alignItems: 'center',
             }}
           >
-            <MdiIcon path={mdiChatQuestionOutline.path} />
+            {/* Same reason as the launcher: this one sits beside an `h6`
+                title in a plain Stack, so `inherit` gave it the 16px body
+                size against a 20px heading. */}
+            <MdiIcon path={mdiChatQuestionOutline.path} fontSize="medium" />
             <Typography variant="h6" sx={{ flexGrow: 1 }}>
               {`${branding.productName} Assist`}
             </Typography>
@@ -655,7 +677,9 @@ export function AssistPanelComponent() {
                 aria-label={`Close ${branding.productName} Assist`}
                 onClick={() => setOpen(false)}
               >
-                <MdiIcon path={mdiClose.path} />
+                {/* An IconButton does not set a font-size of its own, so
+                    `inherit` reached the same 14px button typography. */}
+                <MdiIcon path={mdiClose.path} fontSize="medium" />
               </IconButton>
             </Tooltip>
           </Stack>
@@ -853,7 +877,10 @@ export function AssistPanelComponent() {
                     {busy ? (
                       <CircularProgress size={20} />
                     ) : (
-                      <MdiIcon path={mdiSend.path} />
+                      // 20px to match the CircularProgress it swaps with
+                      // on the line above — at the inherited 14px the
+                      // button visibly grew its contents while busy.
+                      <MdiIcon path={mdiSend.path} sx={{ fontSize: 20 }} />
                     )}
                   </IconButton>
                 </span>

@@ -565,9 +565,16 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       )
     })
 
-    it('Contacts per 1,000 over band — $1 · $0.75 · $0.50 · $0.40 · $0.25 · $0.20', () => {
+    it('Contacts per 1,000 over band — $1 · $0.75 · $0.50 · $0.40 · $0.25 · —', () => {
+      // Agency is NULL, and the em dash on the published page is the whole
+      // point (AGL-2482, decided by Zach 2026-08-21). Its `contactsPerHost`
+      // is UNLIMITED, so an overage rate there advertises a fee that cannot
+      // be charged: `checkContactQuota` computes `Math.max(0, used -
+      // Infinity)`, which is 0 at every usage level. No charged price moved
+      // — the $0.20 was unreachable — so this is the published page catching
+      // up with what the code always did.
       expect(PAID.map((p) => PLAN_PRICING[p].extraContactsUsdPer1k)).toEqual([
-        1, 0.75, 0.5, 0.4, 0.25, 0.2,
+        1, 0.75, 0.5, 0.4, 0.25, null,
       ])
     })
   })

@@ -27,6 +27,55 @@ import { generatePresetId } from '../utils/generate-preset-id'
 // Component ids are persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = 'image'
 
+/**
+ * The node id of the first image on the page, in document order (AGL-2486).
+ *
+ * Every image used to render `loading="lazy"` — the hero included. That is
+ * the worst possible default for the one image that is almost always the LCP
+ * element: a lazy image is not fetched until layout has run and the browser
+ * has decided it is near the viewport, and it is fetched at LOW priority when
+ * it finally is. Lighthouse reports that as "LCP request discovery", and it is
+ * also why an image four sections down could finish before the one the reader
+ * is looking at: with everything lazy and everything low, nothing outranked
+ * anything, so the order was whatever the network felt like.
+ *
+ * So the first image gets `loading="eager"` + `fetchpriority="high"` and the
+ * rest get `fetchpriority="low"`, which is the browser-level knob that stops
+ * below-the-fold images competing with the one above it.
+ *
+ * Resolved from the tree rather than a render-order counter on purpose: the
+ * renderer walks the tree in document order on the server AND on hydrate, but
+ * a mutable counter would double-count under React's concurrent re-renders
+ * and hand the priority to a different image on the client than the one the
+ * HTML gave it. A pure function of the tree cannot disagree with itself.
+ *
+ * The walk STOPS at the first image, so it is O(nodes above the hero) — a
+ * dozen nodes on a normal page — rather than a full traversal per image.
+ *
+ * An image with no `src` renders a placeholder box and no `<img>` at all, so
+ * it cannot be the LCP element and is skipped.
+ */
+export function firstImageNodeId(
+  root: Aglyn.NodeSchema | undefined,
+): string | undefined {
+  const walk = (node: Aglyn.NodeSchema | undefined): string | undefined => {
+    if (!node) return undefined
+    if (node.componentId === ID) {
+      const props = (node.resolvedProps ?? node.props ?? {}) as Record<
+        string,
+        unknown
+      >
+      if (String(props['src'] ?? '').trim()) return node.$id
+    }
+    for (const child of node.children ?? []) {
+      const found = walk(child)
+      if (found) return found
+    }
+    return undefined
+  }
+  return walk(root)
+}
+
 export interface ImageProps {
   /**
    * Where the image comes from (AGL-72). Either a **media reference** —
@@ -116,6 +165,23 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
     externalHref,
   )
   /**
+   * Eagerness (AGL-2486). An explicit author choice always wins — including
+   * an explicit `lazy`, so someone who deliberately deferred the top image
+   * keeps that. Only an UNSET `loading` is decided here, and only for the
+   * first image on the page.
+   *
+   * `leafIdsMatch` rather than `===`: a reusable component instance suffixes
+   * its leaf ids, so the id in the tree and the id in the context are the
+   * same leaf spelled two ways (the markdown block resolves the same way).
+   */
+  const nodeId = Aglyn.useNodeId()
+  const leadImageId = firstImageNodeId(Aglyn.canvas.rootNode)
+  const isLeadImage =
+    Boolean(nodeId) &&
+    Boolean(leadImageId) &&
+    Aglyn.leafIdsMatch(leadImageId as string, nodeId)
+  const eager = loading === 'eager' || (loading == null && isLeadImage)
+  /**
    * Resolve the stored value to a URL (AGL-1215). A media reference becomes
    * a CDN URL here rather than in the document, so the route shape stays an
    * app concern; every other value — a legacy firebasestorage URL, a legacy
@@ -171,6 +237,10 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
   // srcSet is safe for any CDN-form URL. Asked of the RESOLVED url, so a
   // reference and a legacy stored path both keep their WebP variants.
   const isCdnUrl = Aglyn.isMediaCdnUrl(src)
+  /** A CSS width that is a plain pixel value, and therefore a real `sizes`. */
+  const pinnedWidth = /^\d+(?:\.\d+)?px$/.test(String(width ?? '').trim())
+    ? String(width).trim()
+    : undefined
   return wrapLink(
     <Box
       ref={ref}
@@ -184,14 +254,30 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
               .join(', ')
           : undefined
       }
-      sizes={isCdnUrl ? '100vw' : undefined}
+      // `100vw` is the honest answer only for an image that really is full
+      // bleed. When the author pinned a pixel width, saying `100vw` made the
+      // browser pick the 1280w or 1920w candidate to fill a 320px slot on
+      // every screen — which is most of what "Improve image delivery" is
+      // reporting (AGL-2486). A pinned width describes the slot exactly, so
+      // it is the better `sizes`; anything else (%, vw, auto, calc) still
+      // falls back to the old value rather than guessing.
+      sizes={isCdnUrl ? (pinnedWidth ?? '100vw') : undefined}
       // Unset alt keeps rendering `alt=""` exactly as it always has —
       // existing documents must not change output (AGL-1305). Decorative
       // ON forces `alt=""` over any alt text and suppresses the tooltip,
       // so the a11y intent is explicit rather than an accident of blank.
       alt={decorative ? '' : (alt ?? '')}
       title={decorative ? undefined : title || undefined}
-      loading={loading === 'eager' ? 'eager' : 'lazy'}
+      loading={eager ? 'eager' : 'lazy'}
+      // The ordering signal (AGL-2486). `high` on the one image that is
+      // probably the LCP element; `low` on everything else, so a footer
+      // image cannot be fetched ahead of the section the reader is in.
+      fetchPriority={eager ? 'high' : 'low'}
+      // Decoding off the main thread for the deferred ones — they have no
+      // paint deadline, and decoding them synchronously is main-thread time
+      // spent on pixels nobody is looking at yet. The eager image keeps the
+      // browser's default (`auto`) so it is free to decode in time to paint.
+      decoding={eager ? undefined : 'async'}
       {...rest}
       sx={[
         {

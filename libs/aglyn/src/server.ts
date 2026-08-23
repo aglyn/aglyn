@@ -33,4 +33,12 @@ export * from './lib/app-utils/api-adapter'
 // same rule: exposed ONLY through this `/server` entry, never the full
 // `@aglyn/aglyn` barrel that client code bundles.
 export * from './lib/app-utils/api-idempotency'
+// The marketplace bundle verifier (AGL-2486) imports `acorn` to parse an
+// untrusted plugin bundle, so it rides the same rule as the two above:
+// exposed ONLY through this `/server` entry, never re-exported by the full
+// `@aglyn/aglyn` barrel that client code bundles. Measured on a Turbopack
+// production build: -39,035 B GZIPPED off the `/[host]/[[...slug]]` route's
+// client chunks. It runs in two console admin routes and nowhere else, and
+// it was putting a JavaScript parser into every published customer page.
+export * from './lib/app-utils/plugin-bundle-checks'
 export * from './lib/plugin-manager/realm-server'

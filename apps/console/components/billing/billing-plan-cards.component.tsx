@@ -175,7 +175,24 @@ export const ENTERPRISE_HIGHLIGHTS: Array<{
 const quotaLabel = (value: number, unit?: string) =>
   value === UNLIMITED ? 'Unlimited' : unit ? `${value} ${unit}` : String(value)
 
-const mbLabel = (mb: number) => (mb >= 1024 ? `${mb / 1024} GB` : `${mb} MB`)
+/**
+ * `quotaLabel` for the counts that are grouped by thousands. Kept separate
+ * because `quotaLabel` deliberately does NOT localise — "2000 org datasets"
+ * reads as a quota, "2,000" reads as money — but contacts and API requests
+ * have always been grouped, and dropping that would be a copy regression.
+ *
+ * The reason this exists at all: `UNLIMITED` is `Number.POSITIVE_INFINITY`,
+ * and `Infinity.toLocaleString()` is the glyph `'∞'`. So the Agency card read
+ * "∞ contacts" while every neighbouring row said "Unlimited", and an
+ * Enterprise card would mix "∞ contacts" with "Infinity GB storage" from the
+ * raw interpolations below. Formatting an uncapped quota is never the
+ * caller's business — see AGL-2482, same class one surface over.
+ */
+const quotaCount = (value: number) =>
+  value === UNLIMITED ? 'Unlimited' : value.toLocaleString()
+
+const mbLabel = (mb: number) =>
+  mb === UNLIMITED ? 'Unlimited' : mb >= 1024 ? `${mb / 1024} GB` : `${mb} MB`
 
 type FeatureKey = keyof (typeof PLAN_ENTITLEMENTS)['free']['features']
 
@@ -653,26 +670,30 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                     {`${mbLabel(entitlements.storagePerHostMb)} storage`}
                   </Typography>
                   <Typography variant="body2">
-                    {`${entitlements.bandwidthGb} GB bandwidth`}
+                    {`${
+                      entitlements.bandwidthGb === UNLIMITED
+                        ? 'Unlimited'
+                        : `${entitlements.bandwidthGb} GB`
+                    } bandwidth`}
                   </Typography>
                   <Typography variant="body2">
-                    {`${entitlements.managersPerOrg} team seat${
+                    {`${quotaLabel(entitlements.managersPerOrg)} team seat${
                       entitlements.managersPerOrg === 1 ? '' : 's'
                     }`}
                     {pricing.extraSeatMonthlyUsd != null
                       ? ` (+$${pricing.extraSeatMonthlyUsd}/extra, ` +
-                        `max ${entitlements.maxManagersPerOrg})`
+                        `max ${quotaLabel(entitlements.maxManagersPerOrg)})`
                       : ''}
                   </Typography>
                   {/* Per-site console collaborators (AGL-888) — end-user
                       member accounts are unlimited and listed separately. */}
                   <Typography variant="body2">
-                    {`${entitlements.membersPerHost} site collaborator${
+                    {`${quotaLabel(entitlements.membersPerHost)} site collaborator${
                       entitlements.membersPerHost === 1 ? '' : 's'
                     }`}
                     {pricing.extraCollaboratorMonthlyUsd != null
                       ? ` (+$${pricing.extraCollaboratorMonthlyUsd}/extra, ` +
-                        `max ${entitlements.maxMembersPerHost})`
+                        `max ${quotaLabel(entitlements.maxMembersPerHost)})`
                       : ''}
                   </Typography>
                   {/* Visitor signups are never capped (AGL-889). */}
@@ -681,7 +702,7 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                   </Typography>
                   {/* Audience band (AGL-890): paid tiers meter overage. */}
                   <Typography variant="body2">
-                    {`${entitlements.contactsPerHost.toLocaleString()} contacts`}
+                    {`${quotaCount(entitlements.contactsPerHost)} contacts`}
                     {pricing.extraContactsUsdPer1k != null
                       ? ` (+$${pricing.extraContactsUsdPer1k}/1k over)`
                       : ''}
@@ -695,12 +716,12 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                     {entitlements.datasetsPerOrg > 0
                       ? `${quotaLabel(entitlements.datasetsPerOrg)} org datasets × ` +
                         `${quotaLabel(entitlements.recordsPerDataset)} records · ` +
-                        `${Math.round(entitlements.dataStorageMbPerOrg / 1024)} GB data`
+                        `${mbLabel(entitlements.dataStorageMbPerOrg)} data`
                       : 'No datasets'}
                   </Typography>
                   <Typography variant="body2">
                     {entitlements.apiRequestsPerMonth > 0
-                      ? `${entitlements.apiRequestsPerMonth.toLocaleString()} API requests/mo` +
+                      ? `${quotaCount(entitlements.apiRequestsPerMonth)} API requests/mo` +
                         (pricing.extraApiRequestsUsdPer1k != null
                           ? ` (+$${pricing.extraApiRequestsUsdPer1k}/1k over)`
                           : '')

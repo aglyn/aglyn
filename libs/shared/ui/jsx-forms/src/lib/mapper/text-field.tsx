@@ -23,12 +23,17 @@
 import { TextField as MuiTextField } from '@mui/material'
 
 import { useFieldApi } from '../vendor/data-driven-forms'
-import FormFieldGrid, { type FormFieldGridProps } from './form-field-grid'
+import FormFieldGrid, {
+  buildFieldClear,
+  type FormFieldGridProps,
+} from './form-field-grid'
 import type { BaseFieldProps } from './types'
 import { type ExtendedFieldMeta, validationError } from './validation-error'
 
 export interface TextFieldProps extends BaseFieldProps {
   placeholder?: string
+  /** Offer the reset-to-unset affordance (AGL-2486). */
+  clearable?: boolean
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   inputProps?: Record<string, any>
   /**
@@ -56,13 +61,25 @@ export const TextField = (props: TextFieldProps) => {
     inputProps,
     InputProps,
     help,
+    clearable,
     FormFieldGridProps = {},
     ...rest
   } = useFieldApi(props)
   const invalid = validationError(meta as ExtendedFieldMeta, validateOnMount)
+  // `!== ''` and friends spelled out: `0` is a value an author typed and
+  // this repo has `strictNullChecks` off, so a falsy test would hide the
+  // clear button on it (AGL-2486).
+  const clear = buildFieldClear({
+    clearable,
+    label,
+    hasValue:
+      input.value !== '' && input.value !== undefined && input.value !== null,
+    locked: Boolean(isDisabled || isReadOnly),
+    onClear: () => input.onChange(''),
+  })
 
   return (
-    <FormFieldGrid help={help} {...FormFieldGridProps}>
+    <FormFieldGrid help={help} clear={clear} {...FormFieldGridProps}>
       <MuiTextField
         {...input}
         fullWidth

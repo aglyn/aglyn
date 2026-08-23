@@ -398,7 +398,8 @@ export default function BillingAddonsCardComponent({
       {noSubscription ? (
         <Alert severity="info">
           {'Add-ons bill onto an active plan subscription. This workspace does ' +
-            'not have one — either its plan is managed by Aglyn, or checkout ' +
+            `not have one — either its plan is managed by ${branding.productName}, ` +
+            'or checkout ' +
             'has not been completed — so these are shown for reference and ' +
             'cannot be changed here. Contact support to adjust them.'}
         </Alert>

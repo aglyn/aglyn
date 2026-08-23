@@ -19,23 +19,40 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { MEDIA_ALT_MAX_LENGTH } from '@aglyn/aglyn/app-utils/media-metadata'
 import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
-import { mdiFileDocumentMultipleOutline } from '@aglyn/shared-data-mdi'
+import {
+  mdiCalendarClock,
+  mdiChevronDown,
+  mdiCogOutline,
+  mdiDeleteOutline,
+  mdiFileDocumentMultipleOutline,
+  mdiOpenInNew,
+  mdiPencilOutline,
+  mdiPublish,
+  mdiPublishOff,
+} from '@aglyn/shared-data-mdi'
 import {
   CardDisplay,
   Container,
+  HelpTip,
+  MdiIcon,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
+  Avatar,
   Button,
   Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   MenuItem,
   Stack,
   Table,
@@ -56,7 +73,7 @@ import {
   setDoc,
   updateDoc,
 } from 'firebase/firestore'
-import { Box, Link as MuiLink } from '@mui/material'
+import { Box } from '@mui/material'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
@@ -74,6 +91,7 @@ import { docsHelp } from '../../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 import { hasEntitlement } from '../../../../../../constants/entitlements'
+import useBranding from '../../../../../../hooks/use-branding'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import {
   CONTENT_MAX_WIDTH,
@@ -82,7 +100,11 @@ import {
 import useFirestoreCollection from '../../../../../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../../../../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../../../../../hooks/use-host-activity-logger'
+import HubTabs from '../../../../../../components/hub-tabs.component'
 import MediaPickerDialog from '../../../../../../components/media/media-picker-dialog.component'
+import RowActionsMenu, {
+  type RowActionsMenuItem,
+} from '../../../../../../components/row-actions-menu.component'
 import {
   applyCommandToSource,
   MARKDOWN_SOURCE_HINT,
@@ -107,15 +129,77 @@ const slugify = (value: string) =>
 const MANAGE_CATEGORIES_VALUE = '__manage__'
 
 /**
+ * Entries tab id (AGL-2486); `/content?tab=entries` deep links land here.
+ * The value the collection deep-link (`?collection=`) has always assumed.
+ */
+const ENTRIES_TAB_ID = 'entries'
+/** Authors tab id (AGL-2486); `/content?tab=authors` deep links here. */
+const AUTHORS_TAB_ID = 'authors'
+
+/**
+ * Sentinel option in the entry editor's Author Select (AGL-2486): publish
+ * under a one-off byline typed on the entry instead of an author record.
+ *
+ * It exists for two reasons and both are back-compat. Every entry written
+ * before this feature carries a free-typed `authorName` and nothing else, and
+ * the Select has to be able to REPRESENT that state rather than silently
+ * re-attributing the post the first time someone opens it. And a guest byline
+ * used once is a legitimate thing not to want a record for.
+ */
+const CUSTOM_BYLINE_VALUE = '__custom__'
+
+
+/**
  * Content collections manager (AGL-81): collections (e.g. Blog) with
  * entries the org serves at /{collectionSlug} and
  * /{collectionSlug}/{entrySlug}.
  */
+/**
+ * Every toolbar control is locked to one height (AGL-2486).
+ *
+ * A `TextField size="small"` is 40px and a `Button size="small"` is 30.8px,
+ * so a select and a button placed on the same row with `alignItems: center`
+ * agree about nothing: measured on `/content` the six controls came out
+ * 40 / 83.8 / 83.8 / 30.8 / 53.5 / 53.5px tall with their tops spread over
+ * 26.5px. Both control kinds now read their height from THIS constant, so
+ * the row cannot drift apart again without someone editing one number.
+ */
+const TOOLBAR_CONTROL_HEIGHT = 40
+
+/**
+ * A row timestamp short enough to hold one line (AGL-2486).
+ *
+ * `toLocaleString()` renders `8/8/2026, 11:48:47 PM`, which wrapped to three
+ * line boxes inside the ~100px column the table actually gave it and made
+ * every row a different height. The exact instant is not lost — it moves to
+ * the cell's `title`, which is where a precise value belongs when the column
+ * is scanned for recency rather than read.
+ */
+const formatStampShort = (value: any): string => {
+  const date = value?.toDate?.()
+  if (!date) return '\u2014'
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+/** The full instant behind `formatStampShort`, for the cell's tooltip. */
+const formatStampFull = (value: any): string | undefined => {
+  const date = value?.toDate?.()
+  if (!date) return undefined
+  return date.toLocaleString()
+}
+
 const HostContent: NextPageWithLayout<Record<string, never>> = () => {
   const hostId = useHostId()
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
   const firestore = useFirestore()
+  // Help copy on this page names the product, and a white-label org must see
+  // its own name rather than ours (AGL-2153).
+  const { branding } = useBranding()
   // Entry creation is server-owned since AGL-2266 (the cap); every other
   // entry write on this page stays client-direct.
   const createResource = useHostResourceApi()
@@ -135,6 +219,34 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     () => doc(firestore, 'hosts', hostId),
     [firestore, hostId],
     { idField: '$id' },
+  )
+  /**
+   * Custom content authors (AGL-2486): `hosts/{hostId}/authors`.
+   *
+   * Host-scoped for the reason the collections above are — the byline belongs
+   * to the SITE that publishes it, resolves inside the same document tree the
+   * entry lives in, and serialises alongside `host.seo.entity`, which is a
+   * field of the host document. See `content-authors.ts`.
+   *
+   * Read unpaginated: `AUTHORS_MAX_PER_HOST` is the ceiling, and a masthead
+   * that needs paging is not a masthead.
+   */
+  const { data: authorDocs } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'hosts', hostId, 'authors'),
+        limit(Aglyn.AUTHORS_MAX_PER_HOST),
+      ),
+    [firestore, hostId],
+    { idField: '$id' },
+  )
+  const authors = useMemo<Aglyn.ContentAuthorRecord[]>(
+    () =>
+      (authorDocs ?? [])
+        .map((item: any) => Aglyn.normalizeContentAuthor(item, item.$id))
+        .filter((item): item is Aglyn.ContentAuthorRecord => Boolean(item))
+        .sort((a, b) => String(a.name).localeCompare(String(b.name))),
+    [authorDocs],
   )
   // Entry-template screens (AGL-105): assignable per collection.
   const { data: screenDocs } = useFirestoreCollection<any>(
@@ -456,6 +568,12 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
      * Article/BlogPosting wants.
      */
     authorName: string
+    /**
+     * The author RECORD this entry publishes under (AGL-2486), or `''` for
+     * the one-off byline in `authorName`. Empty with an empty `authorName`
+     * means "the site", which is what `Article.author` falls back to.
+     */
+    authorId: string
     // Category taxonomy (AGL-582): entries reference the collection's
     // categories by stable id (lookup, not typed) so renames never touch
     // entries. `legacyCategory` is the old free-typed string, shown
@@ -465,9 +583,9 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     tags: string
   } | null>(null)
   // Media picker target: entry cover image or an inline body image.
-  const [pickerTarget, setPickerTarget] = useState<'cover' | 'body' | null>(
-    null,
-  )
+  const [pickerTarget, setPickerTarget] = useState<
+    'cover' | 'body' | 'authorImage' | null
+  >(null)
   // Body editing mode (AGL-582): the WYSIWYG surface is the default; the
   // raw markdown textarea (with live preview) stays one tab away. Both
   // edit the same markdown-lite string, so switching re-parses/serializes.
@@ -675,6 +793,25 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
             // Entry model v2 (AGL-582): SEO overrides + taxonomy.
             seoTitle: editor.seoTitle.trim(),
             seoDescription: editor.seoDescription.trim(),
+            /**
+             * Byline, in BOTH shapes (AGL-2486).
+             *
+             * `authorId` is the reference and wins at render; `authorName` is
+             * written beside it as the resolved name, and that denormalization
+             * is deliberate rather than redundant. It is what keeps a byline
+             * on the page when the author record is later deleted, when an
+             * entry is restored from a bundle whose authors did not come with
+             * it, and on any reader that has the entry but not the masthead —
+             * `resolveEntryAuthor` falls through a dangling id to exactly this
+             * field. The RECORD still wins whenever it exists, so renaming an
+             * author updates every post at render time, unchanged.
+             *
+             * Choosing the custom byline clears the id rather than leaving a
+             * stale one to win over what was just typed.
+             */
+            ...(editor.authorId
+              ? { authorId: editor.authorId }
+              : { authorId: deleteField() }),
             authorName: editor.authorName.trim(),
             // Category lookup (AGL-582): the entry stores the STABLE
             // categoryId; picking one clears the legacy free-typed field.
@@ -914,6 +1051,192 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     })
   }, [selected, deleteBusy, user, hostId, enqueueSnackbar, logActivity])
 
+  /* ── Authors (AGL-2486) ───────────────────────────────────────────────── */
+
+  /**
+   * The author being edited, or null. Mirrors the entry editor's shape: the
+   * dialog owns a draft, `sameAs` stays a NEWLINE-SEPARATED string while
+   * editing (one profile per line reads better than a comma soup of URLs) and
+   * is saved as `string[]`.
+   */
+  const [authorEditor, setAuthorEditor] = useState<{
+    id: string | null
+    type: string
+    name: string
+    url: string
+    image: string
+    jobTitle: string
+    worksFor: string
+    sameAs: string
+    bio: string
+  } | null>(null)
+  const [authorBusy, setAuthorBusy] = useState(false)
+
+  const openAuthor = useCallback((author?: Aglyn.ContentAuthorRecord) => {
+    setAuthorEditor({
+      id: author?.$id ?? null,
+      // Stored as the numeric `HostEntityType`; held as a string here only
+      // because a MUI Select value is one. `contentAuthorSchemaType` coerces
+      // on the way back, which is the same helper that forgives the string
+      // form the Setup → SEO → Entity form has always written.
+      type: String(
+        Aglyn.contentAuthorSchemaType(author?.type) === 'Person'
+          ? Aglyn.HostEntityType.PERSON
+          : Aglyn.HostEntityType.ORGANIZATION,
+      ),
+      name: author?.name ?? '',
+      url: author?.url ?? '',
+      image: author?.image ?? '',
+      jobTitle: author?.jobTitle ?? '',
+      worksFor: author?.worksFor ?? '',
+      sameAs: (author?.sameAs ?? []).join('\n'),
+      bio: author?.bio ?? '',
+    })
+  }, [])
+
+  const handleSaveAuthor = useCallback(async () => {
+    if (!authorEditor || authorBusy) return
+    const name = authorEditor.name.trim()
+    if (!name) {
+      return void enqueueSnackbar('An author needs a name', {
+        variant: 'warning',
+        persist: false,
+      })
+    }
+    const isPerson =
+      Number(authorEditor.type) === Aglyn.HostEntityType.PERSON
+    const sameAs = authorEditor.sameAs
+      .split(/[\n,]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, Aglyn.AUTHOR_SAME_AS_MAX)
+    /**
+     * The Person-only fields are dropped rather than stored when the author
+     * is an Organization, and this is the branch rather than a cosmetic one:
+     * `jobTitle` and `worksFor` are not defined on `schema.org/Organization`,
+     * so carrying them would either publish invalid structured data or leave
+     * a value that reappears the moment somebody flips the type back — a
+     * field the editor cannot see and cannot clear.
+     */
+    const data = {
+      type: isPerson
+        ? Aglyn.HostEntityType.PERSON
+        : Aglyn.HostEntityType.ORGANIZATION,
+      name,
+      url: authorEditor.url.trim(),
+      image: authorEditor.image.trim(),
+      jobTitle: isPerson ? authorEditor.jobTitle.trim() : '',
+      worksFor: isPerson ? authorEditor.worksFor.trim() : '',
+      sameAs,
+      bio: authorEditor.bio.trim(),
+    }
+    setAuthorBusy(true)
+    try {
+      if (authorEditor.id) {
+        // Update stays client-direct: it creates no document, so it consumes
+        // no slot under `AUTHORS_MAX_PER_HOST` — the `actions` split.
+        await updateDoc(
+          doc(firestore, 'hosts', hostId, 'authors', authorEditor.id),
+          { ...data, updatedAt: Timestamp.now() },
+        )
+      } else {
+        /**
+         * A NEW author is created by the server (AGL-2486), like an entry
+         * (AGL-2266): `hosts/{hostId}/authors` is a client-creatable host
+         * subcollection, and one with no cap is unbounded Firestore documents
+         * mintable from the browser against a $0 subscription. The rules deny
+         * the client create and /api/hosts/resources counts live rows against
+         * `AUTHORS_MAX_PER_HOST` before writing.
+         *
+         * Unlike the entry there is no second write: an author carries no
+         * `deleteField()` sentinels, so the route's field allow-list can hold
+         * the whole payload.
+         */
+        await createResource({
+          hostId,
+          resource: 'author',
+          data,
+        })
+      }
+    } catch (error: any) {
+      setAuthorBusy(false)
+      return void enqueueSnackbar(
+        error?.message ?? 'Could not save the author',
+        { variant: 'error' },
+      )
+    }
+    setAuthorBusy(false)
+    setAuthorEditor(null)
+    enqueueSnackbar(authorEditor.id ? 'Author saved' : 'Author created', {
+      variant: 'success',
+      persist: false,
+    })
+    logActivity(authorEditor.id ? 'Updated author' : 'Created author', {
+      type: 'content',
+      id: authorEditor.id ?? name,
+      name,
+    })
+  }, [
+    authorEditor,
+    authorBusy,
+    firestore,
+    hostId,
+    createResource,
+    enqueueSnackbar,
+    logActivity,
+  ])
+
+  const handleDeleteAuthor = useCallback(
+    (author: Aglyn.ContentAuthorRecord) => async () => {
+      const ok = await confirm({
+        title: `Delete "${author.name}"?`,
+        // Said plainly because it is the question an editor actually has.
+        // Entries keep their byline: the resolved name is stored on the entry
+        // beside the reference, and `resolveEntryAuthor` falls through a
+        // dangling id to it and then to the site.
+        description:
+          'Entries published under this author keep their byline as plain ' +
+          'text, but lose the link, portrait and profile links in their ' +
+          'structured data. This cannot be undone.',
+      })
+      if (!ok) return
+      await deleteDoc(
+        doc(firestore, 'hosts', hostId, 'authors', String(author.$id)),
+      )
+      enqueueSnackbar('Author deleted', { variant: 'success', persist: false })
+      logActivity('Deleted author', {
+        type: 'content',
+        id: String(author.$id),
+        name: String(author.name),
+      })
+    },
+    [confirm, firestore, hostId, enqueueSnackbar, logActivity],
+  )
+
+  /**
+   * Opening a blank entry editor, shared by the toolbar's primary button and
+   * the zero-state's call to action (AGL-2486). It was inlined on the button
+   * when there was only one way in.
+   */
+  const openNewEntry = useCallback(() => {
+    setBodyTab('visual')
+    setEditor({
+      id: null,
+      title: '',
+      excerpt: '',
+      body: '',
+      coverImage: '',
+      coverImageAlt: '',
+      seoTitle: '',
+      seoDescription: '',
+      authorName: '',
+      authorId: '',
+      categoryId: '',
+      legacyCategory: '',
+      tags: '',
+    })
+  }, [])
+
   return (
     <>
       <DashboardLayout
@@ -943,265 +1266,840 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
         }
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <CardDisplay
-            header={'Collections & Entries'}
-            help={docsHelp('buildABlog')}
-            contentGutterX
-            contentGutterY
-            contentBordered="all"
-          >
-          {collections.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              {'Create a collection (e.g. "Blog") to publish entries at ' +
-                '/blog and /blog/{entry} on your site.'}
-            </Typography>
-          ) : (
-            <Stack spacing={2}>
-              <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
-                <TextField
-                  select
-                  size="small"
-                  label="Collection"
-                  value={selected?.$id ?? ''}
-                  onChange={(event) => setSelectedId(event.target.value)}
-                  sx={{ minWidth: 220 }}
-                >
-                  {collections.map((item) => (
-                    <MenuItem key={item.$id} value={item.$id}>
-                      {`${item.displayName} (/${item.slug})`}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <TextField
-                  select
-                  size="small"
-                  label="List template screen"
-                  value={selected?.listScreenId ?? ''}
-                  onChange={handleTemplateChange(selected?.$id ?? '', 'list')}
-                  sx={{ minWidth: 200 }}
-                  helperText={`Screen for /${selected?.slug ?? '…'} — drop a Collection Entries block`}
-                >
-                  <MenuItem value="">{'Built-in themed list'}</MenuItem>
-                  {screenOptions.map((screen: any) => (
-                    <MenuItem key={screen.$id} value={screen.$id}>
-                      {screen.displayName ?? screen.$id}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <TextField
-                  select
-                  size="small"
-                  label="Entry template screen"
-                  value={
-                    selected?.entryScreenId ??
-                    selected?.templateScreenId ??
-                    ''
-                  }
-                  onChange={handleTemplateChange(selected?.$id ?? '', 'entry')}
-                  sx={{ minWidth: 200 }}
-                  helperText={`Screen for /${selected?.slug ?? '…'}/{entry} — use {{entry.title}}, Entry Body`}
-                >
-                  <MenuItem value="">{'Built-in themed article'}</MenuItem>
-                  {screenOptions.map((screen: any) => (
-                    <MenuItem key={screen.$id} value={screen.$id}>
-                      {screen.displayName ?? screen.$id}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  color="primary"
-                  onClick={() => setCategoriesOpen(true)}
-                >
-                  {'Categories'}
-                </Button>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  color="primary"
-                  onClick={() => {
-                    setBodyTab('visual')
-                    setEditor({
-                      id: null,
-                      title: '',
-                      excerpt: '',
-                      body: '',
-                      coverImage: '',
-                      coverImageAlt: '',
-                      seoTitle: '',
-                      seoDescription: '',
-                      authorName: '',
-                      categoryId: '',
-                      legacyCategory: '',
-                      tags: '',
-                    })
-                  }}
-                >
-                  {'New entry'}
-                </Button>
-                {/* AGL-1324: the collection shell was the one thing on this
-                    page that could be created and never removed. */}
-                {isSiteAdmin && selected ? (
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="error"
-                    onClick={() => {
-                      setDeleteConfirm('')
-                      setDeleteOpen(true)
-                    }}
+          {/* Tabs, not a second route (AGL-2486): an author is managed
+              ALONGSIDE the entries that reference it, and `HubTabs` is the
+              strip the settings hub, the marketplace and every plugin console
+              page already use — it owns the `?tab=` mirroring, the
+              deep-linking and the small-screen collapse, so there is nothing
+              here to get subtly different. */}
+          <HubTabs
+            navHeader="Content"
+            tabs={[
+              {
+                id: ENTRIES_TAB_ID,
+                label: 'Collections & Entries',
+                content: (
+                  <CardDisplay
+                    header={'Collections & Entries'}
+                    help={docsHelp('buildABlog')}
+                    contentGutterX
+                    contentGutterY
+                    contentBordered="all"
                   >
-                    {'Delete collection'}
-                  </Button>
-                ) : null}
-              </Stack>
-              {entries.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  {'No entries yet.'}
-                </Typography>
-              ) : (
-                <Table size="small">
-                  <TableHead
-                    sx={{ '& .MuiTableCell-head': { height: TABLE_HEAD_HEIGHT } }}
-                  >
-                    <TableRow>
-                      <TableCell>{'Title'}</TableCell>
-                      <TableCell>{'Status'}</TableCell>
-                      <TableCell>{'Updated'}</TableCell>
-                      <TableCell>{'Published'}</TableCell>
-                      <TableCell align="right">{'Actions'}</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {entries.map((entry) => {
-                      // Row click opens the same editor the Edit button does,
-                      // matching the artifact listings (AGL-698).
-                      const openEntry = () => {
-                        setBodyTab('visual')
-                        setEditor({
-                          id: entry.$id,
-                          title: entry.title ?? '',
-                          excerpt: entry.excerpt ?? '',
-                          body: entry.body ?? '',
-                          coverImage: entry.coverImage ?? '',
-                          coverImageAlt: entry.coverImageAlt ?? '',
-                          seoTitle: entry.seoTitle ?? '',
-                          seoDescription: entry.seoDescription ?? '',
-                          authorName: entry.authorName ?? '',
-                          categoryId: entry.categoryId ?? '',
-                          legacyCategory: entry.category ?? '',
-                          tags: Array.isArray(entry.tags)
-                            ? entry.tags.join(', ')
-                            : '',
-                        })
-                      }
-                      return (
-                      <TableRow
-                        key={entry.$id}
-                        hover
-                        onClick={openEntry}
-                        sx={{ cursor: 'pointer' }}
+                    {/*
+                      The control row used to do three unrelated jobs at once
+                      (AGL-2486): pick a collection, configure that
+                      collection's two template screens, and act on it. That
+                      is why nothing lined up — a settings control carries
+                      helper text and a button does not, so putting them on
+                      one `alignItems: center` row guaranteed three different
+                      heights and three different baselines. Measured: the six
+                      controls were 40 / 83.8 / 83.8 / 30.8 / 53.5 / 53.5px
+                      tall, and `New entry` and `Delete collection` wrapped
+                      their own labels onto two lines at EVERY width down from
+                      1800px, while `Categories` did not.
+
+                      Split by job instead: a toolbar that chooses and acts,
+                      and a disclosure that configures. Nothing was removed.
+                    */}
+                    {collections.length === 0 ? (
+                      /*
+                        Deliberately not `EmptyState` — that component brings
+                        its own `CardDisplay`, and this one already sits
+                        inside one. The framing differs; the language (icon,
+                        h6 title, capped secondary copy, one call to action)
+                        is the same on purpose.
+                      */
+                      <Stack
+                        spacing={1.5}
+                        sx={{ alignItems: 'center', textAlign: 'center', py: 6 }}
                       >
-                        <TableCell>
-                          {entry.title}
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                            component="div"
-                          >
-                            {`/${selected?.slug}/${entry.slug}`}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={
-                              entry.status === 'scheduled' && entry.publishAt
-                                ? `scheduled · ${entry.publishAt.toDate?.().toLocaleString() ?? ''}`
-                                : (entry.status ?? 'draft')
-                            }
-                            color={
-                              entry.status === 'published'
-                                ? 'success'
-                                : entry.status === 'scheduled'
-                                  ? 'info'
-                                  : 'default'
-                            }
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          {entry.updatedAt?.toDate?.().toLocaleString() ?? '--'}
-                        </TableCell>
-                        <TableCell>
-                          {entry.publishedAt?.toDate?.().toLocaleString() ??
-                            '--'}
-                        </TableCell>
-                        <TableCell
-                          align="right"
-                          sx={{ whiteSpace: 'nowrap' }}
-                          onClick={(event) => event.stopPropagation()}
+                        <MdiIcon
+                          path={mdiFileDocumentMultipleOutline.path}
+                          color="primary"
+                          fontSize="large"
+                        />
+                        <Typography variant="h6">
+                          {'No collections yet'}
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{ maxWidth: 440 }}
                         >
-                          <Button size="small" onClick={openEntry}>
-                            {'Edit'}
-                          </Button>
-                          <Button
+                          {'A collection is a set of pages that share a shape ' +
+                            '\u2014 a blog, a news feed, a case-study library. ' +
+                            'Create one and its entries publish at ' +
+                            '/{collection} and /{collection}/{entry} on your ' +
+                            'site.'}
+                        </Typography>
+                        <Button
+                          variant="contained"
+                          color="primary"
+                          onClick={() => setNewCollectionOpen(true)}
+                        >
+                          {'New collection'}
+                        </Button>
+                      </Stack>
+                    ) : (
+                      <Stack spacing={2.5}>
+                        {/*
+                          Toolbar: which collection, and what to do with it.
+                          It WRAPS rather than overflowing, and every control
+                          is pinned to `TOOLBAR_CONTROL_HEIGHT`, so the row
+                          holds its baseline at any width.
+                        */}
+                        <Stack
+                          direction="row"
+                          useFlexGap
+                          sx={{
+                            alignItems: 'center',
+                            flexWrap: 'wrap',
+                            gap: 1.5,
+                          }}
+                        >
+                          <TextField
+                            select
                             size="small"
-                            color="primary"
-                            onClick={handleTogglePublish(entry)}
-                          >
-                            {entry.status === 'published'
-                              ? 'Unpublish'
-                              : 'Publish'}
-                          </Button>
-                          <Button
-                            size="small"
-                            color="primary"
-                            onClick={() => {
-                              const initial = new Date(
-                                Date.now() + 60 * 60 * 1000,
-                              )
-                              initial.setMinutes(0, 0, 0)
-                              const pad = (value: number) =>
-                                String(value).padStart(2, '0')
-                              setScheduler({
-                                entry,
-                                at:
-                                  `${initial.getFullYear()}-${pad(initial.getMonth() + 1)}-` +
-                                  `${pad(initial.getDate())}T${pad(initial.getHours())}:${pad(initial.getMinutes())}`,
-                              })
+                            label="Collection"
+                            value={selected?.$id ?? ''}
+                            onChange={(event) =>
+                              setSelectedId(event.target.value)
+                            }
+                            sx={{
+                              minWidth: 200,
+                              maxWidth: 340,
+                              flexGrow: 1,
+                              '& .MuiInputBase-root': {
+                                height: TOOLBAR_CONTROL_HEIGHT,
+                              },
                             }}
                           >
-                            {'Schedule'}
-                          </Button>
-                          {entry.status === 'published' && siteBase ? (
-                            <Button
-                              size="small"
-                              component={MuiLink as any}
-                              href={`${siteBase}/${selected?.slug}/${entry.slug}`}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              {'View'}
-                            </Button>
-                          ) : null}
+                            {collections.map((item) => (
+                              <MenuItem key={item.$id} value={item.$id}>
+                                {`${item.displayName} (/${item.slug})`}
+                              </MenuItem>
+                            ))}
+                          </TextField>
+                          {/* Pushes the actions to the trailing edge without
+                              letting the select swallow the whole row. */}
+                          <Box sx={{ flexGrow: 1 }} />
                           <Button
-                            size="small"
-                            color="error"
-                            onClick={handleDeleteEntry(entry)}
+                            variant="outlined"
+                            color="primary"
+                            onClick={() => setCategoriesOpen(true)}
+                            sx={{
+                              height: TOOLBAR_CONTROL_HEIGHT,
+                              flexShrink: 0,
+                              whiteSpace: 'nowrap',
+                            }}
                           >
-                            {'Delete'}
+                            {'Categories'}
                           </Button>
-                        </TableCell>
-                      </TableRow>
-                      )
+                          {/* The one primary action on this tab, and now the
+                              only contained button in the row. */}
+                          <Button
+                            variant="contained"
+                            color="primary"
+                            onClick={openNewEntry}
+                            sx={{
+                              height: TOOLBAR_CONTROL_HEIGHT,
+                              flexShrink: 0,
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {'New entry'}
+                          </Button>
+                        </Stack>
+                        {/*
+                          Collection settings: the two template screens and
+                          the collection's own deletion. Both are things you
+                          set up once and then leave alone, so they sit behind
+                          a disclosure instead of competing with `New entry`
+                          for the toolbar.
+                        */}
+                        <Accordion
+                          disableGutters
+                          elevation={0}
+                          sx={{
+                            border: 1,
+                            borderColor: 'divider',
+                            borderRadius: 1,
+                            '&::before': { display: 'none' },
+                          }}
+                        >
+                          <AccordionSummary
+                            expandIcon={
+                              <MdiIcon path={mdiChevronDown.path} size={0.9} />
+                            }
+                          >
+                            <Stack
+                              direction="row"
+                              spacing={1}
+                              sx={{ alignItems: 'center' }}
+                            >
+                              <MdiIcon path={mdiCogOutline.path} size={0.8} />
+                              <Typography variant="subtitle2">
+                                {'Collection settings'}
+                              </Typography>
+                            </Stack>
+                          </AccordionSummary>
+                          <AccordionDetails>
+                            <Stack spacing={3}>
+                              <Stack spacing={1.5}>
+                                <Stack
+                                  direction="row"
+                                  spacing={0.5}
+                                  sx={{ alignItems: 'center' }}
+                                >
+                                  <Typography variant="subtitle2">
+                                    {'Template screens'}
+                                  </Typography>
+                                  {/*
+                                    The captions under these two selects used
+                                    to read "drop a Collection Entries block"
+                                    and "use {{entry.title}}, Entry Body" —
+                                    true, but written for whoever built the
+                                    feature, and long enough to wrap and shove
+                                    the row's baseline around. The detail is
+                                    kept, in the console's own `HelpTip`; the
+                                    helper text below each select now answers
+                                    the question an editor actually has, which
+                                    is which URL the screen serves.
+                                  */}
+                                  <HelpTip
+                                    title="Template screens"
+                                    href={docsHelp('buildABlog').href}
+                                    excerpt={
+                                      'Leave either on the built-in themed ' +
+                                      `page and ${branding.productName} ` +
+                                      'renders it for you. To ' +
+                                      'design your own: the list screen needs ' +
+                                      'a Collection Entries block, and the ' +
+                                      'entry screen can use {{entry.title}}, ' +
+                                      'Entry Body and the entry\u2019s other ' +
+                                      'fields.'
+                                    }
+                                  />
+                                </Stack>
+                                <Box
+                                  sx={{
+                                    display: 'grid',
+                                    gap: 2,
+                                    gridTemplateColumns: {
+                                      xs: '1fr',
+                                      sm: '1fr 1fr',
+                                    },
+                                  }}
+                                >
+                                  <TextField
+                                    select
+                                    size="small"
+                                    label="List screen"
+                                    value={selected?.listScreenId ?? ''}
+                                    onChange={handleTemplateChange(
+                                      selected?.$id ?? '',
+                                      'list',
+                                    )}
+                                    helperText={`Lists every entry at /${
+                                      selected?.slug ?? '\u2026'
+                                    }`}
+                                  >
+                                    <MenuItem value="">
+                                      {'Built-in themed list'}
+                                    </MenuItem>
+                                    {screenOptions.map((screen: any) => (
+                                      <MenuItem
+                                        key={screen.$id}
+                                        value={screen.$id}
+                                      >
+                                        {screen.displayName ?? screen.$id}
+                                      </MenuItem>
+                                    ))}
+                                  </TextField>
+                                  <TextField
+                                    select
+                                    size="small"
+                                    label="Entry screen"
+                                    value={
+                                      selected?.entryScreenId ??
+                                      selected?.templateScreenId ??
+                                      ''
+                                    }
+                                    onChange={handleTemplateChange(
+                                      selected?.$id ?? '',
+                                      'entry',
+                                    )}
+                                    helperText={`Renders one entry under /${
+                                      selected?.slug ?? '\u2026'
+                                    }`}
+                                  >
+                                    <MenuItem value="">
+                                      {'Built-in themed article'}
+                                    </MenuItem>
+                                    {screenOptions.map((screen: any) => (
+                                      <MenuItem
+                                        key={screen.$id}
+                                        value={screen.$id}
+                                      >
+                                        {screen.displayName ?? screen.$id}
+                                      </MenuItem>
+                                    ))}
+                                  </TextField>
+                                </Box>
+                              </Stack>
+                              {/*
+                                AGL-1324 gave the collection shell a delete;
+                                AGL-2486 gives it somewhere to live. It was
+                                sitting next to `New entry` at the same size
+                                and the same outlined weight, which is the one
+                                arrangement guaranteed to make the destructive
+                                action the easiest to hit by accident. It is
+                                now behind this disclosure, below a rule, in
+                                the lightest button variant there is, and it
+                                still opens the type-the-name dialog.
+                              */}
+                              {isSiteAdmin && selected ? (
+                                <>
+                                  <Divider />
+                                  <Stack
+                                    direction="row"
+                                    useFlexGap
+                                    sx={{
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      flexWrap: 'wrap',
+                                      gap: 1.5,
+                                    }}
+                                  >
+                                    <Stack
+                                      spacing={0.25}
+                                      sx={{ flexGrow: 1, minWidth: 220 }}
+                                    >
+                                      <Typography variant="subtitle2">
+                                        {'Delete this collection'}
+                                      </Typography>
+                                      <Typography
+                                        variant="caption"
+                                        color="text.secondary"
+                                      >
+                                        {`Permanently removes ${
+                                          selected.displayName
+                                        }, its /${
+                                          selected.slug
+                                        } route and every entry in it.`}
+                                      </Typography>
+                                    </Stack>
+                                    <Button
+                                      size="small"
+                                      variant="text"
+                                      color="error"
+                                      onClick={() => {
+                                        setDeleteConfirm('')
+                                        setDeleteOpen(true)
+                                      }}
+                                      sx={{
+                                        flexShrink: 0,
+                                        whiteSpace: 'nowrap',
+                                      }}
+                                    >
+                                      {'Delete collection'}
+                                    </Button>
+                                  </Stack>
+                                </>
+                              ) : null}
+                            </Stack>
+                          </AccordionDetails>
+                        </Accordion>
+                        {entries.length === 0 ? (
+                          <Stack
+                            spacing={1.5}
+                            sx={{
+                              alignItems: 'center',
+                              textAlign: 'center',
+                              py: 5,
+                            }}
+                          >
+                            <MdiIcon
+                              path={mdiFileDocumentMultipleOutline.path}
+                              color="primary"
+                              fontSize="large"
+                            />
+                            <Typography variant="h6">
+                              {'No entries yet'}
+                            </Typography>
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ maxWidth: 420 }}
+                            >
+                              {`Entries you publish here appear at /${
+                                selected?.slug ?? ''
+                              } on your site.`}
+                            </Typography>
+                            <Button
+                              variant="contained"
+                              color="primary"
+                              onClick={openNewEntry}
+                            >
+                              {'New entry'}
+                            </Button>
+                          </Stack>
+                        ) : (
+                          <Table size="small">
+                            <TableHead
+                              sx={{
+                                '& .MuiTableCell-head': {
+                                  height: TABLE_HEAD_HEIGHT,
+                                },
+                              }}
+                            >
+                              <TableRow>
+                                {/*
+                                  Title takes every spare pixel; the rest are
+                                  sized by their own content. Before this the
+                                  action cluster held a FIXED 381.5px — 43% of
+                                  the table at 1280px and 48.5% at 900px, more
+                                  than the title column ever got — and the
+                                  table overflowed its container by 298px at
+                                  900px and 448px at 700px.
+                                */}
+                                <TableCell sx={{ width: '100%' }}>
+                                  {'Title'}
+                                </TableCell>
+                                <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                  {'Status'}
+                                </TableCell>
+                                <TableCell
+                                  sx={{
+                                    whiteSpace: 'nowrap',
+                                    display: { xs: 'none', md: 'table-cell' },
+                                  }}
+                                >
+                                  {'Updated'}
+                                </TableCell>
+                                <TableCell
+                                  sx={{
+                                    whiteSpace: 'nowrap',
+                                    display: { xs: 'none', md: 'table-cell' },
+                                  }}
+                                >
+                                  {'Published'}
+                                </TableCell>
+                                <TableCell align="right" sx={{ width: 56 }}>
+                                  {'Actions'}
+                                </TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {entries.map((entry) => {
+                                // Row click opens the same editor the Edit
+                                // action does, matching the artifact listings
+                                // (AGL-698).
+                                const openEntry = () => {
+                                  setBodyTab('visual')
+                                  setEditor({
+                                    id: entry.$id,
+                                    title: entry.title ?? '',
+                                    excerpt: entry.excerpt ?? '',
+                                    body: entry.body ?? '',
+                                    coverImage: entry.coverImage ?? '',
+                                    coverImageAlt: entry.coverImageAlt ?? '',
+                                    seoTitle: entry.seoTitle ?? '',
+                                    seoDescription: entry.seoDescription ?? '',
+                                    authorName: entry.authorName ?? '',
+                                    authorId: entry.authorId ?? '',
+                                    categoryId: entry.categoryId ?? '',
+                                    legacyCategory: entry.category ?? '',
+                                    tags: Array.isArray(entry.tags)
+                                      ? entry.tags.join(', ')
+                                      : '',
+                                  })
+                                }
+                                const published =
+                                  entry.status === 'published'
+                                /*
+                                  Five equal text links (EDIT · UNPUBLISH ·
+                                  SCHEDULE · VIEW · DELETE) put the one
+                                  irreversible action a few pixels from the
+                                  four routine ones. The console settled this
+                                  in AGL-701: secondary and destructive row
+                                  actions go in the overflow menu, which tints
+                                  the destructive item and cannot be hit
+                                  without opening it first.
+                                */
+                                const actions: RowActionsMenuItem[] = [
+                                  {
+                                    key: 'edit',
+                                    label: 'Edit',
+                                    icon: (
+                                      <MdiIcon
+                                        path={mdiPencilOutline.path}
+                                        size={0.8}
+                                      />
+                                    ),
+                                    onClick: openEntry,
+                                  },
+                                  {
+                                    key: 'publish',
+                                    label: published ? 'Unpublish' : 'Publish',
+                                    icon: (
+                                      <MdiIcon
+                                        path={
+                                          published
+                                            ? mdiPublishOff.path
+                                            : mdiPublish.path
+                                        }
+                                        size={0.8}
+                                      />
+                                    ),
+                                    onClick: () =>
+                                      void handleTogglePublish(entry)(),
+                                  },
+                                  {
+                                    key: 'schedule',
+                                    label: 'Schedule\u2026',
+                                    icon: (
+                                      <MdiIcon
+                                        path={mdiCalendarClock.path}
+                                        size={0.8}
+                                      />
+                                    ),
+                                    onClick: () => {
+                                      const initial = new Date(
+                                        Date.now() + 60 * 60 * 1000,
+                                      )
+                                      initial.setMinutes(0, 0, 0)
+                                      const pad = (value: number) =>
+                                        String(value).padStart(2, '0')
+                                      setScheduler({
+                                        entry,
+                                        at:
+                                          `${initial.getFullYear()}-${pad(initial.getMonth() + 1)}-` +
+                                          `${pad(initial.getDate())}T${pad(initial.getHours())}:${pad(initial.getMinutes())}`,
+                                      })
+                                    },
+                                  },
+                                ]
+                                if (published && siteBase) {
+                                  actions.push({
+                                    key: 'view',
+                                    label: 'View on site',
+                                    icon: (
+                                      <MdiIcon
+                                        path={mdiOpenInNew.path}
+                                        size={0.8}
+                                      />
+                                    ),
+                                    onClick: () =>
+                                      void window.open(
+                                        `${siteBase}/${selected?.slug}/${entry.slug}`,
+                                        '_blank',
+                                        'noreferrer',
+                                      ),
+                                  })
+                                }
+                                actions.push({
+                                  key: 'delete',
+                                  label: 'Delete',
+                                  destructive: true,
+                                  icon: (
+                                    <MdiIcon
+                                      path={mdiDeleteOutline.path}
+                                      size={0.8}
+                                    />
+                                  ),
+                                  onClick: () =>
+                                    void handleDeleteEntry(entry)(),
+                                })
+                                return (
+                                  <TableRow
+                                    key={entry.$id}
+                                    hover
+                                    onClick={openEntry}
+                                    sx={{ cursor: 'pointer' }}
+                                  >
+                                    <TableCell sx={{ width: '100%' }}>
+                                      {/*
+                                        `anywhere` rather than a truncation:
+                                        a slug is one long unbroken token and
+                                        the default break rules cut it
+                                        mid-word instead of wrapping it.
+                                      */}
+                                      <Typography
+                                        variant="body2"
+                                        sx={{
+                                          fontWeight: 500,
+                                          overflowWrap: 'anywhere',
+                                        }}
+                                      >
+                                        {entry.title}
+                                      </Typography>
+                                      <Typography
+                                        variant="caption"
+                                        color="text.secondary"
+                                        component="div"
+                                        sx={{ overflowWrap: 'anywhere' }}
+                                      >
+                                        {`/${selected?.slug}/${entry.slug}`}
+                                      </Typography>
+                                    </TableCell>
+                                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                      {/*
+                                        Outlined, and the label is the status
+                                        word alone. A filled chip carrying a
+                                        full timestamp was the heaviest thing
+                                        on a page of otherwise quiet rows, and
+                                        it repeated identically down every
+                                        one. The scheduled instant moves to
+                                        the Published column, which is the
+                                        column about when a thing goes live.
+                                      */}
+                                      <Chip
+                                        label={entry.status ?? 'draft'}
+                                        variant="outlined"
+                                        color={
+                                          published
+                                            ? 'success'
+                                            : entry.status === 'scheduled'
+                                              ? 'info'
+                                              : 'default'
+                                        }
+                                        size="small"
+                                      />
+                                    </TableCell>
+                                    <TableCell
+                                      title={formatStampFull(entry.updatedAt)}
+                                      sx={{
+                                        whiteSpace: 'nowrap',
+                                        display: {
+                                          xs: 'none',
+                                          md: 'table-cell',
+                                        },
+                                      }}
+                                    >
+                                      {formatStampShort(entry.updatedAt)}
+                                    </TableCell>
+                                    <TableCell
+                                      title={
+                                        formatStampFull(entry.publishedAt) ??
+                                        formatStampFull(entry.publishAt)
+                                      }
+                                      sx={{
+                                        whiteSpace: 'nowrap',
+                                        display: {
+                                          xs: 'none',
+                                          md: 'table-cell',
+                                        },
+                                      }}
+                                    >
+                                      {entry.publishedAt ? (
+                                        formatStampShort(entry.publishedAt)
+                                      ) : entry.status === 'scheduled' &&
+                                        entry.publishAt ? (
+                                        <Typography
+                                          variant="body2"
+                                          color="info.main"
+                                          component="span"
+                                        >
+                                          {formatStampShort(entry.publishAt)}
+                                        </Typography>
+                                      ) : (
+                                        '\u2014'
+                                      )}
+                                    </TableCell>
+                                    <TableCell
+                                      align="right"
+                                      sx={{ width: 56 }}
+                                      onClick={(event) =>
+                                        event.stopPropagation()
+                                      }
+                                    >
+                                      <RowActionsMenu
+                                        label={entry.title}
+                                        items={actions}
+                                      />
+                                    </TableCell>
+                                  </TableRow>
+                                )
+                              })}
+                            </TableBody>
+                          </Table>
+                        )}
+                      </Stack>
+                    )}
+                  </CardDisplay>
+                ),
+              },
+              {
+                id: AUTHORS_TAB_ID,
+                label: 'Authors',
+                content: (
+                  <CardDisplay
+                    header={'Authors'}
+                    help={docsHelp('buildABlog', {
+                      anchor: '#authors',
+                      excerpt:
+                        'Publish entries under a pen name, a guest ' +
+                        'contributor or the company — a Person or an ' +
+                        'Organization, emitted as JSON-LD structured data.',
                     })}
-                  </TableBody>
-                </Table>
-              )}
-            </Stack>
-          )}
-          </CardDisplay>
+                    contentGutterX
+                    contentGutterY
+                    contentBordered="all"
+                  >
+                    <Stack spacing={2}>
+                      <Stack
+                        direction="row"
+                        spacing={2}
+                        sx={{ alignItems: 'center' }}
+                      >
+                        <Typography variant="body2" color="text.secondary" sx={{ flexGrow: 1 }}>
+                          {'Bylines your entries can be published under — ' +
+                            'they need not match the account that wrote the ' +
+                            'post. Each one becomes the Article’s ' +
+                            'schema.org author.'}
+                        </Typography>
+                        <Button
+                          variant="contained"
+                          color="primary"
+                          onClick={() => openAuthor()}
+                          sx={{
+                            height: TOOLBAR_CONTROL_HEIGHT,
+                            flexShrink: 0,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {'New author'}
+                        </Button>
+                      </Stack>
+                      {authors.length === 0 ? (
+                        <Typography variant="body2" color="text.secondary">
+                          {'No authors yet. Entries fall back to a one-off ' +
+                            'byline, or to the site’s publisher entity from ' +
+                            'Setup → SEO.'}
+                        </Typography>
+                      ) : (
+                        <Table size="small">
+                          <TableHead
+                            sx={{
+                              '& .MuiTableCell-head': {
+                                height: TABLE_HEAD_HEIGHT,
+                              },
+                            }}
+                          >
+                            <TableRow>
+                              <TableCell>{'Author'}</TableCell>
+                              <TableCell>{'Type'}</TableCell>
+                              <TableCell>{'Entries'}</TableCell>
+                              <TableCell align="right" sx={{ width: 56 }}>
+                                {'Actions'}
+                              </TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {authors.map((author) => (
+                              <TableRow
+                                key={author.$id}
+                                hover
+                                onClick={() => openAuthor(author)}
+                                sx={{ cursor: 'pointer' }}
+                              >
+                                <TableCell>
+                                  <Stack
+                                    direction="row"
+                                    spacing={1}
+                                    sx={{ alignItems: 'center' }}
+                                  >
+                                    <Avatar
+                                      src={
+                                        Aglyn.resolveMediaSrc(author.image, {
+                                          hostId,
+                                        }) || undefined
+                                      }
+                                      sx={{ width: 28, height: 28 }}
+                                    >
+                                      {String(author.name ?? '?').slice(0, 1)}
+                                    </Avatar>
+                                    <span>{author.name}</span>
+                                  </Stack>
+                                  {author.jobTitle ? (
+                                    <Typography
+                                      variant="caption"
+                                      color="text.secondary"
+                                      component="div"
+                                    >
+                                      {author.jobTitle}
+                                    </Typography>
+                                  ) : null}
+                                </TableCell>
+                                <TableCell>
+                                  <Chip
+                                    size="small"
+                                    label={Aglyn.contentAuthorSchemaType(
+                                      author.type,
+                                    )}
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  {/* Counted off the SELECTED collection's
+                                      loaded entries only — the listener holds
+                                      one collection at a time, so this is a
+                                      hint about where a byline is in use, not
+                                      a site-wide total it cannot know. */}
+                                  {
+                                    entries.filter(
+                                      (entry: any) =>
+                                        entry.authorId === author.$id,
+                                    ).length
+                                  }
+                                </TableCell>
+                                <TableCell
+                                  align="right"
+                                  sx={{ width: 56 }}
+                                  onClick={(event) => event.stopPropagation()}
+                                >
+                                  <RowActionsMenu
+                                    label={author.name}
+                                    items={[
+                                      {
+                                        key: 'edit',
+                                        label: 'Edit',
+                                        icon: (
+                                          <MdiIcon
+                                            path={mdiPencilOutline.path}
+                                            size={0.8}
+                                          />
+                                        ),
+                                        onClick: () => openAuthor(author),
+                                      },
+                                      {
+                                        key: 'delete',
+                                        label: 'Delete',
+                                        destructive: true,
+                                        icon: (
+                                          <MdiIcon
+                                            path={mdiDeleteOutline.path}
+                                            size={0.8}
+                                          />
+                                        ),
+                                        onClick: () =>
+                                          void handleDeleteAuthor(author)(),
+                                      },
+                                    ]}
+                                  />
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </Stack>
+                  </CardDisplay>
+                ),
+              },
+            ]}
+          />
         </Container>
       </DashboardLayout>
       <Dialog
@@ -1533,17 +2431,78 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
               helperText="Comma-separated, e.g. nextjs, seo"
             />
           </Stack>
+          {/* Byline (AGL-2486). A record, a one-off string, or the site —
+              and the Select has to be able to say all three, because an
+              entry written before this feature is in the middle state and
+              opening its editor must not re-attribute it. */}
           <TextField
+            select
             label="Author"
-            value={editor?.authorName ?? ''}
-            onChange={(event) =>
-              setEditor((prev) =>
-                prev ? { ...prev, authorName: event.target.value } : prev,
-              )
+            value={
+              editor?.authorId
+                ? editor.authorId
+                : editor?.authorName
+                  ? CUSTOM_BYLINE_VALUE
+                  : ''
             }
+            onChange={(event) => {
+              const value = event.target.value
+              setEditor((prev) => {
+                if (!prev) return prev
+                if (value === CUSTOM_BYLINE_VALUE) {
+                  // Keep whatever was typed; only drop the record reference.
+                  return { ...prev, authorId: '' }
+                }
+                if (!value) return { ...prev, authorId: '', authorName: '' }
+                return {
+                  ...prev,
+                  authorId: value,
+                  // The resolved name travels with the id — see the save.
+                  authorName:
+                    authors.find((author) => author.$id === value)?.name ??
+                    prev.authorName,
+                }
+              })
+            }}
             size="small"
-            helperText="Byline for this entry — falls back to the site name"
-          />
+            helperText="Byline for this entry — falls back to the site entity"
+          >
+            <MenuItem value="">{'The site (publisher entity)'}</MenuItem>
+            {authors.map((author) => (
+              <MenuItem key={author.$id} value={author.$id}>
+                {`${author.name} · ${Aglyn.contentAuthorSchemaType(author.type)}`}
+              </MenuItem>
+            ))}
+            {editor?.authorId &&
+            !authors.some((author) => author.$id === editor.authorId) ? (
+              // The referenced author was deleted. Keep the Select valid and
+              // show the id, exactly as the category Select does — the post
+              // still renders (the stored name is the fallback), and the
+              // editor can see what to move it off.
+              <MenuItem value={editor.authorId}>
+                {`${editor.authorId} (deleted)`}
+              </MenuItem>
+            ) : null}
+            <MenuItem value={CUSTOM_BYLINE_VALUE}>
+              {'Custom byline…'}
+            </MenuItem>
+          </TextField>
+          {!editor?.authorId ? (
+            <TextField
+              label="Custom byline"
+              value={editor?.authorName ?? ''}
+              onChange={(event) =>
+                setEditor((prev) =>
+                  prev ? { ...prev, authorName: event.target.value } : prev,
+                )
+              }
+              size="small"
+              helperText={
+                'A one-off name for this entry — published as a Person. ' +
+                'Leave blank to attribute the piece to the site.'
+              }
+            />
+          ) : null}
           <TextField
             label="SEO title"
             value={editor?.seoTitle ?? ''}
@@ -1722,6 +2681,168 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      {/* Author editor (AGL-2486). The Person/Organization Select is a real
+          branch: the fields below it change with it, because `jobTitle` and
+          `worksFor` are not defined on `schema.org/Organization` and a form
+          that offers them for one is a form that invites invalid markup. */}
+      <Dialog
+        open={Boolean(authorEditor)}
+        onClose={() => setAuthorEditor(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {authorEditor?.id ? 'Edit author' : 'New author'}
+        </DialogTitle>
+        <DialogContent
+          sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}
+        >
+          <TextField
+            select
+            label="Type"
+            size="small"
+            value={
+              authorEditor?.type ?? String(Aglyn.HostEntityType.ORGANIZATION)
+            }
+            onChange={(event) =>
+              setAuthorEditor((prev) =>
+                prev ? { ...prev, type: event.target.value } : prev,
+              )
+            }
+            helperText={
+              'Person or Organization — they are different schema.org types ' +
+              'with different fields, not a label.'
+            }
+          >
+            <MenuItem value={String(Aglyn.HostEntityType.PERSON)}>
+              {'Person'}
+            </MenuItem>
+            <MenuItem value={String(Aglyn.HostEntityType.ORGANIZATION)}>
+              {'Organization'}
+            </MenuItem>
+          </TextField>
+          <TextField
+            label="Name"
+            size="small"
+            required
+            value={authorEditor?.name ?? ''}
+            onChange={(event) =>
+              setAuthorEditor((prev) =>
+                prev ? { ...prev, name: event.target.value } : prev,
+              )
+            }
+            helperText="The byline, exactly as it should read"
+          />
+          <TextField
+            label="URL"
+            size="small"
+            value={authorEditor?.url ?? ''}
+            onChange={(event) =>
+              setAuthorEditor((prev) =>
+                prev ? { ...prev, url: event.target.value } : prev,
+              )
+            }
+            helperText="Author page or personal site"
+          />
+          <Stack direction="row" spacing={2} sx={{ alignItems: 'flex-start' }}>
+            <TextField
+              label={
+                Number(authorEditor?.type) === Aglyn.HostEntityType.PERSON
+                  ? 'Portrait'
+                  : 'Logo'
+              }
+              size="small"
+              sx={{ flexGrow: 1 }}
+              value={authorEditor?.image ?? ''}
+              onChange={(event) =>
+                setAuthorEditor((prev) =>
+                  prev ? { ...prev, image: event.target.value } : prev,
+                )
+              }
+              helperText={
+                'Pick from the media library, or paste a URL — an external ' +
+                'avatar is a legitimate answer.'
+              }
+            />
+            <Button
+              size="small"
+              variant="outlined"
+              sx={{ mt: 0.5 }}
+              onClick={() => setPickerTarget('authorImage')}
+            >
+              {'Choose…'}
+            </Button>
+          </Stack>
+          {Number(authorEditor?.type) === Aglyn.HostEntityType.PERSON ? (
+            <>
+              <TextField
+                label="Job title"
+                size="small"
+                value={authorEditor?.jobTitle ?? ''}
+                onChange={(event) =>
+                  setAuthorEditor((prev) =>
+                    prev ? { ...prev, jobTitle: event.target.value } : prev,
+                  )
+                }
+                helperText="schema.org/Person jobTitle, e.g. Staff Writer"
+              />
+              <TextField
+                label="Works for"
+                size="small"
+                value={authorEditor?.worksFor ?? ''}
+                onChange={(event) =>
+                  setAuthorEditor((prev) =>
+                    prev ? { ...prev, worksFor: event.target.value } : prev,
+                  )
+                }
+                helperText="The organization they write for"
+              />
+            </>
+          ) : null}
+          <TextField
+            label="Profile links"
+            size="small"
+            multiline
+            minRows={2}
+            value={authorEditor?.sameAs ?? ''}
+            onChange={(event) =>
+              setAuthorEditor((prev) =>
+                prev ? { ...prev, sameAs: event.target.value } : prev,
+              )
+            }
+            helperText={
+              `One URL per line — emitted as schema.org sameAs, up to ` +
+              `${Aglyn.AUTHOR_SAME_AS_MAX}.`
+            }
+          />
+          <TextField
+            label="Bio"
+            size="small"
+            multiline
+            minRows={2}
+            value={authorEditor?.bio ?? ''}
+            onChange={(event) =>
+              setAuthorEditor((prev) =>
+                prev ? { ...prev, bio: event.target.value } : prev,
+              )
+            }
+            helperText={
+              'Shown beside the byline. Not structured data — a marketing ' +
+              'sentence is not a schema.org description of a person.'
+            }
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAuthorEditor(null)}>{'Cancel'}</Button>
+          <Button
+            variant="contained"
+            disabled={authorBusy || !authorEditor?.name?.trim()}
+            onClick={handleSaveAuthor}
+          >
+            {authorBusy ? 'Saving…' : 'Save'}
+          </Button>
+        </DialogActions>
+      </Dialog>
       <MediaPickerDialog
         hostId={hostId}
         open={pickerTarget != null}
@@ -1758,7 +2879,15 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
             const alt = Aglyn.inheritedMediaAlt({
               assetAlt: (media as any).alt,
             }) ?? ''
-            if (pickerTarget === 'cover') {
+            if (pickerTarget === 'authorImage') {
+              // The author's portrait / logo (AGL-2486). Through
+              // `mediaNodeSrc` like every other pick on this page, so it is
+              // stored as a `media:` REFERENCE rather than the object's
+              // current location — an AGL-1215 folder move would 404 a raw
+              // URL permanently. The tenant resolves it to an absolute URL
+              // for the JSON-LD with the same helper `og:image` uses.
+              setAuthorEditor((prev) => (prev ? { ...prev, image: src } : prev))
+            } else if (pickerTarget === 'cover') {
               setEditor((prev) =>
                 prev
                   ? {

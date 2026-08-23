@@ -209,11 +209,27 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
     // The publisher installs their own listing for free, and may install
     // an unapproved version of it to test. Org-owned now (AGL-652), so this
     // is a role check — comparing a uid to an org id would never match.
-    const ownsListing = await canActAsPublisher(
-      firestore,
-      decoded.uid,
-      listing.profileId,
-    )
+    //
+    // TWO facts, correlated (AGL-2484). `canActAsPublisher` answers a
+    // question about the PUBLISHER org alone; the install TARGET is a
+    // different org, resolved from the host by the permission gate above.
+    // Nothing tied them together, so one flag computed from org P waived
+    // three gates on an install landing in org Q: review, version
+    // resolution, and payment. A user who administers publisher org P and
+    // holds `installPlugins` on a host in org Q could therefore push P's
+    // pending — or rejected — bundle onto Q's live public site, for free.
+    //
+    // Same-org is a NECESSARY condition, never a sufficient one: the role
+    // check still has to pass, so this narrows the waiver and cannot widen
+    // it. `strictNullChecks` is off repo-wide, hence the explicit `!== ''`
+    // rather than a truthiness test — a listing with no `profileId` is
+    // owned by nobody and must waive nothing.
+    const publisherOrgId = String(listing.profileId ?? '')
+    const installTargetOrgId = String(membership.orgId ?? '')
+    const ownsListing =
+      publisherOrgId !== '' &&
+      installTargetOrgId === publisherOrgId &&
+      (await canActAsPublisher(firestore, decoded.uid, listing.profileId))
 
     // Private plugins are installable ONLY by the owning org (AGL-968).
     // This is what makes private mean private; the UI merely hides them.
@@ -262,8 +278,10 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
     // simply not offered, and the previously approved one keeps installing.
     //
     // The publisher may still install their own unapproved version — that
-    // is how you test a plugin before submitting it, and it reaches only
-    // their own sites.
+    // is how you test a plugin before submitting it. It reaches only their
+    // own sites because `ownsListing` now REQUIRES the install to land in
+    // the publishing org (AGL-2484); this sentence used to be an assertion
+    // about code that did not check.
     // Read the kill switch BEFORE resolving, not after (AGL-2368).
     //
     // The order used to be: pick the newest APPROVED version, then 409 if that

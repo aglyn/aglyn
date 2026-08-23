@@ -175,6 +175,8 @@ describe('collapsing only ever applies to an org with a tier to be below (AGL-18
   })
 
   it('an org on Free has nothing below it and gets no disclosure', () => {
+    // `free` renders the entire ladder: an org on Free has no lower tier
+    // to collapse, so every card including Agency is on screen.
     renderCards({ plan: 'free' })
     expect(cardShown('Starter')).toBe(true)
     expect(disclosure()).toBeNull()
@@ -318,6 +320,8 @@ describe('the Free card is honest to a subscriber (AGL-2156)', () => {
  */
 describe('an org with no plan field reads as Free, not as nothing (AGL-2156)', () => {
   it("'free' marks the current tier and recommends the next one up", () => {
+    // `free` renders the entire ladder: an org on Free has no lower tier
+    // to collapse, so every card including Agency is on screen.
     renderCards({ plan: 'free' })
     expect(screen.getAllByText('Current plan').length).toBe(1)
     expect(screen.getAllByText('Recommended').length).toBe(1)
@@ -366,5 +370,50 @@ describe('the billing page hands the grid a defaulted plan (AGL-2156)', () => {
     expect(
       planProp === 'plan' || /\?\?\s*'free'/.test(planProp ?? ''),
     ).toBe(true)
+  })
+})
+
+describe('an uncapped quota never leaks its sentinel (AGL-2482)', () => {
+  /**
+   * Zach caught this on the live Agency card: "∞ contacts (+$0.2/1k over)".
+   *
+   * `UNLIMITED` is `Number.POSITIVE_INFINITY`, and the card interpolated it
+   * raw. `Infinity.toLocaleString()` is `'∞'` and `` `${Infinity}` `` is
+   * `'Infinity'` — so a single card could print BOTH spellings while every
+   * row that went through `quotaLabel` said "Unlimited".
+   *
+   * Unlike AGL-2482 proper this is NOT the wire bug: these cards read the
+   * `PLAN_ENTITLEMENTS` constant directly, so the sentinel arrives intact and
+   * only the formatting was wrong. Same defect one surface over, which is why
+   * it survived that sweep.
+   */
+  it('the Agency card says Unlimited contacts, not the ∞ glyph', () => {
+    renderCards({ plan: 'agency' })
+    expect(screen.queryAllByText(/∞/).length).toBe(0)
+    expect(screen.queryAllByText(/Unlimited contacts/).length).toBeGreaterThan(0)
+  })
+
+  it('no card anywhere prints ∞ or Infinity, on any plan', () => {
+    // The class guard. Rendering every tier is the point: a future plan that
+    // turns one more quota uncapped fails here rather than on a customer's
+    // screen. `Infinity` is matched as a whole word so a legitimate "1 GB"
+    // or a component name can never trip it.
+    // `free` renders the entire ladder: an org on Free has no lower tier
+    // to collapse, so every card including Agency is on screen.
+    renderCards({ plan: 'free' })
+    const text = document.body.textContent ?? ''
+    expect(text).not.toContain('∞')
+    expect(text).not.toMatch(/\bInfinity\b/)
+    // The premise: something on screen really is uncapped, so this is not
+    // passing merely because every quota happens to be finite.
+    expect(text).toContain('Unlimited')
+  })
+
+  it('a finite quota still reads exactly as it did, grouped', () => {
+    // The counter-case. A "fix" that formatted every quota as Unlimited would
+    // be the same defect pointed the other way, and grouping must survive:
+    // Scale is 500,000 contacts, never 500000.
+    renderCards({ plan: 'scale' })
+    expect(screen.queryAllByText(/500,000 contacts/).length).toBeGreaterThan(0)
   })
 })

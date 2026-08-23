@@ -17,6 +17,9 @@
 
 import {
   PLATFORM_BRANDING_PROFILE,
+  formatQuotaLimit,
+  isUnlimitedQuota,
+  restoreQuotaLimit,
   brandMergeTokens,
   checkApiRequestQuota,
   checkContactQuota,
@@ -55,6 +58,7 @@ import {
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
   resolveOrgEntitlements,
+  resolveHostCollaboratorCap,
   resolveMarketplaceFeePct,
   resolveTransactionFeePct,
   EXTRA_HOSTS_ADDON_MAX,
@@ -308,7 +312,7 @@ describe('plan entitlements', () => {
         extraDatasetMonthlyUsd: 1,
         extraDataGbMonthlyUsd: 0.25,
         extraApiRequestsUsdPer1k: 0.15,
-        extraContactsUsdPer1k: 0.2,
+        extraContactsUsdPer1k: null,
         meteredInfraPassThrough: true,
       },
       // Enterprise (AGL-1118) is quoted per deal — these zeros/nulls are the
@@ -2016,5 +2020,171 @@ describe('marketplace price floor (AGL-2343)', () => {
     expect(marketplacePriceFloorHint('Payouts first.')).toContain(
       'Payouts first.',
     )
+  })
+})
+
+/**
+ * The `UNLIMITED` sentinel does not survive a route boundary, and every
+ * failure that follows is quiet.
+ *
+ * `UNLIMITED` is `Number.POSITIVE_INFINITY`; `JSON.stringify(Infinity)` is
+ * `null`; `Number(null)` is `0`; `Number.isFinite(0)` is TRUE. So a payload
+ * that has lost the fact that a plan is uncapped passes every "is this
+ * usable" guard, and the console renders a cap of zero — or compares against
+ * `null`, where `1 > null` is TRUE and an uncapped site is reported "over the
+ * limit" (AGL-2482; AGL-2223 is the same class).
+ */
+describe('quota caps over a JSON boundary', () => {
+  /** Exactly what `Response.json` does to a value on the way out. */
+  const wire = <T,>(value: T) => JSON.parse(JSON.stringify(value))
+
+  it('proves the sentinel is destroyed by serialisation', () => {
+    // The premise of every fix below. Asserted rather than assumed, because
+    // if this ever stopped being true the guards would be dead weight and
+    // nothing else in this file would notice.
+    expect(wire({ cap: UNLIMITED }).cap).toBeNull()
+    expect(Number(wire({ cap: UNLIMITED }).cap)).toBe(0)
+    expect(Number.isFinite(Number(wire({ cap: UNLIMITED }).cap))).toBe(true)
+    // And the comparison that made it damaging rather than merely ugly.
+    expect(1 > (wire({ cap: UNLIMITED }).cap as never)).toBe(true)
+  })
+
+  it('recognises every shape a lost cap arrives in', () => {
+    expect(isUnlimitedQuota(UNLIMITED)).toBe(true)
+    expect(isUnlimitedQuota(null)).toBe(true)
+    expect(isUnlimitedQuota(undefined)).toBe(true)
+    expect(isUnlimitedQuota(Number.NaN)).toBe(true)
+    // A real cap is not unlimited — including zero, which is the value a
+    // naive `Number(null)` coercion produces and the one a permissive
+    // predicate would be most tempted to wave through.
+    expect(isUnlimitedQuota(0)).toBe(false)
+    expect(isUnlimitedQuota(250)).toBe(false)
+  })
+
+  it('writes a cap the way every console surface must write it', () => {
+    expect(formatQuotaLimit(UNLIMITED)).toBe('Unlimited')
+    expect(formatQuotaLimit(null)).toBe('Unlimited')
+    expect(formatQuotaLimit(250, 'MB')).toBe('250 MB')
+    // The unit is never appended to `Unlimited` — "Unlimited MB" reads as a
+    // typo, and the whole point of the word is that no quantity follows it.
+    expect(formatQuotaLimit(UNLIMITED, 'MB')).toBe('Unlimited')
+  })
+
+  it('rebuilds the sentinel from the route’s explicit flag', () => {
+    // The wire contract: a FINITE number plus a boolean. `null` alone cannot
+    // distinguish "unlimited" from "the field is missing", which is why the
+    // flag exists and why it wins over the number.
+    expect(restoreQuotaLimit(0, true)).toBe(UNLIMITED)
+    expect(restoreQuotaLimit(3, false)).toBe(3)
+    expect(restoreQuotaLimit(0, false)).toBe(0)
+  })
+
+  it('falls back to the value when a route has not been taught the flag', () => {
+    // The backstop. An un-migrated route still sends the bare `null`, and a
+    // surface reading it must render "Unlimited" rather than reintroduce the
+    // false over-limit warning.
+    expect(restoreQuotaLimit(null, undefined)).toBe(UNLIMITED)
+    expect(restoreQuotaLimit(undefined, undefined)).toBe(UNLIMITED)
+    expect(restoreQuotaLimit(5, undefined)).toBe(5)
+  })
+
+  it('restores an Enterprise per-site cap end to end', () => {
+    // The real path, with real entitlements rather than a hand-written
+    // Infinity: resolve → serialise → restore, and the comparison the
+    // console makes on the far side.
+    const org = { plan: 'enterprise' } as never
+    const cap = resolveHostCollaboratorCap(org, 'host-1')
+    expect(cap).toBe(UNLIMITED)
+    const sent = {
+      cap: Number.isFinite(cap) ? cap : 0,
+      capUnlimited: !Number.isFinite(cap),
+    }
+    const received = wire(sent)
+    expect(received.cap).toBe(0)
+    expect(received.capUnlimited).toBe(true)
+    const restored = restoreQuotaLimit(received.cap, received.capUnlimited)
+    // One collaborator on an uncapped plan is not over anything. Against the
+    // un-restored payload this comparison was `1 > 0` — true.
+    expect(1 > restored).toBe(false)
+    expect(formatQuotaLimit(restored)).toBe('Unlimited')
+  })
+
+  it('does not turn a capped plan into an uncapped one', () => {
+    // The same fix pointed the other way would be the same defect: Free must
+    // still round-trip as the small number it is.
+    const cap = resolveOrgEntitlements({ plan: 'free' } as never).membersPerHost
+    const received = wire({
+      cap: Number.isFinite(cap) ? cap : 0,
+      capUnlimited: !Number.isFinite(cap),
+    })
+    expect(received.capUnlimited).toBe(false)
+    expect(restoreQuotaLimit(received.cap, received.capUnlimited)).toBe(cap)
+    expect(formatQuotaLimit(cap)).toBe(String(cap))
+  })
+})
+
+describe('an uncapped band never carries an overage rate (AGL-2482)', () => {
+  /**
+   * The rule the Agency contacts defect broke, made mechanical.
+   *
+   * Agency shipped `contactsPerHost: UNLIMITED` alongside
+   * `extraContactsUsdPer1k: 0.2`, and both claims were published — the console
+   * plan card and `aglyn.com/pricing` each said "Unlimited contacts" and
+   * "$0.20 per 1,000 over the included band" at the same time. Nobody was
+   * overcharged (`Math.max(0, used - Infinity)` is 0), but we advertised a fee
+   * that could not exist, and the 2026-08-18 lock verification could not catch
+   * it: it matched rates against rates, and the band lived somewhere else.
+   *
+   * Pairing them here is the whole point. Neither figure is wrong on its own.
+   */
+  const METERED_PAIRS = [
+    { band: 'contactsPerHost', rate: 'extraContactsUsdPer1k', unit: 'contacts' },
+    { band: 'apiRequestsPerMonth', rate: 'extraApiRequestsUsdPer1k', unit: 'API requests' },
+    { band: 'dataStorageMbPerOrg', rate: 'extraDataGbMonthlyUsd', unit: 'dataset storage' },
+  ] as const
+
+  it.each(METERED_PAIRS)(
+    'no plan has an UNLIMITED $unit band and a non-null $rate',
+    ({ band, rate, unit }) => {
+      const offenders = (Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]).filter((plan) => {
+        const limit = PLAN_ENTITLEMENTS[plan][band]
+        const price = PLAN_PRICING[plan]?.[rate]
+        return limit === UNLIMITED && price !== null && price !== undefined
+      })
+      expect(offenders).toEqual([])
+      if (offenders.length > 0) {
+        throw new Error(
+          `${offenders.join(', ')} advertise a ${unit} overage rate on an uncapped band`,
+        )
+      }
+    },
+  )
+
+  it('the premise holds — some plan really is uncapped for each meter', () => {
+    // Without this the three cases above would pass on a table where every
+    // band happened to be finite, which is the shape of a guard that has
+    // quietly stopped testing anything.
+    for (const { band, unit } of METERED_PAIRS) {
+      const uncapped = (Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]).filter(
+        (plan) => PLAN_ENTITLEMENTS[plan][band] === UNLIMITED,
+      )
+      expect(uncapped.length).toBeGreaterThan(0)
+      expect(unit).toBeTruthy()
+    }
+  })
+
+  it('a FINITE band still requires a rate, or usage past it is silently free', () => {
+    // The counter-case. Dropping every rate would satisfy the rule above and
+    // be the same defect pointed the other way.
+    const paidWithFiniteContacts = (Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]).filter(
+      (plan) =>
+        plan !== 'free' &&
+        !isCustomPricedPlan(plan) &&
+        Number.isFinite(PLAN_ENTITLEMENTS[plan].contactsPerHost),
+    )
+    expect(paidWithFiniteContacts.length).toBeGreaterThan(0)
+    for (const plan of paidWithFiniteContacts) {
+      expect(PLAN_PRICING[plan].extraContactsUsdPer1k).not.toBeNull()
+    }
   })
 })

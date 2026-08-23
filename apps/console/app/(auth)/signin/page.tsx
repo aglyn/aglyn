@@ -89,6 +89,68 @@ const formSchema: FormSchema = {
   fields: [FIELD_SCHEMA_EMAIL, FIELD_SCHEMA_PASSWORD],
 }
 
+/**
+ * Sign in with the typed address, falling back to the account's primary when
+ * the typed one is a CONFIRMED secondary (AGL-2486).
+ *
+ * Firebase Auth knows one email per user, so an account whose record says
+ * `ada@personal.test` cannot be signed into as `ada@work.test` however
+ * thoroughly that address is confirmed. `/api/auth/resolve-identifier`
+ * translates; this retries once with what it returns.
+ *
+ * ## Order matters, and it is this way round on purpose
+ *
+ * The direct attempt goes FIRST and the resolver only runs after it fails.
+ * Resolving up front would put a lookup on the critical path of every single
+ * sign-in in the product — slower for everyone, and an outage in the resolver
+ * would become an outage in sign-in. This way the common case never touches
+ * it, and a resolver that is down costs only the alias convenience.
+ *
+ * The retry is attempted on the credential errors alone. Anything else — a
+ * disabled account, too many attempts, a network failure — is rethrown
+ * untouched, so a second attempt never turns one refusal into two and never
+ * doubles a rate-limit count against the user.
+ */
+async function signInWithAnyConfirmedAddress(
+  firebaseAuth: Parameters<typeof signInWithEmailAndPassword>[0],
+  typed: string,
+  password: string,
+) {
+  try {
+    return await signInWithEmailAndPassword(firebaseAuth, typed, password)
+  } catch (error: any) {
+    const code = error?.code as string | undefined
+    // `auth/invalid-credential` is what a modern Firebase project returns for
+    // BOTH a wrong password and an unknown address — email enumeration
+    // protection collapses them on purpose — so it has to be one of the
+    // codes that earns a retry, or the alias path would never run at all on
+    // a project with that setting on.
+    const retryable =
+      code === 'auth/user-not-found' ||
+      code === 'auth/invalid-credential' ||
+      code === 'auth/invalid-email'
+    if (!retryable) throw error
+    let resolved: string | null = null
+    try {
+      const response = await fetch('/api/auth/resolve-identifier', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ identifier: typed }),
+      })
+      const data = await response.json().catch(() => ({}))
+      resolved = typeof data?.email === 'string' ? data.email : null
+    } catch {
+      // Never let this lookup be the reason a sign-in fails.
+    }
+    // The route echoes the input when it knows nothing, so this is also the
+    // "nothing to retry" test.
+    if (!resolved || resolved.toLowerCase() === String(typed).trim().toLowerCase()) {
+      throw error
+    }
+    return signInWithEmailAndPassword(firebaseAuth, resolved, password)
+  }
+}
+
 function SignIn() {
   const { queueLoading, loading } = useLoading()
   const firebaseAuth = useAuth()
@@ -156,7 +218,7 @@ function SignIn() {
       await setPersistence(firebaseAuth, browserLocalPersistence)
         .then(() => {
           if (values) {
-            return signInWithEmailAndPassword(
+            return signInWithAnyConfirmedAddress(
               firebaseAuth,
               values[FIELD_SCHEMA_EMAIL.name],
               values[FIELD_SCHEMA_PASSWORD.name],

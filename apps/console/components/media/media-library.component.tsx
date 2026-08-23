@@ -2589,7 +2589,13 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       const quota = checkOrgQuota(org, 'storagePerHostMb', usedMb - 1)
       if (!quota.allowed) {
         enqueueSnackbar(
-          `Storage limit reached (${quota.limit} MB) — see Billing to upgrade`,
+          // `formatQuotaLimit`, not the raw number: `UNLIMITED` is
+          // `Number.POSITIVE_INFINITY`, so an uncapped plan that ever reached
+          // this branch would read "Storage limit reached (Infinity MB)".
+          `Storage limit reached (${Aglyn.formatQuotaLimit(
+            quota.limit,
+            'MB',
+          )}) — see Billing to upgrade`,
           { variant: 'warning', persist: false, allowDuplicate: true },
         )
         return 0

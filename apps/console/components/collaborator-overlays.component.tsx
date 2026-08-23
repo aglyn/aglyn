@@ -24,9 +24,11 @@ import type { PresenceEntry } from '../hooks/use-presence'
 
 /** Where one collaborator's marks should be painted, in viewport pixels. */
 interface Placement {
-  uid: string
+  /** `uid:sessionId` — per SESSION, because a cursor belongs to a tab. */
+  key: string
   displayName: string
   colour: string
+  isSelf?: boolean
   cursor?: { x: number; y: number }
   selection?: { top: number; left: number; width: number; height: number }
 }
@@ -51,6 +53,11 @@ interface Placement {
  * does not emit it. The canvas also renders into shadow roots, so a document
  * query would not reach its elements even if it did.
  */
+/** Whole pixels, and a stable token for "no value" (AGL-2486). */
+function round(value: number | undefined): string {
+  return typeof value === 'number' ? String(Math.round(value)) : '-'
+}
+
 export function CollaboratorOverlays({
   entries,
 }: {
@@ -66,7 +73,7 @@ export function CollaboratorOverlays({
   // Identity of the collaborator set, so the effect re-arms when someone
   // joins or leaves but not on every cursor tick.
   const roster = entries
-    .map((entry) => `${entry.uid}:${entry.colour}:${entry.displayName}`)
+    .map((entry) => `${entry.key}:${entry.colour}:${entry.displayName}`)
     .join('|')
 
   useEffect(() => {
@@ -76,6 +83,23 @@ export function CollaboratorOverlays({
     }
     let frame = 0
     let stopped = false
+    /**
+     * The last placement set actually COMMITTED, serialized (AGL-2486).
+     *
+     * The loop below runs every frame — it has to, because the things it
+     * measures move for reasons presence never hears about. What it must NOT
+     * do is call `setPlacements` every frame: a fresh array is a new
+     * identity, so React re-rendered and re-reconciled this whole overlay
+     * tree ~60 times a second for as long as anybody else was in the room,
+     * whether or not a single pixel had changed. Measured here on 2026-08-22:
+     * with two sessions open the renderer stopped answering CDP evaluations
+     * altogether.
+     *
+     * MEASURING every frame is cheap; COMMITTING every frame is not. Rounded
+     * to whole pixels first, so sub-pixel jitter from a scroll or a zoom
+     * cannot churn a render on its own.
+     */
+    let committed = ''
     // The latest entries are read through a ref-like closure variable so the
     // measuring loop is not restarted 16 times a second by cursor updates.
     const measure = () => {
@@ -85,9 +109,14 @@ export function CollaboratorOverlays({
       const next: Placement[] = []
       for (const entry of entriesRef.current) {
         const placement: Placement = {
-          uid: entry.uid,
-          displayName: entry.displayName,
+          key: entry.key,
+          // Your own other tab is labelled as such rather than by name.
+          // Two marks reading "Zach Gover" on one canvas, one of which is
+          // your own second window, is exactly the confusion the flag
+          // exists to prevent (AGL-2486).
+          displayName: entry.isSelf ? 'You, in another tab' : entry.displayName,
           colour: entry.colour ?? '#1a73e8',
+          isSelf: entry.isSelf,
         }
         if (
           rootBox?.width &&
@@ -112,7 +141,22 @@ export function CollaboratorOverlays({
         }
         if (placement.cursor || placement.selection) next.push(placement)
       }
-      setPlacements(next)
+      const fingerprint = next
+        .map(
+          (placement) =>
+            `${placement.key}|${placement.displayName}|${placement.colour}|` +
+            `${round(placement.cursor?.x)},${round(placement.cursor?.y)}|` +
+            `${round(placement.selection?.top)},${round(
+              placement.selection?.left,
+            )},${round(placement.selection?.width)},${round(
+              placement.selection?.height,
+            )}`,
+        )
+        .join(';')
+      if (fingerprint !== committed) {
+        committed = fingerprint
+        setPlacements(next)
+      }
       frame = requestAnimationFrame(measure)
     }
     frame = requestAnimationFrame(measure)
@@ -139,16 +183,24 @@ export function CollaboratorOverlays({
       }}
     >
       {placements.map((placement) => (
-        <Box key={placement.uid}>
+        <Box key={placement.key}>
           {placement.selection ? (
             <Box
+              // A hook the overlays can be VERIFIED through (AGL-2486). They
+              // are drawn from measured rectangles into a `position: fixed`
+              // layer with `pointer-events: none`, so nothing about them is
+              // reachable from the accessibility tree or from a click — which
+              // left "the overlay renders" as something only a human eye could
+              // confirm, on the one feature whose whole job is to be seen.
+              data-aglyn-collaborator-selection={placement.key}
+              data-aglyn-collaborator-self={placement.isSelf ? '' : undefined}
               sx={{
                 position: 'absolute',
                 top: placement.selection.top,
                 left: placement.selection.left,
                 width: placement.selection.width,
                 height: placement.selection.height,
-                border: `2px solid ${placement.colour}`,
+                border: `2px ${placement.isSelf ? 'dashed' : 'solid'} ${placement.colour}`,
                 borderRadius: '2px',
                 boxSizing: 'border-box',
               }}
@@ -175,6 +227,8 @@ export function CollaboratorOverlays({
           ) : null}
           {placement.cursor ? (
             <Box
+              data-aglyn-collaborator-cursor={placement.key}
+              data-aglyn-collaborator-self={placement.isSelf ? '' : undefined}
               sx={{
                 position: 'absolute',
                 top: placement.cursor.y,

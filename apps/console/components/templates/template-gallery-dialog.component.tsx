@@ -21,7 +21,11 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 // A listing's preview may be a `media:` reference (AGL-1424), which is not a
 // URL. The marketplace lib's own `ListingImage` cannot be imported here —
 // `scope:app` may not depend on `aglyn:addons` — so this resolves directly.
-import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
+import {
+  formatQuotaLimit,
+  lockdownRefusalText,
+  parseLockdownRefusal,
+} from '@aglyn/aglyn'
 import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import {
   Box,
@@ -439,8 +443,12 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
       )
       if (!quota.allowed) {
         return void enqueueSnackbar(
+          // `formatQuotaLimit`, not the raw number: `UNLIMITED` is
+          // `Number.POSITIVE_INFINITY`, so an uncapped plan that ever reached
+          // this branch would read "your plan allows Infinity".
           `This template needs ${template.screens.length} screens — your ` +
-            `plan allows ${quota.limit}. See Billing to upgrade.`,
+            `plan allows ${formatQuotaLimit(quota.limit)}. See Billing to ` +
+            'upgrade.',
           { variant: 'warning', persist: false },
         )
       }

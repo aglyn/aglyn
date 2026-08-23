@@ -26,7 +26,7 @@ import {
   onSnapshot,
   query,
 } from 'firebase/firestore'
-import { useParams } from 'next/navigation'
+import { useParams, usePathname } from 'next/navigation'
 import {
   createContext,
   useCallback,
@@ -36,6 +36,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { resolveNavSection } from './nav-section'
 import { MAX_RETRIES, retryDelayMs } from './use-host-resolution'
 
 const SELECTED_ORG_STORAGE_KEY = 'aglyn.selectedOrgId'
@@ -85,6 +86,10 @@ export interface OrgScopeContextValue {
   /**
    * The org slug in the URL path (`/[orgSlug]/…`), the source of truth for
    * the active workspace on org-scoped routes (AGL-621); null off them.
+   *
+   * Read from the matched route params when there are any, and from the
+   * pathname when there are not — a not-found boundary matches no dynamic
+   * segment but still has the slug right there in the URL (AGL-2486).
    */
   pathOrgSlug: string | null
   loading: boolean
@@ -144,8 +149,36 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
   const firestore = useFirestore()
   const { data: user } = useUser()
   const params = useParams<{ orgSlug?: string | string[] }>()
+  const pathname = usePathname()
+  /**
+   * The workspace the URL PATH names.
+   *
+   * `useParams()` is the direct reading and stays first — on a matched route
+   * it is exactly the `[orgSlug]` segment Next resolved. But it is empty on
+   * routes that matched no dynamic segment, and the loudest of those is the
+   * NOT-FOUND boundary (AGL-2486): `/aglyn-org/hosts/aglyn-marketing/screens/
+   * pegb_4s5wV` is not a route — the screen editor lives at
+   * `/screens/[screenId]/versions/[versionId]/…` — so the params bag came
+   * back empty while the address bar still plainly read `aglyn-org`. Every
+   * URL-derived candidate below missed, the chain fell through to the
+   * remembered selection, and the chrome named a workspace the URL
+   * contradicted.
+   *
+   * `usePathname()` survives that, and `resolveNavSection` already knows
+   * which leading segments are workspaces and which are the org-less sections
+   * (`/admin`, `/manage`, and the bare `/` picker all yield no `orgSlug`), so
+   * those keep falling through to the org they need to ACT on.
+   *
+   * This is NOT a change to the precedence below — it is the same top
+   * candidate, reading the same URL, through an API that does not vanish on
+   * an unmatched route. A leading segment that names no real workspace (a
+   * mistyped path) simply misses here as it always did, and the fallbacks
+   * still catch it.
+   */
   const pathOrgSlug =
-    typeof params?.orgSlug === 'string' ? params.orgSlug : null
+    (typeof params?.orgSlug === 'string' ? params.orgSlug : null) ??
+    resolveNavSection(pathname).orgSlug ??
+    null
   const [orgs, setOrgs] = useState<UserOrgMembership[]>([])
   const [loading, setLoading] = useState(true)
   const [confirmed, setConfirmed] = useState(false)

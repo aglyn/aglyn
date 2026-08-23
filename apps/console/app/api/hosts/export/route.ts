@@ -283,6 +283,7 @@ async function handler(request: Request): Promise<Response> {
       functions,
       workflows,
       actions,
+      authors,
       services,
       collections,
       datasets,
@@ -298,6 +299,10 @@ async function handler(request: Request): Promise<Response> {
       exportCollection('functions'),
       exportCollection('workflows'),
       exportCollection('actions'),
+      // The bylines `entries.authorId` points at (AGL-2486). A referenced
+      // collection nobody added to the manifest is the AGL-1046/1050/1392
+      // shape, and here it would restore every post's author as a dangling id.
+      exportCollection('authors'),
       exportCollection('services'),
       withEntries(),
       withRecords(),
@@ -342,6 +347,7 @@ async function handler(request: Request): Promise<Response> {
       functions,
       workflows,
       actions,
+      authors,
       services,
       collections,
       datasets,

@@ -60,11 +60,32 @@
  * verification, pointed at a config that excluded the file it was verifying.
  * Verify with `npm run typecheck` (optionally `node tools/scripts/typecheck.mjs
  * libs/aglyn` to filter by path prefix) and read the exit code bare.
+ *
+ * ## `--changed` — the same gate, scoped to what you touched (AGL-2486)
+ *
+ * AGL-1725's lesson recurred on 2026-08-22: a spec built a component without
+ * two required props, the component's own tsconfig was clean because the spec
+ * is not in it, and the whole-workspace gate was the only reader that saw it —
+ * at PROMOTION time, hours later.
+ *
+ * The gap is not that the author skipped verification. It is that the obvious
+ * scoped command is the WRONG scoped command. `tsc -p <project>/tsconfig.lib
+ * .json` and `tsc -p <app>/tsconfig.json` both exclude `**\/*.spec.ts*`; only
+ * the sibling `tsconfig.spec.json` reads them, and there are 40 of those in
+ * this workspace. So the author runs a real check, gets a real green, and the
+ * spec they just wrote was never compiled by anything.
+ *
+ * `--changed` closes it by resolving changed files to their owning project
+ * directory and then running EVERY tsconfig in that directory — lib, app and
+ * spec together — rather than the one whose name looks right. It is the
+ * scoped command that has the same coverage as the unscoped one for the files
+ * you touched, and it is what `npm run precheck` runs.
  */
 
-import { execFile } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import { readdirSync, existsSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { availableParallelism, loadavg } from 'node:os'
+import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
@@ -113,10 +134,93 @@ function findConfigs(dir, acc) {
   return acc
 }
 
-const filters = process.argv.slice(2)
-const configs = findConfigs(root, []).filter(
-  (c) => filters.length === 0 || filters.some((f) => c.startsWith(f)),
-)
+const argv = process.argv.slice(2)
+
+/**
+ * Resolves changed files to the tsconfigs that could possibly read them.
+ *
+ * Walks UP from each changed file to the nearest ancestor directory holding
+ * any tsconfig*.json, then takes ALL of that directory's configs. Taking all
+ * of them is the entire point (see the `--changed` note in the header): the
+ * spec config is a sibling of the lib config, and picking by name is what
+ * silently drops specs from a scoped check.
+ *
+ * Walking up rather than matching prefixes also handles the app case, where
+ * `apps/console/app/(app)/manage/user/page.tsx` is many levels below the
+ * configs that read it.
+ */
+export function configsForFiles(files, allConfigs) {
+  const byDir = new Map()
+  for (const c of allConfigs) {
+    const d = dirname(c)
+    if (!byDir.has(d)) byDir.set(d, [])
+    byDir.get(d).push(c)
+  }
+  const picked = new Set()
+  for (const f of files) {
+    let d = dirname(f)
+    for (;;) {
+      if (byDir.has(d)) {
+        for (const c of byDir.get(d)) picked.add(c)
+        break
+      }
+      const up = dirname(d)
+      if (up === d || d === '.' || d === '') break
+      d = up
+    }
+  }
+  return [...picked].sort()
+}
+
+/**
+ * Changed files: staged, unstaged, untracked, and anything already committed
+ * on this branch but not on the base. All four, because "did I break a spec"
+ * has to be answerable before the commit AND before the push, and an agent
+ * that committed three times still wants one verdict over the lot.
+ */
+function changedFiles(base) {
+  const git = (args) => {
+    try {
+      return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).split('\n').filter(Boolean)
+    } catch {
+      return []
+    }
+  }
+  const merged = new Set([
+    ...git(['diff', '--name-only', '--diff-filter=ACMR']),
+    ...git(['diff', '--cached', '--name-only', '--diff-filter=ACMR']),
+    ...git(['ls-files', '--others', '--exclude-standard']),
+    ...git(['diff', '--name-only', '--diff-filter=ACMR', `${base}...HEAD`]),
+  ])
+  return [...merged].filter((f) => /\.(ts|tsx|mts|cts)$/.test(f))
+}
+
+const allConfigs = findConfigs(root, [])
+let configs
+let scopeLabel
+
+const changedIdx = argv.indexOf('--changed')
+if (changedIdx >= 0) {
+  const base = argv[changedIdx + 1]?.startsWith('--') || !argv[changedIdx + 1] ? 'origin/main' : argv[changedIdx + 1]
+  const files = changedFiles(base)
+  configs = configsForFiles(files, allConfigs)
+  const specs = configs.filter((c) => c.endsWith('tsconfig.spec.json')).length
+  scopeLabel =
+    `--changed vs ${base}: ${files.length} changed .ts/.tsx file(s) -> ` +
+    `${configs.length} tsconfig(s), ${specs} of them spec configs`
+  if (files.length && configs.length === 0) {
+    console.error(
+      `typecheck --changed: ${files.length} changed file(s) resolved to NO tsconfig.\n` +
+        '  They live outside every project (tools/ is .mjs, apps/docs is standalone).\n' +
+        '  This proves nothing about types. Run `npm run typecheck` if that is unexpected.',
+    )
+  }
+} else {
+  const filters = argv.filter((a) => !a.startsWith('--'))
+  configs = allConfigs.filter((c) => filters.length === 0 || filters.some((f) => c.startsWith(f)))
+  scopeLabel = filters.length ? `filtered to ${filters.join(', ')}` : 'whole workspace'
+}
+console.log(`typecheck: ${configs.length}/${allConfigs.length} configs (${scopeLabel})`)
 
 if (!existsSync(TSC)) {
   console.error('native tsc not found at', TSC, '- run npm install')
@@ -181,7 +285,27 @@ const staleGenerated = (
   )
 ).filter(Boolean)
 
-const CONCURRENCY = 4
+/**
+ * How many `tsc` processes at once (AGL-2486).
+ *
+ * This was pinned at 4 and 4 is right for exactly one machine state. The
+ * native (Go) compiler is CPU-bound and short-lived, so on an idle 10-core box
+ * 4 leaves more than half the machine unused across a 2m12s phase; with six
+ * agents on the box, 4 more compilers is what turns a slow run into a stalled
+ * one. `TYPECHECK_CONCURRENCY` pins it explicitly where a caller knows better
+ * (gate.sh passes its own adapted budget down, so the whole gate answers to
+ * one reading of the load rather than each phase guessing separately).
+ */
+const CONCURRENCY = (() => {
+  const pinned = Number(process.env.TYPECHECK_CONCURRENCY)
+  if (Number.isFinite(pinned) && pinned >= 1) return Math.floor(pinned)
+  const cores = availableParallelism()
+  const headroom = cores - loadavg()[0]
+  if (headroom >= cores * 0.7) return Math.max(4, Math.min(8, cores - 2))
+  if (headroom >= cores * 0.3) return 4
+  return 2
+})()
+console.log(`typecheck: concurrency ${CONCURRENCY} (${availableParallelism()} cores, load ${loadavg()[0].toFixed(2)})`)
 let failed = 0
 const queue = [...configs]
 

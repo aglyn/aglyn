@@ -93,6 +93,18 @@ jest.mock('@aglyn/aglyn', () => ({
   collectionTemplateBindings: () => [],
   mediaNodeSrc: () => '',
   createResourceUid: () => 'entry-new',
+  // The custom-author model (AGL-2486), REAL for the same reason
+  // `hostPublicOrigin` is: the page reads `HostEntityType` and three helpers
+  // off this barrel, and a closed-world mock turns each one into a
+  // `TypeError` at render. A stub of the Person/Organization branch would
+  // also be a stub of the exact question that branch answers.
+  ...jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/content-authors',
+  ),
+  HostEntityType: jest.requireActual(
+    '../../../libs/aglyn/src/lib/foundation/definitions/platform.types',
+  ).HostEntityType,
+  resolveMediaSrc: () => '',
 }))
 
 jest.mock('@aglyn/shared-util-timestamp', () => ({
@@ -136,6 +148,25 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   Container: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  // The two-column shell `HubTabs` lays its nav and panels out with — the
+  // Content page became a tabbed hub in AGL-2486. Mocked here rather than
+  // mocking `HubTabs` itself, so the real strip (and its `keepMounted`
+  // panels, which is what keeps the entry editor in the tree) still runs.
+  GridItems: ({ items }: { items: Array<{ children: ReactNode }> }) => (
+    <div>
+      {items.map((item, index) => (
+        <div key={index}>{item.children}</div>
+      ))}
+    </div>
+  ),
+  // Both arrived with the AGL-2486 polish pass: `HelpTip` carries the
+  // template-screen guidance that used to be helper text under the selects,
+  // and `MdiIcon` draws the zero-state icon, the disclosure's cog and every
+  // row-menu glyph. Named here because this factory is a closed world — an
+  // unlisted export renders as `undefined` and React throws "Element type is
+  // invalid" for the WHOLE page, which is what it did.
+  HelpTip: () => null,
+  MdiIcon: () => null,
   useConfirmationContext: () => ({
     confirm: jest.fn().mockResolvedValue(undefined),
   }),
@@ -186,6 +217,22 @@ jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ org: { plan: 'business' }, ready: true }),
 }))
+/**
+ * The page names the product in its Template-screens help copy and reads that
+ * name from the org's resolved brand (AGL-2486), so a white-label org sees its
+ * own. Mocked here rather than left real because the hook reaches
+ * `use-secondary-nav` -> `console-plugins-gate` -> `createPluginLoader`, and
+ * `@aglyn/aglyn` is already a stub in this file; a non-Aglyn name also keeps
+ * the substitution visible if the copy is ever asserted.
+ */
+jest.mock('../hooks/use-branding', () => ({
+  __esModule: true,
+  default: () => ({
+    branding: { productName: 'Northwind' },
+    whiteLabel: true,
+    ready: true,
+  }),
+}))
 jest.mock('../hooks/use-host-activity-logger', () => ({
   __esModule: true,
   default: () => jest.fn(),
@@ -224,6 +271,12 @@ jest.mock('../hooks/use-firestore-doc', () => ({
 jest.mock('../constants/docs-links', () => ({ docsHelp: () => ({}) }))
 jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
+  // The Content page is a HubTabs hub since AGL-2486, and the strip mirrors
+  // the active tab into `?tab=` with a shallow replace — so the router and
+  // pathname it asks for have to exist here, or every render throws before a
+  // single seed assertion runs.
+  useRouter: () => ({ replace: jest.fn() }),
+  usePathname: () => '/org/hosts/site/content',
 }))
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires

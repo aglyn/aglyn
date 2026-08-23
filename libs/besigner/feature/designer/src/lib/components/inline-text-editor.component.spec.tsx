@@ -350,3 +350,133 @@ describe('the text editor follows the canvas (AGL-1644)', () => {
     expect(window.getComputedStyle(overlay()).top).toBe('210px')
   })
 })
+
+/**
+ * AGL-2486 — the phantom edit that starts the phantom dirty state.
+ *
+ * Measured on `localhost:4200`, screen `yFjgqiG2wm`: the editor loaded, took
+ * a CONFIRMED baseline of 271 nodes at t=518ms, and at t≈1.26s two
+ * single-node `setNodes(…, merge)` calls arrived from `applyRemoteNode` —
+ * the co-editing mirror replaying a previous session's unsaved work. The
+ * whole of that "work" was `props.html: ""` appearing on two `muiTypography`
+ * nodes that had no `html` key at all.
+ *
+ * Nobody typed it. `commit()` writes `html: hasMarkup ? sanitized : ''`, and
+ * the rich surface opens seeded with `escapeHtml(children)` — plain text,
+ * never markup. So opening a rich text element and clicking away, changing
+ * NOTHING, adds a key the document never had. Co-editing then publishes it,
+ * and because it is never saved the mirror replays it to every joiner for
+ * the next seven days (`COEDIT_MIRROR_MAX_AGE_MS`).
+ *
+ * `''` and absent are the same document: the renderer gates on
+ * `typeof html === 'string' && Boolean(html)`. Only `isEqual` on the
+ * serialized node map can tell them apart — which is exactly what decides
+ * whether the header reads SAVE.
+ */
+describe('InlineTextEditorComponent: a commit that changes nothing (AGL-2486)', () => {
+  const rect = { left: 10, top: 10, width: 120, height: 24 }
+
+  let updateNodeProps: jest.SpyInstance
+
+  beforeEach(() => {
+    updateNodeProps = jest
+      .spyOn(Aglyn.canvas, 'updateNodeProps')
+      .mockImplementation((() => undefined) as any)
+  })
+  afterEach(() => {
+    act(() => inlineTextEdit.close())
+    updateNodeProps.mockRestore()
+  })
+
+  /** A rich-text element as stored: plain `children`, and no `html` key. */
+  const richNodeWithoutHtml = (children: string) =>
+    ({
+      $id: 'agl2486-rich',
+      type: 'node',
+      componentId: 'rich-text',
+      props: { children },
+      componentSchema: {
+        flags: { richTextEditable: Aglyn.FEATURE_FLAG.ENABLED },
+      },
+      nodes: [],
+    }) as any
+
+  const openRich = async (node: any) => {
+    render(<InlineTextEditorComponent />)
+    act(() => inlineTextEdit.open(node, rect))
+    const surface = await screen.findByRole('textbox', {
+      name: 'Edit rich text',
+    })
+    await waitFor(() =>
+      expect(surface.textContent && surface.textContent.length > 0).toBe(true),
+    )
+    return surface
+  }
+
+  it('does not invent an html key on a node that had none', async () => {
+    const node = richNodeWithoutHtml('Be first through the door')
+    const surface = await openRich(node)
+
+    // Open, touch nothing, click away.
+    fireEvent.blur(surface)
+
+    const props = updateNodeProps.mock.calls.at(-1)?.[1] as
+      | Record<string, unknown>
+      | undefined
+    if (props) expect('html' in props).toBe(false)
+  })
+
+  it('leaves the node byte-identical when nothing was edited', async () => {
+    const node = richNodeWithoutHtml('Be first through the door')
+    const before = JSON.stringify(node.props)
+    const surface = await openRich(node)
+
+    fireEvent.blur(surface)
+
+    const props = updateNodeProps.mock.calls.at(-1)?.[1] as
+      | Record<string, unknown>
+      | undefined
+    // Either no write at all, or a write that cannot move the document.
+    expect(JSON.stringify(props ?? JSON.parse(before))).toBe(before)
+  })
+
+  it('drops an html key that no longer holds markup', async () => {
+    const node = {
+      $id: 'agl2486-rich-clear',
+      type: 'node',
+      componentId: 'rich-text',
+      props: { children: 'plain now', html: '<b>plain now</b>' },
+      componentSchema: {
+        flags: { richTextEditable: Aglyn.FEATURE_FLAG.ENABLED },
+      },
+      nodes: [],
+    } as any
+    const surface = await openRich(node)
+    // Strip the markup the way an author would, leaving plain text.
+    surface.innerHTML = 'plain now'
+    fireEvent.blur(surface)
+
+    const props = updateNodeProps.mock.calls.at(-1)?.[1] as Record<
+      string,
+      unknown
+    >
+    expect(props).toBeTruthy()
+    // Absent, not `''` — the two mean the same thing to every renderer, and
+    // only the absent form compares equal to a document that never had it.
+    expect('html' in props).toBe(false)
+    expect(props['children']).toBe('plain now')
+  })
+
+  it('still stores markup when there is markup', async () => {
+    const node = richNodeWithoutHtml('bold me')
+    const surface = await openRich(node)
+    surface.innerHTML = '<strong>bold me</strong>'
+    fireEvent.blur(surface)
+
+    const props = updateNodeProps.mock.calls.at(-1)?.[1] as Record<
+      string,
+      unknown
+    >
+    expect(props['html']).toContain('<strong>')
+  })
+})

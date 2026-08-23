@@ -119,3 +119,69 @@ describe('palette var substitution (AGL-1331)', () => {
     expect(resolvePaletteVarsSx(42, light)).toBe(42)
   })
 })
+
+/**
+ * Alpha on a theme token (AGL-2486, item 6).
+ *
+ * The storage format is MUI's own channel form, `rgba(var(…Channel) / A)`
+ * with a literal channel fallback. It is a REFERENCE, so these tests are the
+ * ones that say the value still follows the palette; flattening to a literal
+ * `rgba(0, 176, 255, 0.12)` at author time would pass no assertion here.
+ */
+describe('alpha on a palette token (AGL-2486)', () => {
+  const WASH = 'rgba(var(--mui-palette-primary-mainChannel, 0 176 255) / 0.12)'
+
+  it('derives the channel triplet from the palette colour', () => {
+    expect(resolvePaletteVars(WASH, light)).toBe('rgba(0 176 255 / 0.12)')
+  })
+
+  it('follows a palette change instead of freezing the authored colour', () => {
+    // The whole point: the same stored string paints the DARK brand blue
+    // when the dark theme is active, and a white-label host's own colour
+    // when it swaps the palette. A flattened literal could not do this.
+    expect(resolvePaletteVars(WASH, dark)).toBe('rgba(102 211 255 / 0.12)')
+    expect(
+      resolvePaletteVars(WASH, { primary: { main: '#1F2937' } }),
+    ).toBe('rgba(31 41 55 / 0.12)')
+  })
+
+  it('reads an rgb() palette entry as well as a hex one', () => {
+    expect(
+      resolvePaletteVars(
+        'rgba(var(--mui-palette-text-primaryChannel, 0 0 0) / 0.6)',
+        light,
+      ),
+    ).toBe('rgba(22 28 33 / 0.6)')
+  })
+
+  it('prefers a channel entry the theme itself defines', () => {
+    // A CssVarsProvider theme really does carry `mainChannel`; its own value
+    // must win over anything derived here.
+    expect(
+      resolvePaletteVars(WASH, {
+        primary: { main: '#00B0FF', mainChannel: '1 2 3' },
+      }),
+    ).toBe('rgba(1 2 3 / 0.12)')
+  })
+
+  it('falls back to the literal channels, never to a bare var()', () => {
+    // Same hazard as a token stop: a surviving var() would resolve against
+    // the CONSOLE's palette on the besigner canvas.
+    expect(resolvePaletteVars(WASH, { primary: {} })).toBe(
+      'rgba(0 176 255 / 0.12)',
+    )
+    expect(resolvePaletteVars(WASH, undefined)).not.toContain('var(')
+  })
+
+  it('resolves inside a whole sx, which is what the leaf renders', () => {
+    // The published page reaches CSS through `Leaf`, which runs
+    // `resolvePaletteVarsSx` over the merged author sx — so a colour field's
+    // alpha'd token resolves on the tenant exactly as it does on the canvas.
+    const out = resolvePaletteVarsSx(
+      { backgroundColor: WASH, md: { borderColor: WASH } },
+      light,
+    ) as any
+    expect(out.backgroundColor).toBe('rgba(0 176 255 / 0.12)')
+    expect(out.md.borderColor).toBe('rgba(0 176 255 / 0.12)')
+  })
+})

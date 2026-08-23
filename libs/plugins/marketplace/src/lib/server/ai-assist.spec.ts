@@ -530,8 +530,11 @@ describe('every answered call is metered per org (AGL-2073)', () => {
     const rollup = mockDocs.get(MONTH_DOC(month)) as Record<string, number>
     expect(rollup['inputTokens']).toBe(100)
     expect(rollup['outputTokens']).toBe(40)
-    // Sonnet list rates: 100 in @ $3/MTok + 40 out @ $15/MTok.
-    expect(rollup['estCostUsd']).toBeCloseTo(0.0009, 6)
+    // HAIKU list rates: 100 in @ $1/MTok + 40 out @ $5/MTok (AGL-2486).
+    // Element mode is a short bounded rewrite with the source text supplied,
+    // so it is served by the cheap tier; the figure is a third of the $0.0009
+    // this asserted while every mode ran on Sonnet.
+    expect(rollup['estCostUsd']).toBeCloseTo(0.0003, 6)
 
     const signals = [...mockDocs.entries()].filter(([path]) =>
       path.startsWith(`orgs/${ORG}/assistSignals/`),
@@ -539,12 +542,52 @@ describe('every answered call is metered per org (AGL-2073)', () => {
     expect(signals).toHaveLength(1)
     expect(signals[0][1]).toMatchObject({
       route: '/api/ai/assist/element',
-      model: 'claude-sonnet-5',
+      model: 'claude-haiku-4-5',
       tier: 'entitled',
       stopReason: 'end_turn',
       inputTokens: 100,
       outputTokens: 40,
     })
+  })
+
+  it('TIERING: the request, the meter and the COST all name one model per mode', async () => {
+    // Three failures in one test, because they are the same failure seen from
+    // different sides:
+    //
+    //  - a tiering change that updates the request and not the meter reports
+    //    Sonnet money for Haiku tokens, and every cap tuned against those
+    //    figures is tuned against fiction;
+    //  - a model id the rate table lacks silently falls back to the DEAREST
+    //    known tier ($10/$50), which would price this same turn at $0.0030 —
+    //    a 10x overstatement that looks like a cost regression;
+    //  - and the model actually sent upstream is the only one that bills.
+    //
+    // So the cost is asserted as a NUMBER per mode. All three distinct:
+    // Haiku $0.0003, Sonnet $0.0009, the dear fallback $0.0030 — for the
+    // same 100 in / 40 out — so no pair of them can pass for another.
+    const cases: Array<[string, string, number]> = [
+      ['element', 'claude-haiku-4-5', 0.0003],
+      ['blog', 'claude-sonnet-5', 0.0009],
+    ]
+    for (const [mode, expected, cost] of cases) {
+      mockDocs.clear()
+      mockFetch.mockClear()
+      const result = await call(
+        { ...BODY, mode, instruction: 'Tighten this' },
+        `token-tier-${mode}`,
+      )
+      expect(result.status).toBe(200)
+      const sent = JSON.parse(String(mockFetch.mock.calls[0][1].body))
+      expect(sent.model).toBe(expected)
+      const signal = [...mockDocs.entries()].find(([path]) =>
+        path.startsWith(`orgs/${ORG}/assistSignals/`),
+      )
+      expect(signal?.[1]).toMatchObject({ model: expected })
+      expect((signal?.[1] as Record<string, number>)['estCostUsd']).toBeCloseTo(
+        cost,
+        6,
+      )
+    }
   })
 
   it('keeps NO verbatim record of what the customer typed', async () => {

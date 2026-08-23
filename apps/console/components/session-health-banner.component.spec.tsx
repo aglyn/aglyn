@@ -16,11 +16,15 @@
  */
 
 /**
- * The banner is the half of AGL-1063 the user actually sees, so what is
- * worth pinning down is that it stays SILENT until the verdict says
- * otherwise — a false "your session is dead" mid-edit is worse than the
- * quiet degradation it replaces — and that it is genuinely subscribed, not
- * merely written (`feedback_verify_control_is_wired`).
+ * The stale-session watcher (AGL-1063 → AGL-2486).
+ *
+ * What is worth pinning down is unchanged in spirit and inverted in form:
+ * it stays SILENT until the verdict says otherwise — a false "your session
+ * is dead" mid-edit is worse than the quiet degradation it replaces — and
+ * when the verdict does arrive it OPENS THE FIX rather than describing the
+ * problem in a banner. The three `permission-denied` causes that look
+ * identical from the client get three different answers, and only one of
+ * them is the dialog.
  */
 
 import { act, render, screen } from '@testing-library/react'
@@ -30,12 +34,14 @@ import {
   reportDeniedRead,
   reportSuccessfulRead,
 } from '../utils/session-health'
+import {
+  __resetSessionReauth,
+  dismissSessionReauth,
+  getSessionReauth,
+} from '../utils/session-reauth'
 
 const mockUser: { data: unknown } = { data: undefined }
 jest.mock('@aglyn/tenant-feature-instance', () => ({
-  // No user by default: the diagnostic effect is skipped, which keeps most
-  // of these about the banner rather than about token plumbing. The
-  // AGL-1143 cases below supply one, because the probe runs inside it.
   useUser: () => mockUser,
   useAuth: () => ({}),
   useFirestore: () => ({}),
@@ -50,60 +56,137 @@ jest.mock('../utils/interactive-signin', () => ({
   markInteractiveSignOut: jest.fn(),
 }))
 
+/** The banner copy that AGL-2486 removed; nothing may bring it back. */
 const bannerText = /session needs refreshing/i
+
+/** A live user is required — the probe (and the identity capture) need one. */
+const signedIn = () => ({
+  uid: 'u1',
+  email: 'someone@example.com',
+  providerData: [{ providerId: 'password', email: 'someone@example.com' }],
+  getIdToken: () => Promise.resolve('t'),
+  getIdTokenResult: () => Promise.resolve({}),
+})
+
+/** Two DISTINCT collections is the bar; one is a scoped collaborator. */
+const goStale = () =>
+  act(() => {
+    reportDeniedRead('users')
+    reportDeniedRead('orgs')
+  })
+
+/** The probe is async, so the verdict lands a microtask after the evidence. */
+const settle = async () => {
+  await act(async () => {
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+}
 
 describe('SessionHealthBanner (AGL-1063)', () => {
   beforeEach(() => {
     __resetSessionHealth()
-    mockUser.data = undefined
+    __resetSessionReauth()
+    mockUser.data = signedIn()
     mockProbe.mockReset()
     mockProbe.mockResolvedValue({ outcome: 'ok', hint: 'ok' })
+    jest.spyOn(console, 'error').mockImplementation(() => void 0)
   })
-  afterEach(() => __resetSessionHealth())
+  afterEach(() => {
+    __resetSessionHealth()
+    __resetSessionReauth()
+    ;(console.error as jest.Mock).mockRestore?.()
+  })
 
-  it('renders nothing on a healthy session', () => {
+  it('renders nothing, and asks for nothing, on a healthy session', async () => {
     render(<SessionHealthBanner />)
+    await settle()
     expect(screen.queryByText(bannerText)).toBeNull()
+    expect(getSessionReauth().reason).toBeNull()
   })
 
-  it('stays silent for a single denied collection', () => {
+  it('stays silent for a single denied collection', async () => {
     // A scoped collaborator hitting something AGL-1041 hides on purpose.
     render(<SessionHealthBanner />)
     act(() => {
       reportDeniedRead('orgs/datasets')
       reportDeniedRead('orgs/datasets')
     })
+    await settle()
+    expect(getSessionReauth().reason).toBeNull()
+  })
+
+  /**
+   * The change Zach asked for: the fix, not a description of the problem.
+   */
+  it('opens the sign-in dialog — and NO banner — once the session is the verdict', async () => {
+    render(<SessionHealthBanner />)
+    goStale()
+    await settle()
+
+    expect(getSessionReauth().reason).toBe('stale')
+    expect(getSessionReauth().dismissed).toBe(false)
     expect(screen.queryByText(bannerText)).toBeNull()
+    expect(screen.queryByRole('button', { name: /sign in again/i })).toBeNull()
   })
 
-  it('appears — with a way back in — once two collections are denied', () => {
+  it('carries the identity the dialog needs to offer the right factor', async () => {
     render(<SessionHealthBanner />)
-    act(() => {
-      reportDeniedRead('orgs/media')
-      reportDeniedRead('orgs/members')
-    })
-    expect(screen.getByText(bannerText)).toBeTruthy()
-    expect(screen.getByRole('button', { name: /sign in again/i })).toBeTruthy()
+    goStale()
+    await settle()
+
+    // Captured from the LIVE user, before any sign-out: afterwards there is
+    // nobody left to ask which factors this account has.
+    expect(getSessionReauth().identity.email).toBe('someone@example.com')
+    expect(getSessionReauth().identity.hasPassword).toBe(true)
+    // The `stale` trigger leaves the user signed in until they submit.
+    expect(getSessionReauth().requiresSignIn).toBe(false)
   })
 
-  it('says nothing has been deleted, because that is the first fear', () => {
+  it('does not reopen on the next failed read after "Not now"', async () => {
     render(<SessionHealthBanner />)
+    goStale()
+    await settle()
+    act(() => dismissSessionReauth())
+    expect(getSessionReauth().dismissed).toBe(true)
+
+    // The session is still dead, so reads keep failing. That must not turn
+    // into a modal every time a page issues two more queries.
     act(() => {
-      reportDeniedRead('orgs/media')
-      reportDeniedRead('hostIndex')
+      reportDeniedRead('hosts')
+      reportDeniedRead('media')
     })
-    expect(screen.getByText(/nothing has been deleted/i)).toBeTruthy()
+    await settle()
+    expect(getSessionReauth().dismissed).toBe(true)
   })
 
-  it('withdraws itself when a server read succeeds again', () => {
+  it('stands down when a read reaches the server again', async () => {
     render(<SessionHealthBanner />)
-    act(() => {
-      reportDeniedRead('orgs/media')
-      reportDeniedRead('orgs/members')
-    })
-    expect(screen.getByText(bannerText)).toBeTruthy()
+    goStale()
+    await settle()
+    expect(getSessionReauth().reason).toBe('stale')
+
     act(() => reportSuccessfulRead())
-    expect(screen.queryByText(bannerText)).toBeNull()
+    await settle()
+    expect(getSessionReauth().reason).toBeNull()
+  })
+
+  it('prompts again only after the session has demonstrably recovered', async () => {
+    render(<SessionHealthBanner />)
+    goStale()
+    await settle()
+    act(() => dismissSessionReauth())
+
+    // Recovery, then a fresh failure: a NEW episode, and the one thing that
+    // may re-arm the prompt.
+    act(() => reportSuccessfulRead())
+    await settle()
+    goStale()
+    await settle()
+
+    expect(getSessionReauth().reason).toBe('stale')
+    expect(getSessionReauth().dismissed).toBe(false)
   })
 })
 
@@ -112,26 +195,24 @@ describe('SessionHealthBanner (AGL-1063)', () => {
  * verdict and for an App Check rejection. The banner used to assume the
  * former and always offer "Sign in again"; when the refusal is in front of
  * the rules that advice is wrong, and following it destroys the evidence.
+ * Since AGL-2486 the stakes are higher, because the wrong branch would now
+ * put a modal in front of someone it cannot help.
  */
 describe('when even a public read is denied (AGL-1143)', () => {
-  const goStale = () =>
-    act(() => {
-      reportDeniedRead('users')
-      reportDeniedRead('orgs')
-    })
-
   beforeEach(() => {
     __resetSessionHealth()
-    mockUser.data = {
-      uid: 'u1',
-      getIdToken: () => Promise.resolve('t'),
-      getIdTokenResult: () => Promise.resolve({}),
-    }
+    __resetSessionReauth()
+    mockUser.data = signedIn()
     mockProbe.mockReset()
+    jest.spyOn(console, 'error').mockImplementation(() => void 0)
   })
-  afterEach(() => __resetSessionHealth())
+  afterEach(() => {
+    __resetSessionHealth()
+    __resetSessionReauth()
+    ;(console.error as jest.Mock).mockRestore?.()
+  })
 
-  it('withholds the sign-in button, because it would not help', async () => {
+  it('says so in a banner and opens NO dialog, because it would not help', async () => {
     mockProbe.mockResolvedValue({
       outcome: 'denied',
       code: 'permission-denied',
@@ -139,32 +220,45 @@ describe('when even a public read is denied (AGL-1143)', () => {
     })
     render(<SessionHealthBanner />)
     goStale()
+
     expect(
       await screen.findByText(/signing in again will not help/i),
     ).toBeTruthy()
-    expect(screen.queryByRole('button', { name: /sign in again/i })).toBeNull()
+    expect(getSessionReauth().reason).toBeNull()
   })
 
-  it('still offers it when the public read succeeds', async () => {
-    // The session really is the problem — the original behaviour, which must
-    // survive the new branch.
-    mockProbe.mockResolvedValue({ outcome: 'ok', hint: 'ID token' })
+  it('opens no dialog for an offline blip either', async () => {
+    // `error` is not evidence about App Check, and it is not evidence about
+    // the session. Interrupting an edit with a sign-in modal over a dropped
+    // connection is the false positive this whole mechanism is tuned against.
+    mockProbe.mockResolvedValue({
+      outcome: 'error',
+      code: 'unavailable',
+      hint: 'offline',
+    })
     render(<SessionHealthBanner />)
     goStale()
-    expect(
-      await screen.findByRole('button', { name: /sign in again/i }),
-    ).toBeTruthy()
-    expect(screen.queryByText(/will not help/i)).toBeNull()
+    await settle()
+
+    expect(getSessionReauth().reason).toBeNull()
+    expect(screen.queryByText(bannerText)).toBeNull()
   })
 
-  it('offers it when the probe cannot reach the network either', async () => {
-    // `error` is not evidence about App Check. Falling back to the ordinary
-    // advice is right: it is the more common cause and it is harmless.
-    mockProbe.mockResolvedValue({ outcome: 'error', code: 'unavailable', hint: 'offline' })
+  it('never prompts while the probe is still unsettled', async () => {
+    // An unsettled value must not answer the question (the AGL-1179 shape).
+    let release: (value: unknown) => void = () => void 0
+    mockProbe.mockReturnValue(new Promise((resolve) => (release = resolve)))
     render(<SessionHealthBanner />)
     goStale()
-    expect(
-      await screen.findByRole('button', { name: /sign in again/i }),
-    ).toBeTruthy()
+    await settle()
+
+    expect(getSessionReauth().reason).toBeNull()
+
+    await act(async () => {
+      release({ outcome: 'ok', hint: 'ok' })
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(getSessionReauth().reason).toBe('stale')
   })
 })

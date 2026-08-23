@@ -135,8 +135,13 @@ function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
         <Fragment>
           {/* Impersonation warning (AGL-246). */}
           <ImpersonationBanner />
-          {/* "Your session needs refreshing" (AGL-1063). Renders nothing
-              until server reads fail across two distinct collections. */}
+          {/* Stale-session watcher (AGL-1063, AGL-2486). Renders nothing
+              until server reads fail across two distinct collections AND a
+              public read proves it is this session — at which point it opens
+              the dialog below rather than describing the problem in a
+              banner. It still renders one for the App Check case, the one
+              diagnosis signing in again cannot fix. Must stay ABOVE the
+              dialog it drives. */}
           <SessionHealthBanner />
           {/* "Sign in again to verify your device" (AGL-664). Renders
               nothing until the console's own auth machinery requests it. */}

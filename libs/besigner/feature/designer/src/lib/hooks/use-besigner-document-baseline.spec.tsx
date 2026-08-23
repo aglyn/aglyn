@@ -192,3 +192,100 @@ describe('useBesignerDocument: the saved baseline vs the store', () => {
     expect(notify).not.toHaveBeenCalledWith('Already saved', expect.anything())
   })
 })
+
+/**
+ * The other half of AGL-1262, found while chasing AGL-2486.
+ *
+ * `updateInitialNodes(…, { confirmed: false })` is recorded exactly once, on
+ * the first snapshot that carries nodes, and `_initialConfirmed` moves to
+ * true in only two places — `reset()` and another `updateInitialNodes`. So a
+ * document whose FIRST snapshot arrives carrying this client's own queued
+ * write records an unconfirmed baseline and then has no way back: the effect
+ * re-runs when the write settles (`pendingWrites` is in its deps), but the
+ * `!didSetInitial` guard is false by then and nothing re-confirms.
+ *
+ * The editor is pinned dirty for the rest of the session over a document
+ * nobody has edited — the same phantom-dirty shape AGL-2486 was reported as,
+ * reached by a different route.
+ *
+ * Confirming must stay conditional, or the fix reintroduces the bug it sits
+ * next to: the baseline may only be adopted while the canvas STILL matches
+ * it. An author who edited in the meantime has work the store has never
+ * seen, and calling that "saved" is precisely AGL-1262.
+ */
+describe('useBesignerDocument: an unconfirmed baseline is re-confirmed', () => {
+  const ROOT = Aglyn.CANVAS_ROOT_ELEMENT_ID
+
+  const NODES = {
+    [ROOT]: { $id: ROOT, type: 'node', componentId: 'div', nodes: ['box'] },
+    box: {
+      $id: 'box',
+      type: 'node',
+      parentId: ROOT,
+      componentId: 'muiStack',
+      sx: { width: '100%' },
+      nodes: [],
+    },
+  } as never
+
+  function openWith(pendingWrites: boolean) {
+    const save = jest.fn().mockResolvedValue(undefined)
+    const notify = jest.fn()
+    const rendered = renderHook(
+      (props: { pendingWrites: boolean }) =>
+        useBesignerDocument({
+          nodes: NODES,
+          status: 'success',
+          save,
+          notify,
+          noun: 'screen',
+          pendingWrites: props.pendingWrites,
+        } as never),
+      { initialProps: { pendingWrites } },
+    )
+    return { ...rendered, save, notify }
+  }
+
+  beforeEach(() => {
+    Aglyn.canvas.reset()
+  })
+  afterEach(() => {
+    Aglyn.canvas.reset()
+  })
+
+  it('stays dirty while the write is still unacknowledged', () => {
+    const { result, rerender } = openWith(true)
+    act(() => rerender({ pendingWrites: true }))
+    expect(result.current.saveAvailable).toBe(true)
+  })
+
+  it('goes clean once the store acknowledges that write', () => {
+    const { result, rerender } = openWith(true)
+    act(() => rerender({ pendingWrites: true }))
+    expect(result.current.saveAvailable).toBe(true)
+
+    // The queued write lands. The snapshot content is unchanged — it was
+    // always our own write — but the store now vouches for it.
+    act(() => rerender({ pendingWrites: false }))
+    act(() => rerender({ pendingWrites: false }))
+
+    expect(result.current.saveAvailable).toBe(false)
+  })
+
+  it('stays savable when the author edited before the acknowledgement', () => {
+    const { result, rerender } = openWith(true)
+    act(() => rerender({ pendingWrites: true }))
+
+    // Work the store has never seen, made while the baseline was unconfirmed.
+    act(() => {
+      const box = Aglyn.canvas.getNode('box')
+      Aglyn.canvas.updateNodeProps(box as never, { title: 'edited' } as never)
+    })
+    act(() => rerender({ pendingWrites: false }))
+    act(() => rerender({ pendingWrites: false }))
+
+    // The acknowledgement was for the OLD write, not for this edit. Calling
+    // it saved is how unsaved work becomes unsavable (AGL-1262).
+    expect(result.current.saveAvailable).toBe(true)
+  })
+})

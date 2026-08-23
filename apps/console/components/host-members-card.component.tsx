@@ -511,7 +511,7 @@ export function HostMembersCard(props: HostMembersCardProps) {
                   <MemberAvatar
                     photoURL={ownerMember?.photoURL}
                     email={ownerMember?.email}
-                    displayName={ownerLabel}
+                    name={ownerLabel}
                     size={28}
                   />
                   <span>{ownerLabel}</span>
@@ -540,7 +540,7 @@ export function HostMembersCard(props: HostMembersCardProps) {
                         member.uid ? photoByUid.get(member.uid) : undefined
                       }
                       email={member.email}
-                      displayName={member.displayName}
+                      name={member.displayName}
                       size={28}
                     />
                     {/* Into the member's detail page, like the org Team

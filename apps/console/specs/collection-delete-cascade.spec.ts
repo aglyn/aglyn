@@ -82,15 +82,61 @@ describe('collection delete runs the shared cascade helper (AGL-1324)', () => {
     expect(source).toContain("kind: 'collections'")
   })
 
+  /**
+   * Reads one `deleteDoc(...)` call's argument by BALANCING parentheses.
+   *
+   * This used to be `source.slice(index, index + 400)`, which is not the
+   * call — it is the call plus whatever happens to follow it. That made the
+   * guard depend on the page's layout: the author delete (AGL-2486) landed
+   * with `'entries'` nowhere in its own argument, and passed anyway because
+   * the entry-editor code 300 characters further down mentioned it. Adding
+   * an unrelated callback between the two pushed the coincidence out of
+   * range and the guard finally went red — which is when anyone learned it
+   * had stopped reading what it claimed to read.
+   */
+  const deleteDocArguments = (source: string): string[] => {
+    const found: string[] = []
+    const token = 'deleteDoc('
+    let cursor = source.indexOf(token)
+    while (cursor !== -1) {
+      let depth = 0
+      let index = cursor + token.length - 1
+      for (; index < source.length; index += 1) {
+        if (source[index] === '(') depth += 1
+        else if (source[index] === ')') {
+          depth -= 1
+          if (depth === 0) break
+        }
+      }
+      found.push(source.slice(cursor, index + 1))
+      cursor = source.indexOf(token, index + 1)
+    }
+    return found
+  }
+
   it('leaves the console with no client-SDK delete of a collection doc', () => {
-    // The rules deny it (AGL-947) and it would orphan `entries` — so the
-    // page's only `deleteDoc` must be the single-ENTRY delete.
+    // The rules deny it (AGL-947) and it would orphan `entries` — so every
+    // `deleteDoc` on this page must name a LEAF this page owns. Two do now:
+    // the single-entry delete (AGL-1324) and the author record (AGL-2486),
+    // which has no subcollection of its own and so cascades nothing.
     const source = read(CONTENT_PAGE)
-    const calls = [...source.matchAll(/deleteDoc\(/g)]
+    const calls = deleteDocArguments(source)
     expect(calls).not.toHaveLength(0)
-    for (const call of calls) {
-      const argument = source.slice(call.index ?? 0, (call.index ?? 0) + 400)
-      expect(argument).toContain("'entries'")
+    for (const argument of calls) {
+      expect(argument).toMatch(/'entries'|'authors'/)
+    }
+  })
+
+  it('never deletes the collection document itself', () => {
+    // The specific shape AGL-947 forbids: a path that STOPS at the
+    // collection. Checked separately from the allow-list above so that
+    // adding a third leaf resource cannot quietly re-admit this one.
+    const source = read(CONTENT_PAGE)
+    for (const argument of deleteDocArguments(source)) {
+      // One path segment after `'collections'` and then the `doc(` closes:
+      // that is a handle on the collection itself. The entry delete carries
+      // `'entries', entry.$id` after the id, so it does not match.
+      expect(argument).not.toMatch(/'collections',\s*[^,()]+,?\s*\)/)
     }
   })
 })

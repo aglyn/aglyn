@@ -16,6 +16,8 @@
  */
 
 export enum FieldComponentType {
+  /** Per-breakpoint span/offset row; persists one string (AGL-2486). */
+  BREAKPOINT_SPAN = 'breakpoint-span',
   BUTTON = 'button',
   CHECKBOX = 'checkbox',
   COLOR_PICKER = 'color-picker',
@@ -39,6 +41,8 @@ export enum FieldComponentType {
   TABS = 'tabs',
   TEXT_FIELD = 'text-field',
   TEXTAREA = 'textarea',
+  /** Theme-scale combo box that still accepts a raw value (AGL-2486). */
+  THEME_SCALE = 'theme-scale',
   TIME_PICKER = 'time-picker',
   TOGGLE_BUTTON = 'toggle-button',
   WIZARD = 'wizard',

@@ -100,11 +100,23 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
           <AddControlsComponent />
           {documentSwitcher}
           <HistoryControlsComponent sx={{ flexGrow: 1 }} />
+          {/*
+           * Presence leads the control group (AGL-2486). Zach: "We also
+           * should probably move all of them to be before the theme mode
+           * switcher."
+           *
+           * It also fixes the lopsided spacing he saw. Sitting last, the
+           * cluster had the `Divider`'s `ml: spacing(2) !important` on its
+           * right and only the Stack's own `spacing={1}` on its left — an
+           * enormous right margin and a small left one, neither of them set
+           * by the presence component. Ahead of the group it is bounded by
+           * that one Stack rule on both sides.
+           */}
+          {presence}
           <SchemePreviewControlsComponent />
           <DevicePreviewControlsComponent />
           {/*<InteractControlsComponent />*/}
           <PanelControlsComponent />
-          {presence}
           <Divider
             orientation="vertical"
             sx={(theme) => ({

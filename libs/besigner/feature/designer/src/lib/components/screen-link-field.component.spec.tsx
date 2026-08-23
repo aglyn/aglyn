@@ -127,6 +127,20 @@ describe('ScreenLinkValuePicker (AGL-1335)', () => {
     expect(stored()).toBe('')
   })
 
+  it('does not print its label over the option it renders when unset', () => {
+    // Same shape as the Styles panel's Background Fill (AGL-2486): a
+    // Select with `displayEmpty` draws a real MenuItem for the empty value,
+    // and MUI still reports the input unfilled — so the field name floated
+    // on top of "Not set" and neither could be read. `displayEmpty` and a
+    // shrunk label are one decision, not two.
+    render(<Harness />)
+    expect(screen.getByRole('combobox').textContent).toBe('Not set')
+    const label = screen
+      .getAllByText('Default')
+      .find((element) => element.classList.contains('MuiInputLabel-root'))
+    expect(label?.getAttribute('data-shrink')).toBe('true')
+  })
+
   it('names the component default by SCREEN, not by its stored id', () => {
     // `Use the component default (screen:s2)` is not a sentence an author
     // can act on, and it is the shape the graft stores.

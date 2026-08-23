@@ -44,6 +44,13 @@ export function adminNavTabItems() {
       label: 'Feature flags',
       href: buildRoute(Route.ADMIN_FLAGS),
     },
+    // Beside Feature flags, because it is the same kind of thing: a lever
+    // over the whole platform rather than over one workspace (AGL-2486).
+    {
+      id: 'nav-tab-admin-settings',
+      label: 'Platform settings',
+      href: buildRoute(Route.ADMIN_SETTINGS),
+    },
     {
       id: 'nav-tab-admin-coupons',
       label: 'Coupons',
@@ -112,6 +119,14 @@ export function adminNavTabItems() {
       id: 'nav-tab-admin-assist-signals',
       label: 'Assist signal',
       href: buildRoute(Route.ADMIN_ASSIST_SIGNALS),
+    },
+    // Directly before Sales tax, because the two read the same
+    // `platformRevenue` rows for different questions: this one asks what Aglyn
+    // earned, that one asks what is owed to the state (AGL-2486).
+    {
+      id: 'nav-tab-admin-revenue',
+      label: 'Revenue',
+      href: buildRoute(Route.ADMIN_REVENUE),
     },
     {
       id: 'nav-tab-admin-tax-return',

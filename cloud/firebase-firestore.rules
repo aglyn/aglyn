@@ -1596,6 +1596,24 @@ service cloud.firestore {
         // counts LIVE rows, so the soft delete frees a slot, which is the
         // property that makes leaving update open safe rather than merely
         // convenient.
+        //
+        // `authors` joins CREATE ONLY (AGL-2486), which is the `actions` split
+        // AGL-2266 made and for the same single reason: a new host
+        // subcollection the browser can create is unbounded Firestore
+        // documents against a $0 subscription. Nothing about a byline is
+        // priced — `AUTHORS_MAX_PER_HOST` is a flat platform cap counted by
+        // /api/hosts/resources, like `ACTIONS_MAX_PER_HOST` and
+        // `WEBHOOK_MAX_PER_HOST` before it.
+        //
+        // Update and delete are deliberately NOT excluded. The authors tab
+        // edits a record in place and removes one outright; neither creates a
+        // document, so neither can raise the count the cap is about, and
+        // adding the name to those lists would break both surfaces to close
+        // nothing. Deleting frees a slot, which is the property that lets a
+        // host at the ceiling recover without support — and a deleted author
+        // does not strip the byline off its posts, because
+        // `resolveEntryAuthor` falls through a dangling `authorId` to the
+        // entry's own `authorName` and then to the site.
         allow create: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'variables',
@@ -1603,7 +1621,8 @@ service cloud.firestore {
               'locations', 'products', 'components', 'registers', 'installs',
               'templates', 'collections', 'datasets', 'webhooks', 'orders',
               'counters', 'analytics', 'screenAnalytics', 'members',
-              'mediaTombstones', 'formSubmissions', 'actions', 'carts',
+              'mediaTombstones', 'formSubmissions', 'actions', 'authors',
+              'carts',
               'checkouts', 'giftCards', 'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation']));
         // `templates` is excluded from update as well as create: its
@@ -1815,6 +1834,29 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // Email addresses on this account (AGL-2486): SERVER-WRITE ONLY, and
+      // this one is the sharpest case of the rule `passkeys` above states.
+      //
+      // `users/{userId}` itself is `allow read, write` for its owner with no
+      // field validation at all, so anything stored ON that document is a
+      // field its owner may set to any value they like. `verified` is the
+      // entire security property of this feature: a verified address is a
+      // SIGN-IN IDENTIFIER and can be promoted to primary, and the primary is
+      // the Firebase Auth record's email — the string `decoded.email`
+      // carries, which the session mint's SSO domain policy and the
+      // invite-accept comparison both read. An owner who could write
+      // `verified: true` could therefore claim an address they have never
+      // received mail at and turn it into an authorization input.
+      //
+      // So every write goes through /api/account/emails, which proves
+      // delivery by an emailed round-trip before it sets the bit. The owner
+      // reads their own list for the management card, exactly like passkeys.
+      match /emails/{address} {
+        allow read: if isStaff() ||
+          (isSignedIn() && request.auth.uid == userId);
+        allow write: if false;
+      }
+
       // Clickwrap acceptance records (AGL-1497): SERVER-WRITE ONLY, for the
       // same reason as passkeys above — this is evidence ABOUT the person who
       // would be writing it. A client-writable acceptance could be forged
@@ -1838,6 +1880,29 @@ service cloud.firestore {
       allow read, write: if false;
     }
     match /passkeyCredentialIndex/{credentialId} {
+      allow read, write: if false;
+    }
+
+    // Account email machinery (AGL-2486): server-only, both of them, on the
+    // same reasoning as the WebAuthn pair directly above.
+    //
+    // `emailIdentityIndex/{address}` -> `{ uid }` is THE uniqueness guard:
+    // one verified address, one account. A client that could WRITE one could
+    // point somebody else's address at their own uid, which makes the sign-in
+    // identifier ambiguous and is account takeover with no password involved.
+    // A client that could READ the collection could enumerate which addresses
+    // exist and which account holds each — the address book of every user we
+    // have, keyed for lookup.
+    //
+    // `emailVerifications/{tokenId}` holds the SHA-256 of a secret that
+    // confirms an address. Readable would let an attacker compare candidates
+    // offline; writable would let them mint a confirmation for an address
+    // they do not own, which defeats the round-trip that the whole feature
+    // rests on. Single-use and TTL'd, deleted by the route that consumes it.
+    match /emailIdentityIndex/{address} {
+      allow read, write: if false;
+    }
+    match /emailVerifications/{tokenId} {
       allow read, write: if false;
     }
 

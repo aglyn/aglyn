@@ -19,6 +19,7 @@
 
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import {
+  AppLink,
   CardDisplay,
   Container,
   GridItems,
@@ -221,6 +222,13 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                     'Stripe subscription. Staff plan overrides, comped, and ' +
                     'canceled organizations contribute $0; annual plans count ' +
                     'at their per-month equivalent.',
+                  // Zach asked for the dashboard MRR to drill into the full
+                  // report (AGL-2486). This tile is a single point-in-time
+                  // number with no way to ask why it is what it is; Revenue
+                  // answers that — settled cash beside it, and the gap between
+                  // the two broken into named causes.
+                  href: buildRoute(Route.ADMIN_REVENUE),
+                  hrefLabel: 'Break this down',
                 },
               ].map((metric) => ({
                 size: { xs: 6, md: 3 },
@@ -241,6 +249,18 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                       <Typography variant="caption" color="text.secondary">
                         {metric['caption']}
                       </Typography>
+                    ) : null}
+                    {metric['href'] ? (
+                      <Stack sx={{ mt: 1, alignItems: 'flex-start' }}>
+                        <AppLink
+                          componentVariant="button"
+                          size="small"
+                          variant="outlined"
+                          href={metric['href']}
+                        >
+                          {metric['hrefLabel'] ?? 'Open'}
+                        </AppLink>
+                      </Stack>
                     ) : null}
                   </CardDisplay>
                 ),

@@ -33,6 +33,11 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import {
+  formatQuotaLimit,
+  isUnlimitedQuota,
+  restoreQuotaLimit,
+} from '@aglyn/aglyn'
 
 /** One site's row, as `/api/billing/collaborator-allocations` reports it. */
 interface AllocationSite {
@@ -41,8 +46,14 @@ interface AllocationSite {
   /** Seats in use, through the counter the cap is ENFORCED with. */
   collaborators: number
   allocatedSeats: number
-  /** Plan cap + this site's allocated seats, clamped to the plan's band. */
+  /**
+   * Plan cap + this site's allocated seats, clamped to the plan's band —
+   * already rehydrated, so an uncapped plan is `UNLIMITED` here and not the
+   * `null` the wire carried.
+   */
   cap: number
+  /** The route's explicit flag; `cap` is a placeholder `0` when true. */
+  capUnlimited?: boolean
 }
 
 interface AllocationState {
@@ -54,9 +65,46 @@ interface AllocationState {
   }
   /** The collaborator cap every site gets from the PLAN alone (AGL-2439). */
   planCapPerSite: number
+  /** The route's explicit flag; `planCapPerSite` is `0` when true. */
+  planCapPerSiteUnlimited?: boolean
   /** The plan's hard band; assigning past it cannot raise a site's cap. */
   maxCapPerSite: number
+  /** The route's explicit flag; `maxCapPerSite` is `0` when true. */
+  maxCapPerSiteUnlimited?: boolean
   sites: AllocationSite[]
+}
+
+/**
+ * Put the `UNLIMITED` sentinel back where `JSON.stringify` flattened it.
+ *
+ * `UNLIMITED` is `Number.POSITIVE_INFINITY` and `JSON.stringify(Infinity)` is
+ * `null`, so an Enterprise payload arrived with every cap nulled. The display
+ * was the visible half; the COMPARISONS were the damaging half, because they
+ * do not fail loudly — `1 > null` is TRUE, so a site with one collaborator on
+ * an uncapped plan raised the grandfather notice ("1 over the limit and
+ * kept") beneath a readout of "1/∞ collaborators", and `null >= null` is TRUE,
+ * so the same row said it had hit "your plan's maximum of null per site —
+ * upgrade instead" on the top plan.
+ *
+ * Rehydrating HERE, once, means every comparison below is ordinary arithmetic
+ * that is simply correct (AGL-2482; AGL-2223 is the same class).
+ */
+function hydrate(payload: AllocationState): AllocationState {
+  return {
+    ...payload,
+    planCapPerSite: restoreQuotaLimit(
+      payload?.planCapPerSite,
+      payload?.planCapPerSiteUnlimited,
+    ),
+    maxCapPerSite: restoreQuotaLimit(
+      payload?.maxCapPerSite,
+      payload?.maxCapPerSiteUnlimited,
+    ),
+    sites: (payload?.sites ?? []).map((site) => ({
+      ...site,
+      cap: restoreQuotaLimit(site?.cap, site?.capUnlimited),
+    })),
+  }
 }
 
 export interface BillingCollaboratorAllocationsCardProps {
@@ -158,7 +206,7 @@ export default function BillingCollaboratorAllocationsCardComponent({
       .then((outcome) => {
         if (cancelled) return
         if (!outcome.ok) return void setLoadState('error')
-        setState(outcome.payload as AllocationState)
+        setState(hydrate(outcome.payload as AllocationState))
         setLoadState('loaded')
       })
       // A rejected fetch — offline, a wedged route — never reached the
@@ -269,6 +317,10 @@ export default function BillingCollaboratorAllocationsCardComponent({
   }
 
   const { pool, planCapPerSite, maxCapPerSite, sites } = state
+  // `site.cap` is rehydrated, so an uncapped site compares as
+  // `collaborators > Infinity` — false. Against the raw wire value it was
+  // `collaborators > null`, which is TRUE for any count above zero: the
+  // grandfather notice fired on Enterprise sites that were not over anything.
   const overCapSites = sites.filter((site) => site.collaborators > site.cap)
 
   return (
@@ -304,8 +356,11 @@ export default function BillingCollaboratorAllocationsCardComponent({
       {pool.purchased === 0 ? (
         <Alert severity="info">
           You haven’t bought any extra collaborator seats yet. Every site can
-          have {plural(planCapPerSite, 'collaborator', 'collaborators')} on
-          your current plan. Add collaborator seats under{' '}
+          have{' '}
+          {isUnlimitedQuota(planCapPerSite)
+            ? 'as many collaborators as it needs'
+            : plural(planCapPerSite, 'collaborator', 'collaborators')}{' '}
+          on your current plan. Add collaborator seats under{' '}
           <strong>Plan add-ons</strong> above, then assign them to a site here.
         </Alert>
       ) : pool.available === 0 ? (
@@ -325,7 +380,14 @@ export default function BillingCollaboratorAllocationsCardComponent({
         <Stack spacing={1}>
           {sites.map((site) => {
             const busy = busyHostId === site.hostId
-            const atBand = site.cap >= maxCapPerSite
+            // An uncapped site is never "at the band": `Infinity >= Infinity`
+            // is true and so was `null >= null` before rehydration, which put
+            // "At your plan's maximum — upgrade instead" on the plan there is
+            // nothing above. A band only binds when there is a number to hit.
+            const atBand =
+              !isUnlimitedQuota(site.cap) &&
+              !isUnlimitedQuota(maxCapPerSite) &&
+              site.cap >= maxCapPerSite
             return (
               <Stack
                 key={site.hostId}
@@ -361,7 +423,7 @@ export default function BillingCollaboratorAllocationsCardComponent({
                     </Typography>
                   ) : atBand ? (
                     <Typography variant="caption" color="text.secondary">
-                      {`At your plan’s maximum of ${maxCapPerSite} per site — more seats can’t raise it, upgrade instead`}
+                      {`At your plan’s maximum of ${formatQuotaLimit(maxCapPerSite)} per site — more seats can’t raise it, upgrade instead`}
                     </Typography>
                   ) : null}
                 </Box>

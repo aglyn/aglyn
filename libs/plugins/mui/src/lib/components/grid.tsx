@@ -17,33 +17,55 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiViewGrid, mdiViewGridOutline } from '@aglyn/shared-data-mdi'
+import {
+  parseBreakpointSpan,
+  SPAN_BREAKPOINTS,
+  type SpanBreakpoint,
+} from '@aglyn/shared-data-enums'
 import MuiGrid from '@mui/material/Grid'
 import { forwardRef, type ReactNode } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
 
 // Component ids are persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = 'muiGrid'
 
-/** Breakpoint keys MUI's responsive `size`/`offset` objects accept. */
-export const BREAKPOINTS = ['xs', 'sm', 'md', 'lg', 'xl'] as const
-export type Breakpoint = (typeof BREAKPOINTS)[number]
+/**
+ * Breakpoint keys MUI's responsive `size`/`offset` objects accept.
+ *
+ * Re-exported from `@aglyn/shared-data-enums` rather than declared twice
+ * (AGL-2486): the attributes panel's breakpoint row and this parser have to
+ * agree on the list, and two copies is how they stop agreeing.
+ */
+export const BREAKPOINTS = SPAN_BREAKPOINTS
+export type Breakpoint = SpanBreakpoint
 
 export interface GridElementProps {
   /** Flex container behavior; items are its direct Grid children. */
   container?: boolean
   /**
-   * Column span, authored as text. Accepts a bare span (`6`), the
-   * keywords `auto`/`grow`, or per-breakpoint pairs (`xs:12 md:6`).
+   * Column span. Persisted as one string: a bare span (`6`), the keywords
+   * `auto`/`grow`, or per-breakpoint pairs (`xs:12 md:6`). Authored through
+   * the breakpoint row in the attributes panel (AGL-2486); the stored
+   * format is unchanged from when it was a text box.
    */
   size?: string | number
-  /** Empty columns before the item; same syntax as `size`. */
+  /** Empty columns before the item; same syntax as `size`, minus `grow`. */
   offset?: string | number
   spacing?: number | string
   rowSpacing?: number | string
   columnSpacing?: number | string
   /** Total columns in the container; MUI's default is 12. */
   columns?: number | string
+  /**
+   * Container flow. MUI supports `row`/`row-reverse` ONLY — Grid subdivides
+   * a layout into columns, and `column`/`column-reverse` are documented as
+   * unsupported (use a Stack for a vertical layout).
+   */
+  direction?: 'row' | 'row-reverse'
+  /** `flex-wrap` for the container; MUI's default is `wrap`. */
+  wrap?: 'nowrap' | 'wrap' | 'wrap-reverse'
   children?: ReactNode
 }
 
@@ -52,9 +74,8 @@ export interface GridElementProps {
  *
  * MUI dropped the `item` prop and the per-breakpoint `xs=`/`md=` props in
  * v6; v9 (installed here) takes a single `size` that is either a value or
- * a `{ xs, md, … }` object. Exposing five separate breakpoint fields in
- * the inspector for one concept is worse than one field, so the field is
- * text and this parser owns the translation:
+ * a `{ xs, md, … }` object. One STORED string covers both, and this parser
+ * owns the translation:
  *
  *   `6`           → 6
  *   `auto`        → 'auto'
@@ -68,27 +89,18 @@ export interface GridElementProps {
 export function parseSpan(
   value: unknown,
 ): number | 'auto' | 'grow' | Record<string, number | 'auto' | 'grow'> | undefined {
-  if (value == null || value === '') return undefined
-  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined
-  const text = String(value).trim()
-  if (!text) return undefined
-  if (text === 'auto' || text === 'grow') return text
-  if (/^-?\d+(\.\d+)?$/.test(text)) return Number(text)
-
-  const pairs = text.split(/[\s,]+/).filter(Boolean)
-  const result: Record<string, number | 'auto' | 'grow'> = {}
-  for (const pair of pairs) {
-    const match = /^([a-z]+)\s*[:=]\s*(auto|grow|-?\d+(?:\.\d+)?)$/i.exec(pair)
-    if (!match) return undefined
-    const key = (match[1] ?? '').toLowerCase()
-    if (!BREAKPOINTS.includes(key as Breakpoint)) return undefined
-    const raw = match[2] ?? ''
-    result[key] =
-      raw === 'auto' || raw === 'grow'
-        ? (raw as 'auto' | 'grow')
-        : Number(raw)
-  }
-  return Object.keys(result).length ? result : undefined
+  // The reading itself is `parseBreakpointSpan` in `@aglyn/shared-data-enums`
+  // (AGL-2486), shared with the attributes panel's breakpoint row so the
+  // editor and the renderer cannot disagree about a stored string. This
+  // function keeps its own signature and its "unparseable means unset"
+  // contract: `raw` is what the editor hands back untouched, and what MUI
+  // must never receive.
+  const span = parseBreakpointSpan(value as string | number)
+  if (span.raw !== undefined) return undefined
+  if (span.base !== undefined) return span.base
+  return span.values && Object.keys(span.values).length
+    ? (span.values as Record<string, number | 'auto' | 'grow'>)
+    : undefined
 }
 
 /**
@@ -134,6 +146,8 @@ const GridElement = forwardRef<HTMLDivElement, GridElementProps>(
       rowSpacing,
       columnSpacing,
       columns,
+      direction,
+      wrap,
       children,
       ...rest
     } = props
@@ -149,7 +163,12 @@ const GridElement = forwardRef<HTMLDivElement, GridElementProps>(
         rowSpacing={toNumber(rowSpacing)}
         columnSpacing={toNumber(columnSpacing)}
         columns={toNumber(columns)}
-        {...rest}
+        // A CLEARED select persists as `null`, and MUI resolves both of these
+        // as responsive values — `null.xs` throws during SSR and 500s the
+        // published page (the AGL-1226 shape). `undefined` is what "cleared"
+        // has to mean by the time it reaches MUI.
+        {...dropClearedProps({ direction, wrap })}
+        {...dropClearedProps(rest)}
       >
         {children}
       </MuiGrid>
@@ -164,8 +183,10 @@ const CONTAINER_ONLY = { when: 'container', is: true }
 const ITEM_ONLY = { when: 'container', is: true, notMatch: true }
 
 const SPAN_HELP =
-  'A column span (1–12), `auto` to fit the content, `grow` to take the ' +
-  'remaining space, or per-breakpoint pairs like `xs:12 md:6`.'
+  'How many columns this cell takes. Set **All** for every screen size, or ' +
+  'give individual breakpoints a value — `xs` applies from the smallest ' +
+  'screens up and each larger breakpoint overrides it. `auto` fits the ' +
+  'content, `grow` takes the remaining space.'
 
 export const schema: Aglyn.ComponentSchema<GridElementProps> = {
   $id: ID,
@@ -189,17 +210,26 @@ export const schema: Aglyn.ComponentSchema<GridElementProps> = {
       name: 'size',
       label: 'Span',
       description: SPAN_HELP,
-      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      // A row of breakpoint controls rather than a text box (AGL-2486). The
+      // STORED value is the same string it always was; only the way it is
+      // authored changed. `xs:12 md:2` was a developer syntax documented
+      // nowhere but this tooltip, so the responsive capability was there and
+      // effectively unreachable.
+      component: Aglyn.FieldComponentType.BREAKPOINT_SPAN,
       condition: ITEM_ONLY,
     },
     {
       name: 'offset',
       label: 'Offset',
       description:
-        'Empty columns before this cell. Same syntax as Span, e.g. ' +
-        '`md:2` — `auto` pushes the cell to the right, and `grow` is not ' +
-        'an offset.',
-      component: Aglyn.FieldComponentType.TEXT_FIELD,
+        'Empty columns before this cell. `auto` pushes the cell to the ' +
+        'right; `grow` is a span keyword and not an offset, so it is not ' +
+        'offered here.',
+      component: Aglyn.FieldComponentType.BREAKPOINT_SPAN,
+      // MUI's GridOffset is `'auto' | number`: a zero offset is a real
+      // choice, and `grow` is not one at all.
+      allowGrow: false,
+      minSpan: 0,
       condition: ITEM_ONLY,
     },
     {
@@ -233,6 +263,39 @@ export const schema: Aglyn.ComponentSchema<GridElementProps> = {
       description: 'Total columns the row is divided into. Default 12.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       type: 'number',
+      condition: CONTAINER_ONLY,
+    },
+    {
+      name: 'direction',
+      label: 'Direction',
+      // The option that is NOT offered is the point of this field. MUI's own
+      // API doc: "Only `row` and `row-reverse` are supported. `column` and
+      // `column-reverse` are not supported, because the Grid component is
+      // designed to subdivide layouts into columns, not rows." Offering them
+      // would be a control that silently does nothing.
+      description:
+        'Sets the `flex-direction` for the row. Only Row and Row Reversed ' +
+        'are supported — Grid divides a layout into columns, so a column ' +
+        'direction does nothing. Use a Stack for a vertical layout.',
+      component: Aglyn.FieldComponentType.SELECT,
+      options: [
+        { value: 'row', label: 'Row' },
+        { value: 'row-reverse', label: 'Row Reversed' },
+      ],
+      condition: CONTAINER_ONLY,
+    },
+    {
+      name: 'wrap',
+      label: 'Wrap',
+      description:
+        'Whether cells that do not fit move onto a new line. Default Wrap; ' +
+        'No Wrap keeps every cell on one line and lets them shrink instead.',
+      component: Aglyn.FieldComponentType.SELECT,
+      options: [
+        { value: 'wrap', label: 'Wrap' },
+        { value: 'nowrap', label: 'No Wrap' },
+        { value: 'wrap-reverse', label: 'Wrap Reversed' },
+      ],
       condition: CONTAINER_ONLY,
     },
   ],

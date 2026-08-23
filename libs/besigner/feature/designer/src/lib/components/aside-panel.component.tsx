@@ -59,6 +59,7 @@ import {
   forwardRef,
   type SyntheticEvent,
   useCallback,
+  useEffect,
   useMemo,
   useState,
 } from 'react'
@@ -465,6 +466,39 @@ export const AsidePanelComponent = forwardRef<any, AsidePanelComponentProps>(
     } = panelTabs[panelKey]
     const { toggled, tab, size } = panel || {}
     const value = tab || defaultTab
+
+    // The bottom-right corner belongs to this panel while it is open
+    // (AGL-2486), so publish how far a viewport-fixed affordance has to
+    // stand off to clear it. The Assist launcher reads this; the console's
+    // own chrome leaves the corner free and never sets it, which is why the
+    // variable carries the offset rather than the panel width — an unset
+    // variable then means "the corner is yours" everywhere else.
+    //
+    // Kept in an effect on the LIVE panel state so it tracks the author
+    // dragging the panel wider or collapsing it, and removed on unmount:
+    // navigating from the besigner back into the console must not leave a
+    // 395px inset behind on a page with no panel at all.
+    // `size` is `string | number` on the panel state, so a numeric width is
+    // parsed rather than added to: `'375' + 20` is `'37520'`, which is a
+    // perfectly valid CSS length and would park the launcher off-screen.
+    const panelWidth = Number.parseFloat(String(size ?? ''))
+    const rightInset =
+      panelKey === 'panelRight' && toggled && Number.isFinite(panelWidth)
+        ? panelWidth + 20
+        : null
+    useEffect(() => {
+      if (panelKey !== 'panelRight') return undefined
+      const root = document.documentElement
+      const property = '--aglyn-assist-inset-right'
+      if (rightInset === null) {
+        root.style.removeProperty(property)
+      } else {
+        root.style.setProperty(property, `${rightInset}px`)
+      }
+      return () => {
+        root.style.removeProperty(property)
+      }
+    }, [panelKey, rightInset])
 
     const handleTabChange = useCallback(
       (e: SyntheticEvent, val: string) => {

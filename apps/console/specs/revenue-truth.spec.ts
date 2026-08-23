@@ -230,6 +230,8 @@ const USES_HELPERS = /isBillingSubscription|orgMonthlyRevenueUsd/
 const EXCEPTIONS: Record<string, string> = {
   'apps/console/app/(app)/admin/overview/page.tsx':
     'Renders metrics.mrrUsd straight from /api/admin/overview; its `plan` references are the broadcast-audience selector and a per-org label, not a computation.',
+  'apps/console/app/(app)/admin/revenue/page.tsx':
+    'Renders figures straight from /api/admin/revenue, which computes every one of them through isBillingSubscription/orgListPriceMonthlyUsd/orgMonthlyRevenueUsd in utils/server/revenue-report.ts. Its only `plan` reference is the docblock and the on-page copy EXPLAINING that a plan tier is not a price (AGL-925) — the guard reads `plan` off raw source including comments, so stating the rule is what trips it. The page performs no revenue arithmetic at all.',
 }
 
 function walk(dir: string, out: string[] = []): string[] {

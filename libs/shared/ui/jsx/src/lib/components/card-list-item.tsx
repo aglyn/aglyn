@@ -44,7 +44,16 @@ const CardBox = styled('div')({})
 const Card = styled(MuiCard)(({ theme }) => {
   const tv = (theme as any).vars || theme
   return {
+  // The selected treatment used to hang off `.CardListItem-actionArea`, a
+  // class this component has never rendered — so `selected` set a class and
+  // painted NOTHING, which is why the icon picker read as unresponsive and
+  // invited repeat clicking (AGL-2486). It lives on the card itself now,
+  // where there is always an element to carry it.
   [`&.${cardClasses.selected}`]: {
+    backgroundColor: tv.palette.primary.main,
+    color: tv.palette.primary.contrastText,
+    outline: `2px solid ${tv.palette.primary.main}`,
+    outlineOffset: 1,
     [`.${cardClasses.actionArea}`]: {
       backgroundColor: tv.palette.primary.main,
       color: tv.palette.primary.contrastText,

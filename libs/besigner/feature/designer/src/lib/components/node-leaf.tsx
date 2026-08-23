@@ -27,9 +27,10 @@ import {
 import * as Besigner from '@aglyn/besigner'
 import { alpha, Box } from '@mui/material'
 import { observer } from 'mobx-react-lite'
-import { forwardRef, useContext, useMemo } from 'react'
+import { forwardRef, useCallback, useContext, useMemo, useRef } from 'react'
 import BindingPickerContext from '../contexts/binding-picker-context'
 import ComponentPromotionContext from '../contexts/component-promotion-context'
+import { useRenderedCanvasElements } from '../contexts/rendered-canvas-elements'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import DraggableDroppable from './dnd/draggable-droppable'
 import EmptyDocumentSlot from './empty-document-slot'
@@ -125,6 +126,72 @@ export const NodeLeaf = observer(
   forwardRef<any, NodeLeafProps>((props, ref) => {
     const { node, children, ...rest } = props
     const [viewType] = useAglynBesignerFlag('viewType')
+    // The canvas element registry, finally given a WRITER (AGL-2486).
+    //
+    // `RenderedCanvasElementsProvider` has existed since the registry was
+    // introduced and `setElementRef`/`deleteElementRef` were called from
+    // NOWHERE in the repo — `elements.current` was `{}` for the life of every
+    // session. Everything that reads it therefore read an empty map and
+    // failed the only way an empty map can: silently.
+    //
+    // Two features were void because of it, and neither logged anything:
+    //
+    //   `usePresence`'s cursor broadcast resolves the canvas root through
+    //   this registry and bails with `if (!root) return`, so no editor has
+    //   EVER written a cursor position. Confirmed against production RTDB on
+    //   2026-08-22: three live presence entries across three rooms, not one
+    //   carrying `cursorX`/`cursorY`.
+    //
+    //   `CollaboratorOverlays` resolves both the canvas root and each peer's
+    //   selected node here, so `placements` was always empty and the overlay
+    //   returned null. Confirmed live in the running console: a collaborator
+    //   entry carrying both a cursor and a selection rendered its avatar and
+    //   drew no cursor, no selection box and no name label.
+    //
+    // Registering here rather than in the renderer keeps it to the canvas:
+    // `NodeLeaf` is the besigner's leaf component, so component-definition
+    // previews (which render the plain `Leaf` through `INERT_RENDERER`) stay
+    // out of the registry — they are not in the canvas and must not be
+    // addressable as though they were.
+    //
+    // `NODE_ROOT_ID` and `CANVAS_ROOT_ELEMENT_ID` are the same string
+    // (`'_@_'`), so keying on `$id` registers the canvas root under the id
+    // the cursor code already looks for, with no special case.
+    const { elements, setElementRef, deleteElementRef } =
+      useRenderedCanvasElements()
+    const $id = node?.$id
+    // What THIS leaf last put in the registry. A remount can hand the new
+    // element its ref before the old one is cleared, so an unconditional
+    // delete on `null` would evict the live registration and put the
+    // registry back to the state this whole change exists to fix.
+    const registered = useRef<Element | null>(null)
+    const registerElement = useCallback(
+      (element: unknown) => {
+        // Forward FIRST and unconditionally: dnd and the renderer already
+        // depend on this ref, and registration must never change what they
+        // observe.
+        if (typeof ref === 'function') ref(element)
+        else if (ref) (ref as { current: unknown }).current = element
+        if (!$id) return
+        if (element instanceof Element) {
+          registered.current = element
+          setElementRef($id, {
+            $id,
+            node: element,
+            dragHandle: undefined,
+          } as never)
+          return
+        }
+        // Cleared (or never a DOM element — a class instance, say). Only
+        // withdraw the registration if it is still OURS.
+        const current = elements?.current?.[$id]?.node
+        if (!registered.current || current === registered.current) {
+          deleteElementRef($id)
+        }
+        registered.current = null
+      },
+      [ref, $id, elements, setElementRef, deleteElementRef],
+    )
     const showSlotMarker =
       node?.componentId === Aglyn.LAYOUT_SLOT_COMPONENT_ID &&
       viewType === Aglyn.HostViewType.LAYOUT
@@ -254,7 +321,7 @@ export const NodeLeaf = observer(
         disableDragging={!Besigner.dnd.canDragNode(node)}
       >
         <Leaf
-          ref={ref}
+          ref={registerElement}
           node={renderNode as typeof node}
           data-aglyn-selected={Besigner.focus.isNodeSelected(node)}
           // Present while the selection lives in this node's subtree (the

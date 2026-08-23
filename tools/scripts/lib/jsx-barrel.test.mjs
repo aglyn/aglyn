@@ -39,6 +39,7 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import {
+  AGLYN_BARREL,
   BARREL,
   collectBarrelGraph,
   evaluateBarrel,
@@ -222,5 +223,96 @@ test('FORCED RED: dropping an export is red too, not silently forgiven', () => {
   )
   const verdict = evaluateBarrel(measured, BASELINE)
   assert.deepEqual(verdict.specifiers.removed, ['./lib/components/sr-only'])
+  assert.equal(verdict.clean, false)
+})
+
+// ── The @aglyn/aglyn barrel (AGL-2486) ─────────────────────────────────────
+//
+// The second entry a published page imports statically. Same detector, same
+// pins, its own allowlist — and its own forced reds, which replay the two
+// regressions that were live in production before it was guarded.
+
+const AGLYN_BASELINE = JSON.parse(
+  readFileSync(
+    join(REPO_ROOT, 'tools', 'scripts', 'aglyn-barrel-baseline.json'),
+    'utf8',
+  ),
+)
+const AGLYN_CLI = join(REPO_ROOT, 'tools', 'scripts', 'check-aglyn-barrel.mjs')
+
+/** Overlay one file's text onto the real tree. Disk is untouched. */
+const readWithFile = (path, source) => (file) =>
+  file === join(REPO_ROOT, path) ? source : readFileSync(file, 'utf8')
+
+const measureAglyn = (read = (file) => readFileSync(file, 'utf8')) =>
+  measureBarrel(REPO_ROOT, read, AGLYN_BARREL)
+
+test('POSITIVE CONTROL: the aglyn barrel matches its checked-in allowlist', () => {
+  const verdict = evaluateBarrel(measureAglyn(), AGLYN_BASELINE)
+  assert.deepEqual(verdict.specifiers.added, [])
+  assert.deepEqual(verdict.specifiers.removed, [])
+  assert.deepEqual(verdict.packages.added, [])
+  assert.deepEqual(verdict.packages.removed, [])
+  assert.equal(verdict.clean, true)
+})
+
+test('POSITIVE CONTROL: the aglyn CLI exits 0 against the tree as it stands', () => {
+  const out = execFileSync('node', [AGLYN_CLI], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+  })
+  assert.match(out, /matches the allowlist/)
+})
+
+test('FORCED RED: firebase/auth walks back in through the enums barrel', () => {
+  // The live regression AGL-2486 found. `merge-node-sx` is a styling helper on
+  // the node-render path; importing its one function through the
+  // `@aglyn/shared-data-enums` BARREL rather than the file drags
+  // `lib/firebase-auth` in, which imports `AuthErrorCodes` from `firebase/auth`
+  // as a value. Nothing about the export list changes — this is exactly the
+  // regression only the package pin can see.
+  const path = 'libs/aglyn/src/lib/app-utils/merge-node-sx.ts'
+  const real = readFileSync(join(REPO_ROOT, path), 'utf8')
+  const doctored = real.replace(
+    "from '@aglyn/shared-data-enums/sx-property-aliases'",
+    "from '@aglyn/shared-data-enums'",
+  )
+  assert.notEqual(doctored, real, 'the subpath import is still there to undo')
+
+  const verdict = evaluateBarrel(
+    measureAglyn(readWithFile(path, doctored)),
+    AGLYN_BASELINE,
+  )
+  assert.deepEqual(verdict.specifiers.added, [], 'the export list is unchanged')
+  assert.ok(
+    verdict.packages.added.includes('firebase'),
+    `expected firebase, got ${JSON.stringify(verdict.packages.added)}`,
+  )
+  assert.equal(verdict.clean, false)
+})
+
+test('FORCED RED: acorn walks back in through app-utils/server.ts', () => {
+  // The other live regression. `plugin-bundle-checks` parses an untrusted
+  // marketplace bundle and belongs behind the `/server` entry; re-exported
+  // from the shared `app-utils/server` barrel it reaches `@aglyn/aglyn`, and
+  // a JavaScript parser ships to anonymous visitors.
+  const path = 'libs/aglyn/src/lib/app-utils/server.ts'
+  const real = readFileSync(join(REPO_ROOT, path), 'utf8')
+  const doctored = `${real}\nexport * from './plugin-bundle-checks'\n`
+
+  const verdict = evaluateBarrel(
+    measureAglyn(readWithFile(path, doctored)),
+    AGLYN_BASELINE,
+  )
+  assert.deepEqual(verdict.packages.added, ['acorn'])
+  assert.equal(verdict.clean, false)
+})
+
+test('FORCED RED: the aglyn barrel getting LIGHTER is red too', () => {
+  // Same rule as the jsx barrel: an allowlist row nobody has read is read as
+  // permission, so a win has to be banked in the commit that earned it.
+  const lighter = { ...AGLYN_BASELINE, packages: [...AGLYN_BASELINE.packages, 'react-virtuoso'] }
+  const verdict = evaluateBarrel(measureAglyn(), lighter)
+  assert.deepEqual(verdict.packages.removed, ['react-virtuoso'])
   assert.equal(verdict.clean, false)
 })

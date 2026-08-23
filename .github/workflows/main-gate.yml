@@ -1,0 +1,251 @@
+name: Main Gate
+
+# ---------------------------------------------------------------------------
+# CONTINUOUS GATING OF `main` (AGL-2486)
+# ---------------------------------------------------------------------------
+# On 2026-08-22 the promotion gate came back RED with four unrelated failures —
+# a spec-tsconfig type error, a banned word in a new fixture, a latent raw NUL
+# byte, and a stale generated pricing table. All four had been sitting on `main`
+# for hours. The cost was not the gate's 15 minutes; it was that a promotion
+# turned into an unbounded repair session, at the one moment when the answer
+# was supposed to be yes or no.
+#
+# The reason nothing caught them earlier is recorded in nx-ci.yml and
+# tools-guards.yml: on 2026-08-20 the `push` trigger on both moved from `main`
+# to `production`, because with many agents landing on `main` continuously they
+# ran dozens of times an hour and every red notified Zach. CI became noise, so
+# it was switched off for `main`, and the note left behind says exactly what
+# then happened — "a break can sit on `main` unnoticed until someone runs the
+# gate."
+#
+# Restoring the push trigger would restore the noise. This workflow is the
+# other way out of that trade: gate on a TIMER rather than per push.
+#
+#   - N commits in a window collapse into ONE run and ONE verdict, so the
+#     notification rate is bounded by the cadence, not by how many agents are
+#     committing. That is the entire noise problem, solved by arithmetic.
+#   - The window is small enough that a red still names a short list of
+#     suspects instead of a day of them. The summary prints that list.
+#   - It reports into ONE tracking issue that is opened on red and closed on
+#     green, so a break is a visible STATE on the repo rather than an email
+#     that scrolls away.
+#
+# ---------------------------------------------------------------------------
+# WHY TWO JOBS
+# ---------------------------------------------------------------------------
+# `fast` is typecheck + docs:typecheck + every derived guard. It finishes in minutes,
+# so it runs every 15. `full` adds the test sweep and the PRODUCTION builds and
+# runs hourly, because it cannot finish in 15 minutes and pretending otherwise
+# just queues runs behind each other.
+#
+# The split is not a guess about which half matters. ALL FOUR of the 2026-08-22
+# failures were in the `fast` half — one typecheck, three guards. That is what
+# the cadences are sized against: the class that actually accumulates on `main`
+# is the cheap class, and it is worth catching four times an hour.
+#
+# `full` is still the thing that says a release is safe. Neither job replaces
+# `tools/gate.sh`, which is what a promotion runs; these keep `main` in a state
+# where running it is uneventful.
+
+on:
+  schedule:
+    # Every 15 minutes, offset off :00 — GitHub's scheduler is most congested
+    # on the hour and schedules are best-effort, so a run may be late or
+    # skipped entirely. This is a tightener, not a guarantee; `tools/gate.sh`
+    # at promotion time remains the guarantee.
+    - cron: '7,22,37,52 * * * *'
+    # Hourly for the full sweep, offset again.
+    - cron: '11 * * * *'
+  workflow_dispatch:
+    inputs:
+      full:
+        description: 'Run the full sweep (tests + production builds)'
+        type: boolean
+        default: true
+
+# A constant group per job, NOT cancel-in-progress. AGL-2378's finding applies:
+# a group holds one running plus at most one pending run, so a third arrival
+# cancels the pending one. That is the CORRECT behaviour for a timer — a
+# superseded scheduled run covers a range the next run also covers, so nothing
+# is lost by dropping it, unlike a push run where each commit needs its own
+# verdict. Stated so nobody later reads the cancelled pending runs as the
+# eviction bug that workflow was fixed for.
+concurrency:
+  group: main-gate-${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  NX_NO_CLOUD: 'true'
+
+permissions:
+  contents: read
+  # The `moved` step asks the Actions API for the last completed run's head_sha
+  # so a quiet weekend does not re-gate the same commit 96 times a day. That
+  # read needs `actions: read` — without it `gh api` 403s. The step degrades
+  # safely (it falls back to running the gate rather than skipping it), so the
+  # failure mode is wasted minutes, not a missed verdict; granting it makes the
+  # skip actually work.
+  actions: read
+  issues: write
+
+jobs:
+  fast:
+    name: fast (typecheck + guards)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Has `main` moved since the last run that produced a verdict? If not,
+      # re-running proves nothing new and re-notifies on a red that is already
+      # tracked. Cheap to ask, and it keeps a quiet weekend from burning 96
+      # runner-hours a day.
+      - id: moved
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current=$(git rev-parse HEAD)
+          last=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/main-gate.yml/runs?status=completed&per_page=20" \
+            --jq '[.workflow_runs[] | select(.name=="Main Gate")][0].head_sha' 2>/dev/null || echo '')
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          if [ -n "$last" ] && [ "$last" = "$current" ] && [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "main has not moved since $last — nothing new to gate."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.moved.outputs.skip != 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      # The three trees, for the same reasons nx-ci.yml enumerates: neither
+      # apps/docs nor cloud/functions is an npm workspace, and a root-only
+      # install fails docs:typecheck and cloud-functions with errors that read
+      # as source defects.
+      - if: steps.moved.outputs.skip != 'true'
+        run: npm ci
+      - if: steps.moved.outputs.skip != 'true'
+        run: npm ci --prefix cloud/functions
+      - if: steps.moved.outputs.skip != 'true'
+        run: npm ci --prefix apps/docs
+
+      - if: steps.moved.outputs.skip != 'true'
+        run: npm run typecheck
+      - if: steps.moved.outputs.skip != 'true'
+        run: npx nx run docs:typecheck
+
+      # All of them, concurrently. The list is DERIVED from nx-ci.yml and
+      # tools-guards.yml by the script itself, so a guard added to either is
+      # gated here without anyone editing this file — and deriving zero is a
+      # hard failure rather than an empty green phase.
+      - if: steps.moved.outputs.skip != 'true'
+        run: node tools/scripts/run-guards.mjs --concurrency 4
+
+      # Which commits this verdict covers. On a red, this is the suspect list,
+      # and its length is the whole point of gating on a short timer: a day's
+      # accumulation is not a suspect list, fifteen minutes of it is.
+      - if: always() && steps.moved.outputs.skip != 'true'
+        run: |
+          {
+            echo "### Commits in this window"
+            echo
+            git log --since='20 minutes ago' --format='- \`%h\` %s (%an)' || true
+            echo
+            echo "Gated \`$(git rev-parse --short HEAD)\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  full:
+    name: full (tests + production builds)
+    runs-on: ubuntu-latest
+    # The four things a promotion gate exists to prove, so it inherits the
+    # promotion gate's runtime. nx-ci.yml's 60 was measured against `nx
+    # affected`; this is run-many over all 40 projects plus three production
+    # builds, so it is bounded higher. Do not tighten without measuring the
+    # spread — a bound below the real distribution turns honest slow runs into
+    # cancellations, which is the AGL-2378 mistake.
+    timeout-minutes: 90
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '11 * * * *'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: 'npm'
+      - run: npm ci
+      - run: npm ci --prefix cloud/functions
+      - run: npm ci --prefix apps/docs
+
+      - run: npm run typecheck
+      - run: npx nx run docs:typecheck
+      - run: npx nx run-many -t lint --all --parallel=3
+      - run: node tools/scripts/run-guards.mjs --concurrency 4
+      - run: npx nx run-many -t test --all --parallel=3 --maxWorkers=2
+
+      # PRODUCTION builds, named individually. A bare `nx run-many -t build`
+      # once went green while BOTH Next production builds errored on a
+      # misplaced `use client`, and `docs` has no `production` configuration.
+      # This is the non-negotiable: a gate that skips the production build has
+      # historically let a broken build reach production.
+      - run: npx nx run console:build:production
+      - run: npx nx run tenant:build:production
+      - run: npx nx run docs:build
+
+  # -------------------------------------------------------------------------
+  # THE RED SINK
+  # -------------------------------------------------------------------------
+  # A failing workflow emails whoever is watching, and an email is exactly the
+  # thing that scrolled away and let four failures sit on main for hours. So
+  # the verdict also lands as a STATE: one issue, opened on the first red,
+  # commented on each subsequent red, closed the moment main is green again.
+  #
+  # One issue and not one per failure, deliberately. A red main is a single
+  # condition however many phases report it, and a stream of issues is the same
+  # noise problem in a new place.
+  report:
+    name: report
+    runs-on: ubuntu-latest
+    needs: [fast, full]
+    if: always() && github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          FAST: ${{ needs.fast.result }}
+          FULL: ${{ needs.full.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          TITLE='main gate: RED'
+          # `skipped` is not a failure — the `full` job is skipped on the
+          # 15-minute cadence by design, and `fast` skips itself when main has
+          # not moved. Only an actual failure counts, or the issue would open
+          # on every quarter-hour.
+          red=0
+          [ "$FAST" = 'failure' ] && red=1
+          [ "$FULL" = 'failure' ] && red=1
+
+          existing=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number' || echo '')
+
+          if [ "$red" = 1 ]; then
+            body=$(printf '`main` is failing the continuous gate.\n\nfast: %s\nfull: %s\n\nCommit: `%s`\nRun: %s\n\nCommits in this window:\n%s\n' \
+              "$FAST" "$FULL" "$(git rev-parse --short HEAD)" "$RUN_URL" \
+              "$(git log --since='70 minutes ago' --format='- %h %s (%an)' || true)")
+            if [ -n "$existing" ]; then
+              gh issue comment "$existing" --body "$body"
+            else
+              gh issue create --title "$TITLE" --body "$body"
+            fi
+          elif [ -n "$existing" ]; then
+            gh issue close "$existing" --comment "\`main\` is green again as of \`$(git rev-parse --short HEAD)\`. $RUN_URL"
+          fi

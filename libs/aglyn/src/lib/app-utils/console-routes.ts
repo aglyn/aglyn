@@ -62,11 +62,18 @@ export enum Route {
   // only a curl to reach them; filing happens on a fixed quarterly calendar
   // from 2026-09-01, so the return needs a URL a person can bookmark.
   ADMIN_ASSIST_SIGNALS = '/admin/assist-signals',
+  ADMIN_REVENUE = '/admin/revenue',
   ADMIN_TAX_RETURN = '/admin/tax-return',
   ADMIN_AUDIT = '/admin/audit',
   ADMIN_USERS = '/admin/users',
   ADMIN_USER_DETAIL = '/admin/users/[uid]',
   ADMIN_FLAGS = '/admin/flags',
+  // Platform-wide settings that are not a release flag (AGL-2486). The
+  // free-workspace ceiling was the first of them and it opened the
+  // Organizations LIST, above the table — a global lever wedged into the
+  // screen for browsing individual orgs. Settings that describe the platform
+  // rather than one org belong on their own tab, beside the flags.
+  ADMIN_SETTINGS = '/admin/settings',
   ADMIN_PLUGIN_REVIEWS = '/admin/plugin-reviews',
   // One submission or listed plugin in full (AGL-959): the queue index is
   // for scanning, this is where a reviewer reads the manifest, weighs the
@@ -240,11 +247,13 @@ export interface RoutePayload {
   [Route.ADMIN_HEALTH]: undefined
   [Route.ADMIN_MAINTENANCE]: undefined
   [Route.ADMIN_ASSIST_SIGNALS]: undefined
+  [Route.ADMIN_REVENUE]: undefined
   [Route.ADMIN_TAX_RETURN]: undefined
   [Route.ADMIN_AUDIT]: undefined
   [Route.ADMIN_USERS]: undefined
   [Route.ADMIN_USER_DETAIL]: { uid: string }
   [Route.ADMIN_FLAGS]: undefined
+  [Route.ADMIN_SETTINGS]: undefined
   [Route.ADMIN_PLUGIN_REVIEWS]: undefined
   [Route.ADMIN_PLUGIN_REVIEW]: { listingId: string }
   [Route.ADMIN_SUPPORT]: undefined

@@ -174,6 +174,79 @@ export function applyCustomCssEdits(
   return applyStylePartialToSx(sx, partial, breakpoint, null)
 }
 
+/**
+ * Un-applied CSS / JSS text, held ACROSS an unmount of this form (AGL-2486).
+ *
+ * The JSS tab is the one control in the Styles panel whose work lives only
+ * in React state until Apply — and this form is mounted under
+ * `withLastSelectedNode`, which renders "Select an element" the instant the
+ * canvas selection empties. Anything that clears the selection therefore
+ * UNMOUNTS the editor, and a `useState('')` buffer takes the author's
+ * half-typed sx document with it. Measured on a live besigner: a selection
+ * held with no keyboard or pointer input at all lost the editor 46s in, so
+ * this is not something the author can avoid by typing carefully — it is
+ * why the wipe reads as random, and why it gets blamed on whichever key was
+ * pressed last.
+ *
+ * Keyed by node AND style target, so a component instance's root and its
+ * leaves each keep their own pending text, and re-selecting the element
+ * hands the author back exactly what they had typed. An entry lives only
+ * while the text DIFFERS from the stored document: applying it, or typing
+ * it back to what sx already says, drops the entry, so this never resurrects
+ * a draft the author has already resolved.
+ *
+ * Deliberately not persisted beyond the page: it is un-applied text, not a
+ * document, and the crash-recovery draft store is the thing that owns
+ * surviving a reload.
+ */
+const pendingDrafts = new Map<string, string>()
+
+const draftKey = (
+  nodeId: string,
+  overrideKey: string,
+  mode: 'css' | 'json',
+): string => [nodeId, overrideKey, mode].join('\x00')
+
+/** Drops every pending draft — test seam, and a hard reset for the canvas. */
+export function resetPendingCustomCssDrafts(): void {
+  pendingDrafts.clear()
+}
+
+/**
+ * Why a JSS buffer cannot be applied, or `null` when it is ready
+ * (AGL-2486). Rendered live as the author types, so "nothing happened when
+ * I pressed Apply" is never the first sign that the text does not parse.
+ *
+ * Mid-edit JSON is TRANSIENTLY invalid by nature — `{"a": 1,` is what every
+ * new property looks like a keystroke before it is finished — so this is a
+ * hint, never a block on typing and never a reason to touch the document.
+ *
+ * An empty buffer is called out rather than treated as `{}`: `JSON.parse`
+ * would need a fallback to accept it at all, and silently reading "" as
+ * "delete every style on this element" is the most destructive thing this
+ * panel could do with an accidental Select-All. Clearing all styles stays
+ * available, spelled `{}`, which nobody types by accident.
+ */
+export function jsonDraftProblem(text: string): string | null {
+  const trimmed = (text ?? '').trim()
+  if (!trimmed) {
+    return 'Empty — type {} to clear every style on this element.'
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(trimmed)
+  } catch {
+    return 'Not valid JSON yet — Apply will not change anything until it parses.'
+  }
+  // Explicit `=== null` and an array check: `strictNullChecks` is off
+  // repo-wide, so `!parsed` would fold `null`, `0` and `""` together, and
+  // `typeof null` is `'object'`.
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return 'The sx value must be a JSON object.'
+  }
+  return null
+}
+
 export interface CustomCssFormProps {
   node?: Aglyn.NodeSchema
   /** Active artboard breakpoint; builder/CSS edits scope to it (AGL-333). */
@@ -217,15 +290,59 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
   )
   const [draftRow, setDraftRow] = useState<BuilderRow>({ property: '', value: '' })
 
+  const nodeId = node?.$id ?? ''
+  /** What the STORED document says, in each tab's spelling. */
+  const storedCss = useMemo(
+    () => serializeCssDeclarations(nodeSx, breakpoint),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [JSON.stringify(nodeSx), breakpoint],
+  )
+  const storedJson = useMemo(
+    () => JSON.stringify(nodeSx, null, 2),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [JSON.stringify(nodeSx)],
+  )
+
+  /**
+   * Records (or drops) the author's un-applied text for one tab, so an
+   * unmount cannot take it (AGL-2486). Text equal to the stored document is
+   * not a draft at all, so it clears the entry rather than pinning a value
+   * that would then shadow a later change from elsewhere in the panel.
+   */
+  const rememberDraft = useCallback(
+    (draftMode: 'css' | 'json', value: string, stored: string) => {
+      const key = draftKey(nodeId, target.overrideKey, draftMode)
+      if (value === stored) pendingDrafts.delete(key)
+      else pendingDrafts.set(key, value)
+    },
+    [nodeId, target.overrideKey],
+  )
+
   useEffect(() => {
-    setCssDraft(serializeCssDeclarations(nodeSx, breakpoint))
-    setJsonDraft(JSON.stringify(nodeSx, null, 2))
+    // A pending draft wins over the stored document — that is the whole
+    // point of keeping it. `!== undefined` rather than a truthiness test:
+    // `''` is a legitimate buffer the author emptied on purpose, and with
+    // `strictNullChecks` off `if (!pending)` would silently discard it.
+    const pendingCss = pendingDrafts.get(draftKey(nodeId, target.overrideKey, 'css'))
+    const pendingJson = pendingDrafts.get(draftKey(nodeId, target.overrideKey, 'json'))
+    setCssDraft(pendingCss !== undefined ? pendingCss : storedCss)
+    setJsonDraft(pendingJson !== undefined ? pendingJson : storedJson)
     setError(null)
     // Re-seeded on the override target too (AGL-1332): switching from the
     // component root to a leaf must reload the drafts, or a stale CSS
     // buffer would be written back onto the newly picked target.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, node?.$id, target.overrideKey])
+  }, [mode, nodeId, target.overrideKey])
+
+  /**
+   * Live "is this appliable yet" verdict for the JSS tab (AGL-2486) — a
+   * caption only. Nothing here writes, so a buffer that stops parsing
+   * mid-property changes the hint and leaves the document alone.
+   */
+  const jsonProblem = useMemo(
+    () => (mode === 'json' ? jsonDraftProblem(jsonDraft) : null),
+    [mode, jsonDraft],
+  )
 
   // Passive off-site url() hint (AGL-1737) — the "warn" half of AGL-1725's
   // warn-and-disclose, for the panel with no per-field description to carry
@@ -301,25 +418,40 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
       )
     })
     setError(null)
-  }, [node, target, cssDraft, rows, breakpoint])
+    // Applied text is no longer un-applied.
+    pendingDrafts.delete(draftKey(nodeId, target.overrideKey, 'css'))
+  }, [node, target, cssDraft, rows, breakpoint, nodeId])
 
+  /**
+   * Commits the JSS buffer — the ONLY path from this tab to the document
+   * (AGL-2486).
+   *
+   * A buffer that does not parse to a JSON object is a NON-COMMIT: it sets
+   * the inline error and returns, leaving both the document and the text
+   * exactly as they are, so the author can keep editing from where they
+   * were. There is no blur, change or unmount handler anywhere in this form
+   * that reaches the document — Apply is the whole seam, which is what
+   * makes a transiently invalid buffer harmless.
+   */
   const applyJson = useCallback(() => {
     if (!node) return
-    try {
-      const parsed = JSON.parse(jsonDraft || '{}')
-      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-        throw new Error('The sx value must be a JSON object')
-      }
-      // Replacing sx wholesale is the single most destructive edit this panel
-      // offers, so it is the one that most needs to be undoable (AGL-1204).
-      Aglyn.canvas.transact(() => {
-        target.setSx(parsed)
-      })
-      setError(null)
-    } catch (parseError: any) {
-      setError(parseError?.message ?? 'Invalid JSON')
+    const problem = jsonDraftProblem(jsonDraft)
+    if (problem !== null) {
+      setError(problem)
+      return
     }
-  }, [node, target, jsonDraft])
+    // Re-parsed rather than carried out of the guard: `jsonDraftProblem`
+    // owns the verdict, and one function deciding while another commits is
+    // how "valid enough to pass, wrong shape to store" gets in.
+    const parsed = JSON.parse(jsonDraft.trim())
+    // Replacing sx wholesale is the single most destructive edit this panel
+    // offers, so it is the one that most needs to be undoable (AGL-1204).
+    Aglyn.canvas.transact(() => {
+      target.setSx(parsed)
+    })
+    setError(null)
+    pendingDrafts.delete(draftKey(nodeId, target.overrideKey, 'json'))
+  }, [node, target, jsonDraft, nodeId])
 
   return (
     <Stack spacing={1.5}>
@@ -420,7 +552,10 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
             multiline
             minRows={5}
             value={cssDraft}
-            onChange={(event) => setCssDraft(event.target.value)}
+            onChange={(event) => {
+              setCssDraft(event.target.value)
+              rememberDraft('css', event.target.value, storedCss)
+            }}
             placeholder={'border-radius: 8px;\nbox-shadow: 0 2px 8px rgba(0,0,0,0.2);'}
             slotProps={{
               htmlInput: {
@@ -444,9 +579,17 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
             multiline
             minRows={6}
             value={jsonDraft}
-            onChange={(event) => setJsonDraft(event.target.value)}
+            onChange={(event) => {
+              setJsonDraft(event.target.value)
+              rememberDraft('json', event.target.value, storedJson)
+              // A keystroke that fixes the JSON clears a stale Apply error;
+              // it never raises one, so typing is not nagged mid-property.
+              if (error && jsonDraftProblem(event.target.value) === null) {
+                setError(null)
+              }
+            }}
             error={Boolean(error)}
-            helperText={error ?? undefined}
+            helperText={error ?? jsonProblem ?? undefined}
             slotProps={{
               htmlInput: {
                 style: { fontFamily: 'monospace', fontSize: 12 },

@@ -319,12 +319,22 @@ export class CanvasManager {
   private _foreignAt = new Map<NodeId, number>()
 
   constructor(public aglyn: Aglyn) {
-    makeObservable<CanvasManager, '_initial' | '_initialConfirmed'>(this, {
+    makeObservable<
+      CanvasManager,
+      '_initial' | '_initialConfirmed' | '_epoch'
+    >(this, {
       _initial: observable.ref,
       _initialConfirmed: observable,
+      // Observable so {@link hasRemoteEdits} is a computed a React observer
+      // re-renders on: the draft prompt has to stop offering Restore the
+      // moment a peer's first change lands, not on the next unrelated
+      // render (AGL-2486).
+      _epoch: observable,
       nodes: computed,
       isInitialSame: computed,
       didSetInitial: computed,
+      hasRemoteEdits: computed,
+      markRemoteNode: action,
       undo: action,
       redo: action,
       saveHistory: action,
@@ -336,6 +346,7 @@ export class CanvasManager {
       clearNodes: action,
       reset: action,
       updateInitialNodes: action,
+      confirmInitialNodes: action,
       setNode: action,
       setNodes: action,
       applyNodes: action,
@@ -625,14 +636,48 @@ export class CanvasManager {
     const json: Record<NodeId, NodeSchema<any>> = Object.fromEntries(
       snapshot.nodes.entries(),
     )
+    this.setNodes(this.withForeignNodes(json, snapshot.epoch) as NodesMap)
+    return this
+  }
+  /**
+   * Overlays the nodes a remote session has touched since `sinceEpoch` onto a
+   * map about to REPLACE the canvas — the current value, or the node's
+   * absence when the peer deleted it (AGL-1958).
+   *
+   * Shared by {@link restoreSnapshot} and {@link applyNodes} because it is
+   * one rule, not two: any wholesale replace composed without knowledge of a
+   * peer's change would otherwise roll that change back and — through the
+   * co-editing diff — publish the rollback to its author.
+   *
+   * Mutates and returns `json`; callers pass a map they own.
+   */
+  private withForeignNodes(
+    json: Record<NodeId, NodeSchema<any>>,
+    sinceEpoch: number,
+  ): Record<NodeId, NodeSchema<any>> {
     for (const [nodeId, at] of this._foreignAt) {
-      if (at <= snapshot.epoch) continue
+      if (at <= sinceEpoch) continue
       const live = this.nodes.get(nodeId)
       if (live) json[nodeId] = live
       else delete json[nodeId]
     }
-    this.setNodes(json as NodesMap)
-    return this
+    return json
+  }
+  /**
+   * Whether any REMOTE session has changed this canvas since it loaded
+   * (AGL-2486).
+   *
+   * The draft prompt reads it to decide whether offering a private
+   * per-browser snapshot back is still honest: once a colleague's live work
+   * is on the canvas, applying an older whole-document snapshot is not
+   * "restore my unsaved changes" but "roll the shared canvas back".
+   *
+   * `_epoch` only ever moves in {@link markRemoteNode}, so a non-zero epoch
+   * IS "a peer has touched this canvas", and {@link reset} returns it to zero
+   * with the rest of the session.
+   */
+  public get hasRemoteEdits(): boolean {
+    return this._epoch > 0
   }
   /**
    * Runs `mutate` as one undoable step (AGL-1204).
@@ -731,6 +776,32 @@ export class CanvasManager {
     return this
   }
   /**
+   * Promote an UNCONFIRMED baseline to a confirmed one, once the store has
+   * acknowledged the write that made it unconfirmed (AGL-2486).
+   *
+   * Without this there is no way back. `_initialConfirmed` moves to true in
+   * only two other places — {@link reset} and {@link updateInitialNodes} —
+   * and the editor records its baseline exactly once, on the first snapshot
+   * that carries nodes. A document whose first snapshot happens to carry
+   * this client's own queued write therefore reads dirty for the rest of the
+   * session over content nobody has edited.
+   *
+   * Conditional on the canvas still MATCHING the baseline, which is what
+   * keeps AGL-1262 intact. The acknowledgement is for the write that was in
+   * flight, and says nothing about work the author has done since; adopting
+   * a canvas that has moved on would call that work saved and take away the
+   * only control that could still write it.
+   *
+   * @returns whether the baseline is confirmed as a result.
+   */
+  public confirmInitialNodes(): boolean {
+    if (!this._initial) return false
+    if (this._initialConfirmed) return true
+    if (!isEqual(this._initial, this.serializeNodes())) return false
+    this._initialConfirmed = true
+    return true
+  }
+  /**
    * Registers a node in the map AND lists it on `parent`, in one action
    * (AGL-1366).
    *
@@ -821,12 +892,33 @@ export class CanvasManager {
     }
     return this
   }
+  /**
+   * Replaces the whole node map with a map the USER supplied — the raw-JSON
+   * editor, and the local draft the crash net offers back (AGL-2486).
+   *
+   * Snapshots first, so the replacement is undoable — unlike `setNodes`,
+   * which also serves the history-restore and initial-load paths.
+   *
+   * **Every node a remote session has touched survives it**, on exactly the
+   * reasoning AGL-1958 established for undo. A wholesale replace is the same
+   * shape of write as a snapshot restore: the map being applied was composed
+   * without any knowledge of the peer's later changes, and the result is
+   * diffed against the co-editing shadow and published, so a node the map
+   * happens to lack is broadcast as a DELETE under this session's id.
+   * Measured on the running editor before this changed (AGL-2486): a peer
+   * created a node, the other session pressed Restore, and the node vanished
+   * from the peer's own canvas with an RTDB tombstone to show for it.
+   *
+   * Every mark counts, not only those newer than some epoch: unlike a
+   * snapshot, an applied map carries no epoch of its own, and a draft was by
+   * definition composed before this page joined the room.
+   */
   public applyNodes(value: ProcessableNodes): this {
-    // Wholesale user edit (e.g. the raw-json editor): snapshot first so the
-    // replacement is undoable, unlike setNodes which also serves the
-    // history-restore and initial-load paths.
     this.saveHistory()
-    return this.setNodes(this.processNodesToDenormalized(value))
+    const parsed = this.processNodesToDenormalized(value)
+    return this.setNodes(
+      this.withForeignNodes({ ...parsed }, 0) as typeof parsed,
+    )
   }
   public deleteNode(node: NodeSchema<any>): this {
     const validateNode = (node: NodeSchema<any>) => {

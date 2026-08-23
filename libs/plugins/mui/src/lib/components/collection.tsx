@@ -770,6 +770,14 @@ const CollectionEntryBody = forwardRef<
               // has no reason to be stored in a more fragile form.
               src={Aglyn.resolveMediaSrc(block.src, { hostId })}
               alt={block.alt}
+              // An image inside an entry body is below the fold by
+              // construction — the title, byline and opening paragraphs are
+              // above it. This one carried no loading hint at all, so it was
+              // fetched EAGERLY, at default priority, competing with the
+              // entry's own cover (AGL-2486).
+              loading="lazy"
+              fetchPriority="low"
+              decoding="async"
               sx={{ maxWidth: '100%', borderRadius: 1, my: 1 }}
             />
           )

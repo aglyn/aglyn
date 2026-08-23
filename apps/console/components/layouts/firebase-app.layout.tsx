@@ -36,7 +36,8 @@ import {
 } from 'firebase/analytics'
 import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
-import { OrgScopeProvider, useOrgScope } from '../../hooks/use-org-scope'
+import { OrgScopeProvider } from '../../hooks/use-org-scope'
+import { useUrlNamedOrg } from '../../hooks/use-url-names-org'
 import { useOrgPlans } from '../../hooks/use-org-plans'
 import { buildOrgUserProperties } from '../../utils/analytics-user-properties'
 import BootSplash from '../boot-splash.component'
@@ -386,19 +387,30 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
   // failure mode of a missing clear is the PREVIOUS session's tier reported
   // against a new user's behaviour. Same discipline as the traffic_type
   // stamp above.
-  const { currentOrg } = useOrgScope()
-  const activeOrgId = currentOrg?.$id
+  //
+  // The workspace is the one the URL NAMES (AGL-2486). This used to read
+  // `useOrgScope().currentOrg` directly, and that never goes null off an
+  // org route — it falls back to a remembered selection and then the user's
+  // first org — so the "no org scope" branch `buildOrgUserProperties`
+  // documents and `analytics-user-properties.spec.ts` pins was UNREACHABLE
+  // from here. Browsing the staff console or sitting on the workspace picker
+  // reported the fallback org's tier and role against that behaviour, which
+  // is precisely the "who pays" split these properties exist to make
+  // trustworthy. Stamping a workspace onto a session is a claim, not an
+  // action, so it follows the claim rule.
+  const urlNamedOrg = useUrlNamedOrg()
+  const activeOrgId = urlNamedOrg?.$id
   const orgPlans = useOrgPlans(activeOrgId ? [activeOrgId] : [])
   useEffect(() => {
     setUserProperties(
       analytics,
       buildOrgUserProperties({
         orgId: activeOrgId,
-        role: currentOrg?.role,
+        role: urlNamedOrg?.role,
         plan: activeOrgId ? orgPlans[activeOrgId] : undefined,
       }),
     )
-  }, [analytics, activeOrgId, currentOrg, orgPlans])
+  }, [analytics, activeOrgId, urlNamedOrg, orgPlans])
 
   useEffect(() => {
     // tenantId here is Firebase Auth's own GCIP multi-tenancy field on the

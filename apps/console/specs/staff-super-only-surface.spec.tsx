@@ -201,6 +201,15 @@ const GATED_SURFACES: Record<string, { ui: string[]; via: RegExp }> = {
     ui: ['app/(app)/admin/plugin-reviews/[listingId]/page.tsx'],
     via: /SuperStaffOnly/,
   },
+  // Staff refunds (AGL-2486). READING the refundable charges is open to every
+  // staff role — "how much of this invoice is already refunded" is a support
+  // question — and ISSUING one is `super`, the same bar as `flags`, because it
+  // is the only staff action that sends money out. Only the button is wrapped,
+  // so the card stays readable for the role that cannot press it.
+  'org-refund/route.ts': {
+    ui: ['components/staff-org-refund-card.component.tsx'],
+    via: /SuperStaffOnly/,
+  },
   'users/manage/route.ts': {
     ui: ['app/(app)/admin/users/page.tsx'],
     via: /useSuperStaffGate/,

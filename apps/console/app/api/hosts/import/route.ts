@@ -18,6 +18,7 @@
 import { PLATFORM_BRAND_NAME, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   ACTIONS_MAX_PER_HOST,
+  AUTHORS_MAX_PER_HOST,
   checkDatasetQuota,
   checkEntitlement,
   checkQuota,
@@ -422,6 +423,11 @@ const CAPPED_HOST_COLLECTIONS = [
  */
 const FLAT_CAPPED_HOST_COLLECTIONS = [
   { collection: 'actions', max: ACTIONS_MAX_PER_HOST, label: 'interactions' },
+  // Custom content authors (AGL-2486). Same arithmetic and the same reason:
+  // `AUTHORS_MAX_PER_HOST` is enforced on /api/hosts/resources, which closes
+  // the CLIENT door, and this route writes with the Admin SDK. A bundle can
+  // carry 100 authors and be imported repeatedly under fresh id sets.
+  { collection: 'authors', max: AUTHORS_MAX_PER_HOST, label: 'authors' },
   {
     collection: 'collections',
     max: COLLECTIONS_MAX_PER_HOST,
@@ -1243,6 +1249,7 @@ async function handler(request: Request): Promise<Response> {
     await importPlain('functions')
     await importPlain('workflows')
     await importPlain('actions')
+    await importPlain('authors')
     await importPlain('services')
     // Folders before assets: the tree has to exist before anything points into
     // it, and both reads resolve against the same id set (AGL-1392).

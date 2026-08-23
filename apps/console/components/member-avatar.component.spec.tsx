@@ -36,6 +36,8 @@
 
 import { render } from '@testing-library/react'
 import MemberAvatar, { memberInitials } from './member-avatar.component'
+import PresenceAvatars from './presence-avatars.component'
+import type { PresenceEntry, PresenceState } from '../hooks/use-presence'
 
 /** Everything the browser would go and fetch, whatever the element. */
 function fetchedUrls(container: HTMLElement): string[] {
@@ -56,17 +58,48 @@ function fetchedUrls(container: HTMLElement): string[] {
 
 const isRemote = (url: string) => /^(https?:)?\/\//i.test(url)
 
+/**
+ * Emotion inserts its rules with `insertRule` under jest, so reading a
+ * `<style>` element's `textContent` returns `''` and every style assertion
+ * would pass for the wrong reason. Read the CSSOM instead.
+ *
+ * Module scope, and shared, because that trap caught this file twice: an
+ * assertion written against `container.innerHTML` went green against the very
+ * build it was meant to fail, since the markup holds only the generated class
+ * NAME and the declaration lives in the sheet.
+ */
+const cssFor = (container: HTMLElement, selector = '.MuiAvatar-root'): string => {
+  const el = container.querySelector(selector) as HTMLElement
+  if (!el) return ''
+  const classes = [...el.classList]
+  const rules: string[] = []
+  for (const sheet of [...document.styleSheets]) {
+    let list: CSSRuleList
+    try {
+      list = sheet.cssRules
+    } catch {
+      continue
+    }
+    for (const rule of [...(list as any)] as CSSStyleRule[]) {
+      if (classes.some((c) => rule.selectorText?.includes(`.${c}`))) {
+        rules.push(rule.cssText)
+      }
+    }
+  }
+  return rules.join(' ')
+}
+
 describe('MemberAvatar (AGL-1683)', () => {
   it('makes no request at all for a member with only an email', () => {
     const { container } = render(
-      <MemberAvatar email="ada@example.com" displayName="Ada Lovelace" />,
+      <MemberAvatar email="ada@example.com" name="Ada Lovelace" />,
     )
     expect(fetchedUrls(container)).toEqual([])
   })
 
   it('never puts the email — or a hash of it — anywhere in the markup', () => {
     const { container } = render(
-      <MemberAvatar email="ada@example.com" displayName="Ada Lovelace" />,
+      <MemberAvatar email="ada@example.com" name="Ada Lovelace" />,
     )
     const markup = container.innerHTML
     expect(markup).not.toContain('gravatar')
@@ -79,7 +112,7 @@ describe('MemberAvatar (AGL-1683)', () => {
 
   it('draws the member initials instead', () => {
     const { container } = render(
-      <MemberAvatar email="ada@example.com" displayName="Ada Lovelace" />,
+      <MemberAvatar email="ada@example.com" name="Ada Lovelace" />,
     )
     expect(container.textContent).toBe('AL')
   })
@@ -98,7 +131,7 @@ describe('MemberAvatar (AGL-1683)', () => {
       <MemberAvatar
         photoURL={photo}
         email="ada@example.com"
-        displayName="Ada Lovelace"
+        name="Ada Lovelace"
       />,
     )
     const fetched = fetchedUrls(container)
@@ -115,6 +148,46 @@ describe('MemberAvatar (AGL-1683)', () => {
     )
     const img = container.querySelector('img')
     expect(img?.getAttribute('referrerpolicy')).toBe('no-referrer')
+  })
+
+  it('rings a PHOTO avatar in the identity colour (AGL-2486)', () => {
+    // A photo covers the background completely, so on exactly the sessions
+    // that have a picture the one signal tying the avatar to its cursor and
+    // its selection box was invisible. Zach: "right now only those without an
+    // image can you tell because it uses the background."
+    const { container } = render(
+      <MemberAvatar
+        photoURL="https://lh3.googleusercontent.com/a/ada"
+        colour="#9334e6"
+        name="Ada Lovelace"
+      />,
+    )
+    const css = cssFor(container)
+    expect(css).toContain('#9334e6')
+    expect(css).toMatch(/outline/)
+  })
+
+  it('leaves an INITIALS avatar unringed — the background already says it', () => {
+    // Two indicators of one fact is noise, and the ring is drawn outside the
+    // circle where it costs layout room in an overlapping stack.
+    const { container } = render(
+      <MemberAvatar colour="#9334e6" name="Ada Lovelace" />,
+    )
+    expect(cssFor(container)).not.toMatch(/outline-color/)
+  })
+
+  it('does not ring a photo whose colour was only SEEDED', () => {
+    // A member list seeds a colour off the email purely so two rows differ.
+    // Ringing those asserts a correspondence to something not on screen —
+    // only an explicitly passed `colour` means "this matches the cursor".
+    const { container } = render(
+      <MemberAvatar
+        photoURL="https://lh3.googleusercontent.com/a/ada"
+        email="ada@example.com"
+        name="Ada Lovelace"
+      />,
+    )
+    expect(cssFor(container)).not.toMatch(/outline-color/)
   })
 
   it('treats a blank photoURL as no photo rather than as an empty src', () => {
@@ -146,5 +219,75 @@ describe('memberInitials', () => {
   it('has something to draw even with nothing to draw it from', () => {
     expect(memberInitials(null, null)).toBe('?')
     expect(memberInitials('   ', '   ')).toBe('?')
+  })
+})
+
+/**
+ * ONE ring style, and the badge is what says "this is you" (AGL-2486).
+ *
+ * Zach objected to the self chip's dashed border three times: first when it
+ * was dashed and warning-orange, then when it was dashed in the session's own
+ * colour. Both were the same mistake — a second visual language for something
+ * the monitor badge in the corner already carries by itself, and the only
+ * thing making one chip look unlike its neighbours.
+ *
+ * The property worth pinning is not "the ring is solid" for its own sake; it
+ * is that a self chip is still DISTINGUISHABLE. That job moved to the badge,
+ * so the badge is what these assert. A future change that drops the badge and
+ * leans on the ring again fails here.
+ */
+describe('a presence chip distinguishes your own session (AGL-2486)', () => {
+  const entry = (over: Partial<PresenceEntry> = {}): PresenceEntry =>
+    ({
+      uid: 'u1',
+      sessionId: 's1',
+      key: 'u1:s1',
+      displayName: 'Zach Gover',
+      colour: '#1a73e8',
+      lastSeenAt: Date.now(),
+      ...over,
+    }) as PresenceEntry
+
+  const state = (entries: PresenceEntry[]) =>
+    ({
+      entries,
+      people: [],
+      status: 'live',
+      fault: null,
+      ownOtherSessions: 0,
+      session: null,
+    }) as unknown as PresenceState
+
+  it('marks your own session with the badge', () => {
+    const { container } = render(
+      <PresenceAvatars presence={state([entry({ isSelf: true })])} />,
+    )
+    expect(
+      container.querySelectorAll('[data-aglyn-presence-self-badge]'),
+    ).toHaveLength(1)
+  })
+
+  it('gives a colleague no badge', () => {
+    const { container } = render(
+      <PresenceAvatars presence={state([entry({ isSelf: false })])} />,
+    )
+    expect(
+      container.querySelectorAll('[data-aglyn-presence-self-badge]'),
+    ).toHaveLength(0)
+  })
+
+  it('draws NO dashed ring on any chip, your own included', () => {
+    // The literal thing Zach kept seeing, asserted against the CSSOM — the
+    // markup carries only the generated class name, so an `innerHTML` check
+    // passes against a build that is still drawing it.
+    const { container } = render(
+      <PresenceAvatars
+        presence={state([
+          entry({ isSelf: true, key: 'u1:mine', photoURL: 'https://x/y.png' }),
+        ])}
+      />,
+    )
+    expect(cssFor(container)).toMatch(/outline:\s*2px solid/)
+    expect(cssFor(container)).not.toMatch(/dashed/)
   })
 })

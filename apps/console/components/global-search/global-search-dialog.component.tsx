@@ -34,7 +34,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useFirestore, useSwitcherCollection, useUser } from '@aglyn/tenant-feature-instance'
 import { buildRoute, Route } from '../../constants/route-links'
 import { useHostId, useHostReady, useHostSubdomain } from '../host-id-provider'
-import { useOrgScope, useOrgSlug } from '../../hooks/use-org-scope'
+import { useOrgSlug } from '../../hooks/use-org-scope'
+import { useUrlNamedOrg } from '../../hooks/use-url-names-org'
 import {
   globalSearchScopeMessage,
   resolveGlobalSearchScope,
@@ -91,7 +92,10 @@ export function GlobalSearchDialogComponent(props: GlobalSearchDialogProps) {
   const { open, onClose } = props
   const firestore = useFirestore()
   const { data: user } = useUser()
-  const { currentOrg } = useOrgScope()
+  // The URL-named workspace, matching the trigger (AGL-2486) — the dialog
+  // labels itself "Search this workspace" and narrows its queries by this id,
+  // so it must not be a workspace the route never mentioned.
+  const currentOrg = useUrlNamedOrg()
   const orgSlug = useOrgSlug()
   const hostId = useHostId()
   const hostReady = useHostReady()

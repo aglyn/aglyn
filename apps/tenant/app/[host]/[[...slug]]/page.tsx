@@ -18,6 +18,10 @@
 import { PLATFORM_BRANDING_PROFILE } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import { deferLazyPanelNodes } from '@aglyn/tenant-runtime/defer-lazy-panels'
+import {
+  ELEMENT_ANIMATION_STYLE_ID,
+  pageAnimationAssets,
+} from '@aglyn/tenant-runtime/element-animation-assets'
 import { getTemplateScreenRouting } from '@aglyn/tenant-runtime/template-screens'
 import type { Metadata } from 'next'
 import { notFound, permanentRedirect, redirect } from 'next/navigation'
@@ -406,15 +410,15 @@ function buildJsonLd(props: Props): string[] {
   // site the operator owns. The `<link rel="canonical">` above already asks the
   // shared helper; there is no reason for the same question to have two answers.
   const canonicalBase = Aglyn.hostPublicOrigin(host)
-  const publisher = host?.seo?.entity?.name
-    ? {
-        '@type':
-          host.seo.entity.type === Aglyn.HostEntityType.PERSON
-            ? 'Person'
-            : 'Organization',
-        name: host.seo.entity.name,
-      }
-    : undefined
+  // Through the shared serializer (AGL-2486) rather than an inline ternary, so
+  // the site entity and a post author answer `Person` or `Organization` the
+  // same way — see `content-authors.ts`. It also FIXES that answer: the Setup
+  // → SEO → Entity Select persists its option value as the STRING `"2"` (its
+  // options are template literals) and this compared it with the numeric enum
+  // `HostEntityType.PERSON`, so a site that declared itself a Person published
+  // `"@type": "Organization"` on every page. Strict equality across a string
+  // and a number is always false; nothing here could ever have said Person.
+  const publisher = Aglyn.hostSeoEntityJsonLd(host?.seo?.entity)
 
   // Content entry → Article; collection list → ItemList (AGL-660).
   if (props.content) {
@@ -497,6 +501,21 @@ function buildJsonLd(props: Props): string[] {
       sources: [{ image: entry.coverImage }],
       host,
     })
+    // The author's portrait resolves against the SAME origin and host the
+    // cover just did (AGL-2486), so a picture picked from the DAM reaches the
+    // structured data as a fetchable absolute URL rather than the literal
+    // `media:{scope}/{id}` — the AGL-1343 lesson, one field over.
+    const articleAuthor = Aglyn.contentAuthorJsonLd(
+      // The loader's resolved record first — it is the only value that still
+      // carries the author's TYPE, url, portrait and profiles. Re-deriving
+      // from the entry alone would find the denormalized `authorName` and
+      // publish an Organization byline as a Person. `resolveEntryAuthor` is
+      // the fallback for an entry that reached here without the loader (the
+      // legacy `authorName` shape), and returns null when there is no byline
+      // at all so the site entity below wins.
+      entry.author ?? Aglyn.resolveEntryAuthor(entry),
+      { origin: canonicalBase, hostId: host?.$id },
+    )
     return [
       Aglyn.safeJsonLd({
         '@context': 'https://schema.org',
@@ -520,11 +539,18 @@ function buildJsonLd(props: Props): string[] {
         ...(entry.updatedAt?.seconds && {
           dateModified: new Date(entry.updatedAt.seconds * 1000).toISOString(),
         }),
-        // Byline (AGL-686): the entry's own author when the editor set one,
-        // otherwise the site. Every post used to attribute to the same
+        // Byline (AGL-686, AGL-2486): the entry's own author when it names
+        // one, otherwise the site. Every post used to attribute to the same
         // entity, which is not what Article.author means.
-        ...(entry.authorName
-          ? { author: { '@type': 'Person', name: entry.authorName } }
+        //
+        // `entry.author` is the resolved custom-author RECORD — a Person or an
+        // Organization with url, portrait, job title and `sameAs` profiles —
+        // and the loader falls back to the legacy free-typed `authorName` by
+        // promoting it to a bare `{'@type': 'Person', name}`, which is byte
+        // for byte what this emitted for it before. So an entry stored in
+        // either shape keeps its byline, and neither regresses to the site.
+        ...(articleAuthor
+          ? { author: articleAuthor }
           : publisher
             ? { author: publisher }
             : {}),
@@ -807,8 +833,31 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
   const clientProps: Props = screenRoutes
     ? { ...prunedProps, screenRoutes }
     : prunedProps
+  // Element animations (AGL-2486). Derived from the PRUNED node map, so a
+  // deferred tab panel's animations don't drag the stylesheet onto a page that
+  // is not shipping them; the runtime re-scans on mutation, so a panel opened
+  // later still animates if anything else on the page armed the runtime.
+  //
+  // Both tags are withheld when nothing animates — which is the point. There
+  // is no animation library on a published page at all: these are CSS
+  // keyframes plus, only when a scroll trigger is present, ~700 bytes of
+  // inline IntersectionObserver. See the module for the full reasoning.
+  const animation = pageAnimationAssets(clientProps.nodes)
   return (
     <>
+      {animation ? (
+        <style
+          id={ELEMENT_ANIMATION_STYLE_ID}
+          // A build-time constant of our own; no author input reaches it.
+          dangerouslySetInnerHTML={{ __html: animation.styleText }}
+        />
+      ) : null}
+      {animation?.scriptText ? (
+        // Not `next/script`: this must run before hydration and costs no
+        // request inline. The tenant sends no `script-src` (AGL-1228), so no
+        // nonce is involved.
+        <script dangerouslySetInnerHTML={{ __html: animation.scriptText }} />
+      ) : null}
       {jsonLd.map((json, index) => (
         <script
           key={index}

@@ -75,8 +75,23 @@ const FooterComponent = forwardRef<any, FooterProps>((props, ref) => {
                 color="textSecondary"
                 variant="overline"
               >
-                <span>{`Version ${PACKAGE_VERSION}`}</span>{' '}
-                <span>{`(${BUILD_ID})`}</span>
+                <span>{`Version ${PACKAGE_VERSION}`}</span>
+                {/*
+                 * The build id, when there IS one (AGL-2486).
+                 *
+                 * `BUILD_ID` falls back to the literal string 'NULL' when
+                 * nothing set it — deliberately, so an unset build is not
+                 * given an invented id nobody can trace (AGL-2181). That is
+                 * the right VALUE and the wrong thing to print: the footer
+                 * read "Version 1.0.0-beta.6 (NULL)" to every visitor of a
+                 * deployment built outside CI, which reads as a fault in the
+                 * product rather than an absent stamp.
+                 *
+                 * Compared against the sentinel rather than falsiness —
+                 * `BUILD_ID` is `String(...)`, so it is never empty and never
+                 * falsy, and `strictNullChecks` is off repo-wide.
+                 */}
+                {BUILD_ID === 'NULL' ? null : <>{' '}<span>{`(${BUILD_ID})`}</span></>}
               </Typography>
             </Stack>
           </Stack>

@@ -200,7 +200,86 @@ once got reported as green. For the same reason the build phase names
 The guard phase is **derived from the CI workflows** (`nx-ci.yml` and
 `tools-guards.yml`) rather than listed here, so a guard added to CI is gated
 automatically and this file cannot quietly fall behind. If the derivation ever
-yields zero, the phase fails rather than passing empty.
+yields zero, the phase fails rather than passing empty. The guards run
+**concurrently** (`tools/scripts/run-guards.mjs`) — 55 of them in ~15s rather
+than the 1m09s the old serial loop took.
+
+The gate **reads the machine** rather than hardcoding its parallelism. A loaded
+box gets `--parallel 2 --maxWorkers 2` — at or below the old pin, which existed
+because six concurrent agents once drove this box to load 245 and the jest
+SIGTERMs were misread as flaky tests for a day. An idle 10-core box gets 6/4.
+`GATE_PARALLEL` / `GATE_MAX_WORKERS` still pin it explicitly.
+
+## Getting a fix live in five minutes
+
+On release day the question is not "is `main` perfect", it is "can this one fix
+go out now". Three things answer it, in increasing cost.
+
+**Before you commit — `npm run precheck`** (~16s). Type-checks the files you
+changed against **every** tsconfig that could read them, spec configs included,
+and runs the repo-wide guard sweeps. Those are the two classes that reach the
+gate. The spec one is worth stating plainly, because the obvious command is the
+wrong one:
+
+```
+tsc -p libs/<x>/tsconfig.lib.json --noEmit     # exits 0 with a broken spec
+npm run precheck                               # exits 1, names the file
+```
+
+Every `tsconfig.lib.json` carries `"exclude": ["**/*.spec.ts", ...]`. Only the
+sibling `tsconfig.spec.json` reads specs, and there are 40 of them. A
+per-project check is real verification pointed at a config that excludes the
+file being verified — that is how AGL-1725 shipped, and how it recurred on
+2026-08-22. `precheck` prints what it did **not** run as its last line.
+
+**For the fix itself — `tools/gate.sh --affected`.** Gates what the diff
+touches, against `origin/production` by default (`--base <ref>` to override).
+
+| | full | `--affected` |
+|---|---|---|
+| typecheck, `docs:typecheck` | whole workspace | **whole workspace** |
+| all 55 guards | yes | **yes** |
+| lint, test | every project | `nx affected` only |
+| production builds | console, tenant, docs | **only affected apps** |
+
+The two rows in bold are not narrowed, and that is deliberate. Three of
+2026-08-22's four failures were repo-wide sweeps — a raw NUL byte, a banned
+brand word, a stale generated table — and `nx affected` reasons over the
+project graph, which those do not live in. Once the guard phase cost 15s there
+was nothing left to win by narrowing it.
+
+**What `--affected` stops proving:** lint and tests for every unaffected
+project, and the production build of every app the diff does not reach. If no
+app is affected at all, **zero** production builds run and the summary says so
+in a phase row — an absent build line must never be read as a passing one. The
+summary always names which path ran (`PATH: FAST` / `PATH: FULL`).
+
+The fast path reuses a stable gate root, so a second run skips the ~1m35s
+`cp -Rc` of the three module trees. Re-provisioning triggers on
+`package-lock.json`'s blob hash.
+
+**Promote a release with the full gate.** `--affected` proves a diff is sound
+against a workspace it has not rebuilt; that is the right trade for a hot fix
+and the wrong one for a release.
+
+## `main` is gated continuously
+
+`.github/workflows/main-gate.yml` gates `main` on a timer — typecheck plus all
+55 guards every 15 minutes, and the full sweep including production builds
+hourly. Its verdict lands in a **single tracking issue**, opened on the first
+red and closed when `main` goes green again.
+
+This exists because on 2026-08-22 a promotion gate came back red with four
+unrelated failures that had all been sitting on `main` for hours, turning a
+promotion into an unbounded repair session. Nothing was watching: `nx-ci.yml`
+and `tools-guards.yml` moved their push trigger from `main` to `production` on
+2026-08-20 because with many agents landing continuously they ran dozens of
+times an hour and every red became noise.
+
+A timer is the way out of that trade rather than around it — N commits collapse
+into one run and one verdict, so the notification rate follows the cadence
+instead of the commit rate. It does not replace this gate. It keeps `main` in a
+state where running this gate is uneventful.
 
 ## The changelog range
 

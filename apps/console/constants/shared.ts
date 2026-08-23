@@ -16,6 +16,7 @@
  */
 
 import { LEGAL_ORIGIN as OPERATOR_LEGAL_ORIGIN } from '@aglyn/aglyn/app-utils/published-legal-pages'
+import { buildDocsUrl } from './docs-links'
 
 export const CONTENT_MAX_WIDTH = 'xl'
 export const DRAWER_WIDTH = 290
@@ -165,26 +166,96 @@ export const footerNavigation = [
     items: [
       {
         children: 'Privacy',
-        href: '/legal/privacy',
+        // Absolute, for the reason spelled out on `tailNavigation` below: a
+        // console-relative `/legal/privacy` is a 404 here.
+        href: LEGAL_URLS.PRIVACY,
+        target: '_blank',
+        rel: 'noopener',
       },
     ],
   },
 ]
+/**
+ * The console footer's links (AGL-2486).
+ *
+ * ## Both of the two it had were broken, and one of them silently
+ *
+ * They were written as CONSOLE-RELATIVE paths — `/contact` and
+ * `/legal/privacy` — but the console serves neither. `/legal/privacy` was a
+ * plain 404. `/contact` was worse: the console's top-level dynamic segment is
+ * `[orgSlug]`, so the link resolved to a WORKSPACE named "contact" and
+ * rendered a workspace page for an org that does not exist, titled
+ * "contact · Aglyn". A 404 tells you the link is wrong; that does not.
+ *
+ * Every entry is therefore an ABSOLUTE url built from the operator's own
+ * origins — `OPERATOR_LEGAL_ORIGIN` and `buildDocsUrl` — never a bare path.
+ * A self-hosting operator serves their own legal pages and their own docs
+ * (AGL-2091), and a footer that hardcoded ours would send their customers to
+ * a company they have no relationship with. That is also why the two
+ * commented-out entries below could never simply be uncommented: they had no
+ * destination, and `href: '/'` is how they came to be commented out.
+ *
+ * ## Why these five
+ *
+ * Docs and Contact are the two a person actually looks in a footer for.
+ * Terms and Privacy are the clickwrap pair every acceptance in the product
+ * points at. The DPA is here because an enterprise reviewer could otherwise
+ * reach it from nowhere in the console — the same absence
+ * {@link LEGAL_REFERENCE_URLS} was created to close, which had fixed the
+ * links inside the trust page and left the footer as it was.
+ *
+ * Deliberately NOT here: a status page. `status.aglyn.com` exists and is
+ * documented, but it is ours, not an operator's, and there is no configured
+ * origin for it — linking it unconditionally would be the self-host bug above
+ * in a new place, and adding an env var nothing sets would be a link that
+ * never appears. It wants an operator-status origin first.
+ */
 export const tailNavigation = [
   {
-    children: 'Contact',
-    href: '/contact',
+    children: 'Docs',
+    /*
+     * A GETTER, not a call at module scope (AGL-2486).
+     *
+     * `buildDocsUrl` lives in `docs-links`, which a dozen specs partially
+     * `jest.mock` for `docsHelp` alone. Calling it while this module
+     * evaluates therefore threw `buildDocsUrl is not a function` in every one
+     * of them — four suites failed to run at all, and none of them is about
+     * the footer. Deferring to first read means only a caller that actually
+     * renders the footer needs the real module.
+     *
+     * Resolved through `buildDocsUrl` rather than re-reading
+     * `NEXT_PUBLIC_DOCS_ORIGIN` here: `docs-links` documents at length what
+     * happened when one docs origin acquired two env names, and a second
+     * reader in this file is how the next one starts.
+     */
+    get href() {
+      return buildDocsUrl('/')
+    },
+    target: '_blank',
+    rel: 'noopener',
   },
-  // {
-  //   children: 'License',
-  //   href: '/',
-  // },
+  {
+    children: 'Contact',
+    href: `${LEGAL_ORIGIN}/contact`,
+    target: '_blank',
+    rel: 'noopener',
+  },
+  {
+    children: 'Terms',
+    href: LEGAL_URLS.TERMS,
+    target: '_blank',
+    rel: 'noopener',
+  },
   {
     children: 'Privacy',
-    href: '/legal/privacy',
+    href: LEGAL_URLS.PRIVACY,
+    target: '_blank',
+    rel: 'noopener',
   },
-  // {
-  //   children: 'Support',
-  //   href: '/',
-  // },
+  {
+    children: 'DPA',
+    href: LEGAL_REFERENCE_URLS.DPA,
+    target: '_blank',
+    rel: 'noopener',
+  },
 ]

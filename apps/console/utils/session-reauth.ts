@@ -26,7 +26,7 @@
  * A module-level store rather than context, deliberately mirroring
  * `session-health`: the places that know the session died — the
  * `useSessionCookie` restore branch, the idle-logout timer, the
- * session-health banner — are hooks and plain handlers, not a component
+ * session-health watcher — are hooks and plain handlers, not a component
  * tree with a shared provider.
  *
  * ## Who may call `requestSessionReauth`
@@ -136,9 +136,16 @@ export function captureReauthIdentity(
  * Ask for the in-place re-auth prompt.
  *
  * First evidence wins: a second request while one is pending keeps the
- * original reason and identity — but always RE-OPENS a dismissed dialog,
- * because every trigger site is either one-shot per load or an explicit
- * user click, never a poll that could nag.
+ * original reason and identity — but always RE-OPENS a dismissed dialog.
+ *
+ * That re-open is safe only because of what the callers are, and one of
+ * them stopped being obvious with AGL-2486. The auth-machinery triggers are
+ * one-shot per page load or an explicit user click. The `stale` trigger is
+ * a HEURISTIC that keeps firing for as long as the session stays dead, so
+ * it would nag on exactly the dismissal it must respect — the watcher
+ * therefore latches on `session-health`'s `serverReads` and calls this at
+ * most once per episode. A new automatic caller needs the same latch, or
+ * this function needs to stop re-opening.
  */
 export function requestSessionReauth(
   reason: SessionReauthReason,
@@ -166,7 +173,12 @@ export function dismissSessionReauth(): void {
   publish()
 }
 
-/** Bring a dismissed dialog back (the degraded banner's "Sign in"). */
+/**
+ * Bring a dismissed dialog back — the signed-out banner's "Sign in", and
+ * (AGL-2486) the "Sign in again" a degraded list offers once a `stale`
+ * prompt has been dismissed. Both are user clicks; nothing calls this on a
+ * timer or off a failed read.
+ */
 export function reopenSessionReauth(): void {
   if (state.reason === null || !state.dismissed) return
   state = { ...state, dismissed: false }

@@ -192,6 +192,17 @@ export type AglynNodePresetSchema = {
 }
 
 export enum FieldComponentType {
+  /**
+   * Per-breakpoint span editor (AGL-2486): a small row of breakpoint
+   * controls (All / xs / sm / md / lg / xl), each offering a column count
+   * plus MUI's `auto` and `grow` keywords. The persisted prop is still ONE
+   * string in the syntax the Grid element already parses (`"6"`, `"auto"`,
+   * `"xs:12 md:6"`) — this is an input affordance, not a shape change, so
+   * renderers and existing documents stay untouched. A value the row cannot
+   * model (a `{{token}}`, an unknown breakpoint) falls back to free text
+   * rather than being clobbered.
+   */
+  BREAKPOINT_SPAN = 'breakpoint-span',
   BUTTON = 'button',
   BUTTON_GROUP = 'button-group',
   CHECKBOX = 'checkbox',
@@ -285,6 +296,18 @@ export enum FieldComponentType {
   TABS = 'tabs',
   TEXT_FIELD = 'text-field',
   TEXTAREA = 'textarea',
+  /**
+   * Theme-scale combo box (AGL-2486): offers the THEME's own scale for a
+   * property — `theme.typography` for font size and weight,
+   * `theme.zIndex` for stacking — while still accepting any raw value
+   * (`18px`, `1.25rem`, `700`, `1400`), because arbitrary values are
+   * legitimate. The persisted value is a theme token PATH
+   * (`h4.fontSize`, `fontWeightBold`, `appBar`), which MUI's sx system
+   * resolves against the active theme exactly as it resolves
+   * `color: 'primary.main'` — so the element keeps following the theme
+   * instead of freezing the number it had when it was styled.
+   */
+  THEME_SCALE = 'theme-scale',
   TIME_PICKER = 'time-picker',
   TOGGLE_BUTTON = 'toggle-button',
   WIZARD = 'wizard',

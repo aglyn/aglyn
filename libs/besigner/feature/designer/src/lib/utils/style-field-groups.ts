@@ -21,8 +21,10 @@ import {
   describeCssColorProblem,
   expandSxAliases,
 } from '@aglyn/shared-data-enums'
+import type { ThemeScaleOption } from '@aglyn/shared-ui-jsx-forms'
 import { besignerDocsUrl } from './docs-help'
 import { readSxValue, type SxBreakpoint, writeSxValue } from './responsive-sx'
+import type { StyleThemeScales } from './theme-scale-options'
 
 /**
  * First-class style controls beyond the base panel (AGL-540): layout,
@@ -33,9 +35,12 @@ import { readSxValue, type SxBreakpoint, writeSxValue } from './responsive-sx'
  *
  * Consolidation (AGL-587): every style field has exactly one home. The
  * loose base form is gone — display/float live in Layout, color/
- * backgroundColor in Colors, the container gap controls in the Flexbox &
- * Grids accordion ({@link buildFlexGapGroup}), and the per-item flex
- * fields (grow/shrink/basis/order) in Grid & Flex Child.
+ * backgroundColor in Colors.
+ *
+ * The layout half was consolidated again in AGL-2486: `Flexbox & Grids`
+ * and `Grid & Flex Child` were two sections describing the same two CSS
+ * layout models, and every typed field of both now lives in one group
+ * ({@link buildFlexGridGroup}) under the panel's alignment toggles.
  */
 export interface StyleFieldGroup {
   $id: string
@@ -91,6 +96,24 @@ const STYLE_FIELD_HELP: Record<string, { title: string; excerpt: string }> = {
     excerpt:
       'A bare number is a ratio of the font size, not pixels — 1.5 renders one-and-a-half times the text size, and stays right when the font size changes. Add a unit (28px) to pin the line box.',
   },
+}
+
+/**
+ * Marks every field in a group clearable (AGL-2486).
+ *
+ * A style field's empty state is a real authoring choice — it is what
+ * "let the theme decide" looks like — and until this there was no click
+ * anywhere in the panel that produced it. Colour fields had no empty
+ * swatch, length fields re-adopted their unit the moment a number came
+ * back, and selects only offered a Default option where one had been
+ * hand-authored. Applied to the whole group rather than field by field
+ * so a field added later cannot arrive one-way.
+ */
+function withFieldClear(group: StyleFieldGroup): StyleFieldGroup {
+  return {
+    ...group,
+    fields: group.fields.map((field) => ({ clearable: true, ...field })),
+  }
 }
 
 /** Attaches {@link STYLE_FIELD_HELP} to a group's fields, each with a
@@ -209,6 +232,27 @@ const colorField = (
   ...extra,
 })
 
+/**
+ * A field offering a THEME SCALE while still accepting any raw value
+ * (AGL-2486, item 12). The stored value is a theme token path
+ * (`fontWeightBold`, `appBar`) that MUI's sx system resolves itself, or
+ * whatever the author typed — see `ThemeScaleField`.
+ */
+const themeScaleField = (
+  name: string,
+  label: string,
+  description: string,
+  scaleOptions: ThemeScaleOption[],
+  extra?: Record<string, unknown>,
+) => ({
+  component: FieldComponentType.THEME_SCALE,
+  name,
+  label,
+  description,
+  scaleOptions,
+  ...extra,
+})
+
 const selectField = (
   name: string,
   label: string,
@@ -252,6 +296,15 @@ export interface StyleFieldGroupOptions {
    * unset choice has to be named for what it does.
    */
   isInstanceOverride?: boolean
+  /**
+   * The site theme's own scales for the three fields that had no connection
+   * to it (AGL-2486, item 12): font size, font weight and z-index. Built
+   * from the live theme by {@link buildStyleThemeScales}, so a host that
+   * retuned its type scale offers its own values. Absent (a spec, a theme
+   * still loading) simply means no scale is offered — every one of these
+   * fields still takes a raw value.
+   */
+  themeScales?: StyleThemeScales
 }
 
 /**
@@ -262,7 +315,9 @@ export function buildStyleFieldGroups(
   presetColors: string[],
   options?: StyleFieldGroupOptions,
 ): StyleFieldGroup[] {
-  return styleFieldGroups(presetColors, options).map(withStyleFieldHelp)
+  return styleFieldGroups(presetColors, options)
+    .map(withStyleFieldHelp)
+    .map(withFieldClear)
 }
 
 function styleFieldGroups(
@@ -429,17 +484,26 @@ function styleFieldGroups(
       $id: 'typography',
       label: 'Typography',
       fields: [
+        // Number + unit AND the theme's type scale (AGL-2486). Picking
+        // `h4.fontSize` stores that token path, which MUI resolves against
+        // `theme.typography` at render — so the heading keeps moving with
+        // the type scale instead of being pinned to the pixels it had on
+        // the day it was styled. A raw length is still one keystroke away.
         dimensionField(
           'fontSize',
           'Font Size',
-          'CSS font size, e.g. 18px, 1.25rem.',
-          half,
+          'CSS font size, e.g. 18px or 1.25rem — or a size from the theme’s type scale.',
+          { ...half, scaleOptions: options?.themeScales?.fontSize ?? [] },
         ),
-        selectField(
+        // The theme's named weights first, then the CSS ladder, and any raw
+        // value typed straight in (AGL-2486). `fontWeightBold` follows a
+        // host that decides its bold is 600; `700` means exactly 700.
+        themeScaleField(
           'fontWeight',
           'Font Weight',
-          'Thickness of the glyph strokes.',
-          ['100', '200', '300', '400', '500', '600', '700', '800', '900'],
+          'Thickness of the glyph strokes — a theme weight, or a raw value like 700.',
+          options?.themeScales?.fontWeight ?? [],
+          half,
         ),
         textField(
           'fontFamily',
@@ -565,11 +629,15 @@ function styleFieldGroups(
           half,
         ),
         dimensionField('left', 'Left', 'Offset from the left edge.', half),
-        textField(
+        // The theme's stacking layers, not a guessed number (AGL-2486).
+        // `modal` is 1300 today and stays right if the host re-tunes its
+        // layers; a hand-typed 1300 next to the modal is a coin toss.
+        themeScaleField(
           'zIndex',
           'Z-Index',
-          'Stacking order for positioned elements.',
-          { type: 'number', ...half },
+          'Stacking order for positioned elements — a theme layer, or a raw number.',
+          options?.themeScales?.zIndex ?? [],
+          half,
         ),
         selectField(
           'overflow',
@@ -591,10 +659,57 @@ function styleFieldGroups(
         ),
       ],
     },
-    {
-      $id: 'grid',
-      label: 'Grid & Flex Child',
+  ]
+}
+
+/**
+ * The typed fields of the single Flexbox & Grid section (AGL-2486).
+ *
+ * The panel used to answer "how do I lay this out?" in two places. A
+ * `Flexbox & Grids` accordion held the alignment toggles and the gaps; a
+ * separate `Grid & Flex Child` accordion, four sections further down, held
+ * the track lists, the item placement and the flex-child sizing. Both were
+ * about the same two CSS layout models, neither was complete, and their
+ * names did not divide the properties the way the names suggested:
+ * `alignSelf` and `justifySelf` are per-ITEM properties and lived in the
+ * container section, while `gridTemplateColumns` is a CONTAINER property
+ * and lived in the child one.
+ *
+ * So they are one section now, in reading order: how the container spaces
+ * its children (the gaps), what tracks it defines (the grid template), and
+ * where this element sits inside its own parent (placement and flex
+ * sizing). The alignment toggles render above these, from the panel — they
+ * are icon-button groups rather than schema fields and they read far better
+ * than the free-text equivalents would.
+ *
+ * Every property both sections carried is still here; the whole point is
+ * that nothing had to be dropped to stop saying it twice.
+ */
+export function buildFlexGridGroup(): StyleFieldGroup {
+  return withFieldClear(
+    withStyleFieldHelp({
+      $id: 'flex-grid',
+      label: 'Flexbox & Grid',
       fields: [
+        // Container: the gutters between children.
+        textField(
+          'gap',
+          'Gap',
+          'Shorthand for row-gap and column-gap, e.g. 16px or 1rem.',
+        ),
+        textField(
+          'rowGap',
+          'Row Gap',
+          "Size of the gutter between the container's rows.",
+          half,
+        ),
+        textField(
+          'columnGap',
+          'Column Gap',
+          "Size of the gutter between the container's columns.",
+          half,
+        ),
+        // Container: the grid it defines for them.
         textField(
           'gridTemplateColumns',
           'Grid Columns',
@@ -611,6 +726,7 @@ function styleFieldGroups(
           'How auto-placed grid items fill the tracks.',
           ['row', 'column', 'dense', 'row dense', 'column dense'],
         ),
+        // Child: where THIS element sits in its own parent's layout.
         textField(
           'gridColumn',
           'Grid Column',
@@ -650,40 +766,8 @@ function styleFieldGroups(
           { type: 'number', ...half },
         ),
       ],
-    },
-  ]
-}
-
-/**
- * Container gap controls rendered inside the Flexbox & Grids accordion
- * (AGL-587) — they configure the selected element AS a flex/grid
- * container, next to the alignment toggles, and write through the same
- * responsive-sx pipeline as every other group.
- */
-export function buildFlexGapGroup(): StyleFieldGroup {
-  return withStyleFieldHelp({
-    $id: 'flex-gaps',
-    label: 'Gaps',
-    fields: [
-      textField(
-        'gap',
-        'Gap',
-        'Shorthand for row-gap and column-gap, e.g. 16px or 1rem.',
-      ),
-      textField(
-        'rowGap',
-        'Row Gap',
-        "Size of the gutter between the container's rows.",
-        half,
-      ),
-      textField(
-        'columnGap',
-        'Column Gap',
-        "Size of the gutter between the container's columns.",
-        half,
-      ),
-    ],
-  })
+    }),
+  )
 }
 
 /** Field names owned by a group — the only keys its save may touch. */
@@ -758,11 +842,56 @@ function fieldSxScheme(
 }
 
 /**
+ * A value that is ENTIRELY a number — the only shape stored as a number.
+ *
+ * Deliberately narrower than `Number()` would accept: no exponent form, no
+ * `Infinity`, no hex. Those parse to a number and are not CSS anyway, so
+ * converting them would only make the stored value harder to read back
+ * than the text the author actually typed.
+ */
+const NUMERIC_STYLE_VALUE = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/
+
+/**
+ * What a control's emitted value is STORED as (AGL-2486).
+ *
+ * The panel's free-text fields can only hand back a string, and for the
+ * fields whose bare number is a theme multiple that silently changes the
+ * value's MEANING. `borderRadius: 2` renders 8px because MUI multiplies a
+ * NUMBER by `shape.borderRadius`; the string `'2'` is passed through
+ * verbatim as `border-radius: 2` and dropped by the CSS parser. Same for
+ * `gap`/`rowGap`/`columnGap` against the spacing unit, and for
+ * `lineHeight`, where a unitless number is a ratio. Open the field on a
+ * node carrying the theme default, retype the same number, and the value
+ * is gone — with nothing anywhere to report it.
+ *
+ * The rule is the VALUE's shape, not a list of field names, and it is
+ * enforced here rather than in each control: this is the merge every
+ * control in the panel writes through, so a field added later cannot
+ * arrive with the old behaviour. Anything carrying a non-numeric character
+ * (`8px`, `50%`, `1rem`, `span 2`) is what the author wrote and stays a
+ * string.
+ *
+ * Empty — including whitespace — clears. `0` does NOT: it is falsy and it
+ * is a legitimate radius, opacity and flex-grow, and `strictNullChecks` is
+ * off repo-wide, so the emptiness test is spelled out rather than left to
+ * a falsy check.
+ */
+function normalizeStyleValue(value: unknown): unknown {
+  if (typeof value !== 'string') return value
+  const text = value.trim()
+  if (text === '') return undefined
+  if (!NUMERIC_STYLE_VALUE.test(text)) return value
+  const numeric = Number(text)
+  return Number.isFinite(numeric) ? numeric : value
+}
+
+/**
  * Merges a partial of style values into an sx object at the active
  * breakpoint + scheme scope (AGL-333 / AGL-588). Unchanged values are
  * skipped so effective (inherited) readings never get pinned into a
  * breakpoint or scheme slice by round-tripping through a form. Empty
- * strings clear.
+ * strings clear, and purely numeric text is stored as a NUMBER — see
+ * {@link normalizeStyleValue}.
  */
 export function applyStylePartialToSx(
   sx: Record<string, any> | undefined,
@@ -785,7 +914,7 @@ export function applyStylePartialToSx(
     }),
   }
   for (const [key, value] of Object.entries(partial)) {
-    const normalized = value === '' ? undefined : value
+    const normalized = normalizeStyleValue(value)
     const fieldScheme = fieldSxScheme(key, scheme)
     if (readSxValue(next, key, breakpoint, fieldScheme) === normalized) continue
     next = writeSxValue(next, key, normalized, breakpoint, fieldScheme)

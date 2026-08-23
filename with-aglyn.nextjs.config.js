@@ -180,7 +180,31 @@ const AGLYN_CONFIG = {
      * @see {@link https://docs.rs/regex | Rust Regex Docs}
      * @inheritDoc
      */
-    reactRemoveProperties: { properties: ['^data-test', 'displayName'] },
+    /*
+     * `displayName` was in this list and DELETED A REAL PROP APP-WIDE
+     * (AGL-2486).
+     *
+     * The name came from the comment immediately below: styled-components has
+     * a `displayName` option, and it was copied into a completely different
+     * one. `reactRemoveProperties` removes JSX PROPS whose name matches, so
+     * `<MemberAvatar displayName={…} />` had that prop erased from the browser
+     * bundle at every one of its eight call sites — the user menu, the account
+     * page, the team page, both member cards and presence — since AGL-1126.
+     * With an email alongside it fell back to the address; without one it
+     * rendered `?`. `photoURL` survived, which is why an avatar cluster showed
+     * some faces and some question marks.
+     *
+     * Invisible to the test suite by construction: jest compiles with a
+     * different transform that KEEPS the prop, so the unit test asserted the
+     * right initials and passed against a browser build where the prop did not
+     * exist.
+     *
+     * Note the entries are Rust regexes and are NOT anchored unless you anchor
+     * them — a bare `displayName` also matched `userDisplayName` and anything
+     * else containing it. `^data-test` stays: a prefix match is what it wants,
+     * and a test hook is a prop nothing should read at runtime.
+     */
+    reactRemoveProperties: { properties: ['^data-test'] },
 
     /**
      * ssr and displayName are configured by default

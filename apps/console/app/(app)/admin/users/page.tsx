@@ -40,10 +40,11 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
+import StaffListPaginationControls from '../../../../components/staff-list-pagination.component'
 import {
   SuperStaffOnlyNotice,
   useSuperStaffGate,
@@ -54,6 +55,7 @@ import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import { useStaffListPagination } from '../../../../hooks/use-staff-list-pagination'
 import { collapseAdminUserRows } from '../../../../utils/collapse-admin-user-rows'
 
 interface AdminUser {
@@ -102,8 +104,6 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const isStaff = useIsStaff()
-  const [users, setUsers] = useState<AdminUser[]>([])
-  const [nextPageToken, setNextPageToken] = useState<string | null>(null)
   const [truncatedTenants, setTruncatedTenants] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
   // AGL-2131. Every write on this page — grant/revoke staff, set the role,
@@ -111,51 +111,108 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
   // /api/admin/users/manage:93. The lookup and the listing are not.
   const { blocked: notSuper } = useSuperStaffGate()
 
-  const loadPage = useCallback(
-    async (pageToken?: string | null, email?: string) => {
+  /**
+   * The rows of every page visited this session, keyed by page index
+   * (AGL-2486).
+   *
+   * This list used to ACCUMULATE — `[...previous, ...payload.users]` behind a
+   * `Load more` button — and the AGL-2005 collapse below depended on that: a
+   * uid living in two pools arrives as two rows, and because the route
+   * appends the GCIP tenant users only on its LAST page, the emailless
+   * project twin and the real SSO record land in different responses. Only a
+   * list holding both could merge them.
+   *
+   * Paging replaces the rows instead, so the merge would have lost its second
+   * half and Zach's two-rows-for-one-human bug would be back the moment the
+   * project pool needs a second page. Keeping what each page held costs one
+   * map and restores it: the collapse is fed this page PLUS the rows of every
+   * other page seen, then narrowed back to the uids on this page. A twin is
+   * merged as soon as both its pages have been visited, and until then the
+   * behaviour is exactly the per-page collapse the route already performs.
+   */
+  const pageRowsRef = useRef<Map<number, AdminUser[]>>(new Map())
+
+  const fetchUsersPage = useCallback(
+    async (cursor: string | null, index: number) => {
       const idToken = await (user as any)?.getIdToken?.()
-      // Exact-email lookup (AGL-270) replaces the page with the match.
-      const params = email
-        ? `?email=${encodeURIComponent(email)}`
-        : pageToken
-          ? `?nextPageToken=${encodeURIComponent(pageToken)}`
-          : ''
-      const response = await fetch(`/api/admin/users${params}`, {
-        headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
-      })
+      const response = await fetch(
+        `/api/admin/users${
+          cursor ? `?nextPageToken=${encodeURIComponent(cursor)}` : ''
+        }`,
+        { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
+      )
       if (!response.ok) throw new Error(`Listing failed (${response.status})`)
       const payload = await response.json()
-      setUsers((previous) =>
-        pageToken ? [...previous, ...payload.users] : payload.users,
-      )
-      setNextPageToken(payload.nextPageToken ?? null)
+      const rows = (payload.users ?? []) as AdminUser[]
+      pageRowsRef.current.set(index, rows)
       // A tenant pool bigger than one page is reported, never dropped
       // silently (AGL-1122) — invisible users are the bug this fixed.
       setTruncatedTenants(payload.tenantTruncated ?? [])
+      return {
+        rows,
+        nextCursor: payload.nextPageToken ?? null,
+        hasMore: Boolean(payload.nextPageToken),
+      }
     },
     [user],
   )
+  const reportUsersError = useCallback(() => {
+    enqueueSnackbar('Could not load users', { variant: 'error' })
+  }, [enqueueSnackbar])
+  // Previous/Next, the same mechanism the Organizations list uses (AGL-2486);
+  // the page size is Firebase Auth's, applied by /api/admin/users.
+  const pagination = useStaffListPagination<AdminUser>({
+    fetchPage: fetchUsersPage,
+    onError: reportUsersError,
+    enabled: Boolean(isStaff),
+  })
+  const { rows: users, pageIndex, refresh, showRows } = pagination
 
-  useEffect(() => {
-    if (isStaff) {
-      void loadPage().catch((error) => {
-        console.error(error)
-        enqueueSnackbar('Could not load users', { variant: 'error' })
-      })
-    }
-  }, [isStaff, loadPage, enqueueSnackbar])
+  /**
+   * Exact-email lookup (AGL-270): reaches an account beyond the loaded pages
+   * and replaces the list with the single match. It is not a page of the
+   * walk, so it resets the walk rather than pretending to be page n of it.
+   */
+  const lookupEmail = useCallback(
+    async (email: string) => {
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch(
+        `/api/admin/users?email=${encodeURIComponent(email)}`,
+        { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
+      )
+      if (!response.ok) throw new Error(`Lookup failed (${response.status})`)
+      const payload = await response.json()
+      pageRowsRef.current.clear()
+      setTruncatedTenants(payload.tenantTruncated ?? [])
+      showRows((payload.users ?? []) as AdminUser[])
+    },
+    [user, showRows],
+  )
 
   const [search, setSearch] = useState('')
   const visible = useMemo(() => {
-    // One row per human across EVERY loaded page (AGL-2005). The route
+    // One row per human across EVERY page visited (AGL-2005). The route
     // collapses the twins, but it can only merge the rows it is handed at
     // once, and it is handed one page: the project pool paginates 200 at a
     // time and the SSO tenant users are appended only on the LAST page. So
     // past the first page the emailless twin and the real record arrive in
-    // different responses, and this list — which concatenates them — showed
-    // Zach's two rows again, the twin with no merged chip on it. Re-applied
-    // here, where the list is actually assembled.
-    const merged = collapseAdminUserRows(users)
+    // different responses, and this list showed Zach's two rows again, the
+    // twin with no merged chip on it. Re-applied here, where the list is
+    // actually assembled.
+    //
+    // The rows of the OTHER pages are fed in beside this page's so a
+    // cross-page twin still merges, then the result is narrowed back to the
+    // uids this page holds — the collapse keeps each uid at its first
+    // occurrence and this page's rows come first, so what survives is this
+    // page, in page order, enriched.
+    const elsewhere: AdminUser[] = []
+    pageRowsRef.current.forEach((rows, index) => {
+      if (index !== pageIndex) elsewhere.push(...rows)
+    })
+    const onThisPage = new Set(users.map((record) => record.uid))
+    const merged = collapseAdminUserRows([...users, ...elsewhere]).filter(
+      (record) => onThisPage.has(record.uid),
+    )
     const term = search.trim().toLowerCase()
     if (!term) return merged
     return merged.filter((record) =>
@@ -165,7 +222,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
         .toLowerCase()
         .includes(term),
     )
-  }, [users, search])
+  }, [users, pageIndex, search])
 
   // RBAC (AGL-206): role changes go through the same audited endpoint.
   const handleSetRole = useCallback(
@@ -192,7 +249,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
           variant: 'success',
           persist: false,
         })
-        await loadPage()
+        refresh()
       } catch (error) {
         console.error(error)
         enqueueSnackbar('An error has occurred', {
@@ -203,7 +260,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
         setBusy(false)
       }
     },
-    [user, loadPage, enqueueSnackbar],
+    [user, refresh, enqueueSnackbar],
   )
 
   const handleAction = useCallback(
@@ -238,7 +295,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
           variant: 'success',
           persist: false,
         })
-        await loadPage()
+        refresh()
       } catch (error) {
         console.error(error)
         enqueueSnackbar('An error has occurred', {
@@ -249,7 +306,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
         setBusy(false)
       }
     },
-    [confirm, user, loadPage, enqueueSnackbar],
+    [confirm, user, refresh, enqueueSnackbar],
   )
 
   return (
@@ -296,14 +353,14 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                   size="small"
                   disabled={!search.includes('@')}
                   onClick={() =>
-                    void loadPage(null, search.trim()).catch(() =>
+                    void lookupEmail(search.trim()).catch(() =>
                       enqueueSnackbar('Lookup failed', { variant: 'error' }),
                     )
                   }
                 >
                   {'Find exact email'}
                 </Button>
-                <Button size="small" onClick={() => void loadPage()}>
+                <Button size="small" onClick={() => void pagination.loadPage(0)}>
                   {'Reset'}
                 </Button>
               </Stack>
@@ -494,15 +551,15 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                   ))}
                 </TableBody>
               </Table>
-              {nextPageToken ? (
-                <Button
-                  size="small"
-                  sx={{ alignSelf: 'flex-start' }}
-                  onClick={() => void loadPage(nextPageToken)}
-                >
-                  {'Load more'}
-                </Button>
-              ) : null}
+              {/* Previous/Next instead of an ever-growing table (AGL-2486),
+                  the same control the Organizations list carries. The count
+                  is the COLLAPSED row count, not the raw page length — this
+                  is the screen staff check when they think an account is
+                  missing, so it must not claim a row it did not draw. */}
+              <StaffListPaginationControls
+                pagination={pagination}
+                shown={visible.length}
+              />
               {/* Never let a pool go quietly missing again (AGL-1122). */}
               {truncatedTenants.length ? (
                 <Alert severity="warning">

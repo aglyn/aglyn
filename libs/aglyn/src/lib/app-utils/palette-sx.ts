@@ -15,7 +15,14 @@
  * limitations under the License.
  */
 
-import { cssVarNameToPaletteToken } from '@aglyn/shared-data-enums'
+// Subpath, NOT the `@aglyn/shared-data-enums` barrel — see the note on the
+// same import in `merge-node-sx.ts` (AGL-2486). The barrel reaches
+// `firebase/auth`; this file wants one string helper out of `lib/styles`.
+import {
+  channelCssVarNameToPaletteToken,
+  cssColorToChannel,
+  cssVarNameToPaletteToken,
+} from '@aglyn/shared-data-enums/styles'
 
 /**
  * Palette-token references inside sx STRING values (AGL-1331).
@@ -49,6 +56,14 @@ import { cssVarNameToPaletteToken } from '@aglyn/shared-data-enums'
  * The literal fallback is never wasted work — it is what renders if this
  * pass is ever skipped, so the failure mode of the whole feature is a
  * slightly stale colour rather than a dropped declaration.
+ *
+ * AGL-2486 extends the same mechanism to ALPHA. `rgba(…)` cannot take a
+ * colour, only channels, so "primary.main at 12%" persists as
+ * `rgba(var(--mui-palette-primary-mainChannel, 31 41 55) / 0.12)` and this
+ * pass derives the triplet from the palette colour — see
+ * {@link readPaletteVarValue}. Flattening to `rgba(31, 41, 55, 0.12)` at
+ * author time would have been simpler and wrong: the value stops being a
+ * token, so a white-label palette swap silently keeps the old brand colour.
  */
 
 /**
@@ -82,6 +97,38 @@ function readPaletteToken(
 }
 
 /**
+ * What one `--mui-palette-…` custom property stands for in this palette.
+ *
+ * Two shapes, because MUI publishes two (AGL-2486):
+ *
+ * - `--mui-palette-primary-main` — the colour itself.
+ * - `--mui-palette-primary-mainChannel` — its `31 41 55` RGB triplet, which
+ *   is how alpha is applied to a TOKEN rather than to a flattened literal:
+ *   `rgba(var(--mui-palette-primary-mainChannel) / 0.12)`. That is the whole
+ *   point of the channel form, and it is what the styles panel's opacity
+ *   control persists.
+ *
+ * The direct read comes first so a theme that really does define channel
+ * entries (anything built through `CssVarsProvider`) wins with its own
+ * values. `createResponsiveTheme` is plain `createTheme` and defines none, so
+ * for every Aglyn site the triplet is DERIVED here from the colour the token
+ * resolves to — which is exactly what keeps an alpha'd token following the
+ * palette instead of freezing the colour it had on the day it was authored.
+ */
+function readPaletteVarValue(
+  name: string,
+  palette: Record<string, unknown> | undefined,
+): string | undefined {
+  const path = cssVarNameToPaletteToken(name)
+  const direct = path ? readPaletteToken(palette, path) : undefined
+  if (direct) return direct
+  const channelPath = channelCssVarNameToPaletteToken(name)
+  if (!channelPath) return undefined
+  const color = readPaletteToken(palette, channelPath)
+  return color ? cssColorToChannel(color) : undefined
+}
+
+/**
  * Substitutes palette `var()` references in one string. Returns the same
  * string (identity) when there is nothing to substitute, so callers can
  * cheaply tell an untouched value from a rewritten one. A reference whose
@@ -96,8 +143,7 @@ export function resolvePaletteVars(
   return value.replace(
     PALETTE_VAR_PATTERN,
     (match, name: string, fallback?: string) => {
-      const path = cssVarNameToPaletteToken(name)
-      const resolved = path ? readPaletteToken(palette, path) : undefined
+      const resolved = readPaletteVarValue(name, palette)
       if (resolved) return resolved
       const literal = (fallback ?? '').trim()
       return literal || match

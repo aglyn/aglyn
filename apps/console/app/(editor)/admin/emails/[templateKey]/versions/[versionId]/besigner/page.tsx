@@ -489,8 +489,12 @@ function SystemEmailBesignerPage() {
                 saveAvailable={saveAvailable}
                 onPropertiesEdit={() => setPropertiesOpen(true)}
               />
-              <BesignerDraftAlertComponent draft={draft} noun="email" />
-              {remoteChanged ? (
+              <BesignerDraftAlertComponent
+                draft={draft}
+                noun="email"
+                remoteChanged={remoteChanged}
+              />
+              {remoteChanged && !draft.available ? (
                 <BesignerConflictAlertComponent noun="email" />
               ) : null}
               <WorkspaceEditorComponent>

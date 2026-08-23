@@ -20,7 +20,7 @@
 <h3 align="center">The clickable screen to create online.</h3>
 
 <p align="center">
-  <i>Aglyn is a multi-tenant website-builder platform that turns a live, clickable canvas<br>
+  <i>Aglyn™ is a multi-tenant website-builder platform that turns a live, clickable canvas<br>
   into a real business website — no code, no ceremony, no expensive rebuilds.</i>
 </p>
 
@@ -54,7 +54,7 @@
 ## ✨ What is Aglyn?
 
 Aglyn takes the pain out of getting a professional website off the ground. Instead of hiring
-engineers or wrestling with templates, you build on a **live, clickable canvas** — the _Besigner_ —
+engineers or wrestling with templates, you build on a **live, clickable canvas** — the _Besigner™_ —
 where what you click is what you ship. Every element, page, and interaction is editable in place, and
 publishing is instant across a globally-served, multi-tenant runtime.
 

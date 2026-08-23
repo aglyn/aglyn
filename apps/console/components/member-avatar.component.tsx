@@ -20,11 +20,78 @@ import { splitDisplayName } from '@aglyn/shared-util-tools'
 import { Avatar, type AvatarProps } from '@mui/material'
 import { useMemo } from 'react'
 
+/**
+ * Six colours, spaced around the wheel and all legible under white text at
+ * 11px (AGL-2486).
+ *
+ * NOT a generated hue: an unconstrained hash lands on yellows and pale greens
+ * that fail contrast against the white initials, and one unreadable person in
+ * a members list is worse than two people sharing a colour.
+ */
+export const AVATAR_COLOURS = [
+  '#e8710a',
+  '#1a73e8',
+  '#12b5cb',
+  '#9334e6',
+  '#d93025',
+  '#188038',
+]
+
+/**
+ * A stable colour for a seed — deterministic, so the same identity is the
+ * same colour on every screen and for every viewer without anything being
+ * coordinated or stored.
+ *
+ * The SEED is the caller's choice and it matters. Member surfaces seed on the
+ * email, so a rename does not repaint someone. Presence seeds on
+ * `uid:sessionId`, because Zach asked for one avatar per open SESSION each in
+ * its own colour, matching the cursor that session draws.
+ */
+export function avatarColourFor(seed: string): string {
+  let hash = 0
+  const text = String(seed ?? '')
+  for (let index = 0; index < text.length; index += 1) {
+    hash = (hash * 31 + text.charCodeAt(index)) >>> 0
+  }
+  return AVATAR_COLOURS[hash % AVATAR_COLOURS.length]
+}
+
 export interface MemberAvatarProps extends Omit<AvatarProps, 'src' | 'alt'> {
+  /**
+   * Overrides the seeded colour. Presence passes the session's own colour so
+   * the avatar matches the cursor and selection box drawn on the canvas.
+   */
+  colour?: string
+  /** Seed for the colour when none is given; defaults to email, then name. */
+  colourSeed?: string
   /** The member's stored photo, when the roster has one. */
   photoURL?: string | null
   email?: string | null
-  displayName?: string | null
+  /**
+   * The person's name.
+   *
+   * Called `name` rather than `displayName` for a reason worth keeping
+   * (AGL-2486). A JSX prop of that spelling used to be DELETED from the
+   * browser bundle: `compiler.reactRemoveProperties` in the shared Next config
+   * listed it, so every call site here — the account menu, the account page,
+   * the team page, both member cards and the presence stack — passed a prop
+   * that never arrived, and this component silently fell back to the email or
+   * rendered `?`. It was measured by passing the identical value under two
+   * names on one element and reading the running page: one arrived, the other
+   * was absent from the compiled chunk entirely.
+   *
+   * That cause is FIXED — `5e8f9fe69` removed the entry and added
+   * `react-remove-properties.test.mjs`, which whitelists the config to
+   * `^data-test` patterns so no real prop can be stripped again. The name here
+   * stays `name` because it is the better name and eight call sites already
+   * use it, not because the hazard is still live.
+   *
+   * The lasting lesson is the one about testing: jest compiles with a
+   * different transform that KEPT the prop, so this file's own spec asserted
+   * two-letter initials and went green against a browser build in which the
+   * prop did not exist.
+   */
+  name?: string | null
   /** Rendered pixel size. */
   size?: number
 }
@@ -76,14 +143,23 @@ export function memberInitials(
  * console cannot read from the client at all (AGL-1122).
  */
 export function MemberAvatar(props: MemberAvatarProps) {
-  const { photoURL, email, displayName, size = 32, sx, ...rest } = props
+  const {
+    photoURL,
+    email,
+    name,
+    colour,
+    colourSeed,
+    size = 32,
+    sx,
+    ...rest
+  } = props
   const src = useMemo(() => {
     const stored = String(photoURL ?? '').trim()
     return stored || undefined
   }, [photoURL])
 
-  const label = String(displayName || email || '?')
-  const initials = memberInitials(displayName, email)
+  const label = String(name || email || '?')
+  const initials = memberInitials(name, email)
   return (
     <Avatar
       src={src}
@@ -95,6 +171,68 @@ export function MemberAvatar(props: MemberAvatarProps) {
         height: size,
         // Two letters need to fit the same circle one did.
         fontSize: size * (initials.length > 1 ? 0.36 : 0.45),
+        fontWeight: 600,
+        // COLOUR, not the SDK's grey (AGL-2486). Zach, seeing the account
+        // menu next to the presence stack: "I like how we created the named
+        // avatars for no profile picture let's do the same". The grey letter
+        // was not a neutral choice — MUI's `colorDefault` is the same grey it
+        // uses for an image that FAILED to load, so a deliberate initials
+        // avatar was rendering as a broken one. It matters most for SSO
+        // accounts, which have no picture at all: `zach@aglyn.com`
+        // authenticates through `saml.aglyn-workspace`, whose assertion
+        // carries no photo, so for the enterprise tier the initials ARE the
+        // avatar on every screen.
+        bgcolor: colour ?? avatarColourFor(colourSeed || email || label),
+        // `common.white`, not `#fff` — the same colour, said in the one
+        // spelling the hardcoded-colour ratchet accepts. It is deliberately
+        // NOT `getContrastText` or a mode-aware token: the six background
+        // colours above are fixed identity colours chosen for legibility
+        // under white 11px text, so the foreground has to be fixed with them.
+        // A theme-aware pairing would flip this to black in a light theme and
+        // put black on #d93025.
+        color: 'common.white',
+        // The identity colour has to be VISIBLE on a photo too (AGL-2486).
+        // Zach, looking at a presence stack of two photos and two initials:
+        // "The users with a profile image need to have a border indicative of
+        // their color in the canvas, right now only those without an image
+        // can you tell because it uses the background." A photo covers the
+        // background entirely, so on exactly the sessions that HAVE a picture
+        // the one signal tying an avatar to its cursor and its selection box
+        // disappeared.
+        //
+        // Only when the caller supplied `colour` explicitly. That is the
+        // signal that the colour MEANS something — presence passes the
+        // session's own colour, matching the cursor. A member list seeds its
+        // colour off an email purely so two rows differ, and ringing those
+        // would assert a correspondence to something that is not on screen.
+        ...(colour && src
+          ? {
+              // Outside the circle, like the self ring beside it, so the face
+              // is not cropped by its own indicator.
+              //
+              // Still only when there is a PHOTO. An initials avatar's
+              // background already IS the identity colour, so a ring in that
+              // same colour is invisible on it — briefly tried and reverted,
+              // because it bought nothing and contradicted the tested
+              // decision this condition encodes.
+              //
+              // ONE ring style, one meaning (AGL-2486). The ring says "this
+              // is the colour of my cursor" and nothing else.
+              //
+              // It went through two wrong answers first: a dashed ring in the
+              // WARNING colour, then a dashed ring in the session's own
+              // colour. Zach objected three times and was right each time —
+              // dashing was a second visual language for "this one is me",
+              // which the monitor badge in the corner already carries by
+              // itself. Two indicators for one fact is how a chip ends up
+              // looking unlike its neighbours for no reason a reader can name.
+              outline: '2px solid',
+              outlineColor: colour,
+              // Flush with the circle, so the chips can overlap without the
+              // ring being clipped by its neighbour (AGL-2486).
+              outlineOffset: 0,
+            }
+          : {}),
         ...sx,
       }}
       {...rest}

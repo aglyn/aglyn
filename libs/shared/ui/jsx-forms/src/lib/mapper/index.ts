@@ -25,6 +25,7 @@
  */
 
 export { default as Checkbox, SingleCheckbox, type CheckboxProps, type SingleCheckboxProps } from './checkbox'
+export { default as BreakpointSpan, BreakpointSpanField, seedSpanDraft, serializeSpanDraft, type BreakpointSpanProps, type SpanDraft } from './breakpoint-span'
 export { default as CssDimension, CssDimensionField, seedDimensionDraft, serializeDimensionDraft, type CssDimensionProps } from './css-dimension'
 export { default as CssGradient, CssGradientField, seedGradientDraft, serializeGradientDraft, type CssGradientProps } from './css-gradient'
 export { default as DatePicker, type DatePickerProps } from './date-picker'
@@ -41,6 +42,7 @@ export { default as Switch, type SwitchProps } from './switch'
 export { default as Tabs, FormTabs, type FormTabsProps } from './tabs'
 export { default as TextField, type TextFieldProps } from './text-field'
 export { default as Textarea, type TextareaProps } from './textarea'
+export { default as ThemeScale, ThemeScaleField, filterThemeScaleOptions, themeScaleValueToText, type ThemeScaleOption, type ThemeScaleProps } from './theme-scale'
 export { default as TimePicker, type TimePickerProps } from './time-picker'
 export { default as Wizard, type WizardProps } from './wizard'
 export type { BaseFieldProps, OptionValue, SelectOption, SelectValue } from './types'

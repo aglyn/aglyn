@@ -65,6 +65,13 @@ jest.mock('../components/host-id-provider', () => ({
   useHostSubdomain: () => (mockHostId ? 'acme' : null),
 }))
 
+// Global search reads the URL-NAMED workspace, not the ambient scope
+// (AGL-2486) — `mockOrgId = null` is how this suite says "no workspace here",
+// and before the fix that state was unreachable in the real app because the
+// scope always fell back to a remembered org.
+jest.mock('../hooks/use-url-names-org', () => ({
+  useUrlNamedOrg: () => (mockOrgId ? { $id: mockOrgId } : null),
+}))
 jest.mock('../hooks/use-org-scope', () => ({
   useOrgScope: () => ({ currentOrg: mockOrgId ? { $id: mockOrgId } : null }),
   useOrgSlug: () => 'acme-studio',

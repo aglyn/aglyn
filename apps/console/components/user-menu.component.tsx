@@ -34,9 +34,12 @@ import {
 } from '@aglyn/shared-data-mdi'
 import { isEnterpriseOrg, PLAN_LABELS, type OrgPlan } from '@aglyn/aglyn'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
-import { useUser, useUserPhoto } from '@aglyn/tenant-feature-instance'
 import {
-  Avatar,
+  useUser,
+  useUserName,
+  useUserPhoto,
+} from '@aglyn/tenant-feature-instance'
+import {
   Box,
   Button,
   Divider,
@@ -51,6 +54,7 @@ import {
 } from '@mui/material'
 import { useColorScheme } from '@mui/material/styles'
 import { type ReactNode, useState } from 'react'
+import MemberAvatar from './member-avatar.component'
 import ReportIssueDialog from './report-issue-dialog.component'
 import { buildDocsUrl } from '../constants/docs-links'
 import { buildRoute, Route } from '../constants/route-links'
@@ -121,7 +125,16 @@ export function UserMenu() {
     route: Route.MANAGE_TEAM | Route.MANAGE_BILLING | Route.MANAGE_SUPPORT,
   ) => (orgSlug ? buildRoute(route, { orgSlug }) : orgHome)
 
-  const name = user?.displayName || user?.email || 'Account'
+  // `useUserName`, not `user.displayName` (AGL-2486). That field is empty for
+  // every SSO account — `zach@aglyn.com` has no `displayName` on its auth
+  // record at all — so this menu was showing the EMAIL as the person's name,
+  // repeating it as the address on the line below, and handing
+  // `memberInitials` an address with no space in it, which yields the single
+  // letter `Z` while the presence stack two inches away showed `ZG`. The name
+  // was never missing: `users/{uid}` has held `firstName`/`lastName` for this
+  // account the whole time.
+  const resolvedName = useUserName()
+  const name = resolvedName || 'Account'
   const email = user?.email ?? ''
   const plan = org?.plan
   const planLabel = isEnterpriseOrg(org)
@@ -205,13 +218,19 @@ export function UserMenu() {
           aria-haspopup="menu"
           sx={{ p: 0.5 }}
         >
-          <Avatar
-            src={userPhotoUrl}
-            slotProps={{ img: { referrerPolicy: 'no-referrer' } }}
-            sx={{ width: 30, height: 30 }}
-          >
-            {name.slice(0, 1).toUpperCase()}
-          </Avatar>
+          {/* The SAME avatar the presence stack draws (AGL-2486). This was a
+              single grey letter on the SDK's default grey, sitting inches from
+              a coloured two-initial avatar of the same person — and for every
+              SSO account, which has no picture at all, the grey letter was the
+              whole identity. Zach: "I like how we created the named avatars
+              for no profile picture let's do the same". Seeded on the email
+              rather than the display name so the colour survives a rename. */}
+          <MemberAvatar
+            name={name}
+            email={email}
+            photoURL={userPhotoUrl}
+            size={30}
+          />
         </IconButton>
       </Tooltip>
       <Popover
@@ -246,18 +265,22 @@ export function UserMenu() {
             gap: 1,
           }}
         >
-          <Avatar
-            src={userPhotoUrl}
-            slotProps={{ img: { referrerPolicy: 'no-referrer' } }}
-            sx={{ width: 36, height: 36 }}
-          >
-            {name.slice(0, 1).toUpperCase()}
-          </Avatar>
+          <MemberAvatar
+            name={name}
+            email={email}
+            photoURL={userPhotoUrl}
+            size={36}
+          />
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography variant="subtitle2" noWrap>
               {name}
             </Typography>
-            {email ? (
+            {/* Only when it ADDS something (AGL-2486). With no profile name
+                the line above falls back to the address, and printing it
+                again underneath rendered `zach@aglyn.com` twice — which is
+                what a missing name looks like, and what sent this bug
+                hunting in the wrong place. */}
+            {email && email !== name ? (
               <Typography variant="caption" color="text.secondary" noWrap component="div">
                 {email}
               </Typography>

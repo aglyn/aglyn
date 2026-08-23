@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
+
 /**
  * What a staff reviewer must actually do before a plugin carries the
  * verified badge (AGL-963).
@@ -92,6 +94,13 @@ export const PLUGIN_REVIEW_CHECKLIST: readonly ReviewChecklistItem[] = [
     label: 'Data handling matches what the listing claims',
     detail:
       'If it collects anything, the README should say so. Check for host-mediated fetches carrying page or member data to an origin that has no business receiving it.',
+    required: true,
+  },
+  {
+    id: 'positioning',
+    label: `Listing does not misrepresent or disparage ${PLATFORM_BRAND_NAME}’s plans or pricing`,
+    detail:
+      `Read the listing title, description and README the way a customer would. Describing what the plugin does, and stating which ${PLATFORM_BRAND_NAME} plans or features it needs or is compatible with, is fine. Comparing against ${PLATFORM_BRAND_NAME}’s prices, asserting what a plan costs or contains, or presenting the plugin as a way to avoid paying for a tier is not — this text renders in the console beside the upgrade the customer is weighing. Publisher Agreement §3(h): reject and say which line, rather than approving with a note.`,
     required: true,
   },
   {

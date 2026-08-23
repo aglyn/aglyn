@@ -20,17 +20,37 @@ import {
   mdiViewColumn,
   mdiViewSequential,
 } from '@aglyn/shared-data-mdi'
+import MuiDivider from '@mui/material/Divider'
 import MuiStack, { type StackProps } from '@mui/material/Stack'
-import type { CSSProperties } from 'react'
+import type { CSSProperties, ReactElement } from 'react'
 import { createElement, forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
 
-// justifyContent/alignItems are no longer direct StackProps in MUI v6+; pass them through sx.
-type StackWithFlexProps = StackProps & {
+/**
+ * The dividers the `divider` attribute can name (AGL-2486).
+ *
+ * MUI's own `divider` prop takes a NODE, which an attributes panel cannot
+ * author — so the persisted value is a style name and this file builds the
+ * element. Anything else (an author's stray string, a paste) renders no
+ * divider rather than the literal text between every pair of children.
+ */
+const DIVIDER_STYLES = {
+  line: {},
+  dashed: { borderStyle: 'dashed' },
+} as const
+
+export type StackDivider = keyof typeof DIVIDER_STYLES
+
+// justifyContent/alignItems/flexWrap are not direct StackProps in MUI v6+;
+// pass them through sx.
+type StackWithFlexProps = Omit<StackProps, 'divider'> & {
   justifyContent?: CSSProperties['justifyContent']
   alignItems?: CSSProperties['alignItems']
+  flexWrap?: CSSProperties['flexWrap']
+  /** Divider STYLE name, not a node — see {@link DIVIDER_STYLES}. */
+  divider?: StackDivider | string
   /** Repeatable marker (AGL-103); consumed at compose time, not by MUI. */
   repeatDataset?: string
   repeatLimit?: number | string
@@ -39,14 +59,46 @@ type StackWithFlexProps = StackProps & {
   repeatSort?: string
 }
 
+/**
+ * A Stack's divider runs ACROSS the flow, so its orientation is the
+ * opposite of the stack's own axis. A responsive `direction` (an array or
+ * object) is not authorable here, so only the string form is inspected;
+ * anything else falls back to MUI's default horizontal rule.
+ */
+function buildDivider(
+  divider: unknown,
+  direction: unknown,
+): ReactElement | undefined {
+  if (typeof divider !== 'string') return undefined
+  // `hasOwnProperty`, not a truthiness test on the lookup: `"constructor"`
+  // and friends resolve through Object.prototype and would sail past one.
+  if (!Object.prototype.hasOwnProperty.call(DIVIDER_STYLES, divider)) {
+    return undefined
+  }
+  const style = DIVIDER_STYLES[divider as StackDivider]
+  const horizontal =
+    typeof direction === 'string' && direction.startsWith('row')
+  return createElement(MuiDivider, {
+    orientation: horizontal ? 'vertical' : 'horizontal',
+    // Without it a vertical divider collapses to zero height in a flex row.
+    flexItem: horizontal,
+    sx: style,
+  })
+}
+
 const Stack = forwardRef<HTMLDivElement, StackWithFlexProps>(
   // repeatDataset/repeatLimit are compose-time attributes (AGL-103): the
   // tenant expands them before render; strip so they never hit the DOM.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  ({ justifyContent, alignItems, repeatDataset, repeatLimit, repeatFilter, repeatSort, sx, ...props }, ref) =>
+  ({ justifyContent, alignItems, flexWrap, divider, repeatDataset, repeatLimit, repeatFilter, repeatSort, sx, ...props }, ref) =>
     createElement(MuiStack, {
       ref,
-      sx: [{ justifyContent, alignItems }, ...(Array.isArray(sx) ? sx : sx ? [sx] : [])],
+      sx: [
+        { justifyContent, alignItems, flexWrap },
+        ...(Array.isArray(sx) ? sx : sx ? [sx] : []),
+      ],
+      // The stored value is a style NAME; MUI wants a node (AGL-2486).
+      divider: buildDivider(divider, props.direction),
       // A cleared `direction` persists as null, and MUI resolves it as a
       // responsive value — `null.xs` throws during SSR and 500s the page.
       // Same class as the AGL-1226 button colour, different sharp edge.
@@ -107,11 +159,69 @@ export const schema: Aglyn.ComponentSchema = {
       ],
     },
     {
+      name: 'alignItems',
+      label: 'Align Items',
+      description:
+        'Defines how the browser distributes space between and around ' +
+        'content items along the cross-axis of the container — the axis ' +
+        'across the Direction.',
+      component: Aglyn.FieldComponentType.SELECT,
+      // No "Default" sentinel (AGL-1453): `stretch` is CSS's own initial
+      // `align-items` and is already on the list, and like `justifyContent`
+      // this prop is pushed into `sx` rather than through
+      // `dropClearedProps`, so an unpersistable `''` would not be caught.
+      options: [
+        { value: 'stretch', label: 'Stretch' },
+        { value: 'flex-start', label: 'Flex Start' },
+        { value: 'center', label: 'Center' },
+        { value: 'flex-end', label: 'Flex End' },
+        { value: 'baseline', label: 'Baseline' },
+      ],
+    },
+    {
       name: 'spacing',
       label: 'Spacing',
       description: 'Defines the space/gap between its immediate children.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       type: 'number',
+    },
+    {
+      name: 'useFlexGap',
+      label: 'Use flex gap',
+      description:
+        'Space children with the CSS `gap` property instead of margins. ' +
+        'Required for Spacing to survive wrapping, and it leaves child ' +
+        'margins alone — but `gap` is unsupported in some older browsers.',
+      component: Aglyn.FieldComponentType.SWITCH,
+    },
+    {
+      name: 'flexWrap',
+      label: 'Wrap',
+      description:
+        'Whether children that do not fit move onto a new line. Turn on ' +
+        'Use flex gap as well, or Spacing is applied as margins and the ' +
+        'wrapped rows get an uneven gap.',
+      component: Aglyn.FieldComponentType.SELECT,
+      options: [
+        { value: 'nowrap', label: 'No Wrap' },
+        { value: 'wrap', label: 'Wrap' },
+        { value: 'wrap-reverse', label: 'Wrap Reversed' },
+      ],
+    },
+    {
+      name: 'divider',
+      label: 'Divider',
+      description:
+        'Draws a rule between each pair of children, across the ' +
+        'Direction. Clear the field for no divider.',
+      component: Aglyn.FieldComponentType.SELECT,
+      // MUI's own prop takes a node; the persisted value is a style name and
+      // the component builds the element. No `''` option (AGL-1453) — "no
+      // divider" is the field's ✕, which persists as cleared.
+      options: [
+        { value: 'line', label: 'Line' },
+        { value: 'dashed', label: 'Dashed' },
+      ],
     },
     {
       name: 'repeatDataset',

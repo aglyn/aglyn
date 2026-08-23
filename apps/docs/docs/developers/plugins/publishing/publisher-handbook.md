@@ -223,6 +223,9 @@ do**:
 - Every declared network host is required — the ones you don't use are
   gone
 - You have tested **this version** on a site you control
+- The listing doesn't disparage Aglyn, quote what its plans cost, or sell
+  a way around one — see
+  [What your listing can say about Aglyn](#what-your-listing-can-say-about-aglyn)
 - The changelog describes what changed since the last version — asked
   only when you're updating an existing listing
 
@@ -454,6 +457,46 @@ Be explicit about **data & permissions** in the README: what your plugin
 reads/writes and every host in your manifest's network allowlist —
 unverified sandbox listings show buyers a risk disclaimer, and good docs
 are what overcomes it.
+
+## What your listing can say about Aglyn
+
+Your listing renders **inside Aglyn's own console**, on the page a
+customer is reading while they decide whether to upgrade. That is why
+this one has a rule attached: a plugin sold as "the cheap way out of
+Business" is doing its selling with our pricing page, not with your
+plugin.
+
+**Fine — say all of this:**
+
+- What your plugin does, and how well it does it.
+- Which Aglyn plans or features it **requires**: "needs the Pro plan",
+  "uses custom domains", "requires the datasets API".
+- Which plans or features it is **compatible with**, stated as fact.
+- What it costs, and what a buyer gets for it.
+
+**Not fine:**
+
+- Disparaging Aglyn or the platform ("Aglyn's built-in analytics are
+  useless").
+- Stating or implying what an Aglyn plan costs or contains ("Business is
+  $X for features you won't use", "the Pro plan caps you at 5 sites").
+  Plans and prices change; a listing that quotes them goes stale and
+  misinforms buyers who trust it.
+- Comparing your price against ours ("half the price of an upgrade").
+- Naming, framing or marketing the plugin around avoiding, replacing or
+  discouraging an Aglyn plan or upgrade — "Skip the upgrade", "Business
+  features without the Business plan", "don't pay for Pro".
+
+The line is simple: **describe your plugin, not our pricing.** If you
+need a customer to know they must be on Pro for your plugin to work, say
+exactly that — a requirement is a fact about your plugin, and it belongs
+in the listing.
+
+This is [§3(h) of the publisher agreement](#the-publisher-agreement),
+you confirm it at every publish, and a reviewer checks the title,
+description and README against it. A listing that crosses it is rejected
+with the reason rather than quietly edited, so you get to fix your own
+words.
 
 ## Versioning & updates
 

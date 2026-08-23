@@ -43,6 +43,28 @@ export const DRAFT_WRITE_DEBOUNCE_MS = 1_000
  */
 export const DRAFT_WRITE_MAX_WAIT_MS = 15_000
 
+/**
+ * Why a recovered draft may not be put back on the canvas (AGL-2486). Null
+ * when restoring is a private act and safe to offer.
+ */
+export type BesignerDraftRestoreBlock =
+  /**
+   * Someone else SAVED this document after the draft was taken, so the draft
+   * predates work that is now in the stored document.
+   */
+  | 'saved-since'
+  /**
+   * The live co-edit mirror has already applied another session's changes to
+   * this canvas, so a whole-map replace would roll them back — and publish
+   * the rollback to whoever is still in the room.
+   *
+   * "Another session", not "another person": the mirror stamps a session id,
+   * so the replayed work may equally be this author's own earlier window,
+   * which the mirror restores on join. That case wants the same answer —
+   * the work is already back, and an older copy over the top only loses it.
+   */
+  | 'live-session'
+
 export interface BesignerDraftState {
   /**
    * Unsaved work from a previous session is on hand and the author has not
@@ -54,11 +76,15 @@ export interface BesignerDraftState {
   takenAt: number | null
   /**
    * The stored document has moved on since the draft was taken — someone
-   * else saved while it was stranded (AGL-674). Restoring is still allowed
-   * (into the canvas, unsaved), but the save that follows goes through the
-   * existing conflict guard, and the prompt has to say so.
+   * else saved while it was stranded (AGL-674).
    */
   staleAgainstDocument: boolean
+  /**
+   * Why {@link restore} is withheld, or null when it is safe to offer
+   * (AGL-2486). A blocked restore is a no-op, not merely an unrendered
+   * button: the offer and the action have to agree.
+   */
+  restoreBlockedBy: BesignerDraftRestoreBlock | null
   /** Puts the draft into the canvas as an undoable, unsaved change. */
   restore: () => void
   /** Drops the offer and the stored draft. */
@@ -69,6 +95,7 @@ const EMPTY_STATE: BesignerDraftState = {
   available: false,
   takenAt: null,
   staleAgainstDocument: false,
+  restoreBlockedBy: null,
   restore: () => undefined,
   discard: () => undefined,
 }
@@ -102,6 +129,26 @@ export interface UseBesignerDraftOptions {
  * is deliberate: both tabs are editing the same version and the newest
  * unsaved state is the one worth recovering. Nothing here tries to merge
  * them; merging whole node maps is AGL-677's problem, not a crash net's.
+ *
+ * ## Where this sits next to live co-editing (AGL-2486)
+ *
+ * There are two "unsaved" states in a besigner editor and they have
+ * different scopes, which is why the prompt says "from this browser" out
+ * loud:
+ *
+ * * The **co-edit mirror** (AGL-677) is the SHARED one. It carries unsaved
+ *   work per node between sessions and replays it to whoever joins, so
+ *   opening a document someone else is editing already shows their
+ *   in-progress state — and shows you your own again after a crash, before
+ *   this prompt is read.
+ * * This draft is the PRIVATE one: one snapshot, in one browser, for the
+ *   case where nothing else survived.
+ *
+ * They are not merged and this one is not made shareable — the mirror
+ * already is that, per node, without a merge of two whole maps. What
+ * changed in AGL-2486 is that the private snapshot may no longer be put
+ * back over a canvas the author does not solely own; see
+ * {@link BesignerDraftState.restoreBlockedBy}.
  */
 export function useBesignerDraft(
   options: UseBesignerDraftOptions,
@@ -209,16 +256,51 @@ export function useBesignerDraft(
     }
   }, [key, loaded, flush])
 
+  /**
+   * A peer's live change is on this canvas. Read OUTSIDE the memo below so
+   * the observer that renders the prompt re-runs it when the first remote
+   * change lands — a mobx read inside a `useMemo` whose deps never mention
+   * it would keep serving the verdict from mount.
+   */
+  const canvasHasRemoteEdits = Aglyn.canvas.hasRemoteEdits
+  const staleAgainstDocument = Boolean(
+    offer && Aglyn.hasConcurrentWrite(offer.baseStamp, storedStamp),
+  )
+  /**
+   * Restoring is a WHOLE-MAP replace, and in a shared session that is not a
+   * private act (AGL-2486). Measured on the running editor: a peer created a
+   * node, the other session pressed Restore, and the node was deleted on the
+   * peer's own screen; with a stale draft the same click reverted a
+   * colleague's SAVED work and survived the reload the conflict banner asks
+   * for, with Save re-enabled and no warning left on screen.
+   *
+   * So the offer is withheld rather than merely re-worded. What the author
+   * loses by that is small and the mirror mostly covers it: unsaved work in a
+   * co-edited room is republished to whoever rejoins, which is how their own
+   * changes are already back on the canvas before this prompt is even read.
+   * What they would lose by the other choice is someone else's work.
+   */
+  const restoreBlockedBy: BesignerDraftRestoreBlock | null =
+    staleAgainstDocument
+      ? 'saved-since'
+      : canvasHasRemoteEdits
+        ? 'live-session'
+        : null
+
   const restore = useCallback(() => {
     const draft = offer
     if (!draft) return
+    // The action agrees with the offer. A component that renders Restore
+    // without consulting `restoreBlockedBy` still cannot roll a colleague
+    // back through this path.
+    if (restoreBlockedBy) return
     // `applyNodes` snapshots history first, so restoring is undoable and
     // leaves the canvas dirty. Dirty matters beyond the save button: it is
     // what keeps "Save the canvas before creating a version" firing, so a
     // restored draft can never be swept into a version snapshot.
     Aglyn.canvas.applyNodes(draft.nodes)
     setOffer(null)
-  }, [offer])
+  }, [offer, restoreBlockedBy])
 
   const discard = useCallback(() => {
     const currentIds = idsRef.current
@@ -231,14 +313,12 @@ export function useBesignerDraft(
     return {
       available: true,
       takenAt: offer.updatedAt ?? null,
-      staleAgainstDocument: Aglyn.hasConcurrentWrite(
-        offer.baseStamp,
-        storedStamp,
-      ),
+      staleAgainstDocument,
+      restoreBlockedBy,
       restore,
       discard,
     }
-  }, [key, offer, storedStamp, restore, discard])
+  }, [key, offer, staleAgainstDocument, restoreBlockedBy, restore, discard])
 }
 
 export default useBesignerDraft

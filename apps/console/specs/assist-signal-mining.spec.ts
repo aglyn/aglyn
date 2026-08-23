@@ -112,6 +112,9 @@ const signal = (over: Partial<AssistSignalRow> = {}): AssistSignalRow => ({
   route: '/acme/hosts',
   model: 'claude-sonnet-5',
   tier: 'entitled',
+  // A model turn by default — the deflected ones are the exception and every
+  // test about them says so explicitly (AGL-2486).
+  deflected: false,
   inputTokens: 100,
   outputTokens: 40,
   cacheReadTokens: 900,
@@ -371,6 +374,58 @@ describe('mineAssistSignals — the docs-gap ranking (AGL-2252)', () => {
     expect(
       assistSignalRow('org-9', 'ex-9', { feedback: 'meh' }).feedback,
     ).toBeNull()
+  })
+})
+
+describe('the deflection rate an operator reads (AGL-2486)', () => {
+  it('counts the free turns and reports the rate', () => {
+    const report = mineAssistSignals([
+      signal({ deflected: true, model: 'docs-retrieval', estCostUsd: 0 }),
+      signal({ deflected: true, model: 'assist-cache', estCostUsd: 0 }),
+      signal({ estCostUsd: 0.02 }),
+      signal({ estCostUsd: 0.02 }),
+    ])
+    expect(report.totals.messages).toBe(4)
+    expect(report.totals.deflected).toBe(2)
+    expect(report.totals.deflectionRate).toBeCloseTo(0.5, 6)
+  })
+
+  it('an EMPTY scan reports null, not a 0% alarm', () => {
+    // "Nothing was scanned" and "every turn cost a model call" are opposite
+    // findings, and 0 says the second one on an idle month. This is the
+    // headline affordability number; a false alarm on it is expensive.
+    const report = mineAssistSignals([])
+    expect(report.totals.deflectionRate).toBeNull()
+    expect(report.totals.deflected).toBe(0)
+  })
+
+  it('a signal written before the field existed is NOT credited as free', () => {
+    // Defaulting the other way would credit historic turns with a saving
+    // that never happened, and the rate would look its best on the day it
+    // shipped and decay from there.
+    const row = assistSignalRow('org-1', 'ex-1', {
+      route: '/acme',
+      model: 'claude-sonnet-5',
+      tier: 'free',
+      estCostUsd: 0.01,
+    })
+    expect(row.deflected).toBe(false)
+    expect(mineAssistSignals([row]).totals.deflectionRate).toBe(0)
+  })
+
+  it('the free turns carry no cost into the totals they are counted in', () => {
+    // The pair that makes the number usable: a deflected turn must raise the
+    // turn count and move the money not at all. A build that metered the
+    // saving as spend would report a rising rate and a rising bill together.
+    const report = mineAssistSignals([
+      signal({ deflected: true, model: 'docs-retrieval', estCostUsd: 0 }),
+      signal({ estCostUsd: 0.02 }),
+    ])
+    expect(report.totals.estCostUsd).toBeCloseTo(0.02, 6)
+    expect(report.totals.byModel['docs-retrieval']).toMatchObject({
+      messages: 1,
+      estCostUsd: 0,
+    })
   })
 })
 

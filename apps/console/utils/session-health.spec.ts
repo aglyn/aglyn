@@ -45,6 +45,7 @@ describe('session health', () => {
     expect(getSessionHealth()).toEqual({
       staleSession: false,
       deniedCollections: [],
+      serverReads: 0,
     })
   })
 
@@ -72,6 +73,7 @@ describe('session health', () => {
     expect(getSessionHealth()).toEqual({
       staleSession: true,
       deniedCollections: ['orgs/media', 'orgs/members'],
+      serverReads: 0,
     })
   })
 
@@ -92,6 +94,7 @@ describe('session health', () => {
     expect(getSessionHealth()).toEqual({
       staleSession: false,
       deniedCollections: [],
+      serverReads: 1,
     })
   })
 
@@ -116,5 +119,41 @@ describe('session health', () => {
     reportSuccessfulRead()
     unsubscribe()
     expect(seen).toHaveLength(1) // the initial call only
+  })
+
+  /**
+   * The episode counter (AGL-2486). The automatic re-auth prompt latches on
+   * this, so what matters is that it moves for EVERY read that reached the
+   * server — including the ones with no evidence left to clear. A counter
+   * that skipped those would leave the latch armed across a recovery the
+   * user actually had, and the next genuine failure would never prompt.
+   */
+  it('counts a server read even when there is no evidence to clear', () => {
+    expect(getSessionHealth().serverReads).toBe(0)
+    reportSuccessfulRead()
+    reportSuccessfulRead()
+    expect(getSessionHealth().serverReads).toBe(2)
+
+    reportDeniedRead('orgs/media')
+    reportDeniedRead('orgs/members')
+    // Denials do NOT move it: it dates recoveries, not failures.
+    expect(getSessionHealth().serverReads).toBe(2)
+    reportSuccessfulRead()
+    expect(getSessionHealth().serverReads).toBe(3)
+  })
+
+  /**
+   * And the case the counter exists to separate from a recovery: an idle tab
+   * whose evidence simply aged out. `staleSession` goes false and comes back
+   * with nothing having changed, so anything latching on the VERDICT would
+   * re-fire; latching on this number does not.
+   */
+  it('does not move when a denial merely ages out of the window', () => {
+    reportDeniedRead('orgs/media')
+    reportDeniedRead('orgs/members')
+    expect(getSessionHealth().staleSession).toBe(true)
+    clock += SESSION_STALE_WINDOW_MS + 1
+    expect(getSessionHealth().staleSession).toBe(false)
+    expect(getSessionHealth().serverReads).toBe(0)
   })
 })

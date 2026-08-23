@@ -45,6 +45,7 @@ import type { TransitionProps } from '@mui/material/transitions'
 import { Observer, observer } from 'mobx-react-lite'
 import { forwardRef, SyntheticEvent, useCallback, useEffect, useState } from 'react'
 import useVisibleComponentCategories from '../hooks/use-visible-component-categories'
+import { rankPickerItems } from '../utils/rank-picker-results'
 import AccordionListComponent from './accordion-list.component'
 import EmptyResults from './empty-results'
 import NodeCard from './node-card'
@@ -59,6 +60,10 @@ const Transition = forwardRef(function Transition(
 })
 
 type PickerOption = Aglyn.ComponentSchema<any> | Aglyn.PresetSchema<any>
+
+/** The single group search results collapse into (AGL-2486). */
+const RESULTS_CATEGORY_ID = 'aglyn:picker-results'
+const RESULTS_CATEGORY_LABEL = 'Best matches'
 
 export interface ComponentPickerProps extends DialogProps {
   onSelectItem?: (e: SyntheticEvent, item?: { option: PickerOption }) => void
@@ -119,12 +124,31 @@ export const ComponentPicker = observer(
               ],
             })
 
-            items = allItems
-              .map((i) => {
-                fuse.setCollection(i.items)
-                return { ...i, items: fuse.search(filter).map((i) => i.item) }
-              })
-              .filter((i) => Boolean(i.items.length))
+            // Fuse decides WHAT matches (it is the only thing here with
+            // any typo tolerance); the ranking decides the ORDER. Fuse's
+            // own `shouldSort` weights every key alike, which is what put
+            // `Icon` below everything whose description merely mentions an
+            // icon (AGL-2486).
+            //
+            // Results are FLAT while a filter is active, deliberately. A
+            // name hit has to outrank a description hit, and that cannot
+            // hold inside category accordions: `Icon` lives in Media, so
+            // grouping would drag every Media entry — Avatar, "shows a
+            // picture, initials or an icon" — above `Icon button` in Input.
+            // Unfiltered, the curated categories come back untouched.
+            const matched = allItems.flatMap((category) => {
+              fuse.setCollection(category.items)
+              return fuse.search(filter).map((result) => result.item)
+            })
+            items = matched.length
+              ? [
+                  {
+                    $id: RESULTS_CATEGORY_ID,
+                    label: RESULTS_CATEGORY_LABEL,
+                    items: rankPickerItems(matched, filter),
+                  } as typeof allItems[number],
+                ]
+              : []
           } catch (error) {
             console.error('Failed to load fuse.js', error)
           }
@@ -248,6 +272,11 @@ export const ComponentPicker = observer(
             <EmptyResults sx={{ minHeight: '40vh', height: 1 }} />
           ) : (
             <AccordionListComponent
+              // `defaultExpanded` is read once per mount, so the results
+              // group would arrive collapsed without a fresh mount when the
+              // list flips between grouped and flat. Keyed on the SHAPE,
+              // not the filter text, so typing does not remount per press.
+              key={filter ? 'results' : 'categories'}
               items={items}
               defaultExpanded={items.map((i) => i.$id)}
               getItemId={(item) => item?.$id}

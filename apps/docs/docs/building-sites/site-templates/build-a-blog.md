@@ -63,7 +63,9 @@ Each entry carries, besides the title, excerpt, cover image, and markdown body:
 - **Category** — a single bucket (e.g. `Guides`) used for filtering and related posts,
   **picked from the collection's category list** (see below), never typed free-form.
 - **Tags** — comma-separated labels (e.g. `nextjs, seo`).
-- **Author** — the entry's byline; falls back to the site name when blank.
+- **Author** — the entry's byline: an **author record** from the Authors tab, a
+  one-off **custom byline**, or the site's own publisher entity when both are blank.
+  See [Authors](#authors).
 - **SEO title / SEO description** — search & social overrides; they fall back to the
   title and excerpt when blank.
 
@@ -78,6 +80,48 @@ moment. **Publish**/**Unpublish** on the row toggle an entry immediately, and **
 opens the live URL once it's published.
 
 <!-- screenshot: content/entry-schedule-dialog.png per SCREENSHOT_PLAN.md -->
+
+### Authors
+
+Content is often published under a byline that is **not the account that wrote it** —
+a pen name, a guest contributor, or the company itself. So an author is its own
+record rather than a user: open the **Authors** tab on the Content page to create
+them, and pick one per entry.
+
+<!-- screenshot: content/authors-tab.png per SCREENSHOT_PLAN.md -->
+
+Each author is either a **Person** or an **Organization**, and the choice is a real
+one — they are different `schema.org` types with different fields, so the editor shows
+only the fields that apply:
+
+| Field | Person | Organization |
+| --- | --- | --- |
+| **Name** | required | required |
+| **URL** | author page or personal site | site |
+| **Portrait / Logo** | published as `image` | published as `logo` |
+| **Job title** | yes | — |
+| **Works for** | yes | — |
+| **Profile links** | `sameAs`, one URL per line | `sameAs`, one URL per line |
+| **Bio** | shown beside the byline; not structured data | same |
+
+The portrait is a **media-picker target** — choose from the site or organization
+library, or paste a URL if the avatar lives elsewhere.
+
+An author flows straight into the entry page's **structured data**: the `Article`'s
+`author` becomes that Person or Organization, with its url, image, job title and
+profile links, while `publisher` stays the **site entity** you set in
+**Setup → SEO → Entity** — who wrote the piece and who put it out are different
+claims. The byline also fills the **Entry Meta** block and the `{{entry.author}}`
+token wherever they appear.
+
+Entries reference an author by a **stable id**, so **renaming an author updates every
+post at render time**, exactly like categories. Deleting an author leaves its entries
+with the byline as plain text — they keep rendering, they just lose the link,
+portrait and profile links in their structured data. Posts written before authors
+existed keep their typed byline and are published as a `Person` with that name, as
+they always were.
+
+A site holds up to 200 authors.
 
 ### Categories
 

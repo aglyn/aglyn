@@ -16,6 +16,7 @@
  */
 
 import type { Metadata } from 'next'
+import { entityPageTitle } from '../../../../../../../../../entity-page-title'
 import type { ReactNode } from 'react'
 
 // Title-only shell (AGL-1059): the page is a client component, and a client
@@ -24,10 +25,12 @@ import type { ReactNode } from 'react'
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ host: string }>
+  params: Promise<{ host: string; screenId: string }>
 }): Promise<Metadata> {
-  const { host } = await params
-  return { title: `Screen · ${host}` }
+  const { host, screenId } = await params
+  return {
+    title: entityPageTitle({ subject: screenId, noun: 'Screen', scope: host }),
+  }
 }
 
 export default function ScreenVersionTitleLayout({
