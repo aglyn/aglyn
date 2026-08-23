@@ -86,13 +86,24 @@ permissions:
   # failure mode is wasted minutes, not a missed verdict; granting it makes the
   # skip actually work.
   actions: read
-  issues: write
+  # The verdict lands as a COMMIT STATUS on the gated SHA. It was written as a
+  # tracking issue first; that cannot work here and it took one API call to
+  # find out — `gh api repos/aglyn/aglyn` returns has_issues:false and
+  # has_discussions:false, so every red would have died at `gh issue create`
+  # and looked like a broken step rather than a missing verdict.
+  statuses: write
 
 jobs:
   fast:
     name: fast (typecheck + guards)
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    outputs:
+      # Whether this job actually ran its checks. A job that skipped every step
+      # still reports `success`, so the report job cannot infer this from the
+      # result and must be told.
+      verified: ${{ steps.moved.outputs.skip != 'true' }}
+      sha: ${{ steps.moved.outputs.current }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -202,13 +213,16 @@ jobs:
   # THE RED SINK
   # -------------------------------------------------------------------------
   # A failing workflow emails whoever is watching, and an email is exactly the
-  # thing that scrolled away and let four failures sit on main for hours. So
-  # the verdict also lands as a STATE: one issue, opened on the first red,
-  # commented on each subsequent red, closed the moment main is green again.
+  # thing that scrolled away and let failures sit on main for hours. So the
+  # verdict also lands as a STATE: a commit status on the SHA that was gated,
+  # visible beside that commit in the branch and commit views, persisting until
+  # something supersedes it.
   #
-  # One issue and not one per failure, deliberately. A red main is a single
-  # condition however many phases report it, and a stream of issues is the same
-  # noise problem in a new place.
+  # tools/scripts/gate-report.mjs owns the decision so it can be self-tested.
+  # Two things it gets right that inline YAML got wrong: a job that SKIPPED its
+  # steps reports `success`, and reading that as green would clear a red on a
+  # `main` nobody is pushing to; and `fast` and `full` write SEPARATE contexts,
+  # so a cheap green cannot overwrite an expensive red.
   report:
     name: report
     runs-on: ubuntu-latest
@@ -216,36 +230,42 @@ jobs:
     if: always() && github.event_name != 'pull_request'
     permissions:
       contents: read
-      issues: write
+      statuses: write
     steps:
+      # fetch-depth: 0 — the summary lists the commits this verdict covers, and
+      # a default shallow checkout is depth 1, so `git log --since` would have
+      # reported exactly one commit however wide the window really was.
       - uses: actions/checkout@v7
-      - env:
+        with:
+          fetch-depth: 0
+
+      - name: verdict -> commit status
+        env:
           GH_TOKEN: ${{ github.token }}
-          FAST: ${{ needs.fast.result }}
-          FULL: ${{ needs.full.result }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          TITLE='main gate: RED'
-          # `skipped` is not a failure — the `full` job is skipped on the
-          # 15-minute cadence by design, and `fast` skips itself when main has
-          # not moved. Only an actual failure counts, or the issue would open
-          # on every quarter-hour.
-          red=0
-          [ "$FAST" = 'failure' ] && red=1
-          [ "$FULL" = 'failure' ] && red=1
+          node tools/scripts/gate-report.mjs \
+            --sha "${{ needs.fast.outputs.sha || github.sha }}" \
+            --fast "${{ needs.fast.result }}" \
+            --fast-verified "${{ needs.fast.outputs.verified }}" \
+            --full "${{ needs.full.result }}" \
+            --full-verified "${{ needs.full.result != 'skipped' }}"
 
-          existing=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number' || echo '')
-
-          if [ "$red" = 1 ]; then
-            body=$(printf '`main` is failing the continuous gate.\n\nfast: %s\nfull: %s\n\nCommit: `%s`\nRun: %s\n\nCommits in this window:\n%s\n' \
-              "$FAST" "$FULL" "$(git rev-parse --short HEAD)" "$RUN_URL" \
-              "$(git log --since='70 minutes ago' --format='- %h %s (%an)' || true)")
-            if [ -n "$existing" ]; then
-              gh issue comment "$existing" --body "$body"
-            else
-              gh issue create --title "$TITLE" --body "$body"
-            fi
-          elif [ -n "$existing" ]; then
-            gh issue close "$existing" --comment "\`main\` is green again as of \`$(git rev-parse --short HEAD)\`. $RUN_URL"
-          fi
+      # The suspect list. Its length is the whole argument for gating on a short
+      # timer: a day of accumulated commits is not a suspect list, an hour of
+      # them is.
+      - if: always()
+        run: |
+          {
+            echo "### main gate"
+            echo
+            echo "| job | result | verified |"
+            echo "|---|---|---|"
+            echo "| fast | ${{ needs.fast.result }} | ${{ needs.fast.outputs.verified }} |"
+            echo "| full | ${{ needs.full.result }} | ${{ needs.full.result != 'skipped' }} |"
+            echo
+            echo "Gated \`$(git rev-parse --short HEAD)\`. Commits in this window:"
+            echo
+            git log --since='70 minutes ago' --format='- `%h` %s (%an)' || true
+          } >> "$GITHUB_STEP_SUMMARY"

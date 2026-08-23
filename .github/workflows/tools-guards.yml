@@ -300,6 +300,20 @@ jobs:
       # is neither would be a guard nothing runs, protected from narrowing.
       - run: npm run test:run-guards
 
+      # AGL-2486. Where the continuous gate's verdict lands. This one was
+      # written as a GitHub issue that is opened on red and closed on green,
+      # and that sink is structurally dead here — the repository has issues
+      # AND discussions disabled, so every red would have died at
+      # `gh issue create` and read as a broken step rather than a missing
+      # verdict. It writes commit statuses instead.
+      #
+      # The self-test covers the decision that inline YAML got wrong: a job
+      # that SKIPPED every step reports `success`, and reading that as green
+      # clears the red on a `main` nobody happens to be pushing to — the
+      # tracking state marking itself healthy exactly because nothing was
+      # checked. `inconclusive` writes no status, so the prior verdict stands.
+      - run: npm run test:gate-report
+
       # AGL-1882. The comparator behind `check:backup-copies`, which asks the
       # one question `/api/health/backups` structurally cannot: does ANY copy
       # of production data live outside the production GCP project? Every

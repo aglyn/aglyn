@@ -1086,8 +1086,11 @@ case "$PROVISION_NOTE" in
 esac
 case "$PROVISION_NOTE" in
   *refuse*)
-    log "  REFUSED: a lockfile at the gated ref could not be honestly provisioned."
-    log "  NOTHING below this line proves anything about that dependency change." ;;
+    log "  REFUSED: --no-install was passed, and a lockfile at the gated ref"
+    log "  differs from this checkout with no cached tree for it. NOTHING in this"
+    log "  run proves anything about that dependency change."
+    log "  REMEDY: re-run WITHOUT --no-install and the gate will \`npm ci\` that"
+    log "  lockfile, cache it, and gate the packages the ref actually asks for." ;;
 esac
 
 # WHICH GATE RAN. Never left to be inferred from the presence of an

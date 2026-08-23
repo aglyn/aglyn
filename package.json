@@ -162,7 +162,8 @@
     "precheck": "node tools/scripts/precheck.mjs",
     "guards": "node tools/scripts/run-guards.mjs",
     "test:run-guards": "node tools/scripts/run-guards.mjs --self-test",
-    "typecheck:changed": "node tools/scripts/typecheck.mjs --changed"
+    "typecheck:changed": "node tools/scripts/typecheck.mjs --changed",
+    "test:gate-report": "node tools/scripts/gate-report.mjs --self-test"
   },
   "dependencies": {
     "@base-ui/react": "1.6.0",
