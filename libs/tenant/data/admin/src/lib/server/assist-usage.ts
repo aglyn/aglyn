@@ -261,6 +261,18 @@ function rates(inputPerMTok: number, outputPerMTok: number): AssistTokenRates {
  * cost estimate that errs low is worse than one that errs high.
  */
 export const ASSIST_MODEL_RATES_USD: Record<string, AssistTokenRates> = {
+  /**
+   * Not a model — the sentinel a docs-only answer is metered under
+   * (AGL-2486), so a deflected turn lands in the same rollup as a served one
+   * and an operator reads both from one document.
+   *
+   * Zero rates rather than an absent entry: an unknown id falls back to the
+   * DEAREST known tier by design, and inheriting that here would price the
+   * one path that spends nothing at $10/MTok. The tokens are zero too, so
+   * this is belt and braces — but the fallback is the kind of default that
+   * only shows up when someone later records a token count against it.
+   */
+  'docs-retrieval': rates(0, 0),
   'claude-sonnet-5': rates(3, 15),
   'claude-sonnet-4-6': rates(3, 15),
   'claude-haiku-4-5': rates(1, 5),
@@ -587,6 +599,18 @@ export interface AssistSignalRecord {
    * max_tokens rate is a ceiling problem. They need different fixes.
    */
   stopReason: string | null
+  /**
+   * True when the answer came from the docs index with NO model call
+   * (AGL-2486).
+   *
+   * Optional only so the two existing callers need not be edited in the same
+   * breath; it is written as an explicit boolean either way, never left
+   * undefined on the document. An absent field would make "this turn used no
+   * model" and "this turn predates the flag" the same value, and the whole
+   * point of the field is that an operator can tell how much of the month was
+   * free.
+   */
+  deflected?: boolean
 }
 
 /** A signal PLUS the verbatim half — the question, the answer, the asker. */
@@ -613,6 +637,7 @@ function writeSignalAndRollup(
   const increment = FieldValue.increment
   const serverTimestamp = FieldValue.serverTimestamp
   const estCostUsd = estimateAssistCostUsd(record.usage, record.model)
+  const deflected = record.deflected === true
   // The analytic half. No prose and NO uid — deliberately, because a signal
   // row that names the asker is just the exchange with the words removed,
   // and would re-create as an access-request obligation exactly what the
@@ -630,6 +655,7 @@ function writeSignalAndRollup(
     estCostUsd,
     docsPaths: record.docsPaths,
     stopReason: record.stopReason,
+    deflected,
     feedback: null,
     createdAt: serverTimestamp(),
   })
@@ -643,6 +669,15 @@ function writeSignalAndRollup(
     orgRef.collection('assistUsage').doc(assistUsageMonth(now)),
     {
       month: assistUsageMonth(now),
+      // The free half of the month, counted where the paid half already is
+      // (AGL-2486). `messages` counts what the RESERVATION moved — model
+      // turns — and a deflected turn takes no reservation because it spends
+      // nothing, so without this counter the questions Assist answered for
+      // free are invisible and the deflection rate can only be guessed at.
+      // Total questions asked is `messages + deflected`; neither field alone
+      // is that number, and reading `messages` as it would understate usage
+      // by exactly the amount this work was done to create.
+      deflected: increment(deflected ? 1 : 0),
       inputTokens: increment(record.usage.inputTokens),
       outputTokens: increment(record.usage.outputTokens),
       cacheReadTokens: increment(record.usage.cacheReadTokens),

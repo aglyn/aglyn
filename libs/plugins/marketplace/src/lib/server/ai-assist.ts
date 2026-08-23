@@ -38,12 +38,39 @@ import {
 } from '../model/marketplace'
 
 /**
- * Sonnet-class, fixed. The cost meter prices by model id, so a hard-coded
- * constant here means the per-org money is exact rather than approximately
- * right. If this ever becomes configurable, the override has to be read where
- * the request is built AND passed to the meter in the same breath.
+ * The model each mode is served by — tiered by what the mode actually asks
+ * for (AGL-2486), not fixed at Sonnet for all three.
+ *
+ * - **element** → Haiku 4.5. Rewriting one button label or one heading to an
+ *   instruction is a short, bounded transformation with the source text
+ *   supplied: the least model-shaped work on this route and the highest-volume
+ *   (a user clicking "improve this" runs it repeatedly on the same element).
+ *   $1/$5 against $3/$15 — a third of the cost for a job Haiku does well.
+ * - **blog** → Sonnet 5. A post body is real long-form writing, and the
+ *   difference between tiers is legible to the reader.
+ * - **section** → Sonnet 5. A constrained-JSON node subtree over the
+ *   marketplace allowlist is a structured-generation task with a schema the
+ *   sanitizer will reject if it is got wrong, and a rejected generation costs
+ *   the whole request rather than part of it.
+ *
+ * ⚠️ NO PROMPT CACHING IS LOST BY THE HAIKU RUNG — because this route has
+ * never had any. Its system prompts carry no `cache_control` at all, which is
+ * why the tier drop is free here and NOT free on `/api/assist/chat`: Haiku
+ * 4.5's minimum cacheable prefix is 4,096 tokens against that route's
+ * ~1,030-token system prefix, so moving the console chat to Haiku would
+ * silently stop its five-block cache design from caching anything while
+ * leaving the markers in place. Cheaper per token, dearer per request, and
+ * invisible either way. See the header of `apps/console/app/api/assist/chat/
+ * route.ts`.
+ *
+ * The cost meter prices by model id, so the value returned here MUST be the
+ * one passed to `recordAssistCost` — same call, same variable. A tiering
+ * change that updates the request and not the meter reports Sonnet money for
+ * Haiku tokens, which is the failure the by-model rate table exists to stop.
  */
-const MODEL = 'claude-sonnet-5'
+export function assistModelForMode(mode: 'element' | 'blog' | 'section'): string {
+  return mode === 'element' ? 'claude-haiku-4-5' : 'claude-sonnet-5'
+}
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages'
 const ANTHROPIC_VERSION = '2023-06-01'
@@ -230,12 +257,15 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
     }
 
     const tier: 'free' | 'entitled' = entitled ? 'entitled' : 'free'
+    // ONE resolution, read by both the request and the meter — see
+    // `assistModelForMode`. Two call sites would let them drift.
+    const model = assistModelForMode(mode)
     /** Meter what the provider actually charged us for, per org. */
     const meter = (payload: unknown): Promise<unknown> =>
       recordAssistCost(firestore, orgId, {
         route: `/api/ai/assist/${mode}`,
         hostId: hostId || null,
-        model: MODEL,
+        model,
         tier,
         usage: assistUsageFrom(payload),
         docsPaths: [],
@@ -254,7 +284,7 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: MODEL,
+          model,
           max_tokens: SECTION_MAX_TOKENS,
           system:
             'You design one website section inside a site builder. Reply ' +
@@ -323,7 +353,7 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: MODEL,
+        model,
         max_tokens: mode === 'blog' ? BLOG_MAX_TOKENS : ELEMENT_MAX_TOKENS,
         system:
           mode === 'blog'

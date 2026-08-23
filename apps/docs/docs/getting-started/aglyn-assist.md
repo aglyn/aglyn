@@ -64,6 +64,28 @@ misunderstanding you would be a worse assistant, so it doesn't have that
 ability at all — not a setting that's switched off, but a capability it was
 never given.
 
+## Answers straight from the documentation
+
+Most of what people ask the assistant — "how do I connect a domain", "where do
+I save a template" — is already written down on these pages. When your question
+clearly matches one of them, the assistant hands you that page's own words,
+with a link to the full page, instead of writing you a fresh answer.
+
+You will recognise these replies: they open with the name of the page, quote it,
+and close by offering to go further if it missed what you meant.
+
+There are two things worth knowing about them.
+
+- **They are never a summary.** The text is copied from the documentation
+  exactly as written, so it cannot drift from what the page actually says. If
+  the assistant is not confident which page answers you, it writes you a real
+  answer instead of quoting a page that only looks close.
+- **They do not count against your message limit,** because they cost nothing
+  to produce. Ask as many as you like.
+
+If a quoted page did not cover what you meant, just ask again with more detail
+— the follow-up gets a written answer.
+
 ## Message limits
 
 - **Free workspaces** get a limited number of assistant messages each day,
@@ -73,6 +95,9 @@ never given.
 
 When a free workspace reaches its daily limit, the assistant says so and the
 counter resets the next day (UTC).
+
+Answers quoted straight from the documentation are free and are not counted, so
+a workspace at its daily limit can still ask how-to questions.
 
 ## Feedback
 

@@ -656,7 +656,7 @@ export const DOCS_HELP_ANCHORS = {
   addALocale: ['#steps', '#tips', '#related'],
   addOns: ['#what-you-can-add', '#assigning-register-seats', '#assigning-collaborator-seats', '#how-changes-bill', '#plan-switches-and-cancellation', '#related'],
   addSearch: ['#steps', '#tips', '#related'],
-  aglynAssist: ['#what-it-can-do', '#answers-for-beginners-and-developers', '#offers-to-open-a-page', '#message-limits', '#feedback', '#privacy'],
+  aglynAssist: ['#what-it-can-do', '#answers-for-beginners-and-developers', '#offers-to-open-a-page', '#answers-straight-from-the-documentation', '#message-limits', '#feedback', '#privacy'],
   aiAssist: ['#copy-assist', '#ai-generate-section', '#limits', '#related'],
   analytics: ['#pageview-tracking', '#visitors-approximate', '#traffic-card', '#traffic-delta', '#insights', '#campaign-tracking-utm', '#per-screen-traffic', '#dwell-time', '#google-analytics', '#related'],
   animations: ['#add-an-animation', '#presets', '#plays', '#duration-and-delay', '#replay-each-time', '#animations-do-not-play-on-the-canvas', '#accessibility', '#speed-and-layout', '#if-a-visitor-has-javascript-turned-off'],

@@ -30,16 +30,23 @@ import {
   isServerReleaseFlagOnForOrg,
   lockdownRefusal,
   rateLimitHeaders,
+  readAssistAnswerCache,
   recordAssistExchange,
   releaseAssistMessage,
   reserveAssistMessage,
+  writeAssistAnswerCache,
+  assistAnswerCacheKey,
   type AssistTokenUsage,
 } from '@aglyn/tenant-data-admin'
 import {
   docsGroundingBlock,
   retrieveDocsSections,
-  DOCS_SITE_ORIGIN,
 } from '../../_lib/assist-retrieval'
+import {
+  deflectToDocs,
+  sectionLabel,
+  sectionUrl,
+} from '../../_lib/assist-deflection'
 import {
   describeView,
   extractAssistAction,
@@ -57,15 +64,35 @@ import {
  * Aglyn Assist chat proxy (AGL-1860, phase 1 — capability levels 1–2).
  *
  * The gate ladder, in order (every step can go red and each has a spec that
- * forces it): 405 → 501 no ANTHROPIC_API_KEY → 401 no token → 403
- * email-unverified → 400 bad body → 403 not a member → 404 release flag off
- * (a released-off feature does not exist; staff bypass) → 403 unscoped/wrong
- * org (AGL-1934 — the request must NAME the org it meters) → 423 lockdown
- * (platform/org/user + the `ai-assist` feature kill switch) → 429 rate
- * limit → 429 quota (free: N messages/UTC-day; entitled: monthly runaway
- * guard; plus a monthly SPEND ceiling on both, ARMED by default at $40/org —
- * `assistOrgMonthlyCostLimitUsd`, removed only by the literal word `off`)
- * → the model call.
+ * forces it): 405 → 401 no token → 403 email-unverified → 400 bad body → 403
+ * not a member → 404 release flag off (a released-off feature does not exist;
+ * staff bypass) → 403 unscoped/wrong org (AGL-1934 — the request must NAME
+ * the org it meters) → 423 lockdown (platform/org/user + the `ai-assist`
+ * feature kill switch) → 429 rate limit → **the docs answer, if retrieval is
+ * confident** → 501 no ANTHROPIC_API_KEY → 429 quota (free: N messages/UTC-
+ * day; entitled: monthly runaway guard; plus a monthly SPEND ceiling on both,
+ * ARMED by default at $40/org — `assistOrgMonthlyCostLimitUsd`, removed only
+ * by the literal word `off`) → the model call.
+ *
+ * ── Retrieval-first (AGL-2486) ─────────────────────────────────────────────
+ *
+ * Two rungs moved when deflection landed, and both moves are load-bearing.
+ *
+ * **The docs answer sits ABOVE the quota**, because it spends nothing. A
+ * question answered out of `apps/docs` takes no reservation and no message
+ * from a free workspace's daily ten — the per-uid rate limiter is its only
+ * bound, and for a map lookup and a string join that is the right one.
+ *
+ * **The key check sits BELOW it**, where it used to be the first thing this
+ * handler did. That is what lets a deployment holding its `ANTHROPIC_API_KEY`
+ * still answer every question the documentation answers, and say it is
+ * unconfigured only for the ones that genuinely need a model. The cost of the
+ * move is that an unauthenticated caller now gets 401 rather than 501, which
+ * is the better answer to that request anyway.
+ *
+ * What "confident" means, and why a weak match escalates rather than hedges,
+ * is in `assist-deflection.ts`; the measured share of realistic questions it
+ * answers is asserted in `assist-deflection.spec.ts` rather than claimed here.
  *
  * Capability tiers: entitled orgs (`aiAssist`, Pro+) get docs-grounded
  * answers PLUS page-context awareness (level 2 — the current route/host is
@@ -419,23 +446,127 @@ function buildViewBlock(
   }
 }
 
+/**
+ * The model id a docs-only answer is metered under (AGL-2486). Not a model —
+ * a sentinel, priced at zero in `ASSIST_MODEL_RATES_USD`, so a deflected turn
+ * lands in the same monthly rollup as a served one and the two are told apart
+ * by a field rather than by their absence.
+ */
+const DOCS_RETRIEVAL_MODEL = 'docs-retrieval'
+
+/**
+ * The sentinel a CACHE HIT is metered under (AGL-2486). Distinct from
+ * `docs-retrieval` because the two are different savings with different
+ * failure modes — a docs answer is grounded in a page the user can open, a
+ * cached one is a model answer being replayed — and a single sentinel would
+ * make the deflection rate and the cache hit rate one indistinguishable
+ * number. Priced at zero for the same reason.
+ */
+const CACHED_ANSWER_MODEL = 'assist-cache'
+
+interface DocsOnlyArgs {
+  firestore: FirebaseFirestore.Firestore
+  orgId: string
+  uid: string
+  question: string
+  answer: string
+  docs: { title: string; url: string }[]
+  docsPaths: string[]
+  route: string
+  hostId: string | null
+  tier: 'free' | 'entitled'
+  rate: ReturnType<typeof checkRateLimit>
+  /**
+   * Which zero-cost path served this — `docs` (retrieval answered outright)
+   * or `cache` (an identical question already answered this workspace).
+   * Reported on the response header and, through `model`, in the meters, so
+   * the two are countable apart: they are saved differently and a change in
+   * their ratio means different things.
+   */
+  servedBy?: 'docs' | 'cache'
+}
+
+/**
+ * Serve a docs-grounded answer with no provider call, in the SSE shape the
+ * panel already speaks (AGL-2486).
+ *
+ * Deliberately the SAME event sequence as a model turn — one `delta` carrying
+ * the whole answer, then `done` with `exchangeId` and `docs` — so the client
+ * needs no branch and no new state. A separate JSON response shape would have
+ * meant a second rendering path in the panel, a second set of failure modes,
+ * and a user-visible difference between the cheap answer and the expensive
+ * one, which is the last thing this should advertise.
+ *
+ * Two fields are deliberately absent from `done`:
+ *
+ *  - `usage`, because none was spent. Emitting zeros would put a measurement's
+ *    name on a constant, and anything summing the panel's usage would quietly
+ *    count this turn as a real one that happened to cost nothing.
+ *  - `quota`, because no reservation moved. The panel keeps its last known
+ *    standing (`if (event.quota)`), which is the truth: a free workspace's ten
+ *    messages a day are still ten, and a docs answer did not take one.
+ *
+ * `proposal` is absent too — proposals are a level-2 capability that exists
+ * only when the model was given the view block, and there is no model here.
+ */
+async function docsOnlyResponse(args: DocsOnlyArgs): Promise<Response> {
+  const servedBy = args.servedBy ?? 'docs'
+  let exchangeId: string | null = null
+  try {
+    exchangeId = await recordAssistExchange(args.firestore, args.orgId, {
+      uid: args.uid,
+      question: args.question,
+      answer: args.answer.slice(0, MAX_STORED_ANSWER_CHARS),
+      route: args.route,
+      hostId: args.hostId,
+      model: servedBy === 'cache' ? CACHED_ANSWER_MODEL : DOCS_RETRIEVAL_MODEL,
+      tier: args.tier,
+      usage: {
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      },
+      docsPaths: args.docsPaths,
+      stopReason: null,
+      deflected: true,
+    })
+  } catch (error) {
+    // A metering failure must not cost the user their answer — the answer is
+    // already computed and free, so refusing it would trade a reporting
+    // problem for a product one.
+    console.error('assist docs-only exchange record failed', error)
+  }
+  const encoder = new TextEncoder()
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const emit = (event: Record<string, unknown>) => {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+      }
+      emit({ type: 'delta', text: args.answer })
+      emit({ type: 'done', exchangeId, docs: args.docs, proposal: null })
+      controller.close()
+    },
+  })
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      // The one header that distinguishes the two paths, and it exists for
+      // the operator rather than the client: a docs answer and a model answer
+      // are otherwise indistinguishable in a log or a trace, which would make
+      // the deflection rate unverifiable anywhere outside Firestore.
+      'X-Assist-Served-By': servedBy,
+      ...rateLimitHeaders(args.rate),
+    },
+  })
+}
+
 async function handler(request: Request): Promise<Response> {
   if (request.method !== 'POST') {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
-  }
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) {
-    // THE DEPLOYMENT BRAND IS RIGHT HERE, and stays (AGL-2352). This refusal
-    // is emitted before the Authorization header below is even read, so
-    // there is no org to resolve a brand from — and it names an env var the
-    // deployment's operator sets, which is a fact about the deployment
-    // rather than about the workspace that happened to ask.
-    return Response.json(
-      {
-        error: `${PLATFORM_BRAND_NAME} Assist is not configured (ANTHROPIC_API_KEY).`,
-      },
-      { status: 501 },
-    )
   }
   const authorization = request.headers.get('authorization') ?? ''
   const idToken = authorization.startsWith('Bearer ')
@@ -533,6 +664,106 @@ async function handler(request: Request): Promise<Response> {
     // which is a real answer (limited mode), not a denial.
     const entitled = checkEntitlement(org, 'aiAssist')
     const firestore = app.firestore()
+
+    // ── Retrieval FIRST (AGL-2486) ────────────────────────────────────────
+    // Level-1 grounding for everyone. Hoisted above the reservation and the
+    // model call because it is now a candidate ANSWER, not only a prompt
+    // ingredient: most assist traffic is "how do I X", and X is already
+    // written down in apps/docs. Paying a provider to read our own
+    // documentation back to the user is the spend this issue exists to
+    // remove.
+    const scored = retrieveDocsSections(body.question)
+    const docsPaths = scored.map(({ section }) => section.path + section.anchor)
+    const docs = scored.map(({ section }) => ({
+      title: sectionLabel(section),
+      url: sectionUrl(section),
+    }))
+
+    const deflection = deflectToDocs(body.question, scored, body.history.length > 0)
+    if (deflection.answered) {
+      // Costs no provider tokens, so it takes NO reservation: a docs answer
+      // must not spend one of a free workspace's ten messages a day. The
+      // per-uid rate limiter above is what bounds this path, and it is the
+      // right bound — the work is a map lookup and a string join.
+      return docsOnlyResponse({
+        firestore,
+        orgId: body.orgId,
+        uid: decoded.uid,
+        question: body.question,
+        answer: deflection.answer,
+        docs,
+        docsPaths: deflection.quoted.map(
+          (section) => section.path + section.anchor,
+        ),
+        route: body.context?.route ?? '',
+        hostId: body.context?.hostId || null,
+        tier: entitled ? 'entitled' : 'free',
+        rate,
+      })
+    }
+
+    // Only an ESCALATION needs a provider (AGL-2486). The check sat at the
+    // very top of this handler until deflection existed, and moving it here
+    // is the point rather than a tidy-up: a deployment holding its key still
+    // answers every question the documentation answers, and only says it is
+    // unconfigured for the ones that genuinely need a model. The refusal is
+    // byte-identical to the old one, so the panel's existing 501 handling is
+    // unchanged.
+    //
+    // THE DEPLOYMENT BRAND IS RIGHT HERE, and stays (AGL-2352) — it names an
+    // env var the deployment's operator sets, which is a fact about the
+    // deployment rather than about the workspace that happened to ask.
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    if (!apiKey) {
+      return Response.json(
+        {
+          error: `${PLATFORM_BRAND_NAME} Assist is not configured (ANTHROPIC_API_KEY).`,
+        },
+        { status: 501 },
+      )
+    }
+
+    // ── The answer cache (AGL-2486) ───────────────────────────────────────
+    // Only reached by an ESCALATION, and only when the question stands alone:
+    // a turn with history is answered against a conversation this key cannot
+    // describe, and caching on the question alone would serve the reply to
+    // somebody else's thread. Same reason deflection refuses a follow-up.
+    //
+    // The key carries the tier, the route, the model and the brand as well as
+    // the question — see `assistAnswerCacheKey`. Cheap to get wrong and
+    // expensive when it is: an entitled answer names the workspace's own plan
+    // and screen.
+    const cacheKey = body.history.length
+      ? ''
+      : assistAnswerCacheKey({
+          question: body.question,
+          tier: entitled ? 'entitled' : 'free',
+          route: body.context?.route ?? '',
+          model: assistModel(),
+          productName: resolveBrandingProfile(org as never).productName,
+        })
+    const cached = cacheKey
+      ? await readAssistAnswerCache(firestore, body.orgId, cacheKey)
+      : null
+    if (cached) {
+      // Spent nothing, so it takes no reservation — the same rule the docs
+      // path follows, for the same reason.
+      return docsOnlyResponse({
+        firestore,
+        orgId: body.orgId,
+        uid: decoded.uid,
+        question: body.question,
+        answer: cached.answer,
+        docs: cached.docs ?? [],
+        docsPaths,
+        route: body.context?.route ?? '',
+        hostId: body.context?.hostId || null,
+        tier: entitled ? 'entitled' : 'free',
+        rate,
+        servedBy: 'cache',
+      })
+    }
+
     // RESERVED, not merely checked (AGL-2057). The counter moves here, in a
     // transaction, BEFORE a single token is spent — because the old order
     // (check now, count at stream completion) let concurrent requests and
@@ -561,15 +792,6 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
-    // Level-1 grounding for everyone; level-2 page context is Pro+ only.
-    const scored = retrieveDocsSections(body.question)
-    const docsPaths = scored.map(({ section }) => section.path + section.anchor)
-    const docs = scored.map(({ section }) => ({
-      title: section.heading
-        ? `${section.title} — ${section.heading}`
-        : section.title,
-      url: `${DOCS_SITE_ORIGIN}${section.path}${section.anchor}`,
-    }))
     const docsBlock = docsGroundingBlock(scored)
     // Level 2 is the paid rung. A free workspace gets docs grounding and
     // deep links; the view block, and with it the proposal channel, is not
@@ -782,6 +1004,26 @@ async function handler(request: Request): Promise<Response> {
             })
           } catch (error) {
             console.error('assist exchange record failed', error)
+          }
+
+          // Cache the answer so the same question does not buy a second
+          // completion (AGL-2486). Four conditions, and each excludes a
+          // different way a cached entry would be wrong:
+          //
+          //  - `cacheKey` is empty for a turn WITH history — the answer was
+          //    composed against a conversation the key does not describe.
+          //  - a `refusal` or `max_tokens` stop is not an answer, and
+          //    replaying one for a week would make a transient bad turn
+          //    permanent for that workspace.
+          //  - a PROPOSAL is bound to the view the question was asked from
+          //    and is resolved per request; a cached answer carries the prose
+          //    without it, so caching one would silently drop the card.
+          //  - an empty answer caches nothing.
+          if (cacheKey && answer && !proposal && stopReason !== 'refusal' && stopReason !== 'max_tokens') {
+            await writeAssistAnswerCache(firestore, body.orgId, cacheKey, {
+              answer,
+              docs,
+            })
           }
           emit({
             type: 'done',

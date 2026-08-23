@@ -126,6 +126,9 @@ const report = (over: Record<string, unknown> = {}) => ({
     cacheReadTokens: 4_500,
     cacheWriteTokens: 8_192,
     estCostUsd: 4.24,
+    // Two of the five turns were answered with no model call (AGL-2486).
+    deflected: 2,
+    deflectionRate: 0.4,
     cacheReadRate: 0.9,
     byTier: {
       entitled: { messages: 2, estCostUsd: 4.04 },

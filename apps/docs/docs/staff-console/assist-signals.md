@@ -41,6 +41,18 @@ Work the board in this order:
 Totals across the scanned sample: messages, tokens, estimated cost, the thumbs
 tally, and how turns stopped.
 
+**Answered free** is the share of turns served with no model call at all —
+either quoted straight from the docs index or replayed from the answer cache —
+with the count beside it. It is the number that decides whether Assist is
+affordable to leave switched on, and it is the one to watch after a docs
+rewrite: writing a page that people were asking about moves this figure up and
+the estimated cost down, in the same week.
+
+Read it against **estimated cost**, never on its own. The two can move the same
+way for opposite reasons: a rise in the free share is good news, but so is a
+fall in it when the reason is that people have stopped asking questions the
+docs already answered.
+
 Two of these read differently from the rest. **Stop reasons** separate a refusal from
 a truncation — both look like a short answer in the data, but a rising refusal rate is
 a prompt problem and a rising `max_tokens` rate is a ceiling problem, and they need

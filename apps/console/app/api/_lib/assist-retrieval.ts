@@ -130,6 +130,44 @@ export function retrieveDocsSections(
 }
 
 /**
+ * How many indexed sections each token appears in — the raw material for an
+ * IDF weight (AGL-2486).
+ *
+ * Lives here rather than in the deflection module because the tokenized index
+ * is already built here and rebuilding it there would tokenize ~500KB of docs
+ * a second time, per process, to reach the same numbers. Memoised alongside
+ * `indexed` and derived from it, so the two can never disagree about what a
+ * token is.
+ *
+ * Counts SECTIONS, not pages: a term confined to one page but repeated in
+ * every section of it is still a specific term, and page-level counting would
+ * flatten exactly the distinction the weight exists to make.
+ */
+let documentFrequency: Map<string, number> | null = null
+
+export function docsDocumentFrequency(): {
+  frequency: ReadonlyMap<string, number>
+  sections: number
+} {
+  if (!documentFrequency) {
+    const index = (indexed ??= buildIndex(ASSIST_DOCS_INDEX))
+    const frequency = new Map<string, number>()
+    for (const entry of index) {
+      const seen = new Set<string>([
+        ...entry.bodyTokenCounts.keys(),
+        ...entry.titleTokens,
+        ...entry.headingTokens,
+      ])
+      for (const token of seen) {
+        frequency.set(token, (frequency.get(token) ?? 0) + 1)
+      }
+    }
+    documentFrequency = frequency
+  }
+  return { frequency: documentFrequency, sections: ASSIST_DOCS_INDEX.length }
+}
+
+/**
  * Public docs-site origin for deep links the assistant hands the user.
  *
  * Configurable (AGL-2016): a self-hoster who publishes the `apps/docs` site on
