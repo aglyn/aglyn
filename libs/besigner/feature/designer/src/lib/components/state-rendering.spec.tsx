@@ -42,7 +42,10 @@ import {
   sxHasStateSlice,
   sxStateSliceLabel,
   sxStatesWithSlices,
+  SX_STATE_DESCRIPTIONS,
   SX_STATE_LABELS,
+  SX_STATE_LABEL_MAX,
+  SX_STATE_PROSE,
   SX_STATE_SELECTORS,
   SX_STATES,
   writeStateSlice,
@@ -213,8 +216,8 @@ describe('interaction-state slices (AGL-2486 item 39)', () => {
     })
 
     it('WRITES &:focus-visible into node.sx — the label is not the contract', () => {
-      // The chip says "Focus (keyboard)"; what matters is the key that lands
-      // in the document, because that is what the browser matches on.
+      // The chip says "Focus"; what matters is the key that lands in the
+      // document, because that is what the browser matches on.
       const written = writeStateSlice({ color: '#111111' }, 'focusVisible', {
         outlineColor: '#0000ff',
       })
@@ -243,8 +246,43 @@ describe('interaction-state slices (AGL-2486 item 39)', () => {
       expect(css).not.toMatch(/:focus(?!-visible)/)
     })
 
-    it('says "keyboard" on the chip so nobody reads it as mouse focus', () => {
-      expect(SX_STATE_LABELS.focusVisible).toMatch(/keyboard/i)
+    it('says "keyboard" where there is room for it, not on the chip', () => {
+      // The chip label stays short so the row cannot wrap; the nuance lives in
+      // the tooltip and in the preview banner, which appears the moment Focus
+      // is selected and is therefore READ rather than hovered for.
+      expect(SX_STATE_LABELS.focusVisible).toBe('Focus')
+      expect(SX_STATE_PROSE.focusVisible).toMatch(/keyboard/i)
+      expect(SX_STATE_DESCRIPTIONS.focusVisible).toMatch(/keyboard/i)
+      expect(SX_STATE_DESCRIPTIONS.focusVisible).toMatch(/mouse click/i)
+    })
+  })
+
+  describe('the chip row cannot wrap', () => {
+    it('keeps every label inside the measured width budget', () => {
+      // Measured, not guessed: the five chips shipped once as
+      // Default/Hover/Active/"Focus (keyboard)"/Disabled, which needed 368px
+      // against the 359px a default 375px panel offers — so `Disabled` fell to
+      // a second line. Short labels bring the row to ~272px. This is the guard
+      // that fails instead of the layout when someone adds a parenthetical.
+      for (const state of SX_STATES) {
+        expect([state, SX_STATE_LABELS[state].length]).toEqual([
+          state,
+          expect.any(Number),
+        ])
+        expect(SX_STATE_LABELS[state].length).toBeLessThanOrEqual(
+          SX_STATE_LABEL_MAX,
+        )
+      }
+      expect('Default'.length).toBeLessThanOrEqual(SX_STATE_LABEL_MAX)
+    })
+
+    it('has no label carrying a parenthetical qualifier', () => {
+      for (const state of SX_STATES) {
+        expect([state, SX_STATE_LABELS[state]]).toEqual([
+          state,
+          expect.not.stringContaining('('),
+        ])
+      }
     })
   })
 

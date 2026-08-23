@@ -113,23 +113,40 @@ export const SX_STATE_SELECTORS: Readonly<Record<SxState, string>> =
   })
 
 /**
- * Chip labels.
+ * Chip labels. **Keep them short — this row must never wrap.**
  *
- * `focusVisible` says "(keyboard)" out loud rather than plain "Focus". Chips
- * are SCANNED, not hovered, so a label that reads as generic focus would tell
- * an author who wants to style the mouse-click focus ring that this is it —
- * and they would then be puzzled when their style never fires, because
- * `:focus-visible` deliberately does not match a plain click. The extra word
- * is cheaper than that confusion, and it also stops the label quietly
- * contradicting the reason plain `:focus` is not offered at all (see
- * {@link SX_STATES}).
+ * These shipped once as "Focus (keyboard)", to stop a bare "Focus" implying
+ * that the mouse-click ring is what you are styling. The reasoning was right
+ * and the label was wrong: measured against the styles panel, the five chips
+ * needed **368px** of the **359px** a default 375px panel has, so `Disabled`
+ * fell to a second line and the row read as a layout accident. Zach: *"please
+ * fix the states pills"*.
+ *
+ * Short labels bring the row to 272px, which fits every panel width down to
+ * about 290px, and {@link SX_STATE_LABEL_MAX} pins them so the next person to
+ * reach for a clarifying parenthetical gets a failing test instead of a
+ * wrapped row.
+ *
+ * The keyboard nuance did not get dropped, it moved somewhere better than a
+ * label: {@link SX_STATE_DESCRIPTIONS} carries the full rule in the chip
+ * tooltip, and {@link SX_STATE_PROSE} puts "keyboard focus" in the preview
+ * banner — which appears the moment Focus is selected, so it is READ rather
+ * than hovered for. That is the same job the long label was doing, done where
+ * there is room for it.
  */
 export const SX_STATE_LABELS: Readonly<Record<SxState, string>> = Object.freeze({
   hover: 'Hover',
   active: 'Active',
-  focusVisible: 'Focus (keyboard)',
+  focusVisible: 'Focus',
   disabled: 'Disabled',
 })
+
+/**
+ * The longest a chip label may be before the row stops fitting a narrow
+ * panel. `Disabled` is 8 and is the longest today; the budget is measured,
+ * not guessed — see {@link SX_STATE_LABELS}.
+ */
+export const SX_STATE_LABEL_MAX = 8
 
 /** The same states in running prose — banners, the override chips. */
 export const SX_STATE_PROSE: Readonly<Record<SxState, string>> = Object.freeze({

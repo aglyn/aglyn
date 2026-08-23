@@ -68,6 +68,7 @@ import { useHostThemeDocument } from '@aglyn/shared-ui-theme'
 import { objectFlatten } from '@aglyn/shared-util-vendor'
 import {
   Alert,
+  Box,
   Chip,
   FormControlLabel,
   FormHelperText,
@@ -1152,7 +1153,7 @@ const ElementStylesForm = observer(
             editing" question, same answer shape. Picking a state also HOLDS
             it on the canvas for this element, which is the only way to see
             what you are styling from a side panel. */}
-        <Container gutterY={[1]} dense sx={{ position: 'relative' }}>
+        <Container gutterY={[1]} dense sx={{ position: 'relative', pr: 3 }}>
           <HelpTip
             title="Hover, focus & other states"
             excerpt="Style how this element looks when someone points at it, presses it or reaches it with the keyboard. Picking a state also shows it on the canvas while you work — that preview is never saved."
@@ -1165,40 +1166,67 @@ const ElementStylesForm = observer(
               fontSize: '0.9em',
             }}
           />
-          <Tooltip title="Styles that apply at rest, and everywhere a state does not override them.">
-            <Chip
-              size="small"
-              color={activeState ? 'default' : 'primary'}
-              variant={activeState ? 'outlined' : 'filled'}
-              label="Default"
-              onClick={() => selectState(null)}
-            />
-          </Tooltip>
-          {SX_STATES.map((state) => (
-            <Tooltip key={state} title={SX_STATE_DESCRIPTIONS[state]}>
+          {/* The row is structurally unable to wrap. Five labelled chips need
+              ~272px and a 375px panel offers 359, so they fit at every normal
+              width — but the panel is resizable, and at ~260px nothing fits at
+              any size consistent with the rest of the panel. `nowrap` plus
+              `overflow-x` makes the failure mode a few pixels of scroll rather
+              than an orphaned chip on a second line, which is what this row
+              shipped as and what Zach reported. */}
+          <Box
+            sx={{
+              display: 'flex',
+              flexWrap: 'nowrap',
+              alignItems: 'center',
+              gap: 0.5,
+              overflowX: 'auto',
+              // The scrollbar would eat more height than the chips it serves.
+              scrollbarWidth: 'none',
+              '&::-webkit-scrollbar': { display: 'none' },
+              // Tightened from the stock small chip so the row clears a narrow
+              // panel; the 0.75rem type still matches the breakpoint chip above.
+              '& .MuiChip-label': { px: 0.75 },
+              '& .MuiChip-root': { flexShrink: 0 },
+              '& .MuiChip-deleteIcon': { ml: '-2px', mr: '2px' },
+            }}
+          >
+            {/* Default is FILLED and the states are OUTLINED, always — the base
+                scope reads as a different kind of thing at a glance rather than
+                as a fifth state, and unlike a divider it costs no width. */}
+            <Tooltip title="Styles that apply at rest, and everywhere a state does not override them.">
               <Chip
                 size="small"
-                sx={{ ml: 1 }}
-                color={activeState === state ? 'primary' : 'default'}
-                variant={activeState === state ? 'filled' : 'outlined'}
-                label={
-                  sxHasStateSlice(nodeSx as Record<string, any>, state)
-                    ? `${SX_STATE_LABELS[state]} •`
-                    : SX_STATE_LABELS[state]
-                }
-                onClick={() => selectState(state)}
-                // The X clears the WHOLE slice, and only appears on the state
-                // being edited that actually has one — the same clear
-                // affordance individual values have, one level up.
-                onDelete={
-                  activeState === state &&
-                  sxHasStateSlice(nodeSx as Record<string, any>, state)
-                    ? () => clearState(state)
-                    : undefined
-                }
+                variant="filled"
+                color={activeState ? 'default' : 'primary'}
+                label="Default"
+                onClick={() => selectState(null)}
               />
             </Tooltip>
-          ))}
+            {SX_STATES.map((state) => (
+              <Tooltip key={state} title={SX_STATE_DESCRIPTIONS[state]}>
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  color={activeState === state ? 'primary' : 'default'}
+                  label={
+                    sxHasStateSlice(nodeSx as Record<string, any>, state)
+                      ? `${SX_STATE_LABELS[state]} •`
+                      : SX_STATE_LABELS[state]
+                  }
+                  onClick={() => selectState(state)}
+                  // The X clears the WHOLE slice, and only appears on the state
+                  // being edited that actually has one — the same clear
+                  // affordance individual values have, one level up.
+                  onDelete={
+                    activeState === state &&
+                    sxHasStateSlice(nodeSx as Record<string, any>, state)
+                      ? () => clearState(state)
+                      : undefined
+                  }
+                />
+              </Tooltip>
+            ))}
+          </Box>
         </Container>
         {activeState ? (
           <Container gutterY={[1]} dense>

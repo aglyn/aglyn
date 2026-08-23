@@ -33,7 +33,7 @@ mode.
 ## Style hover, focus and other states {#interaction-states}
 
 Under the breakpoint chip is a second row of chips: **Default**, **Hover**,
-**Active**, **Focus (keyboard)** and **Disabled**. They answer the same
+**Active**, **Focus** and **Disabled**. They answer the same
 question the breakpoint chip does — *which version of this element am I
 editing?*
 
@@ -44,7 +44,7 @@ resting styles.
 
 - **Hover** — while the pointer is over the element.
 - **Active** — while it is being pressed or clicked.
-- **Focus (keyboard)** — while it has keyboard focus (see the note below).
+- **Focus** — while it has **keyboard** focus (see the note below).
 - **Disabled** — while a form control is disabled.
 
 A chip with a **•** already has styles for that state. Selecting a state
@@ -77,14 +77,13 @@ The two chips work together. Choose *MD – Laptop* **and** *Hover* and you
 are editing "the hover style, on laptops and up" — phones keep whatever
 the smaller breakpoints say. The same goes for the dark-scheme scope.
 
-### About Focus (keyboard) {#focus-state}
+### About Focus {#focus-state}
 
-The chip says *(keyboard)* because that is exactly what it means. **Focus
-(keyboard)** is `:focus-visible` — it applies when someone reaches the
+**Focus** is `:focus-visible` — it applies when someone reaches the
 element with the **keyboard**, and not on an ordinary mouse click. There is
 deliberately no chip for plain `:focus`.
 
-That is deliberate. The focus ring is how keyboard and screen-reader
+The focus ring is how keyboard and screen-reader
 visitors know where they are on your page, and a control that removed it on
 every click would take it away from them too. Styling this state can make
 the indicator match your brand; it is much harder to accidentally delete it.
