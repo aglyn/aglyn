@@ -1,7 +1,15 @@
 # Commerce token signing (`TOKEN_SIGNING_SECRET`)
 
 One secret signs every commerce token the platform mints: order download links, supplier
-tokens, gift-card codes and gated-video stream URLs.
+tokens, gated-video stream URLs, private media signatures and tenant edit tokens.
+
+> **Correction, 2026-08-23 (AGL-2403).** This document previously said gift-card codes were
+> among them. They are not. `billing-webhook.ts:3073` keys their HMAC on the **Stripe object
+> id** — `createHmac('sha256', String(object.id))` — and the resulting `GC-…` code is stored
+> as a Firestore document and looked up, not verified as a signature. **Gift cards survive a
+> rotation of this secret untouched.** The item the old wording omitted is far more
+> important: the **supplier token has no expiry at all** and is persisted on the order
+> document, so it is the longest-lived thing a rotation destroys.
 
 It **fails closed**. If the variable is unset, the code throws rather than minting — no
 fallback, deliberately. The bug this replaced (AGL-509) was
@@ -15,10 +23,11 @@ possible, which is why there isn't one now.
 | File | Tokens |
 | --- | --- |
 | `libs/plugins/commerce/src/lib/server/download.ts` | order download links (90-day TTL) — defines `tokenSigningSecret()` |
-| `libs/plugins/commerce/src/lib/server/billing-webhook.ts` | supplier tokens, gift-card codes |
+| `libs/plugins/commerce/src/lib/server/billing-webhook.ts` | supplier tokens (**no expiry**, persisted on the order doc; re-derived and compared in `supplier-update.ts`) |
 | `libs/plugins/commerce/src/lib/server/stream.ts` | gated-video stream URLs (15-min TTL) — AGL-689 |
 | `libs/tenant/data/admin/src/lib/server/media-signing.ts` | private media access signatures (15-min TTL) — AGL-1051 |
 | `libs/tenant/data/admin/src/lib/server/edit-access-token.ts` | tenant admin-bar edit tokens (30-min TTL, `edit-bar:` namespace) — AGL-1302 follow-on |
+| `libs/tenant/data/admin/src/lib/server/edit-hint-token.ts` | edit-hint cookie (**7-day** TTL, set on `.aglyn.app`) and the 60-second bounce token |
 
 Each consumer domain-separates its payloads with its own context prefix (`media:`,
 `edit-bar:`, …) so a token minted for one purpose can never verify as another.
@@ -35,10 +44,12 @@ Today this is arranged so the mismatch *cannot* happen: `TOKEN_SIGNING_SECRET` i
 one value. Keep it that way. Replacing it with two per-project variables reintroduces the
 failure mode for no benefit.
 
-**2. Rotation invalidates every outstanding link.** Changing the secret breaks every
-download and gift-card link already in a customer's inbox, permanently — they were signed
-with the old key and there is no grace window or key-ring. Rotate only with a deliberate
-plan to re-issue, and never as a routine hygiene step.
+**2. Rotation invalidates every outstanding token.** Changing the secret breaks every
+download link already in a customer's inbox (90-day TTL) and **every supplier token ever
+issued** (no expiry), permanently — they were signed with the old key and there is no grace
+window or key-ring. Rotate only with a deliberate plan to re-issue, and never as a routine
+hygiene step. The full ordered procedure, including why the cost of this rotation only ever
+goes up, is in [`SECRET_ROTATION.md`](./SECRET_ROTATION.md).
 
 ## Current state — check before you change anything
 

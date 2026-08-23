@@ -31,7 +31,7 @@
 //
 // ## IT NEVER READS A VALUE, AND THAT IS NOT A LIMITATION
 //
-// This script asks the Vercel API for env var METADATA only. It never passes
+// This script decides everything from env var METADATA. It never passes
 // `decrypt=true`, never runs `vercel env pull`, never writes a value to disk
 // and never prints one. It does not need to, because sameness is decidable
 // from the record shape alone:
@@ -46,7 +46,13 @@
 // The AGL-2403 audit established the same fact by pulling every value and
 // comparing salted hashes. That worked, but it put ten production secrets in a
 // file on a laptop to prove they should not be on a laptop. This asks the
-// question the other way round and never touches the plaintext.
+// question the other way round.
+//
+// ⚠️ The API hands back plaintext whether you want it or not — `decrypt=false`
+// does NOT suppress the `value` field (measured 2026-08-23: 106 of console's
+// 122 records carry one). The guarantee is therefore enforced in code, by
+// `metadataOnly()` below, which drops every field but four the moment a
+// response arrives. Read that comment before changing how records are read.
 //
 // The inverse — a record that spans only `production` — proves nothing about
 // the OTHER environments (they may have their own record, or none). That is
@@ -205,25 +211,33 @@ const KNOWN_ISSUE = {
   // sharing it with preview makes every other split on this list revocable by
   // whoever holds the preview build.
   VERCEL_TOKEN: 'AGL-2403',
+  // Found 2026-08-23 by the first wired run, and UNTRACKED until then — which
+  // is the point of leaving new findings unlabelled rather than defaulting
+  // them to the nearest issue. Grants issue read/write on the Aglyn Linear
+  // workspace, i.e. the planning record this whole launch runs on.
+  LINEAR_API_KEY: 'AGL-2403',
 }
 
 const args = process.argv.slice(2)
 const JSON_OUT = args.includes('--json')
 const WITH_DEPLOYMENT = args.includes('--deployment')
+const SELF_TEST = args.includes('--self-test')
 
 if (args.includes('--help') || args.includes('-h')) {
   process.stdout.write(
-    'Usage: node tools/deploy/verify-env-isolation.mjs [--deployment] [--json]\n\n' +
+    'Usage: node tools/deploy/verify-env-isolation.mjs [--deployment] [--json] [--self-test]\n\n' +
       '  --deployment  also diff the env KEY list of the newest production\n' +
       '                deployment against the one before it, which is how you\n' +
       '                prove a dashboard change reached the running build.\n' +
-      '  --json        machine-readable output on stdout.\n\n' +
+      '  --json        machine-readable output on stdout.\n' +
+      '  --self-test   drive the verdict over doctored records; no network, no\n' +
+      '                token. Proves the guard can still go RED.\n\n' +
       'Reads Vercel env METADATA only. Never decrypts, never prints a value.\n',
   )
   process.exit(0)
 }
 
-const unknownArgs = args.filter((a) => !['--deployment', '--json'].includes(a))
+const unknownArgs = args.filter((a) => !['--deployment', '--json', '--self-test'].includes(a))
 if (unknownArgs.length) {
   process.stderr.write(`Unknown argument(s): ${unknownArgs.join(', ')}\n`)
   process.exit(2)
@@ -243,6 +257,11 @@ class Fatal extends Error {}
  */
 function readVercelToken() {
   if (process.env.VERCEL_TOKEN) return process.env.VERCEL_TOKEN.trim()
+  // In CI the repo secret is the ONLY acceptable credential. Without this,
+  // a runner image that happened to carry a developer's `vercel login` would
+  // let the job pass on a credential nobody configured — the same shape as
+  // `check-firewall-posture.mjs`, which disables its fallback the same way.
+  if (process.env.CI) return null
   const candidates = [
     join(homedir(), 'Library', 'Application Support', 'com.vercel.cli', 'auth.json'),
     join(homedir(), '.local', 'share', 'com.vercel.cli', 'auth.json'),
@@ -274,6 +293,23 @@ async function api(token, path) {
   return res.json()
 }
 
+/**
+ * ⚠️ `decrypt=false` DOES NOT SUPPRESS THE VALUE. Measured 2026-08-23 against
+ * aglyn-console: `/v9/projects/{id}/env?decrypt=false` and the v10 form with
+ * no flag at all both return 122 records of which **106 carry a readable
+ * plaintext `value`**. The flag governs an explicit decrypt request, not
+ * whether the field comes back.
+ *
+ * So the "reads metadata only" guarantee cannot rest on a query parameter. It
+ * rests on this function: every record is projected down to the four fields
+ * the verdict needs the instant it arrives, and the response object is
+ * dropped. Nothing downstream — no formatter, no `--json` dump, no future
+ * debug line added by someone who did not read this comment — can reach a
+ * value, because by then there is none to reach.
+ */
+const metadataOnly = (records) =>
+  (records ?? []).map(({ key, target, type, projectId }) => ({ key, target, type, projectId }))
+
 /** Team-shared records. Invisible to `vercel env ls`; see the header. */
 async function sharedRecords(token) {
   const out = []
@@ -281,7 +317,7 @@ async function sharedRecords(token) {
   for (let page = 0; page < 20; page += 1) {
     const suffix = until ? `&until=${encodeURIComponent(until)}` : ''
     const body = await api(token, `/v2/env?teamId=${TEAM_SCOPE}&limit=100${suffix}`)
-    out.push(...(body?.data ?? []))
+    out.push(...metadataOnly(body?.data))
     until = body?.pagination?.next ?? null
     if (!until) return out
   }
@@ -290,7 +326,7 @@ async function sharedRecords(token) {
 
 async function projectRecords(token, project) {
   const body = await api(token, `/v9/projects/${project.id}/env?teamId=${TEAM_SCOPE}&decrypt=false`)
-  return body?.envs ?? []
+  return metadataOnly(body?.envs)
 }
 
 /**
@@ -386,22 +422,24 @@ async function deploymentKeyDiff(token, project) {
   }
 }
 
-async function main() {
-  assertEveryAllowanceHasAReason()
-
-  const token = readVercelToken()
-  if (!token) {
-    throw new Fatal('no Vercel token — set VERCEL_TOKEN or log in with `vercel login`')
-  }
-
-  note('Reading team-shared environment variables (invisible to `vercel env ls`)…')
-  const shared = await sharedRecords(token)
+/**
+ * The whole verdict, over records already read. Pure: no network, no clock, no
+ * filesystem — so `--self-test` can drive every branch, including the ones
+ * that only occur once the remediation has been done and there is nothing left
+ * to find.
+ *
+ * @param {object} args
+ * @param {Array<object>} args.shared  team-shared records
+ * @param {Array<{project: {label: string, id: string, name: string}, records: Array<object>}>} args.byProject
+ * @returns {{findings: Array<object>, controls: Array<object>}}
+ * @throws {Fatal} when a negative control fails — never a quiet pass.
+ */
+function evaluateRecords({ shared, byProject }) {
   if (!shared.length) {
     throw new Fatal(
       'the team-shared scope returned zero records — that is the false negative this check exists to avoid, not a clean result',
     )
   }
-  note(`  ${shared.length} shared records`)
 
   const findings = []
   const controls = []
@@ -422,9 +460,7 @@ async function main() {
     })
   }
 
-  for (const project of PROJECTS) {
-    note(`Reading project-scope environment variables for ${project.name}…`)
-    const records = await projectRecords(token, project)
+  for (const { project, records } of byProject) {
     const splits = splitKeys(records)
     controls.push({ project: project.label, records: records.length, splitKeys: splits })
     if (!splits.length) {
@@ -432,7 +468,6 @@ async function main() {
         `${project.name}: no key is split into per-environment records, so "one record spans three environments" proves nothing here — the check cannot fail and must not report clean`,
       )
     }
-    note(`  ${records.length} records; negative control OK (${splits.length} per-env split key(s))`)
     for (const record of records) {
       const also = spansProduction(record)
       if (!also || isAllowed(record.key)) continue
@@ -446,6 +481,33 @@ async function main() {
     }
   }
 
+  findings.sort((a, b) => a.key.localeCompare(b.key) || a.scope.localeCompare(b.scope))
+  return { findings, controls }
+}
+
+async function main() {
+  assertEveryAllowanceHasAReason()
+
+  const token = readVercelToken()
+  if (!token) {
+    throw new Fatal('no Vercel token — set VERCEL_TOKEN or log in with `vercel login`')
+  }
+
+  note('Reading team-shared environment variables (invisible to `vercel env ls`)…')
+  const shared = await sharedRecords(token)
+  note(`  ${shared.length} shared records`)
+
+  const byProject = []
+  for (const project of PROJECTS) {
+    note(`Reading project-scope environment variables for ${project.name}…`)
+    byProject.push({ project, records: await projectRecords(token, project) })
+  }
+
+  const { findings, controls } = evaluateRecords({ shared, byProject })
+  for (const control of controls) {
+    note(`  ${control.project}: ${control.records} records; negative control OK (${control.splitKeys.length} per-env split key(s))`)
+  }
+
   let deployments = null
   if (WITH_DEPLOYMENT) {
     deployments = []
@@ -455,7 +517,6 @@ async function main() {
     }
   }
 
-  findings.sort((a, b) => a.key.localeCompare(b.key) || a.scope.localeCompare(b.scope))
   // Waived sharing is REPORTED, never silent. An accepted decision that stops
   // being visible is indistinguishable from one nobody ever made.
   const accepted = Object.entries(ACCEPTED).map(([key, d]) => ({ key, ...d }))
@@ -517,6 +578,144 @@ async function main() {
   }
 
   process.exit(findings.length ? 1 : 0)
+}
+
+/**
+ * The guard, guarded. Every case here is a state the LIVE data does not
+ * currently contain, so a run against Vercel exercises none of them:
+ *
+ *   * today every finding is red, so "goes GREEN once the split is done" is
+ *     untested by the live read — and a checker that cannot go green is a
+ *     checker nobody will finish the work for;
+ *   * the negative controls are green today, so nothing proves they still
+ *     abort;
+ *   * a NEW shared credential — the drift this exists to catch on the day it
+ *     returns — does not exist yet by definition.
+ *
+ * Pure records, no network, no token. Runs in CI on a day the token is
+ * missing, deliberately: gating it behind a credential it does not use would
+ * recreate the "a guard that never runs" problem it was written for.
+ */
+function selfTest() {
+  const CONSOLE = PROJECTS[0]
+  const TENANT = PROJECTS[1]
+  const failures = []
+  const check = (name, condition) => {
+    process.stdout.write(`${condition ? 'ok  ' : 'FAIL'} ${name}\n`)
+    if (!condition) failures.push(name)
+  }
+  const record = (key, target, extra = {}) => ({ key, target, type: 'encrypted', ...extra })
+  // A project whose keys are never split would abort control 1, so every
+  // fixture project carries one genuine per-environment split.
+  const split = [record('SPLIT_ME', ['development']), record('SPLIT_ME', ['production'])]
+  const evaluate = (shared, consoleRecords = [], tenantRecords = []) =>
+    evaluateRecords({
+      shared,
+      byProject: [
+        { project: CONSOLE, records: [...split, ...consoleRecords] },
+        { project: TENANT, records: [...split, ...tenantRecords] },
+      ],
+    })
+  const throws = (fn) => {
+    try {
+      fn()
+      return false
+    } catch (error) {
+      return error instanceof Fatal
+    }
+  }
+
+  // 1. THE GREEN. Production on its own record, dev/preview on another — the
+  //    shape the runbook asks for. If this cannot pass, the work can never be
+  //    reported done.
+  const green = evaluate([record('CRON_SECRET', ['production']), record('CRON_SECRET', ['development', 'preview'])])
+  check('a split credential is CLEAN', green.findings.length === 0)
+
+  // 2. THE RED it exists for: one record spanning production and development.
+  const red = evaluate([record('CRON_SECRET', ['development', 'preview', 'production'])])
+  check('a spanning credential is a FINDING', red.findings.length === 1)
+  check('the finding names both non-production environments', red.findings[0]?.sharedWith.join() === 'development,preview')
+
+  // 3. preview-only is still a finding — narrower, not acceptable.
+  check('preview-only sharing still fails', evaluate([record('X_SECRET', ['preview', 'production'])]).findings.length === 1)
+
+  // 4. Non-production-only records are NOT findings. A throwaway dev value is
+  //    the remedy, so flagging it would punish the fix.
+  check('a development-only record is clean', evaluate([record('X_SECRET', ['development', 'preview'])]).findings.length === 0)
+
+  // 5. A NEW credential is reported UNTRACKED, not silently folded into the
+  //    nearest issue. This is the drift-returns case.
+  const untracked = evaluate([record('BRAND_NEW_API_KEY', ['development', 'production'])])
+  check('an unknown key reports issue: null (UNTRACKED)', untracked.findings[0]?.issue === null)
+  check('a known key carries its issue id', red.findings[0]?.issue === 'AGL-2403')
+
+  // 6. ALLOW_SHARED and the NEXT_PUBLIC_ class are honoured…
+  check('an allowed key is not a finding', evaluate([record('FIREBASE_TOKEN_URI', ['development', 'production'])]).findings.length === 0)
+  check('NEXT_PUBLIC_* is not a finding', evaluate([record('NEXT_PUBLIC_ANYTHING', ['development', 'production'])]).findings.length === 0)
+  // …and the credential half of the same service account is NOT allowed. The
+  // AGL-2403 audit missed FIREBASE_PRIVATE_KEY; this pins that it cannot be
+  // waved through by the siblings around it.
+  check(
+    'FIREBASE_PRIVATE_KEY is NOT excused by its siblings',
+    evaluate([record('FIREBASE_TOKEN_URI', ['production'])], [record('FIREBASE_PRIVATE_KEY', ['development', 'production'])])
+      .findings.length === 1,
+  )
+
+  // 7. A shared record linked to no project is still reported, and says so.
+  //    Rotating one of these changes no deployment — RESEND_API_KEY is in
+  //    exactly this state today.
+  const inert = evaluate([record('RESEND_API_KEY', ['development', 'production'], { projectId: [] })])
+  check('an unlinked shared record is still a finding', inert.findings.length === 1)
+  check('…and is labelled inert', /inert/.test(inert.findings[0]?.projects.join() ?? ''))
+  check(
+    'a linked shared record names its projects',
+    evaluate([record('CRON_SECRET', ['development', 'production'], { projectId: [CONSOLE.id, TENANT.id] })]).findings[0]
+      ?.projects.join() === 'console,tenant',
+  )
+
+  // 8. Both negative controls abort rather than reporting clean.
+  check('an empty shared scope aborts', throws(() => evaluate([])))
+  check(
+    'a project with no per-environment split aborts',
+    throws(() =>
+      evaluateRecords({
+        shared: [record('ANY', ['production'])],
+        byProject: [{ project: CONSOLE, records: [record('ONLY_ONE', ['development', 'preview', 'production'])] }],
+      }),
+    ),
+  )
+
+  // 9. The policy tables must be self-consistent — an excuse with no reason
+  //    written, or an acceptance with no name on it, aborts at startup.
+  check('every ALLOW_SHARED entry has a reason', !throws(() => assertEveryAllowanceHasAReason()))
+
+  // 10. The plaintext the API volunteers is dropped on arrival. `decrypt=false`
+  //     does not suppress it, so this projection is the ONLY thing standing
+  //     between a live response and a value reaching a formatter or a log.
+  const projected = metadataOnly([
+    { key: 'K', target: ['production'], type: 'encrypted', projectId: ['p'], value: 'PLAINTEXT', decrypted: true, id: 'env_1' },
+  ])
+  check('metadataOnly drops the value field', !Object.hasOwn(projected[0], 'value'))
+  check(
+    'metadataOnly keeps only the four verdict fields',
+    Object.keys(projected[0]).sort().join() === 'key,projectId,target,type',
+  )
+  check(
+    'no serialization of a projected record can contain the plaintext',
+    !JSON.stringify(projected).includes('PLAINTEXT'),
+  )
+
+  process.stdout.write(`\n${failures.length ? `${failures.length} FAILED` : 'all self-test cases pass'}\n`)
+  process.exit(failures.length ? 1 : 0)
+}
+
+if (SELF_TEST) {
+  try {
+    selfTest()
+  } catch (error) {
+    process.stderr.write(`verify-env-isolation --self-test: ${error?.stack ?? error}\n`)
+    process.exit(2)
+  }
 }
 
 main().catch((error) => {
