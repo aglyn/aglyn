@@ -498,11 +498,6 @@ export const DOCS_HELP_TOPICS = {
     title: 'Responsive styling & custom CSS',
     excerpt: 'Style per breakpoint from the artboard preview, use the box stylers, custom classes, and the CSS builder.',
   },
-  revenue: {
-    path: '/staff-console/revenue',
-    title: 'Revenue',
-    excerpt: 'What Aglyn earned — contracted plan value and settled Stripe cash side by side, the gap between them broken into named causes, and every deduction between gross and net.',
-  },
   runAnAgencyWorkspace: {
     path: '/guides/run-an-agency-workspace',
     title: 'Run an agency workspace',
@@ -741,7 +736,6 @@ export const DOCS_HELP_ANCHORS = {
   relations: ['#reference-fields', '#many-to-many', '#using-relations', '#tips', '#related'],
   reportAnIssue: ['#what-to-write', '#length-caps', '#what-gets-attached-for-you', '#being-contacted', '#where-it-goes', '#when-it-does-not-send', '#rate-limits', '#verified-email', '#something-went-wrong-on-our-side', '#related'],
   responsiveStyling: ['#style-per-breakpoint', '#box-stylers', '#style-groups', '#gradient-backgrounds', '#visibility-per-device-band', '#scheme-scoped-colors', '#custom-classes', '#custom-css-sx', '#semantic-sections--theme-mode', '#edit-json-for-one-element'],
-  revenue: ['#the-two-bases', '#how-each-org-is-treated', '#the-gap', '#where-the-money-came-from', '#gross-versus-net', '#three-costs-the-page-flags-but-does-not-net-out', '#rows-that-need-attention', '#related'],
   runAnAgencyWorkspace: ['#the-model', '#step-1-plan', '#step-2-templates', '#step-3-access', '#step-4-domains', '#step-5-backups', '#step-6-billing', '#step-7-automate', '#checklist', '#related'],
   salesTaxReturn: ['#choosing-the-period', '#rows-that-need-attention', '#the-figures', '#refunds', '#all-jurisdictions', '#exporting-the-working-papers', '#related'],
   sandboxSecurity: ['#a-separate-origin', '#per-manifest-network-policy', '#when-you-cant-declare-the-origin', '#pinned-immutable-artifacts', '#what-this-means-when-you-build', '#related'],
