@@ -19,7 +19,9 @@ import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  getOrgDoc,
   isImpersonationSession,
+  lockdownRefusal,
 } from '@aglyn/tenant-data-admin'
 import { summarizeOrgPresence } from '../../_lib/presence-summary'
 
@@ -115,6 +117,33 @@ async function handler(request: Request): Promise<Response> {
         { status: 403 },
       )
     }
+
+    // Lockdown verdict (AGL-1506), the same wiring `/api/presence/token`
+    // carries and for the same reason: this route answers the identical
+    // question in bulk, so a locked org that mints no presence token must
+    // not have its rooms readable through the list decoration instead. The
+    // two must refuse together or the summary is a way around the token.
+    //
+    // Costs no extra read on the happy path — the host doc and the member
+    // doc are both already in hand, and the org doc is fetched only when the
+    // member doc's `orgSuspended` projection trips. Staff bypass is the
+    // un-panic invariant.
+    const locked = await lockdownRefusal({
+      request,
+      // POST-shaped READ (AGL-1511), exactly as the token route classifies
+      // itself: this only reveals who is already in a document, it races no
+      // Firestore migration, and refusing it would break the read view of
+      // every list and detail page it decorates.
+      intent: 'read',
+      staff: decoded['staff'] === true,
+      uid: decoded.uid,
+      org:
+        membership.get('orgSuspended') === true
+          ? ((await getOrgDoc(orgId)) ?? {})
+          : undefined,
+      host: host.data(),
+    })
+    if (locked) return locked
 
     const tree = (
       await firebaseAdmin.database().ref(`presence/${orgId}`).get()

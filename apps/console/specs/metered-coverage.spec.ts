@@ -55,8 +55,32 @@ const API_ROOT = join(CONSOLE_ROOT, 'app', 'api')
 const MUTATES_SUBSCRIPTION: RegExp[] = [
   // A subscription-mode Checkout session.
   /mode:\s*'subscription'/,
-  // POST /v1/subscriptions — create, or update by id.
-  /['"`]subscriptions(\/\$\{|['"`])/,
+  // POST /v1/subscriptions — update by id, as a path template.
+  /['"`]subscriptions\/\$\{/,
+  /**
+   * POST /v1/subscriptions — the bare CREATE, whose endpoint is a plain
+   * string (`stripe(secretKey, 'subscriptions', {...})` in
+   * `admin/enterprise-billing`). Anchored on ARGUMENT POSITION — an opening
+   * paren or a comma before the literal — rather than on the word alone.
+   *
+   * The unanchored form matched any occurrence of the string `'subscriptions'`
+   * anywhere in a file, which is not a Stripe call and on `admin/revenue`
+   * was not even close to one: its only match was a display label,
+   * `revenueInPeriod.truncated ? 'subscriptions' : null`, in the list of
+   * source names a truncated sweep reports. That route reads Firestore
+   * mirrors and calls Stripe ZERO times — by design, because this repo runs
+   * the LIVE secret key on localhost — so the guard was flagging a route
+   * that has no subscription to meter.
+   *
+   * Tightened rather than exempted on purpose. EXEMPT means "this path
+   * mutates a subscription and is metered elsewhere or deliberately not",
+   * which would be a false statement about a read-only report — and it
+   * would switch the guard OFF for that file permanently, hiding a real
+   * Stripe write if one were ever added there. Argument position keeps
+   * `admin/revenue` under surveillance while no longer reading prose as a
+   * subscription create.
+   */
+  /[(,]\s*['"`]subscriptions['"`]/,
   /stripe\.com\/v1\/subscriptions/,
   // POST /v1/subscription_items — adding or re-pricing one item.
   /stripe\.com\/v1\/subscription_items/,

@@ -83,12 +83,35 @@ describe('the org a report claims (AGL-2486)', () => {
       '../components/report-issue-dialog.component'
     )
     render(<ReportIssueDialog open onClose={jest.fn()} />)
+    // EVERY required field of the default `bug` kind, read from the schema
+    // rather than guessed: `submit()` opens with `if (!ready || busy) return`,
+    // and `ready` needs the summary AND all four of `REPORT_FIELDS.bug`
+    // (steps, expected, actual, frequency — all `required: true`). Filling
+    // two of them left the button inert, so `fetch` was never called and
+    // both cases failed on the setup rather than on the org claim they are
+    // here to check. A future required field must be added here too — the
+    // symptom is this same silent no-op, not a missing-field error.
     fireEvent.change(screen.getByLabelText(/summary/i), {
       target: { value: 'a summary' },
     })
-    fireEvent.change(screen.getByLabelText(/what happened/i), {
+    fireEvent.change(screen.getByLabelText(/what were you doing/i), {
+      target: { value: '1. opened the page' },
+    })
+    fireEvent.change(screen.getByLabelText(/what did you expect/i), {
+      target: { value: 'it would work' },
+    })
+    fireEvent.change(screen.getByLabelText(/what happened instead/i), {
       target: { value: 'a description' },
     })
+    // `frequency` is a `<TextField select>` — a MUI Select, whose labelled
+    // element is the combobox, not an input with a value setter. So it is
+    // OPENED and an option is CLICKED, the way a reporter answers it. A
+    // `fireEvent.change` here does not fail loudly enough to be safe: it
+    // throws "does not have a value setter" only because MUI renders no
+    // settable node, and a component that swapped to radios would make the
+    // same call silently set nothing.
+    fireEvent.mouseDown(screen.getByLabelText(/happen every time/i))
+    fireEvent.click(screen.getByRole('option', { name: /every time i try/i }))
     fireEvent.click(screen.getByRole('button', { name: /send report/i }))
     await waitFor(() => expect(global.fetch).toHaveBeenCalled())
   }

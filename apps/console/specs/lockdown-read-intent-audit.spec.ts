@@ -168,6 +168,20 @@ const AUDITED_READS: Record<string, number> = {
   'apps/console/app/api/auth/session/route.ts': 2,
   // Presence lives in RTDB and races no Firestore migration.
   'apps/console/app/api/presence/token/route.ts': 1,
+  // AGL-2486: the bulk form of the line above, for list rows and detail
+  // pages. Audited end to end, which is the whole obligation here: below
+  // the verdict this route does exactly one thing — a single RTDB
+  // `ref('presence/{orgId}').get()` — and hands the tree to
+  // `summarizeOrgPresence`, a pure function that BUILDS each person from
+  // named fields. No Firestore write, no RTDB write, no Storage object, no
+  // timestamp. It is POST-shaped only because it takes a `hostId` in a
+  // body, the same reason `hosts/where-used` is on this list.
+  //
+  // Declared a read for the same reason the token route is, and it must
+  // stay matched to it: the two answer the same question at different
+  // widths, so if one is refused under a read-only lock and the other is
+  // not, the summary becomes a way around the token.
+  'apps/console/app/api/presence/summary/route.ts': 1,
   // "What would this plugin change" — a projection, not a change.
   'apps/console/app/api/hosts/plugin-impact/route.ts': 1,
   // A usage query whose arguments happen to be a body.

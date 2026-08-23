@@ -68,14 +68,38 @@ const mockScreenDoc = {
   fromCache: false,
 }
 
-jest.mock('@aglyn/tenant-feature-instance', () => ({
-  useFirestore: () => ({}),
-  useUser: () => ({ data: { uid: 'uid-owner', getIdToken: jest.fn() } }),
-  // The REAL guard, not a stub. A stub would let the write through whatever
-  // the page passed it, which is the one thing this spec disproves.
-  writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
-    .writeGuardedBySeed,
-}))
+/**
+ * A CLOSED WORLD: anything the tree reaches for and this object does not
+ * name is `undefined`, and calling it is a TypeError that fails every case
+ * in the file for a reason that has nothing to do with what it asserts.
+ * That is exactly how `useAuthPersistence` broke it — AGL-1379 sealed
+ * `setPersistence` onto the instance, `use-presence.ts` started reading the
+ * class through the hook, and `<DocumentPresenceLive>` renders inside
+ * `<ScreenDetails>`, so every render threw before a single seed was checked.
+ * Widen this list when the tree grows a dependency; do not narrow the tree.
+ */
+jest.mock('@aglyn/tenant-feature-instance', () => {
+  /**
+   * The persistence class the provider's `Auth` was built with (AGL-1379).
+   *
+   * Built inside the factory so it is ONE object for the whole file: the
+   * real hook hands back a context value, and `use-presence` lists it in an
+   * effect dependency array — a fresh object per render would re-mint the
+   * presence session every pass, the exact loop the note above that
+   * dependency list exists to prevent. Its value is never asserted here;
+   * only its identity holding still is.
+   */
+  const authPersistence = { __stub: 'authPersistence' }
+  return {
+    useFirestore: () => ({}),
+    useUser: () => ({ data: { uid: 'uid-owner', getIdToken: jest.fn() } }),
+    useAuthPersistence: () => authPersistence,
+    // The REAL guard, not a stub. A stub would let the write through whatever
+    // the page passed it, which is the one thing this spec disproves.
+    writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
+      .writeGuardedBySeed,
+  }
+})
 
 jest.mock('firebase/firestore', () => ({
   ...jest.requireActual('firebase/firestore'),
