@@ -20,6 +20,50 @@ Anything on this page can be styled from the **Styles** panel, targeted by
 element-specific settings in the **Attributes** panel.
 :::
 
+## Finding the one you want {#finding-an-element}
+
+You do not have to recognise an element by name. Two places offer them — the
+**Elements** tab beside Hierarchy, and the **Choose element** dialog — and both
+search and describe them the same way.
+
+### Search {#element-search}
+
+Type in **Search elements** and the categories collapse into a single **Best matches**
+list. Searching looks at more than the name: an element's description, its category
+and its keywords all count, so *"space"* finds Stack and *"sign in"* finds the member
+elements even though neither says so in its title.
+
+Matches on the **name** always come first — an exact name, then a name starting with
+what you typed, then a name containing it — and only after those, elements matched on
+their description or keywords. So typing `grid` puts **Grid** at the top rather than
+burying it under everything whose description happens to mention a grid. Clearing the
+box brings the curated categories back.
+
+### What an element says about itself {#element-detail}
+
+Point at an element and a detail view explains it before you commit to it:
+
+- **A live preview** — the element genuinely rendered, with its preset content and
+  **your site's theme**, so the colours and type are the ones you will actually get.
+  It is a picture, not a playground: nothing in it is clickable.
+- **What it is for**, in a sentence — written per element rather than generated, so it
+  tells you when to reach for this one instead of the similar one next to it.
+- **What it will and won't do** — whether it holds other elements, which children it
+  accepts, whether it must sit inside something else, whether its text is edited on
+  the canvas, and which plugin provides it.
+- **Its attributes**, and a **Learn more** link into this page at the right category.
+
+Some elements have nothing to show on their own — a table row, a tab panel — and say
+so, naming the parent they belong inside rather than showing you an empty box.
+
+:::note A category you cannot see
+The element list only offers what this site can actually use. If a plugin is switched
+off for the site, its category is not shown — and searching will not bring it back,
+because the search runs over what is on offer. The **Members** elements are the common
+case: they appear once [User accounts](../../guides/member-accounts.md) are turned on
+for the site.
+:::
+
 ## Layout
 
 | Element | What it's for |

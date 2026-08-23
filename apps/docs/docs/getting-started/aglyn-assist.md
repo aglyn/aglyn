@@ -21,8 +21,9 @@ the exact docs section and the console page where you do it.
 
 - **Answer how-to questions** about building sites, publishing, domains,
   commerce, bookings, workflows, datasets, team roles, and billing.
-- **Link you to the source** — every answer cites the docs pages it drew from,
-  so you can read the full guide.
+- **Link you to the source** — under each written answer is a **Sources** list
+  naming the documentation sections it drew on, each one a link straight to
+  that section. See [Where an answer came from](#where-an-answer-came-from).
 - **Guide you on the page you're on** (Pro plans and up) — the assistant knows
   which console screen you're viewing and answers about *that* screen, rather
   than giving you a general answer you then have to translate.
@@ -63,6 +64,21 @@ This is deliberate. An assistant that could change your site by
 misunderstanding you would be a worse assistant, so it doesn't have that
 ability at all — not a setting that's switched off, but a capability it was
 never given.
+
+## Where an answer came from {#where-an-answer-came-from}
+
+Every answer the assistant writes is followed by a short **Sources** line —
+**Source** when there is only one — listing the documentation sections it drew
+on. Each entry names the page and the heading within it, and clicking one opens
+that exact section.
+
+This is there so you never have to take an answer on trust. If the reply is not
+quite what you needed, the source is usually the fastest next step: the page
+will have the surrounding detail that a short answer had to leave out.
+
+A link the assistant already put in the answer itself is not repeated in the
+list, so replies quoted straight from the documentation — which lead with the
+page name and link it — do not carry a duplicate.
 
 ## Answers straight from the documentation
 
