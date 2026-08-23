@@ -69,6 +69,15 @@ import {
 const UNSET = '__unset__'
 /** The sentinel that reveals the number + unit pair. */
 const CUSTOM = '__custom__'
+/**
+ * `auto`, which is its own select value AND the string that gets stored —
+ * unlike the two sentinels above, which stand for something else.
+ */
+const AUTO = 'auto'
+
+/** Whether the stored value is the `auto` keyword. */
+const isAutoValue = (value: BoxSpacingValue) =>
+  typeof value === 'string' && value.trim().toLowerCase() === AUTO
 
 export interface SpacingEditorProps {
   /** The side's stored value: a theme step, a CSS string, or nothing. */
@@ -77,6 +86,25 @@ export interface SpacingEditorProps {
   steps?: readonly SpacingScaleOption[]
   /** Accessible name for the pair, e.g. `Space inside — top`. */
   label: string
+  /**
+   * Whether `auto` belongs in the list for this side (Zach, 2026-08-23:
+   * "let's add the auto to this option list as well instead of only in
+   * the custom amount").
+   *
+   * It is a per-SIDE question, not a preference. `margin: auto` is the
+   * standard way to centre an element and the diagram already displays it
+   * on the left and right margins; `padding: auto` is not valid CSS, and
+   * the browser drops the declaration — so offering it on a padding side
+   * would be a menu entry that does nothing and reports nothing, which is
+   * worse than not offering it. The caller answers per side rather than
+   * this component guessing from `label`, which is display copy.
+   *
+   * `auto` reachable through Custom amount → the `auto` unit is what this
+   * replaces as the ONLY route; that route still exists and still works,
+   * and a padding side that somehow holds `auto` still shows it there
+   * rather than pretending the side is unset.
+   */
+  allowAuto?: boolean
   /**
    * Emits the value to STORE.
    *
@@ -88,14 +116,22 @@ export interface SpacingEditorProps {
 }
 
 export const SpacingEditor = (props: SpacingEditorProps) => {
-  const { value, steps, label, onChange } = props
+  const { value, steps, label, allowAuto, onChange } = props
   const ladder = steps ?? []
+
+  /**
+   * `auto`, when this side offers it, is a LIST answer rather than a
+   * custom amount — otherwise picking it from the list would immediately
+   * read back as "Custom amount…", since it is a string like any other.
+   */
+  const isAuto = Boolean(allowAuto) && isAutoValue(value)
 
   // A string value IS custom; the latch only adds the case where the
   // author asked for custom mode while the stored value is still a step.
   const [customLatch, setCustomLatch] = useState(false)
   const isCustom =
-    customLatch || (isSpacingSet(value) && !isThemeSpacingStep(value))
+    customLatch ||
+    (isSpacingSet(value) && !isThemeSpacingStep(value) && !isAuto)
 
   const parsed = useMemo(
     () => parseCssMeasurement(typeof value === 'string' ? value : undefined),
@@ -119,9 +155,11 @@ export const SpacingEditor = (props: SpacingEditorProps) => {
 
   const selectValue = isCustom
     ? CUSTOM
-    : isThemeSpacingStep(value)
-      ? `${value}`
-      : UNSET
+    : isAuto
+      ? AUTO
+      : isThemeSpacingStep(value)
+        ? `${value}`
+        : UNSET
 
   const handleSelect = useCallback(
     (next: string) => {
@@ -132,6 +170,14 @@ export const SpacingEditor = (props: SpacingEditorProps) => {
       setCustomLatch(false)
       if (next === UNSET) {
         onChange?.(undefined)
+        return
+      }
+      // `auto` is a KEYWORD, not an amount, and it has to be emitted as
+      // the string CSS expects. It also has to return HERE: `Number('auto')`
+      // is NaN, so the step branch below would emit `undefined` and
+      // silently clear the side the author had just set.
+      if (next === AUTO) {
+        onChange?.(AUTO)
         return
       }
       // The STEP, as a number — MUI multiplies it by `theme.spacing` at
@@ -225,6 +271,29 @@ export const SpacingEditor = (props: SpacingEditorProps) => {
             </Typography>
           </MenuItem>
         ))}
+        {/* Its own group, because `auto` is not a size — listing it among
+            the rungs would put "let the browser decide" in a ladder of
+            amounts. `Not set` (no property at all), `None` (0px) and
+            `Auto` are three different answers and the list has to keep
+            them apart. The gloss is the shared one the unit menu shows
+            for the same keyword, so the two cannot drift. */}
+        {allowAuto ? (
+          <ListSubheader sx={{ lineHeight: 2 }}>{'Automatic'}</ListSubheader>
+        ) : null}
+        {allowAuto ? (
+          <MenuItem value={AUTO}>
+            <Box component="span" sx={{ flex: 1 }}>
+              {'Auto'}
+            </Box>
+            <Typography
+              component="span"
+              variant="caption"
+              sx={{ color: 'text.secondary', ml: 1 }}
+            >
+              {UNIT_GLOSS[CssUnit.AUTO]}
+            </Typography>
+          </MenuItem>
+        ) : null}
         <ListSubheader sx={{ lineHeight: 2 }}>{'Exact amount'}</ListSubheader>
         <MenuItem value={CUSTOM}>{'Custom amount…'}</MenuItem>
       </Select>

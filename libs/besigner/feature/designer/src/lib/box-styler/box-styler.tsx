@@ -202,6 +202,12 @@ export const BoxStyler = forwardRef<any, BoxStylerProps>(
                 value={measurements?.[shown]}
                 steps={spacingSteps}
                 label={SIDE_LABELS[shown]}
+                // `auto` is offered on the MARGIN sides only. It is the
+                // standard way to centre an element and the diagram
+                // already draws it there — but `padding: auto` is not
+                // valid CSS, so on a padding side it would be a menu
+                // entry that silently does nothing.
+                allowAuto={shown.startsWith('margin')}
                 onChange={handleChange(shown)}
               />
             </Stack>

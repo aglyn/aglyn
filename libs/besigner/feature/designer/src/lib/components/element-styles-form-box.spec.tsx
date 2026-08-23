@@ -352,4 +352,163 @@ describe('the box styler in the styles panel (AGL-2486)', () => {
       ).toBe('2')
     })
   })
+
+  describe('the BORDER label chip (Zach, 2026-08-23)', () => {
+    /**
+     * The CSS emotion actually emitted for one selector, whitespace
+     * removed.
+     *
+     * Read from the emitted RULES rather than from `getComputedStyle`,
+     * because jsdom does not resolve `var(--mui-palette-*)` — a computed
+     * background would be empty whether the declaration is there or not,
+     * i.e. a check that could only ever pass. Emotion inserts through
+     * `sheet.insertRule` here, so the `<style>` tags carry no text and the
+     * rules have to come off `document.styleSheets`.
+     */
+    const cssFor = (selector: string) => {
+      const rules: string[] = []
+      for (const sheet of Array.from(document.styleSheets)) {
+        try {
+          for (const rule of Array.from(sheet.cssRules)) {
+            const text = `${(rule as CSSRule).cssText}`.replace(/\s+/g, '')
+            if (text.includes(`${selector}{`)) rules.push(text)
+          }
+        } catch {
+          // A sheet jsdom cannot read has nothing to contribute.
+        }
+      }
+      return rules.join(' | ')
+    }
+
+    it('sits on the same opaque chip as MARGIN and PADDING', async () => {
+      // Zach: "the border label on the box styler needs a background to
+      // make it more legible just like padding and margin labels". The
+      // chip painted the band's own stripes, and because `background` is
+      // a SHORTHAND that also reset the base chip's opaque paper ground —
+      // so the one label sitting on the figure's only patterned region
+      // was the one label without a ground of its own.
+      await renderPanel({})
+      const base = cssFor('.label')
+      expect(base).not.toBe('')
+      expect(base).toContain(
+        'background-color:var(--mui-palette-background-paper)',
+      )
+
+      const chip = cssFor('.label.border')
+      expect(chip).not.toBe('')
+      // No texture, and no `background` shorthand to wipe the ground out.
+      expect(chip).not.toContain('repeating-linear-gradient')
+      expect(chip).not.toMatch(/[;{]background:/)
+      // Still identifiably the border's: the band's own dashed info edge.
+      expect(chip).toContain('border-style:dashed')
+    })
+
+    it('sits TOP-LEFT, stepping inward with the other two', async () => {
+      // Superseding the earlier bottom-right placement, which existed
+      // only because the chip had to overlap two regions to be read. All
+      // three chips now take the same corner of their own band, so they
+      // step inward along the left edge as the regions nest.
+      await renderPanel({})
+      const chip = cssFor('.label.border')
+      // The base rule IS the placement; the chip releases none of it.
+      expect(cssFor('.label')).toContain('left:2px')
+      expect(cssFor('.label')).toContain('top:2px')
+      for (const escape of ['top:auto', 'left:auto', 'bottom:-1px', 'right:']) {
+        expect(chip).not.toContain(escape)
+      }
+    })
+
+    it('positions each chip against its OWN region, so the step is geometry', async () => {
+      // What makes three chips in the same corner read as nesting rather
+      // than as a stack: each is absolute inside a different offset
+      // parent, so the inward step falls out of the regions themselves.
+      await renderPanel({})
+      expect(
+        screen
+          .getByText('Border', { selector: '.label.border' })
+          .closest('.borderRing'),
+      ).toBeTruthy()
+      expect(
+        screen
+          .getByText('Padding', { selector: '.label.padding' })
+          .closest('.paddingContainer'),
+      ).toBeTruthy()
+      for (const selector of ['.borderRing', '.paddingContainer']) {
+        expect(cssFor(selector)).toContain('position:relative')
+      }
+    })
+  })
+
+  describe('auto is on the list, for margins only (Zach, 2026-08-23)', () => {
+    /** Open one side's select and read the options it offers. */
+    const optionsFor = async (side: string) => {
+      act(() => {
+        fireEvent.mouseDown(screen.getByLabelText(`${side} value`))
+      })
+      await act(async () => undefined)
+      return within(screen.getByRole('listbox'))
+    }
+
+    it('offers Auto on a margin side', async () => {
+      await renderPanel({})
+      await openSide('Space outside — left')
+      const options = await optionsFor('Space outside — left')
+      expect(options.getByText('Auto')).toBeTruthy()
+      // Its own group: `auto` is not a size, and listing it among the
+      // rungs would put "let the browser decide" in a ladder of amounts.
+      expect(options.getByText('Automatic')).toBeTruthy()
+      // and the three genuinely different answers stay distinguishable.
+      expect(options.getByText('Not set')).toBeTruthy()
+      expect(options.getByText('None')).toBeTruthy()
+    })
+
+    it('does NOT offer it on a padding side, where it is not valid CSS', async () => {
+      // `padding: auto` is dropped by the browser, so the entry would be
+      // a menu row that silently does nothing.
+      await renderPanel({})
+      await openSide('Space inside — top')
+      const options = await optionsFor('Space inside — top')
+      expect(options.queryByText('Auto')).toBeNull()
+      expect(options.queryByText('Automatic')).toBeNull()
+      // The list is otherwise the same one.
+      expect(options.getByText('Custom amount…')).toBeTruthy()
+    })
+
+    it('stores the auto KEYWORD rather than clearing the side', async () => {
+      // `Number('auto')` is NaN, and the step branch turns a non-finite
+      // number into `undefined` — so picking Auto without its own branch
+      // would silently REMOVE the property the author just set.
+      await renderPanel({})
+      await openSide('Space outside — left')
+      await pick('Space outside — left', 'Auto')
+      expect(live().sx).toEqual({ marginLeft: 'auto' })
+    })
+
+    it('reads back as Auto, not as a custom amount', async () => {
+      // A string value is a custom amount by default, so without the
+      // keyword case the list answer would round-trip into the other
+      // control the moment it was stored.
+      await renderPanel({ marginLeft: 'auto' })
+      await openSide('Space outside — left')
+      expect(
+        screen.getByLabelText('Space outside — left value').textContent,
+      ).toContain('Auto')
+      expect(screen.queryByLabelText('Space outside — left amount')).toBeNull()
+      // and the diagram, which already understood the value, shows it.
+      expect(
+        within(screen.getByLabelText('Space outside — left')).getByText('auto'),
+      ).toBeTruthy()
+    })
+
+    it('still shows an auto that somehow reached a PADDING side', async () => {
+      // Not offering it is not the same as hiding it: a padding side
+      // holding `auto` from a hand-written sx must not read as unset.
+      await renderPanel({ paddingLeft: 'auto' })
+      await openSide('Space inside — left')
+      expect(
+        (screen.getByLabelText('Space inside — left unit') as HTMLElement)
+          .textContent,
+      ).toContain('auto')
+    })
+  })
 })

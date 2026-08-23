@@ -60,11 +60,13 @@ export type { Measurements }
  *   reading as a gap between two better-resolved neighbours.
  * - `Contents` is 48% of the padding box rather than 33%, so it reads as
  *   the thing everything else surrounds instead of a label in a gap.
- * - The BORDER chip moved to the bottom RIGHT and overlaps its
- *   neighbours, which Zach asked for explicitly. That partly reverses the
- *   "every chip on its own region" fix; he chose legibility over the
- *   rule, so the chip keeps the band's own dashed info edge and texture
- *   to stay unambiguously the border's.
+ * - The BORDER chip sits TOP-LEFT, on the same opaque chip MARGIN and
+ *   PADDING use. It spent one round at the bottom right, overlapping its
+ *   neighbours, because that was the only way it read while the palette
+ *   was still unsettled; with the materials resolved all three chips take
+ *   the same corner of their own band, so they step inward along the left
+ *   edge as the regions nest. See `.label.border` below for why the
+ *   ground and the placement are one change rather than two.
  *
  * Every colour is a palette token or a channel form of one. Nothing is a
  * literal, so the console's class-based colour-scheme variables re-resolve
@@ -364,22 +366,43 @@ const StyledWrapper = styled('div')(({ theme }) => {
       '&.padding': { borderColor: fills.padding.borderColor },
 
       /**
-       * BORDER sits bottom-RIGHT and overlaps its neighbours, which Zach
-       * asked for directly. Overlapping is why it is legible — the band
-       * is 26px and the chip is taller than that — so it carries the
-       * band's own dashed info edge and hatch to stay unmistakably the
-       * border's rather than the margin's or the padding's.
+       * BORDER, on the same opaque chip as MARGIN and PADDING, in the
+       * same TOP-LEFT corner of its own band (Zach, 2026-08-23; top-left
+       * supersedes a top-right pass earlier the same day).
+       *
+       * Two asks that turn out to be one change. The chip painted
+       * `fills.border.background` — the band's own stripes — which is how
+       * it stayed identifiably the border's while it lay across two
+       * neighbouring regions at the bottom right. But `background` is a
+       * SHORTHAND, so it also reset the base chip's opaque
+       * `background.paper` ground: BORDER was the only one of the three
+       * labels reading off a 45° hatch, and since the border band is the
+       * figure's only patterned region, the label most in need of a
+       * ground was the one without one.
+       *
+       * Removing that single declaration restores the base treatment
+       * untouched — not a variant of the chip, the same chip. The dashed
+       * edge in the band's own info hue is what still says "border", and
+       * it is enough now that the chip no longer has to survive lying
+       * across two other materials.
+       *
+       * The ground is also what frees the placement: with one it no
+       * longer has to overlap to be read, so it takes its own band's
+       * top-left corner and the three chips step inward together as the
+       * regions nest — which is the pattern MARGIN and PADDING already
+       * set. Nothing about the position is declared here: the base rule's
+       * `left: 2, top: 2` is the placement, and each chip is positioned
+       * against its OWN region (`.borderRing` here, `.paddingContainer`
+       * for PADDING, the wrapper for MARGIN), so the inward step is the
+       * geometry rather than three hand-tuned offsets. It CLEARS the 26px
+       * band — 9px type at 1.5 plus two 1px edges is ~16px tall — checked
+       * at a 260px panel, not only at a comfortable width.
        */
       '&.border': {
-        top: 'auto',
-        left: 'auto',
-        bottom: -1,
-        right: -1,
         pointerEvents: 'auto',
         cursor: 'help',
         borderStyle: 'dashed',
         borderColor: fills.border.borderColor,
-        background: fills.border.background,
         color: tv.palette.text.primary,
       },
     },
