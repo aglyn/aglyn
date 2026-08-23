@@ -363,6 +363,8 @@ export const drawerSchema: Aglyn.ComponentSchema<DrawerElementProps> = {
   $id: DRAWER_ID,
   pluginId: BUNDLE_ID,
   displayName: 'Drawer',
+  description:
+    'A panel that slides in from an edge. Pair it with a Menu Button.',
   category: Aglyn.ComponentCategory.NAVIGATION,
   icon: { path: mdiDockLeft.path, sx: { color: '#2196f3' } },
   attributes: [
@@ -400,6 +402,7 @@ export const drawerToggleSchema: Aglyn.ComponentSchema<DrawerToggleProps> = {
   $id: DRAWER_TOGGLE_ID,
   pluginId: BUNDLE_ID,
   displayName: 'Menu Button',
+  description: "A hamburger button that opens the page's drawer.",
   category: Aglyn.ComponentCategory.NAVIGATION,
   icon: { path: mdiMenu.path, sx: { color: '#2196f3' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

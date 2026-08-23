@@ -143,6 +143,8 @@ export const schema: Aglyn.ComponentSchema<MemberFeedProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Member feed',
+  description:
+    'Updates only entitled members can see. Non-members never receive them.',
   category: Aglyn.ComponentCategory.COMMERCE,
   icon: { path: mdiBellRingOutline.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

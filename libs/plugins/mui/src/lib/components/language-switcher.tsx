@@ -129,6 +129,8 @@ export const schema: Aglyn.ComponentSchema<LanguageSwitcherProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Language Switcher',
+  description:
+    "Links between this screen's translations. It hides itself when there are none.",
   category: Aglyn.ComponentCategory.NAVIGATION,
   icon: {
     path: mdiTranslate.path,

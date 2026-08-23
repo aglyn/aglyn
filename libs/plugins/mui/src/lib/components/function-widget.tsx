@@ -129,6 +129,8 @@ export const schema: Aglyn.ComponentSchema<FunctionWidgetProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Function Widget',
+  description:
+    'Runs one of your no-code functions and shows the result — calculators, quotes.',
   category: Aglyn.ComponentCategory.INPUT,
   icon: { path: mdiFunctionVariant.path, sx: { color: '#7b1fa2' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

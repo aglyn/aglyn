@@ -32,6 +32,7 @@ export const schema: Aglyn.ComponentSchema<ListItemTextProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'List Item Text',
+  description: 'The primary and secondary text pair inside a list row.',
   category: Aglyn.ComponentCategory.DATA_DISPLAY,
   icon: { path: mdiFormatListChecks.path },
   // Text lives in `primary`/`secondary` (not `children`), so this component

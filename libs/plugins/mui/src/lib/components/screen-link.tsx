@@ -198,6 +198,7 @@ export const schema: Aglyn.ComponentSchema<ScreenLinkProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Screen Link',
+  description: 'Links to another screen by id, so it survives a slug change.',
   category: Aglyn.ComponentCategory.NAVIGATION,
   icon: {
     path: mdiLinkVariant.path,

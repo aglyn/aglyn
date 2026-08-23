@@ -69,6 +69,8 @@ export const schema: Aglyn.ComponentSchema<SearchBoxProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Search Box',
+  description:
+    "A search field that opens the site's search page. It works without JavaScript.",
   category: Aglyn.ComponentCategory.FORMS,
   icon: { path: mdiMagnify.path, sx: { color: '#455a64' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

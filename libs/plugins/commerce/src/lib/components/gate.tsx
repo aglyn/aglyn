@@ -151,6 +151,8 @@ export const schema: Aglyn.ComponentSchema<GateProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Members gate',
+  description:
+    'Shows its children only to entitled members. Everyone else sees the teaser.',
   category: Aglyn.ComponentCategory.COMMERCE,
   attributes: [
     {

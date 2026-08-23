@@ -132,6 +132,7 @@ export const schema: Aglyn.ComponentSchema<NewsletterSignupProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Newsletter signup',
+  description: 'A consented email capture that writes straight into contacts.',
   category: Aglyn.ComponentCategory.COMMERCE,
   icon: { path: mdiEmailOutline.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

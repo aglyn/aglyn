@@ -234,6 +234,8 @@ export const schema: Aglyn.ComponentSchema<EventListProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Event List',
+  description:
+    'Your published events, each marked up so search engines can show it.',
   category: Aglyn.ComponentCategory.DATA_DISPLAY,
   icon: {
     path: mdiCalendarStar.path,

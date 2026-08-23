@@ -732,6 +732,7 @@ export const schema: Aglyn.ComponentSchema<ProductDetailProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Product detail',
+  description: "One product's gallery, options and buy button.",
   category: Aglyn.ComponentCategory.COMMERCE,
   icon: { path: mdiTagOutline.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

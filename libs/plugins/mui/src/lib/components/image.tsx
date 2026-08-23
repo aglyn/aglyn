@@ -320,6 +320,8 @@ export const schema: Aglyn.ComponentSchema<ImageProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Image',
+  description:
+    'A picture from your media library or any URL, with fit, size and an optional link.',
   category: Aglyn.ComponentCategory.MEDIA,
   icon: {
     path: mdiImage.path,

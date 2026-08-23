@@ -447,6 +447,8 @@ export const schema: Aglyn.ComponentSchema<CustomerAccountProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Customer account',
+  description:
+    'Sign-in and account area — profile, addresses and order history.',
   category: Aglyn.ComponentCategory.COMMERCE,
   icon: { path: mdiAccountCircleOutline.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

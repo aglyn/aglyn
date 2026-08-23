@@ -57,6 +57,7 @@ export const schema: Aglyn.ComponentSchema<ContainerProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Container',
+  description: 'Centres your page content and caps how wide it gets.',
   category: Aglyn.ComponentCategory.LAYOUT,
   icon: {
     path: mdiViewArrayOutline.path,

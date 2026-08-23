@@ -135,6 +135,7 @@ export const schema: Aglyn.ComponentSchema<VideoProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Video',
+  description: 'Plays a video file from your media library or any URL.',
   category: Aglyn.ComponentCategory.MEDIA,
   icon: {
     path: mdiVideo.path,

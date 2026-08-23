@@ -399,6 +399,7 @@ export const navMenuSchema: Aglyn.ComponentSchema<NavMenuProps> = {
   $id: NAV_MENU_ID,
   pluginId: BUNDLE_ID,
   displayName: 'Dropdown Menu',
+  description: 'A nav item that opens a dropdown of links beneath it.',
   category: Aglyn.ComponentCategory.NAVIGATION,
   icon: { path: mdiFormDropdown.path, sx: { color: '#2196f3' } },
   // Open/close behavior deliberately has NO attribute (AGL-568): click
@@ -418,6 +419,8 @@ export const megaMenuSchema: Aglyn.ComponentSchema<MegaMenuProps> = {
   $id: MEGA_MENU_ID,
   pluginId: BUNDLE_ID,
   displayName: 'Mega Menu',
+  description:
+    'A nav item that opens a wide panel — columns of links, promos, whatever you build.',
   category: Aglyn.ComponentCategory.NAVIGATION,
   icon: { path: mdiViewGridOutline.path, sx: { color: '#2196f3' } },
   // Open/close behavior deliberately has NO attribute (AGL-568) — see

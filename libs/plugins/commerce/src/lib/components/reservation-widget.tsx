@@ -311,6 +311,8 @@ export const schema: Aglyn.ComponentSchema<ReservationWidgetProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Reservation widget',
+  description:
+    'A date-range booking with a live quote and a deposit taken up front.',
   category: Aglyn.ComponentCategory.COMMERCE,
   icon: { path: mdiCalendarCheckOutline.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

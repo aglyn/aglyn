@@ -52,6 +52,7 @@ export const schema: Aglyn.ComponentSchema<ToolbarProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Toolbar Content',
+  description: 'The content row inside an App Bar — brand, links, actions.',
   category: Aglyn.ComponentCategory.NAVIGATION,
   icon: {
     path: mdiBorderInside.path,

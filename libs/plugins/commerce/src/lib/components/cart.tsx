@@ -679,6 +679,8 @@ export const schema: Aglyn.ComponentSchema<CartProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Cart',
+  description:
+    'The shopping cart — a badge icon with a slide-out drawer, or the full cart page.',
   category: Aglyn.ComponentCategory.COMMERCE,
   icon: { path: mdiCartOutline.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

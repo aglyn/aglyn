@@ -160,6 +160,8 @@ export const schema: Aglyn.ComponentSchema<RelatedProductsProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Related products',
+  description:
+    'An upsell strip — your manual picks, or what people buy together.',
   category: Aglyn.ComponentCategory.COMMERCE,
   icon: { path: mdiShapePlus.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

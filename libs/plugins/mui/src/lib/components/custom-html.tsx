@@ -172,6 +172,8 @@ export const schema: Aglyn.ComponentSchema<CustomHtmlProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Custom HTML',
+  description:
+    'Your own markup, sanitised on render, or isolated in a sandboxed iframe.',
   category: Aglyn.ComponentCategory.DATA_DISPLAY,
   icon: { path: mdiCodeTags.path, sx: { color: '#7b1fa2' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

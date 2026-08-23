@@ -247,6 +247,7 @@ export const schema: Aglyn.ComponentSchema<WishlistProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Wishlist',
+  description: 'Products a visitor saved, linking back to their pages.',
   category: Aglyn.ComponentCategory.COMMERCE,
   icon: { path: mdiHeartOutline.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

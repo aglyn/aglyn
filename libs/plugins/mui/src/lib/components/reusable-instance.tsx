@@ -114,6 +114,8 @@ export const schema: Aglyn.ComponentSchema<ReusableInstanceProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Reusable Component',
+  description:
+    'Where a reusable component is placed. Edit the component once and every instance follows.',
   category: Aglyn.ComponentCategory.SURFACE,
   icon: {
     path: mdiPackageVariant.path,

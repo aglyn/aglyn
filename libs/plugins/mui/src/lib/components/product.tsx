@@ -160,6 +160,7 @@ export const schema: Aglyn.ComponentSchema<ProductProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Product',
+  description: 'A single product card with a buy button, priced on the server.',
   category: Aglyn.ComponentCategory.COMMERCE,
   icon: { path: mdiCartOutline.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

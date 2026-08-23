@@ -162,6 +162,7 @@ export const cardHeaderSchema: Aglyn.ComponentSchema<CardHeaderElementProps> = {
   $id: CARD_HEADER_ID,
   pluginId: BUNDLE_ID,
   displayName: 'Card Header',
+  description: 'The title and subheader at the top of a card.',
   category: Aglyn.ComponentCategory.SURFACE,
   icon: { path: mdiCardText.path, sx: { color: '#2196f3' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

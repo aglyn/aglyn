@@ -732,6 +732,8 @@ export const markdownSchema: Aglyn.ComponentSchema<MarkdownProps> = {
   $id: MARKDOWN_ID,
   pluginId: BUNDLE_ID,
   displayName: 'Markdown',
+  description:
+    'A whole document written as markdown. It takes no child elements.',
   category: Aglyn.ComponentCategory.TEXT,
   icon: { path: mdiLanguageMarkdown.path, sx: { color: '#455a64' } },
   flags: {
@@ -763,6 +765,8 @@ export const tableOfContentsSchema: Aglyn.ComponentSchema<TableOfContentsProps> 
     $id: TABLE_OF_CONTENTS_ID,
     pluginId: BUNDLE_ID,
     displayName: 'Table of Contents',
+    description:
+      "An on-this-page list linking to a Markdown element's headings.",
     category: Aglyn.ComponentCategory.NAVIGATION,
     icon: { path: mdiTableOfContents.path, sx: { color: '#455a64' } },
     flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
