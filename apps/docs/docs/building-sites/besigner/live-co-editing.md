@@ -24,30 +24,112 @@ this feature.
 ## Who's here
 
 When someone else has the document open, their **avatar** appears in the besigner
-toolbar (photo or initial, on their assigned color). Hovering says what to expect of
-working alongside them: *"«Name» has this open too. Edits merge live, element by
-element, and either of you can save at any time — if you both change the same
-element, the last change wins."*
+toolbar (photo or initial, on their assigned color, ringed in that same color).
+Hovering says what to expect of working alongside them: *"«Name» has this open too.
+Edits merge live, element by element, and either of you can save at any time — if you
+both change the same element, the last change wins."*
+
+Up to **six** avatars are shown side by side; beyond that the rest collapse into a
+`+N` disc that says how many more are here. When you are the only one in the
+document, the toolbar shows nothing at all rather than an empty slot.
 
 <!-- screenshot: besigner/presence-avatar-stack.png per SCREENSHOT_PLAN.md -->
 
 If **your own account** has the document open somewhere else — another tab, or your
-account signed in on another machine — that window gets its own avatar too, marked
-with a small badge so you can tell it is yours. It is treated as a separate session
-in every respect: edits merge between your windows the same way, and either window
-can save. The conflict guard has never keyed on *who* wrote, so two windows of one
-account are protected exactly as two people are.
+account signed in on another machine — that window gets its own avatar too, drawn
+with a **dashed ring and a small screen badge** so you can tell at a glance it is
+yours. It is treated as a separate session in every respect: edits merge between your
+windows the same way, and either window can save. The conflict guard has never keyed
+on *who* wrote, so two windows of one account are protected exactly as two people
+are. Your *current* window never draws an avatar for itself.
 
 On the canvas, each collaborator shows up as:
 
-- a **cursor** in their color with their name on a small pill, and
+- a **cursor** in their color, with their name on a small pill — shown while they are
+  moving around, and dropped once they have an element selected, where the selection
+  already carries their name;
 - a **selection outline** around the element they have selected, with their name in a
-  tab above it.
+  tab above it. Your own other tab is labelled **"You, in another tab"** rather than
+  by name, and its outline is dashed.
+
+A collaborator's cursor is only broadcast while their pointer is genuinely over the
+canvas, so someone typing in a side panel stops trailing a cursor across your screen.
 
 <!-- screenshot: besigner/remote-cursor-and-selection.png per SCREENSHOT_PLAN.md -->
 
-Everyone sees the same person in the same color, and the overlays never intercept
-your clicks.
+The overlays never intercept your clicks.
+
+### About the colors {#presence-colors}
+
+Colors are assigned **per session**, from a palette of six, and everyone in the room
+sees the same session in the same color — "the purple cursor" means the same window
+on everybody's screen. Two tabs of your own account therefore get two *different*
+colors, which is what makes them tellable apart.
+
+The palette holds six, so a room with more than six sessions in it starts reusing
+colors. A session can also change color if a colliding session leaves; a session that
+never collided keeps its color, including across reloads.
+
+## One version, one room {#per-version-rooms}
+
+Presence and live editing are scoped to **one version of one document** — not to the
+document as a whole.
+
+That matters in practice: if a teammate is editing **version 3** of a screen and you
+open **version 4**, you will not see each other. No avatar, no cursor, no selection
+box, and none of their typing arrives on your canvas.
+
+This is not a gap — it is the honest answer. Live edits flow through a shared working
+copy that is itself per version, so two people on different versions were never going
+to reach each other. Showing an avatar would promise a connection that does not
+exist. **If you mean to work together, make sure you are both on the same version.**
+
+Templates are the exception, because templates do not have versions: everyone editing
+one template shares a single room.
+
+## Who's in a document, before you open it {#presence-in-lists}
+
+You don't have to open a document to find out someone is already in it. Small avatars
+appear on the row itself in:
+
+- the **Screens** list,
+- the **Layouts** list,
+- the **Components** card,
+- the **Templates** card, and
+- the **Site emails** card.
+
+Up to three faces are shown per row, then `+N`. A row with nobody in it shows nothing,
+so a quiet list stays quiet.
+
+Two things are worth knowing about these row avatars, because they answer a slightly
+different question from the ones in the editor:
+
+- **They mean "in this document", not "in this version."** They are rolled up across
+  every version, so a face on the row may be someone editing a version other than the
+  one your **Open** button goes to. The tooltip says so.
+- **They refresh about every 30 seconds**, and only while the tab is in front — this
+  is a periodic check, not the live connection the editor has. Treat a row avatar as
+  "someone was here a moment ago", and the editor's toolbar as the live truth.
+
+One person shows as one face here however many tabs they have open, and you will see
+**yourself** on a row if you have that document open in another window.
+
+## Presence is not a lock {#not-a-lock}
+
+Seeing nobody does not reserve the document, and seeing somebody does not shut you
+out. Nothing is ever locked — anyone with edit access can open anything at any time.
+What actually protects your work is the save guard described in
+[When a save is refused](#when-a-save-is-refused), not the avatars.
+
+So an empty avatar row is a good sign, not a guarantee. If presence cannot reach the
+server the toolbar says so — an amber warning disc replaces the avatars, and clicking
+it explains what went wrong, what to do, and warns you explicitly that an empty stack
+is not proof you are alone.
+
+On a self-hosted Aglyn without a Realtime Database configured, presence and live
+co-editing are simply not available; the toolbar shows a neutral "not set up" badge
+rather than an error, and everything else on this page — the save guard and draft
+recovery — carries on working.
 
 ## Editing together
 
@@ -59,7 +141,14 @@ footer and you both keep your work. What lands in the document:
 - **The same element** — last write wins. Co-editing shares changes; it does not merge
   two versions of one element.
 - A teammate's changes **never enter your undo stack** — undo rewinds only your own
-  edits.
+  edits, including edits that came back to you from another of your own tabs.
+
+:::note One rough edge in undo
+If you try to undo a change to an element a teammate has since edited themselves,
+the undo will step back without visibly changing anything — Aglyn will not roll back
+their work on your behalf. Press undo again to keep going back through your own
+edits. This is uncommon, and only happens on an element two of you touched.
+:::
 
 Anyone with **edit access** to the site (a site admin or editor, or a workspace owner
 / admin / editor) can co-edit. Viewers see presence but their changes are refused at
