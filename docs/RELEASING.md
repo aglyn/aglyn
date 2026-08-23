@@ -293,10 +293,30 @@ and the wrong one for a release.
 
 ## `main` is gated continuously
 
-`.github/workflows/main-gate.yml` gates `main` on a timer — typecheck plus all
-55 guards every 15 minutes, and the full sweep including production builds
-hourly. Its verdict lands in a **single tracking issue**, opened on the first
-red and closed when `main` goes green again.
+`.github/workflows/main-gate.yml` gates `main` on a timer — typecheck plus every
+guard every 15 minutes, and the full sweep including production builds hourly.
+
+The verdict lands as a **commit status on the SHA that was gated**, so a red
+belongs to the commit that caused it and shows beside that commit in the branch
+and commit views. Two contexts, written independently:
+
+| context | claims |
+|---|---|
+| `main-gate/fast` | typecheck, `docs:typecheck` and every guard are clean |
+| `main-gate/full` | + the whole test sweep and all three production builds |
+
+They are separate so a fast green cannot overwrite a full red — different
+strengths of check must not share a slot. **A run that did not look writes
+nothing at all**: the fast job skips its steps when `main` has not moved, and a
+skipped GitHub Actions job reports `success`, so treating that as green would
+clear a red on a `main` nobody happens to be pushing to. The decision lives in
+`tools/scripts/gate-report.mjs` with a `--self-test`, because logic inline in a
+workflow can only be tested by running the workflow, so nobody tests it.
+
+It was written as a tracking issue first. That could not work — this repository
+has issues **and** discussions disabled, so every red would have died at
+`gh issue create`, and on the green path the step succeeded while doing nothing
+at all, which is how a dead sink stays invisible until the moment you need it.
 
 This exists because on 2026-08-22 a promotion gate came back red with four
 unrelated failures that had all been sitting on `main` for hours, turning a
