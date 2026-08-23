@@ -30,11 +30,17 @@ import {
   sendEmail,
   type LoadedHostEmail,
 } from '@aglyn/shared-util-email'
-import { type PluginApiHandler } from '@aglyn/aglyn/server'
+import {
+  type PluginApiHandler,
+  type PluginJobHostGate,
+  pluginJobHostGate,
+} from '@aglyn/aglyn/server'
 
 export interface RestockScanResult {
   scanned: number
   sent: number
+  /** Alerts left unstamped because their site is locked (AGL-2495). */
+  skippedLocked: number
 }
 
 /**
@@ -48,7 +54,10 @@ export interface RestockScanResult {
  *
  * Exported so `server.ts` can put it on the platform job beat.
  */
-export async function scanRestockAlerts(): Promise<RestockScanResult> {
+export async function scanRestockAlerts(
+  /** The lockdown gate, injected by the caller (AGL-2495). Not optional. */
+  gate: PluginJobHostGate,
+): Promise<RestockScanResult> {
   const firestore = firebaseAdmin.app().firestore()
   const alerts = await firestore
     .collectionGroup('restockAlerts')
@@ -62,9 +71,21 @@ export async function scanRestockAlerts(): Promise<RestockScanResult> {
   // White-label brand per host (White-Label Phase 3): resolved once per host
   // from the owning org doc through the one shared resolver.
   const brandingByHost = new Map<string, Aglyn.ResolvedBrandingProfile>()
+  let skippedLocked = 0
   for (const docSnapshot of alerts.docs) {
     const hostRef = docSnapshot.ref.parent.parent
     if (!hostRef) continue
+    // LOCKDOWN (AGL-2495), before anything in this body writes. The poisoned-
+    // row retirement below stamps `notifiedAtMs`, which is a write, and the
+    // email is a message sent in a suspended merchant's name — both wait.
+    //
+    // SKIPPED, NOT DROPPED: an alert that is not stamped is re-scanned on the
+    // next beat, which is exactly the behaviour the `notifiedAtMs == null`
+    // query already relies on.
+    if (await gate.isLocked(hostRef.id)) {
+      skippedLocked += 1
+      continue
+    }
     const data = docSnapshot.data() as any
     // AGL-1774: `productId` is a STORED FIELD written by an unauthenticated
     // POST (`notify-restock.ts`), and this line is where it becomes a path
@@ -144,7 +165,7 @@ export async function scanRestockAlerts(): Promise<RestockScanResult> {
       .catch(() => undefined)
     sent += 1
   }
-  return { scanned: alerts.size, sent }
+  return { scanned: alerts.size, sent, skippedLocked }
 }
 
 /**
@@ -163,7 +184,8 @@ export const processRestockHandler: PluginApiHandler = async (req, res) => {
     return res.status(501).json({ error: 'Email is not configured.' })
   }
   try {
-    return res.status(200).json(await scanRestockAlerts())
+    // The manual door asks the same question the beat does (AGL-2495).
+    return res.status(200).json(await scanRestockAlerts(pluginJobHostGate()))
   } catch (error) {
     console.error(error)
     return res.status(500).json({ error: 'Processing failed' })

@@ -24,6 +24,7 @@
 // `lockdown-tenant-api-coverage.spec.ts` is what holds that.
 
 import {
+  hasPluginJobHostLockdown,
   listPluginJobs,
   pluginJobKey,
   runPluginJobs,
@@ -39,6 +40,12 @@ import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
 // plugin manifest to load them, so the runner route is where they enter the
 // registry — `ensureAll` below only reaches plugin `/server` entries.
 import '../../../../utils/publish-schedule-job'
+// Imported for its registration side effect too (AGL-2495): it is what tells
+// core's job gate how to resolve a host's lockdown. Core cannot import the
+// admin lib (that edge is a cycle), so if this import goes, every job on the
+// beat silently runs UNGATED — which is why `hostLockdownWired` below is in
+// the response and asserted by `lockdown-tenant-api-coverage.spec.ts`.
+import '../../../../utils/plugin-job-lockdown'
 import {
   readPluginJobLastRuns,
   recordPluginJobRuns,
@@ -175,6 +182,13 @@ export async function POST(request: Request): Promise<Response> {
       // A held job records no last-run mark, so it becomes due the moment the
       // flag returns rather than waiting out an interval it spent refused.
       heldByReleaseFlag,
+      // Is the lockdown gate wired at all (AGL-2495)? A deployment whose app
+      // never registered a resolver runs every job ungated, and the only
+      // symptom is work happening on a locked site — invisible from here
+      // unless it is said out loud. Same instinct as `heldByReleaseFlag`
+      // above: report what the beat's guarantees actually are, rather than
+      // letting a 200 imply them.
+      hostLockdownWired: hasPluginJobHostLockdown(),
     },
     { status: 200 },
   )

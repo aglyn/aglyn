@@ -286,6 +286,12 @@ import {
   scanStockDecrements,
 } from './reconcile-stock'
 
+/**
+ * An UNLOCKED gate (AGL-2495) — this suite is about the reconciliation
+ * itself. The locked answer is asserted in `job-lockdown.spec.ts`.
+ */
+const OPEN_GATE = { isLocked: async () => false }
+
 const fetchMock = jest.fn(async (url: any) => {
   throw new Error(`Unexpected fetch to ${String(url)}`)
 })
@@ -746,7 +752,7 @@ describe('the platform beat', () => {
     killDecrementsAfterOrder = false
     settleOrders()
 
-    const scan = await scanStockDecrements({ nowMs: NOW })
+    const scan = await scanStockDecrements(OPEN_GATE, { nowMs: NOW })
 
     expect(scan.hosts).toBe(1)
     expect(scan.missingLines).toBe(1)

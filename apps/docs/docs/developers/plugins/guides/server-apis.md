@@ -59,7 +59,14 @@ registerPluginJob({
   pluginId: BUNDLE_ID,
   name: 'nightly-cleanup',
   intervalMinutes: 24 * 60,
-  handler: async () => { /* bounded, idempotent */ },
+  lockdown: { scope: 'per-host' },
+  handler: async (gate) => {
+    for (const row of await dueRows()) {
+      // Skip a locked site — and leave its row untouched.
+      if (await gate.isLocked(row.hostId)) continue
+      /* bounded, idempotent */
+    }
+  },
 })
 ```
 
@@ -68,6 +75,33 @@ The deployment's scheduler POSTs `/api/plugins/run-jobs` with the
 error-isolated, and last-run marks persist across cold starts. Keep
 handlers bounded (limits, no unbounded scans) — they share the API
 process.
+
+### Lockdown — `lockdown` is required
+
+A job runs on **platform credentials** with no visitor, no session and no
+org, so none of the gates that cover the request paths are anywhere near
+it. A site can be locked for maintenance, non-payment, abuse or a legal
+takedown, and a beat that kept emailing its customers or moving its stock
+would be acting for a site the platform has taken off the air.
+
+So every registration declares what it touches, and the runner injects the
+verdict:
+
+| `lockdown` | Means | The runner hands your handler |
+| -- | -- | -- |
+| `{ scope: 'per-host' }` | The job acts for sites. | A working gate — **ask it for every host you touch**. |
+| `{ scope: 'platform', reason: '…' }` | Nothing a lock could be about. | A gate that **throws** if asked, so a wrong declaration fails loudly. |
+
+Two rules the platform's own jobs follow, and yours should:
+
+- **Take the gate you are given.** Calling `pluginJobHostGate()` yourself
+  works at runtime but is refused by the coverage guard: a job free to mint
+  its own gate is free to declare `platform` and never meet the check that
+  the declaration is true. (The `x-cron-secret` doors that drive a pass by
+  hand are the exception — they have no runner to hand them one.)
+- **Skip, do not drop.** A lockdown is a pause, not a cancellation. Leave
+  the row exactly as it was — unstamped, undeleted, its retry count
+  untouched — so the work lands on the first beat after the lift.
 
 ## Troubleshooting
 

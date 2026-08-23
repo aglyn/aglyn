@@ -150,7 +150,8 @@ claim) is one this route can safely re-run.
 | `registerPluginConfigSchema(schema)` / `mergePluginConfig` / `validatePluginConfigValues` | Per-plugin settings: declared once, generic form + typed defaults-merged reads everywhere (AGL-428). |
 | `registerCustomFieldType(fieldType)` / `validateCustomFieldValue` | Dataset field types riding existing storage types (AGL-434). |
 | `registerPluginPermissions(list)` | Role-resolved permission keys with per-tier defaults (AGL-435). |
-| `registerPluginJob(job)` / `runPluginJobs(due?)` | Scheduled jobs run by the guarded `/api/plugins/run-jobs` route (AGL-435). |
+| `registerPluginJob(job)` / `runPluginJobs(due?)` | Scheduled jobs run by the guarded `/api/plugins/run-jobs` route (AGL-435). `job.lockdown` is required; the runner injects a `PluginJobHostGate` into every handler (AGL-2495). |
+| `registerPluginJobHostLockdown(fn)` / `pluginJobHostGate()` | How the HOST APP supplies the per-host lockdown verdict the job beat asks, and how a manual cron door mints the same gate (AGL-2495). |
 | `registerPluginInstallPresetMapper(fn)` | Maps marketplace install docs to besigner drawer presets. |
 
 ## Remote bundles — `realm-plugins` (isomorphic), `realm-server` (`/server`)

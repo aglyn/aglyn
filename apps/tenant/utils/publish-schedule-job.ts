@@ -66,6 +66,13 @@ registerPluginJob({
   // `now - lastRun >= intervalMinutes`, so 1 means "every beat".
   intervalMinutes: 1,
   description: 'Publish screens whose scheduled time has passed, and drop their cached pages.',
+  // AGL-2495. This beat predates the injected gate and keeps calling
+  // `getSiteLockdown` directly, which it may: it lives in `apps/tenant`, so
+  // the admin lib is an ordinary static import rather than something reached
+  // through a registry. Declaring the scope anyway is not decoration — it is
+  // what makes the contract uniform, so `runPluginJobs` and the coverage
+  // guard have one question to ask of every registration including this one.
+  lockdown: { scope: 'per-host' },
   handler: async () => {
     const firestore = firebaseAdmin.app().firestore()
 

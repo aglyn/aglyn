@@ -131,6 +131,7 @@ beforeEach(() => {
     pluginId: 'bookings',
     name: 'expire-stale-holds',
     intervalMinutes: 360,
+    lockdown: { scope: 'per-host' as const },
     handler: () => {
       mockRanHandlers.push('bookings:expire-stale-holds')
     },
@@ -139,6 +140,7 @@ beforeEach(() => {
     pluginId: 'core',
     name: 'apply-publish-schedules',
     intervalMinutes: 1,
+    lockdown: { scope: 'per-host' as const },
     handler: () => {
       mockRanHandlers.push('core:apply-publish-schedules')
     },

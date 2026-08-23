@@ -479,11 +479,42 @@ describe('AGL-2495 · every tenant API route has a lockdown disposition', () => 
  *
  * So the same discover-don't-list posture, applied to registrations: every
  * `registerPluginJob({…})` in the repo is found, keyed by `file#name`, and
- * must either resolve a lockdown for the host it touches or be recorded in
- * {@link UNGATED_JOBS}. A new job is a violation by existing — including a
- * new job added to a file that already holds four.
+ * must declare what it touches and — for a job that touches hosts — actually
+ * ask the lock. A new job is a violation by existing, including a new job
+ * added to a file that already holds four.
+ *
+ * ## The gate moved into the CONTRACT, and why that is the point
+ *
+ * The first pass of this spec recorded six ungated jobs and froze them, on
+ * the stated grounds that `libs/plugins/*` could not import
+ * `@aglyn/tenant-data-admin`. **That reason was wrong.** The admin lib
+ * carries `scope:data` and `scope:aglyn`, both on the `aglyn:addons`
+ * allowlist in `eslint.config.mjs`, and 196 files under `libs/plugins`
+ * already import it. Recorded here rather than quietly corrected, because a
+ * frozen set justified by a constraint that does not exist is the worst kind
+ * of known-open: it looks argued.
+ *
+ * The conclusion held anyway, for the better reason. Six call-site edits
+ * close six holes and guarantee the seventh is forgotten. So `PluginJob`
+ * now carries a REQUIRED `lockdown` declaration and `runPluginJobs` injects
+ * a `PluginJobHostGate` into every handler — a new job does not compile
+ * until its author has answered what it touches, and this spec is what
+ * checks the answer is true.
+ *
+ * ## What this half can and cannot see
+ *
+ * It reads text. It can prove a registration DECLARES a scope and that the
+ * gate is asked somewhere in the registration, and it cannot prove the
+ * answer reaches every mutation inside a scan function three files away.
+ * That is what the behavioural suites are for — `job-lockdown.spec.ts` in
+ * each plugin, and `publish-schedule-job-lockdown.spec.ts` here — which
+ * drive each job with a gate that says LOCKED and assert nothing was written
+ * or sent, then lift and assert the work lands. Said plainly rather than
+ * implied: this guard holds the shape, those suites hold the behaviour, and
+ * neither one is the other.
  */
 const JOB_ROOTS = ['apps/tenant', 'libs/plugins']
+
 /**
  * `name:` is written BOTH ways in this repo — a string literal in the plugin
  * bundles, and a module constant in `publish-schedule-job.ts`
@@ -493,8 +524,7 @@ const JOB_ROOTS = ['apps/tenant', 'libs/plugins']
  * cautionary note rather than tidied away — the anchor test below is what
  * caught it, which is the entire argument for having an anchor.
  */
-const JOB_REGISTRATION =
-  /registerPluginJob\(\{[\s\S]{0,600}?name:\s*(?:'([^']+)'|([A-Za-z_$][\w$]*))/g
+const JOB_NAME = /name:\s*(?:'([^']+)'|([A-Za-z_$][\w$]*))/
 /** `const NAME = 'value'` in the same file, for the constant spelling. */
 function resolveJobName(source: string, literal?: string, ident?: string) {
   if (literal) return literal
@@ -504,15 +534,94 @@ function resolveJobName(source: string, literal?: string, ident?: string) {
   )
   return match ? match[1] : null
 }
-/** The gate as it is written when it guards the work, not merely imported. */
-const JOB_GATE =
-  /if\s*\(\s*await\s+getSiteLockdown\(|(?:const|let)\s+[A-Za-z_$][\w$]*\s*=\s*await\s+getSiteLockdown\(/
+
+/**
+ * The whole `registerPluginJob({ … })` literal, brace-matched.
+ *
+ * The first pass used a bounded lookahead (`[\s\S]{0,600}?`) and computed
+ * `gated` PER FILE, which meant one gated job in `commerce/server.ts` would
+ * have vouched for the other three. Balanced extraction is what makes the
+ * disposition per REGISTRATION, which is the only unit that means anything
+ * when four of them share a file.
+ */
+export function jobRegistrationBlocks(source: string): string[] {
+  const blocks: string[] = []
+  const opener = 'registerPluginJob({'
+  let from = 0
+  for (;;) {
+    const start = source.indexOf(opener, from)
+    if (start === -1) break
+    let depth = 0
+    let end = -1
+    for (let i = start + opener.length - 1; i < source.length; i += 1) {
+      const char = source[i]
+      if (char === '{') depth += 1
+      else if (char === '}') {
+        depth -= 1
+        if (depth === 0) {
+          end = i + 1
+          break
+        }
+      }
+    }
+    // An unbalanced literal is not a pass: it is surfaced as a block running
+    // to end-of-file, which fails to classify and therefore fails the spec.
+    blocks.push(source.slice(start, end === -1 ? source.length : end))
+    from = end === -1 ? source.length : end
+  }
+  return blocks
+}
+
+/** The handler's first parameter — the gate, when the handler takes one. */
+export function handlerGateParam(block: string): string | null {
+  const match = block.match(
+    /handler:\s*(?:async\s+)?(?:\(\s*([A-Za-z_$][\w$]*)?[^)]*\)|([A-Za-z_$][\w$]*))\s*=>/,
+  )
+  if (!match) return null
+  return match[1] ?? match[2] ?? null
+}
+
+/**
+ * Does this registration ASK the lock? Three idioms, all shipped:
+ *
+ *  1. the direct call, used as a guard — `if (await getSiteLockdown(hostId))`
+ *     — which `apps/tenant/utils/publish-schedule-job.ts` may make because it
+ *     lives in the app and imports the admin lib statically;
+ *  2. the injected gate, asked here — `if (await gate.isLocked(hostId))`;
+ *  3. the injected gate, THREADED into a scan whose signature requires one —
+ *     `await scanRestockAlerts(gate)`. The parameter is not optional on any
+ *     of those functions, so "passed it on" is as strong as "asked it", and
+ *     strictly stronger than a local `if` that a refactor could orphan.
+ *
+ * A bare import, or a parameter declared and never used, is NOT an ask — the
+ * synthetics below hold that.
+ */
+export function jobAsksTheLock(block: string): boolean {
+  if (/if\s*\(\s*await\s+getSiteLockdown\(/.test(block)) return true
+  const param = handlerGateParam(block)
+  if (!param) return false
+  // Search the handler BODY only. The declaration `async (gate) =>` would
+  // otherwise satisfy the "passed as an argument" shape all by itself, which
+  // is the vacuous pass this function exists to avoid.
+  const arrow = block.indexOf('=>', block.indexOf('handler:'))
+  if (arrow === -1) return false
+  const body = block.slice(arrow + 2)
+  if (new RegExp(`\\b${param}\\s*\\.\\s*isLocked\\s*\\(`).test(body)) return true
+  return new RegExp(`\\(\\s*${param}\\s*[,)]`).test(body)
+}
+
+/** `lockdown: { scope: 'per-host' }` / `{ scope: 'platform', reason: '…' }`. */
+export function jobLockdownScope(block: string): string | null {
+  const match = block.match(/lockdown:\s*\{\s*scope:\s*'([^']+)'/)
+  return match ? match[1] : null
+}
 
 interface JobSite {
   key: string
   file: string
   name: string
-  gated: boolean
+  scope: string | null
+  asks: boolean
 }
 
 const JOB_SITES: JobSite[] = JOB_ROOTS.flatMap((root) =>
@@ -523,61 +632,73 @@ const JOB_SITES: JobSite[] = JOB_ROOTS.flatMap((root) =>
     .map(repoPath)
     .flatMap((file) => {
       const source = read(file)
-      const gated = JOB_GATE.test(source)
-      return [...source.matchAll(JOB_REGISTRATION)].flatMap((match) => {
-        const name = resolveJobName(source, match[1], match[2])
+      return jobRegistrationBlocks(source).map((block) => {
+        const named = JOB_NAME.exec(block)
+        const name = named
+          ? resolveJobName(source, named[1], named[2])
+          : null
         // An unresolvable name is not a pass. It means a registration exists
-        // that this walk cannot key, which is indistinguishable from the
-        // miss above, so it is surfaced as its own key rather than dropped.
-        return [
-          {
-            key: `${file}#${name ?? `UNRESOLVED(${match[2]})`}`,
-            file,
-            name: name ?? '',
-            gated,
-          },
-        ]
+        // that this walk cannot key, which is indistinguishable from a miss,
+        // so it is surfaced as its own key rather than dropped.
+        return {
+          key: `${file}#${name ?? `UNRESOLVED(${named?.[2] ?? '?'})`}`,
+          file,
+          name: name ?? '',
+          scope: jobLockdownScope(block),
+          asks: jobAsksTheLock(block),
+        }
       })
     }),
 ).sort((a, b) => a.key.localeCompare(b.key))
 
 /**
- * Background jobs that run on platform credentials and do NOT resolve a
- * lockdown. Frozen, for the same three reasons the route set above is —
- * except that here the members are not reads: they mutate. That is why they
- * are named individually rather than by file, and why adding a fifth job to
- * `commerce/server.ts` fails this spec.
+ * Jobs that legitimately touch NOTHING a lock could be about, and may
+ * therefore declare `{ scope: 'platform' }`. Empty today, and that is the
+ * honest state: every registered job on this platform acts for hosts.
  *
- * Closing them is not a line-of-code change and was not attempted in
- * AGL-2495: `libs/plugins/*` cannot import `@aglyn/tenant-data-admin` under
- * the current nx boundaries, so a plugin job cannot call `getSiteLockdown`
- * without either a new shared edge or the runner handing the verdict to the
- * handler. The runner is the better shape — it already resolves the release
- * flags for every job — but it is a change to the job contract, not to a
- * call site.
+ * Held as a named table anyway, checked for equality in BOTH directions,
+ * because the alternative is that `scope: 'platform'` becomes a word an
+ * author can type to leave the walk. A job claiming it has to be argued for
+ * here, in a file a reviewer reads, and a job that stops claiming it has to
+ * be struck rather than left as a stale entry.
  */
-const UNGATED_JOBS: Record<string, string> = {
-  'libs/plugins/bookings/src/lib/server.ts#booking-reminders':
-    'sends reminder email for upcoming bookings on a locked host',
-  'libs/plugins/bookings/src/lib/server.ts#expire-stale-holds':
-    'releases held booking slots — a write across every site, including locked ones',
-  'libs/plugins/commerce/src/lib/server.ts#abandoned-checkout-recovery':
-    'sends recovery email for carts on a locked host',
-  'libs/plugins/commerce/src/lib/server.ts#back-in-stock-alerts':
-    'sends stock alerts for a locked host',
-  'libs/plugins/commerce/src/lib/server.ts#stock-decrement-reconciliation':
-    'rewrites inventory counts across every site',
-  'libs/plugins/commerce/src/lib/server.ts#supplier-webhook-delivery':
-    'delivers outbound webhooks on behalf of a locked host',
-}
+const PLATFORM_JOBS: Record<string, string> = {}
+
+/**
+ * Background jobs that mutate for a host and do NOT resolve a lockdown.
+ *
+ * **EMPTY, and it is meant to stay empty.** The six that were frozen here —
+ * four commerce, two bookings — are closed: each declares
+ * `lockdown: { scope: 'per-host' }` and threads the runner's gate through to
+ * its per-host loop. The set is kept as a named, asserted-empty record
+ * rather than deleted, so re-opening it is a visible act with a reason
+ * attached rather than a silent regression in a passing suite.
+ *
+ * Adding an entry here is NOT how a new job passes this spec. It is the
+ * escape hatch of last resort for a job that genuinely cannot ask — and no
+ * such job exists, because the runner hands every handler a gate.
+ */
+const UNGATED_JOBS: Record<string, string> = {}
 
 describe('AGL-2495 · every background job that writes for a host asks the lock', () => {
   it('discovers the registrations rather than trusting a list', () => {
     // ANTI-VACUITY, and the shape that matters most here: this walk crosses
-    // two roots and a regex with a bounded lookahead, so an empty result is
-    // entirely plausible and would pass every assertion below.
+    // two roots and a brace matcher, so an empty result is entirely
+    // plausible and would pass every assertion below.
     expect(JOB_SITES.length).toBeGreaterThanOrEqual(7)
     expect(new Set(JOB_SITES.map((job) => job.file)).size).toBeGreaterThan(1)
+    // And it must find the file that holds FOUR of them as four, not one —
+    // the per-file/per-registration confusion the first pass shipped.
+    expect(
+      JOB_SITES.filter(
+        (job) => job.file === 'libs/plugins/commerce/src/lib/server.ts',
+      ).map((job) => job.name).sort(),
+    ).toEqual([
+      'abandoned-checkout-recovery',
+      'back-in-stock-alerts',
+      'stock-decrement-reconciliation',
+      'supplier-webhook-delivery',
+    ])
   })
 
   it('names the core publish beat as gated — the AGL-1621 anchor', () => {
@@ -590,31 +711,255 @@ describe('AGL-2495 · every background job that writes for a host asks the lock'
       (job) => job.file === 'apps/tenant/utils/publish-schedule-job.ts',
     )
     expect(anchor?.name).toBe('apply-publish-schedules')
-    expect(`${anchor?.file}: ${anchor?.gated}`).toBe(
-      'apps/tenant/utils/publish-schedule-job.ts: true',
+    expect(`${anchor?.file}: ${anchor?.scope} / ${anchor?.asks}`).toBe(
+      'apps/tenant/utils/publish-schedule-job.ts: per-host / true',
     )
   })
 
-  it('leaves no job ungated and unrecorded', () => {
+  it('every registration DECLARES what it touches', () => {
+    // The declaration is required by the type, so this cannot fail while
+    // typecheck passes — which is the point of asserting it anyway. The two
+    // guards read the same fact from different directions, and a spec that
+    // silently depended on `tsc` having run would be a guard whose green
+    // means "somebody else checked".
+    const undeclared = JOB_SITES.filter(
+      (job) => job.scope !== 'per-host' && job.scope !== 'platform',
+    ).map(
+      (job) =>
+        `${job.key} — no lockdown declaration. Add ` +
+        `lockdown: { scope: 'per-host' } and ask the gate the runner hands ` +
+        `your handler, or { scope: 'platform', reason: '…' } if this job ` +
+        `truly touches nothing a lock could be about.`,
+    )
+    expect(undeclared).toEqual([])
+  })
+
+  it('leaves no host-touching job without an ask', () => {
     const violations = JOB_SITES.filter(
-      (job) => !job.gated && !(job.key in UNGATED_JOBS),
+      (job) => job.scope === 'per-host' && !job.asks && !(job.key in UNGATED_JOBS),
     ).map(
       (job) =>
         `${job.key} — this job writes for a host on platform credentials ` +
-        `with no lockdown verdict on the path. Resolve the lock for the host ` +
-        `it is about to touch (apps/tenant/utils/publish-schedule-job.ts is ` +
-        `the model), or record it in UNGATED_JOBS with what it does.`,
+        `with no lockdown verdict reachable from its registration. Take the ` +
+        `PluginJobHostGate the runner hands your handler and either ask it ` +
+        `(if (await gate.isLocked(hostId)) continue) or thread it into the ` +
+        `scan that loops over hosts. Calling pluginJobHostGate() yourself ` +
+        `does NOT satisfy this: a job that mints its own gate can declare ` +
+        `{ scope: 'platform' } and never meet the refusing gate that checks ` +
+        `the declaration. apps/tenant/utils/publish-schedule-job.ts is the ` +
+        `model.`,
     )
     expect(violations).toEqual([])
   })
 
-  it('holds the ungated-job set at exactly its recorded size', () => {
-    // Both directions: a new job in an already-listed file must be argued
-    // for, and a job that gets gated must be struck from the list rather
-    // than left as a stale claim.
-    const ungated = JOB_SITES.filter((job) => !job.gated)
+  it('holds the ungated-job set EMPTY', () => {
+    // Both directions, as before — except the recorded size is now zero.
+    // The six that used to sit here are closed, and a seventh cannot be
+    // added by writing a line in this file: it would also have to survive
+    // the behavioural suites, which drive the job under a lock.
+    const ungated = JOB_SITES.filter(
+      (job) => job.scope === 'per-host' && !job.asks,
+    )
       .map((job) => job.key)
       .sort()
     expect(ungated).toEqual(Object.keys(UNGATED_JOBS).sort())
+    expect(Object.keys(UNGATED_JOBS)).toEqual([])
+  })
+
+  it('holds the platform-scoped set at exactly its argued size', () => {
+    const claimed = JOB_SITES.filter((job) => job.scope === 'platform')
+      .map((job) => job.key)
+      .sort()
+    expect(claimed).toEqual(Object.keys(PLATFORM_JOBS).sort())
+  })
+
+  it('a platform-scoped job carries its reason IN the registration', () => {
+    // The table above is the argument a reviewer reads; this is the argument
+    // the next author of that file reads. Both, for the same reason the
+    // route exemptions need both a marker and an audit entry.
+    for (const file of new Set(JOB_SITES.map((job) => job.file))) {
+      for (const block of jobRegistrationBlocks(read(file))) {
+        if (jobLockdownScope(block) !== 'platform') continue
+        expect(`${file}: ${/reason:\s*'[^']+'/.test(block)}`).toBe(
+          `${file}: true`,
+        )
+      }
+    }
+  })
+})
+
+/**
+ * ANTI-VACUITY FOR THE CLASSIFIER ITSELF.
+ *
+ * The App Check debug-token lesson, applied to the two functions this half
+ * turns on: prove the search finds what it is SUPPOSED to find, and prove it
+ * refuses the near-misses. Synthetic strings rather than fixture files, so
+ * the negatives can be stated without planting an ungated job in a live app
+ * and without touching a shared checkout to prove a red.
+ */
+describe('AGL-2495 · the job classifier is falsifiable', () => {
+  const wrap = (body: string) => `registerPluginJob({\n${body}\n})`
+
+  it('finds four registrations in one string, not one', () => {
+    const four = [1, 2, 3, 4]
+      .map((n) => wrap(`  name: 'job-${n}',\n  handler: async () => {},`))
+      .join('\n\n')
+    expect(jobRegistrationBlocks(four)).toHaveLength(4)
+    // ...and each block is its OWN literal, not a run-on to the last brace.
+    expect(jobRegistrationBlocks(four)[0]).toContain("name: 'job-1'")
+    expect(jobRegistrationBlocks(four)[0]).not.toContain("name: 'job-2'")
+  })
+
+  it('brace-matches THROUGH a nested object literal', () => {
+    const block = wrap(
+      `  name: 'nested',\n  lockdown: { scope: 'per-host' },\n` +
+        `  handler: async (gate) => { await scan(gate) },`,
+    )
+    expect(jobRegistrationBlocks(`${block}\nconst after = 1`)).toHaveLength(1)
+    expect(jobRegistrationBlocks(block)[0]).toContain('handler')
+  })
+
+  it('ACCEPTS the three real idioms', () => {
+    expect(
+      jobAsksTheLock(
+        wrap(
+          `  handler: async () => {\n` +
+            `    if (await getSiteLockdown(hostId)) continue\n  },`,
+        ),
+      ),
+    ).toBe(true)
+    expect(
+      jobAsksTheLock(
+        wrap(`  handler: async (gate) => {\n` +
+          `    if (await gate.isLocked(hostId)) continue\n  },`),
+      ),
+    ).toBe(true)
+    expect(
+      jobAsksTheLock(
+        wrap(`  handler: async (gate) => {\n    await scanThings(gate)\n  },`),
+      ),
+    ).toBe(true)
+  })
+
+  it('REFUSES a gate that is declared and ignored', () => {
+    // The exact shape a new job takes on its way to being wrong: the author
+    // accepted the parameter (or a linter added it) and never used it.
+    expect(
+      jobAsksTheLock(
+        wrap(
+          `  lockdown: { scope: 'per-host' },\n` +
+            `  handler: async (gate) => {\n    await scanThings()\n  },`,
+        ),
+      ),
+    ).toBe(false)
+  })
+
+  it('REFUSES a handler that MINTS its own gate', () => {
+    // Functionally this one would work — `pluginJobHostGate()` returns the
+    // same gate the runner would have passed. It is refused anyway, and the
+    // reason is the `platform` escape hatch: `runPluginJobs` hands a
+    // platform-scoped job a gate that THROWS when asked, which is the only
+    // runtime check that a declaration is true. A job free to mint its own
+    // gate is free to declare `platform` and never meet that check. Taking
+    // what you are given is what keeps the two halves attached.
+    expect(
+      jobAsksTheLock(
+        wrap(
+          `  lockdown: { scope: 'per-host' },\n` +
+            `  handler: async () => {\n` +
+            `    await scanThings(pluginJobHostGate())\n  },`,
+        ),
+      ),
+    ).toBe(false)
+  })
+
+  it('REFUSES a handler that takes no gate at all', () => {
+    expect(
+      jobAsksTheLock(wrap(`  handler: async () => {\n    await scan()\n  },`)),
+    ).toBe(false)
+  })
+
+  it('REFUSES a verdict that is computed and dropped', () => {
+    // `getSiteLockdown` present, awaited, and doing nothing — the shape the
+    // route half of this spec also refuses. Presence is not correctness.
+    expect(
+      jobAsksTheLock(
+        wrap(
+          `  handler: async () => {\n` +
+            `    const state = await getSiteLockdown(hostId)\n` +
+            `    await publish()\n  },`,
+        ),
+      ),
+    ).toBe(false)
+  })
+
+  it('REFUSES a mention in a comment', () => {
+    expect(
+      jobAsksTheLock(
+        wrap(
+          `  // if (await gate.isLocked(hostId)) continue — TODO\n` +
+            `  handler: async () => {\n    await scan()\n  },`,
+        ),
+      ),
+    ).toBe(false)
+  })
+
+  it('reads the scope, and answers null when there is none', () => {
+    expect(jobLockdownScope(wrap(`  lockdown: { scope: 'per-host' },`))).toBe(
+      'per-host',
+    )
+    expect(
+      jobLockdownScope(wrap(`  lockdown: { scope: 'platform', reason: 'x' },`)),
+    ).toBe('platform')
+    expect(jobLockdownScope(wrap(`  name: 'no-declaration',`))).toBe(null)
+  })
+})
+
+/**
+ * THE WIRING THE GATE DEPENDS ON.
+ *
+ * Core's `pluginJobHostGate()` answers "not locked" when no resolver is
+ * registered — fail open, so a self-host that never wired one does not have
+ * every background job welded shut by infrastructure it did not ask for.
+ * The cost of that direction is that a deleted import turns the whole gate
+ * into a no-op while every test above stays green: the declarations are
+ * still there, the asks are still there, and the answer is always no.
+ *
+ * `feedback_written_but_never_read`, one turn on: this asserts the reader
+ * exists. Three facts, each individually load-bearing.
+ */
+describe('AGL-2495 · the job lockdown resolver is actually wired', () => {
+  const RESOLVER = 'apps/tenant/utils/plugin-job-lockdown.ts'
+  const RUNNER = 'apps/tenant/app/api/plugins/run-jobs/route.ts'
+
+  it('the tenant registers a resolver, from the admin lib', () => {
+    const source = read(RESOLVER)
+    expect(source).toContain('registerPluginJobHostLockdown(')
+    // Asking the SAME function the drill's fix asks, rather than keeping a
+    // second notion of what a lock is — so the enforcement-class work on
+    // `getSiteLockdown` reaches the job beat for free.
+    expect(source).toContain('getSiteLockdown')
+    expect(source).toContain("from '@aglyn/tenant-data-admin'")
+  })
+
+  it('the runner route imports it for its side effect', () => {
+    // Delete this import and every job on the beat runs ungated.
+    expect(read(RUNNER)).toContain("import '../../../../utils/plugin-job-lockdown'")
+  })
+
+  it('the runner reports whether the gate is wired at all', () => {
+    // A silent no-op is the failure mode of a fail-open registry. The beat
+    // says so in its response rather than leaving it to be inferred from
+    // work happening on a locked site.
+    expect(read(RUNNER)).toContain('hostLockdownWired')
+  })
+
+  it('the job contract makes the declaration REQUIRED, not optional', () => {
+    // `lockdown?: PluginJobLockdown` would let every future registration
+    // skip the question and would leave this whole describe asserting a
+    // convention instead of a contract.
+    const contract = read('libs/aglyn/src/lib/plugin-manager/plugin-jobs.ts')
+    expect(contract).toContain('lockdown: PluginJobLockdown')
+    expect(contract).not.toContain('lockdown?: PluginJobLockdown')
   })
 })
