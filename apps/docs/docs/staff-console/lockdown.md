@@ -259,6 +259,67 @@ curl -X POST https://app.aglyn.com/api/admin/lockdown \
 `mode` is optional and defaults to `full`, so every existing runbook command and
 saved script keeps doing exactly what it did before.
 
+## Standard or takedown: what happens if we cannot reach the database {#enforcement}
+
+Every lock carries a second, independent choice, on the console as **"If Aglyn
+can't reach the database"**:
+
+| Choice | Stored as | If the lockdown record cannot be read |
+| --- | --- | --- |
+| **Release — standard lock** (default) | nothing is stored | The lock stops being enforced |
+| **Keep holding — takedown** | `enforcement: 'takedown'` | The lock keeps being enforced |
+
+Lockdown normally **fails open**: if Firestore is unreachable, the verdict is
+"not locked". That is deliberate and stays the default — a database blip must
+not take every customer site down at once.
+
+A legal or abuse **takedown** has the opposite cost. "We kept serving it
+because our database was down" answers no court order and no CSAM report. So a
+takedown holds through the outage, and only a takedown does.
+
+**Choose takedown only for a legal or abuse order** — a court order, a DMCA
+takedown you have accepted, a CSAM or malware removal, a domain hijack or
+dispute. Everything else is a standard lock: maintenance windows, billing
+suspensions, precautionary holds, and incident response, including the
+`security` ones. Getting this wrong takes sites down for a reason unrelated to
+the incident that took the database out.
+
+Three properties worth knowing before you rely on it:
+
+1. **It is never inferred.** Neither the scope nor the reason implies the
+   class — a `security` lock is a standard lock unless you say otherwise, and
+   any of the six scopes can be either. A lock is fail-closed only because
+   somebody chose it, and the audit row records who and when.
+2. **It is not retroactive, and it is not magic.** Enforcement holds on a
+   server process that has already *seen* the takedown. A process that starts
+   up during the outage has never read the record, has nothing to hold, and
+   fails open like everything else — so does a takedown you try to place while
+   the database is already down. In practice the case this covers is the real
+   one: an order placed hours or days ago, and a blip today.
+3. **The expiry still wins.** A takedown with an *until* time still releases on
+   schedule, even mid-outage. Classifying a lock does not make it
+   un-liftable.
+
+A takedown cannot be `read-only`, and the route refuses the combination: a
+read-only lock keeps serving the content and only refuses writes, which is the
+opposite of what a takedown is for.
+
+From a terminal, add `enforcement` to the usual body:
+
+```bash
+curl -X POST https://app.aglyn.com/api/admin/lockdown \
+  -H "Authorization: Bearer $ID_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"action":"lock","scope":"domain","targetId":"seized.example",
+       "enforcement":"takedown","reason":"security",
+       "message":"This domain is subject to a dispute."}'
+```
+
+`enforcement` is optional and defaults to `standard`, so every existing runbook
+command and saved script keeps failing open exactly as before. A value the
+server does not recognise is **rejected** rather than defaulted, in either
+direction — the response echoes the class back as `verified.enforcement` so you
+can confirm the one you meant is the one that landed.
+
 ## Maintenance windows and expiry
 
 A lock may carry an **until** time. When it passes, the lockdown simply stops —
@@ -816,11 +877,16 @@ Two honesty rules the panel follows, and you should read it by:
    **A customer's public site takes longer than that, and the 15 seconds is
    not the number to quote them.** A site page is gated in the tenant
    middleware, which memoizes its verdict for a further 30 seconds. Measured
-   2026-08-23 (AGL-1621): an `org` or `host` lock reaches an already-warm
-   isolate in **~30s**, and a `platform` or `domain` lock in **~45s** —
-   the two caches are in series. A lift takes the same time, in the same
-   direction. A cold isolate refuses on its first request, so a refresh that
-   lands on one shows the lock instantly; that is luck, not the bound.
+   2026-08-23 (AGL-1621) **against the emulator, not production**: an `org` or
+   `host` lock reaches an already-warm isolate in **~30s**, and a `platform`
+   or `domain` lock in **~45s** — the two caches are in series. A lift takes
+   the same time, in the same direction. A cold isolate refuses on its first
+   request, so a refresh that lands on one shows the lock instantly; that is
+   luck, not the bound.
+
+   **These are FLOOR figures, and production is slower.** See
+   [what has and has not been measured](#drill-provenance) before quoting any
+   of them to a customer or a complainant.
 2. **A scope you leave blank is not evaluated.** "Not refused" for a bare uid
    says nothing about that person's workspace. The panel lists exactly which
    scopes the answer covers, and a workspace or site id that matches nothing is
@@ -834,6 +900,64 @@ To confirm the refusal **on the wire** rather than in the abstract, you need a
 caller who is genuinely refused. An org API key is the cheapest one: it carries
 no staff claim and no uid, so `/api/v1` refuses its own holder. See
 [Verifying a lockdown on the wire](#verifying-a-lockdown-on-the-wire).
+
+### What has and has not been measured {#drill-provenance}
+
+The timing figures in this document have one provenance, and it is not
+production. Quoting them as if it were is the mistake that produced the
+figures they replaced.
+
+| Figure | Where it was measured | Status |
+| --- | --- | --- |
+| Verdict-reader TTL, 15.1s both directions | Emulator, driving the real route against a real Firestore | Measured 2026-08-23 (AGL-1621) |
+| Tenant middleware memo, 30.2s lock / 30.2s lift | Emulator, against the real middleware | Measured 2026-08-23 (AGL-1621) |
+| Composed ~15s console/API, ~30–45s site pages | Derived from the two above | Measured 2026-08-23 (AGL-1621) |
+| **Anything on production** | — | **NOT MEASURED. No production drill has been run against the current build.** |
+
+**Treat the emulator numbers as a floor.** Three things production adds, all
+of which make it slower:
+
+- **Edge-isolate fleet spread.** The emulator has one warm process. Vercel has
+  many, each with its own 30s memo, converging independently.
+- **Real Firestore round-trip time.** The emulator's is a loopback.
+- **The ISR fan-out is serial**, one host at a time with a 5s timeout each
+  (`revalidateHostAfterLockdown`). An `org` lock over twenty sites can take
+  ~100s to *return* while already being in effect. The `host` scope pays this
+  once, not per host.
+
+The old "lock visible in ≤10s" figure was a cold isolate — which refuses on
+its very first request — recorded as if it were a bound. Do not repeat that by
+blending a surface: say which surface a number came from, or do not quote it.
+
+#### Why the production drill has not been run {#production-drill-blocked}
+
+A production drill was scoped on 2026-08-23 and **stopped before anything was
+locked**, because it has no safe subject. Recorded here so the next person
+does not rediscover it at the worst moment:
+
+1. **There is no throwaway production host.** Every seeded fixture
+   (`seed-e2e.mjs` and friends) is emulator-gated and refuses to run against a
+   real project.
+2. **The `demo` host is not a throwaway.** The tenant middleware falls back to
+   it for `app.aglyn.com` **and for every Vercel preview deployment**, so
+   locking it takes down far more than one site.
+3. **It would deliberately turn a monitored canary red.** The render canary
+   grades `demo` by loading its home page; a full lock makes that page compose
+   an empty node tree, which is exactly the failure the canary exists to
+   catch. Its 5-minute memo can hold the red *after* the lock lifts.
+4. **A 2-minute dead-man expiry is shorter than one propagation cycle**
+   (~45s each way). The lock could expire before every isolate has observed
+   it engage.
+5. **A dead-man expiry is not the same code path as a lift.** Expiry is
+   evaluated at read time and performs **no write**, so it fires no
+   revalidation fan-out. Measuring release via expiry would measure a
+   different mechanism from the one an operator actually uses under pressure.
+
+A safe production drill needs a genuinely disposable host — its own org, not
+referenced by any fallback, canary or monitor — provisioned first. Until then
+the emulator harnesses
+(`route.drill.emulator.spec.ts`, and `LOCKDOWN_DRILL=1` for the middleware
+timings) are the only repeatable source of these numbers.
 
 ### Verifying a lockdown on the wire
 
@@ -860,7 +984,11 @@ checked without any extra credential.
 
 Every lock and lift writes an `adminAudit` row carrying the actor, the `scope`,
 the target path, and — in `before` and `after` — the `reason`, the
-customer-facing `message`, and the end time as `untilMs`. Recording the end
+customer-facing `message`, the `mode`, the `enforcement` class, and the end
+time as `untilMs`. `mode` and `enforcement` are always stated rather than
+omitted, so a row about a lock written before either field existed reads
+`full` / `standard` instead of a gap you have to interpret — and a takedown is
+exactly the row somebody will later have to produce as evidence. Recording the end
 time is the point: it is the only thing that distinguishes a deliberate
 time-boxed lock from an indefinite one nobody came back to, and on a lift it
 says whether a time-boxed lock was released early or a forgotten one was

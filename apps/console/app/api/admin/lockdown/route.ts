@@ -56,13 +56,16 @@ import {
   domainLockdownDocId,
   featureLockdownDocId,
   isLockableDomain,
+  isLockdownEnforcement,
   isLockdownFeatureKey,
   isLockdownMode,
   isLockdownReasonCode,
+  LOCKDOWN_ENFORCEMENTS,
   LOCKDOWN_FEATURE_KEYS,
   LOCKDOWN_MESSAGE_MAX,
   LOCKDOWN_MODES,
   LOCKDOWNS_COLLECTION,
+  type LockdownEnforcement,
   type LockdownMode,
   PLATFORM_LOCKDOWN_DOC_ID,
   pluginRequestFromWeb,
@@ -131,11 +134,13 @@ function auditLockShape(lock: {
   message?: unknown
   untilMs?: unknown
   mode?: unknown
+  enforcement?: unknown
 }): {
   reason: string | null
   message: string | null
   untilMs: number | null
   mode: string
+  enforcement: string
 } {
   return {
     reason: typeof lock.reason === 'string' ? lock.reason : null,
@@ -148,6 +153,14 @@ function auditLockShape(lock: {
     // storage default is applied here so a row about a pre-AGL-1511 lock
     // reads `full` rather than a gap the reader has to interpret.
     mode: lock.mode === 'read-only' ? 'read-only' : 'full',
+    // Recorded on both sides and never null, for the same reason as `mode`
+    // (AGL-1621). "Staff issued a takedown that holds through a database
+    // outage" and "staff placed an ordinary lock" are different acts with
+    // different legal weight, and a takedown is exactly the row someone
+    // will later have to produce evidence about. The storage default is
+    // applied here so a row about a pre-AGL-1621 lock reads `standard`
+    // rather than a gap a reader has to interpret.
+    enforcement: lock.enforcement === 'takedown' ? 'takedown' : 'standard',
   }
 }
 
@@ -225,6 +238,13 @@ export interface LockState {
   untilMs: number | null
   /** `full` | `read-only`; `full` whenever the carrier says nothing. */
   mode: LockdownMode
+  /**
+   * `standard` | `takedown`; `standard` whenever the carrier says nothing
+   * (AGL-1621). Read back so the operator can VERIFY the class they chose
+   * actually landed — a takedown that silently wrote as standard looks
+   * identical on the page and behaves differently in the incident.
+   */
+  enforcement: LockdownEnforcement
   /** When the lock was engaged, if it is. */
   atMs: number | null
   readAtMs: number
@@ -273,6 +293,10 @@ async function readLockState(
       untilMs: snapshot.get('suspendedUntilMs') ?? null,
       mode:
         snapshot.get('suspendedMode') === 'read-only' ? 'read-only' : 'full',
+      enforcement:
+        snapshot.get('suspendedEnforcement') === 'takedown'
+          ? 'takedown'
+          : 'standard',
       atMs: toMillis(snapshot.get('suspendedAt')),
     }
   }
@@ -300,6 +324,8 @@ async function readLockState(
     exists: true,
     locked: data != null,
     mode: data?.['mode'] === 'read-only' ? 'read-only' : 'full',
+    enforcement:
+      data?.['enforcement'] === 'takedown' ? 'takedown' : 'standard',
     reason: (data?.['reason'] as string) ?? null,
     message: (data?.['message'] as string) ?? null,
     untilMs: (data?.['untilMs'] as number) ?? null,
@@ -691,7 +717,54 @@ async function handler(request: Request): Promise<Response> {
         { status: 400 },
       )
     }
-    const lock = { reason: String(reason), message, untilMs, mode }
+    /*=================================================================
+     * ENFORCEMENT (AGL-1621): what happens if we cannot READ this lock.
+     *================================================================*/
+    // Absent = `standard` = fail open, which is the shipped behaviour and
+    // the safety default. Every existing caller — the staff page's other
+    // cards, the billing auto-lock sweep, any runbook curl — keeps failing
+    // open without knowing this field exists, and an operator who does not
+    // make a choice gets the availability-preserving one.
+    const enforcement: LockdownEnforcement = isLockdownEnforcement(
+      body?.enforcement,
+    )
+      ? body.enforcement
+      : 'standard'
+    // A junk value is REFUSED rather than silently defaulted. Defaulting is
+    // right for an absent field (the operator said nothing) and wrong for a
+    // malformed one (the operator meant something and we could not read it)
+    // — and here the two possible mistakes are "a takedown quietly became
+    // an ordinary lock" and "an ordinary lock quietly became fail-closed".
+    if (
+      action === 'lock' &&
+      body?.enforcement !== undefined &&
+      !isLockdownEnforcement(body.enforcement)
+    ) {
+      return Response.json(
+        {
+          error: `enforcement must be one of: ${LOCKDOWN_ENFORCEMENTS.join(', ')}`,
+        },
+        { status: 400 },
+      )
+    }
+    // A read-only takedown is a contradiction, and refused for the same
+    // reason read-only is refused at the user and feature scopes: it would
+    // be a label that lies. `read-only` keeps SERVING the content and only
+    // refuses writes — so a "read-only takedown" is a takedown that
+    // continues to publish the very material it was issued over, while its
+    // fail-closed classification implies the opposite.
+    if (action === 'lock' && enforcement === 'takedown' && mode === 'read-only') {
+      return Response.json(
+        {
+          error:
+            'A takedown cannot be read-only — a read-only lock keeps serving ' +
+            'the content and only refuses writes. Use mode: full for a ' +
+            'takedown, or enforcement: standard for a read-only lock.',
+        },
+        { status: 400 },
+      )
+    }
+    const lock = { reason: String(reason), message, untilMs, mode, enforcement }
     const actor = {
       actorUid: decoded.uid,
       actorEmail: decoded.email ? String(decoded.email) : null,
@@ -718,6 +791,10 @@ async function handler(request: Request): Promise<Response> {
           // byte-identical to one written before the field existed, so no
           // migration and no re-interpretation of history.
           ...(mode === 'read-only' ? { mode } : {}),
+          // Stored ONLY for takedowns (AGL-1621), same discipline as `mode`:
+          // a standard lock's document stays byte-identical to one written
+          // before the field existed, so absent keeps meaning fail-open.
+          ...(enforcement === 'takedown' ? { enforcement } : {}),
           reason: lock.reason,
           ...(message ? { message } : {}),
           ...(untilMs !== undefined ? { untilMs } : {}),
@@ -770,6 +847,10 @@ async function handler(request: Request): Promise<Response> {
         await ref.set({
           scope: 'feature',
           feature: targetId,
+          // Stored ONLY for takedowns (AGL-1621), same discipline as `mode`:
+          // a standard lock's document stays byte-identical to one written
+          // before the field existed, so absent keeps meaning fail-open.
+          ...(enforcement === 'takedown' ? { enforcement } : {}),
           reason: lock.reason,
           ...(message ? { message } : {}),
           ...(untilMs !== undefined ? { untilMs } : {}),
@@ -828,6 +909,10 @@ async function handler(request: Request): Promise<Response> {
       if (action === 'lock') {
         await ref.set({
           scope: 'domain',
+          // Stored ONLY for takedowns (AGL-1621), same discipline as `mode`:
+          // a standard lock's document stays byte-identical to one written
+          // before the field existed, so absent keeps meaning fail-open.
+          ...(enforcement === 'takedown' ? { enforcement } : {}),
           reason: lock.reason,
           ...(message ? { message } : {}),
           ...(untilMs !== undefined ? { untilMs } : {}),
@@ -894,6 +979,10 @@ async function handler(request: Request): Promise<Response> {
       if (action === 'lock') {
         await ref.set({
           scope: 'user',
+          // Stored ONLY for takedowns (AGL-1621), same discipline as `mode`:
+          // a standard lock's document stays byte-identical to one written
+          // before the field existed, so absent keeps meaning fail-open.
+          ...(enforcement === 'takedown' ? { enforcement } : {}),
           reason: lock.reason,
           ...(message ? { message } : {}),
           ...(untilMs !== undefined ? { untilMs } : {}),

@@ -269,7 +269,8 @@ service cloud.firestore {
              'bandwidthCap', 'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
-             'suspendedMessage', 'suspendedUntilMs', 'suspendedMode'])) ||
+             'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
+             'suspendedEnforcement'])) ||
         (isBillingStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'createdByUid', 'hosts', 'enabledPlugins',
@@ -281,6 +282,7 @@ service cloud.firestore {
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
+             'suspendedEnforcement',
              'erasureRequestedAt'])) ||
         (canManageOrg() && orgNotSuspended() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
@@ -293,6 +295,7 @@ service cloud.firestore {
              'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
+             'suspendedEnforcement',
              'erasureRequestedAt']));
 
       /**
@@ -1094,7 +1097,8 @@ service cloud.firestore {
                      'cname', 'cnameAttachmentPending',
                      'cnameDetachmentPending', 'themeInstalledFrom',
                      'suspendedAt', 'suspendedReasonCode', 'suspendedMessage',
-                     'suspendedUntilMs', 'suspendedMode', 'bandwidthCeiling',
+                     'suspendedUntilMs', 'suspendedMode', 'suspendedEnforcement',
+                     'bandwidthCeiling',
                      'projectId', 'projectNumber']) &&
           (hostMemberRole(hostId) == 'admin' ||
             !request.resource.data.diff(resource.data).affectedKeys()

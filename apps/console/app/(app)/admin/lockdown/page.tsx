@@ -91,6 +91,8 @@ interface LockState {
   exists: boolean
   locked: boolean
   mode: string
+  /** `standard` | `takedown` (AGL-1621); absent on an older server. */
+  enforcement?: string
   reason: string | null
   message: string | null
   untilMs: number | null
@@ -275,6 +277,10 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
   const [reason, setReason] = useState('manual')
   const [message, setMessage] = useState('')
   const [until, setUntil] = useState('')
+  // AGL-1621. Defaults to the fail-OPEN class for the same reason the
+  // route does: an operator who does not make a choice must get the
+  // availability-preserving one.
+  const [enforcement, setEnforcement] = useState('standard')
   /**
    * The scoped card's verified state, read back from the server. Org and
    * host locks live on their own docs, so before this the panic page showed
@@ -476,6 +482,40 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
     >
       <option value="full">{'Full — take it down'}</option>
       <option value="read-only">{'Read-only — freeze writes'}</option>
+    </TextField>
+  )
+
+  /**
+   * AGL-1621 — the fail-open/fail-closed choice, made VISIBLE and
+   * DELIBERATE. An operator issuing a takedown has to know they are issuing
+   * one: this is the only control on the page whose effect shows up during
+   * an unrelated incident, weeks later, when Firestore is unreachable and
+   * this lock is the one that keeps holding.
+   *
+   * The labels say what HAPPENS rather than naming the class, because
+   * "takedown" alone does not tell an operator that picking it changes
+   * behaviour during a database outage — and that is the entire difference
+   * between the two options.
+   */
+  const enforcementField = (value: string, onChange: (next: string) => void) => (
+    <TextField
+      select
+      size="small"
+      label="If Aglyn can't reach the database"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      sx={{ minWidth: 250 }}
+      slotProps={{ select: { native: true } }}
+      color={value === 'takedown' ? 'error' : undefined}
+      focused={value === 'takedown' ? true : undefined}
+      helperText={
+        value === 'takedown'
+          ? 'Keeps holding through an outage. Legal/abuse orders only.'
+          : 'Releases during an outage (default)'
+      }
+    >
+      <option value="standard">{'Release — standard lock'}</option>
+      <option value="takedown">{'Keep holding — takedown'}</option>
     </TextField>
   )
 
@@ -844,6 +884,15 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                       control is hidden there rather than offering a choice
                       the route will reject. */}
                   {scope !== 'user' ? modeField(mode, setMode) : null}
+                  {/* Hidden — not merely disabled — while the lock is
+                      read-only, because the route refuses that combination
+                      outright (a read-only takedown would keep serving the
+                      very content it was issued over). Same posture as the
+                      mode control on the user scope: do not offer a choice
+                      that will be rejected. */}
+                  {mode !== 'read-only'
+                    ? enforcementField(enforcement, setEnforcement)
+                    : null}
                   {reasonField(reason, setReason)}
                   <TextField
                     size="small"
@@ -873,6 +922,13 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                           scope,
                           targetId: targetId.trim(),
                           mode: scope === 'user' ? 'full' : mode,
+                          // Sent explicitly on every lock, including the
+                          // default: the route would infer `standard` from
+                          // an absent field anyway, but stating it keeps
+                          // the request a full description of the intent
+                          // rather than one that relies on a default two
+                          // layers away.
+                          enforcement: mode === 'read-only' ? 'standard' : enforcement,
                           reason,
                           message: message || undefined,
                           untilMs: untilMsOf(until),
@@ -948,6 +1004,21 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                         >
                           {`${scopedState.scope} ${scopedState.targetId}`}
                         </Typography>
+                        {/* AGL-1621: a takedown is called out on its own
+                            rather than folded into the line below, because
+                            it is the one property of a lock that changes
+                            what happens during an UNRELATED incident. An
+                            operator checking state weeks later needs to see
+                            it without reading for it. */}
+                        {scopedState.locked &&
+                        scopedState.enforcement === 'takedown' ? (
+                          <Chip
+                            label="TAKEDOWN — holds through an outage"
+                            color="error"
+                            variant="outlined"
+                            size="small"
+                          />
+                        ) : null}
                         {scopedState.locked ? (
                           <Typography variant="body2">
                             {`${scopedState.reason ?? 'manual'}${
