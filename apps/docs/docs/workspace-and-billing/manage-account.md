@@ -176,6 +176,14 @@ matched to a country without guessing.
 **Country** is the two-letter code (`US`, `GB`, `DE`). Stripe Tax cannot compute
 anything from a spelled-out country name, which is why the field insists.
 
+If your company signs you in through its own identity provider, your address is
+prefilled from that directory only when the directory sends a **street line**. A
+provider that releases a city, region or postcode on its own leaves these fields
+empty for you to fill in: those parts are not an address anyone could post to, and
+Aglyn does not keep personal details it has no use for. As with your name, anything
+you type here wins permanently — signing in again never re-applies the provider's
+version, and clearing the address tells us to stop prefilling it altogether.
+
 :::note Who can see this
 Your address and phone live on your personal account, visible only to you and to
 Aglyn staff. They are **not** copied onto your organization's member list — that

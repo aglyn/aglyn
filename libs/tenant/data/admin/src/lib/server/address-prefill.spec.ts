@@ -17,7 +17,11 @@
 
 /**
  * AGL-1963 — the address half of the IdP prefill, and the erasure guard that
- * has to come with it.
+ * has to come with it. AGL-1566 added the completeness gate: the prefill
+ * stores an asserted address only when it carries a street line, because the
+ * Workspace SAML app maps a HOME city, region and postcode and no street, and
+ * a fragment of somebody's home address is personal data with no use rather
+ * than an address.
  *
  * Modelled on `phone-opt-out.spec.ts` deliberately, because the defect has the
  * same shape: `/api/auth/sso-jit` and `/api/auth/session` both call
@@ -36,6 +40,7 @@
  * is exactly what the seed has to cope with.
  */
 
+import { resolveIdpAddress } from '@aglyn/aglyn/server'
 import { fakeFirestore } from './test-firestore'
 import { forgetUserAddress, seedUserProfile } from './user-profiles'
 
@@ -106,22 +111,65 @@ describe('the IdP address prefill', () => {
     expect(firestore.docs('users')[UID].address).toBeUndefined()
   })
 
-  it('keeps a partial address that normalizeAddress keeps', async () => {
-    // PINNED BECAUSE IT IS A JUDGEMENT CALL. AGL-1963 asks that a partial
-    // assertion "not produce a half-address that looks populated", and the
-    // mechanism it names — `normalizeAddress` returning null — only fires when
-    // NOTHING survives. A city on its own does survive.
+  it('stores NOTHING for a street-less assertion, however many parts it has', async () => {
+    // THE AGL-1566 CASE, and the reversal of a judgement this spec previously
+    // pinned the other way. AGL-1963 asked that a partial assertion "not
+    // produce a half-address that looks populated" and named `normalizeAddress`
+    // as the mechanism; that only fires when NOTHING survives, so a locality on
+    // its own survived and was stored. It was left that way on the reasoning
+    // that Manage Account stores a typed city-only address happily, so a
+    // stricter rule here would give an SSO user and a typing user different
+    // profiles from the same input.
     //
-    // Deliberately not tightened here. `normalizeAddress` is the canonical
-    // rule and Manage Account stores a city-only address happily when someone
-    // types one, so a second, stricter rule in the seed would mean an SSO user
-    // and a typing user end up with different profiles from the same input.
-    // Nothing on this document feeds tax or shipping; the field is editable and
-    // visible. The case that actually bites — parts that amount to nothing — is
-    // the test above.
+    // What that reasoning did not have: the `Aglyn Console SSO` app maps
+    // `city`, `region` and `postalCode` out of the Directory's HOME address and
+    // maps no street row at all. So this is not a rare partial — it is the only
+    // address that IdP can assert, it is residential, and the typing user chose
+    // to enter a city while the SSO user chose nothing.
+    //
+    // EXACTLY THE THREE ATTRIBUTES THE WORKSPACE APP MAPS, spelled the way
+    // Workspace spells them, so this fails if the gate is removed.
+    const firestore = fakeFirestore()
+    const result = await seedUserProfile(UID, {
+      address: parts({ city: 'Jarrell', state: 'TX', postalCode: '76537' }),
+      firestore,
+    })
+    expect(result.fields).not.toContain('address')
+    expect(firestore.docs('users')[UID].address).toBeUndefined()
+  })
+
+  it('stores nothing for a city-only assertion either', async () => {
     const firestore = fakeFirestore()
     await seedUserProfile(UID, { address: parts({ city: 'Austin' }), firestore })
-    expect(firestore.docs('users')[UID].address).toEqual({ city: 'Austin' })
+    expect(firestore.docs('users')[UID].address).toBeUndefined()
+  })
+
+  it('still seeds an address that has a street line', async () => {
+    // The gate is about completeness, not about refusing the IdP. A directory
+    // that releases a real posting address still prefills the form, which is
+    // the whole of what AGL-1963 set out to do.
+    const firestore = fakeFirestore()
+    await seedUserProfile(UID, {
+      address: parts({ line1: '100 Congress Ave', city: 'Austin' }),
+      firestore,
+    })
+    expect(firestore.docs('users')[UID].address).toEqual({
+      line1: '100 Congress Ave',
+      city: 'Austin',
+    })
+  })
+
+  it('does not treat a blank street line as a street line', async () => {
+    // `strictNullChecks` is off repo-wide and a SAML attribute may be mapped
+    // and EMPTY — a directory row nobody filled in. `normalizeAddress` drops
+    // it, so `line1` is absent rather than `''`, and the gate must read that
+    // as no street rather than as a key that is present.
+    const firestore = fakeFirestore()
+    await seedUserProfile(UID, {
+      address: parts({ line1: '   ', city: 'Jarrell', postalCode: '76537' }),
+      firestore,
+    })
+    expect(firestore.docs('users')[UID].address).toBeUndefined()
   })
 })
 
@@ -188,5 +236,91 @@ describe('an erased address survives an SSO re-assertion', () => {
 
     await seedUserProfile(UID, { ...IDP_ASSERTION, firestore })
     expect(firestore.docs('users')[UID].address).toEqual(ADDRESS)
+  })
+})
+
+/**
+ * The composition, not the halves (AGL-1566).
+ *
+ * Every console-side spec that touches the SSO routes mocks `resolveIdpAddress`
+ * to return all-blank parts, so none of them can tell whether an assertion
+ * carrying an address is dropped or merely never arrived. These drive the REAL
+ * resolver with the REAL claim shape — attributes under
+ * `firebase.sign_in_attributes`, never as top-level claims (AGL-1131) — spelled
+ * the way the `Aglyn Console SSO` app spells them, and then the real seed.
+ */
+describe('a real Workspace assertion, resolver and seed together', () => {
+  // The three rows the SAML app maps, sourced from Directory → Contact
+  // information → Address (Home). No street row is mapped, which is the whole
+  // of why this must not be stored.
+  const workspaceAssertion = {
+    firebase: {
+      sign_in_attributes: {
+        firstName: 'Zach',
+        lastName: 'Gover',
+        city: 'Jarrell',
+        region: 'TX',
+        postalCode: '76537',
+      },
+    },
+  }
+
+  it('resolves the home address components, so the drop is a real drop', () => {
+    // Fails on purpose if the resolver stopped reading them: then the seed
+    // assertions below would pass for the wrong reason.
+    expect(resolveIdpAddress(workspaceAssertion)).toMatchObject({
+      city: 'Jarrell',
+      state: 'TX',
+      postalCode: '76537',
+      line1: '',
+    })
+  })
+
+  it('stores no address for it', async () => {
+    const firestore = fakeFirestore()
+    const result = await seedUserProfile('sso-uid-workspace', {
+      displayName: 'Zach Gover',
+      address: resolveIdpAddress(workspaceAssertion),
+      firestore,
+    })
+    expect(result.fields).not.toContain('address')
+    const doc = firestore.docs('users')['sso-uid-workspace']
+    expect(doc.address).toBeUndefined()
+    // The rest of the prefill is untouched — this gate is about one field.
+    expect(doc).toMatchObject({ firstName: 'Zach', lastName: 'Gover' })
+  })
+
+  it('stores no address on a second and third sign-in either', async () => {
+    // The seed runs on EVERY sign-in. A gate that only held the first time
+    // would leak the address to anyone who came back tomorrow.
+    const firestore = fakeFirestore()
+    const address = resolveIdpAddress(workspaceAssertion)
+    for (let i = 0; i < 3; i++) {
+      await seedUserProfile('sso-uid-workspace', { address, firestore })
+    }
+    expect(firestore.docs('users')['sso-uid-workspace'].address).toBeUndefined()
+  })
+
+  it('does store one once the directory releases a street row too', async () => {
+    // Not a refusal of the IdP: add the street attribute in Workspace and the
+    // prefill AGL-1963 built works exactly as designed.
+    const firestore = fakeFirestore()
+    await seedUserProfile('sso-uid-workspace-full', {
+      address: resolveIdpAddress({
+        firebase: {
+          sign_in_attributes: {
+            ...workspaceAssertion.firebase.sign_in_attributes,
+            streetAddress: '125 Johnston Ln',
+          },
+        },
+      }),
+      firestore,
+    })
+    expect(firestore.docs('users')['sso-uid-workspace-full'].address).toEqual({
+      line1: '125 Johnston Ln',
+      city: 'Jarrell',
+      state: 'TX',
+      postalCode: '76537',
+    })
   })
 })

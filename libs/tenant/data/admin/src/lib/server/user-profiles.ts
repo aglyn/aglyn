@@ -61,8 +61,11 @@ export interface SeedUserProfileInput {
   /**
    * Postal address from the same assertion (AGL-1963). Callers pass this
    * through `resolveIdpAddress`, whose loose `IdpAddressParts` is structurally
-   * an `AglynPostalAddress` — it is `normalizeAddress` below, not the caller,
-   * that decides whether the parts amount to an address at all.
+   * an `AglynPostalAddress` — it is the seed below, not the caller, that
+   * decides whether the parts amount to an address at all. Stored only when
+   * the assertion carries a STREET LINE (AGL-1566): a directory that releases
+   * a home city and postcode and no street has given us personal data with no
+   * use, not an address.
    */
   address?: AglynPostalAddress | null
   /** Injectable for tests; defaults to the admin app's Firestore. */
@@ -215,8 +218,43 @@ export async function seedUserProfile(
   // to join, so the per-account marker is the whole of the mechanism here.
   // Adding a second, address-keyed store would retain MORE personal data in
   // the name of erasing it, which is the opposite of what §11 asks for.
+  //
+  // A STREET LINE IS REQUIRED, and this is the one field where the IdP's copy
+  // is held to a stricter rule than a typed one (AGL-1566).
+  //
+  // AGL-1963 asked that a partial assertion "not produce a half-address that
+  // looks populated" and named `normalizeAddress` as the mechanism. It is not
+  // sufficient: `normalizeAddress` returns null only when NOTHING survives, so
+  // a locality on its own survives, and this seed stored it. That was pinned
+  // as a judgement call, on the reasoning that a typed city-only address is
+  // stored happily too and a second rule here would give an SSO user and a
+  // typing user different profiles from the same input.
+  //
+  // AGL-1566 is the fact that reverses it. The `Aglyn Console SSO` app maps
+  // `city`, `region` and `postalCode` out of the Directory's **Home** address
+  // and maps NO street row, so a street-less fragment is not an edge case for
+  // this IdP — it is the only address it can ever assert, and the value is
+  // residential. The symmetry argument does not survive it either: the typing
+  // user CHOSE to enter a city, and the SSO user chose nothing at all. So the
+  // two inputs were never the same input.
+  //
+  // What that leaves is personal data we would receive, store, and have no use
+  // for — nothing outside the owner's own Manage Account form reads
+  // `users/{uid}.address`, and no tax, billing or shipping path touches it.
+  // Under data minimisation the honest answer to "why do we hold this
+  // person's home postcode" has to be better than "the directory offered it".
+  // For a complete address it is: the person gets a filled-in form instead of
+  // an empty one. For a city and a postcode it is nothing, because that is not
+  // an address anybody could use.
+  //
+  // Deliberately NOT pushed into `normalizeAddress` or into `resolveIdpAddress`.
+  // The resolver's job is to report what the assertion said, and lying about
+  // that would hide the exposure rather than remove it; `normalizeAddress` is
+  // shared with Manage Account, where a person storing only a city is their own
+  // business. The rule belongs exactly here, at the point where WE decide to
+  // persist something nobody asked us to hold.
   const address = normalizeAddress(input.address)
-  if (address && isBlankAddress(snapshot.get('address'))) {
+  if (address?.line1 && isBlankAddress(snapshot.get('address'))) {
     if (!snapshot.get('addressErasedAt')) seed['address'] = address
   }
 
