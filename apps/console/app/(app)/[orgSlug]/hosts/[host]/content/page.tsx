@@ -19,16 +19,31 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { MEDIA_ALT_MAX_LENGTH } from '@aglyn/aglyn/app-utils/media-metadata'
 import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
-import { mdiFileDocumentMultipleOutline } from '@aglyn/shared-data-mdi'
+import {
+  mdiCalendarClock,
+  mdiChevronDown,
+  mdiCogOutline,
+  mdiDeleteOutline,
+  mdiFileDocumentMultipleOutline,
+  mdiOpenInNew,
+  mdiPencilOutline,
+  mdiPublish,
+  mdiPublishOff,
+} from '@aglyn/shared-data-mdi'
 import {
   CardDisplay,
   Container,
+  HelpTip,
+  MdiIcon,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Avatar,
   Button,
@@ -37,6 +52,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   MenuItem,
   Stack,
   Table,
@@ -57,7 +73,7 @@ import {
   setDoc,
   updateDoc,
 } from 'firebase/firestore'
-import { Box, Link as MuiLink } from '@mui/material'
+import { Box } from '@mui/material'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
@@ -85,6 +101,9 @@ import useFirestoreDoc from '../../../../../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../../../../../hooks/use-host-activity-logger'
 import HubTabs from '../../../../../../components/hub-tabs.component'
 import MediaPickerDialog from '../../../../../../components/media/media-picker-dialog.component'
+import RowActionsMenu, {
+  type RowActionsMenuItem,
+} from '../../../../../../components/row-actions-menu.component'
 import {
   applyCommandToSource,
   MARKDOWN_SOURCE_HINT,
@@ -134,6 +153,44 @@ const CUSTOM_BYLINE_VALUE = '__custom__'
  * entries the org serves at /{collectionSlug} and
  * /{collectionSlug}/{entrySlug}.
  */
+/**
+ * Every toolbar control is locked to one height (AGL-2486).
+ *
+ * A `TextField size="small"` is 40px and a `Button size="small"` is 30.8px,
+ * so a select and a button placed on the same row with `alignItems: center`
+ * agree about nothing: measured on `/content` the six controls came out
+ * 40 / 83.8 / 83.8 / 30.8 / 53.5 / 53.5px tall with their tops spread over
+ * 26.5px. Both control kinds now read their height from THIS constant, so
+ * the row cannot drift apart again without someone editing one number.
+ */
+const TOOLBAR_CONTROL_HEIGHT = 40
+
+/**
+ * A row timestamp short enough to hold one line (AGL-2486).
+ *
+ * `toLocaleString()` renders `8/8/2026, 11:48:47 PM`, which wrapped to three
+ * line boxes inside the ~100px column the table actually gave it and made
+ * every row a different height. The exact instant is not lost — it moves to
+ * the cell's `title`, which is where a precise value belongs when the column
+ * is scanned for recency rather than read.
+ */
+const formatStampShort = (value: any): string => {
+  const date = value?.toDate?.()
+  if (!date) return '\u2014'
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+/** The full instant behind `formatStampShort`, for the cell's tooltip. */
+const formatStampFull = (value: any): string | undefined => {
+  const date = value?.toDate?.()
+  if (!date) return undefined
+  return date.toLocaleString()
+}
+
 const HostContent: NextPageWithLayout<Record<string, never>> = () => {
   const hostId = useHostId()
   const orgSlug = useOrgSlug()
@@ -1152,6 +1209,30 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     [confirm, firestore, hostId, enqueueSnackbar, logActivity],
   )
 
+  /**
+   * Opening a blank entry editor, shared by the toolbar's primary button and
+   * the zero-state's call to action (AGL-2486). It was inlined on the button
+   * when there was only one way in.
+   */
+  const openNewEntry = useCallback(() => {
+    setBodyTab('visual')
+    setEditor({
+      id: null,
+      title: '',
+      excerpt: '',
+      body: '',
+      coverImage: '',
+      coverImageAlt: '',
+      seoTitle: '',
+      seoDescription: '',
+      authorName: '',
+      authorId: '',
+      categoryId: '',
+      legacyCategory: '',
+      tags: '',
+    })
+  }, [])
+
   return (
     <>
       <DashboardLayout
@@ -1194,267 +1275,655 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                 id: ENTRIES_TAB_ID,
                 label: 'Collections & Entries',
                 content: (
-          <CardDisplay
-            header={'Collections & Entries'}
-            help={docsHelp('buildABlog')}
-            contentGutterX
-            contentGutterY
-            contentBordered="all"
-          >
-          {collections.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              {'Create a collection (e.g. "Blog") to publish entries at ' +
-                '/blog and /blog/{entry} on your site.'}
-            </Typography>
-          ) : (
-            <Stack spacing={2}>
-              <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
-                <TextField
-                  select
-                  size="small"
-                  label="Collection"
-                  value={selected?.$id ?? ''}
-                  onChange={(event) => setSelectedId(event.target.value)}
-                  sx={{ minWidth: 220 }}
-                >
-                  {collections.map((item) => (
-                    <MenuItem key={item.$id} value={item.$id}>
-                      {`${item.displayName} (/${item.slug})`}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <TextField
-                  select
-                  size="small"
-                  label="List template screen"
-                  value={selected?.listScreenId ?? ''}
-                  onChange={handleTemplateChange(selected?.$id ?? '', 'list')}
-                  sx={{ minWidth: 200 }}
-                  helperText={`Screen for /${selected?.slug ?? '…'} — drop a Collection Entries block`}
-                >
-                  <MenuItem value="">{'Built-in themed list'}</MenuItem>
-                  {screenOptions.map((screen: any) => (
-                    <MenuItem key={screen.$id} value={screen.$id}>
-                      {screen.displayName ?? screen.$id}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <TextField
-                  select
-                  size="small"
-                  label="Entry template screen"
-                  value={
-                    selected?.entryScreenId ??
-                    selected?.templateScreenId ??
-                    ''
-                  }
-                  onChange={handleTemplateChange(selected?.$id ?? '', 'entry')}
-                  sx={{ minWidth: 200 }}
-                  helperText={`Screen for /${selected?.slug ?? '…'}/{entry} — use {{entry.title}}, Entry Body`}
-                >
-                  <MenuItem value="">{'Built-in themed article'}</MenuItem>
-                  {screenOptions.map((screen: any) => (
-                    <MenuItem key={screen.$id} value={screen.$id}>
-                      {screen.displayName ?? screen.$id}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  color="primary"
-                  onClick={() => setCategoriesOpen(true)}
-                >
-                  {'Categories'}
-                </Button>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  color="primary"
-                  onClick={() => {
-                    setBodyTab('visual')
-                    setEditor({
-                      id: null,
-                      title: '',
-                      excerpt: '',
-                      body: '',
-                      coverImage: '',
-                      coverImageAlt: '',
-                      seoTitle: '',
-                      seoDescription: '',
-                      authorName: '',
-                      authorId: '',
-                      categoryId: '',
-                      legacyCategory: '',
-                      tags: '',
-                    })
-                  }}
-                >
-                  {'New entry'}
-                </Button>
-                {/* AGL-1324: the collection shell was the one thing on this
-                    page that could be created and never removed. */}
-                {isSiteAdmin && selected ? (
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="error"
-                    onClick={() => {
-                      setDeleteConfirm('')
-                      setDeleteOpen(true)
-                    }}
+                  <CardDisplay
+                    header={'Collections & Entries'}
+                    help={docsHelp('buildABlog')}
+                    contentGutterX
+                    contentGutterY
+                    contentBordered="all"
                   >
-                    {'Delete collection'}
-                  </Button>
-                ) : null}
-              </Stack>
-              {entries.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  {'No entries yet.'}
-                </Typography>
-              ) : (
-                <Table size="small">
-                  <TableHead
-                    sx={{ '& .MuiTableCell-head': { height: TABLE_HEAD_HEIGHT } }}
-                  >
-                    <TableRow>
-                      <TableCell>{'Title'}</TableCell>
-                      <TableCell>{'Status'}</TableCell>
-                      <TableCell>{'Updated'}</TableCell>
-                      <TableCell>{'Published'}</TableCell>
-                      <TableCell align="right">{'Actions'}</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {entries.map((entry) => {
-                      // Row click opens the same editor the Edit button does,
-                      // matching the artifact listings (AGL-698).
-                      const openEntry = () => {
-                        setBodyTab('visual')
-                        setEditor({
-                          id: entry.$id,
-                          title: entry.title ?? '',
-                          excerpt: entry.excerpt ?? '',
-                          body: entry.body ?? '',
-                          coverImage: entry.coverImage ?? '',
-                          coverImageAlt: entry.coverImageAlt ?? '',
-                          seoTitle: entry.seoTitle ?? '',
-                          seoDescription: entry.seoDescription ?? '',
-                          authorName: entry.authorName ?? '',
-                          authorId: entry.authorId ?? '',
-                          categoryId: entry.categoryId ?? '',
-                          legacyCategory: entry.category ?? '',
-                          tags: Array.isArray(entry.tags)
-                            ? entry.tags.join(', ')
-                            : '',
-                        })
-                      }
-                      return (
-                      <TableRow
-                        key={entry.$id}
-                        hover
-                        onClick={openEntry}
-                        sx={{ cursor: 'pointer' }}
+                    {/*
+                      The control row used to do three unrelated jobs at once
+                      (AGL-2486): pick a collection, configure that
+                      collection's two template screens, and act on it. That
+                      is why nothing lined up — a settings control carries
+                      helper text and a button does not, so putting them on
+                      one `alignItems: center` row guaranteed three different
+                      heights and three different baselines. Measured: the six
+                      controls were 40 / 83.8 / 83.8 / 30.8 / 53.5 / 53.5px
+                      tall, and `New entry` and `Delete collection` wrapped
+                      their own labels onto two lines at EVERY width down from
+                      1800px, while `Categories` did not.
+
+                      Split by job instead: a toolbar that chooses and acts,
+                      and a disclosure that configures. Nothing was removed.
+                    */}
+                    {collections.length === 0 ? (
+                      /*
+                        Deliberately not `EmptyState` — that component brings
+                        its own `CardDisplay`, and this one already sits
+                        inside one. The framing differs; the language (icon,
+                        h6 title, capped secondary copy, one call to action)
+                        is the same on purpose.
+                      */
+                      <Stack
+                        spacing={1.5}
+                        sx={{ alignItems: 'center', textAlign: 'center', py: 6 }}
                       >
-                        <TableCell>
-                          {entry.title}
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                            component="div"
-                          >
-                            {`/${selected?.slug}/${entry.slug}`}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={
-                              entry.status === 'scheduled' && entry.publishAt
-                                ? `scheduled · ${entry.publishAt.toDate?.().toLocaleString() ?? ''}`
-                                : (entry.status ?? 'draft')
-                            }
-                            color={
-                              entry.status === 'published'
-                                ? 'success'
-                                : entry.status === 'scheduled'
-                                  ? 'info'
-                                  : 'default'
-                            }
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          {entry.updatedAt?.toDate?.().toLocaleString() ?? '--'}
-                        </TableCell>
-                        <TableCell>
-                          {entry.publishedAt?.toDate?.().toLocaleString() ??
-                            '--'}
-                        </TableCell>
-                        <TableCell
-                          align="right"
-                          sx={{ whiteSpace: 'nowrap' }}
-                          onClick={(event) => event.stopPropagation()}
+                        <MdiIcon
+                          path={mdiFileDocumentMultipleOutline.path}
+                          color="primary"
+                          fontSize="large"
+                        />
+                        <Typography variant="h6">
+                          {'No collections yet'}
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{ maxWidth: 440 }}
                         >
-                          <Button size="small" onClick={openEntry}>
-                            {'Edit'}
-                          </Button>
-                          <Button
+                          {'A collection is a set of pages that share a shape ' +
+                            '\u2014 a blog, a news feed, a case-study library. ' +
+                            'Create one and its entries publish at ' +
+                            '/{collection} and /{collection}/{entry} on your ' +
+                            'site.'}
+                        </Typography>
+                        <Button
+                          variant="contained"
+                          color="primary"
+                          onClick={() => setNewCollectionOpen(true)}
+                        >
+                          {'New collection'}
+                        </Button>
+                      </Stack>
+                    ) : (
+                      <Stack spacing={2.5}>
+                        {/*
+                          Toolbar: which collection, and what to do with it.
+                          It WRAPS rather than overflowing, and every control
+                          is pinned to `TOOLBAR_CONTROL_HEIGHT`, so the row
+                          holds its baseline at any width.
+                        */}
+                        <Stack
+                          direction="row"
+                          useFlexGap
+                          sx={{
+                            alignItems: 'center',
+                            flexWrap: 'wrap',
+                            gap: 1.5,
+                          }}
+                        >
+                          <TextField
+                            select
                             size="small"
-                            color="primary"
-                            onClick={handleTogglePublish(entry)}
-                          >
-                            {entry.status === 'published'
-                              ? 'Unpublish'
-                              : 'Publish'}
-                          </Button>
-                          <Button
-                            size="small"
-                            color="primary"
-                            onClick={() => {
-                              const initial = new Date(
-                                Date.now() + 60 * 60 * 1000,
-                              )
-                              initial.setMinutes(0, 0, 0)
-                              const pad = (value: number) =>
-                                String(value).padStart(2, '0')
-                              setScheduler({
-                                entry,
-                                at:
-                                  `${initial.getFullYear()}-${pad(initial.getMonth() + 1)}-` +
-                                  `${pad(initial.getDate())}T${pad(initial.getHours())}:${pad(initial.getMinutes())}`,
-                              })
+                            label="Collection"
+                            value={selected?.$id ?? ''}
+                            onChange={(event) =>
+                              setSelectedId(event.target.value)
+                            }
+                            sx={{
+                              minWidth: 200,
+                              maxWidth: 340,
+                              flexGrow: 1,
+                              '& .MuiInputBase-root': {
+                                height: TOOLBAR_CONTROL_HEIGHT,
+                              },
                             }}
                           >
-                            {'Schedule'}
-                          </Button>
-                          {entry.status === 'published' && siteBase ? (
-                            <Button
-                              size="small"
-                              component={MuiLink as any}
-                              href={`${siteBase}/${selected?.slug}/${entry.slug}`}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              {'View'}
-                            </Button>
-                          ) : null}
+                            {collections.map((item) => (
+                              <MenuItem key={item.$id} value={item.$id}>
+                                {`${item.displayName} (/${item.slug})`}
+                              </MenuItem>
+                            ))}
+                          </TextField>
+                          {/* Pushes the actions to the trailing edge without
+                              letting the select swallow the whole row. */}
+                          <Box sx={{ flexGrow: 1 }} />
                           <Button
-                            size="small"
-                            color="error"
-                            onClick={handleDeleteEntry(entry)}
+                            variant="outlined"
+                            color="primary"
+                            onClick={() => setCategoriesOpen(true)}
+                            sx={{
+                              height: TOOLBAR_CONTROL_HEIGHT,
+                              flexShrink: 0,
+                              whiteSpace: 'nowrap',
+                            }}
                           >
-                            {'Delete'}
+                            {'Categories'}
                           </Button>
-                        </TableCell>
-                      </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              )}
-            </Stack>
-          )}
-          </CardDisplay>
+                          {/* The one primary action on this tab, and now the
+                              only contained button in the row. */}
+                          <Button
+                            variant="contained"
+                            color="primary"
+                            onClick={openNewEntry}
+                            sx={{
+                              height: TOOLBAR_CONTROL_HEIGHT,
+                              flexShrink: 0,
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {'New entry'}
+                          </Button>
+                        </Stack>
+                        {/*
+                          Collection settings: the two template screens and
+                          the collection's own deletion. Both are things you
+                          set up once and then leave alone, so they sit behind
+                          a disclosure instead of competing with `New entry`
+                          for the toolbar.
+                        */}
+                        <Accordion
+                          disableGutters
+                          elevation={0}
+                          sx={{
+                            border: 1,
+                            borderColor: 'divider',
+                            borderRadius: 1,
+                            '&::before': { display: 'none' },
+                          }}
+                        >
+                          <AccordionSummary
+                            expandIcon={
+                              <MdiIcon path={mdiChevronDown.path} size={0.9} />
+                            }
+                          >
+                            <Stack
+                              direction="row"
+                              spacing={1}
+                              sx={{ alignItems: 'center' }}
+                            >
+                              <MdiIcon path={mdiCogOutline.path} size={0.8} />
+                              <Typography variant="subtitle2">
+                                {'Collection settings'}
+                              </Typography>
+                            </Stack>
+                          </AccordionSummary>
+                          <AccordionDetails>
+                            <Stack spacing={3}>
+                              <Stack spacing={1.5}>
+                                <Stack
+                                  direction="row"
+                                  spacing={0.5}
+                                  sx={{ alignItems: 'center' }}
+                                >
+                                  <Typography variant="subtitle2">
+                                    {'Template screens'}
+                                  </Typography>
+                                  {/*
+                                    The captions under these two selects used
+                                    to read "drop a Collection Entries block"
+                                    and "use {{entry.title}}, Entry Body" —
+                                    true, but written for whoever built the
+                                    feature, and long enough to wrap and shove
+                                    the row's baseline around. The detail is
+                                    kept, in the console's own `HelpTip`; the
+                                    helper text below each select now answers
+                                    the question an editor actually has, which
+                                    is which URL the screen serves.
+                                  */}
+                                  <HelpTip
+                                    title="Template screens"
+                                    href={docsHelp('buildABlog').href}
+                                    excerpt={
+                                      'Leave either on the built-in themed ' +
+                                      'page and Aglyn renders it for you. To ' +
+                                      'design your own: the list screen needs ' +
+                                      'a Collection Entries block, and the ' +
+                                      'entry screen can use {{entry.title}}, ' +
+                                      'Entry Body and the entry\u2019s other ' +
+                                      'fields.'
+                                    }
+                                  />
+                                </Stack>
+                                <Box
+                                  sx={{
+                                    display: 'grid',
+                                    gap: 2,
+                                    gridTemplateColumns: {
+                                      xs: '1fr',
+                                      sm: '1fr 1fr',
+                                    },
+                                  }}
+                                >
+                                  <TextField
+                                    select
+                                    size="small"
+                                    label="List screen"
+                                    value={selected?.listScreenId ?? ''}
+                                    onChange={handleTemplateChange(
+                                      selected?.$id ?? '',
+                                      'list',
+                                    )}
+                                    helperText={`Lists every entry at /${
+                                      selected?.slug ?? '\u2026'
+                                    }`}
+                                  >
+                                    <MenuItem value="">
+                                      {'Built-in themed list'}
+                                    </MenuItem>
+                                    {screenOptions.map((screen: any) => (
+                                      <MenuItem
+                                        key={screen.$id}
+                                        value={screen.$id}
+                                      >
+                                        {screen.displayName ?? screen.$id}
+                                      </MenuItem>
+                                    ))}
+                                  </TextField>
+                                  <TextField
+                                    select
+                                    size="small"
+                                    label="Entry screen"
+                                    value={
+                                      selected?.entryScreenId ??
+                                      selected?.templateScreenId ??
+                                      ''
+                                    }
+                                    onChange={handleTemplateChange(
+                                      selected?.$id ?? '',
+                                      'entry',
+                                    )}
+                                    helperText={`Renders one entry under /${
+                                      selected?.slug ?? '\u2026'
+                                    }`}
+                                  >
+                                    <MenuItem value="">
+                                      {'Built-in themed article'}
+                                    </MenuItem>
+                                    {screenOptions.map((screen: any) => (
+                                      <MenuItem
+                                        key={screen.$id}
+                                        value={screen.$id}
+                                      >
+                                        {screen.displayName ?? screen.$id}
+                                      </MenuItem>
+                                    ))}
+                                  </TextField>
+                                </Box>
+                              </Stack>
+                              {/*
+                                AGL-1324 gave the collection shell a delete;
+                                AGL-2486 gives it somewhere to live. It was
+                                sitting next to `New entry` at the same size
+                                and the same outlined weight, which is the one
+                                arrangement guaranteed to make the destructive
+                                action the easiest to hit by accident. It is
+                                now behind this disclosure, below a rule, in
+                                the lightest button variant there is, and it
+                                still opens the type-the-name dialog.
+                              */}
+                              {isSiteAdmin && selected ? (
+                                <>
+                                  <Divider />
+                                  <Stack
+                                    direction="row"
+                                    useFlexGap
+                                    sx={{
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      flexWrap: 'wrap',
+                                      gap: 1.5,
+                                    }}
+                                  >
+                                    <Stack
+                                      spacing={0.25}
+                                      sx={{ flexGrow: 1, minWidth: 220 }}
+                                    >
+                                      <Typography variant="subtitle2">
+                                        {'Delete this collection'}
+                                      </Typography>
+                                      <Typography
+                                        variant="caption"
+                                        color="text.secondary"
+                                      >
+                                        {`Permanently removes ${
+                                          selected.displayName
+                                        }, its /${
+                                          selected.slug
+                                        } route and every entry in it.`}
+                                      </Typography>
+                                    </Stack>
+                                    <Button
+                                      size="small"
+                                      variant="text"
+                                      color="error"
+                                      onClick={() => {
+                                        setDeleteConfirm('')
+                                        setDeleteOpen(true)
+                                      }}
+                                      sx={{
+                                        flexShrink: 0,
+                                        whiteSpace: 'nowrap',
+                                      }}
+                                    >
+                                      {'Delete collection'}
+                                    </Button>
+                                  </Stack>
+                                </>
+                              ) : null}
+                            </Stack>
+                          </AccordionDetails>
+                        </Accordion>
+                        {entries.length === 0 ? (
+                          <Stack
+                            spacing={1.5}
+                            sx={{
+                              alignItems: 'center',
+                              textAlign: 'center',
+                              py: 5,
+                            }}
+                          >
+                            <MdiIcon
+                              path={mdiFileDocumentMultipleOutline.path}
+                              color="primary"
+                              fontSize="large"
+                            />
+                            <Typography variant="h6">
+                              {'No entries yet'}
+                            </Typography>
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ maxWidth: 420 }}
+                            >
+                              {`Entries you publish here appear at /${
+                                selected?.slug ?? ''
+                              } on your site.`}
+                            </Typography>
+                            <Button
+                              variant="contained"
+                              color="primary"
+                              onClick={openNewEntry}
+                            >
+                              {'New entry'}
+                            </Button>
+                          </Stack>
+                        ) : (
+                          <Table size="small">
+                            <TableHead
+                              sx={{
+                                '& .MuiTableCell-head': {
+                                  height: TABLE_HEAD_HEIGHT,
+                                },
+                              }}
+                            >
+                              <TableRow>
+                                {/*
+                                  Title takes every spare pixel; the rest are
+                                  sized by their own content. Before this the
+                                  action cluster held a FIXED 381.5px — 43% of
+                                  the table at 1280px and 48.5% at 900px, more
+                                  than the title column ever got — and the
+                                  table overflowed its container by 298px at
+                                  900px and 448px at 700px.
+                                */}
+                                <TableCell sx={{ width: '100%' }}>
+                                  {'Title'}
+                                </TableCell>
+                                <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                  {'Status'}
+                                </TableCell>
+                                <TableCell
+                                  sx={{
+                                    whiteSpace: 'nowrap',
+                                    display: { xs: 'none', md: 'table-cell' },
+                                  }}
+                                >
+                                  {'Updated'}
+                                </TableCell>
+                                <TableCell
+                                  sx={{
+                                    whiteSpace: 'nowrap',
+                                    display: { xs: 'none', md: 'table-cell' },
+                                  }}
+                                >
+                                  {'Published'}
+                                </TableCell>
+                                <TableCell align="right" sx={{ width: 56 }}>
+                                  {'Actions'}
+                                </TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {entries.map((entry) => {
+                                // Row click opens the same editor the Edit
+                                // action does, matching the artifact listings
+                                // (AGL-698).
+                                const openEntry = () => {
+                                  setBodyTab('visual')
+                                  setEditor({
+                                    id: entry.$id,
+                                    title: entry.title ?? '',
+                                    excerpt: entry.excerpt ?? '',
+                                    body: entry.body ?? '',
+                                    coverImage: entry.coverImage ?? '',
+                                    coverImageAlt: entry.coverImageAlt ?? '',
+                                    seoTitle: entry.seoTitle ?? '',
+                                    seoDescription: entry.seoDescription ?? '',
+                                    authorName: entry.authorName ?? '',
+                                    authorId: entry.authorId ?? '',
+                                    categoryId: entry.categoryId ?? '',
+                                    legacyCategory: entry.category ?? '',
+                                    tags: Array.isArray(entry.tags)
+                                      ? entry.tags.join(', ')
+                                      : '',
+                                  })
+                                }
+                                const published =
+                                  entry.status === 'published'
+                                /*
+                                  Five equal text links (EDIT · UNPUBLISH ·
+                                  SCHEDULE · VIEW · DELETE) put the one
+                                  irreversible action a few pixels from the
+                                  four routine ones. The console settled this
+                                  in AGL-701: secondary and destructive row
+                                  actions go in the overflow menu, which tints
+                                  the destructive item and cannot be hit
+                                  without opening it first.
+                                */
+                                const actions: RowActionsMenuItem[] = [
+                                  {
+                                    key: 'edit',
+                                    label: 'Edit',
+                                    icon: (
+                                      <MdiIcon
+                                        path={mdiPencilOutline.path}
+                                        size={0.8}
+                                      />
+                                    ),
+                                    onClick: openEntry,
+                                  },
+                                  {
+                                    key: 'publish',
+                                    label: published ? 'Unpublish' : 'Publish',
+                                    icon: (
+                                      <MdiIcon
+                                        path={
+                                          published
+                                            ? mdiPublishOff.path
+                                            : mdiPublish.path
+                                        }
+                                        size={0.8}
+                                      />
+                                    ),
+                                    onClick: () =>
+                                      void handleTogglePublish(entry)(),
+                                  },
+                                  {
+                                    key: 'schedule',
+                                    label: 'Schedule\u2026',
+                                    icon: (
+                                      <MdiIcon
+                                        path={mdiCalendarClock.path}
+                                        size={0.8}
+                                      />
+                                    ),
+                                    onClick: () => {
+                                      const initial = new Date(
+                                        Date.now() + 60 * 60 * 1000,
+                                      )
+                                      initial.setMinutes(0, 0, 0)
+                                      const pad = (value: number) =>
+                                        String(value).padStart(2, '0')
+                                      setScheduler({
+                                        entry,
+                                        at:
+                                          `${initial.getFullYear()}-${pad(initial.getMonth() + 1)}-` +
+                                          `${pad(initial.getDate())}T${pad(initial.getHours())}:${pad(initial.getMinutes())}`,
+                                      })
+                                    },
+                                  },
+                                ]
+                                if (published && siteBase) {
+                                  actions.push({
+                                    key: 'view',
+                                    label: 'View on site',
+                                    icon: (
+                                      <MdiIcon
+                                        path={mdiOpenInNew.path}
+                                        size={0.8}
+                                      />
+                                    ),
+                                    onClick: () =>
+                                      void window.open(
+                                        `${siteBase}/${selected?.slug}/${entry.slug}`,
+                                        '_blank',
+                                        'noreferrer',
+                                      ),
+                                  })
+                                }
+                                actions.push({
+                                  key: 'delete',
+                                  label: 'Delete',
+                                  destructive: true,
+                                  icon: (
+                                    <MdiIcon
+                                      path={mdiDeleteOutline.path}
+                                      size={0.8}
+                                    />
+                                  ),
+                                  onClick: () =>
+                                    void handleDeleteEntry(entry)(),
+                                })
+                                return (
+                                  <TableRow
+                                    key={entry.$id}
+                                    hover
+                                    onClick={openEntry}
+                                    sx={{ cursor: 'pointer' }}
+                                  >
+                                    <TableCell sx={{ width: '100%' }}>
+                                      {/*
+                                        `anywhere` rather than a truncation:
+                                        a slug is one long unbroken token and
+                                        the default break rules cut it
+                                        mid-word instead of wrapping it.
+                                      */}
+                                      <Typography
+                                        variant="body2"
+                                        sx={{
+                                          fontWeight: 500,
+                                          overflowWrap: 'anywhere',
+                                        }}
+                                      >
+                                        {entry.title}
+                                      </Typography>
+                                      <Typography
+                                        variant="caption"
+                                        color="text.secondary"
+                                        component="div"
+                                        sx={{ overflowWrap: 'anywhere' }}
+                                      >
+                                        {`/${selected?.slug}/${entry.slug}`}
+                                      </Typography>
+                                    </TableCell>
+                                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                      {/*
+                                        Outlined, and the label is the status
+                                        word alone. A filled chip carrying a
+                                        full timestamp was the heaviest thing
+                                        on a page of otherwise quiet rows, and
+                                        it repeated identically down every
+                                        one. The scheduled instant moves to
+                                        the Published column, which is the
+                                        column about when a thing goes live.
+                                      */}
+                                      <Chip
+                                        label={entry.status ?? 'draft'}
+                                        variant="outlined"
+                                        color={
+                                          published
+                                            ? 'success'
+                                            : entry.status === 'scheduled'
+                                              ? 'info'
+                                              : 'default'
+                                        }
+                                        size="small"
+                                      />
+                                    </TableCell>
+                                    <TableCell
+                                      title={formatStampFull(entry.updatedAt)}
+                                      sx={{
+                                        whiteSpace: 'nowrap',
+                                        display: {
+                                          xs: 'none',
+                                          md: 'table-cell',
+                                        },
+                                      }}
+                                    >
+                                      {formatStampShort(entry.updatedAt)}
+                                    </TableCell>
+                                    <TableCell
+                                      title={
+                                        formatStampFull(entry.publishedAt) ??
+                                        formatStampFull(entry.publishAt)
+                                      }
+                                      sx={{
+                                        whiteSpace: 'nowrap',
+                                        display: {
+                                          xs: 'none',
+                                          md: 'table-cell',
+                                        },
+                                      }}
+                                    >
+                                      {entry.publishedAt ? (
+                                        formatStampShort(entry.publishedAt)
+                                      ) : entry.status === 'scheduled' &&
+                                        entry.publishAt ? (
+                                        <Typography
+                                          variant="body2"
+                                          color="info.main"
+                                          component="span"
+                                        >
+                                          {formatStampShort(entry.publishAt)}
+                                        </Typography>
+                                      ) : (
+                                        '\u2014'
+                                      )}
+                                    </TableCell>
+                                    <TableCell
+                                      align="right"
+                                      sx={{ width: 56 }}
+                                      onClick={(event) =>
+                                        event.stopPropagation()
+                                      }
+                                    >
+                                      <RowActionsMenu
+                                        label={entry.title}
+                                        items={actions}
+                                      />
+                                    </TableCell>
+                                  </TableRow>
+                                )
+                              })}
+                            </TableBody>
+                          </Table>
+                        )}
+                      </Stack>
+                    )}
+                  </CardDisplay>
                 ),
               },
               {
@@ -1487,10 +1956,14 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                             'schema.org author.'}
                         </Typography>
                         <Button
-                          size="small"
-                          variant="outlined"
+                          variant="contained"
                           color="primary"
                           onClick={() => openAuthor()}
+                          sx={{
+                            height: TOOLBAR_CONTROL_HEIGHT,
+                            flexShrink: 0,
+                            whiteSpace: 'nowrap',
+                          }}
                         >
                           {'New author'}
                         </Button>
@@ -1514,7 +1987,9 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                               <TableCell>{'Author'}</TableCell>
                               <TableCell>{'Type'}</TableCell>
                               <TableCell>{'Entries'}</TableCell>
-                              <TableCell align="right">{'Actions'}</TableCell>
+                              <TableCell align="right" sx={{ width: 56 }}>
+                                {'Actions'}
+                              </TableCell>
                             </TableRow>
                           </TableHead>
                           <TableBody>
@@ -1574,17 +2049,40 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                                     ).length
                                   }
                                 </TableCell>
-                                <TableCell align="right">
-                                  <Button
-                                    size="small"
-                                    color="error"
-                                    onClick={(event) => {
-                                      event.stopPropagation()
-                                      void handleDeleteAuthor(author)()
-                                    }}
-                                  >
-                                    {'Delete'}
-                                  </Button>
+                                <TableCell
+                                  align="right"
+                                  sx={{ width: 56 }}
+                                  onClick={(event) => event.stopPropagation()}
+                                >
+                                  <RowActionsMenu
+                                    label={author.name}
+                                    items={[
+                                      {
+                                        key: 'edit',
+                                        label: 'Edit',
+                                        icon: (
+                                          <MdiIcon
+                                            path={mdiPencilOutline.path}
+                                            size={0.8}
+                                          />
+                                        ),
+                                        onClick: () => openAuthor(author),
+                                      },
+                                      {
+                                        key: 'delete',
+                                        label: 'Delete',
+                                        destructive: true,
+                                        icon: (
+                                          <MdiIcon
+                                            path={mdiDeleteOutline.path}
+                                            size={0.8}
+                                          />
+                                        ),
+                                        onClick: () =>
+                                          void handleDeleteAuthor(author)(),
+                                      },
+                                    ]}
+                                  />
                                 </TableCell>
                               </TableRow>
                             ))}

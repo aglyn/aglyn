@@ -159,6 +159,14 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
       ))}
     </div>
   ),
+  // Both arrived with the AGL-2486 polish pass: `HelpTip` carries the
+  // template-screen guidance that used to be helper text under the selects,
+  // and `MdiIcon` draws the zero-state icon, the disclosure's cog and every
+  // row-menu glyph. Named here because this factory is a closed world — an
+  // unlisted export renders as `undefined` and React throws "Element type is
+  // invalid" for the WHOLE page, which is what it did.
+  HelpTip: () => null,
+  MdiIcon: () => null,
   useConfirmationContext: () => ({
     confirm: jest.fn().mockResolvedValue(undefined),
   }),
