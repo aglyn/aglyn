@@ -575,12 +575,30 @@ describe('the advertising-tag gate', () => {
       expect(files.some((f) => f.file.endsWith('constants/cookie-inventory.ts')))
         .toBe(true)
 
-      const offenders = files.filter(
-        ({ source }) =>
-          source.includes('app-utils/advertising-tags') ||
-          source.includes(META_PIXEL_VENDOR.scriptMatch) ||
-          /\bfbq\b/.test(source),
-      )
+      // Comments are STRIPPED before the scan (AGL-2486). This guard is about
+      // an import, not about a word: `apps/console/constants/cookie-inventory.ts`
+      // has a docstring explaining why the coverage check lives in THIS file
+      // and not there, and that explanation necessarily names
+      // `app-utils/advertising-tags` — so the substring scan read the reason
+      // for the rule as a violation of it, and turned this case red on `main`
+      // for every hourly Main Gate sweep. A comment cannot load a pixel.
+      //
+      // The stripping is deliberately crude and that is the safe direction: it
+      // removes `//` lines and `/* … */` blocks, so the worst it can do is
+      // fail to strip something and go red, never strip real code and go
+      // green. A string literal containing `//` survives, which is fine —
+      // nothing here needs one.
+      const withoutComments = (source: string) =>
+        source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+
+      const offenders = files.filter(({ source }) => {
+        const code = withoutComments(source)
+        return (
+          code.includes('app-utils/advertising-tags') ||
+          code.includes(META_PIXEL_VENDOR.scriptMatch) ||
+          /\bfbq\b/.test(code)
+        )
+      })
       expect(offenders.map((f) => f.file)).toEqual([])
     })
 
