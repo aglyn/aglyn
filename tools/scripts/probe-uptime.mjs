@@ -49,6 +49,43 @@ const DEFAULT_TARGETS = [
 const TIMEOUT_MS = 15_000
 
 /**
+ * The SUBSYSTEM health endpoints, per target name.
+ *
+ * ⚠️ These existed for weeks with no reader, which is the whole reason this
+ * list is here (AGL-2486). `/api/health` aggregates exactly one check —
+ * `firestore` — so a probe that reads only the root answers "is the console
+ * serving requests", and every subsystem detector built on top of it
+ * (AGL-1490 backups, AGL-1955 cron beats, the billing webhook, the signup
+ * funnel, rate limits, the error beacon) reported into nothing.
+ *
+ * The cost of that was measured, not hypothesised: `campaigns-process-
+ * scheduled` was answered with a 429 firewall challenge on every run for
+ * FIFTY-ONE HOURS. `/api/health/crons` had it right the whole time —
+ * `job-silent`, 503 — and no reader ever asked. Meanwhile `Uptime probe` was
+ * green every fifteen minutes, which is worse than no board at all.
+ *
+ * Each route memoises for five minutes (`PROBE_TTL_MS`) precisely so a
+ * fifteen-minute probe is nearly free, and each one's docstring names this
+ * probe as its intended reader. This is finishing the wiring, not adding a
+ * cost centre.
+ *
+ * A name with no entry contributes no extra requests, so a bare-URL or
+ * localhost invocation still probes only the root.
+ */
+const SUBSYSTEM_HEALTH = {
+  console: [
+    '/api/health/crons',
+    '/api/health/backups',
+    '/api/health/billing',
+    '/api/health/signups',
+    '/api/health/rate-limits',
+    '/api/health/error-beacon',
+  ],
+  // The tenant app ships only this one; the rest are console-side.
+  tenant: ['/api/health/error-beacon'],
+}
+
+/**
  * Arguments are `name=url`, or a bare url.
  *
  * Names matter more than they look: the workflow log is the incident record,
@@ -75,8 +112,8 @@ const targets = args.length
  * at aglyn.io after the domain move and every cron run failed for a week
  * before anyone read the logs. Name it instead of following it.
  */
-async function probe(name, base) {
-  const url = `${base.replace(/\/$/, '')}/api/health`
+async function probe(name, base, path = '/api/health') {
+  const url = `${base.replace(/\/$/, '')}${path}`
   const startedAt = Date.now()
   try {
     const response = await fetch(url, {
@@ -137,14 +174,26 @@ async function probe(name, base) {
   }
 }
 
-const results = await Promise.all(targets.map(([name, base]) => probe(name, base)))
+// Root first, then each subsystem, named so the log line says WHICH one is
+// out — `console/crons` rather than a second `console` row the reader has to
+// disambiguate by URL.
+const plan = targets.flatMap(([name, base]) => [
+  [name, base, '/api/health'],
+  ...(SUBSYSTEM_HEALTH[name] ?? []).map((path) => [
+    `${name}/${path.slice('/api/health/'.length)}`,
+    base,
+    path,
+  ]),
+])
+
+const results = await Promise.all(plan.map(([name, base, path]) => probe(name, base, path)))
 
 console.log(`uptime probe · ${new Date().toISOString()}`)
 for (const r of results) {
   const build = r.commit ? ` build=${r.commit}` : ''
   const region = r.region ? ` region=${r.region}` : ''
   console.log(
-    `  ${r.ok ? 'UP  ' : 'DOWN'} ${r.name.padEnd(9)} ${String(r.ms).padStart(5)}ms  ${r.detail}${build}${region}`,
+    `  ${r.ok ? 'UP  ' : 'DOWN'} ${r.name.padEnd(22)} ${String(r.ms).padStart(5)}ms  ${r.detail}${build}${region}`,
   )
   console.log(`       ${r.url}`)
 }
