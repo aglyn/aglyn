@@ -187,6 +187,61 @@ export function mergeUploadOrigins(
 }
 
 /**
+ * The configuration to WRITE so `origins` are no longer permitted, keeping
+ * everything else (AGL-1452).
+ *
+ * ## Why a detach has to do this
+ *
+ * An origin outlives the name unless something removes it. For an
+ * `*.aglyn.com` subdomain that is untidy. For a **white-label console domain**
+ * it is a standing permission on a bucket that accepts signed writes, granted
+ * to a host the customer keeps and we no longer serve — and the signed URL
+ * carries its own authorization, so that host can spend one that leaks. A
+ * stale CORS origin is therefore worse than a stale reCAPTCHA entry, not
+ * merely equivalent to one.
+ *
+ * ## `keep` is not optional in practice
+ *
+ * The platform origin is configured, not provisioned. Removing it would break
+ * large uploads for every customer at once — the platform-wide outage the
+ * read-modify-write warning is about, reached from the other direction. Every
+ * caller passes it.
+ *
+ * A rule left with no origins is DROPPED rather than written as `origin: []`.
+ * GCS accepts the empty form, and it reads to the next person like a rule that
+ * permits something.
+ */
+export function revokeUploadOrigins(
+  rules: CorsRule[],
+  origins: string[],
+  { keep = [] }: { keep?: string[] } = {},
+): { rules: CorsRule[]; removed: string[]; refused: string[] } {
+  const protectedSet = new Set(keep)
+  const asked = [...new Set(origins.map((origin) => String(origin)))]
+  const refused = asked.filter(
+    (origin) => origin === '*' || protectedSet.has(origin),
+  )
+  const doomed = new Set(asked.filter((origin) => !refused.includes(origin)))
+  if (doomed.size === 0) return { rules, removed: [], refused }
+
+  const removed: string[] = []
+  const next: CorsRule[] = []
+  for (const rule of rules) {
+    if (uploadRules([rule]).length !== 1) {
+      next.push(rule)
+      continue
+    }
+    const kept = (rule.origin ?? []).filter((origin) => {
+      if (!doomed.has(String(origin))) return true
+      removed.push(String(origin))
+      return false
+    })
+    if (kept.length > 0) next.push({ ...rule, origin: kept })
+  }
+  return { rules: next, removed, refused }
+}
+
+/**
  * What a human must run when the automation could not.
  *
  * Carries the warning as well as the command: the obvious one-liner is the

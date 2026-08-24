@@ -36,9 +36,11 @@
 export {}
 
 const reconcile = jest.fn()
+const release = jest.fn()
 
 jest.mock('./upload-cors-reconcile', () => ({
   reconcileUploadCors: (...args: unknown[]) => reconcile(...args),
+  releaseUploadCors: (...args: unknown[]) => release(...args),
   liveBucketCorsIO: () => ({ bucket: 'test-bucket' }),
 }))
 
@@ -156,6 +158,76 @@ describe('attachProjectDomain reconciles upload CORS (AGL-1452)', () => {
     await expect(attachProjectDomain('acme.example.com')).resolves.toEqual(
       expect.objectContaining({ outcome: 'attached' }),
     )
+  })
+})
+
+describe('detachProjectDomain reclaims the upload origin (AGL-1452)', () => {
+  let fetchMock: jest.SpyInstance
+
+  beforeEach(() => {
+    release.mockReset()
+    release.mockResolvedValue({
+      origin: 'https://acme.example.com',
+      revoked: true,
+      detail: null,
+    })
+    fetchMock = jest.spyOn(global, 'fetch' as never)
+  })
+
+  afterEach(() => {
+    fetchMock.mockRestore()
+  })
+
+  it('releases the origin of a name it detached', async () => {
+    fetchMock.mockResolvedValue(respond(200))
+    const { detachProjectDomain } = await load()
+    const result = await detachProjectDomain('acme.example.com')
+
+    expect(result.outcome).toBe('detached')
+    // Without this the allowlist only ever grows, which is exactly why the
+    // live bucket carried five `agl1514-smoke-*` origins on 2026-08-24.
+    expect(release).toHaveBeenCalledWith('acme.example.com')
+    expect(result.uploadCorsRelease).toEqual({
+      origin: 'https://acme.example.com',
+      revoked: true,
+      detail: null,
+    })
+  })
+
+  it('does NOT release for a name that was never on the project', async () => {
+    fetchMock.mockResolvedValue(respond(404))
+    const { detachProjectDomain } = await load()
+    const result = await detachProjectDomain('never-ours.example.com')
+
+    expect(result.outcome).toBe('not-found')
+    expect(release).not.toHaveBeenCalled()
+  })
+
+  it('still reports the detach when the release could not write', async () => {
+    fetchMock.mockResolvedValue(respond(200))
+    release.mockResolvedValue({
+      origin: 'https://acme.example.com',
+      revoked: false,
+      detail: 'write-failed',
+    })
+    const { detachProjectDomain } = await load()
+    const result = await detachProjectDomain('acme.example.com')
+
+    // A domain must not fail to detach because a storage API refused — but the
+    // standing permission has to be visible, not swallowed.
+    expect(result.outcome).toBe('detached')
+    expect(result.uploadCorsRelease?.revoked).toBe(false)
+    expect(result.uploadCorsRelease?.detail).toBe('write-failed')
+  })
+
+  it('does not fail the detach when the release throws', async () => {
+    fetchMock.mockResolvedValue(respond(200))
+    release.mockRejectedValue(new Error('storage unreachable'))
+    const { detachProjectDomain } = await load()
+
+    await expect(detachProjectDomain('acme.example.com')).resolves.toMatchObject({
+      outcome: 'detached',
+    })
   })
 })
 
