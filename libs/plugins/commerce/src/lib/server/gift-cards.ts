@@ -85,10 +85,23 @@ export const giftCardsHandler: PluginApiHandler = async (req, res) => {
     if (!hostSnapshot.exists) {
       return res.status(404).json({ error: 'Unknown site' })
     }
-    // Owner/admin/editor, not viewer — the same bar `member-post.ts` sets for
-    // a write that leaves the console.
+    // AN ALLOWLIST (AGL-2372), not the `!role || role === 'viewer'` denylist
+    // this route used to carry — the same correction AGL-2262 made to
+    // `pos-order.ts` and `draft-order.ts` and did not reach here.
+    //
+    // A denylist silently WIDENS every time the role union grows. It did:
+    // `HostAccessRole` is `admin | editor | author | viewer` since AGL-2334,
+    // and `author` is grantable on any host through `/api/hosts/members`. So
+    // "not literally viewer" started admitting authors — a role that exists to
+    // edit content — to a route that mints and destroys store credit.
+    //
+    // `admin | editor` is the bar this route always meant (the comment here
+    // said "owner/admin/editor, not viewer"); the difference is that a role
+    // added tomorrow is now refused until someone decides otherwise, rather
+    // than admitted by silence. Absent stays refused: `undefined` is not in
+    // the set, which matters with `strictNullChecks` off.
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (!memberRole || memberRole === 'viewer') {
+    if (memberRole !== 'admin' && memberRole !== 'editor') {
       return res.status(403).json({ error: 'Not permitted' })
     }
     const owner = await getOrgForHost(hostId).catch(() => null)

@@ -33,6 +33,7 @@ import {
   mergeUploadOrigins,
   missingUploadOrigins,
   permitsUploadOrigin,
+  revokeUploadOrigins,
   uploadCorsRemedy,
   uploadOriginFor,
   UPLOAD_CORS_METHOD,
@@ -209,6 +210,71 @@ describe('mergeUploadOrigins — read-modify-WRITE, never replace', () => {
       'https://app.aglyn.com',
       'https://acme.example.com',
     ])
+  })
+})
+
+describe('revokeUploadOrigins', () => {
+  const rules: CorsRule[] = [
+    {
+      origin: [
+        'https://app.aglyn.com',
+        'https://acme.example',
+        'https://zgover.aglyn.com',
+      ],
+      method: [UPLOAD_CORS_METHOD],
+      responseHeader: ['Content-Type', 'x-goog-resumable'],
+      maxAgeSeconds: 3600,
+    },
+  ]
+
+  it('removes only what was asked and keeps the rest', () => {
+    const result = revokeUploadOrigins(rules, ['https://acme.example'])
+    expect(result.removed).toEqual(['https://acme.example'])
+    // The counterpart of the merge's preservation assertion. A revoke that
+    // rewrites instead of subtracting is the same platform-wide outage as a
+    // `--cors-file` replace, reached from the other direction.
+    expect(result.rules[0].origin).toEqual([
+      'https://app.aglyn.com',
+      'https://zgover.aglyn.com',
+    ])
+  })
+
+  it('refuses an origin named in `keep`', () => {
+    const result = revokeUploadOrigins(rules, ['https://app.aglyn.com'], {
+      keep: ['https://app.aglyn.com'],
+    })
+    expect(result.removed).toEqual([])
+    expect(result.refused).toEqual(['https://app.aglyn.com'])
+    expect(permitsUploadOrigin(result.rules, 'https://app.aglyn.com')).toBe(true)
+  })
+
+  it('refuses `*` — a revoke is never the way to discover a wildcard', () => {
+    const wide: CorsRule[] = [{ origin: ['*'], method: [UPLOAD_CORS_METHOD] }]
+    const result = revokeUploadOrigins(wide, ['*'])
+    expect(result.refused).toEqual(['*'])
+    expect(result.removed).toEqual([])
+  })
+
+  it('drops a rule it emptied rather than writing `origin: []`', () => {
+    const only: CorsRule[] = [
+      { origin: ['https://gone.example'], method: [UPLOAD_CORS_METHOD] },
+    ]
+    // GCS accepts the empty form, and it reads to the next person like a rule
+    // that permits something.
+    expect(revokeUploadOrigins(only, ['https://gone.example']).rules).toEqual([])
+  })
+
+  it('leaves a rule that does not govern the signed PUT alone', () => {
+    const mixed: CorsRule[] = [
+      { origin: ['https://acme.example'], method: ['GET'] },
+      ...rules,
+    ]
+    const result = revokeUploadOrigins(mixed, ['https://acme.example'])
+    expect(result.rules[0]).toEqual({
+      origin: ['https://acme.example'],
+      method: ['GET'],
+    })
+    expect(result.removed).toEqual(['https://acme.example'])
   })
 })
 

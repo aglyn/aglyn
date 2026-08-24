@@ -59,8 +59,15 @@ export const memberPostHandler: PluginApiHandler = async (req, res) => {
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
     const hostSnapshot = await hostRef.get()
+    // AN ALLOWLIST (AGL-2372), matching `gift-cards.ts` and the AGL-2262
+    // correction to the register. The old `!role || role === 'viewer'`
+    // denylist admitted every string that was not literally `viewer` — and
+    // since AGL-2334 that includes `author`, a real grantable role, on a route
+    // that publishes to paying subscribers and sends them mail on the
+    // merchant's brand. A denylist that widens whenever the role union grows
+    // is the defect; the set is the fix. Absent is refused, not permitted.
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (!memberRole || memberRole === 'viewer') {
+    if (memberRole !== 'admin' && memberRole !== 'editor') {
       return res.status(403).json({ error: 'Not permitted' })
     }
     const postRef = await hostRef.collection('memberPosts').add({

@@ -1090,6 +1090,26 @@ export interface BillingWebhookFacts {
    */
   inert: number | null
   /**
+   * Deliveries that only landed on a RETRY inside the window (AGL-2039).
+   *
+   * The arm every other count here is structurally blind to.
+   * `undelivered` comes from `delivery_success=false`, which is a TERMINAL
+   * filter over EVENTS: an event that 400s three times and then succeeds
+   * reads back clean and is indistinguishable from one that succeeded
+   * immediately. The Stripe Dashboard scores delivery ATTEMPTS and counted
+   * all three — which is why AGL-1906 read 0% against the Dashboard's 30% and
+   * both figures were correct. The three attempts it could not see were
+   * AGL-1551.
+   *
+   * The webhook stamps `retriedAtMs` when the distance from `event.created`
+   * to its own claim exceeds `RETRY_LAG_SECONDS`, so this is an aggregation
+   * over a marker field rather than a scan of every claim in the window.
+   *
+   * Null when the Firestore arm could not run, and null is NOT red on its
+   * own — same rule as `processed` and `inert`.
+   */
+  retried: number | null
+  /**
    * Required event types the destination is NOT subscribed to (AGL-1948 /
    * AGL-1798). Empty is the healthy answer; null means the endpoint did not
    * report its subscriptions and the coverage question is unanswered.
@@ -1122,6 +1142,7 @@ export interface BillingWebhookCheck extends HealthCheck {
   emitted: number | null
   processed: number | null
   inert: number | null
+  retried: number | null
   unsubscribedEvents: readonly string[] | null
   connectEndpoint: BillingWebhookFacts['connectEndpoint'] | null
   unsubscribedConnectEvents: readonly string[] | null
@@ -1169,12 +1190,31 @@ export const MAX_FAILED_DELIVERIES_PER_WINDOW = 0
  */
 export const MAX_INERT_DELIVERIES_PER_WINDOW = 0
 
+/**
+ * Retried deliveries tolerated in the window (AGL-2039).
+ *
+ * Zero, and the reasoning is `MAX_FAILED_DELIVERIES_PER_WINDOW`'s: a delivery
+ * counted here is one whose FIRST attempt did not get through, which is a
+ * failed attempt that happened, not a statistical wobble. The healthy band
+ * measured against the live account is 1.0–3.7 seconds against a 120-second
+ * bar, so nothing organic sits anywhere near it.
+ *
+ * Cheap to be wrong in the safe direction, because this cannot latch: the
+ * window is trailing and the marker is on the event's own claim, so a single
+ * blip reds for at most one window and then clears itself — an event, not a
+ * condition (the AGL-1843 rule). It is a parameter rather than a literal so
+ * that if beta traffic turns out to produce organic retries, the knob is one
+ * argument and not a rewrite.
+ */
+export const MAX_RETRIED_DELIVERIES_PER_WINDOW = 0
+
 export function billingWebhookHealth(
   facts: BillingWebhookFacts | null,
   ms: number,
   windowMinutes: number = WEBHOOK_FAILURE_WINDOW_MINUTES,
   threshold: number = MAX_FAILED_DELIVERIES_PER_WINDOW,
   inertThreshold: number = MAX_INERT_DELIVERIES_PER_WINDOW,
+  retriedThreshold: number = MAX_RETRIED_DELIVERIES_PER_WINDOW,
 ): BillingWebhookCheck {
   // A null census is degraded, the same rule `signupsHealth` and
   // `rateLimitsHealth` follow: an alarm that cannot see the thing it watches
@@ -1191,6 +1231,7 @@ export function billingWebhookHealth(
       emitted: null,
       processed: null,
       inert: null,
+      retried: null,
       unsubscribedEvents: null,
       connectEndpoint: null,
       unsubscribedConnectEvents: null,
@@ -1205,6 +1246,7 @@ export function billingWebhookHealth(
     emitted: facts.emitted,
     processed: facts.processed,
     inert: facts.inert,
+    retried: facts.retried,
     unsubscribedEvents: facts.unsubscribedEvents,
     connectEndpoint: facts.connectEndpoint,
     unsubscribedConnectEvents: facts.unsubscribedConnectEvents,
@@ -1247,6 +1289,31 @@ export function billingWebhookHealth(
   // which point "a delivery moved nothing" has no innocent explanation left.
   if (facts.inert !== null && facts.inert > inertThreshold) {
     return { ...base, ok: false, code: 'handlers-inert' }
+  }
+  /*==========================================
+   * THE ATTEMPTS NOTHING ELSE HERE CAN COUNT (AGL-2039).
+   *
+   * `undelivered` above is `delivery_success=false`, a TERMINAL-state filter
+   * over EVENTS. An event that 400s three times and then succeeds on the
+   * fourth reads back `true`, so it is zero there and zero in `emitted`,
+   * `processed` and `inert` too — the handler DID eventually run. Every
+   * number on this check reports a healthy window while three real delivery
+   * attempts failed. That is not a hypothetical: it is the exact reading
+   * AGL-1906 produced, 0.00% against the Stripe Dashboard's 30%, and the
+   * three attempts the Dashboard was counting were AGL-1551's.
+   *
+   * BELOW `deliveries-failing` because an event failing every attempt
+   * explains an event that needed several, and below `handlers-inert`
+   * because a delivery that landed late and then moved nothing is worse than
+   * one that landed late and worked. ABOVE the Connect codes because this is
+   * this hour's revenue path and those are a slower rot.
+   *
+   * Null is not red: the marker is ours, so an unread Firestore is an
+   * unanswered question, and `stripe-unavailable` already covers a census we
+   * could not take.
+   *=========================================*/
+  if (facts.retried !== null && facts.retried > retriedThreshold) {
+    return { ...base, ok: false, code: 'deliveries-retried' }
   }
   /*==========================================
    * THE CONNECT DESTINATION (AGL-1948, closing AGL-2122's blind spot).

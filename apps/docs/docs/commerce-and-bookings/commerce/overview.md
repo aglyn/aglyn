@@ -165,7 +165,11 @@ snapshots, totals, and a timeline:
   labels the console shows, are in [Statuses and channels](#order-statuses).
 - **Fulfill with tracking**, print **packing slips**, add internal notes.
 - **Refunds** (full or partial) go through Stripe and reverse the platform
-  fee; site-admin only.
+  fee. Refunding needs the **admin** role *and* organization-wide membership —
+  a workspace owner or admin, or a member given access to every site. A
+  collaborator invited to this one site is an admin **of the site**, which is
+  enough to run the till and fulfill orders but not to send money back out of
+  the business.
 - **Chargebacks** are shown apart from refunds. When a shopper disputes a
   charge with their bank, the order gets a **Chargeback open** badge and the
   list warns you with the date Stripe needs your evidence by — answer it in

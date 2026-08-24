@@ -235,6 +235,27 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   }),
 }))
 
+/**
+ * The org-scope half of the refund gate (AGL-2372). `admin-1` here is the
+ * merchant's own owner, so this resolves org-wide.
+ *
+ * Stubbed rather than actual: the real resolver reads the roster through
+ * `@aglyn/tenant-data-admin`, which the factory above replaces with a
+ * closed-world double, and it fails CLOSED on a lookup error (AGL-506) — so
+ * every test in this file would 403 for a reason it does not assert. The
+ * gate's own behaviour is measured in `refund.spec.ts`.
+ */
+jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
+  resolveOrgPermissions: async () => ({
+    orgId: 'org-1',
+    role: 'owner',
+    isOwner: true,
+    permissions: {},
+    orgWide: true,
+    hostRole: 'admin',
+  }),
+}))
+
 jest.mock('./contact-refund', () => ({
   recordContactRefund: async () => undefined,
 }))

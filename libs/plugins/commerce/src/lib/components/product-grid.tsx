@@ -613,16 +613,21 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
 
     const grid = (
       <Box sx={gridSx}>
-        {(visible ?? []).map((item) => (
+        {(visible ?? []).map((item) => {
+          // AGL-1726: resolved BEFORE the guard, so a stored value that is
+          // truthy but resolves to nothing renders the placeholder rather
+          // than an `<img>` with no `src`.
+          const imageUrl = Aglyn.siteRelativeMediaSrc(item.imageUrl, { hostId })
+          return (
           <Card key={item.id} variant="outlined">
             <CardActionArea
               href={hostId ? `/products/${item.slug}` : undefined}
               disabled={!hostId}
             >
-              {item.imageUrl ? (
+              {imageUrl ? (
                 <CardMedia
                   component="img"
-                  image={item.imageUrl}
+                  image={imageUrl}
                   alt={item.name}
                   sx={{ height: 160, objectFit: 'cover' }}
                   // Deferred (AGL-2486), and this is the worst offender of
@@ -659,7 +664,8 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
               </CardContent>
             </CardActionArea>
           </Card>
-        ))}
+          )
+        })}
       </Box>
     )
 

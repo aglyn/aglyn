@@ -79,9 +79,11 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
     // `hostMemberRole(hostId) in ['admin','editor']`. The old
     // `!role || role === 'viewer'` denylist caught the stranger but admitted
     // every OTHER string — a legacy value, a typo, any role added later — on
-    // the one route that mints a live Stripe payment link. `HostAccessRole` is
-    // exactly `admin | editor | viewer`, so this refuses nothing a real
-    // projection can produce.
+    // the one route that mints a live Stripe payment link. `HostAccessRole`
+    // has since grown an `author` (AGL-2334), which this allowlist refuses on
+    // purpose — an author edits content and does not mint payment links — and
+    // which the old denylist would have admitted. That is the allowlist form
+    // earning its keep on a union that changed under it.
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
     if (memberRole !== 'admin' && memberRole !== 'editor') {
       return res.status(403).json({ error: 'Not permitted' })

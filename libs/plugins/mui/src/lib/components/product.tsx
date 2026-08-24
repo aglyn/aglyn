@@ -64,8 +64,12 @@ const Product = forwardRef<HTMLDivElement, ProductProps>((props, ref) => {
   const { hostId } = Aglyn.useSite()
   const siteFetch = Aglyn.useSiteFetch()
   // A media-picker target, so it can hold a media reference (AGL-1215) as
-  // well as any URL form that predates it.
-  const imageUrl = Aglyn.resolveMediaSrc(storedImageUrl, { hostId })
+  // well as any URL form that predates it. `siteRelativeMediaSrc` rather
+  // than the bare resolver (AGL-1726): one of those older forms is an
+  // absolute `https://{subdomain}.aglyn.app/api/media/cdn/…`, which on a
+  // white-label storefront names our platform in the customer's page source
+  // and fetches cross-origin from their own domain.
+  const imageUrl = Aglyn.siteRelativeMediaSrc(storedImageUrl, { hostId })
   const [status, setStatus] = useState<'idle' | 'sending' | 'error'>('idle')
   const [coupon, setCoupon] = useState('')
   const [message, setMessage] = useState('')

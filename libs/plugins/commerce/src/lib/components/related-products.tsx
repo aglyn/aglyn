@@ -125,13 +125,19 @@ const RelatedProducts = forwardRef<HTMLDivElement, RelatedProductsProps>(
         <Box sx={{ display: 'flex', gap: 1.5, overflowX: 'auto', pb: 1 }}>
           {items
             .slice(0, maxItems && maxItems > 0 ? maxItems : 6)
-            .map((item) => (
+            .map((item) => {
+              // AGL-1726: resolved BEFORE the guard — see the note in
+              // `product-detail.tsx`.
+              const imageUrl = Aglyn.siteRelativeMediaSrc(item.imageUrl, {
+                hostId,
+              })
+              return (
               <Card key={item.id} variant="outlined" sx={{ minWidth: 160 }}>
                 <CardActionArea href={`/products/${item.slug}`}>
-                  {item.imageUrl ? (
+                  {imageUrl ? (
                     <CardMedia
                       component="img"
-                      image={item.imageUrl}
+                      image={imageUrl}
                       alt={item.name}
                       sx={{ height: 110, objectFit: 'cover' }}
                       // Deferred (AGL-2486). A related-products rail sits at
@@ -153,7 +159,8 @@ const RelatedProducts = forwardRef<HTMLDivElement, RelatedProductsProps>(
                   </CardContent>
                 </CardActionArea>
               </Card>
-            ))}
+              )
+            })}
         </Box>
       </Box>
     )

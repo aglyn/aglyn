@@ -95,6 +95,18 @@ function stripComments(source: string): string {
  */
 const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
   {
+    file: 'libs/tenant/data/admin/src/lib/server/upload-cors-reconcile.ts',
+    count: 1,
+    reason:
+      "AGL-1452. The upload-CORS reconcile. The literal is the PLATFORM's own console origin, held as the one entry the reconcile refuses to release on detach — a self-host operator's bucket needs their own origin, which is derived from their Vercel project, not this constant. Removing it would let a detach withdraw the platform's own permission to upload.",
+  },
+  {
+    file: 'tools/scripts/check-upload-cors.mjs',
+    count: 1,
+    reason:
+      'AGL-1452. The daily upload-CORS drift checker. The literal is the default project fallback for a build tool that is never shipped; a self-host operator runs it against their own project id.',
+  },
+  {
     file: 'apps/console/utils/stripe-dunning-schedule.ts',
     count: 1,
     reason:
@@ -343,10 +355,10 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'Shared-lib reader of NEXT_PUBLIC_WORKSPACE_DOMAIN; cannot import the console constant.',
   },
   {
-    file: 'libs/tenant/data/admin/src/lib/server/console-domains.ts',
+    file: 'libs/tenant/data/admin/src/lib/server/platform-domain-names.ts',
     count: 3,
     reason:
-      'RESERVED_SUFFIXES — a BLOCKLIST of names nobody may claim as a custom console domain. Naming our own there is correct in both deployment shapes.',
+      'RESERVED_DOMAIN_SUFFIXES — a BLOCKLIST of names nobody may claim as a custom console or site domain. Naming our own there is correct in both deployment shapes, and the SELF-HOST apex is covered separately by reading TENANT_APEX at call time rather than by adding it here (AGL-1430). Moved out of console-domains.ts so both domain surfaces read one list.',
   },
   {
     file: 'libs/tenant/data/admin/src/lib/server/workspace-domains.ts',

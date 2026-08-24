@@ -96,6 +96,8 @@ every customer is a reference.
 2. **Read the alert body before acting.** Each health endpoint carries its own
    verdict reason: `endpoint-missing` / `endpoint-disabled` /
    `events-unsubscribed` / `deliveries-failing` / `handlers-inert` /
+   `deliveries-retried` / `connect-endpoint-missing` /
+   `connect-endpoint-disabled` / `connect-events-unsubscribed` /
    `stripe-unavailable` for billing;
    `no-credential` / `http-401` / `http-429` / `transport-TimeoutError` for the
    beacon. `docs/UPTIME_AND_SLA.md` maps every one to what it means.

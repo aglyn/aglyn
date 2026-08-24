@@ -113,9 +113,14 @@ describe('AGL-2226 · issuing and voiding are server-side and gated', () => {
     expect(body(CARD)).not.toMatch(/\bsetDoc\(|\bupdateDoc\(|\baddDoc\(/)
   })
 
-  it('requires a bearer token AND a non-viewer role on the host', () => {
+  it('requires a bearer token AND an allowlisted role on the host', () => {
+    // AGL-2372: was `memberRole === 'viewer'`, a DENYLIST, which admitted
+    // every role added after it was written — `author` since AGL-2334. The
+    // behavioural proof is in `gift-cards-role-gate.spec.ts`; this only holds
+    // the shape, so a future edit back to a denylist is visible here too.
     expect(handler).toContain('verifyIdToken')
-    expect(handler).toContain(`memberRole === 'viewer'`)
+    expect(handler).toContain(`memberRole !== 'admin' && memberRole !== 'editor'`)
+    expect(handler).not.toMatch(/!memberRole \|\| memberRole === 'viewer'/)
   })
 
   it('re-checks the entitlement server-side', () => {

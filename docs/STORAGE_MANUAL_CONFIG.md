@@ -124,7 +124,71 @@ snackbar. Step 1 is the whole procedure.
 merge, with `upload-cors.spec.ts` pinning each against the measurements above.
 It refuses to emit `*` at all.
 
-#### The origin list, and why it is exactly one entry
+#### 1b. The list is DERIVED, and drift is checkable (AGL-1452)
+
+Attach-time reconcile alone only ever **grows** the allowlist. It closes the
+future and does nothing about two other directions, both of which were live on
+2026-08-24:
+
+* **Names attached before it existed.** Nothing walked the project. Of the
+  console project's 20 attached names, 15 served and only **6** were permitted.
+  Nine serving names could not complete a large upload — up from the five
+  measured on 2026-08-20, because add-on-attach makes that number grow.
+* **Detach never reclaimed.** The bucket still carried five
+  `agl1514-smoke-*.aglyn.com` origins from a smoke run. For an `*.aglyn.com`
+  name that is untidy; for a **white-label console domain** it is a standing
+  permission to complete a signed `PUT`, held by a host the customer keeps.
+
+Both are closed, and neither is a checklist line:
+
+```bash
+npm run check:upload-cors             # report only; writes nothing
+npm run check:upload-cors -- --fix    # merge the missing origins in
+npm run check:upload-cors -- --prune  # ALSO remove origins nothing serves
+```
+
+The expected origin set is **derived**, not maintained: it is computed from the
+same Vercel project-domains resource `attachProjectDomain()` writes to, where a
+name with no `redirect` is a serving origin and a name with one is not. A name
+cannot serve the console without being there, so the list cannot silently fall
+behind the customers.
+
+Exit codes — **cannot-check never masquerades as clean**: `0` the bucket permits
+exactly the derived set · `1` drift (missing origins, stale origins, or a
+wildcard) · `2` no credential, an API refusal, or a failed write.
+
+`--fix` and `--prune` are separate on purpose. Adding is additive and safe;
+removing is a permission withdrawal, and a run that healed and pruned in one
+motion would make a routine fix carry an irreversible half nobody asked for. The
+platform origin is refused by both, structurally: removing it breaks large
+uploads for every customer at once.
+
+`detachProjectDomain()` now calls `releaseUploadCors()` on a successful detach,
+so the reverse direction closes itself the same way the forward one does.
+
+#### Is "an entry per customer" bounded? (AGL-1353 asked; answered 2026-08-24)
+
+**Not by a count.** Google documents no maximum number of CORS entries or
+origins per bucket. The real ceiling is a different one, and it is documented:
+
+> Maximum rate of bucket metadata updates per bucket: **one update per second.**
+> "Rapid updates to a single bucket (for example, changing the CORS
+> configuration) might result in throttling errors."
+
+So the constraint on attach-time reconcile is **write contention**, not list
+length. Two attaches racing contend on the conditional write; a burst contends
+on the rate limit. Both surface as a `412` or a `429`, which is the expected
+shape under load rather than an anomaly — the reconcile reports `permitted:
+false` with the remedy rather than treating it as written, and
+`check:upload-cors` heals whatever a contended write missed. The proxy-the-PUT
+alternative is therefore **not forced**; it stays a preference, not a necessity.
+
+#### The origin list, and what does and does not belong in it
+
+> Heading note: this section was written when the rule held **one** origin. It
+> holds 15 as of 2026-08-24 — one per serving console name, derived (§1b). The
+> per-origin reasoning below is unchanged and is still the test for whether a
+> new name belongs.
 
 The signed URL already carries the authorization. CORS here is not deciding
 *who* may write — it is deciding **which page may present a signed URL**, for
@@ -138,8 +202,8 @@ the build if it ever appears.
 | `https://app.aglyn.com` | **Yes** | The canonical console. Routing is path-based (`app.aglyn.com/{slug}`), so every org's DAM is served from this one origin. |
 | `https://console.aglyn.com` | No | Measured 2026-08-12: `308 → https://app.aglyn.com/`. It never renders the app, so no page there can issue the `PUT`. |
 | `https://aglyn.com`, `https://www.aglyn.com` | No | The marketing site. It is served by the **tenant** runtime (host `aglyn-marketing`, `cname: aglyn.com` — AGL-1607), not by a separate marketing app, but the verdict is unchanged: the tenant runtime only *serves* published pages and never issues a signed `PUT`. DAM uploads happen in the console. |
-| `https://<slug>.aglyn.com` (org workspace subdomains) | **Not yet — and that is a live gap** | The middleware **rewrites** rather than redirects, so the origin is preserved and each one needs its own entry. The 2026-08-12 reading (`demo.aglyn.com`, `northwind.aglyn.com` → `404`, none attached) is **stale**. Re-measured 2026-08-20: `zgover`, `test-org`, `aglyn-org`, `sale-test` and `zachary1748` all serve the console at `200`, and a real preflight from each returns **no CORS headers**. Large uploads from those origins fail today. See §1a. |
-| Custom console domains (AGL-1099c white-label) | No | Same rewrite, same consequence: a customer console on their own domain is a distinct origin. Same ceiling note. |
+| `https://<slug>.aglyn.com` (org workspace subdomains) | **Yes, all of them — since 2026-08-24** | The middleware **rewrites** rather than redirects, so the origin is preserved and each one needs its own entry. The 2026-08-12 reading (`demo.aglyn.com`, `northwind.aglyn.com` → `404`, none attached) was stale by 2026-08-20, when five served and none were permitted; by 2026-08-24 that was **nine of fifteen serving names refused**. `check:upload-cors --fix` added all nine (metageneration 10 → 11, nothing removed) and real preflights now echo each one. See §1b. |
+| Custom console domains (AGL-1099c white-label, shipped AGL-1378) | **Yes, on attach** | Same rewrite, same consequence: a customer console on their own domain is a distinct origin. `attachProjectDomain()` reconciles it, `detachProjectDomain()` reclaims it, and `check:upload-cors` catches whatever either missed. |
 | `*.vercel.app` preview/branch hosts | No, deliberately | `aglyn-console-aglyn.vercel.app` serves a fully working console today, and AGL-1344 exists to **remove** that exposure. Adding it to a bucket allowlist would entrench a host we are deleting. |
 | `http://localhost:*` | No | Consequence, stated plainly: **signed uploads over 3 MB cannot be exercised on localhost.** Small files use the base64 route and are unaffected. Add a `http://localhost:4200` entry temporarily if you need to drive the large path locally, and take it back out — a permanent localhost entry means any page on a developer's machine can spend a leaked signed URL. |
 
@@ -160,11 +224,15 @@ So there is **no `*.aglyn.com` form**. This is the opposite of the reCAPTCHA
 App Check allowlist, where a bare entry covers its whole subtree — do not
 reason across from that one. Every org workspace subdomain and every
 white-label console domain that ever needs a >3 MB upload will need its **own
-exact entry here**, which makes this a per-customer provisioning step and a
-commercial ceiling of the same shape as the reCAPTCHA list. Establish that
-before selling white-label consoles with large-file DAM uploads; the durable
-alternative is to keep the DAM on `app.aglyn.com` (which path routing already
-does) or to proxy the `PUT` through our own origin.
+exact entry here**.
+
+That is still true, and it is no longer a *manual* per-customer step: the entry
+is derived and applied by `attachProjectDomain()`, reclaimed by
+`detachProjectDomain()`, and audited by `npm run check:upload-cors` (§1b). It is
+also not a commercial ceiling — Google documents no cap on the number of entries,
+only a **one-update-per-second** limit on bucket metadata, which bounds the
+write rate and not the customer count. The proxy-the-`PUT` alternative remains
+available but is not forced.
 
 #### `x-goog-resumable`
 

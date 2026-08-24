@@ -1,0 +1,130 @@
+name: Upload CORS drift
+
+# Fails when the LIVE GCS bucket CORS allowlist differs from the set derived
+# from the console's serving Vercel domains (AGL-1452).
+#
+# Same class as auth-domains-drift.yml, one step further out again. Bucket CORS
+# has NO deploy step: it is edited by a `gcloud` run, by the attach-time
+# reconcile in `attachProjectDomain()`, or by hand — and the only trace any of
+# those leave is the live value. A commit is not evidence live changed, and live
+# changing is not evidence anyone approved it. Nothing but a scheduled
+# comparison can see it.
+#
+# Why it exists, measured 2026-08-24: the console had **20 attached names, 15 of
+# them serving, and 9 of those REFUSED** by the bucket. The attach-time reconcile
+# (`6d8a848ef`) only ever GROWS the list, so it cannot catch a name attached
+# before it shipped, and it cannot catch a stale origin left by a detach. Nine
+# broken origins accumulated in exactly the gap this workflow closes.
+#
+# ⚠️ GCS matches `origin` as an EXACT string — no subtree, no wildcard. This is
+# the opposite of the App Check reCAPTCHA allowlist, which matches subtrees.
+# Reasoning across from that list gives precisely the wrong answer.
+#
+# ⚠️ The failure mode is invisible to a status-code check: a refused preflight
+# returns **HTTP 200 with no CORS headers**, not a 403. Only reading the headers
+# back distinguishes them. And it only bites files over the 3 MB threshold —
+# smaller uploads route base64 through a same-origin Next.js route where bucket
+# CORS never applies — which is why AGL-1408 stayed invisible for so long.
+#
+# `*` is not an option: the signed URL carries the authorization, so a wildcard
+# would let any site spend a leaked URL.
+#
+# Requires the Firebase secrets rules-drift.yml already uses, PLUS a Vercel token
+# (the derived set comes from the same project-domains resource
+# `attachProjectDomain()` writes to — a name cannot serve the console without
+# being there):
+#   gh secret set FIREBASE_CLIENT_EMAIL --body '<client_email>'
+#   gh secret set FIREBASE_PRIVATE_KEY --body "$(jq -r .private_key service-account.json)"
+#   gh secret set VERCEL_TOKEN --body '<token scoped to the aglyn team>'
+#
+# ⚠️ VERCEL_TOKEN has never been set on this repo, so this job will fail loudly
+# until it is. That is deliberate and correct — see below.
+#
+# When the secrets are ABSENT the guard step fails the job loudly. Never convert
+# that to a skip: a skipped check that renders green is the exact silent drift
+# this exists to prevent, and the checker exits 2 (cannot-check) rather than 0
+# for the same reason.
+#
+# This job is READ-ONLY. It never calls `--fix` or `--prune`. Adding an origin is
+# a grant and removing one is a permission withdrawal; both are deliberate acts
+# that belong to a human or to the attach/detach flow, never to a cron.
+
+on:
+  push:
+    branches:
+      # Sept-1 freeze (Zach, 2026-08-20): `main` is deliberately absent from the
+      # push trigger across the drift family. Agents land on `main` continuously
+      # and every red notified him. RESTORE `main` AFTER LAUNCH.
+      - production
+    paths:
+      - tools/scripts/check-upload-cors.mjs
+      - tools/scripts/lib/upload-cors-drift.mjs
+      - tools/scripts/lib/upload-cors-drift.test.mjs
+      - .github/workflows/upload-cors-drift.yml
+  schedule:
+    # Daily, 05:17 UTC. Off the hour and clear of the rest of the drift family:
+    # auth-domains 06:41, rules 07:23, legal 08:11.
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+concurrency:
+  # Same reasoning as auth-domains-drift.yml: a cancelled push run leaves that
+  # commit unjudged, so pushes group by COMMIT and are never cancelled; the
+  # schedule and manual runs supersede.
+  group: upload-cors-drift-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Refuse to no-op without credentials
+        env:
+          CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          missing=''
+          [ -z "$CLIENT_EMAIL" ] && missing="$missing FIREBASE_CLIENT_EMAIL"
+          [ -z "$PRIVATE_KEY" ] && missing="$missing FIREBASE_PRIVATE_KEY"
+          [ -z "$VERCEL_TOKEN" ] && missing="$missing VERCEL_TOKEN"
+          if [ -n "$missing" ]; then
+            echo "Missing repo secret(s):$missing" >&2
+            echo "" >&2
+            echo "This job derives the expected GCS CORS origins from the console's" >&2
+            echo "serving Vercel domains and compares them against the live bucket." >&2
+            echo "Without BOTH credentials it can see neither side, and passing" >&2
+            echo "anyway would be the silent-drift failure mode it exists to" >&2
+            echo "prevent (AGL-1452: 9 of 15 serving origins were refused)." >&2
+            echo "" >&2
+            echo "  gh secret set FIREBASE_CLIENT_EMAIL --body '<client_email>'" >&2
+            echo "  gh secret set FIREBASE_PRIVATE_KEY --body \"\$(jq -r .private_key service-account.json)\"" >&2
+            echo "  gh secret set VERCEL_TOKEN --body '<token scoped to the aglyn team>'" >&2
+            exit 2
+          fi
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      # Guard the guard, BEFORE the comparison. A comparator that reports "no
+      # drift" because it compared nothing is indistinguishable from
+      # convergence, which is the whole failure this workflow exists to stop.
+      - run: npm run test:upload-cors-drift
+
+      - name: Compare the live bucket against the derived set
+        env:
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npm run check:upload-cors

@@ -55,6 +55,8 @@
 
 import {
   reconcileUploadCors,
+  releaseUploadCors,
+  type UploadCorsRelease,
   type UploadCorsVerdict,
 } from './upload-cors-reconcile'
 
@@ -80,6 +82,15 @@ export interface WorkspaceDomainResult {
    * upload that fails behind a generic snackbar.
    */
   uploadCors?: UploadCorsVerdict | null
+  /**
+   * What a DETACH did about the origin the name leaves behind (AGL-1452).
+   *
+   * The attach half without this one only ever grows the allowlist. A stale
+   * origin is a standing permission to complete a signed upload, held by a host
+   * we no longer serve — and for a white-label console domain, one the customer
+   * still controls.
+   */
+  uploadCorsRelease?: UploadCorsRelease | null
 }
 
 const WORKSPACE_DOMAIN =
@@ -282,6 +293,32 @@ async function uploadCorsFor(
 }
 
 /**
+ * Reclaim the origin a just-detached name leaves on the bucket.
+ *
+ * Called unconditionally on a successful detach rather than only for names we
+ * believe were serving: the redirect flag is Vercel's state at ATTACH time and
+ * a name can have been patched since, and `releaseUploadCors` is a no-op for an
+ * origin that is not on the bucket anyway. Guessing wrong in the other
+ * direction leaves the permission standing.
+ *
+ * Swallows its own failures like everything else here — a domain must not fail
+ * to detach because a storage API was slow — but reports them, because an
+ * operator who has just removed a customer needs to see that their permission
+ * outlived them.
+ */
+async function uploadCorsReleaseFor(
+  domain: string,
+): Promise<{ uploadCorsRelease?: UploadCorsRelease | null }> {
+  try {
+    const release = await releaseUploadCors(domain)
+    return release ? { uploadCorsRelease: release } : {}
+  } catch (error) {
+    console.error('[workspace-domains] upload CORS release threw', domain, error)
+    return {}
+  }
+}
+
+/**
  * The command still owed after a set of attaches, or null when nothing is
  * (AGL-1452).
  *
@@ -345,7 +382,10 @@ export async function detachProjectDomain(
         signal: deadline(),
       },
     )
-    if (response.ok) return { outcome: 'detached', domain }
+    if (response.ok) {
+      return { outcome: 'detached', domain, ...(await uploadCorsReleaseFor(domain)) }
+    }
+    // A name that was never on the project has no origin of ours to reclaim.
     if (response.status === 404) return { outcome: 'not-found', domain }
     console.error('[workspace-domains] detach failed', domain, response.status)
     return { outcome: 'failed', domain, detail: String(response.status) }

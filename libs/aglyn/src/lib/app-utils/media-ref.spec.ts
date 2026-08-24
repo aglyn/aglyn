@@ -28,6 +28,7 @@ import {
   MEDIA_CDN_ROUTE,
   parseMediaRef,
   resolveMediaSrc,
+  siteRelativeMediaSrc,
 } from './media-ref'
 
 const RAW_URL =
@@ -122,6 +123,99 @@ describe('media references (AGL-1215)', () => {
       expect(resolveMediaSrc('')).toBeUndefined()
       expect(resolveMediaSrc(undefined)).toBeUndefined()
       expect(resolveMediaSrc('media:nonsense')).toBeUndefined()
+    })
+  })
+
+  /**
+   * AGL-1726. Production stored a product image as
+   * `https://northwind-coffee.aglyn.app/api/media/cdn/{scope}/{mediaId}` and
+   * commerce rendered it unresolved, so a white-label storefront on the
+   * customer's own domain served an image URL naming OUR platform —
+   * cross-origin, in page source, and in every visitor's request.
+   *
+   * Each case below names the property it defends, so a red one says which
+   * guarantee broke rather than only that a string changed.
+   */
+  describe('siteRelativeMediaSrc (AGL-1726)', () => {
+    const ABSOLUTE_CDN =
+      'https://northwind-coffee.aglyn.app/api/media/cdn/host-1/med123'
+
+    it('drops a first-party origin from a CDN url — the whole defect', () => {
+      expect(siteRelativeMediaSrc(ABSOLUTE_CDN)).toBe(
+        '/api/media/cdn/host-1/med123',
+      )
+      // …and the result is not merely shorter: it names no host at all, which
+      // is the property a white-label storefront actually needs.
+      expect(siteRelativeMediaSrc(ABSOLUTE_CDN)).not.toContain('aglyn.app')
+      expect(siteRelativeMediaSrc(ABSOLUTE_CDN)?.startsWith('/')).toBe(true)
+    })
+
+    it('drops the CONSOLE origin too — AGL-1378 white-label console domains', () => {
+      expect(
+        siteRelativeMediaSrc('https://app.aglyn.com/api/media/cdn/host-1/med'),
+      ).toBe('/api/media/cdn/host-1/med')
+    })
+
+    it('carries the private-asset signature through', () => {
+      // `signMediaAccess` signs (scope, mediaId, exp) and never the host, so
+      // an unsigned result here would be a 403 on every private asset.
+      expect(
+        siteRelativeMediaSrc(`${ABSOLUTE_CDN}?exp=99&sig=deadbeef`),
+      ).toBe('/api/media/cdn/host-1/med123?exp=99&sig=deadbeef')
+    })
+
+    it('NEVER rewrites a third-party host that mimics our path', () => {
+      // The gate is the host, not the path. Relativizing this would silently
+      // re-point an author's hotlink at our own CDN.
+      const mimic = 'https://images.example.com/api/media/cdn/host-1/med123'
+      expect(siteRelativeMediaSrc(mimic)).toBe(mimic)
+    })
+
+    it('leaves firebasestorage absolute — AGL-1726 condition 5', () => {
+      // A first-party HOST, but not a CDN path: free-tier orgs store this
+      // form, and relativizing it would blank every free-tier image.
+      expect(siteRelativeMediaSrc(RAW_URL)).toBe(RAW_URL)
+    })
+
+    it('leaves an author hotlink and a protocol-relative url alone', () => {
+      const hotlink = 'https://images.example.com/hero.png?v=2'
+      expect(siteRelativeMediaSrc(hotlink)).toBe(hotlink)
+      expect(siteRelativeMediaSrc('//cdn.other.test/x.png')).toBe(
+        '//cdn.other.test/x.png',
+      )
+    })
+
+    it('still resolves references, host-qualification included', () => {
+      expect(siteRelativeMediaSrc('media:site-a/med123')).toBe(
+        '/api/media/cdn/site-a/med123',
+      )
+      expect(
+        siteRelativeMediaSrc('media:org:acme/med123', { hostId: 'site-b' }),
+      ).toBe('/api/media/cdn/org:acme:site-b/med123')
+    })
+
+    it('keeps absent, empty and malformed distinct from a broken src', () => {
+      // `strictNullChecks` is off repo-wide, so a missing field folds to
+      // falsy silently. Every one of these must reach the caller as
+      // undefined — the placeholder — never as a string an `<img>` fetches.
+      expect(siteRelativeMediaSrc(undefined)).toBeUndefined()
+      expect(siteRelativeMediaSrc(null)).toBeUndefined()
+      expect(siteRelativeMediaSrc('')).toBeUndefined()
+      expect(siteRelativeMediaSrc('media:junk')).toBeUndefined()
+    })
+
+    it('passes a value that is not a URL through rather than throwing', () => {
+      expect(siteRelativeMediaSrc('{{var:hero}}')).toBe('{{var:hero}}')
+      expect(siteRelativeMediaSrc('https://')).toBe('https://')
+    })
+
+    it('leaves resolveMediaSrc itself unchanged — the email mirror depends on it', () => {
+      // `resolveEmailMediaSrc` is a hand-kept COPY pinned by
+      // `apps/console/specs/email-media-src-drift.spec.ts`, and
+      // `absoluteMediaSrc`'s out-of-band readers need the absolute form. If
+      // this ever reddens, the relativization leaked into the authority.
+      expect(resolveMediaSrc(ABSOLUTE_CDN)).toBe(ABSOLUTE_CDN)
+      expect(absoluteMediaSrc(ABSOLUTE_CDN)).toBe(ABSOLUTE_CDN)
     })
   })
 

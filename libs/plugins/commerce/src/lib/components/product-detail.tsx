@@ -379,8 +379,26 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       )
     }
 
-    const galleryImage =
-      variant?.imageUrl ?? resolved.mediaUrls[activeImage] ?? resolved.mediaUrls[0]
+    // Every rendered `<img src>` on this page goes through
+    // `siteRelativeMediaSrc` (AGL-1726). Commerce called NO resolver at all,
+    // which cost it two things at once: a `media:` reference — writable via
+    // the resources API and the CSV importer — would have reached an `<img>`
+    // as the literal string, and a stored absolute
+    // `https://{subdomain}.aglyn.app/api/media/cdn/…` stayed absolute, so a
+    // white-label storefront on the customer's own domain served product
+    // photos naming OUR platform, cross-origin, in page source and in every
+    // visitor's request. Production carried exactly one such document; the
+    // resolver fixes it at READ time, so no backfill stands between the
+    // defect and the fix.
+    //
+    // Deliberately NOT applied to `resolved.mediaUrls` wholesale: the
+    // schema.org `image` array below is read out of band by a crawler, where
+    // an absolute URL is the point. That one wants `absoluteMediaSrc` with
+    // the site's own origin, which is the tenant page's job (AGL-1725).
+    const galleryImage = Aglyn.siteRelativeMediaSrc(
+      variant?.imageUrl ?? resolved.mediaUrls[activeImage] ?? resolved.mediaUrls[0],
+      { hostId },
+    )
 
     // Subscription framing (AGL-545): subscription-only products price as
     // $X/mo|/yr with a "Subscribe" button; subscriptionOptional products
@@ -475,7 +493,9 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                 <Box
                   key={`${url}-${index}`}
                   component="img"
-                  src={url}
+                  // Same resolver as the hero (AGL-1726) — a thumbnail is an
+                  // `<img>` on the customer's page and leaks exactly as much.
+                  src={Aglyn.siteRelativeMediaSrc(url, { hostId })}
                   alt=""
                   onClick={() => setActiveImage(index)}
                   sx={{

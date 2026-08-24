@@ -70,6 +70,9 @@ being able to put it in front of visitors. Concretely, an Author *cannot*:
 - publish, unpublish or schedule a collection entry
 - delete a page, layout or component
 - read the site's orders or its webhook signing secrets
+- ring a sale at the register, or build a draft order
+- issue or void a gift card
+- publish a members-only post, or email it to subscribers
 
 Everything else is open to them: writing and designing pages, editing layouts and
 components, uploading media, drafting and editing entries, and saving as many versions

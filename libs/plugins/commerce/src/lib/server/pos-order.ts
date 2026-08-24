@@ -115,8 +115,22 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     // ['admin','editor']`. The old `!role || role === 'viewer'` denylist
     // admitted every string that was not literally `viewer` on the route that
     // takes cash, mints a card QR and decrements real inventory.
-    // `HostAccessRole` is exactly `admin | editor | viewer`, so this refuses
-    // nothing a real projection can produce.
+    // The union has since GROWN: `HostAccessRole` is `admin | editor | author
+    // | viewer` (AGL-2334), and `author` is grantable on this host through
+    // `/api/hosts/members`. So this allowlist now refuses a role a real
+    // projection CAN produce, deliberately — an author edits content and does
+    // not take money. That is the whole reason it is an allowlist: a role
+    // added later is refused until someone decides otherwise, rather than
+    // admitted by the silence of a denylist.
+    //
+    // What it does NOT decide is WHOSE admin. `memberRoles` is a per-host
+    // projection, so a SITE COLLABORATOR granted `admin` on this one site
+    // (`hostAccess: { [hostId]: 'admin' }`, `allHosts: false`) is
+    // indistinguishable here from an org owner. That is correct for ringing a
+    // sale — they were invited to run this till — but it means this value
+    // alone cannot carry an elevated, manager-only control such as the
+    // AGL-2372 oversell override. The discriminator is `orgWide` on the
+    // membership resolved just below, not the role string.
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
     if (memberRole !== 'admin' && memberRole !== 'editor') {
       return res.status(403).json({ error: 'Not permitted' })

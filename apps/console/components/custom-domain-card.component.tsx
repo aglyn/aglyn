@@ -251,6 +251,19 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
           conflict?.error ?? 'That domain is already connected to another site',
           { variant: 'error', allowDuplicate: true },
         )
+      } else if (attachResponse.status === 400) {
+        // A terminal refusal, not a hiccup (AGL-1430). The route now rejects a
+        // malformed name and a platform-reserved one before it claims anything,
+        // and both are things only the customer can fix. "Please try again"
+        // would be false advice about a name that can never be connected — and
+        // the verify step above may well have just told them it looks fine,
+        // because a reserved name like `www.aglyn.com` really does resolve to
+        // our edge.
+        const refusal = await attachResponse.json().catch(() => undefined)
+        return void enqueueSnackbar(
+          refusal?.error ?? 'That domain cannot be connected to a site',
+          { variant: 'error', allowDuplicate: true },
+        )
       } else if (!attachResponse.ok) {
         enqueueSnackbar('Could not connect the domain — please try again', {
           variant: 'error',

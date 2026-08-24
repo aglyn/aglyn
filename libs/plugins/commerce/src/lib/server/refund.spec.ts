@@ -221,6 +221,32 @@ const fakeFirestore = {
 
 const mockVerifyIdToken = jest.fn(async () => ({ uid: 'admin-1' }))
 
+/**
+ * The org-scope half of the refund gate (AGL-2372).
+ *
+ * NOT `requireActual` — the real resolver reads the org roster through
+ * `@aglyn/tenant-data-admin`, which this file replaces with a closed-world
+ * double, so it would fail closed (AGL-506) and 403 every test in the suite
+ * for a reason that has nothing to do with what they assert.
+ *
+ * Defaults to an ORG-WIDE admin — the owner the rest of this file has always
+ * been about — so every existing case keeps measuring what it was written to
+ * measure. The collaborator block below drives `orgWide` to false.
+ */
+const mockResolveOrgPermissions = jest.fn(async () => ({
+  orgId: 'org-1',
+  role: 'admin',
+  isOwner: true,
+  permissions: {} as Record<string, boolean>,
+  orgWide: true,
+  hostRole: 'admin',
+}))
+
+jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
+  resolveOrgPermissions: (...args: any[]) =>
+    mockResolveOrgPermissions(...(args as [])),
+}))
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: {
     app: () => ({
@@ -432,6 +458,16 @@ beforeEach(() => {
   deleteContactDuringQuery = false
   fetchMock.mockClear()
   mockVerifyIdToken.mockClear()
+  mockVerifyIdToken.mockResolvedValue({ uid: 'admin-1' })
+  mockResolveOrgPermissions.mockClear()
+  mockResolveOrgPermissions.mockResolvedValue({
+    orgId: 'org-1',
+    role: 'admin',
+    isOwner: true,
+    permissions: {},
+    orgWide: true,
+    hostRole: 'admin',
+  } as any)
   consoleError.mockClear()
   consoleWarn.mockClear()
 
@@ -1402,6 +1438,131 @@ describe('refund and an open dispute (AGL-1809)', () => {
     // same attempt refunds.
     const retry = await post({}, { 'idempotency-key': 'attempt-a' })
     expect(retry.status).toBe(200)
+    expect(storedOrder().refundedCents).toBe(5000)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Who may refund (AGL-2372)
+// ---------------------------------------------------------------------------
+
+/**
+ * A refund is money leaving the business, and until AGL-2372 the only thing
+ * standing in front of it was `memberRoles[uid] === 'admin'`.
+ *
+ * That string does not mean what it reads like. `memberRoles` is a per-host
+ * projection of `hostAccess`, and `/api/hosts/members` will grant a SITE
+ * COLLABORATOR `admin` on one site — `hostAccess: { 'host-1': 'admin' }` with
+ * `allHosts: false`. `hostRoleFor` returns it and `projectHostMemberRoles`
+ * writes it, so at that gate a contractor invited to run one microsite was
+ * BYTE-IDENTICAL to the owner of the business.
+ *
+ * The fixture below is built so `memberRoles['contractor-1'] === 'admin'` is
+ * TRUE — the first assertion in each test says so out loud — and the principal
+ * is still refused. A fix that only re-spelled the role check passes nothing
+ * here.
+ */
+describe('who may refund (AGL-2372)', () => {
+  /** Signs the caller in as a site collaborator holding host `admin`. */
+  function asSiteCollaborator() {
+    mockVerifyIdToken.mockResolvedValue({ uid: 'contractor-1' })
+    docs.set('hosts/host-1', {
+      // The projection an accepted `/api/hosts/members` grant produces. This
+      // is the whole point: it is the same value an owner's projection holds.
+      memberRoles: { 'admin-1': 'admin', 'contractor-1': 'admin' },
+    })
+    mockResolveOrgPermissions.mockResolvedValue({
+      orgId: 'org-1',
+      role: 'editor',
+      isOwner: false,
+      permissions: {},
+      // `isOrgWideMember` is false for a scoped collaborator (AGL-1026) —
+      // this is the discriminator, and the only one there is.
+      orgWide: false,
+      hostRole: 'admin',
+    } as any)
+  }
+
+  it('refuses a SITE COLLABORATOR whose memberRoles reads exactly "admin"', async () => {
+    asSiteCollaborator()
+
+    // The pre-fix gate, spelled out, so this test fails loudly if the fixture
+    // ever stops reproducing the hole it exists to cover.
+    expect(docs.get('hosts/host-1')?.memberRoles['contractor-1']).toBe('admin')
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(403)
+    // No money moved and nothing was written — a 403 that still called Stripe
+    // would be a refusal reported after the fact.
+    expect(refundCalls).toHaveLength(0)
+    expect(storedOrder().refundedCents ?? 0).toBe(0)
+    expect(storedOrder().status).toBe('paid')
+    expect(storedContact().refundedCents).toBeUndefined()
+  })
+
+  it('resolves the scope against THIS host, not the org in the abstract', async () => {
+    asSiteCollaborator()
+
+    await post({}, { 'idempotency-key': 'attempt-a' })
+
+    // A collaborator may be an admin of host-1 and a stranger to host-2; the
+    // question is only ever answerable with the host in hand.
+    expect(mockResolveOrgPermissions).toHaveBeenCalledWith('contractor-1', {
+      hostId: 'host-1',
+    })
+  })
+
+  it('refuses when the membership does not resolve at all', async () => {
+    // `denied()` — no membership, or a lookup that failed closed (AGL-506).
+    // `strictNullChecks` is OFF repo-wide, so "absent" must be refused by the
+    // gate's own shape rather than by a type. Host role still reads `admin`.
+    mockVerifyIdToken.mockResolvedValue({ uid: 'contractor-1' })
+    docs.set('hosts/host-1', { memberRoles: { 'contractor-1': 'admin' } })
+    mockResolveOrgPermissions.mockResolvedValue({
+      orgId: 'org-1',
+      role: null,
+      isOwner: false,
+      permissions: {},
+      orgWide: false,
+      hostRole: null,
+    } as any)
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(403)
+    expect(refundCalls).toHaveLength(0)
+    expect(storedOrder().refundedCents ?? 0).toBe(0)
+  })
+
+  it('refuses an org-wide member who is only an EDITOR on this host', async () => {
+    // Both halves are load-bearing. An org-wide member scoped down to editor
+    // on this site passes `orgWide` and must still be refused, so the fix
+    // cannot be "replace the role check with the scope check".
+    mockVerifyIdToken.mockResolvedValue({ uid: 'sitelead-1' })
+    docs.set('hosts/host-1', { memberRoles: { 'sitelead-1': 'admin' } })
+    mockResolveOrgPermissions.mockResolvedValue({
+      orgId: 'org-1',
+      role: 'editor',
+      isOwner: false,
+      permissions: {},
+      orgWide: true,
+      hostRole: 'editor',
+    } as any)
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(403)
+    expect(refundCalls).toHaveLength(0)
+    expect(storedOrder().refundedCents ?? 0).toBe(0)
+  })
+
+  it('still admits an org-wide admin — the control refuses, it does not block', async () => {
+    // The other half of every allowlist: proof it did not simply close.
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(200)
+    expect(refundCalls).toHaveLength(1)
     expect(storedOrder().refundedCents).toBe(5000)
   })
 })

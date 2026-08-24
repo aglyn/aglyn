@@ -204,13 +204,19 @@ const Wishlist = forwardRef<HTMLDivElement, WishlistProps>((props, ref) => {
             },
           }}
         >
-          {(items ?? []).map((item) => (
+          {(items ?? []).map((item) => {
+            // AGL-1726: resolved BEFORE the guard — see the note in
+            // `product-detail.tsx`.
+            const imageUrl = Aglyn.siteRelativeMediaSrc(item.imageUrl, {
+              hostId,
+            })
+            return (
             <Card key={item.id} variant="outlined">
               <CardActionArea href={`/products/${item.slug}`}>
-                {item.imageUrl ? (
+                {imageUrl ? (
                   <CardMedia
                     component="img"
-                    image={item.imageUrl}
+                    image={imageUrl}
                     alt={item.name}
                     sx={{ height: 120, objectFit: 'cover' }}
                     // Deferred (AGL-2486), same reasoning as the product
@@ -238,7 +244,8 @@ const Wishlist = forwardRef<HTMLDivElement, WishlistProps>((props, ref) => {
                 {'Remove'}
               </Button>
             </Card>
-          ))}
+            )
+          })}
         </Box>
       )}
     </Box>

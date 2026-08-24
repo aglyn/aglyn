@@ -58,10 +58,25 @@
 import {
   mergeUploadOrigins,
   permitsUploadOrigin,
+  revokeUploadOrigins,
   uploadCorsRemedy,
   uploadOriginFor,
   type CorsRule,
 } from '@aglyn/aglyn/server'
+
+/**
+ * The one origin a release must never take away.
+ *
+ * Configured rather than provisioned, so it will never appear in a detach —
+ * but the guard is here rather than at the call site because the cost of
+ * getting it wrong is every customer's large uploads at once, and a guard that
+ * lives at the call site is a guard the next call site does not have.
+ */
+function platformOrigin(): string | null {
+  return uploadOriginFor(
+    process.env['NEXT_PUBLIC_CONSOLE_URL'] ?? 'app.aglyn.com',
+  )
+}
 
 export interface UploadCorsVerdict {
   /** The origin a browser at this name will send. */
@@ -183,4 +198,78 @@ export async function reconcileUploadCors(
     remedy: null,
     detail: null,
   }
+}
+
+/** What a detach did, or could not do, about the origin it left behind. */
+export interface UploadCorsRelease {
+  /** The origin the detached name used to send. */
+  origin: string
+  /** Is that origin gone from the bucket now? */
+  revoked: boolean
+  /** Why not, for a caller that wants to branch. Null when it is gone. */
+  detail: string | null
+}
+
+/**
+ * Take an origin back off the bucket when its name stops serving the console
+ * (AGL-1452).
+ *
+ * The mirror of `reconcileUploadCors`, and the half that was missing: attaching
+ * added an origin and detaching left it. That is a standing permission for a
+ * host we no longer serve — and for a white-label customer domain, a host that
+ * somebody else still controls, on a bucket where the signed URL IS the
+ * authorization.
+ *
+ * Same three properties as the attach side. It never throws, never blocks a
+ * detach, and reports what it could not do rather than going quiet: a domain
+ * must not fail to detach because a storage API was slow, and the operator who
+ * detached a customer must be able to see that the permission outlived them.
+ *
+ * Refuses the platform origin structurally, not by convention.
+ */
+export async function releaseUploadCors(
+  host: string,
+  io: BucketCorsIO | null = liveBucketCorsIO(),
+): Promise<UploadCorsRelease | null> {
+  const origin = uploadOriginFor(host)
+  if (!origin || !io) return null
+  if (origin === platformOrigin()) {
+    return { origin, revoked: false, detail: 'platform-origin' }
+  }
+
+  let current: { rules: CorsRule[]; metageneration: string } | null
+  try {
+    current = await io.read()
+  } catch (error) {
+    console.error('[upload-cors] could not read bucket CORS', io.bucket, error)
+    return { origin, revoked: false, detail: 'read-failed' }
+  }
+  if (!current) return { origin, revoked: false, detail: 'read-failed' }
+
+  // Already gone is the success case, not a no-op to report as a failure: a
+  // detach that runs twice must not read as a permission that would not go.
+  if (!permitsUploadOrigin(current.rules, origin)) {
+    return { origin, revoked: true, detail: null }
+  }
+
+  const { rules, removed } = revokeUploadOrigins(current.rules, [origin], {
+    keep: [platformOrigin() ?? ''].filter(Boolean),
+  })
+  if (removed.length === 0) {
+    return { origin, revoked: false, detail: 'refused' }
+  }
+
+  try {
+    await io.write(rules, current.metageneration)
+  } catch (error) {
+    console.error(
+      '[upload-cors] could not revoke bucket CORS —',
+      origin,
+      'keeps a standing permission to complete signed uploads; run',
+      'npm run check:upload-cors -- --prune',
+      error,
+    )
+    return { origin, revoked: false, detail: 'write-failed' }
+  }
+  return { origin, revoked: true, detail: null }
 }

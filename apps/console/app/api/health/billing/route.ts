@@ -234,6 +234,47 @@ async function inertInWindow(cutoffMs: number): Promise<number | null> {
   }
 }
 
+/**
+ * How many deliveries only landed on a RETRY in the window (AGL-2039).
+ *
+ * The last arm of AGL-1948, and the one every other number on this probe is
+ * structurally blind to. `undelivered` reads
+ * `GET /v1/events?delivery_success=false`, which is a TERMINAL-state filter:
+ * an event that 400s three times and then succeeds on the fourth reads back
+ * `delivery_success: true`. It is therefore zero here, zero in `processed`
+ * (the handler did eventually run) and zero in `inert` (it did its work) —
+ * while three real delivery attempts failed. The Stripe Dashboard's
+ * denominator is ATTEMPTS, which is why AGL-1906 read 0.00% against the
+ * Dashboard's 30% and neither figure was wrong.
+ *
+ * The webhook decides lateness at CLAIM time and stamps `retriedAtMs`, so
+ * this stays a `.count()` over one field — the same automatic single-field
+ * index `receivedAt` and `inertAtMs` use, no composite index, zero documents
+ * read. Reading `receivedAt` off every claim and subtracting would have been
+ * the obvious implementation and would have turned this public,
+ * unauthenticated, five-minute-polled endpoint into a document scan.
+ *
+ * Returns null rather than throwing, and `billingWebhookHealth` treats null
+ * as unanswered, never as red.
+ */
+async function retriedInWindow(cutoffMs: number): Promise<number | null> {
+  try {
+    void firebaseAdmin
+    const db = getFirestore(getApp())
+    const claimCollection = deploymentLivemode(process.env)
+      ? LIVE_EVENT_COLLECTION
+      : TEST_EVENT_COLLECTION
+    const snapshot = await db
+      .collection(claimCollection)
+      .where('retriedAtMs', '>=', cutoffMs)
+      .count()
+      .get()
+    return snapshot.data().count
+  } catch {
+    return null
+  }
+}
+
 const billingProbe = memoizeWithTtl<BillingWebhookCheck>(
   PROBE_TTL_MS,
   async () => {
@@ -287,9 +328,10 @@ const billingProbe = memoizeWithTtl<BillingWebhookCheck>(
       }>
       const match = atOurUrl.find((entry) => !isConnectWebhookEndpoint(entry))
       const connect = atOurUrl.find((entry) => isConnectWebhookEndpoint(entry))
-      const [processed, inert] = await Promise.all([
+      const [processed, inert, retried] = await Promise.all([
         processedInWindow(cutoffMs),
         inertInWindow(cutoffMs),
+        retriedInWindow(cutoffMs),
       ])
       const facts: BillingWebhookFacts = {
         endpointStatus: !match
@@ -301,6 +343,7 @@ const billingProbe = memoizeWithTtl<BillingWebhookCheck>(
         emitted: (emitted.data.data ?? []).length,
         processed,
         inert,
+        retried,
         /*==========================================
          * SUBSCRIPTION COVERAGE (AGL-1948 / AGL-1798).
          *
