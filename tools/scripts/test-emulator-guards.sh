@@ -128,6 +128,11 @@ export FIREBASE_DATABASE_EMULATOR_HOST="127.0.0.1:${DATABASE_PORT}"
 # not jest, which exited 0 on the three it did run — is what said so.
 PROJECTS=(
   apps/console
+  # AGL-1627 put the first emulator spec under apps/tenant
+  # (analytics-collect-lockdown) and this list did not follow it, so the sweep
+  # ran green while never executing it. The coverage check below is what caught
+  # that — keep both, because the list alone cannot notice its own gap.
+  apps/tenant
   libs/tenant/data/admin
   libs/tenant/runtime
   libs/tenant/feature/instance
