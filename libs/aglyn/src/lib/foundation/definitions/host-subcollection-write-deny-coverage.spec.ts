@@ -347,7 +347,14 @@ const EDITOR_WRITABLE_HOST_SUBCOLLECTIONS: Record<string, string> = {
   overlays: 'Modal/drawer overlays, written by the interaction builder dialog.',
   experiments:
     'A/B variants, created and retired by the interactions provider.',
-  redirects: 'Redirect rules, authored in the redirects plugin console page.',
+  redirects:
+    'Redirect rules, managed in the redirects plugin console page. All three ' +
+    'lists exclude the name (AGL-1881) and the dedicated block re-grants ' +
+    'update and delete on `canPublishHostContent` — a redirect decides what ' +
+    'the LIVE site serves at every address at once, with no publish step in ' +
+    'front of it, so it is a publish act and an `author` is refused. Create ' +
+    'stays with /api/hosts/resources for the quota, which asks the same ' +
+    'publish-axis question.',
   webhooks:
     'Outbound webhook listeners, edited in the workflows console card; the ' +
     'per-host cap is enforced on create by /api/hosts/resources (AGL-1360).',

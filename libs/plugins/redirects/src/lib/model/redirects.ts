@@ -47,6 +47,24 @@ export interface HostRedirect {
   kind?: 'exact' | 'prefix' | 'regex'
   /** Evaluation order — lower fires first; missing = 100 (v1 rules). */
   priority?: number
+  /**
+   * The uid of the publishing-role member who last saved this rule with an
+   * EXTERNAL destination (AGL-1881). Absent on every internal rule, and on
+   * every rule written before that issue.
+   *
+   * This is provenance, not preference. `cloud/firebase-firestore.rules` lets
+   * only `canPublishHostContent` — admin or editor, never `author` — write
+   * anything in `hosts/{hostId}/redirects`, so the presence of this field is
+   * the serve path's evidence that a publisher chose to send traffic off the
+   * platform. `matchRedirect` will not serve an absolute destination without
+   * it, which is what makes a rule written BEFORE the rules were fixed refuse
+   * to fire rather than having to be trusted.
+   *
+   * Deliberately a uid rather than a boolean: `true` says nothing a log can be
+   * read against, and the recovery for a rule that stops firing is for a
+   * publisher to open it and save, which stamps their own uid.
+   */
+  externalDestinationApprovedBy?: string
 }
 
 export const REDIRECT_STATUS_CODES = [301, 302, 307, 308] as const
@@ -128,6 +146,35 @@ export function validateRedirectRule(rule: {
   return null
 }
 
+/**
+ * Does this destination leave the platform? (AGL-1881.)
+ *
+ * Written as "not internal" rather than as "starts with https://", so that
+ * anything the normalizer has not already vouched for — an empty string, a
+ * protocol-relative `//host`, a scheme we never expected — answers TRUE and
+ * meets the approval gate rather than slipping past it. `strictNullChecks` is
+ * off repo-wide: an absent destination arrives here as `undefined`, folds to
+ * `''`, and must not read as "internal, therefore safe".
+ */
+export function isExternalRedirectDestination(destination: string): boolean {
+  const value = String(destination ?? '').trim()
+  return !(value.startsWith('/') && !value.startsWith('//'))
+}
+
+/**
+ * Has a publisher vouched for this rule's external destination? (AGL-1881.)
+ *
+ * The `typeof` test is the point. With `strictNullChecks` off, a missing field
+ * is `undefined` and a stored `null` is `null`; both must answer FALSE, and so
+ * must a stamp that is present but blank. Only a non-empty string counts.
+ */
+function externalDestinationApproved(rule: {
+  externalDestinationApprovedBy?: unknown
+}): boolean {
+  const approver = rule.externalDestinationApprovedBy
+  return typeof approver === 'string' && approver.trim().length > 0
+}
+
 export interface RedirectMatch {
   /** Destination with any capture groups substituted. */
   destination: string
@@ -142,6 +189,10 @@ export interface RedirectMatch {
  * segment-boundary prefix, regex → anchored pattern with `$n` capture
  * substitution in the destination. Disabled, self-targeting, and
  * invalid rules never fire.
+ *
+ * The DESTINATION is validated here too (AGL-1881), after substitution: it
+ * must still normalize, and an external one must carry a publisher's stamp.
+ * See the two notes inside the loop.
  */
 export function matchRedirect(
   rules: Array<HostRedirect & { deletedAt?: unknown }>,
@@ -180,6 +231,56 @@ export function matchRedirect(
       }
     }
     if (!destination) continue
+    /**
+     * Validate the destination HERE, on the serve path, after any `$n`
+     * substitution (AGL-1881).
+     *
+     * This function used to hand `rule.destination` straight back. Console
+     * validation was the only thing standing between a stored string and a
+     * `Location:` header — the same "the console is a convenience, not a
+     * control" note `compileRedirectRegex` already carries about `source`,
+     * one field over and never applied.
+     *
+     * Two distinct holes close on this line:
+     *
+     *  1. A destination that never met `normalizeRedirectDestination` at all,
+     *     because it was written straight to Firestore rather than through the
+     *     console — `http://` (a downgrade), `//host` (protocol-relative), a
+     *     `javascript:`/`data:` scheme, a value carrying whitespace or CRLF.
+     *  2. A destination that DID meet it and stops meeting it once captures
+     *     are substituted. `/$1` is an internal path at save time and becomes
+     *     `//attacker.example` when the pattern's group swallows a hostname —
+     *     an open redirect out of a rule that reads as entirely internal.
+     *     Post-substitution is the only place either can be seen.
+     *
+     * A rule that fails is SKIPPED, not fatal: evaluation continues to the
+     * next rule exactly as it does for an uncompilable pattern, so a bad
+     * destination can never take a site down.
+     */
+    const validated = normalizeRedirectDestination(destination)
+    if (!validated) continue
+    destination = validated
+    /**
+     * An external destination fires only with a publisher's stamp on it.
+     *
+     * This is the defence-in-depth half of AGL-1881, and it is what makes the
+     * rules fix retroactive. Rules stop an `author` from WRITING one from now
+     * on; a rule already written — before this file, from a role that has
+     * since been refused, or by any path we have not thought of — still sits
+     * in Firestore, and without this it would still be served on every request
+     * to the site. Absent stamp, absent field, blank stamp: all refuse.
+     *
+     * Internal destinations are untouched, which is deliberate. The cost of
+     * failing closed here is paid ONLY by rules that send traffic off the
+     * platform, and recovering one is a publisher opening it and pressing
+     * Save.
+     */
+    if (
+      isExternalRedirectDestination(destination) &&
+      !externalDestinationApproved(rule)
+    ) {
+      continue
+    }
     if (isSelfRedirect({ source: path, destination })) continue
     const statusCode = (REDIRECT_STATUS_CODES as readonly number[]).includes(
       rule.statusCode,

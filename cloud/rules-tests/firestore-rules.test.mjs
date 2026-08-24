@@ -2087,6 +2087,258 @@ describe('hosts', () => {
   })
 
   /**
+   * URL redirects (AGL-1881) — the highest-ranked finding of the pre-launch
+   * review, reported 2026-08-20.
+   *
+   * `redirects` was on the CREATE exclusion list and on neither of the other
+   * two, and had no dedicated block. For this collection that ordering is
+   * backwards: the console's create rides /api/hosts/resources, so the one
+   * operation the exclusion covered was the one no client performs, while the
+   * two that decide what a rule DOES — the editor's `setDoc(..., {merge})`
+   * and the Delete button's `deletedAt` stamp — resolved on the catch-all's
+   * `canWriteHostContent`, which has admitted `author` since AGL-2334.
+   *
+   * A redirect is evaluated before route resolution on every path of every
+   * render; a regex rule's `source` can match every path at once, and its
+   * `destination` may be an absolute URL. So one update to one document by
+   * the narrowest role we sell decided what an entire site served, with no
+   * publish step and no version pointer in the way.
+   *
+   * ⚠️ The exclusions are the MECHANISM. Drop `redirects` from either list and
+   * the dedicated block below stops deciding anything at all, because sibling
+   * matches are OR'd and the looser one wins — the `components` shape again.
+   */
+  it('an author cannot write a site-wide redirect (AGL-1881)', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      assert.equal(
+        (await getDoc(doc(db, 'hosts', HOST))).data().memberRoles[AUTHOR],
+        'author',
+        'the AUTHOR principal is no longer projected as `author` on the ' +
+          'host, so this test can no longer reproduce the hole it exists ' +
+          'to cover.',
+      )
+      // A rule a publisher created, which is what the update leg re-points.
+      await setDoc(doc(db, 'hosts', HOST, 'redirects', 'agl1881-existing'), {
+        source: '/old-page', destination: '/new-page',
+        statusCode: 301, kind: 'exact', enabled: true,
+      })
+    })
+
+    // ── The reported hole ──────────────────────────────────────────────────
+    // Re-pointing an existing rule at an off-platform destination, widened to
+    // every path. This is the whole finding, in one write.
+    await mustDeny(
+      'an AUTHOR re-pointing a redirect at an external destination — the ' +
+        'traffic-hijack write AGL-1881 reported',
+      updateDoc(
+        doc(authed(AUTHOR), 'hosts', HOST, 'redirects', 'agl1881-existing'),
+        { source: '/(.*)', kind: 'regex', destination: 'https://elsewhere.example/$1' },
+      ),
+    )
+    // The same write as a `setDoc(..., {merge: true})`, which is the shape the
+    // console's editor actually sends — a deny proved only against
+    // `updateDoc` would leave the real call site open.
+    await mustDeny(
+      'an AUTHOR merge-writing the same hijack, the console editor s shape',
+      setDoc(
+        doc(authed(AUTHOR), 'hosts', HOST, 'redirects', 'agl1881-existing'),
+        { destination: 'https://elsewhere.example' },
+        { merge: true },
+      ),
+    )
+    // An INTERNAL destination is refused too. The gate is the role, not the
+    // destination: a rule that sends every path to `/` is the same routing
+    // decision, and an author owning it would still be publishing.
+    await mustDeny(
+      'an AUTHOR re-pointing a redirect at an internal path',
+      updateDoc(
+        doc(authed(AUTHOR), 'hosts', HOST, 'redirects', 'agl1881-existing'),
+        { destination: '/somewhere-else' },
+      ),
+    )
+    await mustDeny(
+      'an AUTHOR toggling a redirect on, which is the row switch',
+      updateDoc(
+        doc(authed(AUTHOR), 'hosts', HOST, 'redirects', 'agl1881-existing'),
+        { enabled: false },
+      ),
+    )
+    await mustDeny(
+      'an AUTHOR soft-deleting a publisher s redirect, the Delete button s write',
+      updateDoc(
+        doc(authed(AUTHOR), 'hosts', HOST, 'redirects', 'agl1881-existing'),
+        { deletedAt: new Date(), enabled: false },
+      ),
+    )
+    await mustDeny(
+      'an AUTHOR hard-deleting a redirect',
+      deleteDoc(
+        doc(authed(AUTHOR), 'hosts', HOST, 'redirects', 'agl1881-existing'),
+      ),
+    )
+    await mustDeny(
+      'an AUTHOR creating a redirect client-direct, bypassing the quota route',
+      setDoc(doc(authed(AUTHOR), 'hosts', HOST, 'redirects', 'agl1881-new'), {
+        source: '/(.*)', destination: 'https://elsewhere.example/$1',
+        statusCode: 302, kind: 'regex', enabled: true,
+      }),
+    )
+    // Stamping its own approval is the same refusal, and worth its own row:
+    // the serve path trusts that field, so a role that could write it could
+    // launder an external destination past `matchRedirect`.
+    await mustDeny(
+      'an AUTHOR stamping externalDestinationApprovedBy on a redirect',
+      updateDoc(
+        doc(authed(AUTHOR), 'hosts', HOST, 'redirects', 'agl1881-existing'),
+        { externalDestinationApprovedBy: AUTHOR },
+      ),
+    )
+
+    // ── Every other principal that must stay out ───────────────────────────
+    await mustDeny(
+      'a VIEWER re-pointing a redirect',
+      updateDoc(
+        doc(authed(VIEWER), 'hosts', HOST, 'redirects', 'agl1881-existing'),
+        { destination: 'https://elsewhere.example' },
+      ),
+    )
+    // LEGACY is signed in, is in the RETIRED `admins` uid-map, and has NO
+    // `memberRoles` entry — so `hostMemberRole` returns null. `null in [...]`
+    // is false in rules, which is the direction this must fail in with
+    // `strictNullChecks` off everywhere else in the stack.
+    await mustDeny(
+      'a signed-in principal with NO memberRoles entry re-pointing a redirect',
+      updateDoc(
+        doc(authed(LEGACY), 'hosts', HOST, 'redirects', 'agl1881-existing'),
+        { destination: 'https://elsewhere.example' },
+      ),
+    )
+    await mustDeny(
+      'an OUTSIDER re-pointing a redirect on a host in another org',
+      updateDoc(
+        doc(authed(OUTSIDER), 'hosts', HOST, 'redirects', 'agl1881-existing'),
+        { destination: 'https://elsewhere.example' },
+      ),
+    )
+    await mustDeny(
+      'an ANONYMOUS caller re-pointing a redirect',
+      updateDoc(
+        doc(anon(), 'hosts', HOST, 'redirects', 'agl1881-existing'),
+        { destination: 'https://elsewhere.example' },
+      ),
+    )
+  })
+
+  /**
+   * The half that makes the deny above worth having. Redirects are a paid
+   * feature with a console page; a fix that breaks it for the roles entitled
+   * to use it is worse than the hole.
+   */
+  it('a publisher still manages redirects, external ones included (AGL-1881)', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const id of ['agl1881-a', 'agl1881-b', 'agl1881-c', 'agl1881-d']) {
+        await setDoc(doc(db, 'hosts', HOST, 'redirects', id), {
+          source: `/${id}`, destination: '/new', statusCode: 301,
+          kind: 'exact', enabled: true,
+        })
+      }
+    })
+    // The card is entitlement-gated, not role-gated, and READ is deliberately
+    // left to the catch-all — a read deny would render an empty list rather
+    // than a refusal anyone can see.
+    await mustAllow(
+      'an AUTHOR listing redirects, which is what the card renders',
+      getDocs(
+        query(collection(authed(AUTHOR), 'hosts', HOST, 'redirects'), limit(50)),
+      ),
+    )
+    await mustAllow(
+      'an EDITOR editing a redirect — the console s setDoc(merge) save',
+      setDoc(
+        doc(authed(EDITOR), 'hosts', HOST, 'redirects', 'agl1881-a'),
+        { source: '/old', destination: '/new', statusCode: 301, kind: 'exact', enabled: true },
+        { merge: true },
+      ),
+    )
+    // The documented external feature — "point old addresses at new pages or
+    // outside URLs" — with the serve path's provenance stamp on it. If this
+    // row ever goes red the fix has become "no external destinations", which
+    // is not what was decided.
+    await mustAllow(
+      'an EDITOR pointing a redirect at an external URL and stamping it',
+      setDoc(
+        doc(authed(EDITOR), 'hosts', HOST, 'redirects', 'agl1881-b'),
+        {
+          destination: 'https://campaign.example/launch',
+          externalDestinationApprovedBy: EDITOR,
+        },
+        { merge: true },
+      ),
+    )
+    await mustAllow(
+      'an EDITOR soft-deleting a redirect, which is the Delete button',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'redirects', 'agl1881-c'), {
+        deletedAt: new Date(), enabled: false,
+      }),
+    )
+    await mustAllow(
+      'a host ADMIN hard-deleting a redirect',
+      deleteDoc(doc(authed(OWNER), 'hosts', HOST, 'redirects', 'agl1881-d')),
+    )
+    // Suspension still wins over the publish role — `hostWritesFrozen` is
+    // inside the dedicated block, not only in the catch-all it replaced.
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'hosts', LOCKED_HOST, 'redirects', 'agl1881-locked'),
+        { source: '/x', destination: '/y', statusCode: 302, kind: 'exact' },
+      )
+    })
+    await mustDeny(
+      'an ADMIN editing a redirect on a host suspended at HOST scope',
+      updateDoc(
+        doc(authed(OWNER), 'hosts', LOCKED_HOST, 'redirects', 'agl1881-locked'),
+        { destination: '/z' },
+      ),
+    )
+  })
+
+  /**
+   * The structural half, stated by NAME beside the behavioural proof — the
+   * `memberPosts` pattern above, and for the same reason: a dedicated block
+   * under a looser sibling is dead text that no ALLOW leg can detect.
+   */
+  it('`redirects` is denied on all three catch-all lists (AGL-1881)', () => {
+    const lists = hostSubcollectionExclusions()
+    assert.ok(
+      lists.create.includes('redirects'),
+      '`redirects` has fallen out of the host catch-all CREATE exclusion ' +
+        'list, so a redirect can be created client-direct — past the quota ' +
+        'and past the publish-role check on /api/hosts/resources.',
+    )
+    assert.ok(
+      lists.update.includes('redirects'),
+      '`redirects` has fallen out of the host catch-all UPDATE exclusion ' +
+        'list. This is the AGL-1881 hole itself: the console s editor is a ' +
+        'client `setDoc(merge)`, so the catch-all s `canWriteHostContent` ' +
+        'hands an `author` the destination of every rule on the site.',
+    )
+    assert.ok(
+      lists.delete.includes('redirects'),
+      '`redirects` has fallen out of the host catch-all DELETE exclusion ' +
+        'list, so the dedicated block s publish gate no longer decides ' +
+        'deletion — sibling matches are OR d and the looser one wins.',
+    )
+    assert.ok(
+      lists.dedicated.includes('redirects'),
+      'the dedicated `match /redirects/{redirectId}` block is gone, so the ' +
+        'three exclusions above are now an outright denial and the redirects ' +
+        'console page is broken for every paying customer.',
+    )
+  })
+
+  /**
    * The seat-recycling half (AGL-1367). Deleting a roster row revokes
    * NOTHING — real access lives in `orgs/{orgId}/members/{uid}.hostAccess`,
    * which is `write: false`, projected into the frozen `memberRoles` — but

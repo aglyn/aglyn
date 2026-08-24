@@ -1938,11 +1938,43 @@ service cloud.firestore {
         // dead client-side, and leaving it open would let an `author` rewrite
         // a live post's title and body in place, which reaches paying
         // subscribers by the same door the create fix just shut.
+        //
+        // `redirects` joins UPDATE and DELETE (AGL-1881). It was on the create
+        // list ALONE, which for this collection is not a control at all: the
+        // console's create rides /api/hosts/resources, but its EDIT is a
+        // client-direct `setDoc(..., {merge: true})` and its delete is a
+        // client-direct `updateDoc` stamping `deletedAt`. So the one operation
+        // the exclusion covered was the one no client performed, and both
+        // operations that decide what a redirect DOES resolved here, on
+        // `canWriteHostContent` — which has admitted `author` since AGL-2334.
+        //
+        // A redirect rule is the strongest routing statement on the platform.
+        // It is evaluated in `resolveRedirect` BEFORE route resolution, on
+        // every path of every render, and a `kind: 'regex'` rule's `source`
+        // can be written to match every path at once — so one update to one
+        // document decides what the whole live site serves, with no publish
+        // step in front of it and no version pointer to move. `destination`
+        // may be an absolute https URL (a documented feature — vanity domains
+        // and campaign links), so that one write can also send the site's
+        // entire traffic off-platform.
+        //
+        // That is the AGL-2334 question with the highest possible answer:
+        // "registering a path is what makes a page reachable" is the reason
+        // `screens` is publish-gated, and a redirect OVERRIDES the routing map
+        // rather than adding to it. The role docs promise an Author that
+        // "nothing they do goes live" and that they cannot "change its
+        // address"; a redirect is live the moment it is written and changes
+        // every address at once. The dedicated block below therefore re-grants
+        // both operations on `canPublishHostContent`.
+        //
+        // The exclusion is the MECHANISM, as on `media`/`components` above:
+        // sibling matches are OR'd and the looser one wins, so the block below
+        // decides nothing at all while this list still names neither operation.
         allow update: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components', 'installs',
               'templates', 'collections', 'datasets', 'orders', 'registers',
-              'webhooks', 'memberPosts',
+              'webhooks', 'memberPosts', 'redirects',
               'counters', 'analytics', 'screenAnalytics', 'members',
               'media', 'mediaTombstones', 'inventoryAdjustments', 'carts',
               'checkouts',
@@ -1975,11 +2007,20 @@ service cloud.firestore {
         // the looser sibling wins; the emulator suite's
         // `an author cannot create or delete a member post (AGL-2372)` is
         // what says so.
+        //
+        // `redirects` joins DELETE for the reason stated on the update list
+        // above (AGL-1881), and it is a re-grant rather than a denial: the
+        // console's Delete button really is a client write. A hard delete is
+        // not the console's path — the button soft-deletes with `deletedAt`,
+        // which is an UPDATE — but leaving hard delete on `canWriteHostContent`
+        // would leave an author able to remove a publisher's redirect outright,
+        // which is the same routing decision in the other direction and is
+        // exactly the AGL-2334 `components` argument.
         allow delete: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components',
               'collections', 'datasets', 'orders', 'registers', 'webhooks',
-              'counters', 'memberPosts',
+              'counters', 'memberPosts', 'redirects',
               'analytics', 'screenAnalytics', 'members', 'mediaTombstones',
               'inventoryAdjustments', 'carts', 'checkouts', 'giftCards',
               'stripeTaxRates', 'restockAlerts',
@@ -2002,6 +2043,33 @@ service cloud.firestore {
       // list with no error rather than as a refusal anyone can see.
       match /memberPosts/{postId} {
         allow delete: if isStaff() ||
+          (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
+      }
+      /**
+       * URL redirects (AGL-1881). Excluded from all THREE catch-all lists
+       * above; this block is the only client grantor, and it grants the two
+       * operations the console actually performs.
+       *
+       * `canPublishHostContent` rather than `canWriteHostContent`, so an
+       * `author` is refused — see the note on the update exclusion for why a
+       * redirect is a publish act and not an authoring one. Create is left
+       * denied: it rides /api/hosts/resources for the quota, and that route
+       * asks the same publish-axis question on the Admin SDK.
+       *
+       * `externalDestinationApprovedBy` is the serve-path's provenance stamp
+       * (`matchRedirect` will not send traffic to an absolute destination
+       * without it). It is NOT separately gated here, and deliberately so:
+       * every write to this collection already meets `canPublishHostContent`,
+       * so the field cannot be written by anyone the stamp is meant to exclude.
+       * A field-level freeze would be a second place to keep true, saying the
+       * same thing as the block it sits inside.
+       *
+       * READ is left to the catch-all, like `media` and `memberPosts`: the
+       * redirects card is entitlement-gated, not role-gated, and denying the
+       * read here would render it as an empty list rather than as a refusal.
+       */
+      match /redirects/{redirectId} {
+        allow update, delete: if isStaff() ||
           (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
       }
       // The site's media library, re-granted with the object fields frozen
