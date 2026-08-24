@@ -25,6 +25,7 @@ import {
   listUsersAcrossPools,
   type PooledUserRecord,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Staff user listing (AGL-204). Replaces the pre-AGL-42 handler that
@@ -116,6 +117,10 @@ async function handler(request: Request): Promise<Response> {
       tenantTruncated: page.tenantTruncated,
     }, { status: 200 })
   } catch (error) {
+    // An unverifiable credential is a 401, not a fault of ours
+    // (AGL-1993). Null for anything else, so a real failure keeps its 500.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Listing failed' }, { status: 500 })
   }

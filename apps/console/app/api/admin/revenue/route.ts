@@ -21,6 +21,7 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { taxPeriodRange } from '../../../../utils/server/tx-return'
 import {
   commerceSettledSummary,
@@ -578,6 +579,10 @@ async function handler(request: Request): Promise<Response> {
       periodIsClosed: range.end.getTime() <= Date.now(),
     })
   } catch (error) {
+    // An unverifiable credential is a 401, not a fault of ours
+    // (AGL-1993). Null for anything else, so a real failure keeps its 500.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error('[admin/revenue]', error)
     return Response.json({ error: 'Revenue report failed' }, { status: 500 })
   }

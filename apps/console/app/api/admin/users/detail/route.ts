@@ -26,6 +26,7 @@ import {
   type ContactChannel,
   type LegalAcceptanceStatus,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 import { LEGAL_DOCUMENT_VERSION } from '../../../../../constants/legal-documents'
 
 /**
@@ -340,6 +341,10 @@ async function handler(request: Request): Promise<Response> {
       legal,
     }, { status: 200 })
   } catch (error) {
+    // An unverifiable credential is a 401, not a fault of ours
+    // (AGL-1993). Null for anything else, so a real failure keeps its 500.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'User detail failed' }, { status: 500 })
   }

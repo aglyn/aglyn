@@ -28,6 +28,7 @@ import {
   type ContactChannel,
   type ContactSuppressionSource,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { FieldValue } from 'firebase-admin/firestore'
 
 /**
@@ -108,6 +109,10 @@ async function listHandler(request: Request): Promise<Response> {
     const records = await listContactSuppressions({ limit: 200 })
     return Response.json({ ok: true, records }, { status: 200 })
   } catch (error) {
+    // An unverifiable credential is a 401, not a fault of ours
+    // (AGL-1993). Null for anything else, so a real failure keeps its 500.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error('[admin/contact-suppressions] list failed', error)
     return Response.json({ error: 'Could not read the suppression list' }, { status: 500 })
   }
@@ -207,6 +212,10 @@ async function writeHandler(request: Request): Promise<Response> {
       { status: 200 },
     )
   } catch (error) {
+    // An unverifiable credential is a 401, not a fault of ours
+    // (AGL-1993). Null for anything else, so a real failure keeps its 500.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error('[admin/contact-suppressions] write failed', error)
     return Response.json({ error: 'Could not record the request' }, { status: 500 })
   }

@@ -30,6 +30,7 @@ import {
   isImpersonationSession,
   readOrgBilling,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Apply or remove a per-org subscription discount (AGL-1105). Staff attaches
@@ -264,6 +265,10 @@ async function handler(request: Request): Promise<Response> {
     })
     return Response.json({ ok: true, rating }, { status: 200 })
   } catch (error) {
+    // An unverifiable credential is a 401, not a fault of ours
+    // (AGL-1993). Null for anything else, so a real failure keeps its 500.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Discount request failed' }, { status: 500 })
   }

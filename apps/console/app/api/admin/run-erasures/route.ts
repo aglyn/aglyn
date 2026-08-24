@@ -30,6 +30,7 @@ import {
   isImpersonationSession,
   meterPlatformEmail,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Executes due GDPR erasures (AGL-487) — completes the self-serve deletion
@@ -280,6 +281,10 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json({ erased, skipped, scanned: due.size }, { status: 200 })
   } catch (error) {
+    // An unverifiable credential is a 401, not a fault of ours
+    // (AGL-1993). Null for anything else, so a real failure keeps its 500.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Erasure run failed' }, { status: 500 })
   }

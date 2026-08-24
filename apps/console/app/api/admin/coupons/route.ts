@@ -22,6 +22,7 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Staff coupon management (AGL-1105). Coupons live in Stripe — the source of
@@ -270,6 +271,10 @@ async function handler(request: Request): Promise<Response> {
       { status: 200 },
     )
   } catch (error) {
+    // An unverifiable credential is a 401, not a fault of ours
+    // (AGL-1993). Null for anything else, so a real failure keeps its 500.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Coupon request failed' }, { status: 500 })
   }
