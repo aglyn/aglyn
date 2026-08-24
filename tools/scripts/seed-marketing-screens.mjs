@@ -23,7 +23,23 @@
  * Every screen is created bound to the `Marketing base` layout, so new pages
  * render the shared nav/footer from the first load.
  *
- * Idempotent: a slug that already exists under the same parent is skipped.
+ * Idempotent: a screen that already exists under the same parent is skipped.
+ * "Already exists" is deliberately checked THREE ways, because a slug is
+ * editable in the console and a spec that only knows the original slug will
+ * happily re-create the screen at its abandoned path:
+ *
+ *   1. current `slug`
+ *   2. any `priorSlugs` the spec records for a slug that has since moved
+ *   3. `displayName`, which survives a slug rename
+ *
+ * The collision check further down cannot cover this — it compares against
+ * paths CLAIMED in the routing map, and a renamed screen has vacated the old
+ * path, so it reads as free. Both guards missed on AGL-2397 (`developers-home`
+ * -> `developers`), and a `--apply` run would have written a ghost empty page
+ * back onto `/developers-home`.
+ *
+ * When renaming a screen's slug in the console, add the old value to
+ * `priorSlugs` here in the same pass.
  */
 import { initializeApp, applicationDefault } from 'firebase-admin/app'
 import { getFirestore, Timestamp } from 'firebase-admin/firestore'
@@ -100,7 +116,10 @@ const SPECS = [
 
   // Content / audience
   { key: 'newsroom', name: 'Newsroom', slug: 'newsroom', description: 'Newsroom listing.' },
-  { key: 'developers-home', name: 'Home — Developers', slug: 'developers-home', description: 'Developer-audience homepage.' },
+  // AGL-2397 renamed this screen's slug `developers-home` -> `developers` in
+  // the console. `priorSlugs` keeps the dedupe honest across that rename; see
+  // the idempotency note at the top of this file.
+  { key: 'developers-home', name: 'Home — Developers', slug: 'developers', priorSlugs: ['developers-home'], description: 'Developer-audience homepage.' },
 
   // Error screens. Only three slots exist on the host (`errorScreens`:
   // notFound / unauthorized / unavailable) — there is no `forbidden`, so the
@@ -115,8 +134,20 @@ const screensRef = hostRef.collection('screens')
 
 const existingSnap = await screensRef.get()
 const existing = new Map()
+/**
+ * Second index, by display name. A slug is editable in the console (the
+ * screen's Publishing card renames the route), so `parentId::slug` alone stops
+ * recognising a screen the moment anyone renames one — and then this script
+ * creates a ghost empty page back at the abandoned path. AGL-2397 is exactly
+ * that: `developers-home` -> `developers`. The name survives a slug rename,
+ * so both indexes have to miss before anything is created.
+ */
+const existingByName = new Map()
 for (const d of existingSnap.docs) {
-  existing.set(`${d.get('parentId') ?? ''}::${d.get('slug')}`, d.id)
+  const parentId = d.get('parentId') ?? ''
+  existing.set(`${parentId}::${d.get('slug')}`, d.id)
+  const nameLower = d.get('nameLower') ?? d.get('displayName')?.toLowerCase()
+  if (nameLower) existingByName.set(`${parentId}::${nameLower}`, d.id)
 }
 const hostSnap = await hostRef.get()
 const routingMap = hostSnap.get('screens') ?? {}
@@ -147,11 +178,23 @@ let skipped = 0
 
 for (const spec of SPECS) {
   const parentId = spec.parentKey ? keyToId.get(spec.parentKey) : spec.parent
-  const dedupeKey = `${parentId ?? ''}::${spec.slug}`
-  if (existing.has(dedupeKey)) {
-    keyToId.set(spec.key, existing.get(dedupeKey))
+  const scope = parentId ?? ''
+  // Slug (current, then any historic one), then display name. Each is a way
+  // the same screen can already be present; only if every one misses is the
+  // screen genuinely absent.
+  const matched =
+    [spec.slug, ...(spec.priorSlugs ?? [])]
+      .map((slug) => ({ how: `slug ${slug}`, id: existing.get(`${scope}::${slug}`) }))
+      .find((m) => m.id) ??
+    (existingByName.has(`${scope}::${spec.name.toLowerCase()}`)
+      ? { how: `name ${spec.name}`, id: existingByName.get(`${scope}::${spec.name.toLowerCase()}`) }
+      : undefined)
+  if (matched) {
+    keyToId.set(spec.key, matched.id)
     skipped += 1
-    console.log(`skip   ${spec.slug.padEnd(18)} already exists`)
+    console.log(
+      `skip   ${spec.slug.padEnd(18)} already exists as ${matched.id} (matched by ${matched.how})`,
+    )
     continue
   }
   const id = createId()
