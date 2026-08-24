@@ -1013,16 +1013,51 @@ describe('lockdown freezes the beacon (AGL-1627)', () => {
     expect(dayDoc()).toBeUndefined()
   })
 
-  it('a READ-ONLY lockdown keeps counting — the open half, pinned to today’s answer', async () => {
-    // This is the decision AGL-1627 leaves to a product call, held by
-    // `FREEZE_TELEMETRY_DURING_READ_ONLY`. The assertion exists so that
-    // flipping the constant is a deliberate act with a red test attached,
-    // rather than a behaviour change nobody notices.
+  /*
+   * THE AGL-1627 DECISION, asserted in both directions.
+   *
+   * A read-only lock splits this route in half: the COUNTERS keep counting,
+   * because they are the meter the bandwidth band and the abuse ceiling are
+   * computed from and the site is deliberately still serving; the HOST EVENT
+   * does not fire, because the runners behind it write customer records,
+   * mutate contacts, send email and call webhooks — visitor-triggered
+   * content writes, which is what read-only freezes everywhere else.
+   *
+   * Both halves are pinned so that changing either is a deliberate act with
+   * a red test attached rather than a drift nobody notices.
+   */
+  it('a READ-ONLY lockdown keeps counting — the meter must not stop while the site serves', async () => {
     mockLockdown = { scope: 'org', mode: 'read-only', reason: 'maintenance' }
     const route = loadRoute()
     await route.POST(beacon({ hostId: HOST_ID, path: '/' }))
+    // Freezing this would let a read-only lock serve traffic that is
+    // unmetered, unbilled and outside the abuse ceiling — and `billing` and
+    // `security` are two of the four reasons a lock gets armed.
     expect(dayDoc().total).toBe(1)
-    expect(mockEmitted).toEqual([{ hostId: HOST_ID, event: 'pageView' }])
+  })
+
+  it('a READ-ONLY lockdown does NOT fire the pageView host event', async () => {
+    mockLockdown = { scope: 'org', mode: 'read-only', reason: 'maintenance' }
+    const route = loadRoute()
+    await route.POST(beacon({ hostId: HOST_ID, path: '/' }))
+    // `emitHostEvent` is not telemetry: its runners create records, merge
+    // values onto contacts, add people to campaigns, send email and call
+    // outbound webhooks. Every sibling visitor write refuses under read-only
+    // through `visitorWriteRefusal` before emitting its own event; this one
+    // evaded that only because it rides inside a route named "analytics".
+    expect(mockEmitted).toEqual([])
+  })
+
+  it('a READ-ONLY lockdown still counts the OVERLAY branch', async () => {
+    mockLockdown = { scope: 'host', mode: 'read-only', reason: 'billing' }
+    const route = loadRoute()
+    await route.POST(
+      beacon({ hostId: HOST_ID, path: '/', overlay: 'popupImpression' }),
+    )
+    // Same reasoning as the pageview counter, and worth its own assertion:
+    // the freeze verdict is consulted once for the whole route, so a wrong
+    // verdict would silence this branch too.
+    expect(dayDoc().overlays.popupImpression).toBe(1)
   })
 
   it('memoizes the verdict per host rather than reading it per beacon', async () => {

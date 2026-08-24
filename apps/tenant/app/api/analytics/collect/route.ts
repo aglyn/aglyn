@@ -115,12 +115,33 @@ async function hostExists(hostId: string): Promise<boolean> {
 // ---------------------------------------------------------------------------
 
 /**
- * Whether a READ-ONLY lock should also freeze telemetry — the open half of
- * AGL-1627, and a product call rather than an engineering one.
+ * How much of this beacon a lockdown freezes.
  *
- * ## What is settled, and is refused below whatever this constant says
+ *  - `none` — no active lock. Everything runs.
+ *  - `automations` — a READ-ONLY lock. The counters still count; the
+ *    `pageView` host event does NOT fire.
+ *  - `all` — a FULL lock. Nothing here writes anything.
  *
- * A **full** lockdown freezes the beacon. That half is not a judgement call.
+ * A string union rather than the boolean this started as, because the answer
+ * is genuinely three-valued, and because `strictNullChecks` is off in this
+ * repo: an absent boolean folds to `false` silently, whereas every comparison
+ * below is written so that an absent verdict falls to the OPEN side by
+ * construction (see `beaconFreeze`).
+ */
+type BeaconFreeze = 'none' | 'automations' | 'all'
+
+/**
+ * THE AGL-1627 DECISION, and why it is a split rather than the single
+ * "does telemetry count as a frozen write?" the issue posed.
+ *
+ * The issue framed one question and offered two answers — freeze the beacon
+ * under a read-only lock, or exempt it. Both are wrong here, because this
+ * route does two unrelated things and they belong on opposite sides of the
+ * line. What sorts them is not "is this telemetry?" but **what does the mode
+ * actually promise?**
+ *
+ * ## `full` — everything freezes. Settled, and shipped in 850c1b827.
+ *
  * `/api` sits outside the tenant middleware matcher, so a page already cached
  * in a visitor's browser keeps beaconing after the site itself has gone dark
  * and started answering 503 from `/api/locked`. Counting those as page views
@@ -130,28 +151,61 @@ async function hostExists(hostId: string): Promise<boolean> {
  * is built on: one set of counters, so the ceiling and the invoice can never
  * disagree), that false count does not stop at the dashboard. It reaches an
  * invoice. Billing a customer for views of a site we switched off is a defect
- * on any reading of the product, so `full` refuses.
+ * on any reading of the product.
  *
- * ## What is genuinely open, and why it is a constant rather than a guess
+ * ## `read-only` — the COUNTERS keep counting.
  *
- * A **read-only** lock is the opposite shape: the site is still serving and
- * still earning, so the visitor is real and the page view is real. AGL-1511
- * built the mode precisely so a migration or a data repair could run without
- * taking customers offline. Two honest positions, and nothing in the code
- * decides between them:
+ * Read-only exists so the customer's site "stays up and earning" while we
+ * repair something (AGL-1511; `tenant-write-lockdown.ts` says it in those
+ * words). If the site is serving, we are paying the egress for it — and these
+ * counters are not a private analytics nicety, they are the meter: the free
+ * plan's bandwidth band (AGL-2413) and the abuse ceiling (AGL-2155) are both
+ * computed from `total` on these very documents, by the code directly above.
  *
- *  - **Freeze.** These counters are exactly the shape a counter
- *    reconciliation repairs, and they are billing inputs; letting them move
- *    underneath a repair of themselves is close to self-defeating.
- *  - **Leave.** Dropping them silently loses analytics the customer is paying
- *    for, during a window when we chose to keep their site up. A visitor who
- *    cannot be counted is worse than a counter a few hits stale.
+ * So freezing them does not buy a quiet migration. It buys a window in which
+ * a site serves traffic that is **unmetered, unbilled and outside the abuse
+ * ceiling** — and `billing` and `security` are two of the four reasons a lock
+ * is armed for. A read-only lock must not be a way to serve for free, and a
+ * containment control that switches off the containment meter is the wrong
+ * shape. The counter is the record that we served; the mode says we chose to
+ * keep serving. Those cannot disagree.
  *
- * Left at `false` — today's behaviour — so this change closes the defect
- * without also making the product decision as a side effect. Flip this one
- * constant to freeze read-only too; nothing else has to move.
+ * The freeze case is real and is not dismissed: these counters are exactly
+ * the shape a counter reconciliation repairs. But `FieldValue.increment` is
+ * commutative — a repair that cannot tolerate concurrent increments needs the
+ * site off the air, which is what `full` is for, and `full` now freezes this.
+ * "Read-only, plus stop the meter" is not a mode we offer, and it should not
+ * be one this route invents for itself.
+ *
+ * ## `read-only` — the HOST EVENT does not fire. This half was a defect.
+ *
+ * The last line of the handler is `emitHostEvent(hostId, 'pageView')`, and
+ * that is not telemetry at all. It fans out to the workflow and action
+ * runners, whose steps create records, merge values onto contacts,
+ * `arrayUnion` people into campaigns, send email and call outbound webhooks
+ * (`libs/tenant/runtime/src/lib/run-event-actions.ts`). Those are customer
+ * content writes and outbound messages, triggered by an anonymous visitor.
+ *
+ * Every sibling visitor write on this runtime already refuses under read-only
+ * through `visitorWriteRefusal` — forms, cart, checkout, reviews, newsletter,
+ * membership, bookings — and each of those refuses *before* it emits its own
+ * host event. This one evaded that gate only because it rides inside a route
+ * named "analytics". It is the same class of write, so it gets the same
+ * answer, and a migration or repair now genuinely has nothing racing it
+ * except a commutative counter.
+ *
+ * ## Still open for Zach, and cheap to change
+ *
+ * If the intended reading of read-only is "the meter stops too", this is one
+ * line: return `'all'` for read-only instead of `'automations'`. The tests in
+ * `analytics-collect.spec.ts` assert the split explicitly in both directions,
+ * so that flip is a deliberate act with red tests attached, not a drift.
  */
-const FREEZE_TELEMETRY_DURING_READ_ONLY = false
+function freezeForMode(state: unknown): BeaconFreeze {
+  // `lockdownMode` applies the absent-means-`full` fail-safe, so a carrier
+  // document written before the field existed freezes everything.
+  return Aglyn.lockdownMode(state as never) === 'full' ? 'all' : 'automations'
+}
 
 /**
  * Per-instance memo of the freeze verdict, because this is the platform's
@@ -169,11 +223,11 @@ const FREEZE_TELEMETRY_DURING_READ_ONLY = false
  * this file; `hostExists` has already refused unknown hosts by the time
  * anything reaches here, so the keys are real host ids.
  */
-const lockdownFreeze = new Map<string, { frozen: boolean; at: number }>()
+const lockdownFreeze = new Map<string, { freeze: BeaconFreeze; at: number }>()
 const LOCKDOWN_FREEZE_TTL_MS = 60_000
 
 /**
- * True when this beacon must not write.
+ * How much of this beacon the active lock freezes.
  *
  * Fails OPEN, like every other lockdown reader: `getSiteLockdown` swallows
  * its own errors and answers null, and an unreachable Firestore is an outage,
@@ -181,17 +235,15 @@ const LOCKDOWN_FREEZE_TTL_MS = 60_000
  * cheap direction; refusing every beacon on the platform because one read
  * timed out is not.
  */
-async function telemetryFrozen(hostId: string): Promise<boolean> {
+async function beaconFreeze(hostId: string): Promise<BeaconFreeze> {
   const now = Date.now()
   const hit = lockdownFreeze.get(hostId)
-  if (hit && now - hit.at < LOCKDOWN_FREEZE_TTL_MS) return hit.frozen
+  if (hit && now - hit.at < LOCKDOWN_FREEZE_TTL_MS) return hit.freeze
   if (lockdownFreeze.size > MAX_TRACKED_HOSTS) lockdownFreeze.clear()
-  let frozen: boolean
+  let freeze: BeaconFreeze
   try {
     const state = await getSiteLockdown(hostId, now)
-    frozen = state
-      ? Aglyn.lockdownMode(state) === 'full' || FREEZE_TELEMETRY_DURING_READ_ONLY
-      : false
+    freeze = state ? freezeForMode(state) : 'none'
   } catch (error) {
     // Belt and braces. `getSiteLockdown` already answers null rather than
     // throwing, but this gate sits in front of EVERY write on the platform's
@@ -199,10 +251,10 @@ async function telemetryFrozen(hostId: string): Promise<boolean> {
     // dropping every beacon on the fleet. Caught here rather than left to the
     // route's outer try/catch, which would abandon the pageview as well.
     console.error('[analytics] lockdown verdict failed', hostId, error)
-    frozen = false
+    freeze = 'none'
   }
-  lockdownFreeze.set(hostId, { frozen, at: now })
-  return frozen
+  lockdownFreeze.set(hostId, { freeze, at: now })
+  return freeze
 }
 
 // ---------------------------------------------------------------------------
@@ -629,11 +681,16 @@ export async function POST(request: Request): Promise<Response> {
 
     // The lockdown gate (AGL-1627), beside the spoof gate because it answers
     // the same question — may this beacon mint counters at all — and has to
-    // hold for BOTH branches below and for emitHostEvent, not just the
-    // pageview one. Refuses SILENTLY, with the same 204 every other path
-    // returns: nothing renders this response, so a 423 would buy a visitor's
-    // browser a retry and tell nobody anything.
-    if (await telemetryFrozen(hostId)) return noContent()
+    // hold for BOTH branches below, not just the pageview one. Refuses
+    // SILENTLY, with the same 204 every other path returns: nothing renders
+    // this response, so a 423 would buy a visitor's browser a retry and tell
+    // nobody anything.
+    //
+    // `=== 'all'` rather than a truthiness test on purpose: `strictNullChecks`
+    // is off repo-wide, so an absent verdict must fall to the OPEN side by
+    // construction rather than by luck.
+    const freeze = await beaconFreeze(hostId)
+    if (freeze === 'all') return noContent()
 
     // Overlay events (AGL-200): impressions/dismissals/clicks for the
     // announcement bar and popup count into the same day doc under an
@@ -839,7 +896,15 @@ export async function POST(request: Request): Promise<Response> {
     }
     // Event trigger (AGL-128/148): fire-and-forget — never delays the
     // beacon; alerts have no response channel here and are dropped.
-    void emitHostEvent(hostId, 'pageView', { path })
+    //
+    // NOT under a read-only lock (AGL-1627). This is where the beacon stops
+    // being telemetry: the runners behind it create records, merge values
+    // onto contacts, add people to campaigns, send email and call webhooks.
+    // Those are visitor-triggered customer-content writes, which is exactly
+    // what read-only freezes everywhere else on this runtime. `!== 'auto…'`
+    // rather than `=== 'none'` so an absent verdict emits — the same
+    // fail-open direction as the gate above.
+    if (freeze !== 'automations') void emitHostEvent(hostId, 'pageView', { path })
   } catch (error) {
     console.error(error)
   }

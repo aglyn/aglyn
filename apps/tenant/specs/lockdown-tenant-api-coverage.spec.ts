@@ -179,6 +179,33 @@ function wiredHow(source: string): string | null {
       return `if (await ${match[1]}(…)) return …`
     }
   }
+  // Shape 3 — a THREE-VALUED verdict from a file-local resolver, held in a
+  // local and compared, guarding a return (AGL-1627):
+  //
+  //   const freeze = await beaconFreeze(hostId)
+  //   if (freeze === 'all') return noContent()
+  //
+  // A route whose lock has more than one strength cannot express itself as a
+  // boolean predicate, and contorting it into one to satisfy this checker
+  // would be the checker deciding the code. Bound to the return exactly as
+  // the two shapes above are: the resolver must genuinely consult a verdict,
+  // AND the local it produces must guard a `return`. A verdict computed,
+  // compared and then not returned on is still nothing.
+  const compared = source.matchAll(
+    /(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*await\s+([A-Za-z_$][\w$]*)\s*\(/g,
+  )
+  for (const match of compared) {
+    const [, local, resolver] = match
+    const body = functionBody(source, resolver)
+    if (!body || !VERDICT_CALL.test(body)) continue
+    if (
+      new RegExp(
+        `if\\s*\\(\\s*${local}\\s*(?:===|!==)[^)]*\\)\\s*return\\b`,
+      ).test(source)
+    ) {
+      return `const ${local} = await ${resolver}(…) → if (${local} === …) return …`
+    }
+  }
   return null
 }
 
@@ -385,6 +412,22 @@ describe('AGL-2495 · every tenant API route has a lockdown disposition', () => 
     expect(
       wiredHow(predicate.replace('cache.get(hostId) === true', 'Boolean(await getSiteLockdown(hostId))')),
     ).not.toBeNull()
+    // And the three-valued shape (AGL-1627), in all three directions: a
+    // resolver that never asks is not wiring, a verdict that is compared but
+    // not returned on is not wiring, and only both together count.
+    const resolver = [
+      'async function beaconFreeze(hostId) {',
+      '  return cache.get(hostId)',
+      '}',
+      "const freeze = await beaconFreeze(hostId)",
+    ].join('\n')
+    const asks = resolver.replace(
+      'cache.get(hostId)',
+      "(await getSiteLockdown(hostId)) ? 'all' : 'none'",
+    )
+    expect(wiredHow(`${resolver}\nif (freeze === 'all') return noContent()`)).toBeNull()
+    expect(wiredHow(`${asks}\nif (freeze === 'all') { /* refusal deleted */ }`)).toBeNull()
+    expect(wiredHow(`${asks}\nif (freeze === 'all') return noContent()`)).not.toBeNull()
   })
 
   it('leaves no route unwired, undelegated, unexplained and unlisted', () => {

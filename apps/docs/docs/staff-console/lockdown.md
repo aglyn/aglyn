@@ -59,6 +59,7 @@ on the platform card and the workspace/site card.
 | --- | --- | --- |
 | Customer sites | 503 notice, cached pages evicted | **keep serving normally** |
 | Visitor forms, cart, checkout | refused | refused, with an inline "temporarily paused" |
+| Visitor analytics beacon | frozen entirely | **page views still count**, host automations do not fire ([why](#analytics-beacon)) |
 | Console reads (sign-in, viewing) | refused | **work** |
 | Console/API writes | refused | refused with 423 |
 | Member sessions | revoked (`security`/`manual`) | **never revoked** |
@@ -878,6 +879,43 @@ publish could fire on a locked host. It is gated now and the spec names it if
 that line ever leaves. Six plugin jobs (four in commerce, two in bookings) are
 recorded as still ungated — the runner, not the call site, is where that should
 be fixed.
+
+### The analytics beacon, which a read-only lock splits in half {#analytics-beacon}
+
+`POST /api/analytics/collect` is the one route where "read-only refuses every
+write" is deliberately not the whole answer, so it is worth reading before you
+arm a maintenance window and wonder why the dashboard kept moving.
+
+**Under a full lock it is frozen completely** (AGL-1627). The middleware does
+not match `/api`, so a page already sitting in a visitor's browser keeps
+beaconing long after the site went dark — and these are not private counters.
+`/api/billing/report-usage` meters the **same** `hosts/{id}/analytics/{day}`
+documents the beacon increments, deliberately, so that the bandwidth ceiling and
+the invoice can never disagree. A page view recorded against a site we switched
+off therefore reaches an invoice. It now refuses, silently, keeping the `204`
+the beacon always returns: nothing renders that response, so a 423 would buy the
+browser a retry and tell nobody anything.
+
+**Under a read-only lock the counters keep counting.** The site is still serving
+— that is the entire point of the mode — so we are still paying the egress, and
+those same counters are the meter that the free plan's bandwidth band and the
+abuse ceiling are computed from. Freezing them would turn a read-only lock into
+a window where a site serves traffic that is unmetered, unbilled and outside the
+abuse ceiling, and `billing` and `security` are two of the four reasons a lock
+gets armed. So the counter stays honest about what we served.
+
+**Under a read-only lock the host automations do not fire.** The last thing the
+beacon does is emit a `pageView` host event, and that is not telemetry: the
+workflow and action runners behind it create records, merge values onto
+contacts, add people to campaigns, send email and call outbound webhooks. Those
+are visitor-triggered content writes — exactly what every sibling route already
+refuses under read-only — and they only escaped the gate because they ride
+inside a route named "analytics". A migration or repair now has nothing racing
+it here except a commutative counter increment.
+
+If you need the counters frozen as well — a reconciliation of the analytics
+documents themselves — use a **full** lock on that site. "Read-only, but also
+stop the meter" is not a mode we offer.
 
 ## Operating it
 
