@@ -99,14 +99,17 @@ filter. A `url(...)` in it reaches the visitor's browser by exactly the route
 described above, except that the host was picked by the **plugin's publisher**,
 on a site whose owner did not choose it and generally cannot see it. So we do
 not put that one on the site owner to name: they could not enumerate it if they
-tried. What stands behind it instead is review — plugin code that can render on
-a published site runs only on the staff-signed realm tier, so those bytes were
-read by a person before they shipped and the version can be revoked
-platform-wide at render time. Reviewed is not proxied and we are not implying
-it is: the request still travels from the visitor's browser to the publisher's
-host. If you have installed a plugin and want to know what it references, write
-to `privacy@aglyn.com` and we will tell you what is in the version you are
-running.
+tried. What stands behind it instead is narrower than "we reviewed it", and the
+exact shape is worth having. Plugin code that can render on a published site
+runs only on the staff-signed realm tier, so it needs a staff trust grant, its
+bytes are pinned by SHA-256 and its signature is checked before it executes,
+and staff can withdraw that version platform-wide at render time. Marketplace
+review is the ordinary route to publishing a version but it is not a universal
+guarantee — a publisher may install their own not-yet-reviewed build on their
+own workspace. And none of it is a proxy: the request still travels from the
+visitor's browser to the publisher's host. If you have installed a plugin and
+want to know what it references, write to `privacy@aglyn.com` and we will tell
+you what is in the version you are running.
 
 What we do about it, written as current configuration rather than as an
 assurance:
