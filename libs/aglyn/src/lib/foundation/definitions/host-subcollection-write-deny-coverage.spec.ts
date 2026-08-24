@@ -380,7 +380,17 @@ const EDITOR_WRITABLE_HOST_SUBCOLLECTIONS: Record<string, string> = {
   discounts: 'Automatic discounts, authored in the discounts card.',
   licenseKeys:
     'Digital-product license keys, issued and revoked from the products hub.',
-  memberPosts: 'Members-only posts, authored in the member posts card.',
+  memberPosts:
+    'Members-only posts. CREATE and UPDATE are denied outright (AGL-2372) — ' +
+    '/api/commerce/member-post is the only writer and it runs on the Admin ' +
+    'SDK, so the route fix that made it refuse an `author` (f78705249) was ' +
+    'bypassable with a client `addDoc` while this collection sat in none of ' +
+    'the three exclusion lists. DELETE stays client-side because the member ' +
+    'posts card really does remove a post that way, but it is excluded from ' +
+    'the catch-all and re-granted by a dedicated block on ' +
+    '`canPublishHostContent`: an author must not take down content paying ' +
+    'subscribers read, which is the AGL-2334 `components` decision one ' +
+    'collection over.',
   reviews: 'Product reviews, approved and hidden in the moderation card.',
   subscriptions:
     'Site membership subscriptions, adjusted from the site member drawer.',

@@ -1831,6 +1831,34 @@ service cloud.firestore {
         // `storagePath`, which `mediaStoragePathInScope` resolves to the
         // document's OWN key. Adding the name here would take the DAM's delete
         // with it to close nothing.
+        //
+        // `memberPosts` joins CREATE and UPDATE, with DELETE excluded and
+        // re-granted by the dedicated block below (AGL-2372). This is the
+        // DATABASE half of the route fix in `f78705249`, which made
+        // `member-post.ts` refuse an `author` and closed the front door only:
+        // the name was in NONE of these three lists, so this catch-all
+        // granted it on `canWriteHostContent`, and that has included `author`
+        // since AGL-2334. The role the route had just refused could `addDoc`
+        // the identical document straight from the browser. Only the
+        // subscriber email is lost in that path — it lives on the route — and
+        // the post itself is what paying subscribers read.
+        //
+        // The split is written from the call sites, and they are unanimous:
+        // the ONLY client-SDK write to this collection anywhere in `apps` or
+        // `libs` is the `deleteDoc` at `member-posts-card.component.tsx:166`.
+        // /api/commerce/member-post owns the create on the Admin SDK, so
+        // denying it here costs the product nothing and makes that route the
+        // single door — its `admin | editor` allowlist becomes the whole
+        // policy instead of half of it. Nothing updates one at all.
+        //
+        // DELETE could not simply join them. Excluding the name outright is
+        // what the previous pass declined to do, and correctly: it breaks the
+        // card's Delete button for the admins and editors entitled to press
+        // it. But leaving delete in the catch-all lets an `author` destroy
+        // content paying subscribers read, and AGL-2334 already answered that
+        // exact question for `components` — taking live content down is the
+        // publish act in the other direction. So the name is excluded here
+        // and the block below re-grants delete on `canPublishHostContent`.
         allow create: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'variables',
@@ -1839,7 +1867,7 @@ service cloud.firestore {
               'templates', 'collections', 'datasets', 'webhooks', 'orders',
               'counters', 'analytics', 'screenAnalytics', 'members',
               'media', 'mediaTombstones', 'formSubmissions', 'actions',
-              'authors', 'carts',
+              'authors', 'carts', 'memberPosts',
               'checkouts', 'giftCards', 'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds']));
         // `stockHolds` joins all THREE lists (AGL-2356). It is the release
@@ -1903,11 +1931,18 @@ service cloud.firestore {
         // `media` joins UPDATE for the `components` reason stated on the
         // create list above (AGL-1881): the block below freezes the object
         // fields, and a freeze under a looser sibling never fires.
+        //
+        // `memberPosts` joins UPDATE for the reason stated on the create list
+        // (AGL-2372), and it is a deny rather than a re-grant: no client
+        // updates one — the card has no edit control — so the operation is
+        // dead client-side, and leaving it open would let an `author` rewrite
+        // a live post's title and body in place, which reaches paying
+        // subscribers by the same door the create fix just shut.
         allow update: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components', 'installs',
               'templates', 'collections', 'datasets', 'orders', 'registers',
-              'webhooks',
+              'webhooks', 'memberPosts',
               'counters', 'analytics', 'screenAnalytics', 'members',
               'media', 'mediaTombstones', 'inventoryAdjustments', 'carts',
               'checkouts',
@@ -1930,15 +1965,44 @@ service cloud.firestore {
         // component came out wrong and why reading the diff would not have
         // shown it. A rules test against a MOCK of this file would have
         // agreed with the comment.
+        //
+        // `memberPosts` joins DELETE so that the dedicated block below can
+        // decide it (AGL-2372) — the `media`/`components` mechanism, not an
+        // outright denial. The console card really does delete client-side,
+        // so the block re-grants exactly that, narrowed from
+        // `canWriteHostContent` to `canPublishHostContent`. Remove the name
+        // from this list and the block stops deciding anything at all, since
+        // the looser sibling wins; the emulator suite's
+        // `an author cannot create or delete a member post (AGL-2372)` is
+        // what says so.
         allow delete: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components',
               'collections', 'datasets', 'orders', 'registers', 'webhooks',
-              'counters',
+              'counters', 'memberPosts',
               'analytics', 'screenAnalytics', 'members', 'mediaTombstones',
               'inventoryAdjustments', 'carts', 'checkouts', 'giftCards',
               'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds']));
+      }
+      // Members-only posts (AGL-2372). Create and update are denied outright
+      // by the exclusions above — /api/commerce/member-post is the only
+      // writer and it runs on the Admin SDK — and this block re-grants the
+      // one client operation that exists: the Delete button on the member
+      // posts card (`member-posts-card.component.tsx:166`).
+      //
+      // `canPublishHostContent` rather than `canWriteHostContent`, so an
+      // `author` is refused. Removing a post that paying subscribers can read
+      // is the AGL-2334 `components` act in the other direction, and the
+      // route's own allowlist has said `admin | editor` since f78705249; the
+      // database now says the same thing rather than the opposite.
+      //
+      // READ is deliberately left to the catch-all. The card is not
+      // role-gated, and denying the read here would render it as an empty
+      // list with no error rather than as a refusal anyone can see.
+      match /memberPosts/{postId} {
+        allow delete: if isStaff() ||
+          (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
       }
       // The site's media library, re-granted with the object fields frozen
       // (AGL-1881). `media` is excluded from the catch-all's create and update
