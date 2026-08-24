@@ -417,10 +417,14 @@ describe('OrgSsoCard break-glass designation (AGL-1888)', () => {
     await screen.findByText('On')
     expect(button('Enforce').disabled).toBe(true)
     // The requirement is on screen BEFORE the button is reached for — the
-    // refusal used to be the first time anyone heard of it.
-    expect(
-      screen.getByText(/designate at least one break-glass account/i),
-    ).toBeTruthy()
+    // refusal used to be the first time anyone heard of it. It names BOTH
+    // ways out, because for a pool we provisioned only one of them is
+    // reachable (AGL-1888 option (a)).
+    const requirement = screen.getByText(
+      /needs one way in that survives your identity provider failing/i,
+    )
+    expect(requirement.textContent).toMatch(/owner who signs in outside/i)
+    expect(requirement.textContent).toMatch(/break-glass account inside the pool/i)
   })
 
   it('offers Enforce once an account is designated', async () => {
@@ -587,5 +591,148 @@ describe('OrgSsoCard break-glass with no eligible account (AGL-1888)', () => {
     expect(
       screen.queryByText(/No account in your identity pool can serve as break-glass/),
     ).toBeNull()
+  })
+})
+
+/**
+ * AGL-1888 option (a) — the way OUT of the dead end above.
+ *
+ * An org owner in the project pool is invisible to the enforcement sweep (it
+ * lists `authForPool(tenantId)` and nothing else), so an identity provider
+ * that stops answering cannot lock them out. The server decides who qualifies
+ * — seven conditions, none of which this component can see — and hands the
+ * answer back on the rehearsal. The card's whole job is to believe it, say
+ * who, and stop refusing.
+ *
+ * Both worlds are arranged in every case: an assertion that the button is
+ * enabled proves nothing unless the identical org without an owner is still
+ * refused, which is the pair that matters most here.
+ */
+const rehearsalWithOwners = (
+  owners: Array<Record<string, unknown>>,
+  extra: Record<string, unknown> = {},
+) => ({
+  ok: true,
+  preview: {
+    scanned: 1,
+    changed: 0,
+    // A pool of the only shape `provisionSsoPool` can create: SAML and
+    // nothing else, so no tick in the table could ever be effective.
+    accounts: [account({ uid: 'u-1', email: 'pooled@acme.com', unlinked: [] })],
+    lockout: {
+      safe: owners.length > 0,
+      retainedBy: [],
+      ineffective: [],
+      ownersOutsidePool: owners,
+      ownerLookupFailed: false,
+      ...extra,
+    },
+  },
+})
+
+const FOUNDER = {
+  uid: 'founder',
+  email: 'founder@personal.example',
+  providers: ['password'],
+}
+
+describe('OrgSsoCard break-glass by an owner outside the pool (AGL-1888)', () => {
+  it('THE FIX: enforcement becomes offerable, with nothing designated', async () => {
+    serveByAction({
+      status: { body: liveOrg() },
+      'enforce-preview': { body: rehearsalWithOwners([FOUNDER]) },
+    })
+
+    render(<OrgSsoCard />)
+    await screen.findByText('On')
+    // Disabled before the rehearsal — the card has not been told anything yet
+    // and must not guess about a one-way door.
+    expect(button('Enforce').disabled).toBe(true)
+
+    fireEvent.click(button('Rehearse'))
+
+    await screen.findByLabelText('Break-glass: pooled@acme.com')
+    expect(button('Enforce').disabled).toBe(false)
+    // And it says WHO, by the address the admin knows them by. "You are
+    // protected" without a name is not something anybody can check.
+    expect(
+      screen.getByText(/founder@personal\.example/),
+    ).toBeTruthy()
+  })
+
+  it('THE NEGATIVE: the identical org with no such owner stays refused', async () => {
+    // Same pool, same absent designation, same rehearsal — only the server's
+    // owner list differs. Without this pair the case above would pass on a
+    // button that is simply always enabled after a rehearsal.
+    serveByAction({
+      status: { body: liveOrg() },
+      'enforce-preview': { body: rehearsalWithOwners([]) },
+    })
+
+    render(<OrgSsoCard />)
+    await screen.findByText('On')
+    fireEvent.click(button('Rehearse'))
+
+    await screen.findByLabelText('Break-glass: pooled@acme.com')
+    expect(button('Enforce').disabled).toBe(true)
+    expect(
+      screen.getByText(/No account in your identity pool can serve as break-glass/),
+    ).toBeTruthy()
+  })
+
+  it('drops the dead-end warning once an owner outside the pool exists', async () => {
+    // The warning is about having NO way in, not about the pool being
+    // SAML-only — which it always is. Leaving it up next to an enabled
+    // Enforce button would be the card contradicting itself.
+    serveByAction({
+      status: { body: liveOrg() },
+      'enforce-preview': { body: rehearsalWithOwners([FOUNDER]) },
+    })
+
+    render(<OrgSsoCard />)
+    await screen.findByText('On')
+    fireEvent.click(button('Rehearse'))
+
+    await screen.findByLabelText('Break-glass: pooled@acme.com')
+    expect(
+      screen.queryByText(/No account in your identity pool can serve as break-glass/),
+    ).toBeNull()
+  })
+
+  it('says the CHECK failed rather than claiming the org has nobody', async () => {
+    // "We could not check" and "you have nobody" both refuse, but only one of
+    // them is the org's problem to fix. An error swallowed into an empty list
+    // renders as a measured zero and nothing about it looks wrong.
+    serveByAction({
+      status: { body: liveOrg() },
+      'enforce-preview': {
+        body: rehearsalWithOwners([], { ownerLookupFailed: true }),
+      },
+    })
+
+    render(<OrgSsoCard />)
+    await screen.findByText('On')
+    fireEvent.click(button('Rehearse'))
+
+    expect(
+      await screen.findByText(/could not finish checking/i),
+    ).toBeTruthy()
+    // Still refused — a failed check is never a way past the guard.
+    expect(button('Enforce').disabled).toBe(true)
+  })
+
+  it('does not say the check failed when it succeeded', async () => {
+    // The paired positive for the banner above.
+    serveByAction({
+      status: { body: liveOrg() },
+      'enforce-preview': { body: rehearsalWithOwners([]) },
+    })
+
+    render(<OrgSsoCard />)
+    await screen.findByText('On')
+    fireEvent.click(button('Rehearse'))
+
+    await screen.findByLabelText('Break-glass: pooled@acme.com')
+    expect(screen.queryByText(/could not finish checking/i)).toBeNull()
   })
 })

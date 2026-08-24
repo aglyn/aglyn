@@ -46,13 +46,21 @@
  *     account down to the SAML link and the pool is perfectly consistent right
  *     up until the IdP stops answering, at which point nobody can sign in and
  *     we cannot let them back in either. `zach@aglyn.com` is in that state
- *     today. So enforcement REFUSES unless the org has designated a
- *     break-glass account that keeps a non-IdP credential.
+ *     today. So enforcement REFUSES unless the org keeps a way in that does
+ *     not depend on the IdP: either a DESIGNATED break-glass account inside
+ *     the pool, or an org owner who lives OUTSIDE it
+ *     ({@link findBreakGlassOrgOwners}). The second is what makes the first
+ *     satisfiable at all — nothing inside a pool we provisioned can hold a
+ *     password, so for a while this guard could only ever say no.
  */
 
 import type { UserRecord } from 'firebase-admin/auth'
 import { FieldValue } from 'firebase-admin/firestore'
 import { authForPool } from './auth-pools'
+import {
+  findBreakGlassOrgOwners,
+  type SsoBreakGlassOwner,
+} from './sso-break-glass-owners'
 import { invalidateTokenRevocationCache } from './token-revocation'
 import firebaseAdmin from './firebase-admin'
 import { notifyUsers } from './notifications'
@@ -95,8 +103,9 @@ export interface SsoEnforcementAccount {
  */
 export interface SsoLockoutAssessment {
   /**
-   * True when at least one DESIGNATED break-glass account keeps a credential
-   * that does not depend on the org's IdP.
+   * True when the org keeps at least one way in that its IdP does not
+   * mediate: a DESIGNATED break-glass account inside the pool, or an org
+   * owner outside it.
    */
   safe: boolean
   /** Designated break-glass uids that actually retain a non-IdP credential. */
@@ -108,6 +117,18 @@ export interface SsoLockoutAssessment {
    * as protection.
    */
   ineffective: string[]
+  /**
+   * Org owners in the PROJECT pool (AGL-1888 option (a)). The sweep cannot
+   * see these accounts, so an IdP that stops answering cannot lock them out.
+   * Named, not counted: the admin has to recognise the person.
+   */
+  ownersOutsidePool: SsoBreakGlassOwner[]
+  /**
+   * The owner lookup could not be completed. `ownersOutsidePool` is then
+   * INCOMPLETE rather than empty, so the refusal must say we could not check
+   * instead of asserting the org has nobody. Never makes an org safe.
+   */
+  ownerLookupFailed: boolean
 }
 
 export interface SsoEnforcementResult {
@@ -191,7 +212,18 @@ export async function enforceSsoSignInMethods(
     accounts.push(summary)
   }
 
-  const lockout = assessSsoLockoutRisk(accounts, providerId, breakGlassUids)
+  // The half the pool cannot supply (AGL-1888 option (a)). Run for the DRY
+  // RUN too: the rehearsal is where an org learns whether it may enforce, and
+  // a rehearsal that skipped this would report a lockout risk the real run
+  // then disagrees with.
+  const ownerLookup = await findBreakGlassOrgOwners(orgId, providerId, tenantId)
+  const lockout = assessSsoLockoutRisk(
+    accounts,
+    providerId,
+    breakGlassUids,
+    ownerLookup.owners,
+    ownerLookup.unavailable,
+  )
 
   // THE PRE-FLIGHT (AGL-1888). Planned first, refused before a single
   // `updateUser` — this is the whole reason the plan is computed separately
@@ -344,11 +376,29 @@ export function planAccount(
  * is the most natural way to get this wrong — it looks like a break-glass
  * account and provides nothing, because it fails in exactly the situation it
  * exists for.
+ *
+ * THE SECOND WAY IN IS NOT IN THE POOL AT ALL (AGL-1888 option (a)). An org
+ * owner holding a project-level credential is invisible to the sweep — the
+ * enforcement pass lists `authForPool(tenantId)` and never touches the
+ * project pool — so a lapsed certificate cannot reach them. No designation is
+ * required for those: nobody has to be told to keep the key they already
+ * hold, and requiring a tick would put the requirement back out of reach for
+ * exactly the org that already satisfies it. Whether such an owner exists is
+ * decided by {@link findBreakGlassOrgOwners}, which is where the seven
+ * conditions live; this function only counts what it is handed, so that the
+ * rehearsal and the real run cannot disagree.
+ *
+ * `ownerLookupFailed` deliberately does NOT make an org safe. It exists so a
+ * refusal can distinguish "you have nobody" from "we could not check" — an
+ * error swallowed into an empty list renders as a measured zero, and nothing
+ * about it looks wrong.
  */
 export function assessSsoLockoutRisk(
   accounts: readonly SsoEnforcementAccount[],
   providerId: string,
   breakGlass: readonly string[],
+  ownersOutsidePool: readonly SsoBreakGlassOwner[] = [],
+  ownerLookupFailed = false,
 ): SsoLockoutAssessment {
   const designated = [...new Set(breakGlass.filter(Boolean))]
   const byUid = new Map(accounts.map((account) => [account.uid, account]))
@@ -362,7 +412,14 @@ export function assessSsoLockoutRisk(
     if (protects) retainedBy.push(uid)
     else ineffective.push(uid)
   }
-  return { safe: retainedBy.length > 0, retainedBy, ineffective }
+  const owners = [...ownersOutsidePool]
+  return {
+    safe: retainedBy.length > 0 || owners.length > 0,
+    retainedBy,
+    ineffective,
+    ownersOutsidePool: owners,
+    ownerLookupFailed,
+  }
 }
 
 /**
@@ -374,10 +431,12 @@ export function assessSsoLockoutRisk(
  */
 export const SSO_LOCKOUT_REFUSAL =
   'Enforcing single sign-on would remove every sign-in method that does not ' +
-  'go through your identity provider, and this organization has no ' +
-  'break-glass account holding one. If your IdP certificate lapses or its ' +
-  'app is removed, nobody would be able to sign in and we could not let you ' +
-  'back in either. Designate at least one break-glass account that keeps a ' +
-  'password, then enforce.'
+  'go through your identity provider, and this organization would be left ' +
+  'with no way in that survives your identity provider failing. If its ' +
+  'certificate lapses or its application is removed, nobody would be able ' +
+  'to sign in and we could not let you back in either. Give the ' +
+  'organization one of two things first: an owner who signs in outside your ' +
+  'identity pool, or a designated break-glass account inside it that keeps ' +
+  'a password.'
 
 export default enforceSsoSignInMethods

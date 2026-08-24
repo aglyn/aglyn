@@ -117,21 +117,54 @@ method being removed is reported and skipped rather than orphaned.
 Enforcement cannot be undone by turning it off. We remove a linked credential;
 we do not keep a copy to put back. Anyone affected re-links for themselves.
 
-### You must designate a break-glass account first
+### You must keep one way in that does not go through your IdP
 
-Enforcing is **refused** until at least one account in your pool is designated
-as **break-glass**. This is not a warning you can dismiss — the button stays
-disabled and the sweep will not run.
+Enforcing is **refused** until your organization has a way in that survives your
+identity provider failing. This is not a warning you can dismiss — the button
+stays disabled and the sweep will not run.
 
 The reason is the failure it protects against. After enforcement, every account
 in your pool holds nothing but the link to your identity provider. If that
 provider stops answering — a lapsed signing certificate, an application deleted
 during a migration, a tenant moved — nobody can sign in, and **we cannot let you
 back in either**: your accounts live in your own pool and their only credential
-is the one that stopped working. A break-glass account keeps its password
-through the sweep, and it is the way back.
+is the one that stopped working.
 
-Designate them from the rehearsal: it lists every account in the pool with a
+There are two ways to satisfy the requirement, and for most organizations only
+the first is available.
+
+#### An owner who signs in outside your identity pool
+
+Enforcement sweeps your identity pool and nothing else. An **organization
+owner** whose account is not in that pool is not merely spared — the sweep
+cannot see the account at all, so no certificate, application or provider
+change on your side can lock them out. Nothing has to be ticked: they already
+hold the key.
+
+To count, the owner must:
+
+- have the **Owner** role in the organization — Admin is not enough;
+- sign in **outside the identity pool**, with their own password or social
+  login. In practice this is an address your identity provider does not
+  govern — the founding admin who set the organization up before SSO, or a
+  deliberate administrative account on a different domain;
+- have a **verified email address** and not be disabled. An unverified address
+  cannot reach organization settings, so it could not turn enforcement back
+  off — which is the entire job.
+
+The rehearsal names them. If your organization has none, make one: promoting a
+member to Owner is something you do yourself, on the Members page.
+
+One residual worth knowing: if that owner's login and your identity provider
+are the same vendor — a Workspace SAML application plus a Workspace Google
+login — then deleting the whole vendor account takes both. A lapsed certificate
+or a removed SAML application, the failures this exists for, do not.
+
+#### Or a break-glass account inside the pool
+
+If an account in your pool already holds a password or another linked login —
+which happens for pools created before self-serve setup — you can designate it
+instead. Designate from the rehearsal: it lists every account in the pool with a
 **Break-glass** checkbox, then **Save break-glass accounts**.
 
 Only an account that already holds a password or another linked login can be
@@ -140,10 +173,21 @@ exactly like protection and provides none — it fails in precisely the situatio
 break-glass exists for — so both the checkbox and the server refuse it, and the
 refusal names which of your picks was ineffective.
 
-Keep the list current. It is a standing bypass of the enforcement you bought,
-which is the point, but it also means a departed admin left on it is a standing
-password into your organization. Saving replaces the list rather than adding to
-it, so removing someone is a matter of unticking them.
+For a pool we created for you, **no account can qualify**: the pool is created
+with password sign-in disabled, passwords cannot be set on accounts inside it,
+and social logins cannot be linked to a governed account. That is the isolation
+working as intended, and it is why the owner route above is the normal answer.
+
+Keep any designation current. It is a standing bypass of the enforcement you
+bought, which is the point, but it also means a departed admin left on it is a
+standing password into your organization. Saving replaces the list rather than
+adding to it, so removing someone is a matter of unticking them.
+
+#### If we cannot check
+
+The owner check can fail on our side. When it does, enforcement is **refused**
+and the page says the check did not complete rather than telling you your
+organization has nobody. Nothing changes; rehearse again.
 
 ## Consequences worth knowing before you switch
 

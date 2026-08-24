@@ -45,6 +45,22 @@ const auditAdd = jest.fn(async () => undefined)
 let poolUsers: Array<{ uid: string; email: string; providerData: Array<{ providerId: string }> }> = []
 /** The `sso` map on the org document for one test. */
 let orgSso: Record<string, unknown> = {}
+/**
+ * What the owner resolver answers (AGL-1888 option (a)). BOTH worlds are
+ * arranged below — a double that reported an owner unconditionally could not
+ * prove the refusal path, which is the assertion that matters most here. The
+ * resolver's own seven conditions are driven for real in
+ * `sso-break-glass-owners.spec.ts`; this file is about what the SWEEP does
+ * with the answer.
+ */
+let ownerLookup: {
+  owners: Array<{ uid: string; email: string; providers: string[] }>
+  unavailable: boolean
+} = { owners: [], unavailable: false }
+
+jest.mock('./sso-break-glass-owners', () => ({
+  findBreakGlassOrgOwners: async () => ownerLookup,
+}))
 
 jest.mock('./auth-pools', () => ({
   authForPool: () => ({
@@ -104,10 +120,20 @@ const baseSso = {
   enforced: true,
 }
 
+/** The founding admin: an org owner in the PROJECT pool, not in the tenant. */
+const OUTSIDE_OWNER = {
+  uid: 'founder',
+  email: 'founder@aglyn.com',
+  providers: ['password'],
+}
+
 beforeEach(() => {
   jest.clearAllMocks()
   orgSso = { ...baseSso }
   poolUsers = []
+  // The default is the world where NOBODY qualifies, so every existing case
+  // below still proves what it claims to prove.
+  ownerLookup = { owners: [], unavailable: false }
 })
 
 describe('the SSO enforcement pre-flight', () => {
@@ -196,6 +222,89 @@ describe('the SSO enforcement pre-flight', () => {
     expect(preview.lockout).toMatchObject({
       safe: false,
       ineffective: ['ghost'],
+    })
+  })
+
+  /**
+   * AGL-1888 option (a), at the sweep. The pure assessment is covered in
+   * `sso-enforcement.spec.ts`; what is proved here is that the sweep actually
+   * ASKS, and that the answer reaches the guard rather than a field nobody
+   * reads.
+   */
+  describe('an org owner outside the pool', () => {
+    it('THE FIX: enforcement proceeds with nobody designated', async () => {
+      // The state every self-serve org is in: `provisionSsoPool` disables
+      // password sign-in in the pool, so no account inside it can ever
+      // qualify. The founding admin signs in at project level, where the
+      // sweep below cannot reach them.
+      ownerLookup = { owners: [OUTSIDE_OWNER], unavailable: false }
+      poolUsers = [
+        account('member-a', [SAML, 'password']),
+        account('member-b', [SAML, 'google.com']),
+      ]
+      const result = await enforceSsoSignInMethods(ORG)
+
+      expect(result.lockout).toMatchObject({
+        safe: true,
+        retainedBy: [],
+        ownersOutsidePool: [OUTSIDE_OWNER],
+      })
+      // And it really enforced — an org that is allowed through must still
+      // lose its bypasses, or the fix has quietly turned enforcement off.
+      expect(updateUser).toHaveBeenCalledWith('member-a', {
+        providersToUnlink: ['password'],
+      })
+      expect(updateUser).toHaveBeenCalledWith('member-b', {
+        providersToUnlink: ['google.com'],
+      })
+      expect(result.changed).toBe(2)
+    })
+
+    it('THE NEGATIVE: the identical org with NO such owner is refused', async () => {
+      // Same pool, same absent designation — only the owner world differs.
+      // This is the assertion that proves the guard is still a guard, and the
+      // one that would go quiet if the lookup were stubbed to always answer.
+      ownerLookup = { owners: [], unavailable: false }
+      poolUsers = [
+        account('member-a', [SAML, 'password']),
+        account('member-b', [SAML, 'google.com']),
+      ]
+      await expect(enforceSsoSignInMethods(ORG)).rejects.toThrow(
+        SSO_LOCKOUT_REFUSAL,
+      )
+      expect(updateUser).not.toHaveBeenCalled()
+      expect(revokeRefreshTokens).not.toHaveBeenCalled()
+      expect(auditAdd).not.toHaveBeenCalled()
+    })
+
+    it('a FAILED owner lookup refuses, and says the check did not complete', async () => {
+      // An outage must not read as "this org has nobody", and must never be
+      // a way past the guard.
+      ownerLookup = { owners: [], unavailable: true }
+      poolUsers = [account('member-a', [SAML, 'password'])]
+      await expect(enforceSsoSignInMethods(ORG)).rejects.toThrow(
+        SSO_LOCKOUT_REFUSAL,
+      )
+      const preview = await enforceSsoSignInMethods(ORG, { dryRun: true })
+      expect(preview.lockout).toMatchObject({
+        safe: false,
+        ownerLookupFailed: true,
+      })
+    })
+
+    it('the REHEARSAL reports the owner, so the card can name them', async () => {
+      // The rehearsal is where an org finds out whether it may enforce. If it
+      // skipped the lookup it would report a risk the real run disagrees
+      // with, and the card would keep telling a protected org it is stranded.
+      ownerLookup = { owners: [OUTSIDE_OWNER], unavailable: false }
+      poolUsers = [account('member-a', [SAML, 'password'])]
+      const preview = await enforceSsoSignInMethods(ORG, {
+        dryRun: true,
+        force: true,
+      })
+      expect(preview.lockout.safe).toBe(true)
+      expect(preview.lockout.ownersOutsidePool).toEqual([OUTSIDE_OWNER])
+      expect(updateUser).not.toHaveBeenCalled()
     })
   })
 
