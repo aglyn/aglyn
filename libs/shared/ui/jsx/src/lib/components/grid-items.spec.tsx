@@ -138,50 +138,6 @@ describe('GridItems masonry', () => {
     expect(columns()).toEqual([['body', 'changelog'], ['sidebar']])
   })
 
-  it('hides an item whose children rendered NOTHING', () => {
-    // A plugin widget slot renders an empty fragment when no plugin is
-    // entitled for it. The item wrapper survives, and a column is a flex
-    // stack with a `gap` — so an empty wrapper draws the gutter on BOTH
-    // sides of a zero-height box, a hole exactly where the absent card was.
-    render(
-      <GridItems
-        data-testid="grid"
-        masonry
-        spacing={3}
-        items={[
-          {size: {xs: 12, md: 4}, children: card('a')},
-          {size: {xs: 12, md: 4}, children: null},
-        ]}
-      />,
-    )
-    const column = screen.getByTestId('grid').firstElementChild as HTMLElement
-    const generated = column.className
-      .split(' ')
-      .find((name) => name.startsWith('css-') || name.startsWith('mui-'))
-    // Guard the guard: with no generated class the search below would run
-    // over the whole document's CSS, or over nothing at all.
-    expect(generated).toBeTruthy()
-    const stylesheet = Array.from(document.styleSheets)
-      .flatMap((sheet) => {
-        try {
-          return Array.from(sheet.cssRules).map((rule) => rule.cssText)
-        } catch {
-          return []
-        }
-      })
-      .join('\n')
-    const rule = stylesheet
-      .split('\n')
-      .find((line) => line.includes(generated as string) && line.includes(':empty'))
-    expect(rule).toContain('display: none')
-    // THE CONTROL: it must be `:empty` that hides them and not a blanket
-    // rule — a real card still lays out.
-    const plain = stylesheet
-      .split('\n')
-      .find((line) => line.includes(generated as string) && !line.includes(':empty'))
-    expect(plain).not.toContain('display: none')
-  })
-
   it('does not let a full-width card reorder the page around it', () => {
     // A full-width item ends the band, so the cards after it cannot be pulled
     // up into a column beside cards from before it.

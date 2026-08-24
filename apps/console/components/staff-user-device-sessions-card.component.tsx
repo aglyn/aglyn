@@ -100,9 +100,21 @@ function formatSeen(ms: number | null): string {
  *    cannot produce a newer `auth_time`, while the owner signs back in
  *    normally. So the honest promise is "everyone signs out once, you sign back
  *    in, that device does not".
- *  - **A tab already open can keep reading for up to an hour.** Firestore rules
- *    key on the ID token, not on our cookie. Everything that goes through our
- *    server stops within ~15 seconds (AGL-1881).
+ *  - **A tab already open can keep reading AND WRITING for up to an hour.**
+ *    Firestore rules key on the ID token, not on our cookie. Everything that
+ *    goes through our server stops within ~15 seconds (AGL-1881) — but the
+ *    console edits Firestore DIRECTLY from the browser for most of what it
+ *    does (screens, layouts, products, contacts, the canvas node graph), and
+ *    `cloud/firebase-firestore.rules` never consults revocation: no rule reads
+ *    `auth.token.auth_time`, so a still-valid ID token keeps its full write
+ *    access until it expires. Presence/co-edit RTDB writes survive the same
+ *    way, on the `presenceOrg`/`coeditHost` claims baked into that token.
+ *    Storage is the one exception — `firebase-storage.rules` denies every
+ *    client path, so uploads really do stop at once.
+ *
+ *    The copy below therefore says "reading and changing". It said "reading"
+ *    alone until AGL-1513 measured it against the emulator; that was the same
+ *    shape of false promise this comment block exists to prevent.
  *
  * ## Why it is super-only and role-refused rather than hidden
  *
@@ -279,7 +291,8 @@ export function StaffUserDeviceSessionsCard({
               'refused. The account is not disabled and the password does not ' +
               'change. It takes effect on our servers within a few seconds; a ' +
               'page already open on the signed-out device may keep reading ' +
-              'data for up to an hour.'}
+              'and changing data for up to an hour, though file uploads stop ' +
+              'at once.'}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
