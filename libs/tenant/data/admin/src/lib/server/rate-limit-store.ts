@@ -16,6 +16,10 @@
  */
 
 import { createHash } from 'crypto'
+// The atomic counter primitive for the AGL-1921 server-error markers below.
+// Commutative server-side, so instances converging on one minute's document
+// neither contend nor retry — see `flushServerErrors`.
+import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
 import {
   checkRateLimit,
@@ -328,6 +332,219 @@ export function recordSignupRefusal(
       )
     })
     .catch(() => undefined)
+}
+
+/**
+ * Document-id prefix for server-error markers (AGL-1921).
+ *
+ * ## Why a Firestore marker when the errors already go to Cloud Logging
+ *
+ * `reportServerError` forwards every `onRequestError` to a `server-errors` log
+ * in `aglyn-main`, which is the right sink for triage — Error Reporting groups
+ * them and a log-match policy can page on them. It is not a sink anything in
+ * this repo can READ. Measured 2026-08-24 against the production credential:
+ * `POST logging.googleapis.com/v2/entries:list` for that log answers
+ * **403 `Permission denied for all log views`**, because the firebase-admin
+ * service account can create log entries and cannot list them. So the only
+ * reader the log has is a GCP alert policy that does not exist yet, and
+ * creating one is Zach's click, not a thing that ships with a commit.
+ *
+ * That is the AGL-2486 shape exactly — a detector written into a place nothing
+ * watches. This marker is the second copy of the count, in a store we can
+ * already read, so `/api/health/server-errors` can grade it and the readers
+ * that already exist (the 15-minute GitHub uptime probe, the external keyword
+ * monitors, `docs.aglyn.com/status`) become the listeners on day one.
+ *
+ * Written into the SAME `rateLimits` collection as the counters, the AGL-1679
+ * degradation markers and the AGL-1907 refusal markers, for the reason those
+ * two gave: it inherits the deny-all security rule and the `expiresAt` TTL
+ * policy that already exist, instead of needing a new collection, a rules
+ * deploy and a second TTL policy — i.e. instead of needing Zach. Minute
+ * bucketed so concurrent instances converge:
+ *
+ * ```
+ * rateLimits/serverError_1755100800000
+ * ```
+ *
+ * **The timestamp field is `erroredAtMs`**, deliberately neither `lastAtMs`
+ * (AGL-1679's) nor `refusedAtMs` (AGL-1907's), for the reason spelled out on
+ * `SIGNUP_REFUSAL_DOC_PREFIX`: each health probe range-queries its own field,
+ * and a shared field would let one signal's flood fill another's read limit
+ * and silently blind it. Three signals, three disjoint indexes.
+ */
+export const SERVER_ERROR_DOC_PREFIX = 'serverError_'
+
+/** Marker id granularity. Matches both sibling marker kinds. */
+const SERVER_ERROR_BUCKET_MS = 60_000
+
+/**
+ * How long a server-error marker survives the TTL sweep. Seven days, matching
+ * the refusal markers rather than the degradation markers' thirty: these can
+ * be written every few seconds under a spike, and the question they answer
+ * ("was there a spike, when, and on which deployment") is asked in the days
+ * after an incident, not the month after.
+ */
+const SERVER_ERROR_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
+
+/**
+ * Minimum spacing between marker writes from ONE instance (AGL-1921).
+ *
+ * The failure being watched for is a SPIKE, and a spike is exactly when an
+ * unbounded recorder turns one incident into a billing incident — the same
+ * argument that gave `reportServerError` its per-minute Logging budget. A
+ * write per error would also be a write per error onto a SINGLE document,
+ * which is where Firestore's per-document write ceiling lives and where
+ * AGL-2404's contention storm came from.
+ *
+ * So errors coalesce in process and land at most once every five seconds per
+ * instance — twelve writes a minute at the very worst, against a threshold
+ * measured in single digits over half an hour. The count is never rounded
+ * down: what is pending is added to the next flush, and a bucket rollover
+ * flushes what it was holding before the new bucket starts.
+ *
+ * **The first error of a window is written IMMEDIATELY** (`lastFlushAtMs`
+ * starts at 0), so a lone error is durable within a second and the alarm
+ * never waits on a second one to become visible.
+ */
+const SERVER_ERROR_FLUSH_INTERVAL_MS = 5_000
+
+interface ServerErrorAccumulator {
+  /** The minute bucket these pending errors belong to. */
+  bucketStart: number
+  /** Errors observed and not yet written. */
+  pending: number
+  /** Pending split by deployment — `console-web`, `tenant-web`. */
+  pendingByService: Record<string, number>
+  /** When this instance last wrote, so the spacing above can be enforced. */
+  lastFlushAtMs: number
+  /** The newest error in the bucket, which becomes `erroredAtMs`. */
+  lastErrorAtMs: number
+}
+
+/**
+ * The errors this instance is holding, or null when it is holding none.
+ * Module-scoped for the same reason `episode` above is: it is a per-instance
+ * observation on its way to a durable place.
+ */
+let serverErrors: ServerErrorAccumulator | null = null
+
+/**
+ * Write what the accumulator is holding, and forget it.
+ *
+ * Fire-and-forget and best-effort, like `flushDegradation`: this runs while a
+ * request is already failing, and a monitoring breadcrumb must never be the
+ * reason a second thing breaks.
+ *
+ * `FieldValue.increment` with a merge, rather than the read-modify-write
+ * transaction the two sibling markers use: increments are commutative
+ * server-side, so several instances converging on one minute's document
+ * neither contend nor retry — which is the AGL-2416 lesson applied to a path
+ * that only ever runs during an incident.
+ */
+function flushServerErrors(firestore: any, nowMs: number): void {
+  const held = serverErrors
+  if (!held || held.pending <= 0) return
+  // Zeroed BEFORE the await so a concurrent flush cannot write them twice.
+  const errors = held.pending
+  const byService = held.pendingByService
+  const erroredAtMs = held.lastErrorAtMs
+  const bucketStart = held.bucketStart
+  held.pending = 0
+  held.pendingByService = {}
+  held.lastFlushAtMs = nowMs
+
+  const ref = firestore
+    .collection(RATE_LIMIT_COLLECTION)
+    .doc(`${SERVER_ERROR_DOC_PREFIX}${bucketStart}`)
+  const byServiceIncrements: Record<string, unknown> = {}
+  for (const [service, count] of Object.entries(byService)) {
+    byServiceIncrements[service] = FieldValue.increment(count)
+  }
+  void Promise.resolve(
+    ref.set(
+      {
+        errors: FieldValue.increment(errors),
+        byService: byServiceIncrements,
+        // NOT `lastAtMs`, NOT `refusedAtMs` — see the prefix doc above.
+        erroredAtMs,
+        expiresAt: new Date(nowMs + SERVER_ERROR_RETENTION_MS),
+      },
+      { merge: true },
+    ),
+  ).catch(() => undefined)
+}
+
+/**
+ * Record one uncaught server-side error, for `/api/health/server-errors`.
+ *
+ * Called from `reportServerError`, which is called from each app's
+ * `onRequestError` hook — so this counts exactly what that hook can see: an
+ * uncaught throw in a render or a route handler. It does NOT see an error that
+ * kills the process first, a platform-level 5xx (function timeout, OOM,
+ * cold-start 502), or anything thrown in the edge runtime. Those need the
+ * Vercel log drain; `docs/UPTIME_AND_SLA.md` carries the list.
+ *
+ * Fire-and-forget and never throws. Nothing identifying is stored — a count
+ * and which deployment produced it. The message, the stack and the route
+ * pattern stay in the Logging entry, which is not public; this marker is read
+ * by an endpoint that is.
+ */
+export function recordServerError(
+  service: string,
+  options?: { now?: number; firestore?: any },
+): void {
+  const nowMs = options?.now ?? Date.now()
+  const bucketStart =
+    Math.floor(nowMs / SERVER_ERROR_BUCKET_MS) * SERVER_ERROR_BUCKET_MS
+  let firestore: any
+  try {
+    firestore = options?.firestore ?? firebaseAdmin.app().firestore()
+  } catch {
+    // No Admin app (a unit test, a misconfigured instance). The error still
+    // happened and the caller still reports it to Logging; only the count is
+    // lost — and a deployment that cannot reach Firestore at all is already
+    // red on `/api/health`'s own `firestore` check.
+    return
+  }
+
+  // A rollover flushes what the OLD bucket was holding before anything is
+  // added to the new one, so a minute's count is never smeared into the next.
+  if (serverErrors && serverErrors.bucketStart !== bucketStart) {
+    flushServerErrors(firestore, nowMs)
+    serverErrors = null
+  }
+  if (!serverErrors) {
+    serverErrors = {
+      bucketStart,
+      pending: 0,
+      pendingByService: {},
+      // 0, so the first error of a bucket is written immediately.
+      lastFlushAtMs: 0,
+      lastErrorAtMs: nowMs,
+    }
+  }
+  serverErrors.pending += 1
+  serverErrors.pendingByService[service] =
+    (serverErrors.pendingByService[service] ?? 0) + 1
+  serverErrors.lastErrorAtMs = Math.max(serverErrors.lastErrorAtMs, nowMs)
+
+  if (nowMs - serverErrors.lastFlushAtMs >= SERVER_ERROR_FLUSH_INTERVAL_MS) {
+    flushServerErrors(firestore, nowMs)
+  }
+}
+
+/**
+ * Errors this instance is holding but has not written yet. Exposed for tests
+ * and for anyone reasoning about the coalescing window; callers must not treat
+ * it as a global view — it only ever describes the instance that answers.
+ */
+export function pendingServerErrors(): number {
+  return serverErrors?.pending ?? 0
+}
+
+/** Test seam: forget anything held. */
+export function resetServerErrorsForTests(): void {
+  serverErrors = null
 }
 
 /**

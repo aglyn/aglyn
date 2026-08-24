@@ -277,6 +277,13 @@ jobs:
       # and the two render canaries built to replace the dead GCP page checks
       # had no reader at all. The canary half is derived from the filesystem,
       # so a third canary fails this until a monitor points at it. Pure node.
+      #
+      # Widened to EVERY health endpoint either app ships (AGL-1921), in both
+      # directions: an endpoint on disk that nothing probes, and a watched path
+      # no app serves. The second one is what lets the probe report a
+      # not-yet-promoted route as PENDING instead of failing a run every
+      # fifteen minutes over the deploy queue, without that tolerance being a
+      # place a deleted route could hide.
       - run: npm run test:uptime-targets
 
       # test:week-one-preflight  The launch pre-flight's OWN self-test

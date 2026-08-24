@@ -28,6 +28,9 @@ GET  https://app.aglyn.com/api/health/error-beacon
                                                console beacon liveness (AGL-1923)
 GET  https://aglyn.com/api/health/error-beacon tenant beacon liveness (AGL-1923)
 GET  https://app.aglyn.com/api/health/crons    scheduled-job liveness (AGL-1955)
+GET  https://app.aglyn.com/api/health/server-errors
+                                               uncaught server-error RATE, both
+                                               deployments (AGL-1921)
 GET  https://aglyn.com/api/health/render/marketing
                                                marketing home RENDERS (AGL-2486)
 GET  https://demo.aglyn.app/api/health/render/site
@@ -168,6 +171,15 @@ and `delivery` green is our sample page, not their site.
    were weakest. `signups` degraded means we suspect a signup farm. The error
    beacon watches our own telemetry: if it is dead we are blind and the
    customer's site is fine.
+6. **`server-errors` is the one genuinely arguable case** (AGL-1921), and the
+   argument is not settled here. FOR: unlike every entry in 4 and 5, a spike is
+   customer-visible by definition — it counts requests that returned a 500 to
+   somebody. AGAINST: it aggregates BOTH deployments, so a console-only spike
+   would red a card customers read as "my published site is down", which
+   overstates it. If it becomes a card, split the verdict by
+   `checks.serverErrors.byService` first so the page can say WHICH. Until then
+   it is watched by the probe and the external monitor, which page us without
+   telling a customer their site is broken when it is not.
 :::
 
 `DOCS_STATUS_FALLBACK_URL` is the second variable this page reads. It prints
@@ -1038,26 +1050,30 @@ is the platform demonstration site the middleware falls back to for
 
 ### What is deliberately NOT watched (the honest list)
 
-- **The server-side error RATE (AGL-1921).** This is the largest remaining
-  hole and it deserves its own line rather than a clause. Every check above is
-  a *liveness* signal on one URL: they answer "is `/api/health` up", and not
-  one of them can answer "are 30% of checkout requests 500ing". **A route can
-  500 for every paying customer while every check above stays green.** It
-  cannot be built today, and the reason is specific: server errors live in the
-  Vercel runtime log, which retains ~60 minutes and drains nowhere —
-  `GET /v2/integrations/log-drains` returns `[]` on both `aglyn-console` and
-  `aglyn-tenant` (AGL-1799). Nothing from the running app reaches GCP Logging,
-  so there is nothing in `aglyn-main` for a log-based metric or a log-match
-  policy to key on. **Do not paper over this with a reachability probe.** The
-  health endpoints on this page are correctness signals for the subsystems
-  they name — beacon transport, Stripe delivery, backups, rate limiters — and
-  each is honest about what it reads; none of them is an error rate, and
-  dressing one up as one would be worse than the gap. The unblocking decision
-  is a Vercel log drain into GCP Logging: it closes this, closes AGL-1799, and
-  makes every "check the runtime log" instruction in the tree executable.
-  **Partly closed since 2026-08-20** by AGL-1921's fallback arm — see the
-  runbook below for what now reaches GCP, what still does not, and the
-  ordered steps that finish it.
+- **PLATFORM 5xx — the part of the server error rate still nobody's (AGL-1921).**
+  This line used to say the whole server error rate was unwatched. It no longer
+  is: since 2026-08-24 `/api/health/server-errors` reports the count of uncaught
+  render/route-handler errors across BOTH deployments in a trailing 30-minute
+  window, and every reader on this page watches it. What remains unwatched is
+  precisely the set that never reaches our code:
+
+  - an error that kills the process before `onRequestError` runs;
+  - a platform-level 5xx — a Vercel function timeout, an OOM, a cold-start 502;
+  - anything thrown in the edge runtime (middleware), where firebase-admin
+    cannot load.
+
+  Those live only in the Vercel runtime log, which retains ~60 minutes and
+  drains nowhere — `GET /v2/integrations/log-drains` returns `[]` on both
+  `aglyn-console` and `aglyn-tenant` (AGL-1799). A log drain sees all three and
+  is still the only thing that closes them. **Do not read the new endpoint as
+  more than it is:** it counts errors our own hook observed, which is most of
+  what "the server is failing" means and not all of it.
+- **Do not paper over any of this with a reachability probe.** The health
+  endpoints on this page are correctness signals for the subsystems they name —
+  beacon transport, Stripe delivery, backups, rate limiters, and now the error
+  count — and each is honest about what it reads. A probe that measures the one
+  request it makes is not an error rate, and dressing one up as one would be
+  worse than the gap.
 - **Vercel function errors and logs.** The same root cause as the row above,
   from the operator's side: a `console.error` written during an incident is
   gone before anyone reads it. **Upgrade path:** Vercel Pro unlocks log drains
@@ -1101,20 +1117,97 @@ Three properties worth knowing before you tune anything:
   exactly when an unbounded reporter turns one incident into a billing incident
   on a $20/month budget. The counter only has to cross a threshold, not be exact.
 
-**What it still cannot see, and this is why the issue stays open.** It is a
-fallback, not the fix. It misses an error that kills the process before the
-handler runs, a platform-level 5xx that never reaches our code (a Vercel
-function timeout, an OOM, a cold-start 502), and anything thrown in the edge
-runtime, where firebase-admin cannot be loaded. A log drain sees all of them.
+**What it still cannot see.** It is a fallback, not the fix. It misses an error
+that kills the process before the handler runs, a platform-level 5xx that never
+reaches our code (a Vercel function timeout, an OOM, a cold-start 502), and
+anything thrown in the edge runtime, where firebase-admin cannot be loaded. A
+log drain sees all of them.
+
+#### What shipped 2026-08-24 — the READER, which is the half that was missing
+
+The 08-20 arm captured errors and put them somewhere nothing here could read.
+That is the shape this repo keeps losing to (`/api/health/crons` was correct
+about a broken job for fifty-one hours because nobody asked it), and it was not
+a suspicion — it was measured. Against the production credential:
+
+```
+POST https://logging.googleapis.com/v2/entries:list
+  filter: logName="projects/aglyn-main/logs/server-errors"
+→ 403  { "message": "Permission denied for all log views" }
+```
+
+The firebase-admin service account can **create** log entries and cannot
+**list** them, so no probe in this repo can read back what the hook writes. The
+only reader that log can ever have is a GCP alert policy created by hand — step
+1 below, still worth doing, and still a click nobody had made.
+
+So `reportServerError` now also counts into a
+`rateLimits/serverError_{minute}` marker, and **`/api/health/server-errors`**
+grades those counts in the same 200/503 contract as every sibling endpoint.
+Four things about it that are decisions rather than details:
+
+- **The count is written FIRST**, above the Logging budget gate, the credential
+  check and the fetch. A beacon whose transport is dead otherwise reports zero
+  errors, and it reports it during exactly the incident that killed the
+  transport.
+- **Unknown is its own state.** A failed marker query is `errors-unavailable`
+  and **503**, never "0 errors". `strictNullChecks` is off repo-wide, so a
+  swallowed query folding to a confident zero is one `.catch(() => [])` away —
+  and on this endpoint that would be the worst bug it could have.
+- **Threshold 5 in a trailing 30 minutes**, not zero. Unlike the rate-limiter
+  and billing alarms, a healthy day can produce the occasional uncaught error,
+  and an alarm that pages on the first one gets muted before the real one
+  arrives. `SERVER_ERROR_ALARM_MAX_ERRORS` retunes it without a deploy.
+- **Cost is bounded by coalescing, not by dropping.** Errors accumulate in
+  process and land at most once per five seconds per instance — twelve writes a
+  minute at worst — with the first error of each minute written immediately so a
+  lone error is never invisible. Nothing is rounded down.
+
+**Who reads it, concretely:** `.github/workflows/uptime-probe.yml` (every 15
+minutes, from GitHub's runners, and a 503 fails the run); the external
+UptimeRobot keyword monitor once pointed at it; and `docs.aglyn.com/status` once
+the URL is in `DOCS_STATUS_TARGETS`. The list it is on
+(`tools/scripts/lib/uptime-targets.mjs`) is now guarded in BOTH directions —
+`evaluateSubsystemReaders` fails the suite on a health endpoint nothing probes
+*and* on a watched path no app serves.
+
+:::note A subsystem 404 reads `PEND`, not `DOWN`
+The watch list lives on `main`; the probe hits **production**, promoted
+separately. Between merge and promotion the probe asks for a route that build
+does not serve. A 404 on a subsystem path *while that target's root is UP* is
+therefore reported `PENDING — promote main` and does not fail the run. It is
+narrow on purpose (never the root, never a non-404, never while the root is
+down), and the review-time `missing` check above is what stops a deleted route
+hiding behind it forever.
+:::
 
 #### Ordered steps — Zach
 
-**No GCP resource was created for this.** Steps 1 and 2 are free and can be done
-today; step 3 onward costs money and is a decision, not a task.
+**No GCP or Vercel resource was created for any of this.** Steps 1–4 are free;
+step 5 onward costs money and is a decision, not a task.
 
-1. **Free, and does the most: an alert policy on the new log.** The beacon is
-   already writing, so this needs no Vercel change at all. In `aglyn-main` →
-   Monitoring → Alerting, create a **log-based alert** on
+1. **Free, 2 minutes: point the external monitor at the new endpoint.** In
+   UptimeRobot add a **keyword** monitor (never plain HTTP) on
+   `https://app.aglyn.com/api/health/server-errors`, keyword `"status":"ok"`,
+   alert when **not** found, 5-minute interval — the same shape as the other
+   nine. This is the arm that emails you; the GitHub probe only records.
+2. **Free, 1 minute, and YOUR call: a status-page card?** Appending the same URL
+   to `DOCS_STATUS_TARGETS` on the `aglyn-docs` Vercel project renders a card on
+   `docs.aglyn.com/status`. It is the one arguable case in the card policy above
+   — a spike is genuinely customer-visible, but the endpoint aggregates both
+   deployments, so a console-only spike would tell site owners their sites are
+   down. Read item 6 of that policy and decide; step 1 already covers alerting
+   us either way.
+3. **Free, 5 minutes: prove the alarm fires, before trusting it.** Set
+   `SERVER_ERROR_ALARM_MAX_ERRORS=-1` on `aglyn-console` and redeploy: zero
+   errors is still over a negative threshold, so the endpoint reports
+   `server-error-spike` and **503**s without anyone breaking a real route.
+   Confirm the UptimeRobot email arrives and the status card flips, then remove
+   the variable. An alarm nobody has seen fire is an alarm nobody should trust.
+4. **Free, and still worth doing: an alert policy on the log.** The GCP side is
+   independent of the endpoint above and catches the case where the console
+   itself is down. In `aglyn-main` → Monitoring → Alerting, create a
+   **log-based alert** on
 
    ```
    logName="projects/aglyn-main/logs/server-errors" AND severity>=ERROR
@@ -1126,20 +1219,19 @@ today; step 3 onward costs money and is a decision, not a task.
    counter with a threshold once a baseline exists. Log-based metrics and alert
    policies are not separately billed; the log entries themselves fall under the
    Logging free tier at this volume.
-2. **Free: confirm it can go red.** Do not trust an untested alarm. The AGL-1923
-   beacon heartbeat already proves the credential and transport this path shares
-   — check `/api/health/error-beacon` is green on both deployments, which is the
-   dead-man's switch for server-error reporting too. Then force one real server
-   error on a preview deployment and confirm the entry lands and the policy
-   fires.
-3. **Billable, and the real fix: a Vercel log drain into GCP Logging.**
+
+   Optional, also free: grant the firebase-admin service account
+   `roles/logging.viewer` on `aglyn-main`. That is what the 403 above is, and
+   with it a future probe could read the log directly as a second, independent
+   reader. Not required for anything shipped.
+5. **Billable, and the real fix: a Vercel log drain into GCP Logging.**
    Log drains require **Vercel Pro** (~$20/user/month; tracked as AGL-723,
    already targeted for mid-September). Once on Pro: Vercel → each of
    `aglyn-console` and `aglyn-tenant` → Integrations → Log Drains → add a drain
    to GCP Logging. Verify with `GET /v2/integrations/log-drains`, which returns
    `[]` on both projects today — that empty array is the current evidence of the
    gap, so it is also the check that the drain took.
-4. **After the drain, the policy this issue originally specified.** A log-based
+6. **After the drain, the policy this issue originally specified.** A log-based
    counter metric on
 
    ```
@@ -1149,13 +1241,21 @@ today; step 3 onward costs money and is a decision, not a task.
    with a threshold policy — proposed `> 5` in 5 minutes, `ALIGN_DELTA` /
    `REDUCE_SUM`, grouped by project. Re-tune against the beta baseline; the
    point of the beta window is to get one.
-5. **Then reconcile the two.** With the drain live, the drain sees a superset of
-   what the beacon sees, and keeping both would double-page. Keep the beacon —
-   it survives a Vercel outage and a plan downgrade — but demote its policy to
-   the counter form so the drain's policy is the one that pages.
+7. **Then reconcile the three.** With the drain live it sees a superset of what
+   the hook sees, and keeping every arm at page level would triple-page. Keep
+   them all — the hook and its endpoint survive a Vercel outage and a plan
+   downgrade — but let the drain's policy be the one that pages, and demote the
+   other two to the counter form.
 
-Until step 3 lands, AGL-1921 stays open and this section is the honest statement
-of how much of the server tier is actually watched.
+Until step 5 lands, AGL-1921's platform-5xx blind spot stays open and this
+section is the honest statement of how much of the server tier is watched.
+
+**Marginal cost of the 08-24 arm: effectively zero.** Firestore writes are
+bounded by coalescing at ≤12/minute/instance and only during an incident (~$0.02
+per sustained hour across a five-instance fleet at the $0.18/100k write price);
+the probe reads at most 60 documents once per five minutes per instance
+(~$0.0002/hour); the endpoint adds no GCP resource and no log ingest. The
+Logging writes it sits beside were already budgeted at 60/minute/instance.
 
 ### Cost and plumbing
 

@@ -810,6 +810,194 @@ export function rateLimitsHealth(
 }
 
 /**
+ * Uncaught server-side errors, reduced to a health verdict (AGL-1921).
+ *
+ * ## The gap this closes
+ *
+ * Of the eleven alert policies in `aglyn-main`, not one could see a server
+ * error rate. Every check is a LIVENESS probe on one URL: `/api/health` can be
+ * green while `/api/billing/checkout` 500s for every paying customer, which is
+ * the single most likely shape of a launch-day incident and the one nothing
+ * could page on. Server errors lived only in the Vercel runtime log, which
+ * retains ~60 minutes and drains nowhere (AGL-1799).
+ *
+ * The first pass gave both apps an `onRequestError` hook that forwards each
+ * error to a `server-errors` log in `aglyn-main`. That closed the CAPTURE gap
+ * and left the reading gap wide open, and the reading gap is the one this repo
+ * keeps losing to — `/api/health/crons` was correct about a broken job for
+ * fifty-one hours because nothing asked it. Measured 2026-08-24: the
+ * production credential is refused `entries:list` on that log
+ * (`403 Permission denied for all log views`), so no probe here can read what
+ * the hook writes. The only reader that log can have is a GCP alert policy
+ * created by hand.
+ *
+ * So the hook ALSO counts into a `rateLimits/serverError_{minute}` marker,
+ * and this grades those counts into the same 200/503 contract the sibling
+ * checks speak — which hands the signal to readers that already exist and
+ * already run: the 15-minute GitHub uptime probe, the external keyword
+ * monitors, and `docs.aglyn.com/status`.
+ *
+ * ## What it can and cannot see, exactly
+ *
+ * It counts what `onRequestError` counts: an uncaught throw in a render or a
+ * route handler, in the nodejs runtime. It does NOT count an error that kills
+ * the process before the hook runs, a platform-level 5xx that never reaches
+ * our code (function timeout, OOM, cold-start 502), or anything thrown in the
+ * edge runtime. A Vercel log drain sees all of those and remains the real fix.
+ * This is the arm that ships without a purchase, and its blind spots are
+ * written down rather than glossed — `docs/UPTIME_AND_SLA.md`.
+ *
+ * ## The third state is the one that matters here
+ *
+ * A monitoring path that cannot measure MUST NOT report a zero. `null` markers
+ * — the query failed — is `errors-unavailable` and degraded, never "0 errors".
+ * That is the same rule `rateLimitsHealth` and `billingWebhookHealth` follow,
+ * and on this check it is the difference between "nothing is wrong" and "we
+ * have no idea", which during a 5xx spike are the two readings furthest apart.
+ *
+ * ## It must be able to go GREEN
+ *
+ * A spike is an EVENT, not a condition (the AGL-1843 rule). Markers live seven
+ * days, so "does a marker exist" would hold this red for a week after a
+ * one-minute blip, and a check that stays red after recovery is a check that
+ * gets muted. The verdict covers a trailing window and clears itself.
+ *
+ * Pure on purpose, like its siblings: the route queries, this decides, the
+ * spec exercises every branch without a network.
+ */
+export interface ServerErrorMarker {
+  /** Uncaught server errors merged into this minute bucket. */
+  errors?: number
+  /** Split by deployment — `{ 'console-web': n, 'tenant-web': n }`. */
+  byService?: Record<string, number>
+  /** When the most recent error in this bucket happened. */
+  erroredAtMs?: number
+}
+
+export interface ServerErrorsCheck extends HealthCheck {
+  /**
+   * Uncaught server errors inside the trailing window. A COUNT only — the
+   * endpoint is public, and messages, stacks and route patterns have no
+   * business in it (they are in the Logging entry, which is not public). Null
+   * when the query itself failed, and null is NEVER zero.
+   */
+  serverErrors: number | null
+  /**
+   * Which deployment produced them. The first thing an incident needs, and it
+   * is a deployment name rather than anything about a request. Null when the
+   * query failed.
+   */
+  byService: Record<string, number> | null
+  /** Minutes since the most recent error, so the body dates itself. */
+  minutesSinceLast: number | null
+  /** The trailing window the count covers, so the body is self-describing. */
+  windowMinutes: number
+  /** The count above which this reports degraded. */
+  threshold: number
+}
+
+/**
+ * Trailing window the error count covers.
+ *
+ * Bounded from below by the alert path, not by taste — the same arithmetic as
+ * `RATE_LIMIT_DEGRADED_WINDOW_MINUTES`: the probe memoises for 5 minutes, the
+ * external checks run every 5, and an alert policy wants ~10 minutes of
+ * sustained failure before it emails, so a window under ~20 minutes can go red
+ * and green again before anyone is told. 30 leaves ten minutes of margin and
+ * still clears itself inside half an hour of the last error.
+ */
+export const SERVER_ERROR_WINDOW_MINUTES = 30
+
+/**
+ * Errors tolerated in the window.
+ *
+ * NOT zero, unlike the rate-limiter and billing alarms, and the difference is
+ * real rather than a matter of nerve. Those two watch controls that a healthy
+ * deployment exercises exactly never. This one watches a count that a single
+ * cold-start Firestore deadline, or one visitor's malformed request reaching a
+ * route that throws instead of 400ing, can make non-zero on a perfectly good
+ * day — and an alarm that pages on the first of those gets muted before the
+ * one that matters arrives.
+ *
+ * Five over thirty minutes is chosen against the only two facts available.
+ * Production serves single-digit orgs (2026-08), so the organic rate of
+ * UNCAUGHT server errors is ~zero — the codebase answers its expected failures
+ * with 4xx, and reaching this hook means nothing handled it. And the shape
+ * being caught is "a route is failing for real users", which does not produce
+ * six errors an hour; it produces six in a minute. There is deliberately no
+ * pretence of calibration: the beta window exists to produce a baseline, and
+ * `SERVER_ERROR_ALARM_MAX_ERRORS` moves this without a deploy when it does.
+ */
+export const MAX_SERVER_ERRORS_PER_WINDOW = 5
+
+export function serverErrorsHealth(
+  markers: ServerErrorMarker[] | null,
+  ms: number,
+  now: number = Date.now(),
+  threshold: number = MAX_SERVER_ERRORS_PER_WINDOW,
+  windowMinutes: number = SERVER_ERROR_WINDOW_MINUTES,
+): ServerErrorsCheck {
+  // ⚠️ THE MEASURED ZERO. A failed query is degraded, never calm, and on this
+  // check that is not a convention borrowed from its siblings — it is the
+  // whole reason the check is trustworthy. "We could not count the errors"
+  // and "there were no errors" are the same JSON if this branch is missing,
+  // and the first is most likely precisely when the second is false.
+  if (markers === null) {
+    return {
+      ok: false,
+      ms,
+      code: 'errors-unavailable',
+      serverErrors: null,
+      byService: null,
+      minutesSinceLast: null,
+      windowMinutes,
+      threshold,
+    }
+  }
+
+  const cutoff = now - windowMinutes * 60_000
+  // The window is re-applied here rather than trusted from the query, so the
+  // rule lives in one spec-covered place and a marker whose `erroredAtMs` is
+  // missing cannot silently count as recent. `strictNullChecks` is off
+  // repo-wide, so an absent field would otherwise compare as 0 and fall
+  // outside every window forever — a marker that can never be counted.
+  const recent = markers.filter(
+    (marker) =>
+      typeof marker.erroredAtMs === 'number' && marker.erroredAtMs >= cutoff,
+  )
+
+  const byService: Record<string, number> = {}
+  let serverErrors = 0
+  let lastAtMs: number | null = null
+  for (const marker of recent) {
+    // `Number(...) || 0` rather than a bare add: these come out of Firestore
+    // and a corrupt field must not turn the total into NaN, which compares
+    // false against the threshold and would report calm forever.
+    serverErrors += Number(marker.errors) || 0
+    for (const [service, count] of Object.entries(marker.byService ?? {})) {
+      byService[service] = (byService[service] ?? 0) + (Number(count) || 0)
+    }
+    const at = marker.erroredAtMs as number
+    if (lastAtMs === null || at > lastAtMs) lastAtMs = at
+  }
+
+  const over = serverErrors > threshold
+  return {
+    ok: !over,
+    ms,
+    ...(over ? { code: 'server-error-spike' } : {}),
+    serverErrors,
+    byService,
+    minutesSinceLast:
+      lastAtMs === null
+        ? null
+        : Math.max(0, Math.round(((now - lastAtMs) / 60_000) * 10) / 10),
+    windowMinutes,
+    threshold,
+  }
+}
+
+/**
  * Reuse a probe result for `ttlMs`, per instance.
  *
  * The endpoint is public and unauthenticated, so an unthrottled dependency
