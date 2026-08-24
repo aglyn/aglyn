@@ -222,6 +222,17 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     upsertHostContact: () => undefined,
     getPluginConfig: async () => ({}),
     renderHostEmailWithTokens: (value: string) => value,
+    // Both booking paths now write their lead through the ONE bounded writer
+    // (AGL-1529) instead of `hostRef.collection('leads').add(…)`. Recorded
+    // into the same `written['leads']` the direct write landed in, so the
+    // AGL-2303 payload assertions below keep reading the thing that was
+    // stored — a double that answered `true` and forgot the payload could not
+    // fail on a lead with no name on it, which is the bug they exist for.
+    addHostLead: async (options: { lead: Record<string, unknown> }) => {
+      const written = state.written['leads'] ?? (state.written['leads'] = [])
+      written.push({ ...options.lead, createdAt: 'NOW' })
+      return true
+    },
   }
 })
 

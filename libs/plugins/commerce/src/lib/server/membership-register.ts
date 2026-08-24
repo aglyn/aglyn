@@ -16,7 +16,19 @@
  */
 
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
-import { firebaseAdmin, upsertHostContact } from '@aglyn/tenant-data-admin'
+import {
+  checkVisitorRecordCeiling,
+  HOST_TOKENS,
+  SITE_MEMBER_CEILING_CODE,
+  SITE_MEMBER_UNAVAILABLE_MESSAGE,
+  SITE_MEMBERS_MAX_PER_HOST,
+} from '@aglyn/aglyn/server'
+import {
+  addHostLead,
+  firebaseAdmin,
+  recordVisitorRecordCeilingTrip,
+  upsertHostContact,
+} from '@aglyn/tenant-data-admin'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
 import {
   hashMemberPassword,
@@ -62,25 +74,99 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
     // quota check belongs here. Audience monetization happens downstream:
     // contact bands meter the CRM projection (AGL-890) and paid
     // memberships carry the plan's digital transaction fee (AGL-892).
+    //
+    // `SITE_MEMBERS_MAX_PER_HOST` below is NOT that check and does not make
+    // it one (AGL-1529). It is a flat PLATFORM ceiling — same number on every
+    // plan, no `OrgEntitlements` key, nothing on the price list — and it
+    // exists because this handler is reachable by an ANONYMOUS VISITOR, so
+    // without it the collection was bounded only by a per-(host, IP) rate
+    // limiter that fails soft and bounds the RATE rather than the TOTAL. An
+    // abuse control is not something we sell; "unlimited member accounts on
+    // every plan" stays literally true.
     const membersRef = hostRef.collection('siteMembers')
-    const existing = await membersRef
-      .where('email', '==', email)
-      .limit(1)
-      .get()
-    if (!existing.empty) {
+    const memberRef = membersRef.doc()
+    /*
+     * COUNT, DEDUPE AND CREATE IN ONE TRANSACTION (AGL-1529, the AGL-2231
+     * treatment).
+     *
+     * Read-then-decide-then-`set()` is the create-time quota that laundered
+     * everywhere else in this repo: N concurrent sign-ups each read the same
+     * pre-count, each find room, and each land — and nothing re-counts
+     * afterwards, so the extra accounts are permanent. The fix is WHEN the
+     * count is evaluated, not the counting rule.
+     * `Transaction.get(AggregateQuery)` serialises the count against a
+     * concurrent create into this collection: the loser retries, re-reads the
+     * higher count and is refused. The duplicate-email read moves inside for
+     * free, which also closes the smaller race it always had — two
+     * simultaneous sign-ups on one address both saw `empty` and both wrote.
+     *
+     * ALL READS BEFORE THE WRITE, which Firestore requires.
+     *
+     * The scrypt hash sits between the last read and the create ON PURPOSE.
+     * It is ~100 ms of CPU and it is the most expensive thing in the request,
+     * so a refused sign-up must never pay it — hashing before the transaction
+     * would hand a flood a CPU amplifier on exactly the path the ceiling
+     * exists to contain, and would also be a regression, since today a
+     * duplicate-email refusal does not hash either. It is a pure computation,
+     * not an effect, so it does not violate the "nothing happens in a
+     * transaction body" rule the sibling routes state.
+     *
+     * A refusal is returned as DATA and rendered outside: a body that can run
+     * several times must not be the place a response is built.
+     */
+    const refusal = await firestore.runTransaction(async (tx) => {
+      const existing = await tx.get(membersRef.where('email', '==', email).limit(1))
+      if (!existing.empty) return { duplicate: true, ceiling: 0 }
+      const used = (await tx.get(membersRef.count())).data().count
+      // Live documents only, so removing a member in the inbox frees the slot.
+      const verdict = checkVisitorRecordCeiling(used, SITE_MEMBERS_MAX_PER_HOST)
+      if (verdict.exceeded) return { duplicate: false, ceiling: verdict.ceiling }
+      tx.create(memberRef, {
+        email,
+        ...(displayName ? { displayName } : {}),
+        passwordScrypt: hashMemberPassword(password),
+        createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+      })
+      return null
+    })
+    if (refusal?.duplicate) {
       return res.status(409).json({ error: 'That email is already a member' })
     }
-    const memberRef = membersRef.doc()
-    await memberRef.set({
-      email,
-      ...(displayName ? { displayName } : {}),
-      passwordScrypt: hashMemberPassword(password),
-      createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-    })
-    // Sign-ups double as leads for the site owner (AGL-109).
-    await hostRef
-      .collection('leads')
-      .add({
+    if (refusal) {
+      // Visible to the HOST — Zach's rule that a control nobody can see in
+      // the console did not ship. Durable counter + one notification.
+      await recordVisitorRecordCeilingTrip({
+        hostRef,
+        hostId,
+        kind: 'siteMembers',
+        ceiling: refusal.ceiling,
+      })
+      // Opaque to the VISITOR, who is a stranger to this site and not our
+      // customer (AGL-1666's rules, restated in the message's own docblock).
+      // The one genuinely useful thing to hand them is a door that still
+      // opens, so the site's OWN published support address rides along when
+      // it has one — read through the host-token registry, whose description
+      // of this field is literally "where visitors should write for help".
+      // Nothing else off the host document may leave the console.
+      const contact = HOST_TOKENS['supportEmail']?.resolve(
+        hostSnapshot.data() as any,
+      )
+      return res.status(429).json({
+        error: SITE_MEMBER_UNAVAILABLE_MESSAGE,
+        // Machine-readable, because the dispatcher's rate limiter answers 429
+        // too and the status therefore discriminates nothing.
+        code: SITE_MEMBER_CEILING_CODE,
+        ...(contact ? { contact } : {}),
+      })
+    }
+    // Sign-ups double as leads for the site owner (AGL-109), through the one
+    // writer that enforces `LEADS_MAX_PER_HOST` (AGL-1529). A refused lead
+    // never fails the sign-up: the visitor asked for an account, not for a
+    // lead record, and the trip is recorded for the owner either way.
+    await addHostLead({
+      hostRef,
+      hostId,
+      lead: {
         email,
         // The name the person just typed (AGL-2303). `campaign-send` reads
         // `leads.name` for merge tags and NOTHING wrote it, so every campaign
@@ -88,9 +174,8 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
         // line above, already stored on the member document.
         ...(displayName ? { name: displayName } : {}),
         source: 'signup',
-        createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-      })
-      .catch((error) => console.error(error))
+      },
+    })
     // Contacts ingestion (AGL-197).
     void upsertHostContact({
       hostId,

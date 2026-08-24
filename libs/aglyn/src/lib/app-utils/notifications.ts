@@ -94,6 +94,13 @@ export type AglynNotificationType =
   // STOPPED accepting. Filing it under the muted bucket would guarantee it
   // reaches nobody on exactly the sites busy enough to trip it.
   | 'system.formSubmissionsPaused'
+  // A site reached the flat platform ceiling on member accounts or on lead
+  // records, so further ones are being refused (AGL-1529). `system.` for the
+  // same reason as `formSubmissionsPaused` directly above, and with the same
+  // sharpness: `content.` is the bucket an owner mutes to stop routine
+  // sign-up and lead chatter, and this is the one notification saying the
+  // sign-ups have STOPPED — muted exactly on the sites busy enough to trip it.
+  | 'system.visitorRecordsPaused'
   // An outsider reported one of our sites for phishing, malware or CSAM
   // (AGL-1964). `system` for the AGL-1088 reason and, again, more sharply
   // than most: this notification goes to STAFF, not to a customer, and its
@@ -192,6 +199,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> =
     'system.scopeDrift': 'Resources missing a sharing scope',
     'system.ssoDomainUnverified': 'SSO domain no longer proves ownership',
     'system.formSubmissionsPaused': 'Form submissions paused',
+    'system.visitorRecordsPaused': 'Sign-ups or leads paused',
     'system.abuseReportUrgent': 'Urgent abuse report',
     'system.dmcaCounterNotice': 'DMCA counter-notice',
     'system.bandwidthCeilingTripped': 'Bandwidth ceiling reached',

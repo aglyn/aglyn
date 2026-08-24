@@ -35,9 +35,17 @@ const mockState: {
 } = { members: [], leads: [] }
 
 jest.mock('@aglyn/tenant-data-admin', () => {
-  const membersCollection = {
+  // The sign-up now COUNTS AND CREATES IN ONE TRANSACTION (AGL-1529), so the
+  // double models a transaction rather than a bare `set()`: an aggregate
+  // `count()` read through `tx.get`, and `tx.create` for the write. A double
+  // that kept answering `set()` would make the handler's real path untested
+  // while still going green, which is the failure this file was written
+  // against in the first place.
+  const membersCollection: any = {
     where: () => membersCollection,
     limit: () => membersCollection,
+    // Marks the aggregate so `tx.get` can tell a count from a query.
+    count: () => ({ __count: true, collection: membersCollection }),
     get: async () => ({ empty: true, docs: [] }),
     doc: () => ({
       id: 'member-1',
@@ -46,15 +54,26 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       },
     }),
   }
-  const hostRef = {
-    get: async () => ({ exists: true }),
+  const firestore: any = {
+    collection: () => ({ doc: () => hostRef }),
+    runTransaction: async (body: (tx: any) => Promise<unknown>) =>
+      body({
+        get: async (target: any) =>
+          target?.__count
+            ? { data: () => ({ count: mockState.members.length }) }
+            : { empty: true, docs: [] },
+        create: (_ref: unknown, data: Record<string, unknown>) => {
+          mockState.members.push(data)
+        },
+      }),
+  }
+  const hostRef: any = {
+    firestore,
+    get: async () => ({ exists: true, data: () => ({}) }),
     collection: (name: string) =>
       name === 'siteMembers'
         ? membersCollection
         : {
-            // Recorded, not discarded. A double whose `add` returns an id and
-            // forgets the payload cannot fail on a wrong payload — which is
-            // how a lead with no name on it went unnoticed.
             add: async (data: Record<string, unknown>) => {
               if (name === 'leads') mockState.leads.push(data)
               return { id: `${name}-1` }
@@ -63,12 +82,18 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
   return {
     firebaseAdmin: {
-      app: () => ({
-        firestore: () => ({ collection: () => ({ doc: () => hostRef }) }),
-      }),
+      app: () => ({ firestore: () => firestore }),
       firestore: { FieldValue: { serverTimestamp: () => 'NOW' } },
     },
     upsertHostContact: () => undefined,
+    recordVisitorRecordCeilingTrip: async () => undefined,
+    // Recorded, not discarded. A double whose writer returns success and
+    // forgets the payload cannot fail on a wrong payload — which is how a
+    // lead with no name on it went unnoticed.
+    addHostLead: async (options: { lead: Record<string, unknown> }) => {
+      mockState.leads.push({ ...options.lead, createdAt: 'NOW' })
+      return true
+    },
   }
 })
 

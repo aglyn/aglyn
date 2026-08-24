@@ -22,6 +22,8 @@ import {
   formSubmissionsPausedNotice,
   pluginDocsHelp,
   submissionMonthKey,
+  visitorRecordRefusedCounterId,
+  visitorRecordsPausedNotice,
 } from '@aglyn/aglyn'
 import { CampaignsCard as HostCampaignsCard } from '@aglyn/plugins-email'
 import { HostOrdersCard } from '@aglyn/plugins-commerce'
@@ -130,6 +132,54 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
   )
   const spamNotice = formSpamCaughtNotice({
     spam: Number(spamCounter?.[submissionMonthKey()] ?? 0),
+  })
+
+  // Sign-ups and leads this site's PLATFORM ceiling refused (AGL-1529).
+  //
+  // Same instrument as the form ceiling directly above and read the same way:
+  // a client-unwritable counters document (AGL-1367) that host admins can
+  // already read, keyed by the SERVER's month through the shared helper — a
+  // key derived differently here would read zero refusals on exactly the
+  // sites being refused. The counter id comes from the shared function for
+  // the same reason: the writer is in `@aglyn/tenant-data-admin` and this is
+  // the reader, and two spellings of one document id is a surface that
+  // renders nothing forever.
+  //
+  // This is the surface that makes the ceiling SHIPPED rather than merely
+  // implemented. Without it a refusal exists in two places a site owner
+  // cannot see: a Firestore document only our console renders, and one
+  // notification that `system.` bucket-muting can suppress at write time.
+  const { data: membersRefusedCounter } = useFirestoreDoc<any>(
+    () =>
+      doc(
+        firestore,
+        'hosts',
+        hostId,
+        'counters',
+        visitorRecordRefusedCounterId('siteMembers'),
+      ),
+    [firestore, hostId],
+  )
+  const membersPausedNotice = visitorRecordsPausedNotice({
+    kind: 'siteMembers',
+    refused: Number(membersRefusedCounter?.[submissionMonthKey()] ?? 0),
+    ceiling: Number(membersRefusedCounter?.['ceiling']) || undefined,
+  })
+  const { data: leadsRefusedCounter } = useFirestoreDoc<any>(
+    () =>
+      doc(
+        firestore,
+        'hosts',
+        hostId,
+        'counters',
+        visitorRecordRefusedCounterId('leads'),
+      ),
+    [firestore, hostId],
+  )
+  const leadsPausedNotice = visitorRecordsPausedNotice({
+    kind: 'leads',
+    refused: Number(leadsRefusedCounter?.[submissionMonthKey()] ?? 0),
+    ceiling: Number(leadsRefusedCounter?.['ceiling']) || undefined,
   })
 
   // Site members + leads (AGL-109).
@@ -248,6 +298,24 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
           {spamNotice}
         </Alert>
       ) : null}
+      {/* Above the tabs for the same reason the form notice is (AGL-1529):
+          the Members and Leads lists are on the Contacts tab, and an owner
+          who last left this page on Orders would never see a notice hidden
+          inside one. Two notices rather than one because the two ceilings are
+          independent — a site can be refusing leads while sign-ups still
+          land — and a merged sentence could only be true of both. Neither
+          carries an `until` line: unlike the monthly form ceiling, these
+          count LIVE DOCUMENTS and no date lifts them. */}
+      {[membersPausedNotice, leadsPausedNotice].map((notice) =>
+        notice ? (
+          <Alert key={notice.title} severity="warning" sx={{ mb: 2 }}>
+            <AlertTitle>{notice.title}</AlertTitle>
+            <Typography component="div" variant="body2">
+              {notice.message}
+            </Typography>
+          </Alert>
+        ) : null,
+      )}
       <HubTabs
             tabs={[
               {

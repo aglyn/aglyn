@@ -91,8 +91,11 @@ import {
   checkHostRegisterQuota,
   checkQuota,
   checkSeatQuota,
+  checkVisitorRecordCeiling,
+  LEADS_MAX_PER_HOST,
   PLAN_ENTITLEMENTS,
   resolveOrgEntitlements,
+  SITE_MEMBERS_MAX_PER_HOST,
 } from '@aglyn/aglyn/server'
 import { mediaStorageGate } from '../utils/storage-overage'
 
@@ -535,29 +538,69 @@ describe('the verdict REACHES an enforcement point (the AGL-2163 shape)', () => 
   })
 })
 
-describe('KNOWN UNCAPPED, recorded so it cannot be forgotten (AGL-1529)', () => {
+describe('FLAT PLATFORM CEILINGS on visitor-created records (AGL-1529)', () => {
   /**
    * `hosts/{hostId}/siteMembers` and `hosts/{hostId}/leads` are created by
-   * ANONYMOUS VISITORS on a public site (`membershipRegisterHandler`, the
-   * bookings lead path) and are bounded by NOTHING: no plan dimension, no
-   * flat platform cap, no entitlement on the handler. The only bound is
-   * `visitorWriteRateLimitRefusal`, which is keyed on (host, IP) and
-   * therefore bounds the RATE and not the TOTAL — the exact sentence AGL-2265
-   * used as its reason for adding the free-workspace ceiling.
+   * ANONYMOUS VISITORS on a public site (`membershipRegisterHandler`, the two
+   * bookings lead paths). Until 2026-08-23 they were bounded by NOTHING: no
+   * plan dimension, no flat platform cap, no entitlement on the handler. The
+   * only bound was `visitorWriteRateLimitRefusal`, which is keyed on
+   * (host, IP), fails soft, and therefore bounds the RATE and not the TOTAL —
+   * the exact sentence AGL-2265 used as its reason for adding the
+   * free-workspace ceiling, and the shape AGL-2266 closed for `actions` and
+   * `entries`: *"uncapped Firestore documents and write volume behind a $0
+   * subscription"*.
    *
-   * This is the same shape AGL-2266 closed for `actions` and `entries`:
-   * *"uncapped Firestore documents and write volume behind a $0
-   * subscription"*. It is NOT closed here, because closing it means refusing
-   * an end-user account on somebody else's site, and AGL-889 decided member
-   * accounts are unlimited on every plan as a PRICING matter. Whether an
-   * ABUSE ceiling (the `FORM_ABUSE_CEILING` / `BANDWIDTH_ABUSE_CEILING`
-   * instrument, which is not a plan dimension) belongs here is on AGL-1529
-   * for Zach.
+   * ## Zach's decision, 2026-08-23, verbatim
    *
-   * Asserted rather than commented, so the day somebody adds the cap this
-   * goes red and the decision record gets updated with it.
+   * > A platform-wide ceiling — **not a plan dimension**, so "unlimited
+   * > member accounts on every plan" stays true, because **an abuse control
+   * > is not something we sell**. Same instrument already approved twice:
+   * > **AGL-1655** for forms and **AGL-2155** for bandwidth.
+   *
+   * So this block used to record the gap as MEASURED FACT, deliberately, so
+   * that it would go red the day a cap landed. It has. What it records now is
+   * the cap — and, still, that the cap did NOT become a plan dimension, which
+   * is the half of the decision easiest to lose: AGL-889 decided member
+   * accounts are unlimited on every plan as a PRICING matter and `/pricing`
+   * says so, so a ceiling that varied by plan would make that sentence false.
+   *
+   * ## Why a FLAT constant and not the `*_ABUSE_CEILING_MULTIPLE` shape
+   *
+   * The two ceilings Zach named are both `max(floor, included × 10)`, which
+   * needs an included band to multiply. Members and leads have none by
+   * construction — that is the point of AGL-889 — so a multiple would have to
+   * invent the plan dimension the decision forbids. The flat family those
+   * same docblocks point at (`WEBHOOK_MAX_PER_HOST`,
+   * `NON_PAGE_SCREEN_MAX_PER_HOST`, `ACTIONS_MAX_PER_HOST`,
+   * `AUTHORS_MAX_PER_HOST`) is the shape; AGL-1655/2155 supply the posture.
    */
+  const CEILINGS: Array<{
+    label: string
+    ceiling: number
+    /** The file that must consult the decider, as `ENFORCED_IN` does above. */
+    enforcedIn: string
+    decider: string
+  }> = [
+    {
+      label: 'siteMembers',
+      ceiling: SITE_MEMBERS_MAX_PER_HOST,
+      enforcedIn: 'libs/plugins/commerce/src/lib/server/membership-register.ts',
+      decider: 'checkVisitorRecordCeiling',
+    },
+    {
+      label: 'leads',
+      ceiling: LEADS_MAX_PER_HOST,
+      enforcedIn:
+        'libs/tenant/data/admin/src/lib/server/host-visitor-records.ts',
+      decider: 'checkVisitorRecordCeiling',
+    },
+  ]
+
   it('no plan carries a members or leads dimension', () => {
+    // The AGL-889 pricing promise, unchanged by the ceiling. A ceiling that
+    // grew an `OrgEntitlements` key would be a plan limit wearing an abuse
+    // control's clothes, and `/pricing` would start lying.
     for (const [plan, entitlements] of Object.entries(PLAN_ENTITLEMENTS)) {
       expect(`${plan} siteMembers`).toBe(`${plan} siteMembers`)
       expect(entitlements).not.toHaveProperty('siteMembersPerHost')
@@ -565,21 +608,116 @@ describe('KNOWN UNCAPPED, recorded so it cannot be forgotten (AGL-1529)', () => 
     }
   })
 
-  it('the sign-up handler consults no quota', () => {
+  it('the ceiling is the SAME number on every plan', () => {
+    // The other half of "not a plan dimension", asserted on the decider
+    // rather than on the table: the function takes no org at all, so there is
+    // nowhere for a plan to enter the answer. A signature that grew one would
+    // fail to compile here.
+    for (const { ceiling } of CEILINGS) {
+      expect(checkVisitorRecordCeiling(ceiling - 1, ceiling).exceeded).toBe(false)
+      expect(checkVisitorRecordCeiling(ceiling, ceiling).exceeded).toBe(true)
+    }
+  })
+
+  it.each(CEILINGS.map((row) => [row.label, row.ceiling] as const))(
+    '%s: REFUSED at the ceiling, ALLOWED one below, and ALLOWED when the ceiling is raised by one',
+    (_label, ceiling) => {
+      // 1. REFUSED at the cap.
+      expect(checkVisitorRecordCeiling(ceiling, ceiling).exceeded).toBe(true)
+      // 2. ALLOWED one below it.
+      expect(checkVisitorRecordCeiling(ceiling - 1, ceiling).exceeded).toBe(false)
+      // 3. CAUSATION — the load-bearing leg. The SAME usage that was refused
+      //    in (1), re-driven against a ceiling one higher, must succeed. A
+      //    refusal that survives its own cap being raised was never that
+      //    cap's refusal, and (1) alone is equally true of a decider that
+      //    refuses everything.
+      expect(checkVisitorRecordCeiling(ceiling, ceiling + 1).exceeded).toBe(false)
+    },
+  )
+
+  it('the two ceilings are DIFFERENT numbers, and leads is the larger', () => {
+    // Not cosmetic. A lead is append-only and deduped by nothing — every
+    // sign-up writes one and so does every booking — while a member is
+    // deduped by email, so the lead collection outgrows the member collection
+    // on any real site. Equal numbers would make the LEAD ceiling the one
+    // that trips first, on a site doing nothing wrong.
+    expect(LEADS_MAX_PER_HOST).toBeGreaterThan(SITE_MEMBERS_MAX_PER_HOST)
+  })
+
+  it('a ceiling of ZERO refuses; it does not read as unlimited', () => {
+    // `strictNullChecks` is OFF repo-wide, so `0` reaching the comparison as
+    // a falsy "no ceiling configured" is the live hazard. 0 means none
+    // allowed, in the argument that decides the refusal.
+    expect(checkVisitorRecordCeiling(0, 0).exceeded).toBe(true)
+    // …and a count of 0 against a real ceiling is a legitimate zero, allowed.
+    expect(checkVisitorRecordCeiling(0, 1).exceeded).toBe(false)
+  })
+
+  it.each(CEILINGS.map((row) => [row.label, row.enforcedIn, row.decider] as const))(
+    '%s is decided in %s',
+    (label, file, decider) => {
+      // The AGL-2163 shape: a decider that is read and discarded, or never
+      // read at all. Pinned per ceiling so a verdict cannot pass above while
+      // going nowhere.
+      expect(`${label}: ${codeOf(file).includes(decider) ? 'wired' : 'NOT WIRED'}`)
+        .toBe(`${label}: wired`)
+    },
+  )
+
+  it('EVERY lead writer goes through the one bounded writer', () => {
+    // A cap enforced at two of three call sites is not a cap. The three lead
+    // writes in the repo are the sign-up handler and the two bookings paths;
+    // none of them may reach the collection directly any more.
+    for (const file of [
+      'libs/plugins/commerce/src/lib/server/membership-register.ts',
+      'libs/plugins/bookings/src/lib/server.ts',
+    ]) {
+      const code = codeOf(file)
+      expect(`${file}: ${code.includes('addHostLead') ? 'bounded' : 'UNBOUNDED'}`)
+        .toBe(`${file}: bounded`)
+      // The instrument, aimed at the thing it replaced: a direct
+      // `collection('leads')` write is what the ceiling cannot see.
+      expect(`${file}: ${/collection\('leads'\)/.test(code) ? 'DIRECT WRITE' : 'routed'}`)
+        .toBe(`${file}: routed`)
+    }
+  })
+
+  it('the sign-up refusal is visible to the HOST and opaque to the VISITOR', () => {
+    // Zach's standing rule: a control that exists but is not visible in the
+    // console did not ship. The handler must record the trip, and the inbox
+    // console page — where the members and leads lists already live — must
+    // read it back.
     const handler = codeOf(
       'libs/plugins/commerce/src/lib/server/membership-register.ts',
     )
-    // Stated as the measured fact it is. When this stops being true the
-    // refusal has been implemented and this suite must be rewritten to prove
-    // it, rather than quietly continuing to pass.
-    for (const decider of [
-      'checkQuota',
-      'checkEntitlement',
-      'checkContactQuota',
-      'MAX_PER_HOST',
-    ]) {
-      expect(`${decider}: ${handler.includes(decider) ? 'present' : 'absent'}`)
-        .toBe(`${decider}: absent`)
+    expect(handler).toContain('recordVisitorRecordCeilingTrip')
+    // …and must answer the visitor with the shared, deliberately uninformative
+    // sentence rather than a hand-written one that explains too much.
+    expect(handler).toContain('SITE_MEMBER_UNAVAILABLE_MESSAGE')
+    const inbox = codeOf(
+      'libs/plugins/inbox/src/lib/components/inbox-console-page.tsx',
+    )
+    expect(inbox).toContain('visitorRecordsPausedNotice')
+    expect(inbox).toContain('visitorRecordRefusedCounterId')
+  })
+
+  it('every pinned enforcement file is TRACKED', () => {
+    const isTracked = (file: string): boolean => {
+      try {
+        execFileSync('git', ['ls-files', '--error-unmatch', '--', file], {
+          cwd: REPO_ROOT,
+          encoding: 'utf8',
+          stdio: 'pipe',
+        })
+        return true
+      } catch {
+        return false
+      }
+    }
+    expect(isTracked('apps/console/specs/no-such-file.ts')).toBe(false)
+    for (const { enforcedIn } of CEILINGS) {
+      expect(`${enforcedIn}: ${isTracked(enforcedIn) ? 'tracked' : 'MISSING'}`)
+        .toBe(`${enforcedIn}: tracked`)
     }
   })
 })
