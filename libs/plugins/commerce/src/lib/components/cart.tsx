@@ -370,15 +370,22 @@ function CartLines(props: {
   }
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, p: 2 }}>
-      {cart.lines.map((line) => (
+      {cart.lines.map((line) => {
+        // AGL-1726: resolve BEFORE the guard, never inside the `src`. A
+        // stored value can be truthy and still resolve to nothing (a
+        // malformed `media:` reference), and testing the raw string would
+        // turn "no image" into an `<img>` with no `src` — a broken-image
+        // icon where the placeholder belongs.
+        const imageUrl = Aglyn.siteRelativeMediaSrc(line.imageUrl, { hostId })
+        return (
         <Box
           key={`${line.productId}:${line.variantId ?? ''}`}
           sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}
         >
-          {line.imageUrl ? (
+          {imageUrl ? (
             <Box
               component="img"
-              src={line.imageUrl}
+              src={imageUrl}
               alt=""
               sx={{
                 width: 48,
@@ -442,7 +449,8 @@ function CartLines(props: {
             {'✕'}
           </Button>
         </Box>
-      ))}
+        )
+      })}
       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
         <Typography variant="subtitle2">{'Subtotal'}</Typography>
         <Typography variant="subtitle2">{usd(cart.subtotalCents)}</Typography>

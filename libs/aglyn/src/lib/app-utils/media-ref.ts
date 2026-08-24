@@ -244,6 +244,88 @@ export function resolveMediaSrc(
 }
 
 /**
+ * The site-relative path of an ABSOLUTE first-party CDN URL, or undefined
+ * when the value is not one. Internal to {@link siteRelativeMediaSrc}.
+ *
+ * Gated on {@link isFirstPartyHost} rather than on the path alone, and that
+ * gate is the whole safety argument: an author-typed hotlink whose path
+ * happens to look like ours must keep its origin, or we would silently
+ * re-point someone else's image at our own CDN.
+ *
+ * `search` and `hash` are carried through. A private asset is served behind
+ * `exp` + `sig`, and `signMediaAccess` signs (scope, mediaId, exp) — never
+ * the host — so a signature survives the origin being dropped.
+ */
+function firstPartyCdnPathname(value: string): string | undefined {
+  // Cheap reject before constructing a URL: only an absolute http(s) URL
+  // carries an origin to drop, and this runs on every rendered image.
+  if (!/^https?:\/\//i.test(value)) return undefined
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    return undefined
+  }
+  if (!isFirstPartyHost(url.hostname)) return undefined
+  if (!url.pathname.startsWith(`${MEDIA_CDN_ROUTE}/`)) return undefined
+  return `${url.pathname}${url.search}${url.hash}`
+}
+
+/**
+ * {@link resolveMediaSrc}, with an absolute FIRST-PARTY CDN URL folded back
+ * to the site-relative path that names the same bytes (AGL-1726).
+ *
+ * The resolver's pass-through branch is right for what it was written for —
+ * a raw storage URL and an author's hotlink are values we must not touch.
+ * But a stored `https://{subdomain}.aglyn.app/api/media/cdn/…` is neither.
+ * It is OUR route, addressed the long way round, and on a white-label
+ * storefront served from the customer's own domain it is:
+ *
+ * 1. a **brand leak** — the platform subdomain appears in page source and in
+ *    every visitor's request, on a site whose owner pays not to see it;
+ * 2. **cross-origin**, so `img-src 'self'` would blank it (this is the
+ *    AGL-1726 measurement, and fixing it unblocks that flip);
+ * 3. a dependency on `aglyn.app` resolving, on a page that otherwise has no
+ *    reason to need it.
+ *
+ * Dropping the origin is safe because `serveMediaCdn` decides from the URL
+ * and the document, never from the `Host` header — "the cache key IS the
+ * URL, one host's answer can never reach another" — and BOTH apps mount the
+ * route, so the console canvas and the tenant page each serve their own.
+ *
+ * ## Why this is a separate function and not a change to `resolveMediaSrc`
+ *
+ * Two consumers need the absolute form and would be harmed by folding this
+ * into the shared resolver:
+ *
+ * - {@link absoluteMediaSrc}'s out-of-band readers (`og:image`, the PWA
+ *   manifest, JSON-LD, an inbox). They re-absolutize against a stated
+ *   origin, so a value that no longer carries one returns undefined
+ *   wherever that origin is unknown.
+ * - `resolveEmailMediaSrc` in `shared-util-email`, a deliberate COPY of
+ *   `resolveMediaSrc` pinned by `apps/console/specs/email-media-src-drift.spec.ts`.
+ *   It cannot import this module (`scope:shared` is a leaf), so any change
+ *   to the authority has to be mirrored by hand — and a mirror of
+ *   {@link isFirstPartyHost}, which reads two environment variables, is the
+ *   AGL-2195 trap re-armed.
+ *
+ * So: the render-time resolver keeps its contract, and a surface that puts
+ * the result straight into an `<img src>` on a page asks for this instead.
+ */
+export function siteRelativeMediaSrc(
+  value: string | undefined | null,
+  options?: ResolveMediaSrcOptions,
+): string | undefined {
+  const resolved = resolveMediaSrc(value, options)
+  // Absent, empty, and an unparseable reference all arrive here as
+  // undefined and must LEAVE as undefined — the caller's placeholder is the
+  // correct render, and `strictNullChecks` being off repo-wide means a
+  // missing field folds to falsy rather than announcing itself.
+  if (!resolved) return undefined
+  return firstPartyCdnPathname(resolved) ?? resolved
+}
+
+/**
  * {@link resolveMediaSrc}, then made ABSOLUTE against a stated origin.
  *
  * Two of the three stored generations — a `media:` reference and the AGL-175
