@@ -606,6 +606,12 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
     dataReceived:
       'Nothing from us. A staff member who clicks it authenticates to Google themselves.',
   },
+  'groups.google.com': {
+    disposition: 'no-request',
+    reason:
+      'Printed in the contact-address checker\'s error text, telling an operator where to confirm a Google Group exists before adding it to PROVISIONED_CONTACT_ADDRESSES — an unprovisioned @aglyn.com address accepts mail and suppresses the bounce (AGL-1577), so it cannot be verified by sending to it. The operator opens the URL themselves; no code path fetches it.',
+    dataReceived: 'Nothing. It is a sentence in a diagnostic.',
+  },
   'console.developers.google.com': {
     disposition: 'no-request',
     reason:

@@ -84,10 +84,33 @@ interface Occurrence {
   named: boolean
 }
 
-/** The `<IconButton …>` opening tag and the full element, from its start. */
+/**
+ * The `<IconButton …>` opening tag and the full element, from its start.
+ *
+ * The opening tag ends at the first `>` that is at brace depth zero and
+ * outside a string — NOT simply at the first `>`. A naive scan stops inside
+ * `onClick={() => …}`, because an arrow function contains one, and truncates
+ * the tag before every prop written after it. That is not hypothetical: it
+ * reported the Raw-JSON toggle on the screen-version view as nameless while
+ * its `aria-label` sat two lines below the arrow, which is exactly the
+ * over-reporting failure this guard's own header warns about — "a guard that
+ * over-reports sends someone to 'fix' code that was correct".
+ */
 function readElement(source: string, start: number): [string, string] {
   let cursor = start
-  while (cursor < source.length && source[cursor] !== '>') cursor += 1
+  let depth = 0
+  let quote: string | null = null
+  while (cursor < source.length) {
+    const character = source[cursor]
+    if (quote !== null) {
+      if (character === quote && source[cursor - 1] !== '\\') quote = null
+    } else if (character === '"' || character === "'" || character === '`') {
+      quote = character
+    } else if (character === '{') depth += 1
+    else if (character === '}') depth -= 1
+    else if (character === '>' && depth === 0) break
+    cursor += 1
+  }
   const openingTag = source.slice(start, cursor + 1)
   if (source[cursor - 1] === '/') return [openingTag, openingTag]
   const close = source.indexOf('</IconButton>', cursor)

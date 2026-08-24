@@ -339,6 +339,40 @@ jobs:
       # absence is not evidence against the theory. Hence: leading hypothesis,
       # and the digest step below is what will settle it next time.
       #
+      # ── SETTLED 2026-08-24. Both hypotheses above are WRONG. ──────────────
+      # The digest did its job. The first red run carrying real bytes (Main
+      # Gate `full`, job 97477291374, 30,855,416 bytes against the 65,550 the
+      # pipe used to deliver) named five ordinary failing specs. `console:test`
+      # was never a resource failure and never an invocation artifact — it was
+      # four deterministic guard reds plus one that only a UTC runner can see:
+      #
+      #   · icon-button-accessible-name — the guard's own parser. It read an
+      #     opening tag to the first `>`, and `onClick={() => …}` has one, so
+      #     every prop after an arrow function was invisible. It reported a
+      #     button whose `aria-label` sat two lines lower. A FALSE red.
+      #   · the AGL-975 marketplace-naming guard — a real new doc link to the
+      #     forum page, needing an allowlist entry. (Named obliquely on
+      #     purpose: that guard scans every tracked file, this one included,
+      #     so spelling its filename here would itself be a stray hit.)
+      #   · subprocessor-inventory — `groups.google.com`, newly named in a
+      #     diagnostic string, needing a declaration.
+      #   · selfhost-hardcoded-hosts (aglyn:test) — fixed separately by
+      #     a9f51bc86.
+      #   · analytics-day-cache — green on a Chicago laptop and red on a UTC
+      #     runner, because a spec cannot change its own timezone under jest.
+      #     Pinned at process launch in `apps/console/jest.config.ts`.
+      #
+      # Why it read as unreproducible: three of the five are repo-SCANNING
+      # guards, so they went red the moment the offending content landed, on
+      # whatever tree was current — while the "green locally" runs were on an
+      # older tree. Nothing was ever flaky. With all five fixed, the whole
+      # console suite is green under ambient UTC at `--maxWorkers=2`: 619
+      # suites, 7,385 tests, exit 0 — which also retires the OOM theory, since
+      # that is the same invocation that was supposed to be starving.
+      #
+      # Keep the split and `--maxWorkers=2` anyway: they are good hygiene and
+      # cost nothing. Just do not read them as the fix for this.
+      #
       # Do NOT quietly drop `--maxWorkers=2` to make CI faster. It is the one
       # difference between the invocation measured green on this tree and the
       # one measured red on it. The flag DOES reach jest rather than being
