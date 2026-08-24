@@ -329,6 +329,8 @@ switch; including commerce is your plan's. See
 [downgrading](/workspace-and-billing/billing-and-plans/downgrading-and-canceling#what-changes-on-a-downgrade).
 :::
 
+![A draft order refusing to create a payment link with a message that selling is not enabled, on a plan without commerce](/img/commerce/selling-not-enabled.png)
+
 ## Shipping & taxes
 
 - **Shipping zones** own countries ('*' = rest of world); rates are flat,

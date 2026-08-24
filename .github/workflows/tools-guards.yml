@@ -466,6 +466,18 @@ jobs:
 
       - run: npm run check:docs-self-host
 
+      # AGL-1950. Same two-step order. Docusaurus' `onBrokenLinks: 'throw'`
+      # does NOT cover static assets — an asset under `static/` is copied, not
+      # resolved — so a page pointing at a screenshot that was never captured
+      # builds green and ships a broken-image icon. Worse, a capture harness
+      # that fails mid-shot writes a VALID PNG of empty backdrop, which passes
+      # any check that only asks whether the path resolves. The unit test is
+      # what proves the scanner reds on both, and on the 0-byte case, before
+      # the repo scan's green means anything.
+      - run: npm run test:docs-screenshots
+
+      - run: npm run check:docs-screenshots
+
       # AGL-2400. Same two-step order, and the unit test carries the whole
       # burden of proof here: a `@aglyn.com` address that was never created
       # ACCEPTS mail and suppresses the bounce (AGL-1577), so the corpus scan

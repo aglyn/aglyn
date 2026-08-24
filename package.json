@@ -132,6 +132,7 @@
     "check:manifest-versions": "node tools/scripts/check-manifest-versions.mjs",
     "check:docs-self-host": "node tools/scripts/check-docs-self-host.mjs",
     "check:docs-screenshots": "node tools/scripts/check-docs-screenshots.mjs",
+    "test:docs-screenshots": "node --test tools/scripts/lib/docs-screenshots.test.mjs",
     "test:docs-self-host": "node --test tools/scripts/lib/docs-self-host.test.mjs",
     "check:contact-addresses": "node tools/scripts/check-contact-addresses.mjs",
     "test:contact-addresses": "node --test tools/scripts/lib/contact-addresses.test.mjs",

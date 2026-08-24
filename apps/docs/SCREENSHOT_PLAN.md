@@ -249,6 +249,35 @@ crop. Paste each `spec` into the `SHOTS` array, run the harness, then replace
 the `<!-- screenshot: … -->` comment on the named docs page with a standard
 image reference using the alt text given.
 
+## Third run of 2026-08-24 (AGL-1950) — 12 captured, 4 not
+
+**A10 and A14 are captured.** Neither needed a decision or a Stripe mutation;
+both had been read as manual because of where the earlier passes stopped:
+
+- **A10** was blocked on "creating a key is a real write". It is — to the
+  **emulator**. A token minted against a local, ephemeral Firestore is dead by
+  construction, which is a stronger guarantee than the plan's own "revoke it
+  immediately after". The entry now carries the one condition that matters: the
+  shot must never run against a console wired to real Firebase.
+- **A14** was blocked on "no fixture produces it". It took fifteen lines: an org
+  on `free` whose `enabledPlugins` still carries `commerce`. A separate org, not
+  a flipped plan — several other shots in this file read the bakery's plan.
+
+**The four that remain are A1, A2, A7 and A15, and none of them is a capture.**
+A1/A2 need a real Stripe customer with a scheduled downgrade; A7 needs a real
+paid invoice on Stripe's own pages, carrying real billing data into a **public**
+repository; A15 is Zach's decision about a release flag that is still off. There
+is no harness time left in this issue.
+
+**New guard: `npm run check:docs-screenshots`.** Every `/img/…` reference in
+every docs page must resolve to a file that decodes and is not a single flat
+colour. Docusaurus' `onBrokenLinks: 'throw'` does not cover static assets, so a
+page pointing at an uncaptured image built green and shipped a broken-image
+icon; and a harness that fails mid-shot writes a valid PNG of empty backdrop
+that any file-exists check passes. Failed on purpose three ways in an isolated
+worktree before being trusted: a deleted image, a same-size all-white
+replacement, and a 0-byte truncation.
+
 ## Second run of 2026-08-23 (AGL-1950) — 11 captured, 5 not
 
 The four fixture-blocked entries below are now captured (**A8, A11, A13**), plus
@@ -560,7 +589,7 @@ hand and redact.)*
 }
 ```
 
-### A10. `static/img/api/key-shown-once.png` — ⛔ BLOCKED (AGL-1950)
+### A10. `static/img/api/key-shown-once.png` — ✅ CAPTURED (AGL-1950, 2026-08-24 third pass)
 
 - **Docs page:** `guides/your-first-api-call.md` → `#step-1-create-a-key`
 - **Capture:** the moment after creating a key, where the full token is shown
@@ -572,11 +601,26 @@ hand and redact.)*
 - **Alt text:** A newly created API key shown once in full, with a copy button
   and a warning that it will not be shown again.
 
-*(No shot spec — creating a key is a real write. Capture by hand, then revoke.)*
-
-- **⛔ Blocked (2026-08-23):** unchanged. The image is of a live credential, and
-  the only safe version is one revoked immediately after. That is a deliberate
-  human step, not an automated one.
+- **✅ Captured 2026-08-24 (third pass), and the hazard is answered by WHERE it
+  ran rather than by what happened afterwards.** The two earlier passes read
+  "creating a key is a real write" as meaning this could only ever be a manual
+  shot. It is a real write — to the **Firestore emulator**. The console under
+  capture is pinned to a local, ephemeral database, so `POST /api/org/api-keys`
+  stored the token's SHA-256 there and nowhere else. **The string in the image
+  authenticates against nothing, anywhere, and cannot be made to.** That is
+  strictly stronger than the plan's own mitigation: "revoke immediately after"
+  leaves a real window between the capture and the revoke, and this leaves none.
+- **⛔ The shot must never be run against a console wired to real Firebase.**
+  With `E2E_BASE_URL` pointed at production it would mint a live credential and
+  publish it to a public repository — the one way to turn this shot back into
+  the hazard the plan describes. The spec now says so in the harness itself.
+- **Spec correction:** the create dialog's submit button reads **`Create key`**,
+  not `Create` — and `button:has-text("Create")` would match the card's
+  **Create API key** first. The reveal is a second `[role="dialog"]`; the crop
+  names its title (`Copy your API key`) so it cannot race the create dialog's
+  unmount, and so a failed creation fails the shot instead of quietly
+  re-photographing the dialog that was already there.
+- No revoke was needed and none was performed; the emulator was torn down.
 
 ## Agency workspace (guides)
 
@@ -725,7 +769,7 @@ hand and redact.)*
 }
 ```
 
-### A14. `static/img/commerce/selling-not-enabled.png` — ⛔ BLOCKED (AGL-1950)
+### A14. `static/img/commerce/selling-not-enabled.png` — ✅ CAPTURED (AGL-1950, 2026-08-24 third pass)
 
 - **Docs page:** `commerce-and-bookings/commerce/overview.md` → `#orders`
 - **Precondition:** an org on a plan **without** commerce whose site still has
@@ -738,11 +782,35 @@ hand and redact.)*
 - **Alt text:** A draft order refusing to create a payment link with a message
   that selling is not enabled, on a plan without commerce.
 
-*(No shot spec — needs an org in a deliberately downgraded state. Set up by hand.)*
-
-- **⛔ Blocked (2026-08-23):** unchanged. It needs an org deliberately put on a
-  plan without commerce while its site keeps the plugin on, which no fixture
-  currently produces.
+- **✅ Captured 2026-08-24 (third pass)**, against a free-plan org added to
+  `tools/e2e/seed-docs-fixtures.mjs` (`docs-free` / `docs-free-site`). "No
+  fixture currently produces it" was true; it turned out to be about fifteen
+  lines of fixture, not a hand-staged org.
+- **The state is reachable because the switchboard and the plan gate are
+  different things.** `enabledPlugins` is an ORG field and `commerce` is an
+  entitlement, so an org that drops to Free keeps the plugin installed. The
+  console page renders, the **Draft order** button is live, and the refusal
+  arrives only on submit — which is exactly the sentence the admonition makes.
+  Only `free` lacks `commerce` (`plan-entitlements.ts`); every self-serve tier
+  from Starter up carries it, so no other plan produces this shot.
+- **A SEPARATE org, not a flipped plan.** Setting the bakery's `plan` to `free`
+  would have been one line, but every other shot in this plan is taken on that
+  org and several read its plan — the retention funnel's over-Free-limits
+  warning, the billing cards, the seat line. A fixture that mutates a shared org
+  photographs the other shots as a side effect.
+- **Spec correction — the anchor moved.** The spec names `#orders`, but the
+  admonition this image illustrates ("Selling needs a plan with commerce") now
+  sits under the chargebacks section, which is where `## Orders` sends the
+  reader with *"see the note below"*. The image is placed with the admonition,
+  not with the heading the spec named.
+- **Spec correction — the refusal is a SNACKBAR, not an inline error**, and
+  notistack auto-hides it, so the settle after the submit is short on purpose.
+  The dialog does not close on a refusal, which is the only reason the spec's
+  "enough of the draft order around it to show where the customer was" fits in
+  one frame at all.
+- The Product select's options are a portal at the end of `<body>`, so the
+  `li[role="option"]` is **not** inside `[role="dialog"]` — a scoped selector
+  matches nothing and the fill that follows lands on a closed menu.
 
 ## Tooltips (AGL-1943)
 

@@ -41,6 +41,8 @@ with Windows 10 and later. There's a JavaScript version of each step underneath.
 genuinely cannot show it to you again — if you lose it, the fix is to revoke it and
 make a new one, which costs you nothing but a minute.
 
+![A newly created API key shown once in full, with a copy button and a warning that it will not be shown again](/img/api/key-shown-once.png)
+
 A key looks like this:
 
 ```

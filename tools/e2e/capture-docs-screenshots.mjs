@@ -764,6 +764,84 @@ const shots = [
     },
   },
   {
+    // A10 (AGL-1950). The once-only reveal — and the hazard the plan spends a
+    // paragraph on is answered by WHERE this runs, not by redaction.
+    //
+    // The plan's rule is that the only safe capture is a dead credential, and
+    // that blurring a live one is not redaction. A key minted here is dead by
+    // construction rather than dead by follow-up: the console under capture is
+    // pinned to the Firestore EMULATOR, so `POST /api/org/api-keys` writes the
+    // token's SHA-256 into a local, ephemeral database and nothing in
+    // production ever holds that hash. The string in the image authenticates
+    // against nothing, anywhere, and cannot be made to — which is strictly
+    // stronger than "revoke it immediately after", where the window between
+    // capture and revoke is real.
+    //
+    // ⛔ This is why the shot must NEVER be run with E2E_BASE_URL pointing at a
+    // console wired to real Firebase. Against production it mints a live
+    // credential and publishes it to a public repository.
+    out: 'api/key-shown-once.png',
+    path: `/${ORG_SLUG}/settings`,
+    waitFor: 'API keys',
+    viewport: { width: 1440, height: 1500 },
+    actions: [
+      { click: 'text=API keys', settleMs: 3000 },
+      { click: 'button:has-text("Create API key")', settleMs: 2500 },
+      // The same name the guide's step 1 tells the reader to type, so A9 and
+      // A10 read as two moments of one flow rather than two examples.
+      { fill: ['[role="dialog"] input[type="text"]', 'zapier-orders-sync'], settleMs: 300 },
+      // `Create key`, not `Create API key` — that is the card's button, and a
+      // `has-text` on the shorter string would match the card's one first.
+      { click: '[role="dialog"] button:has-text("Create key")', settleMs: 3500 },
+    ],
+    // The create dialog is unmounted by `setDraft(null)` before the reveal
+    // opens, but both are `[role="dialog"]` and a bare selector would race the
+    // unmount. Naming the reveal's own title is what makes the crop
+    // deterministic — and if creation failed, this matches nothing and the
+    // shot fails rather than photographing the create dialog again.
+    clipTo: { locator: '[role="dialog"]:has-text("Copy your API key")' },
+  },
+  {
+    // A14 (AGL-1950). Needs the free-plan org from seed-docs-fixtures.mjs.
+    //
+    // The state is only reachable because the plugin switchboard and the plan
+    // gate are different things: `enabledPlugins` is an ORG field and
+    // `commerce` is an entitlement, so an org that drops to Free keeps the
+    // plugin installed. The console page renders, the Draft order button is
+    // live, and the refusal arrives only on submit — which is exactly what the
+    // admonition on the overview page describes.
+    //
+    // Only `free` lacks `commerce`; every self-serve tier from Starter up
+    // carries it, so no other plan produces this shot.
+    out: 'commerce/selling-not-enabled.png',
+    path: '/docs-free/hosts/docs-free-site/products?tab=orders',
+    waitFor: 'No orders yet',
+    actions: [
+      { click: 'button:has-text("Draft order")', settleMs: 2000 },
+      // MUI renders the Product select's options into a portal at the end of
+      // <body>, so the option is NOT inside `[role="dialog"]`.
+      { click: '[role="dialog"] [role="combobox"]', settleMs: 800 },
+      { click: 'li[role="option"]:has-text("Sourdough loaf")', settleMs: 800 },
+      {
+        fill: [
+          '[role="dialog"] .MuiFormControl-root:has(label:has-text("Buyer email")) input',
+          'jordan.avery@example.com',
+        ],
+        settleMs: 300,
+      },
+      { click: '[role="dialog"] button:has-text("Create & copy link")', settleMs: 2500 },
+    ],
+    // The refusal is a snackbar, not an inline field error, and notistack
+    // auto-hides it — hence the short settle above. The union with the still-
+    // open dialog is what gives the spec's "enough of the draft order around
+    // it to show where the customer was"; the dialog does NOT close on a
+    // refusal, which is the whole reason both fit in one frame.
+    clipTo: {
+      locator: '[role="dialog"]',
+      include: ['text=Selling is not enabled'],
+    },
+  },
+  {
     // A16. The help tip is `Help: Moving to a lower plan takes effect
     // later`, not the `Help: Downgrading` the spec guessed. The disclosure
     // sits well below the fold once expanded, so it is scrolled into view
