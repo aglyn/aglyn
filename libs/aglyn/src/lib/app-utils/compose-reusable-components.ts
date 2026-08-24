@@ -1050,4 +1050,69 @@ export function nodesReferenceComponent(
   )
 }
 
+/**
+ * Every definition id a node map renders, DIRECTLY or through another
+ * definition (AGL-1898).
+ *
+ * {@link nodesReferenceComponent} answers the same question for one id and
+ * scans direct instances only — its own doc says a caller wanting transitive
+ * usage "must scan definitions too". This is that scan, kept beside the
+ * graft for the same reason: a caller that disagreed with
+ * {@link composeReusableComponentNodes} about what a document references
+ * would be wrong about exactly the nested case the canvas draws.
+ *
+ * Why it exists here rather than at a call site. A screen's canvas re-grafts
+ * when the host's definitions map changes, which is the whole of AGL-1898's
+ * phase-2 transport — but that map changes whenever ANY component in the
+ * host is published, most of them not on this page. Deciding whether a
+ * change is this document's business needs the transitive set, because the
+ * usual shared component is reached through a nav or a card rather than
+ * placed on the screen itself.
+ *
+ * - Unresolvable ids are INCLUDED. A screen referencing a definition that is
+ *   unpublished, deleted, or simply not in the map yet still references it;
+ *   a caller filtering to "what can expand" can intersect with its own map,
+ *   whereas an id dropped here cannot be recovered.
+ * - Cycles terminate: an id already collected is never re-walked, which
+ *   bounds a self-referencing definition the same way
+ *   {@link MAX_COMPONENT_DEPTH} bounds the graft.
+ * - Traversal is over the definition's stored `nodes`, NOT a composed tree,
+ *   so it costs nothing and cannot be thrown off by grafted ids.
+ */
+export function collectReferencedComponentIds(
+  nodes: Record<string, AglynNodeSchema | undefined> | undefined | null,
+  definitionsById?:
+    | Record<string, { nodes?: unknown } | undefined>
+    | undefined
+    | null,
+): Set<string> {
+  const found = new Set<string>()
+  const directRefIds = (
+    source: Record<string, AglynNodeSchema | undefined> | undefined | null,
+  ) => {
+    const ids: string[] = []
+    for (const node of Object.values(source ?? {})) {
+      if (node?.componentId !== REUSABLE_INSTANCE_COMPONENT_ID) continue
+      const refId = (node.props as { refId?: unknown } | undefined)?.refId
+      if (typeof refId === 'string' && refId) ids.push(refId)
+    }
+    return ids
+  }
+
+  const queue = directRefIds(nodes)
+  while (queue.length) {
+    const refId = queue.shift() as string
+    if (found.has(refId)) continue
+    found.add(refId)
+    const definition = definitionsById?.[refId]
+    if (!definition?.nodes) continue
+    queue.push(
+      ...directRefIds(
+        definition.nodes as Record<string, AglynNodeSchema | undefined>,
+      ),
+    )
+  }
+  return found
+}
+
 export default composeReusableComponentNodes

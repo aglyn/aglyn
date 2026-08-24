@@ -16,6 +16,7 @@
  */
 
 import {
+  collectReferencedComponentIds,
   composeReusableComponentNodes,
   detachInstanceSubtree,
   getInstanceAttrOverrides,
@@ -255,6 +256,129 @@ describe('nodesReferenceComponent', () => {
     // An empty needle must never match everything.
     expect(nodesReferenceComponent({ a: instance('a', 'card') } as any, '')).toBe(
       false,
+    )
+  })
+})
+
+describe('collectReferencedComponentIds (AGL-1898)', () => {
+  // A definition whose tree places instances of `refIds`.
+  const definitionPlacing = (...refIds: string[]) =>
+    ({
+      rootId: 'root',
+      nodes: {
+        root: { $id: 'root', componentId: 'div', nodes: refIds.map((_, i) => `i${i}`) },
+        ...Object.fromEntries(
+          refIds.map((refId, i) => [`i${i}`, instance(`i${i}`, refId)]),
+        ),
+      },
+    }) as any
+
+  it('collects direct instances', () => {
+    const nodes = {
+      root: { $id: 'root', componentId: 'div', nodes: ['a', 'b'] },
+      a: instance('a', 'card'),
+      b: instance('b', 'banner'),
+    } as any
+    expect([...collectReferencedComponentIds(nodes, {})].sort()).toEqual([
+      'banner',
+      'card',
+    ])
+  })
+
+  it('reaches a component placed INSIDE another component', () => {
+    // The case a shared component is usually in: the button is not on the
+    // screen, the nav is, and the button is inside the nav. A direct-only
+    // scan reports the screen does not use the button — and a propagation
+    // filter built on that would drop exactly the change it exists for.
+    const nodes = { a: instance('a', 'nav') } as any
+    const definitions = {
+      nav: definitionPlacing('button'),
+      button: definitionPlacing(),
+    }
+    expect([...collectReferencedComponentIds(nodes, definitions)].sort()).toEqual([
+      'button',
+      'nav',
+    ])
+    // And the direct-only scan really does miss it — this is the gap, not a
+    // restatement of the assertion above.
+    expect(nodesReferenceComponent(nodes, 'button')).toBe(false)
+  })
+
+  it('walks three levels deep', () => {
+    const nodes = { a: instance('a', 'page') } as any
+    const definitions = {
+      page: definitionPlacing('nav'),
+      nav: definitionPlacing('button'),
+      button: definitionPlacing('icon'),
+      icon: definitionPlacing(),
+    }
+    expect([...collectReferencedComponentIds(nodes, definitions)].sort()).toEqual([
+      'button',
+      'icon',
+      'nav',
+      'page',
+    ])
+  })
+
+  it('includes a referenced id with no definition in the map', () => {
+    // Unpublished, deleted, or simply not arrived: still referenced. An id
+    // dropped here cannot be recovered by the caller.
+    const nodes = { a: instance('a', 'ghost') } as any
+    expect([...collectReferencedComponentIds(nodes, {})]).toEqual(['ghost'])
+    expect([...collectReferencedComponentIds(nodes, undefined)]).toEqual(['ghost'])
+  })
+
+  it('terminates on a self-referencing definition', () => {
+    const nodes = { a: instance('a', 'loop') } as any
+    const definitions = { loop: definitionPlacing('loop') }
+    expect([...collectReferencedComponentIds(nodes, definitions)]).toEqual(['loop'])
+  })
+
+  it('terminates on a definition cycle', () => {
+    const nodes = { a: instance('a', 'ping') } as any
+    const definitions = {
+      ping: definitionPlacing('pong'),
+      pong: definitionPlacing('ping'),
+    }
+    expect([...collectReferencedComponentIds(nodes, definitions)].sort()).toEqual([
+      'ping',
+      'pong',
+    ])
+  })
+
+  it('does not mistake a same-named prop on an ordinary node', () => {
+    const nodes = {
+      a: { $id: 'a', componentId: 'muiButton', props: { refId: 'card' } },
+    } as any
+    expect(collectReferencedComponentIds(nodes, {}).size).toBe(0)
+  })
+
+  it('is safe on empty, missing and id-less input', () => {
+    expect(collectReferencedComponentIds(undefined, {}).size).toBe(0)
+    expect(collectReferencedComponentIds(null, {}).size).toBe(0)
+    expect(collectReferencedComponentIds({}, {}).size).toBe(0)
+    // An instance with no refId references nothing, rather than ''.
+    const nodes = {
+      a: { $id: 'a', componentId: REUSABLE_INSTANCE_COMPONENT_ID, props: {} },
+    } as any
+    expect(collectReferencedComponentIds(nodes, {}).size).toBe(0)
+  })
+
+  it('agrees with the graft about the nested case', () => {
+    // The scan and the composer must not disagree: whatever the composer
+    // expands, the scan must have named.
+    const nodes = { a: instance('a', 'nav') } as any
+    const definitions = {
+      nav: definitionPlacing('button'),
+      button: {
+        rootId: 'broot',
+        nodes: { broot: { $id: 'broot', componentId: 'muiButton', nodes: [] } },
+      } as any,
+    }
+    const composed = composeReusableComponentNodes(nodes as any, definitions)
+    expect(composed['cmp__a__i0'].nodes).toEqual(['cmp__cmp__a__i0__broot'])
+    expect(collectReferencedComponentIds(nodes, definitions).has('button')).toBe(
+      true,
     )
   })
 })
