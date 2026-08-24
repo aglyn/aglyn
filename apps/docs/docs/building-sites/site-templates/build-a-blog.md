@@ -90,8 +90,8 @@ and a **Publication** panel at the bottom of the entry editor itself.
 **Published date** is when a post says it went out; **Publish at** is when a post is
 *due* to go out. Scheduling refuses a past time and backdating refuses a future one,
 so each control only ever writes its own field. The Publication panel states which
-one it's showing you — "Published *{date}*" against the first, "Scheduled for
-*{date}*" against the second.
+one it's showing you — "Published *\{date\}*" against the first, "Scheduled for
+*\{date\}*" against the second.
 :::
 
 **View** opens the live URL once the entry is published.
