@@ -38,6 +38,7 @@ import {
   mediaUsageAssurance,
   PLUGIN_BLIND_SPOT,
   provesUnused,
+  SCANNED_SURFACES,
   usagePanelEmptyMessage,
 } from './media-usage-copy'
 
@@ -117,16 +118,21 @@ describe('the sentences themselves', () => {
 
   /**
    * AGL-1867. `full` coverage means "every document the scan knows about",
-   * and the scan does not know about plugin-owned collections — a commerce
-   * product carries `imageUrl`, so a product photo used nowhere else still
-   * comes back empty. The coverage flag cannot express that, because it
-   * reports how much of the CORPUS was read and this is a hole in the corpus
-   * itself. So the sentence has to carry it.
+   * so what the scan does NOT know about has to be said in words — the flag
+   * reports how much of the corpus was read and cannot describe a hole in the
+   * corpus itself.
+   *
+   * The hole this sentence originally named — plugin-owned collections, where
+   * a commerce product's `imageUrl` made a product photo report as unused — is
+   * closed: `PLUGIN_CONTENT_COLLECTIONS` puts products, events, services and
+   * twenty-two more into the corpus, and a build guard holds that list equal
+   * to a repo-wide sweep. What is left is the deliberate exclusions, which the
+   * sentence now names instead.
    *
    * Asserted for every empty result including `full`: that is the one an
    * author acts on, and the one that used to claim the whole site.
    */
-  it('names the plugin blind spot on every empty result', () => {
+  it('names the remaining blind spot on every empty result', () => {
     for (const coverage of COVERAGES) {
       const panel = usagePanelEmptyMessage(coverage)
       const confirmation = deleteConfirmationNote({ coverage, names: [] })
@@ -141,6 +147,39 @@ describe('the sentences themselves', () => {
         coverage,
         confirmation: expect.stringContaining(PLUGIN_BLIND_SPOT),
       })
+    }
+  })
+
+  /**
+   * The corpus grew, so the sentence has to grow with it (AGL-1867).
+   *
+   * `SCANNED_SURFACES` is what an author is told was checked, and it is the
+   * only place the answer says what "checked" covered. Leaving it naming five
+   * surfaces after the scan learned to read twenty-five plugin collections
+   * would understate the answer in the direction that makes an author distrust
+   * a correct result — the mirror of the bug, and still a bad outcome.
+   *
+   * FORCED RED: drop the plugin clause from `SCANNED_SURFACES` and this fails.
+   */
+  it('tells the author plugin content was checked', () => {
+    expect(SCANNED_SURFACES).toContain('plugin content')
+    expect(SCANNED_SURFACES).toContain('product')
+    for (const message of [
+      usagePanelEmptyMessage('full'),
+      deleteConfirmationNote({ coverage: 'full', names: [] }),
+    ]) {
+      expect(message).toContain('plugin content')
+    }
+    // And the old sentence, which said the opposite, is gone for good: an
+    // author reading "plugin content is outside this check" beside a list that
+    // includes a product would rightly stop believing either one.
+    for (const message of [
+      usagePanelEmptyMessage('full'),
+      usagePanelEmptyMessage('published'),
+      deleteConfirmationNote({ coverage: 'full', names: [] }),
+      deleteConfirmationNote({ coverage: 'published', names: [] }),
+    ]) {
+      expect(message).not.toContain('is outside this check')
     }
   })
 

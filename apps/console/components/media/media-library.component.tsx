@@ -17,6 +17,10 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+import {
+  hostContentCollectionLabel,
+  PLUGIN_CONTENT_ROUTE_SLUG,
+} from '@aglyn/aglyn'
 import { hostDisplayDomain } from '../../constants/tenant-links'
 import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -218,7 +222,15 @@ const SCOPE_CHUNK_SIZE = 100
  * carries what the client needs to deep-link back to the resource.
  */
 interface MediaUsageRef {
-  kind: 'screen' | 'layout' | 'entry' | 'component' | 'site' | 'email'
+  kind:
+    | 'screen'
+    | 'layout'
+    | 'entry'
+    | 'component'
+    | 'site'
+    | 'email'
+    /** A plugin-owned document — `collectionId` says which kind (AGL-1867). */
+    | 'plugin'
   id: string
   name: string
   hostId: string
@@ -239,7 +251,24 @@ const REF_KIND_LABEL: Record<MediaUsageRef['kind'], string> = {
   component: 'Component',
   site: 'Site settings',
   email: 'Email',
+  // Overridden per row by the collection's own label — see `refKindLabel`.
+  // "Plugin" is only what an unlabelled row falls back to.
+  plugin: 'Plugin',
 }
+
+/**
+ * The chip on one reference row (AGL-1867).
+ *
+ * Plugin rows do not share a label: a product, an event and a bookable service
+ * are all `kind: 'plugin'`, and telling an author their photo is used by a
+ * "Plugin" is barely better than not telling them at all. The collection name
+ * is the label, humanised by the same helper the guard spec pins, so a newly
+ * scanned collection reads correctly without a second list to keep in step.
+ */
+const refKindLabel = (reference: MediaUsageRef): string =>
+  reference.kind === 'plugin' && reference.collectionId
+    ? hostContentCollectionLabel(reference.collectionId)
+    : REF_KIND_LABEL[reference.kind]
 
 
 const formatBytes = (bytes: number) =>
@@ -2556,6 +2585,26 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           versionId: reference.versionId,
         })
       }
+      // A plugin-owned document (AGL-1867) — a product, an event, a service.
+      // The destination is the plugin's own console page, which is where the
+      // author edits or removes the thing holding the asset. A collection with
+      // no declared slug renders as plain text rather than being dropped: the
+      // ROW is the safety answer, the link is a convenience, and making
+      // coverage wait on a route is how the collection ends up uncovered.
+      if (reference.kind === 'plugin') {
+        const slug = reference.collectionId
+          ? PLUGIN_CONTENT_ROUTE_SLUG[
+              reference.collectionId as keyof typeof PLUGIN_CONTENT_ROUTE_SLUG
+            ]
+          : undefined
+        return slug
+          ? buildRoute(Route.HOST_PLUGIN, {
+              orgSlug,
+              host: reference.hostSubdomain,
+              pluginSlug: slug,
+            })
+          : null
+      }
       if (reference.kind === 'entry') {
         const base = buildRoute(Route.HOST_CONTENT, {
           orgSlug,
@@ -4198,7 +4247,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                         <Chip
                           size="small"
                           variant="outlined"
-                          label={REF_KIND_LABEL[reference.kind]}
+                          label={refKindLabel(reference)}
                         />
                       </Stack>
                     </Stack>

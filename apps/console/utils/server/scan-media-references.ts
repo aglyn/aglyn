@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { decodeStoredNodes } from '@aglyn/aglyn/server'
+import {
+  CORE_CONTENT_COLLECTIONS,
+  decodeStoredNodes,
+  PLUGIN_CONTENT_COLLECTIONS,
+} from '@aglyn/aglyn/server'
 import { TENANT_EMAILS } from '@aglyn/shared-util-email'
 
 /**
@@ -51,6 +55,17 @@ import { TENANT_EMAILS } from '@aglyn/shared-util-email'
  *    scan that reports `[]` is indistinguishable from an exhaustive one that
  *    reports `[]`, and the difference is whether the author is about to
  *    destroy something. See {@link MediaScanCoverage}.
+ * 3. **A failed read is charged to coverage, never to the result.** A
+ *    `catch` that returns an empty page is rule 2 defeated at the last step:
+ *    the scan reports `[]` and reports it as complete. Every read in here
+ *    either succeeds or downgrades the coverage flag.
+ *
+ * AGL-1867 closed the last two holes in the corpus: a site's transactional
+ * email templates, and the documents owned by the first-party feature plugins
+ * — products, events, services and the rest. Which collections those are is
+ * declared in `PLUGIN_CONTENT_COLLECTIONS` and held equal to a repo-wide
+ * sweep by `host-content-media-coverage.spec.ts`, so the corpus is derived
+ * from the codebase rather than remembered.
  */
 
 export type MediaReferenceKind =
@@ -61,6 +76,11 @@ export type MediaReferenceKind =
   | 'site'
   /** A site's own transactional email template (AGL-1867). */
   | 'email'
+  /**
+   * A document owned by a first-party feature plugin — a product, an event, a
+   * bookable service (AGL-1867). `collectionId` carries which one.
+   */
+  | 'plugin'
 
 /** One place an asset is referenced from. */
 export interface MediaReference {
@@ -73,7 +93,14 @@ export interface MediaReference {
   hostSubdomain: string
   /** Version scanned (screens/layouts/components) — the deep-link target. */
   versionId?: string
-  /** Collection holding the entry — deep-links to that collection. */
+  /**
+   * Collection holding the row.
+   *
+   * For an `entry`, the content collection it lives in — the deep link opens
+   * that collection. For a `plugin` row it is the host subcollection name
+   * (`products`, `events`, …), which is both the label the client renders and
+   * the key it routes off (AGL-1867).
+   */
   collectionId?: string
   /**
    * Whether the matching version is the PUBLISHED one.
@@ -161,73 +188,19 @@ export const HOSTS_PER_SCAN = 25
  * fixed (`TENANT_EMAILS`), and a template document only exists once somebody
  * has pressed Design, so most sites have none at all.
  *
- * ## What is still NOT here, stated rather than papered over
+ * Derived from `CORE_CONTENT_COLLECTIONS` rather than written out again, so
+ * that the guard which keeps the whole corpus equal to a repo-wide sweep is
+ * reasoning about the same four names this loop reads. `collections` is the
+ * fifth core member and is walked one level deeper, into `…/entries`, below.
  *
- * Plugin-owned documents — the other half of AGL-1867 — are not in this list
- * and could not honestly be added to it by hand. They are ordinary host
- * subcollections with no namespace, no prefix and no registry, and a sweep of
- * the repo turns up 95 distinct collection names of which many are not
- * host-scoped or not media-bearing at all. How many ARE host-scoped depends
- * on which path shapes the sweep recognises — three common ones find 37, a
- * wider sweep finds low fifties — and that a name's own scope cannot be
- * counted reliably is this problem in miniature.
- * `host-subcollection-write-deny-coverage.spec.ts` made this argument first
- * and it still holds — "a hand-written classification of all of them would be
- * a large list of guesses dressed as decisions, and the first stale entry is
- * where the next hole hides."
- *
- * The gap is real and not theoretical: a commerce product carries `imageUrl`
- * and `mediaUrls` (`libs/plugins/commerce/src/lib/server/product.ts`), so a
- * product photo used nowhere else still reports as unused today.
- *
- * ## The registry this needs is NOT the one it sounds like (AGL-1867)
- *
- * An earlier draft of this note said the fix was plugins "naming the
- * collections they own, enforced at build time", a schema change to the
- * plugin manifest. That would enforce nothing, and the reason is worth
- * writing down before somebody spends a week on it.
- *
- * "Plugin" means two disjoint things here:
- *
- *  - a SANDBOXED marketplace plugin, which declares a `PluginManifest` and
- *    runs in an iframe on a separate origin. It has NO Firestore access at
- *    all: `plugin-bridge.ts` is the whole protocol and its guest verbs are
- *    `ready`, `resize`, `event`, `fetch-request` and `error`. There is no
- *    data verb, and `parseGuestMessage` rejects anything else. A manifest
- *    field declaring what such a plugin writes would govern the empty set.
- *  - a FIRST-PARTY feature plugin under `libs/plugins/*` — 13 of them, listed
- *    in `plugins.config.json` — compiled into the apps and using the ordinary
- *    Firestore SDKs directly. These are the ones that write media-bearing
- *    documents, and they declare their UI placement (`ConsoleExtension`) and
- *    nothing about their data.
- *
- * So the blind spot is bounded and enumerable — 13 in-repo plugins, not an
- * open set of third-party writers — and closing it does NOT need a write
- * chokepoint (there is none: ~100 client-direct write sites in `libs/plugins`
- * plus the admin SDK, and a product EDIT deliberately bypasses even the
- * quota-enforcing resources route). A scanner needs only the READ side: a
- * declared list of (collection, media-bearing field paths), kept honest the
- * way the deny-coverage guard is kept honest — a DERIVED sweep of
- * `libs/plugins/**` for host subcollection writes, checked against a declared
- * classification, so a new collection fails the build until somebody says
- * whether it carries media.
- *
- * That is tractable, and it is deliberately not being done days before a
- * feature freeze: the work is classifying several dozen collections one at a
- * time, on the path behind a delete confirmation, which is the wrong thing to
- * rush.
- * Until it exists the delete confirmation names this blind spot in words
- * instead of implying it away; see `media-usage-copy.ts`.
+ * Everything else is `PLUGIN_CONTENT_COLLECTIONS`, read by Pass 2b.
  */
-const SCANNED_HOST_COLLECTIONS = [
-  'screens',
-  'layouts',
-  'components',
-  'emailTemplates',
-] as const
+const SCANNED_HOST_COLLECTIONS = CORE_CONTENT_COLLECTIONS.filter(
+  (name) => name !== 'collections',
+) as ReadonlyArray<'screens' | 'layouts' | 'components' | 'emailTemplates'>
 
 const HOST_COLLECTION_KIND: Record<
-  (typeof SCANNED_HOST_COLLECTIONS)[number],
+  (typeof SCANNED_HOST_COLLECTIONS)[number] & string,
   Extract<MediaReferenceKind, 'screen' | 'layout' | 'component' | 'email'>
 > = {
   screens: 'screen',
@@ -257,6 +230,26 @@ const VERSIONS_PER_DOCUMENT = 3
 /** Content collections per site, and entries per collection. */
 const COLLECTIONS_PER_HOST = 50
 const ENTRIES_PER_COLLECTION = 500
+
+/**
+ * Documents read per plugin-owned collection, per site (AGL-1867).
+ *
+ * Matches `DOCS_PER_COLLECTION`, and for the same reason: past this the answer
+ * costs more than it is worth, and the honest response to a catalog of 500
+ * products is `partial` coverage — "we could not check everywhere" — not a
+ * quietly shortened list that reads as a clean bill of health.
+ */
+const PLUGIN_DOCS_PER_COLLECTION = 200
+
+/**
+ * Plugin collections queried concurrently per site.
+ *
+ * There are twenty-five of them and most are empty on most sites, so issuing
+ * them one at a time would put twenty-five sequential round-trips behind a
+ * button that already blocks a delete confirmation. This is the granularity at
+ * which the budget can still stop the pass.
+ */
+const PLUGIN_COLLECTION_CHUNK = 8
 
 /**
  * Documents one scan may read.
@@ -387,6 +380,30 @@ const displayNameOf = (snapshot: FirebaseFirestore.DocumentSnapshot): string =>
  */
 const emailTemplateName = (key: string): string =>
   TENANT_EMAILS.find((entry) => entry.key === key)?.name ?? key
+
+/**
+ * What to call a plugin-owned document in the list (AGL-1867).
+ *
+ * Twenty-five collections written by thirteen plugins do not agree on a name
+ * field, and nothing declares which one they use — so this tries the four the
+ * repo actually uses, in the order a person would want them. `title` leads
+ * because that is what commerce products, events and member posts carry;
+ * `displayName` follows for the besigner-adjacent ones.
+ *
+ * The fallback is the document id, never a skipped row. A product whose title
+ * failed to read still uses the asset, and "this thing you cannot name uses
+ * it" is a far better answer than silence in the one panel where silence means
+ * "go ahead and delete".
+ */
+const pluginRowNameOf = (
+  snapshot: FirebaseFirestore.DocumentSnapshot,
+): string => {
+  for (const field of ['title', 'name', 'displayName', 'label']) {
+    const value = snapshot.get(field)
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return snapshot.id
+}
 
 /** The name a reference row shows, by kind. */
 const rowNameOf = (
@@ -611,6 +628,93 @@ export async function scanMediaReferences(
         }
       }),
     )
+  }
+
+  // ── Pass 2b: plugin-owned content (AGL-1867) ───────────────────────────
+  // The other half of this issue. A product, an event, a bookable service, a
+  // members-only post: ordinary host subcollections written by the
+  // first-party feature plugins under `libs/plugins/*`, holding assets an
+  // author picked out of exactly this library. A commerce product carries
+  // `imageUrl` and `mediaUrls`, so a product photo used nowhere else came
+  // back as an empty list — and the panel's job is to be believed.
+  //
+  // WHICH collections is not decided here; see `PLUGIN_CONTENT_COLLECTIONS`,
+  // whose whole design is that a name nobody has thought about is SCANNED and
+  // a name outside the corpus had to be written down with a reason, with a
+  // build guard holding the list equal to a repo-wide sweep. Nothing about
+  // plugin schemas is known here: each document is flattened by
+  // `documentHaystack` — decoding `nodes`/`elements` on the way, so a plugin
+  // that adopts the compressed form is covered without a code change — and
+  // the matching field's dotted path is recovered by the same generic walk
+  // the host document gets.
+  //
+  // Placed after the published-version pass and before history on purpose.
+  // Plugin content is LIVE — a visitor sees the product page today — so it
+  // belongs on the live tier, and running out of budget here downgrades the
+  // answer to `partial`. It goes second within that tier because Pass 2 is
+  // one read per document and this is one query per collection per site.
+  for (const host of hosts.slice(0, HOSTS_PER_SCAN)) {
+    for (const group of chunked(
+      [...PLUGIN_CONTENT_COLLECTIONS],
+      PLUGIN_COLLECTION_CHUNK,
+    )) {
+      if (!budget.open) {
+        liveTruncated = true
+        break
+      }
+      await Promise.all(
+        group.map(async (collectionName) => {
+          let page: FirebaseFirestore.QuerySnapshot
+          try {
+            page = await host.ref
+              .collection(collectionName)
+              .limit(PLUGIN_DOCS_PER_COLLECTION + 1)
+              .get()
+          } catch (error) {
+            // A FAILED READ IS NOT AN EMPTY ONE.
+            //
+            // The single most dangerous line in this module would be a
+            // `.catch(() => null)` here: a missing index, a rules change, a
+            // transient Firestore error would all fold into "this collection
+            // holds no references", which is the exact shape of the bug the
+            // whole file exists to prevent — an author shown a confident
+            // "nothing uses it" that was really an error. So the failure is
+            // logged and charged to COVERAGE instead, which forces the panel
+            // and the delete confirmation onto their `unknown` sentences.
+            console.error(
+              'media reference scan could not read plugin collection',
+              { hostId: host.id, collection: collectionName },
+              error,
+            )
+            liveTruncated = true
+            return
+          }
+          budget.charge(page.size)
+          if (page.size > PLUGIN_DOCS_PER_COLLECTION) liveTruncated = true
+          for (const document of page.docs.slice(
+            0,
+            PLUGIN_DOCS_PER_COLLECTION,
+          )) {
+            if (document.get('deletedAt')) continue
+            if (!isReferenced(documentHaystack(document.data()))) continue
+            references.push({
+              kind: 'plugin',
+              id: document.id,
+              name: pluginRowNameOf(document),
+              hostId: host.id,
+              hostSubdomain: host.subdomain,
+              // The collection IS the label — the client turns
+              // `productCategories` into "Product category" and routes the
+              // row off the same value.
+              collectionId: collectionName,
+              field:
+                referencingFieldPath(document.data(), isReferenced) ??
+                undefined,
+            })
+          }
+        }),
+      )
+    }
   }
 
   // ── Pass 3: version history, with whatever budget is left ──────────────

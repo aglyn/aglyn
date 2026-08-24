@@ -78,6 +78,17 @@ type Doc = Record<string, any>
 const store = new Map<string, Map<string, Doc>>()
 
 /**
+ * Collection paths whose `get()` throws (AGL-1867).
+ *
+ * A read that FAILS and a collection that is genuinely empty are the same
+ * value coming out of a `catch` that returns nothing, and the difference is
+ * whether an author is about to delete something that is in use. There is no
+ * way to prove the scan tells them apart without making a read fail on
+ * purpose, so the fake grows the ability to.
+ */
+const failingCollections = new Set<string>()
+
+/**
  * Documents materialized by the scan.
  *
  * The panel runs this per asset on a user's click and again inside the delete
@@ -115,6 +126,13 @@ function collectionRef(path: string, filters: Array<[string, any]> = [], cap = I
     select: () => ref,
     orderBy: () => ref,
     get: async () => {
+      if (failingCollections.has(path)) {
+        // The shape Firestore actually throws: a missing composite index, a
+        // rules change, a transient unavailable. None of them mean "empty".
+        throw Object.assign(new Error(`FAILED_PRECONDITION: ${path}`), {
+          code: 9,
+        })
+      }
       const all = [...(store.get(path) ?? new Map()).entries()]
         .filter(([, data]) =>
           filters.every(([field, value]) => fieldAt(data, field) === value),
@@ -304,6 +322,7 @@ const kindsFor = (result: ScanResult) =>
 
 beforeEach(() => {
   store.clear()
+  failingCollections.clear()
   reads = 0
   mockVerifyIdToken.mockReset()
   mockVerifyIdToken.mockResolvedValue({ uid: 'user-1', email_verified: true })
@@ -338,6 +357,15 @@ beforeEach(() => {
     ['email-png', 'email-hero.png'],
     ['email-bytes-png', 'email-packed.png'],
     ['email-header-png', 'email-header.png'],
+    ['product-png', 'blue-widget.png'],
+    ['product-gallery-png', 'blue-widget-back.png'],
+    ['variant-png', 'blue-widget-large.png'],
+    ['event-png', 'launch-party.png'],
+    ['service-png', 'consultation.png'],
+    ['storefront-png', 'storefront-logo.png'],
+    ['category-png', 'widgets-category.png'],
+    ['retired-product-png', 'retired-widget.png'],
+    ['order-snapshot-png', 'sold-widget.png'],
   ] as const) {
     seed(`orgs/${ORG_ID}/media`, id, {
       fileName,
@@ -440,6 +468,66 @@ beforeEach(() => {
   })
   seed(`hosts/${HOST_ID}/emailTemplates/gift-card/versions`, 'gift-live', {
     nodes: { root: { $id: 'root', componentId: 'container' } },
+  })
+
+  // ── Plugin-owned documents (AGL-1867) ──────────────────────────────────
+  // The half of this issue that was still open. These are ordinary host
+  // subcollections written by the first-party feature plugins, and every one
+  // of them held assets the panel reported as used NOWHERE.
+  //
+  // Seeded across four different plugins on purpose. A fixture in `products`
+  // alone would pass against a one-collection fix, and "verified in
+  // aggregate, missing an entire collection" is the exact failure this issue
+  // is a case of.
+  seed(`hosts/${HOST_ID}/products`, 'product-widget', {
+    title: 'Blue widget',
+    // The two fields `libs/plugins/commerce/src/lib/server/product.ts` writes.
+    imageUrl: refTo('product-png'),
+    mediaUrls: [refTo('product-gallery-png')],
+    // Nested inside an array of objects — a variant's own photo. The generic
+    // field walk has to reach it; a declared list of media-bearing field
+    // paths would have had to name `variants.1.imageUrl`, which is why there
+    // is no such list.
+    variants: [
+      { sku: 'BW-S', title: 'Small' },
+      { sku: 'BW-L', title: 'Large', imageUrl: refTo('variant-png') },
+    ],
+  })
+  // Soft-deleted, and therefore NOT a dependent: the products hub stamps
+  // `deletedAt` rather than removing the row, and reporting a retired product
+  // would tell an author an asset is in use when nothing renders it.
+  seed(`hosts/${HOST_ID}/products`, 'product-retired', {
+    title: 'Retired widget',
+    deletedAt: 1_700_000_000_000,
+    imageUrl: refTo('retired-product-png'),
+  })
+  seed(`hosts/${HOST_ID}/productCategories`, 'category-widgets', {
+    name: 'Widgets',
+    imageUrl: refTo('category-png'),
+  })
+  seed(`hosts/${HOST_ID}/events`, 'event-launch', {
+    title: 'Launch party',
+    coverImage: refTo('event-png'),
+  })
+  // A bookable service, stored with a COMPRESSED node tree. Nothing writes a
+  // plugin document this way today; it is here because `documentHaystack`
+  // decodes on the way in, and a fix that only handled plain maps would pass
+  // every other case in this block and fail this one.
+  seed(`hosts/${HOST_ID}/services`, 'service-consult', {
+    name: 'Consultation',
+    nodes: compressedNodes(nodesReferencing('service-png')),
+  })
+  // A per-plugin settings document — the storefront's own logo.
+  seed(`hosts/${HOST_ID}/settings`, 'storefront', {
+    logoUrl: refTo('storefront-png'),
+  })
+  // In an EXCLUDED collection, and deliberately so. An order copies the
+  // product's image at purchase time; that copy is a record of what was sold,
+  // not a live dependent, and a store's order history is unbounded. If this
+  // ever starts reporting, the exclusion has silently stopped working.
+  seed(`hosts/${HOST_ID}/orders`, 'order-1001', {
+    number: 1001,
+    lineItems: [{ title: 'Blue widget', imageUrl: refTo('order-snapshot-png') }],
   })
 
   // ── Content collections ────────────────────────────────────────────────
@@ -593,6 +681,171 @@ describe('media usage scan — email templates', () => {
    */
   it('does not report an email template that holds nothing', async () => {
     expect(kindsFor(await scan('orphan-png'))).toEqual([])
+  })
+})
+
+/**
+ * AGL-1867, the half that stayed open. A commerce product carries `imageUrl`
+ * and `mediaUrls`, so a product photo used nowhere else came back with an
+ * empty list under `full` coverage — the reading that lets a delete proceed
+ * with a clean bill of health.
+ *
+ * ## Every case here was mutation-tested against the fix
+ *
+ * Removing `'products'` from `PLUGIN_CONTENT_COLLECTIONS` turns the product
+ * cases red and leaves the events/services/settings cases green — which is
+ * the point of spreading the fixtures across four plugins. Removing the whole
+ * `PLUGIN_CONTENT_COLLECTIONS` loop from the scanner turns all of them red
+ * while the negative controls below stay green.
+ */
+describe('media usage scan — plugin-owned documents', () => {
+  it('finds an asset used only on a product', async () => {
+    const result = await scan('product-png')
+    expect(kindsFor(result)).toEqual(['plugin:product-widget'])
+    expect(result.references[0]).toMatchObject({
+      kind: 'plugin',
+      collectionId: 'products',
+      name: 'Blue widget',
+      hostId: HOST_ID,
+      field: 'imageUrl',
+    })
+    // And it is a CLAIMABLE answer, not a hedged one — the whole failure was
+    // an empty list arriving under a coverage flag that permitted deletion.
+    expect(result.coverage).toBe('full')
+  })
+
+  it("finds one in a product's gallery array", async () => {
+    const result = await scan('product-gallery-png')
+    expect(kindsFor(result)).toEqual(['plugin:product-widget'])
+    expect(result.references[0].field).toBe('mediaUrls.0')
+  })
+
+  it("finds one nested on a single VARIANT's own photo", async () => {
+    const result = await scan('variant-png')
+    expect(kindsFor(result)).toEqual(['plugin:product-widget'])
+    expect(result.references[0].field).toBe('variants.1.imageUrl')
+  })
+
+  /**
+   * Per COLLECTION, not in aggregate. A sweep that is green overall can be
+   * missing one collection entirely, and each of these is a different plugin
+   * writing a differently-shaped document.
+   */
+  it.each([
+    ['category-png', 'category-widgets', 'productCategories', 'Widgets'],
+    ['event-png', 'event-launch', 'events', 'Launch party'],
+    ['service-png', 'service-consult', 'services', 'Consultation'],
+    ['storefront-png', 'storefront', 'settings', 'storefront'],
+  ])(
+    'finds %s on hosts/{hostId}/%s',
+    async (mediaId, documentId, collection, name) => {
+      const result = await scan(mediaId as string)
+      expect(kindsFor(result)).toEqual([`plugin:${documentId}`])
+      expect(result.references[0]).toMatchObject({
+        kind: 'plugin',
+        collectionId: collection,
+        name,
+      })
+    },
+  )
+
+  /**
+   * The scan reads plugin documents generically, and a plugin that adopts the
+   * compressed storage form must not fall out of the corpus for it — the
+   * AGL-1223 trap, one collection over.
+   */
+  it('decodes a compressed node tree on a plugin document', async () => {
+    const service = store.get(`hosts/${HOST_ID}/services`).get('service-consult')
+    // The fixture really is the hostile form, not a plain map that would pass
+    // against the bug.
+    expect(Buffer.isBuffer(service.nodes)).toBe(true)
+    expect(mediaRefPattern('service-png').test(JSON.stringify(service))).toBe(
+      false,
+    )
+    expect(kindsFor(await scan('service-png'))).toEqual([
+      'plugin:service-consult',
+    ])
+  })
+
+  // ── Negative controls ────────────────────────────────────────────────
+  // Without these, a scan that reported every plugin document for every asset
+  // would pass everything above.
+
+  it('does not report a plugin document that holds nothing', async () => {
+    expect(kindsFor(await scan('orphan-png'))).toEqual([])
+  })
+
+  it('does not report a SOFT-DELETED product', async () => {
+    // The row still exists in Firestore and still contains the reference;
+    // nothing renders it, so calling the asset "in use" would be the mirror
+    // of this bug — an author kept from deleting something they can delete.
+    expect(kindsFor(await scan('retired-product-png'))).toEqual([])
+  })
+
+  it('does not report an EXCLUDED collection — an order is a record, not a use', async () => {
+    // `orders` is in MEDIA_SCAN_EXCLUDED with a written reason. This is what
+    // makes that exclusion a decision rather than a description: if the
+    // exclusion were dropped, this goes red.
+    expect(
+      store.get(`hosts/${HOST_ID}/orders`).get('order-1001').lineItems[0]
+        .imageUrl,
+    ).toContain('order-snapshot-png')
+    expect(kindsFor(await scan('order-snapshot-png'))).toEqual([])
+  })
+
+  /**
+   * The self-reference trap, which is why `media` is excluded rather than
+   * merely unlisted. Every asset's own library document holds its own url,
+   * cdnPath and storage path — every needle the scan carries — so scanning
+   * that collection would report all 206 assets as used, by themselves, and
+   * the panel would become noise nobody reads.
+   */
+  it('does not report the asset as using ITSELF', async () => {
+    const own = store.get(`orgs/${ORG_ID}/media`).get('orphan-png')
+    expect(own.url).toContain('orphan-png')
+    const result = await scan('orphan-png')
+    expect(result.references).toEqual([])
+    expect(result.complete).toBe(true)
+  })
+
+  /**
+   * THE failure mode this whole module exists to stop, at its newest edge.
+   *
+   * A plugin collection whose read throws — a missing index, a rules change,
+   * a transient unavailable — must not come back as "this collection holds no
+   * references". A `.catch(() => [])` there would produce an empty list under
+   * `full` coverage, which the delete confirmation renders as a clean bill of
+   * health. The failure is charged to COVERAGE instead.
+   *
+   * FORCED RED: replace the `catch` in the plugin pass with one that returns
+   * an empty page and this fails on the `coverage` line, having found the
+   * asset nowhere.
+   */
+  it('a plugin collection that FAILS to read downgrades coverage, never the result', async () => {
+    failingCollections.add(`hosts/${HOST_ID}/products`)
+    const result = await scan('product-png')
+    expect(result.references).toEqual([])
+    // Not `full`, and not `published` either: nothing here may be presented
+    // as unused, because the thing that would have said otherwise is exactly
+    // what failed to read.
+    expect(result.coverage).toBe('partial')
+    expect(result.complete).toBe(false)
+  })
+
+  it('keeps every OTHER collection when one of them fails', async () => {
+    failingCollections.add(`hosts/${HOST_ID}/products`)
+    const result = await scan('event-png')
+    // The failure is not allowed to eat the answer: the event is still found.
+    expect(kindsFor(result)).toEqual(['plugin:event-launch'])
+    // And the answer still says it was incomplete, because it was.
+    expect(result.coverage).toBe('partial')
+  })
+
+  it('a failed read never makes a CORE surface report as unused either', async () => {
+    failingCollections.add(`hosts/${HOST_ID}/products`)
+    const result = await scan('hero-png')
+    expect(kindsFor(result)).toEqual(['screen:screen-home'])
+    expect(result.complete).toBe(false)
   })
 })
 

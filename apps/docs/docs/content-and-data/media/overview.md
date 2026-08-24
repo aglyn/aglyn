@@ -78,8 +78,22 @@ feature; large video uploads and higher storage are gated by plan.
   a **picker** (choosing an image for a page, a logo or a favicon): a picker is for
   choosing, not for editing.
 - See **per-asset usage**: delivery counters load automatically, and a **Used on**
-  audit runs on demand — click **Find where this is used** to list every screen,
-  layout, and content entry that references the asset, each a link that opens it.
+  audit runs on demand — click **Find where this is used** to list everything that
+  references the asset, each a link that opens it. The audit covers **pages, layouts,
+  reusable components, emails, site settings** (logo, favicon, social image),
+  **content entries**, and **plugin content** — products and their variants, product
+  categories, events, bookable services, member posts and the rest. It reads every
+  version of a page, not just the published one, so an image held only by a draft
+  still shows up.
+
+  Two things it deliberately does **not** check, and it says so under the result:
+  **order history, form submissions and the activity log**. Those record a past use
+  — an order keeps a copy of the product photo as it was when it sold — so deleting
+  the file changes nothing about them.
+
+  If the audit cannot finish, it tells you that instead of showing an empty list.
+  **"We could not check everywhere"** is not the same answer as **"nothing uses
+  this"**, and only the second one is safe to delete on.
 - **Delete from the detail drawer too**, right under the usage audit — so you can run
   **Find where this is used**, read the answer, and act on it without leaving the file.
   The confirmation opens immediately and fills the usage warning in as the scan lands,
