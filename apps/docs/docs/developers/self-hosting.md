@@ -423,6 +423,7 @@ after; the values are baked into the static output.
 | `DOCS_GA_TRACKING_ID` | No analytics tag is loaded at all |
 | `DOCS_ERROR_BEACON_ENDPOINT` | The browser error beacon installs no handlers |
 | `DOCS_STATUS_TARGETS` | `/status` probes nothing and says so |
+| `DOCS_STATUS_FALLBACK_URL` | `/status` names no independent monitor to fall back to |
 | `DOCS_URL` | The canonical origin is `https://docs.aglyn.com` |
 | `DOCS_ORGANIZATION_NAME` | The footer copyright reads `Aglyn LLC`, followed by Aglyn's trademark attribution. Setting it replaces the name and drops the attribution — a rebranded build must not claim our marks. |
 
@@ -460,6 +461,15 @@ Whatever you configure, the page reports a service as operational **only**
 when it answers 200 with the platform's own health body. A reply it cannot
 read — a bot-protection challenge, a proxy error page, a redirect — is shown
 as *no reading*, never as healthy, and never as an outage either.
+
+`DOCS_STATUS_FALLBACK_URL` takes one `http(s)` URL and should point at a status
+page **someone else hosts** — a free UptimeRobot page, or any third-party
+monitor. `/status` prints it in full under a line telling the reader to check
+it when this page will not load, which is the one thing this page cannot do for
+itself: it is served from your own infrastructure, so an outage broad enough to
+take that down takes your status page with it. Leave it blank and no such line
+is printed; a value that is not plainly `http:` or `https:` is dropped rather
+than rendered.
 If you point `DOCS_ERROR_BEACON_ENDPOINT` at your own console's `/api/errors`,
 set `NEXT_PUBLIC_DOCS_ORIGIN` on that **console** to your docs origin as well —
 the collector's CORS allowlist reads it.

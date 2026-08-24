@@ -131,6 +131,33 @@ export function parseTargets(raw: unknown): StatusTarget[] {
     .filter((target) => Boolean(target.name && target.base))
 }
 
+/**
+ * `DOCS_STATUS_FALLBACK_URL` → an independent status page, or nothing.
+ *
+ * The one link on this page whose whole job is to work when this page does
+ * not, so it is the one link that must not be able to point somewhere
+ * unexpected. This is operator-supplied configuration rendered into an
+ * `href`, and `javascript:` and `data:` are both valid URLs — a value that is
+ * not plainly `http(s)` is dropped rather than rendered, because a status
+ * page is exactly the surface a reader arrives at already alarmed and
+ * inclined to click.
+ *
+ * Returns the URL to link, or `null` for "print no such sentence". UNSET IS
+ * NOT A DEFAULT (AGL-2124): a self-hosted build must never fall back to
+ * Aglyn's monitor, which would report our uptime as the operator's at the
+ * moment theirs is down.
+ */
+export function fallbackLink(raw: unknown): string | null {
+  if (typeof raw !== 'string' || !raw.trim()) return null
+  const value = raw.trim()
+  try {
+    const { protocol } = new URL(value)
+    return protocol === 'https:' || protocol === 'http:' ? value : null
+  } catch {
+    return null
+  }
+}
+
 /** The host a visitor should recognise, for the card. Never an internal id. */
 export function targetHost(target: StatusTarget): string {
   try {

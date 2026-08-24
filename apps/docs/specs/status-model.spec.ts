@@ -32,6 +32,7 @@
  */
 
 import {
+  fallbackLink,
   initialReadings,
   overallStatus,
   parseTargets,
@@ -354,5 +355,44 @@ describe('overallStatus', () => {
     expect(overallStatus([target()], { console: reading('operational') })).toBe(
       'operational',
     )
+  })
+})
+
+/**
+ * The fallback link is the one thing on this page written to be useful when
+ * the page itself is gone, so it gets the same "unset means off, never ours"
+ * rule as every other `DOCS_*` value — and one rule of its own, because it is
+ * the only operator-supplied string this page renders into an `href`.
+ */
+describe('fallbackLink', () => {
+  it('is nothing when unset, so a self-host build links to no monitor at all', () => {
+    // The AGL-2124 shape: a default here would tell an operator's customers
+    // that AGLYN is up at the moment THEIR platform is down.
+    expect(fallbackLink(undefined)).toBeNull()
+    expect(fallbackLink(null)).toBeNull()
+    expect(fallbackLink('')).toBeNull()
+    expect(fallbackLink('   ')).toBeNull()
+  })
+
+  it('passes an http(s) URL through, trimmed', () => {
+    expect(fallbackLink('https://stats.example.com/abc123')).toBe(
+      'https://stats.example.com/abc123',
+    )
+    expect(fallbackLink('  http://status.example.com  ')).toBe(
+      'http://status.example.com',
+    )
+  })
+
+  it('drops a scheme that is not http(s), rather than rendering it', () => {
+    // A status page is where an alarmed reader clicks without thinking, and
+    // both of these are URLs the `new URL()` parser accepts happily.
+    expect(fallbackLink('javascript:alert(1)')).toBeNull()
+    expect(fallbackLink('data:text/html,<script>alert(1)</script>')).toBeNull()
+  })
+
+  it('drops anything that is not a URL at all', () => {
+    expect(fallbackLink('stats.example.com')).toBeNull()
+    expect(fallbackLink('not a url')).toBeNull()
+    expect(fallbackLink(42)).toBeNull()
   })
 })

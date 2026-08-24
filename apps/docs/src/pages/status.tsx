@@ -53,6 +53,7 @@ import {
 } from 'react'
 
 import {
+  fallbackLink,
   initialReadings,
   overallStatus,
   parseTargets,
@@ -77,6 +78,10 @@ export default function StatusPage(): ReactElement {
     () => parseTargets(siteConfig.customFields?.['statusTargets']),
     [siteConfig.customFields],
   )
+  // Where to send a reader when THIS page is the thing that is down. Not
+  // memoized alongside the targets on purpose: it is a string, it feeds no
+  // effect, and an unstable identity here cannot cost anything.
+  const fallbackUrl = fallbackLink(siteConfig.customFields?.['statusFallbackUrl'])
   const [readings, setReadings] = useState<Record<string, Reading>>(() =>
     initialReadings(targets),
   )
@@ -223,6 +228,34 @@ export default function StatusPage(): ReactElement {
           enough to take out the whole platform could take this page with it. If it does
           not load at all, assume that is a real signal.
         </p>
+        {/*
+          The one paragraph written to be read somewhere other than here.
+
+          It exists because the sentence above admits this page can go down
+          with the platform and then left the reader with nowhere to go. The
+          URL is spelled out rather than hidden behind link text on purpose:
+          the moment it is useful is the moment this page will not render, so
+          it has to survive being screenshotted, cached, or read aloud.
+
+          `rel="noopener"` because it is an off-site link, and no `noindex`
+          reasoning applies — we WANT this one findable.
+        */}
+        {fallbackUrl ? (
+          <p
+            data-status-fallback={fallbackUrl}
+            style={{ fontSize: '0.9rem', color: 'var(--ifm-color-emphasis-700)' }}
+          >
+            <strong>If this page will not load, check the independent monitor:</strong>{' '}
+            <a href={fallbackUrl} rel="noopener" target="_blank">
+              {fallbackUrl}
+            </a>
+            . It runs outside our hosting and checks the same services from the
+            outside, so it stays up when we do not. It reports only up or down —
+            it is a second opinion on reachability, not a service level we have
+            committed to, and the uptime figure it shows is its own measurement
+            over however long it has been watching.
+          </p>
+        ) : null}
         <p style={{ fontSize: '0.9rem', color: 'var(--ifm-color-emphasis-700)' }}>
           If a service shows <strong>no reading</strong> while everything else on your
           network works, that is worth reporting to us — from your browser, a real

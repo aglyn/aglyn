@@ -144,6 +144,7 @@ one of these is **off when unset, and never falls back to Aglyn's**:
 | `DOCS_GA_TRACKING_ID` | no analytics tag is loaded at all |
 | `DOCS_ERROR_BEACON_ENDPOINT` | the browser error beacon installs no handlers |
 | `DOCS_STATUS_TARGETS` | `/status` probes nothing and says so |
+| `DOCS_STATUS_FALLBACK_URL` | `/status` names no independent monitor to fall back to |
 | `DOCS_URL` | canonical origin defaults to `https://docs.aglyn.com` — set it |
 | `DOCS_ORGANIZATION_NAME` | the footer copyright reads `Aglyn LLC` — set it |
 
@@ -158,6 +159,14 @@ The fifth field is optional and defaults to `/api/health`; set it to probe a
 subsystem endpoint such as `/api/health/render/site` instead. A description
 may not contain a comma — the comma separates entries, and the remainder is
 dropped as an entry with no origin.
+
+`DOCS_STATUS_FALLBACK_URL` is a single `http(s)` URL — a status page hosted by
+someone other than you, such as a free UptimeRobot page. `/status` prints it,
+spelled out in full, under a line telling the reader to go there when this page
+itself will not load. Set it to **your own** monitor: the page is served from
+your infrastructure, so a broad enough outage takes it down too, and this link
+is the only thing on it that still works when that happens. Anything that is
+not plainly `http:` or `https:` is dropped rather than rendered.
 
 If you point `DOCS_ERROR_BEACON_ENDPOINT` at your own console's
 `/api/errors`, set `NEXT_PUBLIC_DOCS_ORIGIN` on that console to your docs
