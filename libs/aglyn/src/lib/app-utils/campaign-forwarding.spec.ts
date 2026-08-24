@@ -329,6 +329,24 @@ describe('consent, and the three states of it', () => {
     expect(window.sessionStorage.getItem(CAMPAIGN_VISIT_STORAGE_KEY)).toBeNull()
   })
 
+  it('refuses a DIRECT request to remember, denied or merely undecided', () => {
+    // The setter reaches the store through one door and this is the other one.
+    // Asserting only through the setter left the guard inside
+    // `rememberVisitCampaign` unexecuted: a mutation that deleted it kept the
+    // whole suite green, because a denial takes the `removeItem` branch and
+    // never calls this function at all.
+    landOn('https://aglyn.com/?utm_source=google')
+
+    setCampaignForwardingConsent(false)
+    expect(rememberVisitCampaign()).toBeNull()
+    expect(window.sessionStorage.getItem(CAMPAIGN_VISIT_STORAGE_KEY)).toBeNull()
+
+    resetCampaignForwarding()
+    setCampaignForwardingConsent(null)
+    expect(rememberVisitCampaign()).toBeNull()
+    expect(window.sessionStorage.getItem(CAMPAIGN_VISIT_STORAGE_KEY)).toBeNull()
+  })
+
   it('GRANTED stores the first touch, in the canonical wire form', () => {
     landOn(
       'https://aglyn.com/?utm_source=google&utm_medium=cpc&utm_campaign=sept-launch',
@@ -400,7 +418,56 @@ function withBrokenSessionStorage(body: () => void): void {
   }
 }
 
+/**
+ * The other way a store breaks: it is present and hands back a `getItem` that
+ * throws. A different branch from the one above, and asserting only the first
+ * left the second unexecuted — a mutation that collapsed the `getItem` catch
+ * into "no campaign" kept the whole suite green.
+ */
+function withThrowingGetItem(body: () => void): void {
+  const original = Object.getOwnPropertyDescriptor(window, 'sessionStorage')
+  const fake = {
+    getItem() {
+      throw new Error('storage disabled')
+    },
+    setItem() {
+      throw new Error('storage disabled')
+    },
+    removeItem() {
+      /* a no-op, so the failure under test is the READ */
+    },
+  }
+  Object.defineProperty(window, 'sessionStorage', {
+    configurable: true,
+    get: () => fake,
+  })
+  try {
+    body()
+  } finally {
+    if (original) Object.defineProperty(window, 'sessionStorage', original)
+    else delete (window as unknown as Record<string, unknown>)['sessionStorage']
+  }
+}
+
 describe('an unreadable store is not an organic visitor', () => {
+  it('reports `unreadable` when the READ itself throws', () => {
+    withThrowingGetItem(() => {
+      setCampaignForwardingConsent(true)
+
+      expect(readVisitCampaign()).toStrictEqual({ status: 'unreadable' })
+      expect(readVisitCampaign()).not.toStrictEqual({ status: 'none' })
+    })
+  })
+
+  it('falls through to the live URL when the READ throws', () => {
+    landOn('https://aglyn.com/?utm_source=google')
+    withThrowingGetItem(() => {
+      setCampaignForwardingConsent(true)
+
+      expect(campaignToForward()).toStrictEqual({ source: 'google' })
+    })
+  })
+
   it('reports `unreadable`, which is a third answer and not `none`', () => {
     // The whole reason the read is a tri-state. A `catch` returning null would
     // say "this visitor named no campaign" — a measured zero standing in for a
