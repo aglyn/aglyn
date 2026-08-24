@@ -328,6 +328,56 @@ export interface LegalDocumentManifestEntry {
  * Publication-first as always: the bytes come from the PAGE, never from a
  * hand-written file.
  *
+ * 2026-08-24 (AGL-1648): the DPA and the Subprocessors page changed again, and
+ * again NO BUMP — for the AGL-1990 reason above, which is worth restating
+ * because it is the question every legal change now has to answer first.
+ * Neither page is in `LEGAL_URLS`; both live in `LEGAL_REFERENCE_URLS`, which
+ * exists precisely to hold published-but-not-clickwrapped documents. So
+ * `LEGAL_DOCUMENT_VERSION` stays `v1`, the two hashes below are untouched, and
+ * NO re-acceptance interstitial fires. Verified rather than assumed:
+ * `check:legal-snapshots` re-hashed the archived v1 terms.txt (36704 bytes) and
+ * privacy.txt (15286 bytes) after publication and both still match.
+ *
+ * What changed, both gdoc-first then published then confirmed live:
+ *
+ *   - Subprocessors: **Linear** (Linear Orbit, Inc.) added as a subprocessor.
+ *     The console's shipped "Report an issue" dialog has been POSTing the
+ *     reporter's email and uid, the org name and id, and the report free text
+ *     to `api.linear.app` on `LINEAR_API_KEY` — live in production, on no
+ *     published list. Four green checks missed it, each structurally: the
+ *     dependency-egress register scans hosts found in PACKAGES ON DISK and this
+ *     is a first-party `fetch`; `cookie-inventory` keys on cookies and Linear
+ *     sets none; `assist-anthropic-subprocessor-gate.spec.ts` covers exactly one
+ *     vendor; and `check:legal-drift` compares prose to prose. The row is a
+ *     CORRECTION, not advance notice — the change-log entry says so.
+ *
+ *   - DPA 7.2 and the Subprocessors intro: the thirty-day advance-notice
+ *     commitment for new subprocessors, and the objection window that ran with
+ *     it, are DELETED. Zach's call, 2026-08-24, on the ground that this is v1
+ *     with no real customers. He was warned first and the warning stands:
+ *     ⚠️ GDPR Art. 28(2) contemplates the controller having an opportunity to
+ *     OBJECT to a sub-processor change under a general written authorisation,
+ *     and a DPA that offers none is a finding waiting to happen in any
+ *     enterprise security review. A middle option — keep notice, drop the fixed
+ *     period — was offered and explicitly rejected. Do not quietly restore it;
+ *     if it comes back it should come back as a decision, not as a tidy-up.
+ *
+ *   - DPA 13.2(b), a CONSEQUENTIAL edit and not a discretionary one: it
+ *     completed SCC Clause 9 Option 2 by POINTING at Section 7 for "the notice
+ *     period and objection mechanism". With Section 7's period gone that
+ *     sentence asserted a period the document no longer contains anywhere, so
+ *     it now names the Subprocessors page as the then-current list and stops
+ *     there. ⚠️ The practical effect is that Clause 9(a) Option 2's mandatory
+ *     time-period blank is UNSPECIFIED again — the same defect AGL-1648 recorded
+ *     as "the sharpest in the set" when it was an empty `[Specify time period]`
+ *     on 08-14. It is now empty by decision rather than by oversight. That is a
+ *     better failure mode and it is still the failure mode.
+ *
+ * The `/legal` index cards carry their own copy of each document's date and are
+ * a THIRD place that goes stale — `check:legal-index-dates` went red on both
+ * cards and was fixed by republishing the index screen. Publishing a legal
+ * document is three edits, not one.
+ *
  * ## ONE snapshot in the tree, and why that is enough
  *
  * Only the CURRENT version is checked out. Superseded text is not deleted —
