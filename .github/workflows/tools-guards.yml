@@ -588,6 +588,33 @@ jobs:
 
       - run: npm run check:facilitator-charge-shape
 
+      # AGL-1908. The Pricing Source of Truth's change-control rule requires a
+      # price or entitlement change to move together across six places, the
+      # last being the Decision Log. Five of the six are outside the repo and
+      # cannot be checked from here — Stripe, Figma, the hand-authored
+      # `aglyn.com/pricing` besigner content, `setup-stripe.mjs`'s
+      # hand-maintained copy, and the Drive Source of Truth. The sixth can be,
+      # and for nine days nothing did: the log went 2026-08-09 → 2026-08-18
+      # while the entire retention/packaging arc landed in between.
+      #
+      # The rule then started costing more than it collected. On 2026-08-24 an
+      # agent found a live entitlement leak, and one of its three reasons for
+      # declining to close it was that doing so is an entitlement change and
+      # "AGL-1908's change-control rule requires publication legs I cannot
+      # do". An unenforced rule that blocks a real fix is the worst of both, so
+      # the rule is now an exit code and the log is a file in this repo.
+      #
+      # Self-test first, and it earns the order here for a specific reason:
+      # this guard compares PARSED VALUES between refs, not changed paths. A
+      # path-level version would have demanded a pricing decision for
+      # `d393d34a9` — a docblock — and a guard people learn to route around is
+      # worse than none. The self-test pins that a comment-only change stays
+      # green while a moved price, a moved entitlement and a moved COGS rate
+      # each go red, so the sweep's green means the thing it claims.
+      - run: npm run test:decision-log
+
+      - run: npm run check:decision-log
+
       # AGL-2025. Unlike every step above, these two are about the CONTENT of
       # apps/ and libs/, not about tools/ — which is why the `paths:` filter
       # gained those two roots. A colour pinned into `libs/plugins` cannot
