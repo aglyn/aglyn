@@ -129,7 +129,7 @@ function seedRow(
     netCents: 10000,
     currency: 'usd',
     automaticTax: true,
-    customerAddress: { country: 'US', state: 'TX', city: 'Jarrell', postalCode: '76537' },
+    customerAddress: { country: 'US', state: 'TX', city: 'Testville', postalCode: '00000' },
     taxLines: [
       {
         amountCents: 660,

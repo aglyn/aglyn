@@ -81,11 +81,20 @@ const CURRENT_SHAPE_INVOICE = {
   ],
   total_tax_amounts: [{ amount: 660, tax_rate: 'txr_tx_state' }],
   automatic_tax: { enabled: true, status: 'complete' },
+  // THE ADDRESS IS FICTIONAL ON PURPOSE, and must stay that way (AGL-1491).
+  // Only `state` and `country` are load-bearing — they are the jurisdiction
+  // inputs the TX return reads; `city` and `line1` are carried through
+  // untouched, so the expectations below hold whatever these strings say.
+  //
+  // This fixture was originally pasted from a LIVE Stripe invoice, which made
+  // a real residential address the sample data in a public repo. Do not paste
+  // a real invoice back in for fidelity: `npm run check:residential-address`
+  // will refuse it, and git history does not forget.
   customer_address: {
-    city: 'Jarrell',
+    city: 'Testville',
     country: 'US',
-    line1: '125 Johnston Ln',
-    postal_code: '76537',
+    line1: '1 Directory Row',
+    postal_code: '00000',
     state: 'TX',
   },
   status_transitions: { paid_at: 1786687300 },
@@ -114,8 +123,8 @@ describe('platformInvoiceRevenue decomposes a paid invoice (AGL-1811)', () => {
     expect(record!.customerAddress).toEqual({
       country: 'US',
       state: 'TX',
-      city: 'Jarrell',
-      postalCode: '76537',
+      city: 'Testville',
+      postalCode: '00000',
     })
     expect(record!.automaticTax).toBe(true)
     expect(record!.paidAt).toEqual(new Date(1786687300 * 1000))
@@ -168,9 +177,9 @@ describe('platformInvoiceRevenue decomposes a paid invoice (AGL-1811)', () => {
       total_tax_amounts: [],
       automatic_tax: { enabled: false },
       customer_address: {
-        city: 'Jarrell',
+        city: 'Testville',
         country: 'US',
-        postal_code: '76537',
+        postal_code: '00000',
         state: 'TX',
       },
     })
