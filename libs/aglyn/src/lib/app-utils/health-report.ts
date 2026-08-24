@@ -1478,6 +1478,20 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
       'Re-checks stored plugin verdicts against the current verifier (AGL-1086). If it stops, a regression on a live version is never noticed.',
   },
   {
+    id: 'reverify-sso-domains',
+    label: 'SSO domain re-verification',
+    // Mondays 07:30 UTC, after the rest of the weekly block. Weekly is the
+    // right cadence because the threat needs a domain to lapse, clear a
+    // registrar grace period and be re-bought — months, not days — and a
+    // daily sweep would multiply DNS traffic by seven to learn nothing sooner.
+    cron: '30 7 * * 1',
+    runner: 'github-actions',
+    target: '/api/admin/reverify-sso-domains',
+    graceMinutes: 1440,
+    drives:
+      'Re-checks that every live SSO domain still publishes its DNS ownership token (AGL-1210). If it stops, a domain that changed hands keeps routing another company sign-ins and nothing notices. It reports only — it never revokes, because a revoke logs out an entire enterprise.',
+  },
+  {
     id: 'backfill-scope',
     label: 'Scope-drift detection',
     cron: '30 6 * * 1',

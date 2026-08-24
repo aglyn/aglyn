@@ -90,10 +90,20 @@ const mockDocHandle = (path: string) => ({
 
 let mockNotifications: Record<string, any>[] = []
 
+const mockPlatformEmailMeter: number[] = []
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   notifyStaff: async (payload: Record<string, any>) => {
     mockNotifications.push(payload)
+  },
+  // Recorded, not stubbed to a no-op. This mock is an ALLOW-LIST — an export
+  // it omits is `undefined` at the call site, not a missing-module error, so
+  // the receipt's meter would have failed as `is not a function` deep inside
+  // a best-effort path. Counting the calls turns that silence into an
+  // assertion (AGL-1438).
+  meterPlatformEmail: async (count = 1) => {
+    mockPlatformEmailMeter.push(count)
   },
   firebaseAdmin: {
     app: () => ({
@@ -120,6 +130,31 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     resetMs: Date.now() + 120_000,
     degraded: false,
   }),
+}))
+
+/**
+ * AGL-2400 — the emailed receipt.
+ *
+ * The double returns `{sent:false, reason:'unconfigured'}` when
+ * `mockEmailConfigured` is off, which is exactly what the real `sendEmail`
+ * answers on a deployment that never set `RESEND_API_KEY`. Modelling that
+ * outcome rather than throwing is the point: the route must treat an
+ * unsendable receipt as a non-event, and a double that threw would prove the
+ * catch rather than the contract.
+ */
+let mockSentEmails: Record<string, any>[] = []
+let mockEmailConfigured = true
+let mockEmailThrows = false
+
+jest.mock('@aglyn/shared-util-email', () => ({
+  __esModule: true,
+  sendEmail: async (options: Record<string, any>) => {
+    if (mockEmailThrows) throw new Error('resend unreachable')
+    mockSentEmails.push(options)
+    return mockEmailConfigured
+      ? { sent: true, id: 'msg_1' }
+      : { sent: false, reason: 'unconfigured' }
+  },
 }))
 
 jest.mock('../utils/get-host', () => ({
@@ -209,6 +244,10 @@ beforeEach(() => {
   mockAllowed = true
   mockWriteThrows = false
   mockNotifications = []
+  mockSentEmails = []
+  mockPlatformEmailMeter.length = 0
+  mockEmailConfigured = true
+  mockEmailThrows = false
   mockResolvedHost = { $id: 'host-acme', orgId: 'org-9' }
   mockNow = Date.UTC(2026, 7, 17, 9, 30)
   jest.spyOn(Date, 'now').mockImplementation(() => mockNow)
@@ -450,6 +489,100 @@ describe('staff are told, because the deadline is already running', () => {
     // that invites the subscriber to swear it all over again.
     await POST(formPost(COMPLETE))
     expect(theNotice().status).toBe('received')
+  })
+})
+
+/**
+ * AGL-2400 — the receipt the subscriber KEEPS.
+ *
+ * The receipt page is not the artifact; it is a page they can close. The form
+ * collects an email address under the hint "How we will tell you what happens
+ * next", and until AGL-2400 nothing was ever written to it — so a subscriber
+ * who filed a sworn statement and closed the tab held no reference, no date
+ * and no evidence they had filed at all, while a statutory clock ran.
+ *
+ * The assertions are about CONTENT, not about the call happening. A receipt
+ * that arrives without the reference, or that promises a window the receipt
+ * page does not, is a worse artifact than none.
+ */
+describe('the subscriber is emailed a copy of their receipt', () => {
+  it('sends the reference, from the same constants the page prints', async () => {
+    const response = await POST(formPost(COMPLETE))
+    const reference = (await response.text()).match(/CN-[0-9A-F]{10}/)?.[0]
+    expect(reference).toBeTruthy()
+
+    expect(mockSentEmails).toHaveLength(1)
+    const mail = mockSentEmails[0]
+    expect(mail.to).toBe('dana@acme.test')
+    expect(mail.subject).toContain(reference)
+    expect(mail.text).toContain(reference)
+    expect(mail.text).toContain(REMOVED)
+    // The put-back window is read from the same two constants as the page, so
+    // a change to the statutory reading cannot move one and leave the other.
+    expect(mail.text).toContain(
+      `${COUNTER_NOTICE_MIN_BUSINESS_DAYS}–${COUNTER_NOTICE_MAX_BUSINESS_DAYS}`,
+    )
+    // The reassurance a locked-out subscriber loses first when the tab closes.
+    expect(mail.text).toContain('not when we get to it')
+  })
+
+  it('replies to a human address rather than the no-reply sender', async () => {
+    setOperator({
+      ...AGLYN_OPERATED,
+      NEXT_PUBLIC_OPERATOR_LEGAL_EMAIL: 'legal@aglyn.com',
+    })
+    await POST(formPost(COMPLETE))
+    expect(mockSentEmails[0].replyTo).toBe('legal@aglyn.com')
+  })
+
+  it('sends ONE receipt however many times an anxious customer resubmits', async () => {
+    // The same gate as the staff notification, and for the same reason: the
+    // deduplicating id makes a resubmission the same row, so a second mail
+    // would be a duplicate receipt for a single filing — and the gate is what
+    // bounds an unauthenticated form's ability to mail an address a stranger
+    // typed into it.
+    await POST(formPost(COMPLETE))
+    await POST(formPost(COMPLETE))
+    await POST(formPost(COMPLETE))
+    expect(mockSentEmails).toHaveLength(1)
+  })
+
+  it('counts the receipt against the PLATFORM meter, not the host', async () => {
+    // AGL-1438: every `sendEmail` call site is metered or reasonedly exempt.
+    // Platform scope is the whole point here — the recipient is the person
+    // FILING against a site, so billing the reported host for the receipt sent
+    // to their accuser would be perverse. One send, one platform unit.
+    await POST(formPost(COMPLETE))
+    expect(mockSentEmails).toHaveLength(1)
+    expect(mockPlatformEmailMeter).toEqual([1])
+  })
+
+  it('meters nothing when the deployment cannot send', async () => {
+    // The meter follows the send, not the attempt. A self-host with no
+    // RESEND_API_KEY must not accrue a cost for mail that never left.
+    mockEmailConfigured = false
+    await POST(formPost(COMPLETE))
+    expect(mockPlatformEmailMeter).toEqual([])
+  })
+
+  it('still records the counter-notice when mail is unconfigured', async () => {
+    // A self-host that never set RESEND_API_KEY. The receipt page is still the
+    // primary artifact and must not degrade with the mail.
+    mockEmailConfigured = false
+    const response = await POST(formPost(COMPLETE))
+    expect(response.status).toBe(200)
+    expect(theNotice().status).toBe('received')
+    expect(await response.text()).toContain('Counter-notice received')
+  })
+
+  it('never mails a counter-notice we failed to store', async () => {
+    // Ordering, not politeness: a receipt for a filing that does not exist is
+    // worse than no receipt, because the subscriber then holds evidence of
+    // something we cannot act on.
+    mockWriteThrows = true
+    const response = await POST(formPost(COMPLETE))
+    expect(response.status).toBe(503)
+    expect(mockSentEmails).toHaveLength(0)
   })
 })
 

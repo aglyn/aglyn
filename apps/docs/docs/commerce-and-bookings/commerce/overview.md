@@ -286,6 +286,12 @@ payouts to reconcile; use the tiles to see which way the last month went.
 Worth knowing before it happens, because it is money leaving an account you
 already received it into:
 
+![An order showing Charged back status with the reversed amount, distinct from a refund, and the Disputes filter on the orders list](/img/commerce/order-charged-back.png)
+
+The order keeps its **Refunded** status and gains a **Charged back** badge beside
+it — the pair is deliberate. The money did leave, so the order is refunded; the
+badge is what tells you the merchant did not choose it.
+
 - **The sale was paid out to you at the time of the charge.** When a dispute is
   lost, that payout is reversed — the amount is pulled back from your connected
   Stripe account, not absorbed by Aglyn.

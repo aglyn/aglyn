@@ -87,10 +87,20 @@ const mockDocHandle = (path: string) => ({
 
 let mockNotifications: Record<string, any>[] = []
 
+const mockPlatformEmailMeter: number[] = []
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   notifyStaff: async (payload: Record<string, any>) => {
     mockNotifications.push(payload)
+  },
+  // Recorded, not stubbed to a no-op. This mock is an ALLOW-LIST — an export
+  // it omits is `undefined` at the call site, not a missing-module error, so
+  // the receipt's meter would have failed as `is not a function` deep inside
+  // a best-effort path. Counting the calls turns that silence into an
+  // assertion (AGL-1438).
+  meterPlatformEmail: async (count = 1) => {
+    mockPlatformEmailMeter.push(count)
   },
   firebaseAdmin: {
     app: () => ({
@@ -117,6 +127,27 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     resetMs: Date.now() + 120_000,
     degraded: false,
   }),
+}))
+
+/**
+ * AGL-2400 — the reporter's emailed receipt.
+ *
+ * `{sent:false, reason:'unconfigured'}` is what the real `sendEmail` answers
+ * on a deployment with no `RESEND_API_KEY`, and modelling that outcome rather
+ * than throwing is deliberate: the route has to treat an unsendable receipt as
+ * a non-event, and a double that threw would only ever prove the catch.
+ */
+let mockSentEmails: Record<string, any>[] = []
+let mockEmailConfigured = true
+
+jest.mock('@aglyn/shared-util-email', () => ({
+  __esModule: true,
+  sendEmail: async (options: Record<string, any>) => {
+    mockSentEmails.push(options)
+    return mockEmailConfigured
+      ? { sent: true, id: 'msg_1' }
+      : { sent: false, reason: 'unconfigured' }
+  },
 }))
 
 // Mocked so the suite never reaches the render cache or Firestore for host
@@ -203,6 +234,9 @@ beforeEach(() => {
   mockAllowed = true
   mockWriteThrows = false
   mockNotifications = []
+  mockSentEmails = []
+  mockPlatformEmailMeter.length = 0
+  mockEmailConfigured = true
   mockResolvedHost = { $id: 'host-evil', orgId: 'org-9' }
 })
 
@@ -530,6 +564,98 @@ describe('the DMCA path', () => {
     expect(response.status).toBe(400)
     expect((await response.json()).field).toBe('dmcaSignature')
     expect(reports()).toHaveLength(0)
+  })
+})
+
+/**
+ * AGL-2400 — the reference survives the tab closing.
+ *
+ * The receipt page prints `AR-…` and nothing else ever did. For a copyright
+ * notice that reference is the rightsholder's only record of when they put us
+ * on notice, which is the instant our knowledge is dated from — so it is the
+ * one category where the email address is required rather than optional.
+ *
+ * The anonymity assertion is the one that would ship quietly if it broke: this
+ * form is used by people reporting sites they are afraid of, and "we noticed
+ * you have an account, so we replied to that address" would be a disclosure,
+ * not a courtesy.
+ */
+describe('a reporter who left an address gets their reference', () => {
+  const withEmail = { ...PHISHING, reporterEmail: 'watcher@example.test' }
+
+  it('emails the reference to a reporter who gave an address', async () => {
+    const response = await POST(formPost(withEmail))
+    const reference = (await response.text()).match(/AR-[0-9A-F]{10}/)?.[0]
+    expect(reference).toBeTruthy()
+
+    expect(mockSentEmails).toHaveLength(1)
+    expect(mockSentEmails[0].to).toBe('watcher@example.test')
+    expect(mockSentEmails[0].subject).toContain(reference)
+    expect(mockSentEmails[0].text).toContain(reference)
+  })
+
+  it('emails NOBODY when the report was filed anonymously', async () => {
+    await POST(formPost(PHISHING))
+    expect(reports()).toHaveLength(1)
+    expect(mockSentEmails).toHaveLength(0)
+  })
+
+  it('is not gated on severity, unlike the staff alert', async () => {
+    // `notifyStaff` fires only for the urgent three because a flood of alerts
+    // is itself the flood. A reply to one person who just wrote to us has no
+    // such tail, and a spam reporter loses their reference just as easily.
+    await POST(formPost({ ...withEmail, category: 'spam' }))
+    expect(mockNotifications).toHaveLength(0)
+    expect(mockSentEmails).toHaveLength(1)
+  })
+
+  it('sends ONE receipt when the same reporter resubmits', async () => {
+    await POST(formPost(withEmail))
+    await POST(formPost(withEmail))
+    expect(reports()).toHaveLength(1)
+    expect(mockSentEmails).toHaveLength(1)
+  })
+
+  it('tells a copyright reporter the other side may answer', async () => {
+    // The report page already says a copyright notice is the exception where
+    // the site owner has a right to respond. A rightsholder not told that
+    // reads a counter-notice as us reversing ourselves rather than as §512(g).
+    await POST(
+      formPost({
+        category: 'dmca',
+        url: 'https://copycat.aglyn.app/gallery',
+        details: 'Our photographs are republished here without a licence.',
+        reporterEmail: 'legal@studio.example',
+        dmcaWork: 'Photograph "Harbour at Dawn", VA 2-345-678.',
+        dmcaSignature: 'Dana Reyes',
+        dmcaGoodFaith: 'on',
+        dmcaUnderPenalty: 'on',
+      }),
+    )
+    expect(mockSentEmails).toHaveLength(1)
+    expect(mockSentEmails[0].subject).toContain('Copyright notice received')
+    expect(mockSentEmails[0].text).toContain('counter-notice')
+  })
+
+  it('promises no outcome and no timeframe, because the AUP publishes none', async () => {
+    await POST(formPost(withEmail))
+    const body: string = mockSentEmails[0].text
+    expect(body).not.toMatch(/within \d+ (business )?days?/i)
+    expect(body).not.toMatch(/we will (remove|take down|suspend)/i)
+  })
+
+  it('never mails a report we failed to store', async () => {
+    mockWriteThrows = true
+    const response = await POST(formPost(withEmail))
+    expect(response.status).toBe(503)
+    expect(mockSentEmails).toHaveLength(0)
+  })
+
+  it('still stores the report when mail is unconfigured', async () => {
+    mockEmailConfigured = false
+    const response = await POST(formPost(withEmail))
+    expect(response.status).toBe(200)
+    expect(reports()).toHaveLength(1)
   })
 })
 

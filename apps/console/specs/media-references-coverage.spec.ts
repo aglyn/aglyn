@@ -150,6 +150,28 @@ const mockFirestore = {
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The REAL resolver, not a pass-through (AGL-1881). `mediaObjectPath` calls
+  // it to decide whether a document's recorded `storagePath` is inside its own
+  // scope, and a double that echoed the input would make every media route
+  // under test address whatever the fixture said — which is exactly the
+  // behaviour the fix removed. Omitting it entirely is worse still: the route
+  // throws, catches, and 500s while the suite stays green.
+  mediaStoragePathInScope: (o: {
+    storagePath: unknown
+    base: string
+    mediaId: string
+  }) => {
+    const v = o.storagePath
+    const prefix = `${o.base}/media/`
+    const ok =
+      typeof v === 'string' &&
+      v.trim() === v &&
+      v.startsWith(prefix) &&
+      v.length > prefix.length &&
+      !v.includes('//') &&
+      !v.split('/').includes('..')
+    return ok ? (v as string) : `${o.base}/media/${o.mediaId}`
+  },
   __esModule: true,
   firebaseAdmin: {
     app: () => ({

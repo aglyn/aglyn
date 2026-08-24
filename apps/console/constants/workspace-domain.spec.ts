@@ -19,6 +19,7 @@ import {
   APEX_LABELS,
   WORKSPACE_DOMAIN,
   isServableWorkspaceHost,
+  originPersistenceClass,
   workspaceSlugFromHost,
 } from './workspace-domain'
 
@@ -103,6 +104,70 @@ describe('workspace domain', () => {
       expect(isServableWorkspaceHost('localhost:4200', known)).toBe(true)
       expect(isServableWorkspaceHost('aglyn-console.vercel.app', known)).toBe(
         true,
+      )
+    })
+  })
+
+  /**
+   * AGL-1099c. `FirebaseServicesProvider`'s `authPersistence` prop, the
+   * `setPersistence` seal (AGL-1379) and the memory Firestore cache
+   * (AGL-1456) were all built and all defaulted to `durable`, because nobody
+   * ever passed the prop. This function is the declaration they were waiting
+   * for, so the assertions that matter are about its POLARITY: everything not
+   * recognised must come back `ephemeral`.
+   */
+  describe('originPersistenceClass', () => {
+    it('keeps the workspace domain durable — a 14-day session is the product', () => {
+      expect(originPersistenceClass('app.aglyn.com')).toBe('durable')
+      expect(originPersistenceClass('auth.aglyn.com')).toBe('durable')
+      expect(originPersistenceClass('aglyn.com')).toBe('durable')
+      expect(originPersistenceClass('zgover.aglyn.com')).toBe('durable')
+    })
+
+    it('keeps localhost and previews durable — we own that DNS too', () => {
+      expect(originPersistenceClass('localhost:4200')).toBe('durable')
+      expect(originPersistenceClass('127.0.0.1:4200')).toBe('durable')
+      expect(originPersistenceClass('aglyn-console-aglyn.vercel.app')).toBe(
+        'durable',
+      )
+    })
+
+    it('makes a custom console domain ephemeral — the whole point', () => {
+      // The origin AGL-1099 exists to serve. A refresh token in this
+      // origin's IndexedDB outlives every revocation lever we hold, because
+      // `securetoken.googleapis.com` is not App Check enforced.
+      expect(originPersistenceClass('console.acme-agency.com')).toBe(
+        'ephemeral',
+      )
+      expect(originPersistenceClass('app.youragency.com')).toBe('ephemeral')
+    })
+
+    it('answers ephemeral for a host it does not recognise, including none', () => {
+      // The polarity IS the design. A host wrongly called `ephemeral` costs a
+      // re-authentication; a host wrongly called `durable` writes a refresh
+      // token somewhere it can be stolen. So the default is `ephemeral` and
+      // `durable` is the allowlist — never the inverse.
+      expect(originPersistenceClass(null)).toBe('ephemeral')
+      expect(originPersistenceClass(undefined)).toBe('ephemeral')
+      expect(originPersistenceClass('')).toBe('ephemeral')
+      expect(originPersistenceClass('evil.example')).toBe('ephemeral')
+    })
+
+    it('is not fooled by a hostname that merely CONTAINS ours', () => {
+      // A suffix test written as `includes` — or without the leading dot —
+      // hands `durable` to any attacker who can register the name. Both of
+      // these are attacker-registrable and neither is ours.
+      expect(originPersistenceClass('aglyn.com.evil.example')).toBe('ephemeral')
+      expect(originPersistenceClass('notaglyn.com')).toBe('ephemeral')
+      expect(originPersistenceClass('evil-vercel.app')).toBe('ephemeral')
+    })
+
+    it('ignores port and case, like every other gate in this module', () => {
+      // A host normalized differently here than in the code that grants a
+      // session is the bug this module was created to close.
+      expect(originPersistenceClass('APP.AGLYN.COM:443')).toBe('durable')
+      expect(originPersistenceClass('Console.Acme-Agency.com')).toBe(
+        'ephemeral',
       )
     })
   })

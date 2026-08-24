@@ -197,7 +197,7 @@ const orgAdminDenied = memoize(() => {
  *    That is why a dedicated `allow write: if false` block would not have
  *    closed AGL-1367, and why this set is computed by subtracting them.
  */
-const hostServerOnlySubcollections = memoize(() => {
+const hostCatchAllRules = memoize(() => {
   const rules = normalizeRules(RULES_SOURCE)
 
   const hostHeader = 'match /hosts/<hostId> {'
@@ -274,9 +274,29 @@ const hostServerOnlySubcollections = memoize(() => {
     ),
   )
 
+  return { create, update, delete: remove, dedicated: [...dedicated] }
+})
+
+/**
+ * The three lists as they are WRITTEN, before the subtraction above.
+ *
+ * `hostServerOnlySubcollections()` answers "denied outright", which is the
+ * right question for a collection nothing client-side may touch and the wrong
+ * one for a collection that is excluded so a dedicated block can narrow it —
+ * `media` (AGL-1881), `collections` (AGL-978), `templates` (AGL-666). Those
+ * names are absent from the outright set BY DESIGN, so a test that only ever
+ * asked the subtracted question could not tell "excluded, and re-granted with
+ * a freeze" from "never excluded at all", which are the fix and the bug.
+ */
+const hostSubcollectionExclusions = () => hostCatchAllRules()
+
+const hostServerOnlySubcollections = memoize(() => {
+  const { create, update, delete: remove, dedicated } = hostCatchAllRules()
   return create.filter(
     (name) =>
-      update.includes(name) && remove.includes(name) && !dedicated.has(name),
+      update.includes(name) &&
+      remove.includes(name) &&
+      !dedicated.includes(name),
   )
 })
 
@@ -6468,6 +6488,299 @@ describe('an org can read the marketplace licences it holds (AGL-2331)', () => {
       setDoc(doc(authed(STAFF, { staff: true }), 'marketplacePurchases', 'cs_staff'), {
         listingId: 'l1', buyerOrgId: ORG,
       }),
+    )
+  })
+})
+
+/**
+ * `storagePath` and `private` are server-owned on a media document
+ * (AGL-1881) — the defence-in-depth half of the pre-launch review's one
+ * CRITICAL finding.
+ *
+ * The sink is fixed (`media-storage-path.ts` refuses a key outside the
+ * document's own `<scope>/media/` prefix), and these are the rules that stop
+ * the field being written in the first place. Both layers are needed: staff
+ * writes and Admin-SDK routes never reach the rules, and rules ship on a
+ * different cadence from code, so neither one alone is the answer.
+ *
+ * What the field bought while it was writable: seven server paths read it and
+ * hand it to `bucket.file(...)` on the ADMIN SDK, which the Storage rules do
+ * not govern. `serveMediaCdn` streams that object to an anonymous caller
+ * behind an `s-maxage=3600` URL, `/api/media/replace` overwrites it and the
+ * folder delete removes it — cross-tenant read, overwrite and destroy from a
+ * document the attacker legitimately owns. The bucket is shared and holds
+ * `adminAudit-archive/` and `erasures/` at FIXED prefixes, so the attack does
+ * not even need a stolen object key. `private` is the other half: the
+ * download-signature gate is skipped whenever the field is not exactly
+ * `true`.
+ *
+ * Three legs per scope, because two of them alone prove nothing:
+ *
+ *  1. setting/changing `storagePath` is DENIED,
+ *  2. changing `private` is DENIED — including clearing it, which is the
+ *     spelling `deleteField()` produces and the one a `hasAny` on
+ *     `affectedKeys()` has to catch as well as an assignment,
+ *  3. an ordinary DAM edit still LANDS. A freeze that breaks the rename,
+ *     the tag, the folder move or the sharing control is worse than the hole,
+ *     and every one of those is a client-direct write in
+ *     `media-library.component.tsx`.
+ *
+ * The host leg is the one that needed the catch-all exclusion. `media` now
+ * appears in the create and update lists with the block below re-granting
+ * both, because sibling matches are OR'd and the LOOSER wins — a dedicated
+ * block that freezes a field the catch-all still grants freezes nothing, the
+ * shape that left `components` author-publishable (AGL-2334). Drop `media`
+ * from either list and legs 1 and 2 of the host test go red.
+ */
+describe('media object fields are server-owned (AGL-1881)', () => {
+  const ORG_ASSET = ['orgs', ORG, 'media', 'agl1881']
+  const HOST_ASSET = ['hosts', HOST, 'media', 'agl1881']
+  // A fixed, guessable prefix in the same bucket that holds customer media —
+  // the retention archive, not another tenant's image. Named literally so the
+  // assertion reads as the attack it refuses.
+  const SOMEONE_ELSES_OBJECT = 'adminAudit-archive/2026-08/audit.jsonl'
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, ...ORG_ASSET), {
+        fileName: 'brochure.pdf',
+        visibleTo: ['org'],
+        storagePath: `orgs/${ORG}/media/agl1881`,
+        private: true,
+        contentType: 'application/pdf',
+        contentSha256: 'the-digest-the-deny-list-holds',
+        sizeBytes: 1024,
+      })
+      await setDoc(doc(db, ...HOST_ASSET), {
+        fileName: 'hero.png',
+        storagePath: `hosts/${HOST}/media/agl1881`,
+        private: true,
+        contentType: 'image/png',
+        contentSha256: 'the-digest-the-deny-list-holds',
+        sizeBytes: 1024,
+      })
+    })
+  })
+
+  it('an org owner cannot repoint an org asset at another object', async () => {
+    await mustDeny(
+      'repointing orgs/{orgId}/media at the audit archive',
+      updateDoc(doc(authed(OWNER), ...ORG_ASSET), {
+        storagePath: SOMEONE_ELSES_OBJECT,
+      }),
+    )
+    await mustDeny(
+      'repointing it while also making a legitimate edit in the same patch',
+      updateDoc(doc(authed(OWNER), ...ORG_ASSET), {
+        fileName: 'Brochure v2.pdf',
+        storagePath: SOMEONE_ELSES_OBJECT,
+      }),
+    )
+    await mustDeny(
+      'minting a NEW org media document that addresses another object',
+      setDoc(doc(authed(OWNER), 'orgs', ORG, 'media', 'agl1881-forged'), {
+        fileName: 'innocent.png',
+        visibleTo: ['org'],
+        storagePath: SOMEONE_ELSES_OBJECT,
+      }),
+    )
+  })
+
+  it('an org owner cannot flip an org asset out of private', async () => {
+    await mustDeny(
+      'publishing a private asset by assignment',
+      updateDoc(doc(authed(OWNER), ...ORG_ASSET), { private: false }),
+    )
+    await mustDeny(
+      'publishing a private asset by DELETING the flag',
+      updateDoc(doc(authed(OWNER), ...ORG_ASSET), { private: deleteField() }),
+    )
+    await mustDeny(
+      'minting a media document that declares itself already public',
+      setDoc(doc(authed(OWNER), 'orgs', ORG, 'media', 'agl1881-public'), {
+        fileName: 'innocent.png',
+        visibleTo: ['org'],
+        private: false,
+      }),
+    )
+  })
+
+  it('the DAM still edits an org asset (the positive control)', async () => {
+    await mustAllow(
+      'the rename, alt, description and tag edit the detail drawer sends',
+      updateDoc(doc(authed(OWNER), ...ORG_ASSET), {
+        fileName: 'Brochure v2.pdf',
+        alt: 'Company brochure',
+        description: 'Updated for September',
+        tags: ['brochure', 'print'],
+        folderId: 'f1',
+        folder: 'Print',
+      }),
+    )
+    await mustAllow(
+      'the sharing control, which only an org-wide member may move',
+      updateDoc(doc(authed(OWNER), ...ORG_ASSET), {
+        visibleTo: [`host:${HOST}`],
+      }),
+    )
+    await mustAllow(
+      're-sending the frozen values UNCHANGED, which diff() must not call a change',
+      updateDoc(doc(authed(OWNER), ...ORG_ASSET), {
+        fileName: 'Brochure v3.pdf',
+        storagePath: `orgs/${ORG}/media/agl1881`,
+        private: true,
+      }),
+    )
+  })
+
+  it('a site editor cannot repoint a host asset at another object', async () => {
+    await mustDeny(
+      'repointing hosts/{hostId}/media at the audit archive',
+      updateDoc(doc(authed(EDITOR), ...HOST_ASSET), {
+        storagePath: SOMEONE_ELSES_OBJECT,
+      }),
+    )
+    await mustDeny(
+      'repointing it at ANOTHER SITE in the same org',
+      updateDoc(doc(authed(EDITOR), ...HOST_ASSET), {
+        storagePath: 'hosts/host-other/media/their-asset',
+      }),
+    )
+    await mustDeny(
+      'minting a host media document that addresses another object',
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'media', 'agl1881-forged'), {
+        fileName: 'innocent.png',
+        storagePath: SOMEONE_ELSES_OBJECT,
+      }),
+    )
+  })
+
+  it('a site editor cannot flip a host asset out of private', async () => {
+    await mustDeny(
+      'publishing a private asset by assignment',
+      updateDoc(doc(authed(EDITOR), ...HOST_ASSET), { private: false }),
+    )
+    await mustDeny(
+      'publishing a private asset by DELETING the flag',
+      updateDoc(doc(authed(EDITOR), ...HOST_ASSET), { private: deleteField() }),
+    )
+    await mustDeny(
+      'minting a host media document that declares itself already public',
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'media', 'agl1881-public'), {
+        fileName: 'innocent.png',
+        private: false,
+      }),
+    )
+  })
+
+  /**
+   * The two fields the `media-write-deny-coverage` partition turned up, which
+   * are security inputs rather than metadata — frozen with the rest rather
+   * than classified as harmless.
+   *
+   *  - `contentSha256` is the key `mediaCdnServeBlock` asks the quarantine
+   *    deny-list with, and `serveMediaCdn` returns 410 on a hit. A client that
+   *    could rewrite it walked its own asset out of a takedown.
+   *  - `contentType` is the served `Content-Type` and the input to
+   *    `mediaCdnContentSecurityPolicy`. GCS metadata wins where it exists, so
+   *    this is a fallback rather than the only input — hardening, not a second
+   *    CRITICAL, and recorded that way so nobody reads more into the test than
+   *    it proves.
+   */
+  it('neither scope can rewrite the quarantine digest or the served type', async () => {
+    await mustDeny(
+      'walking an org asset out of a takedown by changing its digest',
+      updateDoc(doc(authed(OWNER), ...ORG_ASSET), {
+        contentSha256: 'not-the-hash-the-deny-list-holds',
+      }),
+    )
+    await mustDeny(
+      'walking a host asset out of a takedown by changing its digest',
+      updateDoc(doc(authed(EDITOR), ...HOST_ASSET), {
+        contentSha256: 'not-the-hash-the-deny-list-holds',
+      }),
+    )
+    await mustDeny(
+      'declaring a host asset to be HTML',
+      updateDoc(doc(authed(EDITOR), ...HOST_ASSET), {
+        contentType: 'text/html',
+      }),
+    )
+    await mustDeny(
+      'lowering the recorded size of an org asset',
+      updateDoc(doc(authed(OWNER), ...ORG_ASSET), { sizeBytes: 0 }),
+    )
+  })
+
+  it('the DAM still edits a host asset (the positive control)', async () => {
+    await mustAllow(
+      'the rename, alt, description and tag edit the detail drawer sends',
+      updateDoc(doc(authed(EDITOR), ...HOST_ASSET), {
+        fileName: 'hero-v2.png',
+        alt: 'Hero image',
+        description: 'Autumn campaign',
+        tags: ['hero'],
+        folderId: 'f1',
+        folder: 'Campaign',
+      }),
+    )
+    await mustAllow(
+      're-sending the frozen values UNCHANGED, which diff() must not call a change',
+      updateDoc(doc(authed(EDITOR), ...HOST_ASSET), {
+        fileName: 'hero-v3.png',
+        storagePath: `hosts/${HOST}/media/agl1881`,
+        private: true,
+      }),
+    )
+    await mustAllow(
+      'creating a host media document that names no object at all',
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'media', 'agl1881-plain'), {
+        fileName: 'innocent.png',
+      }),
+    )
+    // The catch-all still owns DELETE, deliberately: removing the document
+    // sets no field, and the re-create is refused above.
+    await mustAllow(
+      'deleting a host media document, which the catch-all still grants',
+      deleteDoc(doc(authed(EDITOR), 'hosts', HOST, 'media', 'agl1881-plain')),
+    )
+  })
+
+  /**
+   * The structural half, and the reason legs 1 and 2 above can fire at all.
+   *
+   * A freeze in a dedicated block is dead text while the catch-all grants the
+   * same operation, because Firestore ORs its allows and the looser branch
+   * wins. So the exclusion is asserted here BY NAME, next to the behavioural
+   * proof, rather than left to be inferred from a green run.
+   */
+  it('`media` is excluded from the catch-all create and update, and only those', () => {
+    const lists = hostSubcollectionExclusions()
+    assert.ok(
+      lists.create.includes('media'),
+      '`media` has fallen out of the host catch-all CREATE exclusion list. ' +
+        'The dedicated block below it freezes `storagePath`/`private` on ' +
+        'create, and a freeze under a looser sibling never fires — the ' +
+        'AGL-2334 `components` shape.',
+    )
+    assert.ok(
+      lists.update.includes('media'),
+      '`media` has fallen out of the host catch-all UPDATE exclusion list, ' +
+        'so the dedicated block s update freeze no longer decides anything.',
+    )
+    assert.ok(
+      !lists.delete.includes('media'),
+      '`media` has been added to the host catch-all DELETE exclusion list ' +
+        'with no dedicated block re-granting delete, so the DAM can no ' +
+        'longer remove an asset. That closes nothing: a delete sets no field.',
+    )
+    assert.ok(
+      !hostServerOnlySubcollections().includes('media'),
+      '`media` is now denied to the client OUTRIGHT under hosts/{hostId}, ' +
+        'but the DAM edits an asset client-direct. Denying it breaks the ' +
+        'library for every customer to close a hole the field freeze ' +
+        'already closes.',
     )
   })
 })

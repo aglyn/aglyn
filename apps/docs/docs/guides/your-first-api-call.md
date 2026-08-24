@@ -25,6 +25,8 @@ with Windows 10 and later. There's a JavaScript version of each step underneath.
 
 1. Open the console and switch to the organization you want to use.
 2. Go to **Organization → Settings → API keys**.
+
+   ![The API keys card listing two keys with their scopes, truncated prefixes and last-used times, and a Create API key button](/img/api/api-keys-card.png)
 3. Choose **Create API key**.
 4. Give it a **name** that says what it's for — `zapier-orders-sync`, not `key 1`. The
    name is what you'll be looking at in six months deciding whether it's safe to

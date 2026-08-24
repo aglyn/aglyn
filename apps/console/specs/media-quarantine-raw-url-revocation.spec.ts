@@ -140,17 +140,38 @@ const mockCollectionHandle = (prefix: string): any => ({
 const mockFirestore = { collection: mockCollectionHandle }
 
 /**
- * The bucket, modelled the way `rotateOne` in `media-download-tokens.ts`
- * actually uses it: the custom-metadata map is READ from `metadata.metadata`
- * and a `setMetadata` REPLACES the whole map. Modelling the replace is what
- * makes "customer metadata survives a rotation" provable rather than
- * assumed — a double that merged would hide the exact trap that module's
- * `rotateOne` documents.
+ * The bucket, modelled the way `@google-cloud/storage` actually behaves.
+ *
+ * TWO properties, and the second one is why this suite used to be green
+ * while the control it guards never fired (AGL-1881):
+ *
+ *  1. **`setMetadata` REPLACES the whole custom map**, it does not merge.
+ *     Modelling the replace is what makes "customer metadata survives a
+ *     rotation" a real assertion rather than a property of a forgiving fake.
+ *  2. **`bucket.file(path)` returns a BARE handle.** `.metadata` is `{}`
+ *     until something fetches it — a `File` is a reference, not a read. This
+ *     double used to hand back `metadata: { metadata: mockObjects[path] }`,
+ *     pre-hydrated, which no real handle ever is. `rotateDownloadTokenForObject`
+ *     read `file.metadata.metadata` off exactly such a bare handle, so in
+ *     production it saw `undefined`, returned `no-token`, and revoked
+ *     nothing — on the DMCA takedown path — while every test here passed.
+ *     `no-token` is also the correct benign answer for an object that never
+ *     had a raw URL, so the audit row read as normal.
+ *
+ * The double now starts `metadata` empty and only reveals the map through
+ * `getMetadata()`. Against the un-fixed module every assertion below fails,
+ * which is the whole point of changing it.
  */
 const mockBucketFile = (path: string) => ({
   name: path,
-  metadata: { metadata: mockObjects[path] },
+  // Bare, exactly like a freshly constructed `File`.
+  metadata: {},
   exists: async () => [mockObjects[path] !== undefined],
+  getMetadata: async () => {
+    if (mockStorageThrows) throw new Error('storage said no')
+    if (mockObjects[path] === undefined) throw new Error('404 No such object')
+    return [{ name: path, metadata: { ...mockObjects[path] } }]
+  },
   setMetadata: async (patch: { metadata?: Record<string, unknown> }) => {
     if (mockStorageThrows) throw new Error('storage said no')
     mockMetadataWrites.push(path)

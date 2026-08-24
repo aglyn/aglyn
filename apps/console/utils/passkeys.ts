@@ -235,3 +235,24 @@ export async function signInWithPasskey(auth: Auth): Promise<void> {
   // goes through (AGL-1993).
   await signInWithPooledCustomToken(auth, token, null)
 }
+
+/**
+ * Removes one of the signed-in user's passkeys (AGL-1881).
+ *
+ * Resolves with the label it was stored under, so the confirmation can name
+ * the credential the user just took off their account rather than saying
+ * "passkey removed" about one of several.
+ *
+ * `removed: false` means it was already gone — a double-click or a retry —
+ * and is a success, not an error the caller has to interpret.
+ */
+export async function removePasskey(
+  user: Pick<User, 'getIdToken'>,
+  credentialId: string,
+): Promise<{ removed: boolean; label: string | null }> {
+  return postJson(
+    '/api/auth/passkeys/remove',
+    { credentialId },
+    await user.getIdToken(),
+  )
+}

@@ -32,6 +32,7 @@ import {
   getOrgForHost,
   lockdownJsonResponse,
   type LockdownVerdictOptions,
+  mediaStoragePathInScope,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import type { LockdownFeatureKey } from '@aglyn/aglyn/server'
@@ -326,15 +327,32 @@ export async function folderStoragePath(
 /**
  * The object path recorded on the media doc, with the legacy flat layout
  * as fallback for assets uploaded before real folders existed.
+ *
+ * `storagePath` is client data and this value is handed to `bucket.file()` on
+ * the ADMIN SDK, which is not subject to the Storage rules — so the recorded
+ * key is honoured only when it is genuinely inside this scope's media prefix
+ * (AGL-1881). Six routes read through here, including the folder DELETE and
+ * `media/replace`, so an unchecked key was cross-tenant destroy and overwrite,
+ * not merely a cross-tenant read. See `media-storage-path.ts` for the full
+ * note.
  */
 export function mediaObjectPath(
   mediaSnapshot: FirebaseFirestore.DocumentSnapshot,
   base: string,
 ): string {
-  const stored = mediaSnapshot.get('storagePath')
-  return typeof stored === 'string' && stored
-    ? stored
-    : `${base}/media/${mediaSnapshot.id}`
+  return mediaStoragePathInScope({
+    storagePath: mediaSnapshot.get('storagePath'),
+    base,
+    mediaId: mediaSnapshot.id,
+    onRefused: (candidate) => {
+      // Every writer in the repo produces an in-scope key, so this is not a
+      // condition that occurs on its own.
+      console.error(
+        '[media] out-of-scope storagePath refused',
+        JSON.stringify({ base, mediaId: mediaSnapshot.id, candidate }),
+      )
+    },
+  })
 }
 
 /**

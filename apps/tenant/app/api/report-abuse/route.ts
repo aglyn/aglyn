@@ -101,6 +101,7 @@ import {
   notifyStaff,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
+import { acknowledgeAbuseReport } from '../_legal-intake/acknowledge'
 // AGL-2016 + AGL-2026: both halves of the chrome the two §512 intakes share
 // — the operator-facing strings, and the page shell itself. AGL-1983 left
 // adopting the shared shell as a follow-up; this is it, so the local copies
@@ -497,8 +498,10 @@ export async function POST(request: Request): Promise<Response> {
    *
    * `notifyStaff` (AGL-850) enumerates the `staff` claim and writes
    * `users/{uid}/notifications`, which the console's notifications menu
-   * already renders — so this needs no new inbox and no email, which matters
-   * because `abuse@aglyn.com` is not confirmed to deliver (AGL-1973).
+   * already renders — so the STAFF side needs no new inbox and no email.
+   * (AGL-1911 has since confirmed `abuse@aglyn.com` does deliver, but routing
+   * the queue through a mailbox would still be the worse shape.) The reporter
+   * receipt below is the one mail this route sends, and it goes outward.
    *
    * URGENT ONLY, and that restraint is the design rather than laziness. The
    * `formSubmissionsPaused` lesson in `/api/forms/submit` is that a flood of
@@ -519,6 +522,35 @@ export async function POST(request: Request): Promise<Response> {
       title: `Urgent abuse report — ${report.category}`,
       body: `${report.reportedHostname || report.url} was reported as ${report.category}. Reference ${reference}.`,
       link: '/admin/abuse-reports',
+    })
+  }
+
+  /**
+   * Post the reference to the reporter, when we have somewhere to post it
+   * (AGL-2400).
+   *
+   * Not gated on severity, unlike the staff alert above. The volume argument
+   * that keeps `notifyStaff` to the urgent three does not apply to a reply
+   * addressed to one person who just wrote to us; and the reporter of a spam
+   * site loses their reference to a closed tab exactly as easily as the
+   * reporter of a phishing one.
+   *
+   * Gated on `firstReport` for the same reason `notifyStaff` is — the
+   * deduplicating document id makes a resubmission the same row — and on
+   * having an address at all, which is optional for every category except
+   * `dmca`. An anonymous report stays anonymous: nothing here backfills a
+   * contact route the reporter deliberately declined.
+   *
+   * After the write and outside its try/catch, best-effort: `sendEmail` never
+   * throws, and a receipt that could not be sent must not turn a report we
+   * have already stored into a 503 that invites the reporter to file again.
+   */
+  if (firstReport && report.reporterEmail) {
+    await acknowledgeAbuseReport({
+      to: report.reporterEmail,
+      reference,
+      reportedUrl: report.url,
+      isCopyright: report.category === 'dmca',
     })
   }
 

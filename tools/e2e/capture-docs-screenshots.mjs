@@ -664,6 +664,106 @@ const shots = [
     clipTo: { locator: '[role="dialog"]' },
   },
   {
+    // A8 (AGL-1950). Needs `tools/e2e/seed-docs-fixtures.mjs` — the base seed
+    // carries no API keys and the card's whole subject is a populated list.
+    //
+    // The settings page is a TAB STRIP whose panels all stay MOUNTED, hidden.
+    // So `waitFor: 'API keys'` matches immediately, on text nobody can see,
+    // and the earlier spec's `scroll` could never reveal it. The click is what
+    // makes the panel visible; the `clipTo` is what proves it, because a
+    // display:none element has no bounding box and the harness fails the shot
+    // rather than cropping to whatever else was in the union.
+    out: 'api/api-keys-card.png',
+    path: `/${ORG_SLUG}/settings`,
+    waitFor: 'API keys',
+    actions: [{ click: 'text=API keys', settleMs: 3000 }],
+    settleMs: 2000,
+    // NO `annotate`, and the reason generalises to every card-with-left-
+    // aligned-rows in this file. The badge is drawn at (x−14, y−14) of its
+    // target, which on a dialog lands in the backdrop but on a table row lands
+    // ON the content immediately left of it. Annotated, this shot published a
+    // ② sitting across the very key prefix it was pointing at and a ③ over
+    // `Created`. Annotate what a reader would otherwise hunt for; a card
+    // cropped to eight lines is not that.
+    clipTo: {
+      locator: '.MuiCard-root:has(> .MuiCardHeader-root:has-text("API keys"))',
+    },
+  },
+  {
+    // A11 (AGL-1950). Needs the seeded site collaborator.
+    //
+    // The card header is `Organization members — E2E Bakery Co`, not the
+    // `Members` the spec names; the locator still matches because Playwright's
+    // `has-text` is a case-insensitive substring, but do not "fix" it to
+    // `:text-is()`. The access cells are the content: `ALL SITES` against the
+    // two managers and `1 SITE(S)` against the collaborator, each over its
+    // `Team manager` / `Site collaborator` caption.
+    out: 'guides/team-managers-vs-collaborators.png',
+    path: `/${ORG_SLUG}/team`,
+    waitFor: 'Organization members',
+    // The card runs past 900px once a third member is in it, and a clip is
+    // clamped to the viewport — the seat line callout is the first thing lost.
+    viewport: { width: 1440, height: 1300 },
+    settleMs: 2500,
+    // No `annotate` — see the note on A8. Here it was worse than untidy: the
+    // seat-line badge covered the `2` in `2 of 15 manager seats used`, which
+    // is the number callout ③ existed to point at, and the `All sites` badge
+    // resolved to nothing at all and left the numbering starting at ②.
+    clipTo: {
+      locator: '.MuiCard-root:has(> .MuiCardHeader-root:has-text("Members"))',
+    },
+  },
+  {
+    // A12 (AGL-1950). The spec's surface is GONE: `/{host}/setup` has no
+    // Members card (Basic details · SEO · Theme · Custom domain · Emails ·
+    // Activity). Per-site access is granted from the ORG Team page instead,
+    // by the inline invite row whose `All sites` checkbox is unticked to scope
+    // the invite to named sites — so this is re-pointed rather than dropped.
+    //
+    // The control is the ACCESS DIALOG, not the invite row's checkbox. The
+    // first attempt shot the row with `All sites` unticked and produced a
+    // near-duplicate of A11 with an empty box in it: unticking there reveals
+    // no site list, so the image showed the absence of org-wide access and
+    // nothing about per-site scoping. The dialog behind the `1 site(s)` /
+    // `All sites` button is where `orgHosts` is actually enumerated, one row
+    // per site with its own role — which is the thing the guide describes.
+    out: 'guides/site-members-invite.png',
+    path: `/${ORG_SLUG}/team`,
+    waitFor: 'Organization members',
+    viewport: { width: 1440, height: 1300 },
+    // The seeded collaborator's own access, so the dialog opens already
+    // scoped — `All sites` off and one of the two seeded sites ticked.
+    actions: [{ click: 'button:has-text("1 site(s)")', settleMs: 1800 }],
+    settleMs: 1500,
+    clipTo: { locator: '[role="dialog"]' },
+  },
+  {
+    // A13 (AGL-1950). Needs the seeded charged-back order.
+    //
+    // Route correction: `/{host}/commerce/orders` 404s. Orders are a TAB of
+    // the commerce plugin page, selected by `?tab=orders` — `HubTabs` seeds
+    // its state from that param.
+    //
+    // The row carries the entire distinction the docs page draws, so no
+    // detail dialog is needed: `$0.00` over `$62.00 less refunds` in the
+    // Total column, and the `Charged back` chip BESIDE the untouched
+    // `Refunded` status chip. A lost dispute is a refund the merchant did not
+    // choose, and one row says so.
+    out: 'commerce/order-charged-back.png',
+    path: `/${HOST_BASE}/products?tab=orders`,
+    waitFor: 'Charged back',
+    settleMs: 2500,
+    // No `annotate`, and this one was actively misleading rather than merely
+    // untidy: the badge for the `Charged back` chip is drawn up and to its
+    // left, which is exactly where the `Refunded` chip sits — so callout ①
+    // for the chargeback landed on the refund, marking the one thing the
+    // image exists to distinguish it FROM. The ② over `$62.00 less refunds`
+    // ate the `$6`.
+    clipTo: {
+      locator: '.MuiCard-root:has([aria-label="Orders"])',
+    },
+  },
+  {
     // A16. The help tip is `Help: Moving to a lower plan takes effect
     // later`, not the `Help: Downgrading` the spec guessed. The disclosure
     // sits well below the fold once expanded, so it is scrolled into view

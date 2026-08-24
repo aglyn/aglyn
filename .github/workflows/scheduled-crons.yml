@@ -130,6 +130,18 @@ on:
     # A non-zero plan returns 207, which fails this workflow below. That is
     # the alert (a staff notification is the other half).
     - cron: '30 6 * * 1' # backfill-scope (detect only) — Mondays 06:30 UTC
+    # Does every live SSO domain STILL prove it belongs to the org routing
+    # it? (AGL-1210) Domain ownership was proven once, at setup, and then
+    # trusted forever — so a company that lets its domain lapse keeps the
+    # routing until a human revokes it.
+    #
+    # Weekly, and REPORT-ONLY. The route has no code path that revokes,
+    # deliberately: a DNS lookup cannot tell "the record is gone" from "the
+    # resolver did not answer", so an automated revoke on a failed lookup
+    # would log out every enterprise on the platform during one resolver
+    # blip. It needs three consecutive CONCLUSIVE failures over fourteen days
+    # before it will even email anybody, and a human decides what to do.
+    - cron: '30 7 * * 1' # reverify-sso-domains (report only) — Mondays 07:30 UTC
     # Scheduled email campaigns (AGL-2134). `/product/marketing` sells
     # "Schedule campaigns and overlays ahead of time", and the campaign
     # composer really does write `status: 'scheduled'` with a `sendAtMs` —
@@ -186,6 +198,7 @@ on:
           - /api/admin/reap-plugin-artifacts
           - /api/admin/reverify-plugin-versions
           - /api/admin/backfill-scope
+          - /api/admin/reverify-sso-domains
           - /api/admin/firestore-export
           - /api/campaigns/process-scheduled
           - /api/admin/finish-domain-attachments
@@ -227,6 +240,7 @@ jobs:
             '30 5 * * 1') path=/api/admin/reap-plugin-artifacts ;;
             '0 6 * * 1') path=/api/admin/reverify-plugin-versions ;;
             '30 6 * * 1') path=/api/admin/backfill-scope ;;
+            '30 7 * * 1') path=/api/admin/reverify-sso-domains ;;
             '*/15 * * * *') path=/api/campaigns/process-scheduled ;;
             '*/20 * * * *') path=/api/admin/finish-domain-attachments ;;
             *) path="$DISPATCH_PATH" ;;

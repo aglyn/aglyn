@@ -36,7 +36,9 @@
 
 import {
   DOWNLOAD_TOKEN_METADATA_KEY,
+  currentDownloadUrlForObject,
   lockRotatesDownloadTokens,
+  rotateDownloadTokenForObject,
   rotateDownloadTokensUnderPrefix,
   rotateScopeDownloadTokens,
 } from './media-download-tokens'
@@ -303,5 +305,159 @@ describe('rotateScopeDownloadTokens', () => {
     expect(siteAsset.custom[DOWNLOAD_TOKEN_METADATA_KEY]).not.toBe('token-b')
     // NEGATIVE CONTROL again, at scope level.
     expect(otherOrg.custom[DOWNLOAD_TOKEN_METADATA_KEY]).toBe('token-z')
+  })
+})
+
+/**
+ * The PER-OBJECT revocation — the one `set-private` and asset quarantine
+ * call (AGL-1615, wired to `set-private` by AGL-1881).
+ *
+ * It had no spec at all, and it did not work.
+ *
+ * ## The double, and why it is shaped like this
+ *
+ * `bucket.file(path)` constructs a `File` whose `.metadata` is `{}` — the
+ * handle is a reference, not a fetch, and nothing populates it until
+ * something asks the API. The prefix scan above never noticed because
+ * `bucket.getFiles()` returns HYDRATED handles; this function reached for
+ * `file.metadata.metadata` on a bare one and therefore read `undefined` for
+ * every object in production, returned `no-token`, and revoked nothing.
+ *
+ * `no-token` is also the correct benign answer for an object that never had
+ * a raw URL, which is why nothing ever looked wrong: a DMCA takedown
+ * reported "no raw URL to revoke" and the audit row recorded it as such.
+ *
+ * So `fileHandle` below starts `metadata` at `{}` exactly as the SDK does
+ * and only reveals the custom map through `getMetadata()`. A double that
+ * pre-populated `.metadata` would make every assertion here pass against
+ * the broken code — which is the failure this suite was built to avoid.
+ */
+function fakeObjectBucket(
+  objects: Record<string, Record<string, unknown> | 'missing'>,
+  options: { name?: string; failWrite?: boolean } = {},
+) {
+  return {
+    name: options.name ?? 'aglyn-media',
+    file(path: string) {
+      return {
+        name: path,
+        // Bare, exactly like a freshly constructed `File`.
+        metadata: {},
+        async getMetadata() {
+          const custom = objects[path]
+          if (custom === undefined || custom === 'missing') {
+            throw new Error('404 No such object')
+          }
+          return [{ name: path, metadata: { ...custom } }]
+        },
+        async setMetadata(next: { metadata: Record<string, unknown> }) {
+          if (options.failWrite) throw new Error('403 from the edge')
+          // REPLACE, exactly as GCS does.
+          objects[path] = { ...next.metadata }
+        },
+      }
+    },
+  }
+}
+
+describe('rotateDownloadTokenForObject', () => {
+  it('FETCHES the metadata rather than reading a bare handle', async () => {
+    // The AGL-1881 regression test. Against the old body this returns
+    // `{ rotated: false, reason: 'no-token' }` and the token is untouched.
+    const objects: Record<string, Record<string, unknown>> = {
+      'orgs/acme/media/a.jpg': {
+        [DOWNLOAD_TOKEN_METADATA_KEY]: 'the-live-token',
+        photographer: 'Dana',
+      },
+    }
+    const result = await rotateDownloadTokenForObject({
+      storagePath: 'orgs/acme/media/a.jpg',
+      bucket: fakeObjectBucket(objects),
+    })
+    expect(result).toEqual({ rotated: true, reason: 'rotated' })
+    // The URL that was handed out is dead: the token is a DIFFERENT value.
+    expect(objects['orgs/acme/media/a.jpg'][DOWNLOAD_TOKEN_METADATA_KEY]).not.toBe(
+      'the-live-token',
+    )
+    expect(
+      String(objects['orgs/acme/media/a.jpg'][DOWNLOAD_TOKEN_METADATA_KEY]),
+    ).toHaveLength(36)
+    // …and a revocation is not a data-loss event: `setMetadata` replaces the
+    // whole custom map, so customer-set pairs have to be respread.
+    expect(objects['orgs/acme/media/a.jpg']['photographer']).toBe('Dana')
+  })
+
+  it('MINTS NOTHING for an object that never carried a token', async () => {
+    // Writing one here would CREATE the public URL this function exists to
+    // remove — the narrowing the module's header spends a paragraph on.
+    const objects: Record<string, Record<string, unknown>> = {
+      'orgs/acme/media/b.jpg': { photographer: 'Dana' },
+    }
+    const result = await rotateDownloadTokenForObject({
+      storagePath: 'orgs/acme/media/b.jpg',
+      bucket: fakeObjectBucket(objects),
+    })
+    expect(result).toEqual({ rotated: false, reason: 'no-token' })
+    expect(objects['orgs/acme/media/b.jpg']).toEqual({ photographer: 'Dana' })
+  })
+
+  it('fails SOFT and says so, rather than throwing at its caller', async () => {
+    // A Storage outage must not become a "you cannot make this private"
+    // outage — but the caller has to be able to tell the two apart, which is
+    // why the reason is reported instead of a bare boolean.
+    expect(
+      await rotateDownloadTokenForObject({
+        storagePath: 'orgs/acme/media/a.jpg',
+        bucket: fakeObjectBucket(
+          { 'orgs/acme/media/a.jpg': { [DOWNLOAD_TOKEN_METADATA_KEY]: 't' } },
+          { failWrite: true },
+        ),
+      }),
+    ).toEqual({ rotated: false, reason: 'error' })
+    // A document with no object behind it, and a bucket that is not there.
+    expect(
+      await rotateDownloadTokenForObject({ storagePath: '', bucket: fakeObjectBucket({}) }),
+    ).toEqual({ rotated: false, reason: 'no-path' })
+    expect(
+      await rotateDownloadTokenForObject({ storagePath: 'x', bucket: null }),
+    ).toEqual({ rotated: false, reason: 'not-configured' })
+  })
+})
+
+describe('currentDownloadUrlForObject', () => {
+  it('rebuilds the URL from the token the object already carries', async () => {
+    // The publish half. It must MINT NOTHING: the value it returns is
+    // derived from the current token, so a URL handed out before the asset
+    // went private is still dead.
+    const url = await currentDownloadUrlForObject({
+      storagePath: 'orgs/acme/media/a.jpg',
+      bucket: fakeObjectBucket({
+        'orgs/acme/media/a.jpg': {
+          [DOWNLOAD_TOKEN_METADATA_KEY]: 'rotated-token-value',
+        },
+      }),
+    })
+    expect(url).toBe(
+      'https://firebasestorage.googleapis.com/v0/b/aglyn-media/o/' +
+        'orgs%2Facme%2Fmedia%2Fa.jpg?alt=media&token=rotated-token-value',
+    )
+  })
+
+  it('returns null rather than an empty URL when there is nothing to rebuild', async () => {
+    // The caller writes no `url` at all in that case; a `url: ''` on the
+    // document would be a value every renderer then has to reason about.
+    expect(
+      await currentDownloadUrlForObject({
+        storagePath: 'orgs/acme/media/b.jpg',
+        bucket: fakeObjectBucket({ 'orgs/acme/media/b.jpg': {} }),
+      }),
+    ).toBeNull()
+    expect(
+      await currentDownloadUrlForObject({
+        storagePath: 'orgs/acme/media/gone.jpg',
+        bucket: fakeObjectBucket({}),
+      }),
+    ).toBeNull()
+    expect(await currentDownloadUrlForObject({ storagePath: '' })).toBeNull()
   })
 })

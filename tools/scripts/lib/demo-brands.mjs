@@ -1826,6 +1826,178 @@ export const BRANDS = {
     },
     teamMember: { email: 'coach@example.com', role: 'editor' },
   },
+
+  // ── 6. Showcase — the RENDER CANARY's subject, not a sales prop ──────────
+  //
+  // AGL-1617. The site canary (`/api/health/render/site`) grades one thing:
+  // a host resolved and returned a non-empty node tree. That assertion is
+  // deliberately structural, so an ordinary customer edit can never page
+  // on-call — and `render-canary-can-go-red.spec.ts` exists to keep it that
+  // way. But a structural assertion is only worth anything when SOMETHING
+  // guarantees the tree, and for its whole life the canary's subject was
+  // `demo`: a host in an individual's personal org with zero seed documents,
+  // whose four screens are renderer test fixtures. 19 `hello` nodes,
+  // `CLICK ME` and unresolved `{{Message}}` tokens graded green, because 19
+  // nodes is a non-empty tree.
+  //
+  // This pack is the subject that makes the assertion mean something. Its
+  // whole content comes from this file, so "the tree is non-empty" is a fact
+  // about a commit rather than about what somebody last left on a canvas.
+  //
+  // THREE constraints it must keep, all of them load-bearing:
+  //
+  //  1. NOT one of the four agency brands, and deliberately absent from
+  //     AGENCY_DEMO_BRANDS. Sales edits those before customer calls; pinning
+  //     the canary to one reintroduces exactly the "an ordinary edit pages
+  //     on-call" failure the structural assertion was built to avoid. Nobody
+  //     demos on this one.
+  //  2. NO commerce, and no pricing of any kind. `demo` publicly served a
+  //     fake $9/$29/$79 pricing table while real pricing was locked for
+  //     launch. A canary subject must never be mistakable for an offer.
+  //  3. NAMES NO OPERATOR. No brand and no hostname appear in this pack, so
+  //     a self-host install seeding it gets a working reference site rather
+  //     than a page about somebody else's company (the AGL-1919 precedent
+  //     the canary's own host resolution follows).
+  showcase: {
+    id: 'showcase',
+    displayName: 'Platform Showcase',
+    subdomain: 'showcase',
+    tagline: 'A reference site, rendered from version control',
+    theme: {
+      colorSchemes: scheme({
+        primary: '#2F4858',
+        secondary: '#7A5C9E',
+        tertiary: '#00A6A6',
+        bg: '#FAFAFC',
+        paper: '#FFFFFF',
+        text: '#1A1D24',
+      }),
+      fonts: [{ family: 'IBM Plex Sans', weights: [400, 600], source: 'google' }],
+      typography: { fontFamily: '"IBM Plex Sans", system-ui, sans-serif' },
+      shape: { borderRadius: 4 },
+    },
+    // heroSplit > statBand > listBand — a section sequence no other pack
+    // uses, so a copy-paste regression that collapsed this pack into another
+    // shows up as a layout clash in the guard rather than as a subtle
+    // rewording nobody reads.
+    home: {
+      sections: [
+        {
+          type: 'heroSplit',
+          // The brand name is in the HERO COPY, not only in `displayName`,
+          // and that is deliberate. `check-week-one-preflight.mjs` matches
+          // /Platform Showcase/i against the served HTML of this host. Left
+          // only in `displayName` the marker reaches the page through the
+          // <title> alone — so the content check would be resting on title
+          // rendering rather than on the body it means to assert, and a
+          // regression that emptied the canvas could still match.
+          title: 'Platform Showcase renders from a file, never from a canvas',
+          body:
+            'Every element here is written in a fixture file and applied by a ' +
+            'seeding script. Nobody edits this site by hand, which is the ' +
+            'entire point: when a health check reports that it rendered, the ' +
+            'result is a statement about a commit.',
+          cta: { label: 'How this site is built', href: '/about' },
+          image: img('referencesite', '960/620'),
+          alt: 'A workbench with drawing tools laid out in order',
+        },
+        {
+          type: 'statBand',
+          stats: [
+            { value: '3', label: 'Sections' },
+            { value: '100%', label: 'From fixtures' },
+            { value: '0', label: 'Hand edits' },
+          ],
+          sx: { py: 8 },
+        },
+        {
+          type: 'listBand',
+          heading: 'What a render check can and cannot tell you',
+          items: [
+            {
+              primary: 'It proves the host resolved',
+              secondary:
+                'A page route that answers at all has already exercised host lookup, theme resolution and the page loader.',
+            },
+            {
+              primary: 'It proves the tree is not empty',
+              secondary:
+                'An empty canvas and a broken query are indistinguishable to a status code, so the node count is read instead.',
+            },
+            {
+              primary: 'It says nothing about whether the words are right',
+              secondary:
+                'Grading copy would turn any routine edit into an alarm. Content is checked on a schedule elsewhere, where it can file instead of page.',
+            },
+          ],
+        },
+      ],
+    },
+    variables: [
+      { id: 'seed-site-name', name: 'siteName', type: 'text', value: 'Platform Showcase' },
+      { id: 'seed-tagline', name: 'tagline', type: 'text', value: 'Rendered from a fixture, never by hand' },
+      { id: 'seed-base-price', name: 'sectionCount', type: 'number', value: '3' },
+    ],
+    logic: { fn: null, workflow: null, action: null },
+    datasets: [
+      {
+        id: 'seed-checks',
+        name: 'Monitored surfaces',
+        fields: ['surface', 'grades', 'cadence'],
+        rows: [
+          { surface: 'Published sites', grades: 'Host resolved and node tree present', cadence: 'Every 15 minutes' },
+          { surface: 'Marketing site', grades: 'Host resolved and node tree present', cadence: 'Every 15 minutes' },
+        ],
+      },
+    ],
+    collections: [
+      {
+        id: 'seed-blog',
+        displayName: 'Notes',
+        slug: 'notes',
+        entries: [
+          {
+            id: 'seed-post-1',
+            title: 'Why this site is boring on purpose',
+            slug: 'boring-on-purpose',
+            excerpt: 'A canary that changes is a canary nobody can read.',
+            coverImage: img('steadystate'),
+            body:
+              '## The subject has to be stable\n\nA health check whose subject drifts ' +
+              'reports the drift, not the health.\n\n' +
+              '## So the subject is a file\n\nChanging what this page says takes a commit, ' +
+              'a review and a deploy, which is the slowest possible way to change it. ' +
+              'That is the feature.',
+          },
+        ],
+      },
+    ],
+    media: [
+      { id: 'seed-media-1', fileName: 'bench.jpg', folder: 'Reference', tags: ['hero'], seed: 'referencesite/1200/600' },
+    ],
+    leads: [],
+    siteMembers: [],
+    services: [],
+    commerce: null,
+    reservations: null,
+    marketing: { campaigns: [], email: null, overlays: [], experiments: [] },
+    redirects: [
+      { id: 'seed-redir-1', source: '/status', destination: '/', statusCode: 302, kind: 'exact', priority: 10 },
+    ],
+    orgData: {
+      contacts: [],
+      segments: [],
+      lists: [],
+      datasets: [
+        {
+          id: 'seed-orgdata-1',
+          name: 'Probe register',
+          model: { fields: [{ key: 'probe', label: 'Probe', type: 'text' }, { key: 'intervalMinutes', label: 'Interval', type: 'number' }] },
+        },
+      ],
+    },
+    teamMember: null,
+  },
 }
 
 /** Brand ids, in the order they read best in a switcher. */
@@ -1840,8 +2012,22 @@ export const DEFAULT_BRAND = 'bakery'
  * Four visibly different clients under one org is the shape the Agency ICP
  * needs to see; the bakery is deliberately NOT in it, because the default
  * host is already seeded with it and a fifth site adds no argument.
+ *
+ * `showcase` is excluded for a DIFFERENT and stronger reason: it is the
+ * render canary's subject (AGL-1617). Sales edits the four brands above
+ * before customer calls, so a canary pinned to one of them would page
+ * on-call for an ordinary edit — the exact failure the canary's structural
+ * assertion was designed to avoid. Adding `showcase` here would put it back.
  */
 export const AGENCY_DEMO_BRANDS = ['dental', 'legal', 'restaurant', 'fitness']
+
+/**
+ * The pack the render canary's host is seeded from (AGL-1617).
+ *
+ * Named rather than spelled `'showcase'` at each call site so the canary's
+ * subject, the seeding command and the content check cannot drift apart.
+ */
+export const CANARY_DEMO_BRAND = 'showcase'
 
 /** Resolves a brand id, failing loudly rather than silently seeding the default. */
 export function resolveBrand(id) {

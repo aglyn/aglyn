@@ -375,6 +375,12 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'origin.',
   },
   {
+    file: 'tools/scripts/check-week-one-preflight.mjs',
+    count: 12,
+    reason:
+      "Aglyn's own launch-week pre-flight (AGL-1617). Never shipped and never imported by an app: it reads OUR Drive folder, OUR five live legal pages and the five demo hosts by name, because the thing it checks IS our launch. A self-hoster has no use for it, so there is nothing here to make configurable. Landed unlisted in 3247f379b, which left this ratchet red on main until AGL-1617 added this entry.",
+  },
+  {
     file: 'tools/scripts/check-retired-colours.mjs',
     count: 1,
     reason:
@@ -411,10 +417,10 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'Reader of STRIPE_WEBHOOK_URL, the same variable the console health route honours; the literal is its default (AGL-2202).',
   },
   {
-    file: 'tools/scripts/probe-uptime.mjs',
+    file: 'tools/scripts/lib/uptime-targets.mjs',
     count: 2,
     reason:
-      'Aglyn own uptime probe, overridable on the command line. Internal tool.',
+      "The uptime probe's two default targets, moved out of probe-uptime.mjs so a test can read them without firing a production sweep (AGL-1617). Overridable on the command line and by CONSOLE_BASE_URL / TENANT_BASE_URL. Internal tool.",
   },
   {
     file: 'tools/scripts/reap-plugin-artifacts.mjs',

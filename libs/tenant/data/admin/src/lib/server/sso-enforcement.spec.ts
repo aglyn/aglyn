@@ -158,6 +158,8 @@ describe('assessSsoLockoutRisk', () => {
       safe: false,
       retainedBy: [],
       ineffective: [],
+      ownersOutsidePool: [],
+      ownerLookupFailed: false,
     })
   })
 
@@ -167,6 +169,8 @@ describe('assessSsoLockoutRisk', () => {
       safe: true,
       retainedBy: ['u1'],
       ineffective: [],
+      ownersOutsidePool: [],
+      ownerLookupFailed: false,
     })
   })
 
@@ -223,6 +227,8 @@ describe('assessSsoLockoutRisk', () => {
       safe: false,
       retainedBy: [],
       ineffective: ['owner'],
+      ownersOutsidePool: [],
+      ownerLookupFailed: false,
     })
   })
 
@@ -247,5 +253,59 @@ describe('assessSsoLockoutRisk', () => {
     // Nothing to protect and nothing protecting it. Answering "safe" for the
     // degenerate case is how a guard gets skipped on the path that matters.
     expect(assessSsoLockoutRisk([], SAML, ['u1']).safe).toBe(false)
+  })
+
+  /**
+   * AGL-1888 option (a). Until this input existed the assessment could only
+   * ever answer unsafe for a pool we provisioned, because nothing inside such
+   * a pool can hold a password — so the guard was not a guard, it was a wall.
+   */
+  describe('an org owner OUTSIDE the pool', () => {
+    const owner = {
+      uid: 'founder',
+      email: 'founder@acme.com',
+      providers: ['password'],
+    }
+
+    it('makes an otherwise-doomed org SAFE, with nobody designated', () => {
+      // The whole point. Every account in the pool holds only the SAML link —
+      // the shape that could never be rescued from inside — and the founder
+      // signs in at project level, where the sweep cannot reach.
+      const accounts = planned([user('u1', [SAML]), user('u2', [SAML])], [])
+      const verdict = assessSsoLockoutRisk(accounts, SAML, [], [owner])
+      expect(verdict.safe).toBe(true)
+      expect(verdict.ownersOutsidePool).toEqual([owner])
+      expect(verdict.retainedBy).toEqual([])
+    })
+
+    it('THE NEGATIVE: no owner and no designation is still a refusal', () => {
+      // The assertion that matters more than the positive one. An empty owner
+      // list must not soften anything, or the guard is off for every org that
+      // does not have one.
+      const accounts = planned([user('u1', [SAML]), user('u2', [SAML])], [])
+      expect(assessSsoLockoutRisk(accounts, SAML, [], []).safe).toBe(false)
+    })
+
+    it('does not launder an INEFFECTIVE designation into an effective one', () => {
+      // Two different protections. An owner outside the pool makes the ORG
+      // safe; it says nothing about the account that was ticked, and that
+      // account must still be reported as protecting nothing so a bad pick
+      // can be replaced rather than left standing.
+      const accounts = planned([user('u1', [SAML])], ['u1'])
+      const verdict = assessSsoLockoutRisk(accounts, SAML, ['u1'], [owner])
+      expect(verdict.safe).toBe(true)
+      expect(verdict.ineffective).toEqual(['u1'])
+      expect(verdict.retainedBy).toEqual([])
+    })
+
+    it('a FAILED lookup never makes an org safe', () => {
+      // `unavailable` travels so the refusal can say "we could not check".
+      // If it ever made an org safe, an Auth outage would become a way to
+      // enforce past the guard.
+      const accounts = planned([user('u1', [SAML])], [])
+      const verdict = assessSsoLockoutRisk(accounts, SAML, [], [], true)
+      expect(verdict.safe).toBe(false)
+      expect(verdict.ownerLookupFailed).toBe(true)
+    })
   })
 })

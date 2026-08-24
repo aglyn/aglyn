@@ -22,9 +22,11 @@ import {
   normalizeVisibleTo,
 } from '@aglyn/aglyn/server'
 import {
+  currentDownloadUrlForObject,
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  rotateDownloadTokenForObject,
 } from '@aglyn/tenant-data-admin'
 import { randomUUID } from 'crypto'
 import {
@@ -425,6 +427,50 @@ async function handler(request: Request): Promise<Response> {
      * Org-wide members only, matching `set-scope`. Turning an asset public
      * is a publish, and a collaborator scoped to one client site has no
      * standing to publish the agency's files.
+     *
+     * ## THE RAW URL, which `cdnPath` never reached (AGL-1881)
+     *
+     * Dropping `cdnPath` closes the path OUR code serves. It does nothing
+     * to the other one. Every upload route also mints a Firebase download
+     * token and stores the resulting
+     * `firebasestorage.googleapis.com/…?alt=media&token=…` on the document's
+     * `url`, and **no code of ours runs on that origin** — a lock cannot
+     * refuse it, a cache cannot be evicted, and `private: true` is a flag it
+     * has never heard of. So "Make private" moved a flag and left the URL
+     * that had already been pasted into a brief, an email or a Slack thread
+     * serving the bytes forever. A private setting that does not make the
+     * thing private is a promise we publish on the confirmation dialog.
+     *
+     * The only lever that works there is the token itself, and it has
+     * existed since AGL-1526. It is now wired here:
+     *
+     *  * **Going private ROTATES the token.** Every raw URL ever handed out
+     *    for this object is dead at Google's edge from the moment the write
+     *    lands — immediately, with no cache of ours in the path and nothing
+     *    to revalidate. There is no grace period and none is wanted: the
+     *    whole complaint is that the outstanding link kept working.
+     *  * **`url` is DELETED with it,** because after a rotation the stored
+     *    value is a dead link, and a dead link in a field the DAM renders
+     *    from is a broken tile rather than an honest one. A private asset
+     *    now shows its file-type placeholder in the library and is fetched
+     *    through the signed, expiring link `POST /api/media/sign` mints —
+     *    which is what the confirmation dialog has always promised.
+     *  * **Publishing REBUILDS `url` from the token the object already
+     *    carries** ({@link currentDownloadUrlForObject}), so Publish is not
+     *    a one-way door for a workspace whose plan has no `mediaCdn` and
+     *    for which `url` is the only delivery path. Nothing is minted and
+     *    the rotation is not undone: the pre-private URLs stay dead.
+     *
+     * What it does NOT reach, stated because a takedown described as a
+     * recall is a false assurance: bytes already delivered. A browser cache,
+     * a downstream CDN, a scraper's disk. Rotation stops NEW fetches at the
+     * origin, which is the strongest control available on a path we do not
+     * serve, and it is not a recall.
+     *
+     * Fail-soft on the Storage call, and REPORTED. A Storage blip must not
+     * become a "you cannot make this private" outage, so the Firestore write
+     * lands either way — but the response says what actually happened, so
+     * the console can state it instead of assuming it.
      */
     if (action === 'set-private') {
       const mediaId = String(body?.mediaId ?? '')
@@ -442,6 +488,34 @@ async function handler(request: Request): Promise<Response> {
       if (!snapshot.exists || snapshot.get('deletedAt')) {
         return Response.json({ error: 'Unknown media' }, { status: 404 })
       }
+      // Resolved through `mediaObjectPath`, never off the raw field: the
+      // recorded key is client data handed to `bucket.file()` on the Admin
+      // SDK, which the Storage rules do not constrain (AGL-1881).
+      const objectPath = mediaObjectPath(snapshot, scope.base)
+      const rotation = makePrivate
+        ? await rotateDownloadTokenForObject({
+            storagePath: objectPath,
+            // Named at the call site, like the quarantine route: the admin
+            // app carries no default bucket, so a caller that forgets is a
+            // silent no-op rather than an error.
+            bucket: firebaseAdmin
+              .app()
+              .storage()
+              .bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET),
+          })
+        : { rotated: false, reason: 'skipped' as const }
+      // Publishing: put back a WORKING `url` from the token the object still
+      // carries, so a plan without `mediaCdn` is not left with no delivery
+      // path at all. Nothing is minted; the pre-private URLs stay dead.
+      const republishedUrl = makePrivate
+        ? null
+        : await currentDownloadUrlForObject({
+            storagePath: objectPath,
+            bucket: firebaseAdmin
+              .app()
+              .storage()
+              .bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET),
+          })
       await snapshot.ref.set(
         {
           private: makePrivate,
@@ -453,6 +527,15 @@ async function handler(request: Request): Promise<Response> {
             mediaId,
             isPrivate: makePrivate,
           }),
+          // The raw URL moves with the flag, in both directions. Deleted on
+          // going private because the token behind it has just been rotated
+          // and the value is now a dead link; restored on publishing when
+          // the object has a token to rebuild it from.
+          ...(makePrivate
+            ? { url: firebaseAdmin.firestore.FieldValue.delete() }
+            : republishedUrl
+              ? { url: republishedUrl }
+              : {}),
           updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true },
@@ -460,7 +543,29 @@ async function handler(request: Request): Promise<Response> {
       // Anything already embedding this asset keeps its stored URL, which
       // now 404s — the same trade as deleting an asset, and the reason the
       // picker refuses private assets in the first place.
-      return Response.json({ ok: true, private: makePrivate }, { status: 200 })
+      return Response.json(
+        {
+          ok: true,
+          private: makePrivate,
+          // Said, not assumed. The Storage call fails soft so the flag still
+          // lands, and the console tells the operator which of the two
+          // happened rather than reporting a revocation that did not run.
+          rawUrlRevoked: rotation.rotated,
+          rawUrlRevocation: rotation.reason,
+          // The question the console actually needs answered, decided once
+          // here rather than by each caller re-deriving it from `reason`.
+          // `no-token` is the common and CORRECT benign case — the object
+          // never had a raw URL, so there is none left live — and reporting
+          // it as a failed revocation would alarm someone about nothing.
+          // Anything else (`error`, `not-configured`, `no-path`) means we do
+          // not know that the public URL is dead, and must not say it is.
+          rawUrlCleared:
+            !makePrivate ||
+            rotation.reason === 'rotated' ||
+            rotation.reason === 'no-token',
+        },
+        { status: 200 },
+      )
     }
 
     if (action === 'custom-metadata') {

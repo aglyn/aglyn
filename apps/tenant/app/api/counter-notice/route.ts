@@ -92,6 +92,7 @@ import {
   notifyStaff,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
+import { acknowledgeCounterNotice } from '../_legal-intake/acknowledge'
 import {
   clientIp,
   contactHtml,
@@ -501,6 +502,28 @@ export async function POST(request: Request): Promise<Response> {
         `${Aglyn.COUNTER_NOTICE_MIN_BUSINESS_DAYS}–${Aglyn.COUNTER_NOTICE_MAX_BUSINESS_DAYS} ` +
         `business days from receipt unless the complainant files suit.`,
       link: '/admin/abuse-reports',
+    })
+
+    /**
+     * And post the same receipt to the subscriber, because the form promised
+     * it (AGL-2400). The email field's own hint reads "How we will tell you
+     * what happens next" — before this it was collected, stored, forwarded to
+     * the complainant, and never written to.
+     *
+     * FIRST SUBMISSION ONLY, sharing `notifyStaff`'s gate rather than adding
+     * a second one: the deduplicating document id makes a resubmission the
+     * same row, so a second mail would be a duplicate receipt for one filing,
+     * and the gate is also what bounds an unauthenticated form's ability to
+     * mail an address someone else typed into it.
+     *
+     * Best-effort by construction. `sendEmail` never throws and answers
+     * `{sent:false}` on a deployment with no mail configured, so the receipt
+     * page — which is still the primary artifact — never depends on it.
+     */
+    await acknowledgeCounterNotice({
+      to: notice.email,
+      reference,
+      reportedUrl: notice.url,
     })
   }
 

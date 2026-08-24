@@ -119,13 +119,18 @@ export FIRESTORE_EMULATOR_HOST="127.0.0.1:${FIRESTORE_PORT}"
 export FIREBASE_AUTH_EMULATOR_HOST="127.0.0.1:${AUTH_PORT}"
 export FIREBASE_DATABASE_EMULATOR_HOST="127.0.0.1:${DATABASE_PORT}"
 
-# One jest invocation per nx project (single-project runs only). The three
-# listed here are every project that currently owns a `*.emulator.spec.ts`;
-# the coverage assertion at the end is what notices when a fourth appears.
+# One jest invocation per nx project (single-project runs only). These are
+# every project that currently owns a `*.emulator.spec.ts`; the coverage
+# assertion at the end is what notices when another appears.
+#
+# It has already earned that: `libs/tenant/feature/instance` was added by
+# AGL-2486's switcher spec, the sweep did not list it, and the assertion —
+# not jest, which exited 0 on the three it did run — is what said so.
 PROJECTS=(
   apps/console
   libs/tenant/data/admin
   libs/tenant/runtime
+  libs/tenant/feature/instance
 )
 
 REPORT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/emulator-guard-reports.XXXXXX")"

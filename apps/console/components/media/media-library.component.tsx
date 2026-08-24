@@ -1275,15 +1275,26 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
    * embed of it; going public hands out a URL that then works forever, for
    * anyone it reaches — that is the property the private flag existed to
    * remove, so it deserves the same pause.
+   *
+   * The "make private" copy used to say the file "will stop working
+   * anywhere it is already used". That was not true (AGL-1881): the raw
+   * `firebasestorage.googleapis.com` URL is served by Google, not by us,
+   * and the flag never reached it. The route now revokes that URL for real
+   * by rotating the object's download token, so the sentence is finally
+   * accurate — and the copy names what is and is not reached, because a
+   * revocation described as a recall is a false assurance handed to someone
+   * making a decision on the strength of it.
    */
   const setAssetPrivate = useCallback(
     async (mediaId: string, makePrivate: boolean) => {
       const confirmed = await confirm({
         title: makePrivate ? 'Make this file private?' : 'Publish this file?',
         description: makePrivate
-          ? 'It will stop working anywhere it is already used, and can no ' +
-            'longer be placed on a page. You will still be able to view and ' +
-            'download it here through a temporary link.'
+          ? 'Every link to this file stops working — including any public ' +
+            'URL already copied or shared — and it can no longer be placed ' +
+            'on a page. You will still be able to view and download it here ' +
+            'through a temporary link. Copies anyone has already downloaded ' +
+            'are not affected.'
           : 'It gets a permanent public URL. Anyone that URL reaches can ' +
             'open the file, and there is no way to withdraw it afterwards.',
         confirmationText: makePrivate ? 'Make private' : 'Publish',
@@ -1315,11 +1326,36 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       // The client wrote this field and knows its new value (AGL-1462), and
       // no query filters on it — so there is nothing here a re-read would
       // learn, and a re-read would cost the loaded window.
-      patchLocal([mediaId], { private: makePrivate })
-      enqueueSnackbar(makePrivate ? 'File is now private' : 'File published', {
-        variant: 'success',
-        persist: false,
-      })
+      //
+      // `url` moves with it (AGL-1881): going private revokes the raw
+      // download URL server-side and deletes the field, so a tile still
+      // holding the old value would render a dead image rather than the
+      // file-type placeholder. Publishing gets the rebuilt one back off the
+      // response, which is the only place the client can learn it.
+      patchLocal([mediaId], {
+        private: makePrivate,
+        ...(makePrivate
+          ? { url: undefined }
+          : payload?.url
+            ? { url: payload.url as string }
+            : {}),
+      } as Partial<Aglyn.AglynHostMedia>)
+      enqueueSnackbar(
+        makePrivate
+          ? // Only claimed when the server says no public URL is left live.
+            // The Storage call fails soft, so the flag can land without the
+            // revocation — and telling someone their public link is dead
+            // when it is not is the exact failure this change is about.
+            payload?.rawUrlCleared
+            ? 'File is now private — its public link no longer works'
+            : 'File is now private, but its old public link could not be revoked. Try again.'
+          : 'File published',
+        {
+          variant:
+            makePrivate && !payload?.rawUrlCleared ? 'warning' : 'success',
+          persist: false,
+        },
+      )
     },
     [user, scopeId, confirm, enqueueSnackbar, patchLocal],
   )

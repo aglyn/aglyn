@@ -63,11 +63,20 @@
  * ## Running it
  *
  *   npm run firebase:emulate      # auth 9099, firestore 8082
- *   npm run seed:e2e
  *   FIRESTORE_EMULATOR_HOST=localhost:8082 \
  *   FIREBASE_AUTH_EMULATOR_HOST=localhost:9099 \
  *     npx jest -c apps/console/jest.config.ts \
  *       --testPathPatterns route.drill.emulator --runInBand
+ *
+ * NO SEED. `beforeAll` builds every document and every account this file
+ * touches, and `afterAll` removes them, so the drill runs against an empty
+ * emulator. It used to pick an arbitrary `orgs`/`hosts` document with a
+ * `limit(1)` and tell you to run `npm run seed:e2e` when it found none —
+ * which meant the org/host case was asserting against whatever happened to
+ * be lying around, and it failed on the first CI run (`emulator-guards.yml`
+ * seeds nothing and never did). A drill whose precondition is "somebody ran
+ * a command earlier" is a drill that goes red the moment the environment is
+ * clean, and it is graded against data nobody chose.
  *
  * Skipped unless both emulator hosts are set, so a normal `jest` run is
  * unaffected and this can never reach production. It is deliberately slow —
@@ -92,6 +101,15 @@ const SUPPORT_EMAIL = 'lockdown-drill-support@aglyn.test'
 const PLAIN_UID = 'lockdown-drill-plain'
 const PLAIN_EMAIL = 'lockdown-drill-plain@aglyn.test'
 const PASSWORD = 'E2e-Password-1'
+
+/**
+ * The org, site and member the org/host case locks. Owned by this file: made
+ * in `beforeAll`, removed in `afterAll`, and named so a leftover is obviously
+ * this drill's rather than somebody's data.
+ */
+const DRILL_ORG_ID = 'lockdown-drill-org'
+const DRILL_HOST_ID = 'lockdown-drill-host'
+const DRILL_MEMBER_UID = 'lockdown-drill-member'
 
 /** Poll cadence for every convergence measurement; also its resolution. */
 const POLL_MS = 250
@@ -161,10 +179,12 @@ describeEmulated('lockdown panic-button drill (emulator)', () => {
     plainToken = await mintIdToken(PLAIN_EMAIL)
     route = (await import('./route')) as typeof route
     await clearAllDrillState(db)
+    await createDrillTargets(db)
   }, 120_000)
 
   afterAll(async () => {
     await clearAllDrillState(db)
+    await deleteDrillTargets(db)
     if (measurements.length) {
       console.log(
         '\nAGL-1621 LAYER-1 MEASUREMENTS (verdict reader, real Firestore)\n' +
@@ -520,8 +540,19 @@ describeEmulated('lockdown panic-button drill (emulator)', () => {
 
   it('org and host: the lock rides the shipped suspendedAt carrier', async () => {
     await clearAllDrillState(db)
-    const orgId = await anyDocId(db, 'orgs')
-    const hostId = await anyDocId(db, 'hosts')
+    const orgId = DRILL_ORG_ID
+    const hostId = DRILL_HOST_ID
+    const memberRef = db
+      .collection('orgs')
+      .doc(orgId)
+      .collection('members')
+      .doc(DRILL_MEMBER_UID)
+    // The targets exist. A missing one does fail the case anyway — the route
+    // 404s and the first `toBe(200)` catches it — but it catches it as
+    // "expected 200, received 404" thirty lines down, which reads like a
+    // regression in the route. Say the real thing here instead.
+    expect((await db.collection('orgs').doc(orgId).get()).exists).toBe(true)
+    expect((await db.collection('hosts').doc(hostId).get()).exists).toBe(true)
 
     // NORMAL: the verdict is null for a caller in an unsuspended org.
     const orgBefore = await readDoc(db, 'orgs', orgId)
@@ -546,6 +577,9 @@ describeEmulated('lockdown panic-button drill (emulator)', () => {
     // loaded, so these two scopes propagate at the caller's own read.
     expect(await admin.getLockdownVerdict({ org: orgAfter, staff: true }))
       .toBeNull()
+    // AGL-210's read side: the member's own projection, which is what the
+    // console reads to tell a member their workspace is suspended.
+    expect((await memberRef.get()).get('orgSuspended')).toBe(true)
 
     const hostLocked = await post(route, superToken, {
       action: 'lock',
@@ -579,6 +613,7 @@ describeEmulated('lockdown panic-button drill (emulator)', () => {
         org: await readDoc(db, 'orgs', orgId),
       }),
     ).toBeNull()
+    expect((await memberRef.get()).get('orgSuspended')).toBe(false)
   }, 180_000)
 
   it('domain: locks one name without taking the site down', async () => {
@@ -775,14 +810,50 @@ async function readDoc(
   return (await db.collection(collection).doc(id).get()).data()
 }
 
-async function anyDocId(db: Firestore, collection: string): Promise<string> {
-  const snapshot = await db.collection(collection).limit(1).get()
-  if (snapshot.empty) {
-    throw new Error(
-      `no ${collection} in the emulator — run \`npm run seed:e2e\` first`,
-    )
-  }
-  return snapshot.docs[0].id
+/**
+ * Build the org and site the org/host case locks, plus one member for the
+ * `orgSuspended` projection to land on.
+ *
+ * Shapes matter here, and two omissions are deliberate:
+ *
+ *  - `hosts: { [DRILL_HOST_ID]: true }` on the org is the map
+ *    `applyOrgLockdown` walks to evict each site's cached pages, so the org
+ *    lock exercises that step rather than skipping it on an empty map.
+ *  - the host doc carries NO `subdomain`, which stops
+ *    `revalidateHostAfterLockdown` at `no-subdomain` before its `fetch`.
+ *    With a subdomain and a `REVALIDATE_SECRET` in the environment — which
+ *    a developer's shell may well have — a locally-run drill would POST to
+ *    `https://<subdomain>.<NEXT_PUBLIC_TENANT_DOMAIN>/api/revalidate`, i.e.
+ *    a test reaching out and busting a real tenant's cache. The revalidate
+ *    fan-out has its own coverage; it is not what this case measures.
+ */
+async function createDrillTargets(db: Firestore): Promise<void> {
+  await db
+    .collection('orgs')
+    .doc(DRILL_ORG_ID)
+    .set({
+      name: 'AGL-1621 drill workspace',
+      slug: DRILL_ORG_ID,
+      hosts: { [DRILL_HOST_ID]: true },
+    })
+  await db
+    .collection('orgs')
+    .doc(DRILL_ORG_ID)
+    .collection('members')
+    .doc(DRILL_MEMBER_UID)
+    .set({ role: 'owner', allHosts: true })
+  await db.collection('hosts').doc(DRILL_HOST_ID).set({
+    orgId: DRILL_ORG_ID,
+    name: 'AGL-1621 drill site',
+  })
+}
+
+async function deleteDrillTargets(db: Firestore): Promise<void> {
+  const orgRef = db.collection('orgs').doc(DRILL_ORG_ID)
+  const members = await orgRef.collection('members').get()
+  await Promise.all(members.docs.map((doc) => doc.ref.delete()))
+  await orgRef.delete()
+  await db.collection('hosts').doc(DRILL_HOST_ID).delete()
 }
 
 /** Leave the emulator as the drill found it: no locks, no suspensions. */

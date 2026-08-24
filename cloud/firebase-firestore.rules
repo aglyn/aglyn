@@ -41,6 +41,96 @@ service cloud.firestore {
     function isSuperStaff() { return isStaff() && staffRole() == 'super'; }
 
     // ------------------------------------------------------------------
+    // Media objects (AGL-1881): the fields that address the SHARED Storage
+    // bucket, decide who may read what it holds, and decide what comes back.
+    // ------------------------------------------------------------------
+    /**
+     * A media document's server-written fields are server-owned facts about a
+     * Storage OBJECT. None is user input, and all of them were client-
+     * writable. `storagePath` and `private` are the pair the pre-launch
+     * review named CRITICAL; the rest are below.
+     *
+     * `storagePath` is the object key. Seven server paths read it off the
+     * document and hand it to `bucket.file(...)` on the ADMIN SDK, which
+     * `cloud/firebase-storage.rules` does not govern at all — Admin
+     * credentials are not subject to Storage rules. So the field addressed
+     * ANY object in the shared bucket, from a document the writer owns:
+     * `serveMediaCdn` streams it to an anonymous caller behind an
+     * edge-cached URL, `/api/media/replace` overwrites it, and the folder
+     * delete removes it. Cross-tenant read, overwrite and destroy. The
+     * bucket is shared and also holds the `adminAudit-archive/` and
+     * `erasures/` retention prefixes, which are FIXED and guessable rather
+     * than needing a stolen key.
+     *
+     * `private` is the other half of the same hole: `serveMediaCdn` skips
+     * the download-signature gate whenever `private != true`, so flipping
+     * it made a signed-only asset anonymously fetchable.
+     *
+     * The SINK is fixed too, and first — `media-storage-path.ts` refuses a
+     * key outside the document's own `<scope>/media/` prefix. This is the
+     * second layer, and it is not redundant: staff writes bypass the sink's
+     * scope by design, rules are deployed on a separate cadence from code,
+     * and a sink-only fix is one refactor away from being reintroduced.
+     * The place a CLIENT-supplied key can be refused is where the client
+     * writes it, which is here.
+     *
+     * ## Why the list is longer than the two fields the finding named
+     *
+     * Because the question the finding asked has an answer, and the answer is
+     * a SET. `media-write-deny-coverage.spec.ts` derives it: every field the
+     * three Admin-SDK creators write onto a media document, minus every field
+     * a client surface actually writes. Nothing here is a guess, and nothing
+     * here is client-authored — the DAM writes `fileName`, `alt`,
+     * `description`, `tags`, `folderId`/`folder` and `visibleTo`, and those
+     * six are the whole of it, swept from the repo rather than remembered.
+     *
+     * Two of the eleven beyond `storagePath`/`private` are security inputs in
+     * their own right, found while classifying them and closed here rather
+     * than written down as safe:
+     *
+     *  - `contentSha256` is the QUARANTINE key. `serveMediaCdn` reads it,
+     *    asks `mediaCdnServeBlock`, and returns 410 on a hit — so a client
+     *    that could rewrite it walked its own asset out of a takedown.
+     *  - `contentType` is the served `Content-Type` and decides the response
+     *    CSP (`mediaCdnContentSecurityPolicy`). GCS metadata wins when it is
+     *    present, so this is a fallback rather than the only input, which is
+     *    what makes it a hardening rather than a second CRITICAL.
+     *
+     * The rest — `cdnPath`, `contentHash`, `createdAt`, `sizeBytes`,
+     * `svgSanitized`, `uploadedBy`, `url`, `variants`, `variantsError` — are
+     * lower stakes individually, and are frozen for the AGL-1367 reason:
+     * every writer is server-side, so denial costs the product nothing, and a
+     * per-field argument about which server-written field is harmless is the
+     * argument that let four org fields drift in AGL-1354.
+     *
+     * ## Two functions, not one
+     *
+     * `resource` does not exist on a create, and `diff()` against a
+     * non-existent document is an ERROR — which denies, but for the wrong
+     * reason and at the wrong line. On a create the fields must be ABSENT
+     * (every legitimate creator is an Admin-SDK route); on an update they
+     * must be UNCHANGED, so a patch that spells out a value it already holds
+     * still passes — the same AGL-1795/1813/1824 property `diff()` gives
+     * everywhere else in this file.
+     *
+     * The two lists are kept adjacent and identical on purpose, since rules
+     * have no constants; `media-write-deny-coverage.spec.ts` asserts they
+     * agree, and that both media blocks use them.
+     */
+    function mediaObjectFieldsUnset() {
+      return !request.resource.data.keys().hasAny([
+        'storagePath', 'private', 'cdnPath', 'url', 'contentType',
+        'contentHash', 'contentSha256', 'sizeBytes', 'variants',
+        'variantsError', 'svgSanitized', 'uploadedBy', 'createdAt']);
+    }
+    function mediaObjectFieldsUnchanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'storagePath', 'private', 'cdnPath', 'url', 'contentType',
+        'contentHash', 'contentSha256', 'sizeBytes', 'variants',
+        'variantsError', 'svgSanitized', 'uploadedBy', 'createdAt']);
+    }
+
+    // ------------------------------------------------------------------
     // Organizations (AGL-233/235, docs/MULTI_TENANT_FIRESTORE.md): the
     // org is the tenant boundary. Authorization resolves from the single
     // membership doc read below — identical get()s within one evaluation
@@ -596,13 +686,26 @@ service cloud.firestore {
       // `canReadScoped()` inspects `resource.data`, which does not exist on
       // a create — media folders ARE created client-side, so that path is
       // real and would error rather than deny.
+      // The object fields are frozen on both operations (AGL-1881). This block
+      // used to freeze `visibleTo` and nothing else, so an org editor could
+      // point their own asset at any object key in the shared bucket — see
+      // `mediaObjectFieldsUnset` at the top of this file for what that bought
+      // and for the whole list. Nothing legitimate is lost: every writer of
+      // every frozen field is an Admin-SDK route, and the DAM's client writes
+      // are `fileName`, `alt`, `description`, `tags`, `folderId`/`folder` and
+      // `visibleTo`.
       match /media/{mediaId} {
         allow read: if isStaff() || canReadScoped();
-        allow create: if isStaff() || (canWriteOrgData() && canCreateScoped());
+        allow create: if isStaff() ||
+          (canWriteOrgData() && canCreateScoped() && mediaObjectFieldsUnset());
         allow update: if isStaff() ||
-          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
+          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
+           mediaObjectFieldsUnchanged());
         allow delete: if isStaff() || canWriteScopedOrgData();
       }
+      // Folders hold a name and a parent; they address no Storage object, so
+      // the object freeze has nothing to say here and is deliberately absent
+      // rather than copied for symmetry.
       match /mediaFolders/{folderId} {
         allow read: if isStaff() || canReadScoped();
         allow create: if isStaff() || (canWriteOrgData() && canCreateScoped());
@@ -1636,6 +1739,29 @@ service cloud.firestore {
         // does not strip the byline off its posts, because
         // `resolveEntryAuthor` falls through a dangling `authorId` to the
         // entry's own `authorName` and then to the site.
+        //
+        // `media` joins CREATE and UPDATE (AGL-1881), and it is the one name
+        // on these lists that is NOT being denied. The dedicated block below
+        // re-grants both operations with the object fields frozen, because
+        // `storagePath` addresses the shared Storage bucket through the Admin
+        // SDK and was client-writable — the CRITICAL finding of the pre-launch
+        // review — and the rest of the set is server-written beside it.
+        //
+        // The exclusion is the MECHANISM, not an extra: sibling matches are
+        // OR'd and the LOOSER one wins, so a dedicated block that freezes a
+        // field while this catch-all still grants the same operation freezes
+        // nothing at all. That is exactly how `components` stayed
+        // author-publishable after its own block was narrowed (AGL-2334), and
+        // it is why a tighter `match /media/{mediaId}` on its own would have
+        // read correct and enforced nothing.
+        //
+        // DELETE is deliberately NOT excluded. Removing the document does not
+        // set a field, so it cannot address another tenant's object, and the
+        // re-create is already refused by the create freeze — a client that
+        // deleted and re-made the document would get a doc with no
+        // `storagePath`, which `mediaStoragePathInScope` resolves to the
+        // document's OWN key. Adding the name here would take the DAM's delete
+        // with it to close nothing.
         allow create: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'variables',
@@ -1643,8 +1769,8 @@ service cloud.firestore {
               'locations', 'products', 'components', 'registers', 'installs',
               'templates', 'collections', 'datasets', 'webhooks', 'orders',
               'counters', 'analytics', 'screenAnalytics', 'members',
-              'mediaTombstones', 'formSubmissions', 'actions', 'authors',
-              'carts',
+              'media', 'mediaTombstones', 'formSubmissions', 'actions',
+              'authors', 'carts',
               'checkouts', 'giftCards', 'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds']));
         // `stockHolds` joins all THREE lists (AGL-2356). It is the release
@@ -1704,13 +1830,18 @@ service cloud.firestore {
         //
         // Create and delete are deliberately NOT changed: create is already
         // API-only via the list above, and the dedicated block owns delete.
+        //
+        // `media` joins UPDATE for the `components` reason stated on the
+        // create list above (AGL-1881): the block below freezes the object
+        // fields, and a freeze under a looser sibling never fires.
         allow update: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components', 'installs',
               'templates', 'collections', 'datasets', 'orders', 'registers',
               'webhooks',
               'counters', 'analytics', 'screenAnalytics', 'members',
-              'mediaTombstones', 'inventoryAdjustments', 'carts', 'checkouts',
+              'media', 'mediaTombstones', 'inventoryAdjustments', 'carts',
+              'checkouts',
               'giftCards', 'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds']));
         // `collections` joins the delete exclusion (AGL-947): a collection
@@ -1739,6 +1870,30 @@ service cloud.firestore {
               'inventoryAdjustments', 'carts', 'checkouts', 'giftCards',
               'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds']));
+      }
+      // The site's media library, re-granted with the object fields frozen
+      // (AGL-1881). `media` is excluded from the catch-all's create and update
+      // above so that this block is the ONLY grantor of both — see the note on
+      // that create list for why the exclusion is the mechanism rather than
+      // belt-and-braces, and `mediaObjectFieldsUnset` for the frozen set.
+      //
+      // Everything the DAM actually writes from the browser still lands:
+      // `fileName` (rename), `alt`, `description`, `tags`, `folderId`/`folder`
+      // (a move) and `visibleTo` (sharing). What it cannot write is the object
+      // key its bytes live at, the flag that decides whether the CDN asks for
+      // a signature, the digest a takedown is keyed on, or the type the bytes
+      // come back as — none of which any client surface has ever sent.
+      //
+      // Read and delete are left to the catch-all on purpose. `media` is in
+      // neither the read nor the delete exclusion list, so both still resolve
+      // there, and re-stating them here would be a second place to keep true.
+      match /media/{mediaId} {
+        allow create: if isStaff() ||
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+           mediaObjectFieldsUnset());
+        allow update: if isStaff() ||
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+           mediaObjectFieldsUnchanged());
       }
       // Editors keep full client control of a collection doc EXCEPT the two
       // identity keys. `slug` is its public address (uniqueness is claimed in

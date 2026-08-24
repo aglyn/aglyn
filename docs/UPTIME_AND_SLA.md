@@ -18,7 +18,7 @@ measure availability and will commit to a number once there is a quarter of it
 
 ```
 GET  https://app.aglyn.com/api/health          console
-GET  https://demo.aglyn.com/api/health         tenant runtime
+GET  https://demo.aglyn.app/api/health         tenant runtime
 GET  https://app.aglyn.com/api/health/backups  Firestore backup state (AGL-1490)
 GET  https://app.aglyn.com/api/health/signups  org-creation volume (AGL-1536)
 GET  https://app.aglyn.com/api/health/rate-limits
@@ -720,6 +720,31 @@ The canary renders a **pinned** host (`AGLYN_CANARY_MARKETING_HOST` /
 deliberately, so nobody can make our deployment render an arbitrary host by
 choosing a URL. So the hostname you fetch proves DNS/TLS/edge for that name,
 while the render half always grades the same two pinned sites.
+:::
+
+:::warning The site canary's subject must be a seeded host (AGL-1617)
+`siteHost()` still defaults to `demo`, and that default is **known-weak**.
+`demo` is not a maintained demo — it is a legacy host in an individual's
+personal org with zero seed documents, and it graded green for months while
+publicly serving `CLICK ME`, nineteen `hello` nodes, a fake `$9/$29/$79`
+pricing table and unresolved `{{Message}}` tokens. Nineteen nodes is a
+non-empty tree, so the check was right and the subject was wrong.
+
+The fix is the subject, not the assertion — tightening the canary into a
+content match would make every ordinary customer edit page on-call. Point it
+at a host whose content comes from version control and is never hand-edited:
+
+```bash
+# 1. host first — seeds `showcase` from the brand pack in demo-brands.mjs
+node tools/scripts/seed-demo-org.mjs --org <orgSlug> --create-hosts --brands showcase
+# 2. env second — only once that host serves
+AGLYN_CANARY_SITE_HOST=showcase
+```
+
+**Order matters.** Setting the variable before the host exists points the
+canary at a 404 and reddens the public status page; changing the `|| 'demo'`
+default to `not-configured` before both are done 503s it. Host first, env
+second, default third.
 :::
 
 Each endpoint answers the ordinary health contract — `200` with
