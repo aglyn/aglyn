@@ -69,6 +69,7 @@ import { useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { overLimitSummary as computeOverLimitSummary } from '../../../../utils/over-limit-summary'
+import { stripeOtherModeInvoiceNotice } from '../../../../utils/stripe-mode-notice'
 import BillingAddonsCardComponent, {
   ADDON_LABELS,
 } from '../../../../components/billing/billing-addons-card.component'
@@ -742,6 +743,13 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   const [invoicesHasMore, setInvoicesHasMore] = useState(false)
   const [invoiceCursor, setInvoiceCursor] = useState<string | null>(null)
   const [invoicesLoading, setInvoicesLoading] = useState(false)
+  /**
+   * This deployment's Stripe mode, but ONLY when it is the reason the list is
+   * empty (AGL-2486). `null` means the empty list is a real observation.
+   */
+  const [invoicesOtherMode, setInvoicesOtherMode] = useState<
+    'live' | 'test' | null
+  >(null)
   const fetchInvoices = useCallback(
     async (cursor?: string | null) => {
       if (!orgId || !user) return
@@ -762,6 +770,17 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
         )
         setInvoicesHasMore(payload.hasMore === true)
         setInvoiceCursor(payload.nextCursor ?? null)
+        // Only the route can know this — the browser has no idea which Stripe
+        // key the server holds. Strict `=== true` so an older cached response
+        // that predates the field reads as "a real empty list", not as a
+        // mode problem.
+        setInvoicesOtherMode(
+          payload.otherModeOnly === true
+            ? payload.deploymentMode === 'live'
+              ? 'live'
+              : 'test'
+            : null,
+        )
       } catch {
         // The card keeps its current state on failure.
       } finally {
@@ -1183,9 +1202,19 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                               {'Invoices appear here once billing is configured.'}
                             </Typography>
                           ) : invoices.length === 0 ? (
-                            <Typography variant="body2" color="text.secondary">
-                              {'No invoices yet.'}
-                            </Typography>
+                            // An empty list has two meanings and they are not
+                            // interchangeable (AGL-2486): never billed, or
+                            // billed in the Stripe mode this deployment cannot
+                            // read. Only the second one gets an Alert.
+                            invoicesOtherMode ? (
+                              <Alert severity="info">
+                                {stripeOtherModeInvoiceNotice(invoicesOtherMode)}
+                              </Alert>
+                            ) : (
+                              <Typography variant="body2" color="text.secondary">
+                                {'No invoices yet.'}
+                              </Typography>
+                            )
                           ) : (
                             <>
                               <Table size="small">

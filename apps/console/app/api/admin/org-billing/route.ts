@@ -22,6 +22,7 @@ import {
   isImpersonationSession,
   readOrgBilling,
 } from '@aglyn/tenant-data-admin'
+import { describeMissingStripeCustomer } from '../../_lib/stripe-customer-mode-notice'
 import {
   describeStripePaymentMethod,
   selectSubscriptionPaymentMethod,
@@ -71,9 +72,19 @@ async function handler(request: Request): Promise<Response> {
     const customerId = (await readOrgBilling(orgId)).stripeCustomerId
     if (!customerId) {
       // Never subscribed — distinct from "lookup failed" (AGL-940), which the
-      // UI has to be able to tell apart.
+      // UI has to be able to tell apart. And distinct again from "billed in
+      // the OTHER Stripe mode" (AGL-2486): the stored id is mode-scoped, so on
+      // a `sk_test` deployment a live-only org lands here with a full invoice
+      // history that this key simply cannot see. `hasCustomer: false` alone
+      // renders that as "never subscribed", which is the one wrong answer a
+      // staff member would act on.
       return Response.json(
-        { invoices: [], paymentMethod: null, hasCustomer: false },
+        {
+          invoices: [],
+          paymentMethod: null,
+          hasCustomer: false,
+          ...(await describeMissingStripeCustomer(orgId)),
+        },
         { status: 200 },
       )
     }

@@ -111,7 +111,11 @@ jest.mock('./firebase-admin', () => ({
 // The REAL module under test, plus the REAL `deploymentLivemode` it composes —
 // the `sk_live_` inference is the thing being relied on, so stubbing it would
 // leave the mode decision untested.
-import { readOrgBilling, writeOrgBilling } from './org-billing'
+import {
+  readOrgBilling,
+  readOrgBillingCustomerModes,
+  writeOrgBilling,
+} from './org-billing'
 
 const ORIGINAL_ENV = process.env
 
@@ -259,5 +263,104 @@ describe('writing is scoped to the deployment mode (AGL-2486)', () => {
       billingDoc = writes.find(([path]) => path === billingPath)?.[1] ?? {}
       expect((await readOrgBilling('org-1')).stripeCustomerId).toBe(id)
     }
+  })
+})
+
+/**
+ * The census that lets a caller EXPLAIN an empty read (AGL-2486, follow-up).
+ *
+ * `readOrgBilling` answering nothing has two meanings — never billed, or
+ * billed in the mode this deployment cannot see — and the billing cards
+ * rendered both as "No invoices yet." over `test-org`'s intact history. The
+ * fallback stays deleted; the caller gets a way to say which silence it is.
+ *
+ * Asserted against the same Firestore double the projection above uses, so the
+ * census and the read it explains provably see the same bytes.
+ */
+describe('which MODES an org has a customer for (AGL-2486)', () => {
+  it('reports the live customer that a test-mode read must not return', async () => {
+    // The exact `test-org` state: live id stored, test slot empty.
+    inMode('test')
+    expect((await readOrgBilling('org-1')).stripeCustomerId).toBeFalsy()
+    expect(await readOrgBillingCustomerModes('org-1')).toEqual({
+      live: true,
+      test: false,
+    })
+  })
+
+  it('never returns an id — a test-mode surface must not hold a live `cus_…`', async () => {
+    inMode('test')
+    const modes = await readOrgBillingCustomerModes('org-1')
+    // Booleans, and only booleans: this value is spread into a JSON response
+    // served to every browser on a test deployment.
+    expect(JSON.stringify(modes)).not.toContain(LIVE_ID)
+    expect(Object.values(modes).every((value) => typeof value === 'boolean')).toBe(
+      true,
+    )
+  })
+
+  it('sees BOTH slots when both are filled, in either mode', async () => {
+    billingDoc = { stripeCustomerId: LIVE_ID, [STRIPE_CUSTOMER_ID_TEST_FIELD]: TEST_ID }
+    for (const mode of ['live', 'test'] as const) {
+      inMode(mode)
+      // The census is a fact about the STORED document, not about the reader.
+      expect(await readOrgBillingCustomerModes('org-1')).toEqual({
+        live: true,
+        test: true,
+      })
+    }
+  })
+
+  it('reports neither for an org that has genuinely never been billed', async () => {
+    billingDoc = {}
+    inMode('test')
+    expect(await readOrgBillingCustomerModes('org-1')).toEqual({
+      live: false,
+      test: false,
+    })
+  })
+
+  it('a stored null is an absence, not a customer', async () => {
+    // The webhook writes `null` to mean "Stripe says this is gone", and
+    // `'stripeCustomerId' in doc` would have called that a customer — turning
+    // a genuinely unbilled org into a bogus other-mode notice.
+    billingDoc = { stripeCustomerId: null, [STRIPE_CUSTOMER_ID_TEST_FIELD]: '' }
+    inMode('test')
+    expect(await readOrgBillingCustomerModes('org-1')).toEqual({
+      live: false,
+      test: false,
+    })
+  })
+
+  it('follows the SAME org-doc fallback `readOrgBilling` follows', async () => {
+    // An org the AGL-1028 backfill never reached. If the census skipped the
+    // fallback it would answer "never billed" for the very orgs whose billing
+    // doc does not exist yet — the population most likely to hit this.
+    billingDoc = null
+    orgDoc = { slug: 'test-org', stripeCustomerId: LIVE_ID }
+    inMode('test')
+    expect((await readOrgBilling('org-1')).stripeCustomerId).toBeFalsy()
+    expect(await readOrgBillingCustomerModes('org-1')).toEqual({
+      live: true,
+      test: false,
+    })
+  })
+
+  it('does not disturb the projection it explains', async () => {
+    // Reading the census must not leave the physical test field visible to a
+    // later `readOrgBilling` — the two now share one stored-document read.
+    billingDoc = { stripeCustomerId: LIVE_ID, [STRIPE_CUSTOMER_ID_TEST_FIELD]: TEST_ID }
+    inMode('live')
+    await readOrgBillingCustomerModes('org-1')
+    const billing = await readOrgBilling('org-1')
+    expect(billing.stripeCustomerId).toBe(LIVE_ID)
+    expect(billing[STRIPE_CUSTOMER_ID_TEST_FIELD]).toBeUndefined()
+  })
+
+  it('an empty org id is not a lookup', async () => {
+    expect(await readOrgBillingCustomerModes('')).toEqual({
+      live: false,
+      test: false,
+    })
   })
 })

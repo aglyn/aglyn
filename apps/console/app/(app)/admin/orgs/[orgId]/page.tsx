@@ -82,6 +82,10 @@ import StaffOrgSummaryCard, {
   type StaffPerson,
 } from '../../../../../components/staff-org-summary-card.component'
 import { fetchAllPages } from '../../../../../utils/fetch-all-pages'
+import {
+  staffBillingCustomerChipLabel,
+  staffBillingHistoryEmptyState,
+} from '../../../../../utils/stripe-mode-notice'
 import { useIsStaff } from '../../../../../hooks/use-is-staff'
 import useFirestoreCollection from '../../../../../hooks/use-firestore-collection'
 
@@ -280,6 +284,15 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
     delinquent?: boolean
     /** False when the org never subscribed — distinct from a failed lookup. */
     hasCustomer?: boolean
+    /**
+     * True when the org DOES have a Stripe customer, but in the mode this
+     * deployment is not running in (AGL-2486). `hasCustomer` is false in that
+     * case too, so without this the panel claims "never subscribed" about a
+     * workspace with a paid invoice history.
+     */
+    otherModeOnly?: boolean
+    /** Which Stripe world this deployment spends in. */
+    deploymentMode?: 'live' | 'test'
     /** Set when Stripe itself errored; the lists above are then meaningless. */
     stripeError?: string
   } | null>(null)
@@ -1496,11 +1509,10 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                             ) : (
                               <Chip
                                 size="small"
-                                label={
-                                  billing.hasCustomer === false
-                                    ? 'Never subscribed'
-                                    : 'No payment method'
-                                }
+                                // "Never subscribed" is a claim about the
+                                // customer, and a mode-invisible customer is
+                                // not evidence for it (AGL-2486).
+                                label={staffBillingCustomerChipLabel(billing)}
                               />
                             )}
                             {billing.delinquent ? (
@@ -1516,14 +1528,23 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                               {`Couldn't reach Stripe — this is not "no invoices". ${billing.stripeError}`}
                             </Alert>
                           ) : billing.invoices.length === 0 ? (
-                            <Typography
-                              variant="body2"
-                              color="text.secondary"
-                            >
-                              {billing.hasCustomer === false
-                                ? 'This organization has never subscribed.'
-                                : 'No invoices yet.'}
-                            </Typography>
+                            // An empty list has a THIRD meaning alongside
+                            // "never subscribed" and "Stripe errored"
+                            // (AGL-2486): the customer is real and this
+                            // deployment's key cannot see it.
+                            staffBillingHistoryEmptyState(billing).tone ===
+                            'notice' ? (
+                              <Alert severity="info">
+                                {staffBillingHistoryEmptyState(billing).message}
+                              </Alert>
+                            ) : (
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                              >
+                                {staffBillingHistoryEmptyState(billing).message}
+                              </Typography>
+                            )
                           ) : (
                             <Table size="small">
                               <TableHead>
