@@ -149,6 +149,14 @@ const MENTIONS_ONLY = new Map<string, string>([
     'Local development template.',
   ],
   [
+    'docs/drafts/agl-1648-dpa-transfer-scc-language.md',
+    'AGL-1648 working draft of proposed DPA transfer/SCC wording. Prose about whether Anthropic must be disclosed as a subprocessor — it names the key to explain WHY the disclosure question exists. Analysis, not a data flow, and it reaches no runtime.',
+  ],
+  [
+    'docs/drafts/agl-1648-subprocessor-change-notification.md',
+    'AGL-1648 working draft of the subprocessor change-notification mechanism. Names the key while arguing that setting it in production is what makes Anthropic a live subprocessor — which is this suite\'s own premise, written down. Prose, not a data flow.',
+  ],
+  [
     '.env.selfhost.example',
     'The self-host env template (AGL-2014). Names the key so an operator knows Assist needs their OWN Anthropic key; without it both Assist surfaces answer 501. A template, not a flow.',
   ],
