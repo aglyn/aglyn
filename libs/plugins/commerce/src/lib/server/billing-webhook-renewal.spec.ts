@@ -216,6 +216,35 @@ const defaultFetch = async (url: any, _init?: any): Promise<any> => {
       }),
     } as any
   }
+  // The subscription tax reversal (AGL-1956). Any fixture here whose invoice
+  // sets `automatic_tax[enabled]` and carries tax now reaches it — the tax on
+  // a Stripe Tax cycle is AGLYN's to remit, so it is pulled back out of the
+  // transfer. Same rule as the AGL-2317 block above: the double answers the
+  // real call sequence (charge → transfer → reversal) rather than fabricating
+  // a red about the double. The reversal itself is asserted in
+  // `billing-webhook-subscription-tax.spec.ts`.
+  if (href.includes('/reversals')) {
+    return { ok: true, status: 200, json: async () => ({ id: 'trr_1' }) } as any
+  }
+  if (href.includes('/v1/transfers/')) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        id: 'tr_1',
+        amount: 11325,
+        amount_reversed: 0,
+        reversals: { data: [] },
+      }),
+    } as any
+  }
+  if (href.includes('/v1/charges/')) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ id: 'ch_2', amount: 11325, transfer: 'tr_1' }),
+    } as any
+  }
   throw new Error(`Unexpected fetch to ${href}`)
 }
 
