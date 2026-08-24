@@ -155,6 +155,26 @@ describe('a log with real jest failures', () => {
     ].join('\n')
     assert.deepEqual(digestLog(prose).failedSuites, [])
   })
+
+  // nx prints a failure two ways and the digest has to read BOTH. Its
+  // streamed form carries the project between the marker and the path; the
+  // form it replays for a failed task does not. Reading only the token
+  // straight after `FAIL` saw the project name — no slash, no extension —
+  // and dropped the suite entirely. On run 32720428088 that is why nx named
+  // three failed projects while the digest reported a single suite: the
+  // other two were printed ONLY in the streamed form (AGL-1617).
+  it('reads the STREAMED form, where the project sits before the path', () => {
+    const streamed = [
+      ' FAIL   plugins-data  libs/plugins/data/src/lib/a.spec.tsx (44.959 s)',
+      ' FAIL   besigner-feature-designer  libs/besigner/b.spec.tsx (8.748 s)',
+      ' FAIL  src/lib/components/c.spec.tsx (8.748 s)',
+    ].join('\n')
+    assert.deepEqual(digestLog(streamed).failedSuites, [
+      'libs/plugins/data/src/lib/a.spec.tsx',
+      'libs/besigner/b.spec.tsx',
+      'src/lib/components/c.spec.tsx',
+    ])
+  })
 })
 
 describe('an nx task failure with no jest failure — the AGL-1617 log', () => {
@@ -433,21 +453,32 @@ describe('the workflows actually USE the digest (AGL-1617)', () => {
   ]
 
   for (const [name, artifact] of workflows) {
-    it(`${name} tees the test run, digests it, and uploads the raw log`, () => {
+    it(`${name} redirects the test run, digests it, and uploads the raw log`, () => {
       const yaml = readFileSync(
         join(repoRoot, '.github', 'workflows', name),
         'utf8',
       )
 
-      // THE line most likely to silently disable the gate. GitHub's default
-      // shell is `bash -e {0}` and `-e` does NOT imply pipefail, so
-      // `nx ... | tee f` exits with TEE's status — zero, always — and a red
-      // test run reports green. Without this assertion the tee is a
-      // regression, not an improvement.
+      // THE line the whole artifact depends on. It used to be `| tee`, and
+      // the pipe is what made the artifact useless: a pipe makes Node's
+      // stdout ASYNCHRONOUS, and nx ends a failed run with `process.exit()`,
+      // which discards the unflushed buffer. Measured — 5,000,000 bytes
+      // written before `process.exit()` arrive as 65,550 through a pipe and
+      // as all 5,000,009 through a `>` redirect to a regular file, which is
+      // synchronous. nx prints FAILED tasks last, so the bytes lost were
+      // always the failing task's, which is how `console:test` stayed red
+      // for days with zero ` FAIL ` markers ever reaching this digest.
       assert.match(
         yaml,
-        /set -o pipefail\n\s*npx nx [^\n]*\| tee "\$RUNNER_TEMP\/nx-test\.log"/,
-        `${name} must pipe nx into tee UNDER set -o pipefail`,
+        /status=0\n\s*npx nx [^\n]*\\\n\s*> "\$RUNNER_TEMP\/nx-test\.log" 2>&1 \|\| status=\$\?\n\s*cat "\$RUNNER_TEMP\/nx-test\.log"\n\s*exit "\$status"/,
+        `${name} must redirect nx into the log file and exit with nx's status`,
+      )
+      // The regression this replaced. Re-piping restores the byte loss even
+      // if the redirect above is left in place somewhere else in the file.
+      assert.doesNotMatch(
+        yaml,
+        /\| tee "\$RUNNER_TEMP\/nx-test\.log"/,
+        `${name} must not pipe the test log — a pipe loses the failing task's output`,
       )
       assert.match(
         yaml,
