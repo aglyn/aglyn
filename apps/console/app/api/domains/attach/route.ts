@@ -24,6 +24,7 @@ import {
   isImpersonationSession,
   lockdownRefusal,
   projectDomainStatus,
+  validatePlatformDomain,
 } from '@aglyn/tenant-data-admin'
 // Shared with the AGL-2010 completer cron so there is exactly one
 // implementation of the edge redirect. Moved out of this file unchanged.
@@ -46,12 +47,48 @@ async function handler(request: Request): Promise<Response> {
   const token = process.env.VERCEL_TOKEN
   const projectId = process.env.VERCEL_TENANT_PROJECT_ID
   const teamId = process.env.VERCEL_TEAM_ID
-  const domain = String(body?.domain ?? '')
-    .trim()
-    .toLowerCase()
+  // The claim/attach correspondence starts HERE, before anything is claimed
+  // (AGL-1430, AGL-1311 §5.2).
+  //
+  // The Vercel add below tolerates `domain_already_in_use`. That is only safe
+  // while every name the platform holds on the tenant project is covered by
+  // the Firestore claim, and TWO families of name were not:
+  //
+  //  - `{subdomain}.{TENANT_APEX}`, attached as a 307 redirect by AGL-1273 on
+  //    every custom-domain connect. Indexed on `hosts.subdomain`, so
+  //    `where('cname','==',…)` cannot see it.
+  //  - The platform's own redirect names — `www.aglyn.com`, `aglyn.app`,
+  //    `aglyn.io` — which are project domains and nobody's `cname`.
+  //
+  // Claiming either walked the entire happy path: no duplicate, tolerated 409,
+  // `projectDomainStatus` truthfully `serving` because the name really is on
+  // our project, pending flag cleared, green tick — and then this route pointed
+  // the claimant's OWN `{sub}.aglyn.app` at it as a 307, so their visitors
+  // landed on a stranger's site and their own site was served nowhere. Measured
+  // reachable with no twin at all; the memo's "safe today" was wrong.
+  //
+  // Refusing the reserved names restores the correspondence by construction:
+  // what remains attachable is exactly the set the claim transaction indexes.
+  // The check is shared with the console-domain path rather than restated, so
+  // a name added to one blocklist is added to both.
+  //
+  // This is also the pattern check `liveCustomDomain` records as missing here —
+  // the route "lowercases and trims what the wizard sends but never
+  // pattern-checks it, so a junk value can reach Firestore".
+  const { domain, error: invalidDomain } = validatePlatformDomain(
+    String(body?.domain ?? ''),
+    {
+      invalid: 'Enter a valid domain, for example example.com',
+      reserved:
+        'That domain is reserved by the platform and cannot be connected to a site',
+    },
+  )
   const hostId = String(body?.hostId ?? '')
-  if (!domain || !hostId) {
+  if (!hostId) {
     return Response.json({ error: 'Missing domain or hostId' }, { status: 400 })
+  }
+  if (!domain) {
+    return Response.json({ error: invalidDomain }, { status: 400 })
   }
 
   const authorization = headers.authorization ?? ''

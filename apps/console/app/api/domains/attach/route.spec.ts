@@ -160,6 +160,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ...jest.requireActual(
     '../../../../../../libs/tenant/data/admin/src/lib/server/workspace-domains',
   ),
+  // The REAL `validatePlatformDomain` too, and for the same reason (AGL-1430):
+  // stubbing the blocklist would turn every reserved-name test below into a
+  // test of the stub. Its own suite in `platform-domain-names.spec.ts` pins the
+  // list; these tests pin that the ROUTE consults it before it claims.
+  ...jest.requireActual(
+    '../../../../../../libs/tenant/data/admin/src/lib/server/platform-domain-names',
+  ),
   firebaseAdmin: {
     app: () => ({
       auth: () => ({ verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args) }),
@@ -490,3 +497,168 @@ describe('a successful POST is not a serving domain (AGL-1913)', () => {
     expect(mockProjectDomainStatus).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * The claim/attach correspondence (AGL-1430, AGL-1311 §5.2).
+ *
+ * The tolerated `domain_already_in_use` above is only safe while **every name
+ * the platform holds on the tenant Vercel project is covered by the Firestore
+ * claim this route runs**. The memo asserted that correspondence held; it did
+ * not. Two families of name sit on that project and are invisible to
+ * `where('cname','==',…)`:
+ *
+ *  1. `{subdomain}.{TENANT_APEX}` — attached as a per-domain 307 redirect by
+ *     AGL-1273's `upsertSubdomainRedirect` every time any customer connects a
+ *     custom domain. Indexed on `hosts.subdomain`, never on `hosts.cname`.
+ *  2. The platform's own redirect names — `www.aglyn.com`, `aglyn.app`,
+ *     `www.aglyn.app`, `aglyn.io` — which are project domains and no host
+ *     document's `cname`.
+ *
+ * Claiming either one used to walk the whole happy path: the transaction found
+ * no duplicate, Vercel answered `domain_already_in_use`, that was tolerated,
+ * `projectDomainStatus` truthfully answered `serving` **because the name really
+ * is on our project**, the pending flag was deleted, and the wizard went green
+ * — after which this route pointed the claimant's OWN `{sub}.aglyn.app` at the
+ * name as a 307. So the claimant's visitors were redirected to a stranger's
+ * site and the claimant's site was never served there. That is the failure
+ * AGL-1311 §5.2 predicted a twin would create, reachable with no twin at all.
+ *
+ * Every test here therefore drives the FULL route, with Vercel answering
+ * exactly what it answers for a name already on the project. A test that
+ * stopped at the 400 would pass against a guard that refuses the name and then
+ * attaches it anyway.
+ */
+describe('the claim covers every name Vercel holds (AGL-1430)', () => {
+  /** Vercel's answer for a name already on this project. */
+  function seedNameAlreadyOnOurProject() {
+    fetchMock.mockResolvedValue(
+      respond(409, { error: { code: 'domain_already_in_use' } }),
+    )
+    mockProjectDomainStatus.mockResolvedValue({
+      state: 'serving',
+      domain: 'x',
+      verification: [],
+      conflicts: [],
+    })
+  }
+
+  /** Nothing was claimed, nothing was attached, nothing was redirected. */
+  async function expectRefused(response: Response, hostId = 'mine') {
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringContaining('reserved'),
+    })
+    expect(docs.get(`hosts/${hostId}`)?.['cname']).toBeUndefined()
+    expect(docs.get(`hosts/${hostId}`)?.['cnameAttachmentPending']).toBeUndefined()
+    // The refusal must land BEFORE the claim and before Vercel — a route that
+    // claimed first and apologised later is AGL-743 again.
+    expect(fetchMock).not.toHaveBeenCalled()
+  }
+
+  it('REFUSES another site’s platform subdomain, which Vercel already holds', async () => {
+    // Org A connected a custom domain, so AGL-1273 put `alice.aglyn.app` on
+    // the tenant project as a 307 to it. Nothing indexes that name as a
+    // `cname`, so the uniqueness transaction cannot see it.
+    seedHost('alice', { subdomain: 'alice', cname: 'alice-store.com' })
+    seedHost('mine', { subdomain: 'mine' })
+    seedNameAlreadyOnOurProject()
+
+    await expectRefused(
+      await POST(post({ hostId: 'mine', domain: 'alice.aglyn.app' })),
+    )
+    // And org A is untouched — it never learns this happened.
+    expect(docs.get('hosts/alice')?.['cname']).toBe('alice-store.com')
+  })
+
+  it('REFUSES the platform’s own names, none of which are anybody’s cname', async () => {
+    for (const reserved of [
+      'www.aglyn.com',
+      'aglyn.app',
+      'www.aglyn.app',
+      'aglyn.io',
+      'app.aglyn.com',
+    ]) {
+      docs = new Map()
+      seedHost('mine', { subdomain: 'mine' })
+      fetchMock.mockClear()
+      seedNameAlreadyOnOurProject()
+
+      await expectRefused(await POST(post({ hostId: 'mine', domain: reserved })))
+    }
+  })
+
+  it('REFUSES a name on a hosting suffix nobody can prove they own', async () => {
+    // The console path has refused these since AGL-1353; this one never did.
+    for (const shared of ['acme.vercel.app', 'acme.pages.dev', 'acme.github.io']) {
+      docs = new Map()
+      seedHost('mine', { subdomain: 'mine' })
+      fetchMock.mockClear()
+      seedNameAlreadyOnOurProject()
+
+      await expectRefused(await POST(post({ hostId: 'mine', domain: shared })))
+    }
+  })
+
+  it('REFUSES a value that is not a hostname at all', async () => {
+    // `liveCustomDomain`'s own comment records that this route "lowercases and
+    // trims what the wizard sends but never pattern-checks it, so a junk value
+    // can reach Firestore". A junk value in a `Location:` header is a
+    // different class of problem again.
+    for (const junk of ['com', 'localhost', '-acme.com', 'acme..com', 'acme.c']) {
+      docs = new Map()
+      seedHost('mine', { subdomain: 'mine' })
+      fetchMock.mockClear()
+
+      const response = await POST(post({ hostId: 'mine', domain: junk }))
+      expect(response.status).toBe(400)
+      expect(docs.get('hosts/mine')?.['cname']).toBeUndefined()
+      expect(fetchMock).not.toHaveBeenCalled()
+    }
+  })
+
+  it('still accepts an ordinary customer domain, and normalises a pasted URL', async () => {
+    // Without this control every test above passes against a route that
+    // refuses everything, which is a wizard that can never connect anything.
+    seedHost('mine', { subdomain: 'mine' })
+    mockProjectDomainStatus.mockResolvedValue({
+      state: 'serving',
+      domain: 'example.com',
+      verification: [],
+      conflicts: [],
+    })
+
+    const response = await POST(
+      post({ hostId: 'mine', domain: '  HTTPS://Example.com/path?x=1  ' }),
+    )
+
+    expect(response.status).toBe(200)
+    expect(docs.get('hosts/mine')?.['cname']).toBe('example.com')
+    // The NORMALISED name is what reaches Vercel and what the edge redirect
+    // targets — a route that claimed `example.com` and attached the raw string
+    // would break the correspondence in the other direction.
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      name: 'example.com',
+    })
+    const redirect = fetchMock.mock.calls.find(([url]) =>
+      String(url).includes('mine.aglyn.app'),
+    )
+    expect(JSON.parse(redirect[1].body)).toEqual({
+      redirect: 'example.com',
+      redirectStatusCode: 307,
+    })
+  })
+
+  it('accepts a multi-label public suffix domain — acme.co.uk is a real domain', async () => {
+    seedHost('mine', { subdomain: 'mine' })
+    mockProjectDomainStatus.mockResolvedValue({
+      state: 'serving',
+      domain: 'acme.co.uk',
+      verification: [],
+      conflicts: [],
+    })
+    const response = await POST(post({ hostId: 'mine', domain: 'acme.co.uk' }))
+    expect(response.status).toBe(200)
+    expect(docs.get('hosts/mine')?.['cname']).toBe('acme.co.uk')
+  })
+})
+

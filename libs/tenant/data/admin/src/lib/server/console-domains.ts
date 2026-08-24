@@ -99,131 +99,33 @@ import {
   pendingUploadCorsRemedy,
   type WorkspaceDomainResult,
 } from './workspace-domains'
+// The blocklist and the shape check, shared with the site custom-domain path
+// so a name added to one is added to both (AGL-1430).
+import {
+  normalizePlatformDomain,
+  validatePlatformDomain,
+} from './platform-domain-names'
 
 const firestore = () => firebaseAdmin.app().firestore()
 
 /** Collection name, kept in one place so the rules file and this agree. */
 export const CONSOLE_DOMAINS_COLLECTION = 'consoleDomains'
 
-const LABEL = '[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?'
-const DOMAIN_PATTERN = new RegExp(`^${LABEL}(?:\\.${LABEL})*\\.[a-z]{2,63}$`)
-
-/** RFC 1035: a fully-qualified name is at most 253 octets. */
-const MAX_DOMAIN_LENGTH = 253
-
-/**
- * Names nobody may claim, as the domain itself **or as any subdomain of it**.
- *
- * Two families, blocked for different reasons.
- *
- * **Ours.** `aglyn.com` passes `customConsoleDomain`'s shape check today, and
- * so do `app.aglyn.com` and `console.aglyn.com` — the console's own hostnames.
- * A blocklist keyed on the registrable domain covers every entry of
- * `PRODUCTION_DOMAINS` in `security-origins.js` without duplicating that list
- * here, and keeps covering names added to it later. There is a test that walks
- * the real file and asserts exactly that, so the two cannot drift apart.
- *
- * **Shared app-hosting suffixes.** Nobody controls the zone at
- * `something.vercel.app` in the sense this feature needs — and AGL-1353
- * measured that `aglyn-console-aglyn.vercel.app` is already a fully functional
- * second console, the AGL-1135 shape on a less credible name. A customer
- * proving control of a name a platform hands out for free is proving something
- * that can be re-handed to someone else.
- */
-const RESERVED_SUFFIXES = [
-  'aglyn.com',
-  'aglyn.io',
-  'aglyn.app',
-  'aglyn.dev',
-  'vercel.app',
-  'vercel.sh',
-  'web.app',
-  'firebaseapp.com',
-  'appspot.com',
-  'cloudfunctions.net',
-  'run.app',
-  'pages.dev',
-  'workers.dev',
-  'netlify.app',
-  'github.io',
-  'herokuapp.com',
-  'azurewebsites.net',
-  'amplifyapp.com',
-  'onrender.com',
-  'fly.dev',
-  'ngrok.io',
-  'ngrok-free.app',
-  'trycloudflare.com',
-  // RFC 2606 / 6761 special-use names, plus the ones a misconfigured resolver
-  // answers for. None of these can be proved by a public TXT lookup.
-  'localhost',
-  'local',
-  'localdomain',
-  'internal',
-  'intranet',
-  'lan',
-  'home',
-  'corp',
-  'test',
-  'example',
-  'invalid',
-  'onion',
-]
-
-/**
- * Multi-label public suffixes, blocked as a **whole name only**.
- *
- * `acme.co.uk` is a perfectly good customer domain; `co.uk` is not a domain at
- * all. This is a short list rather than the Public Suffix List on purpose —
- * pulling in a PSL dependency to reject a name no registrar would sell is not
- * a trade worth making, and the single-label rule below catches the far more
- * common `com` / `net` case for free.
- */
-const BARE_PUBLIC_SUFFIXES = new Set([
-  'co.uk',
-  'org.uk',
-  'me.uk',
-  'ac.uk',
-  'gov.uk',
-  'com.au',
-  'net.au',
-  'org.au',
-  'co.nz',
-  'co.za',
-  'co.jp',
-  'ne.jp',
-  'or.jp',
-  'com.br',
-  'com.mx',
-  'com.cn',
-  'com.tr',
-  'co.in',
-  'co.kr',
-  'com.sg',
-  'com.hk',
-])
-
 /**
  * Trim, lowercase, drop a trailing root dot, and tolerate a pasted URL.
  *
- * People paste `https://console.acme.com/` into a domain field constantly, and
- * refusing that is a support ticket rather than a security control — the value
- * is re-validated against the shape below either way.
+ * The console-flavoured name for the shared normaliser, kept because callers
+ * and the docs use it.
  */
-export function normalizeConsoleDomain(input: string): string {
-  const raw = String(input ?? '')
-    .trim()
-    .toLowerCase()
-  if (!raw) return ''
-  return raw
-    .replace(/^[a-z][a-z0-9+.-]*:\/\//, '')
-    .replace(/^[^@]*@/, '')
-    .split(/[/?#]/)[0]
-    .replace(/\.+$/, '')
-}
+export const normalizeConsoleDomain = normalizePlatformDomain
 
 /**
  * Shape, length and reserved-name check.
+ *
+ * The RULES moved to `platform-domain-names.ts` (AGL-1430) so the site
+ * custom-domain path could stop being the only surface without them — it was
+ * the one with the live hole. Only the wording stays here: these two strings
+ * are what a customer reads in the console-domain wizard.
  *
  * `{ domain, error }` with both keys always present rather than a discriminated
  * union, matching `validateSsoDomain` — `strictNullChecks` is off repo-wide and
@@ -231,29 +133,10 @@ export function normalizeConsoleDomain(input: string): string {
  * crosses a library boundary.
  */
 export function validateConsoleDomain(input: string): DomainCheck {
-  const domain = normalizeConsoleDomain(input)
-  if (!domain || domain.length > MAX_DOMAIN_LENGTH || !DOMAIN_PATTERN.test(domain)) {
-    return {
-      domain: null,
-      error: 'Enter a valid domain, for example console.acme.com',
-    }
-  }
-  const labels = domain.split('.')
-  if (labels.length < 2) {
-    return { domain: null, error: 'Enter a full domain name, not a single label' }
-  }
-  if (BARE_PUBLIC_SUFFIXES.has(domain)) {
-    return { domain: null, error: 'Enter a domain your organization owns' }
-  }
-  for (const suffix of RESERVED_SUFFIXES) {
-    if (domain === suffix || domain.endsWith(`.${suffix}`)) {
-      return {
-        domain: null,
-        error: 'That domain is reserved and cannot be used as a console domain',
-      }
-    }
-  }
-  return { domain, error: null }
+  return validatePlatformDomain(input, {
+    invalid: 'Enter a valid domain, for example console.acme.com',
+    reserved: 'That domain is reserved and cannot be used as a console domain',
+  })
 }
 
 /**

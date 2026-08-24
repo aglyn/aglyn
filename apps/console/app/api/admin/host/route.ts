@@ -22,6 +22,7 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  isPlatformReservedDomain,
   projectDomainStatus,
   updateExisting,
 } from '@aglyn/tenant-data-admin'
@@ -205,6 +206,26 @@ async function reattachDomain(
     return Response.json(
       { error: 'This site has no custom domain to re-attach.' },
       { status: 400 },
+    )
+  }
+  // The second writer to the tenant Vercel project, and therefore the second
+  // place the claim/attach correspondence can be broken (AGL-1430).
+  //
+  // This action cannot be pointed at an arbitrary name — it re-attaches the
+  // `cname` already on the document, and the test above proves a caller-supplied
+  // domain is ignored. But `/api/domains/attach` was writing reserved names into
+  // that field until this change, so a host stored before it can still be
+  // carrying one, and a re-attach would put that name back on the project
+  // outside the claim. Refuse rather than launder it: the fix is to disconnect
+  // the domain, not to press the button again.
+  if (isPlatformReservedDomain(domain)) {
+    return Response.json(
+      {
+        error:
+          `"${domain}" is a platform-reserved name and must not be attached ` +
+          'to a site. Disconnect it rather than re-attaching.',
+      },
+      { status: 409 },
     )
   }
   if (!token || !projectId) {

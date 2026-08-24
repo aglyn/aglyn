@@ -148,6 +148,13 @@ Each site carries a single custom domain, and a domain can only be connected to 
 site across all of Aglyn** — connecting it elsewhere answers *"That domain is already
 connected to another site"*. Disconnect it from the old site first.
 
+Some names cannot be connected at all, and the wizard answers *"That domain is reserved
+by the platform and cannot be connected to a site"*. These are Aglyn's own hostnames —
+anything ending in `aglyn.com`, `aglyn.app` or `aglyn.io`, including another site's
+`your-site.aglyn.app` address — and names on shared app-hosting suffixes such as
+`vercel.app`, `pages.dev` or `github.io`, which nobody can prove they own. Retrying
+will not help; connect a domain registered to you instead.
+
 ## Disconnect
 
 **Disconnect**, next to the connected domain's chip, releases the domain immediately —

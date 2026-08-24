@@ -31,7 +31,7 @@
  * to what it knew rather than inventing a fault.
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 const mockEnqueueSnackbar = jest.fn()
 /** The host document the card reads, swapped per case. */
@@ -209,6 +209,83 @@ describe('it never asserts a status it does not have', () => {
     const calls = (global.fetch as jest.Mock).mock.calls
     expect(calls.some(([url]) => String(url).includes('/api/domains/status'))).toBe(
       false,
+    )
+  })
+})
+
+/**
+ * A refusal the customer has to ACT on, versus one they should retry
+ * (AGL-1430).
+ *
+ * `/api/domains/attach` now refuses a platform-reserved or malformed name with
+ * a 400 before it claims anything, and that 400 used to land in the catch-all
+ * branch whose advice is "please try again". Retrying a reserved name never
+ * works, and the verify step immediately before it may well have just told the
+ * customer the name looks fine — `www.aglyn.com` really does resolve to our
+ * edge. Wrong advice here costs a broken launch, not a support ticket.
+ */
+describe('a 400 from attach is terminal advice, not "try again" (AGL-1430)', () => {
+  /** verify passes; attach answers `status` with `body`. */
+  function serveConnect(status: number, body: unknown) {
+    global.fetch = jest.fn(async (url: string) => {
+      const target = String(url)
+      if (target.includes('/api/domains/verify')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ domain: 'www.aglyn.com', verified: true, records: [] }),
+        } as Response
+      }
+      if (target.includes('/api/domains/attach')) {
+        return { ok: status < 400, status, json: async () => body } as Response
+      }
+      return { ok: true, status: 200, json: async () => ({}) } as Response
+    }) as unknown as typeof fetch
+  }
+
+  async function connect(value: string) {
+    mockHost = { $id: 'host-1' }
+    render(<CustomDomainCard hostId="host-1" />)
+    const field = await screen.findByLabelText('Domain')
+    fireEvent.change(field, { target: { value } })
+    fireEvent.click(screen.getByText('Verify & connect'))
+  }
+
+  it('shows the server’s reason for a reserved name, and never says to retry', async () => {
+    serveConnect(400, {
+      error:
+        'That domain is reserved by the platform and cannot be connected to a site',
+    })
+
+    await connect('www.aglyn.com')
+
+    await waitFor(() =>
+      expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+        'That domain is reserved by the platform and cannot be connected to a site',
+        expect.objectContaining({ variant: 'error' }),
+      ),
+    )
+    // The wrong advice, specifically. Without this the test passes against a
+    // branch that shows BOTH messages.
+    expect(
+      mockEnqueueSnackbar.mock.calls.some(([message]) =>
+        String(message).includes('please try again'),
+      ),
+    ).toBe(false)
+  })
+
+  it('still says to retry on a 5xx — the control', async () => {
+    // A 502 from the platform IS transient, and collapsing the two would make
+    // the test above pass against a card that never offers a retry at all.
+    serveConnect(502, { error: 'Vercel attach failed' })
+
+    await connect('example.com')
+
+    await waitFor(() =>
+      expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+        'Could not connect the domain — please try again',
+        expect.objectContaining({ variant: 'error' }),
+      ),
     )
   })
 })

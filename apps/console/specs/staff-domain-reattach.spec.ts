@@ -94,6 +94,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ...jest.requireActual(
     '../../../libs/tenant/data/admin/src/lib/server/workspace-domains',
   ),
+  // The REAL blocklist, for the same reason (AGL-1430) — a stub would make the
+  // legacy-name test below a test of the stub.
+  ...jest.requireActual(
+    '../../../libs/tenant/data/admin/src/lib/server/platform-domain-names',
+  ),
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Email not verified' }, { status: 403 }),
   isImpersonationSession: () => false,
@@ -227,6 +232,30 @@ describe('AGL-2011 · staff re-attach', () => {
       name: 'shop.example.com',
     })
     expect(mockDocs.get('h1')?.['cname']).toBe('shop.example.com')
+  })
+
+  it('REFUSES to re-attach a platform-reserved name a legacy claim is carrying', async () => {
+    // AGL-1430. `/api/domains/attach` wrote unvalidated names into `cname`
+    // until this change, so a host stored before it can hold
+    // `alice.aglyn.app` — a name AGL-1273 already put on the tenant project as
+    // a 307 redirect for somebody else. Re-attaching it would push it back
+    // onto the project outside the claim, which is the correspondence break
+    // wearing a support-tool label.
+    mockDocs.set('h1', {
+      cname: 'alice.aglyn.app',
+      cnameAttachmentPending: true,
+      subdomain: 'shop',
+    })
+
+    const response = await reattach()
+
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringContaining('platform-reserved'),
+    })
+    // Nothing was said to Vercel, and the document was not touched.
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(mockDocs.get('h1')?.['cname']).toBe('alice.aglyn.app')
   })
 
   it('refuses a claim-less staff token before it touches the platform', async () => {
