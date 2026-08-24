@@ -226,8 +226,14 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
     // stops being a reason to collect nothing. They type the rate, we compute
     // it, charge it, record it and stamp the regime; the settings card states
     // plainly that determining what is owed and to whom is theirs. Aglyn
-    // takes no tax position here — Terms §10.3 and AGL-1904/AGL-1956 are
-    // untouched by this.
+    // takes no tax position here — this is the manual LODGING rate, which
+    // never touches Aglyn's registrations.
+    //
+    // ⚠️ This comment used to say "Terms §10.3 ... untouched by this". §10.3
+    // CHANGED on 2026-08-24 (AGL-1956): Aglyn accepts marketplace-facilitator
+    // status and new §10.7 makes storefront sales tax Aglyn's where it has a
+    // collection obligation. Lodging tax is still the merchant's, so this
+    // handler is unaffected — but §10.3 is no longer the authority for that.
     //
     // DEFAULT OFF, and that is load-bearing: `resolveFlatTaxCents` answers
     // zero for an absent, zero, negative or out-of-range rate, so no existing

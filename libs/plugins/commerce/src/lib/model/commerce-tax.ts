@@ -69,8 +69,22 @@ export interface TaxRate {
  * This is a calculator the merchant configures, records and can read back. It
  * states no view on whether a jurisdiction imposes the tax, on who must
  * register, or on who must remit — those attach by operation of law and
- * belong to counsel (AGL-1904/AGL-1956), and Terms §10.3 already puts the
- * question on the merchant. The merchant-facing copy says only that.
+ * belong to counsel (AGL-1904).
+ *
+ * ⚠️ The sentence that used to stand here — "Terms §10.3 already puts the
+ * question on the merchant" — is FALSE as of 2026-08-24 (AGL-1956). Aglyn
+ * accepts marketplace-facilitator status, ToS §10.3 no longer assigns sales
+ * tax to the merchant, and the new ToS §10.7 says Aglyn calculates, collects
+ * and remits it WHERE IT HAS A FACILITATOR OBLIGATION. Do not cite §10.3 as
+ * authority for merchant-facing tax copy again.
+ *
+ * What is still true, and is why this module did not change: these FLAT RATES
+ * are the manual/lodging/service path, which never touches Aglyn's
+ * registrations and is not what §10.7 covers. The rates a merchant types here
+ * remain theirs to determine. The merchant-facing copy in
+ * `tax-settings-card.component.tsx` and `storefront-tax-summary-card.component.tsx`
+ * still reads as though §10.3 were unchanged, and is an OWED follow-up
+ * (AGL-1956) — it is now narrower than the Terms it was written against.
  */
 export interface FlatTaxRate {
   /** Percent, e.g. 6. Absent or non-positive = off, which is the default. */
