@@ -451,9 +451,33 @@ function scriptSrcReportOnlyDirective(nonce, isProduction) {
  * while leaving paying customers' sites intact — the worst possible shape for
  * a bug to have. `storage.googleapis.com` stays out for the AGL-1685 reason.
  *
- * `'self'` genuinely covers the CDN form: `serveMediaCdn` streams the bytes
- * server-side out of the bucket and never redirects to the storage host, so a
- * `/api/media/cdn/…` image is same-origin all the way down.
+ * `'self'` covers the CDN form only when the src is SITE-RELATIVE:
+ * `serveMediaCdn` streams the bytes server-side out of the bucket and never
+ * redirects to the storage host, so a `/api/media/cdn/…` image is same-origin
+ * all the way down.
+ *
+ * ⚠️ **That qualifier is load-bearing and this comment used to omit it**
+ * (AGL-1726, measured 2026-08-24). `'self'` is resolved against the DOCUMENT,
+ * so it covers a `/api/media/cdn/…` path but NOT an absolute URL naming the
+ * host the media belongs to — and commerce stores the absolute form. Read out
+ * of the production `products` collection group, both stored image URLs are
+ * `https://northwind-coffee.aglyn.app/api/media/cdn/<scope>/<mediaId>`, and
+ * `product-detail.tsx` puts that string in `src` unresolved.
+ *
+ * On `northwind-coffee.aglyn.app` those are same-origin and `'self'` admits
+ * them. On a CUSTOM DOMAIN the document origin is the customer's own name
+ * while the stored URL still says `*.aglyn.app`, so the identical image is
+ * cross-origin and an ENFORCING policy would block it. Attaching a custom
+ * domain is exactly what a paying customer does, so the break is latent today
+ * (no storefront has one) and arms itself at launch — the free-tier/paying
+ * inversion two paragraphs up, rebuilt from the other side.
+ *
+ * Not inferred: `cspViolationDaily` holds
+ * `2026-08-23|tenant|img-src|report|northwind-coffee.aglyn.app`, minted when
+ * that product page was served from a different origin than the one baked into
+ * its stored URL. Fixing this belongs to the commerce sinks (AGL-1725), not to
+ * a new entry here — an `*.aglyn.app` wildcard would let one customer's site
+ * authorise another's.
  */
 const TENANT_IMAGE_ORIGINS = ['https://firebasestorage.googleapis.com']
 
@@ -563,8 +587,46 @@ const TENANT_IMAGE_ORIGINS = ['https://firebasestorage.googleapis.com']
  *
  * So this stays report-only, and the next person does not need to re-run the
  * probe: the blocker is a product decision that has already been made, not a
- * measurement still pending. What the counters are good for now is condition 4
- * — whether gtag's pixels appear at all — and that needs real traffic first.
+ * measurement still pending.
+ *
+ * ## Condition 4 is now ANSWERED, and the answer is not an allowlist entry
+ *
+ * Re-read 2026-08-24. The collection has moved: 18 documents, and **three of
+ * them are `app: 'tenant'`** where the 08-20 reading found none. One is the
+ * 08-20 synthetic probe (`agl1726-probe.invalid` — still present, still not a
+ * real violation, TTLs out on its own). The other two are real, and each
+ * settles a question this file was waiting on.
+ *
+ * `2026-08-24|tenant|img-src|report|www.google.com.vn`, site `aglyn.com`,
+ * path `/`, count 2 — a **Google ad-network pixel**, on a tenant-served site,
+ * over real production https traffic. That is the beacon predicted two
+ * paragraphs above, arriving on a country ccTLD rather than the
+ * `stats.g.doubleclick.net` / `www.google.com/ads/ga-audiences` forms guessed
+ * at. So gtag on a published site DOES emit an image beacon.
+ *
+ * The guidance above applies unchanged, and the ccTLD makes it sharper: the
+ * question is whether we ship ad-network pixels on customers' websites and
+ * whether `/legal/subprocessors` names the recipient — NOT whether to add a
+ * line here. There is no line to add. `www.google.<cctld>` is a per-visitor
+ * country domain, so allowlisting the observed host silences one visitor's
+ * pixel and no one else's, and allowlisting the SHAPE means a wildcard across
+ * Google's entire ccTLD space. Adding a tracking host to silence its own
+ * report is the AGL-1671 mistake played backwards; adding a wildcard for one
+ * is that mistake with the evidence deleted too.
+ *
+ * The second row is the commerce absolute-URL break, recorded with
+ * `TENANT_IMAGE_ORIGINS` above.
+ *
+ * ## What the counters now prove about the pipeline itself
+ *
+ * These two rows retire the 08-20 caveat that a real zero and a broken
+ * collector are byte-identical (the AGL-518 shape). They are unsolicited, from
+ * traffic nobody generated on purpose, carrying a site and path nobody typed
+ * into a probe — so the tenant collector, the aggregator and the reporting
+ * tail are all live in production, demonstrated by output rather than by
+ * reading the header back. A future zero on this surface can now be read as a
+ * zero. It still cannot be read as SAFETY while the population is six hosts we
+ * own (condition 3).
  *
  * ## Why this one is compatible with ISR and `script-src` was not
  *
