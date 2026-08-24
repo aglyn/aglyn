@@ -74,6 +74,18 @@ export type AglynNotificationType =
   // the field. `system.` for the AGL-1088 reason above, and because the
   // collection it names may be `marketplace`-adjacent or not.
   | 'system.scopeDrift'
+  // An SSO domain that WAS DNS-proven has stopped answering with our
+  // challenge record, for three consecutive weekly sweeps (AGL-1210).
+  // Nothing has been turned off — sign-in for that domain still routes
+  // exactly as it did — and that is precisely why this has to be said out
+  // loud rather than left in a log.
+  //
+  // `system.`, not `team.`, for the AGL-1088 reason above and one of its
+  // own: the audience is the org's own admins, the subject is whether their
+  // people can still sign in, and it must reach them BEFORE anybody decides
+  // to revoke the routing. A category somebody mutes to quieten roster
+  // chatter is the wrong place for the one warning that precedes a lockout.
+  | 'system.ssoDomainUnverified'
   // A site hit the per-month form-submission abuse ceiling and further
   // submissions are being refused (AGL-1655). `system.`, not `content.`, for
   // the AGL-1088 reason above and more sharply than any of them: `content` is
@@ -178,6 +190,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> =
     'system.pluginVerifierRegression': 'Plugin verifier regression',
     'system.signInMethodRemoved': 'Sign-in method removed',
     'system.scopeDrift': 'Resources missing a sharing scope',
+    'system.ssoDomainUnverified': 'SSO domain no longer proves ownership',
     'system.formSubmissionsPaused': 'Form submissions paused',
     'system.abuseReportUrgent': 'Urgent abuse report',
     'system.dmcaCounterNotice': 'DMCA counter-notice',

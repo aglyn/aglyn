@@ -34,6 +34,23 @@ passes, and we re-check the record rather than taking your word for it.
 Public mailbox domains — `gmail.com`, `outlook.com` and the like — cannot be
 used. They are shared with millions of people outside your organization.
 
+**Leave the `TXT` record in place after verification.** We re-check it weekly,
+because a domain that changes hands should not keep routing sign-ins to
+whoever set it up first.
+
+If the record stops answering, nothing happens to your sign-in. We do not
+remove a domain automatically, and a failed lookup on our side is never
+treated on its own as proof the record is gone — a DNS outage looks identical
+to a deleted record, and we would rather ask you than lock your team out.
+
+What happens instead: after the check fails three weeks running, we email
+your organization's owners and admins asking you to restore it. Your SSO keeps
+working the whole time. Removing a domain is always a deliberate act by you,
+in **Organization → Settings → SSO**, or by us with your agreement.
+
+So if you migrate DNS providers, carry `_aglyn-challenge.yourdomain.com` across
+with the rest of your records.
+
 ### 2. Connect your identity provider
 
 The settings page shows the two values your IdP asks for when you create the

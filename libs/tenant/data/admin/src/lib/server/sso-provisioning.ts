@@ -51,6 +51,7 @@ import { promises as dns, Resolver as CallbackResolver } from 'dns'
 import { randomBytes } from 'crypto'
 import type { BaseAuth } from 'firebase-admin/auth'
 import firebaseAdmin from './firebase-admin'
+import type { DomainProbe } from './sso-drift-logic'
 
 const auth = () => firebaseAdmin.app().auth()
 const firestore = () => firebaseAdmin.app().firestore()
@@ -194,6 +195,118 @@ export function recordsProveOwnership(
 ): boolean {
   if (!token) return false
   return records.includes(challengeValue(token))
+}
+
+/*==========================================
+ * PERIODIC RE-VERIFICATION (AGL-1210, the residual the 2026-08-23 audit named).
+ *
+ * A domain is proven ONCE, when an admin presses Verify, and then routes that
+ * domain's sign-ins forever. A company that lets its domain lapse — or sells
+ * it — keeps the routing until a human revokes it. The audit called that
+ * "the account-takeover shape in slow motion", and it is the last residual on
+ * an otherwise strong proof.
+ *
+ * ## Why this REPORTS and never revokes
+ *
+ * The obvious fix — re-run the lookup, drop the domain when it fails — is a
+ * worse bug than the one it closes. `resolveChallengeTxt` cannot tell "the
+ * record is gone" from "the resolver did not answer", because BOTH return an
+ * empty array. So a resolver blip during the sweep looks exactly like every
+ * customer simultaneously deleting their TXT record, and an automated revoke
+ * would log out every enterprise on the platform at once. That is the
+ * `reverify-plugin-versions` argument — a lint that can stop a plugin in every
+ * workspace is a kill switch with no human in it — and the lockdown argument,
+ * where an unreachable Firestore is an outage rather than a verdict.
+ *
+ * So this half adds two things and deliberately nothing else:
+ *
+ *   1. {@link probeChallengeTxt} — a THIRD state. `unreachable` is not
+ *      evidence, and is never counted as a failure.
+ *   2. {@link assessDomainDrift} — consecutive CONCLUSIVE failures over a
+ *      minimum wall-clock age before a domain is even reported as drifted.
+ *
+ * Revocation stays exactly where it was: {@link revokeDomain}, an explicit act
+ * by a person. Detection with a human decision beats an automated action that
+ * can log out a paying customer.
+ *
+ * ## Why the risk tolerates a slow answer
+ *
+ * The threat needs a domain to lapse, clear ~30 days of registrar grace and
+ * ~30 days of redemption, drop, and be re-bought. That is months, not days.
+ * And the first harm is not silent credential theft: routing still points at
+ * the ORIGINAL org's IdP, where the new owner's staff have no account. The
+ * concrete harm is that the new legitimate owner cannot claim their own domain
+ * (`issueDomainClaim` refuses a domain another org already routes) and their
+ * users are misdirected. Weeks of grace cost that risk almost nothing, and buy
+ * immunity from the resolver blip that would otherwise be self-inflicted.
+ *=========================================*/
+
+/**
+ * The pure half of re-verification — the probe STATES and the decision made
+ * from them — lives in `sso-drift-logic.ts` and is re-exported here so the
+ * public surface is one module. It has no imports at all, which is what lets
+ * the console route's spec run the REAL decision against faked I/O.
+ */
+export {
+  assessDomainDrift,
+  SSO_DRIFT_FAILURES_BEFORE_REPORT,
+  SSO_DRIFT_MIN_AGE_MS,
+  type DomainDriftAction,
+  type DomainDriftState,
+  type DomainDriftVerdict,
+  type DomainProbe,
+  type DomainProbeStatus,
+} from './sso-drift-logic'
+
+/**
+ * Re-check a claim's TXT record, distinguishing silence from absence.
+ *
+ * Same pinned public resolvers and same fallback as {@link resolveChallengeTxt}
+ * — this is not a second opinion about DNS, it is the same lookup reporting one
+ * more bit. NXDOMAIN/ENOTFOUND/ENODATA are ANSWERS ("that name has no TXT
+ * record") and stay conclusive; anything else from both the pinned resolvers
+ * and the runtime fallback is `unreachable`.
+ *
+ * Never throws: a sweep across every org must not stop at the first bad zone.
+ */
+export async function probeChallengeTxt(
+  domain: string,
+  token: string,
+): Promise<DomainProbe> {
+  const host = `${SSO_CHALLENGE_PREFIX}.${domain}`
+  const flatten = (records: string[][]) =>
+    records.map((chunks) => chunks.join('').trim())
+  const settle = (records: string[]): DomainProbe => ({
+    status: recordsProveOwnership(records, token) ? 'proven' : 'missing',
+    records: records.slice(0, 5),
+  })
+  /** Codes that are a real answer rather than a failure to get one. */
+  const conclusive = (code: string) =>
+    code === 'ENOTFOUND' || code === 'ENODATA' || code === 'NXDOMAIN'
+
+  try {
+    const resolver = new CallbackResolver()
+    resolver.setServers(PUBLIC_RESOLVERS)
+    const records = await new Promise<string[][]>((resolve, reject) => {
+      resolver.resolveTxt(host, (error, addresses) =>
+        error ? reject(error) : resolve(addresses),
+      )
+    })
+    return settle(flatten(records))
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException)?.code
+    if (conclusive(code)) return settle([])
+    try {
+      return settle(flatten(await dns.resolveTxt(host)))
+    } catch (fallbackError) {
+      const fallbackCode = (fallbackError as NodeJS.ErrnoException)?.code
+      // The pinned resolvers gave us nothing usable. Only the fallback's own
+      // answer can still make this conclusive; otherwise we genuinely do not
+      // know, and saying so is the entire feature.
+      if (conclusive(fallbackCode)) return settle([])
+      return { status: 'unreachable', records: [] }
+    }
+  }
 }
 
 export interface SsoDomainClaimView {
