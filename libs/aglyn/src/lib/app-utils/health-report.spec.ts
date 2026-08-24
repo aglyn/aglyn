@@ -740,6 +740,10 @@ describe('billingWebhookHealth (AGL-1924)', () => {
     emitted: 12,
     processed: 12,
     inert: 0,
+    // AGL-1948: the arm ran and saw no retried delivery. NOT null —
+    // null means the Firestore arm could not run, which would
+    // contradict `processed`/`inert` carrying real numbers here.
+    retried: 0,
     unsubscribedEvents: [] as readonly string[],
     connectEndpoint: 'enabled' as const,
     unsubscribedConnectEvents: [] as readonly string[],
@@ -763,6 +767,10 @@ describe('billingWebhookHealth (AGL-1924)', () => {
         emitted: 0,
         processed: 0,
         inert: 0,
+        // AGL-1948: the arm ran and saw no retried delivery. NOT null —
+        // null means the Firestore arm could not run, which would
+        // contradict `processed`/`inert` carrying real numbers here.
+        retried: 0,
         unsubscribedEvents: [],
         connectEndpoint: 'enabled' as const,
         unsubscribedConnectEvents: [],
@@ -793,6 +801,10 @@ describe('billingWebhookHealth (AGL-1924)', () => {
         emitted: 40,
         processed: 0,
         inert: 0,
+        // AGL-1948: the arm ran and saw no retried delivery. NOT null —
+        // null means the Firestore arm could not run, which would
+        // contradict `processed`/`inert` carrying real numbers here.
+        retried: 0,
         unsubscribedEvents: [],
         connectEndpoint: 'enabled' as const,
         unsubscribedConnectEvents: [],
@@ -811,6 +823,10 @@ describe('billingWebhookHealth (AGL-1924)', () => {
         emitted: 40,
         processed: 0,
         inert: 0,
+        // AGL-1948: the arm ran and saw no retried delivery. NOT null —
+        // null means the Firestore arm could not run, which would
+        // contradict `processed`/`inert` carrying real numbers here.
+        retried: 0,
         unsubscribedEvents: [],
         connectEndpoint: 'enabled' as const,
         unsubscribedConnectEvents: [],
@@ -830,6 +846,10 @@ describe('billingWebhookHealth (AGL-1924)', () => {
         emitted: 40,
         processed: 0,
         inert: 0,
+        // AGL-1948: the arm ran and saw no retried delivery. NOT null —
+        // null means the Firestore arm could not run, which would
+        // contradict `processed`/`inert` carrying real numbers here.
+        retried: 0,
         unsubscribedEvents: [],
         connectEndpoint: 'enabled' as const,
         unsubscribedConnectEvents: [],
