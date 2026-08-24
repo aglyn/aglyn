@@ -106,19 +106,54 @@ async function handler(request: Request): Promise<Response> {
     const firestore = firebaseAdmin.app().firestore()
 
     // 1. Billing country per org, from the permanently retained revenue rows.
-    //    Last row wins, which is the most recent billing address on file.
-    const billingByOrg = new Map<string, string>()
+    //
+    // The NEWEST row wins, by `paidAt`, and that has to be said explicitly
+    // because this used to be a bare last-write-wins over the query order and
+    // a comment claiming it was "the most recent billing address on file". It
+    // was not: an unordered `collection().limit().get()` returns documents in
+    // `__name__` order, so the winner was whichever document id sorted last —
+    // an org that moved country got an arbitrary one of its addresses, which
+    // is the silent pick this report exists to refuse.
+    //
+    // Sorted in memory rather than with `orderBy('paidAt')` deliberately: a
+    // Firestore `orderBy` EXCLUDES documents missing the field, so a revenue
+    // row with no `paidAt` would vanish from the sweep entirely — trading a
+    // wrong pick for a dropped one, which is the worse of the two.
+    //
+    // Note this is NOT the `ambiguous` case. Two orgs disagreeing is
+    // simultaneous evidence with no ordering, so the report refuses; a single
+    // org's billing history is a sequence, and the latest entry is a
+    // legitimate answer to "which authority plausibly has an interest".
     const revenueSnap = await firestore
       .collection('platformRevenue')
       .limit(REVENUE_CAP)
       .get()
+    /** Epoch millis out of a Timestamp, Date, ISO string or number. */
+    const paidAtMillis = (value: unknown): number => {
+      if (!value) return 0
+      const timestamp = value as { toMillis?: () => number }
+      if (typeof timestamp.toMillis === 'function') return timestamp.toMillis()
+      const parsed = new Date(value as string | number).getTime()
+      return Number.isFinite(parsed) ? parsed : 0
+    }
+    const billingByOrg = new Map<string, string>()
+    const newestBillingAt = new Map<string, number>()
     for (const doc of revenueSnap.docs) {
       const row = doc.data() as Record<string, unknown>
       const orgId = typeof row.orgId === 'string' ? row.orgId : ''
       const address = row.customerAddress as { country?: unknown } | undefined
       const country =
         typeof address?.country === 'string' ? address.country : ''
-      if (orgId && country) billingByOrg.set(orgId, country)
+      if (!orgId || !country) continue
+      const at = paidAtMillis(row.paidAt)
+      // `>=` so that among rows with no `paidAt` at all — every one of them
+      // scoring 0 — the query order still decides, rather than the first one
+      // seen locking the org forever. Undated rows are the degenerate case;
+      // any dated row outranks them.
+      if (!newestBillingAt.has(orgId) || at >= newestBillingAt.get(orgId)) {
+        newestBillingAt.set(orgId, at)
+        billingByOrg.set(orgId, country)
+      }
     }
 
     // 2. Declared country per org, and each org's member uids.

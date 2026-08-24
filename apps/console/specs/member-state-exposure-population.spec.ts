@@ -429,6 +429,53 @@ describe('the account register — Firebase Auth, not the profile collection', (
     expect(result.totalSubjects).toBe(1)
   })
 
+  it('takes the NEWEST billing address, not the last row the query returned', async () => {
+    // An org that moved country. The older row is returned LAST by the query
+    // — which is exactly what document-id order does to you — so a bare
+    // last-write-wins picks the address the org has stopped using, while
+    // claiming in a comment to be picking the most recent one.
+    mockOrgs = { 'org-moved': { ownerUid: 'u-moved' } }
+    mockOrgMembers = { 'org-moved': ['u-moved'] }
+    mockRevenue = [
+      {
+        orgId: 'org-moved',
+        customerAddress: { country: 'FR' },
+        paidAt: new Date('2026-06-01'),
+      },
+      {
+        orgId: 'org-moved',
+        customerAddress: { country: 'DE' },
+        paidAt: new Date('2024-01-01'),
+      },
+    ]
+
+    const result = await report()
+
+    expect(result.filings).toHaveLength(1)
+    expect(result.filings[0].country).toBe('FR')
+    expect(result.filings[0].byProvenance.billing).toBe(1)
+  })
+
+  it('lets a dated billing row outrank an undated one', async () => {
+    // `paidAt` is absent on the row that would otherwise win on query order.
+    // Treating a missing date as "now" would let the least-evidenced row set
+    // the filing country.
+    mockOrgs = { 'org-partial': { ownerUid: 'u-partial' } }
+    mockOrgMembers = { 'org-partial': ['u-partial'] }
+    mockRevenue = [
+      {
+        orgId: 'org-partial',
+        customerAddress: { country: 'IT' },
+        paidAt: new Date('2025-05-05'),
+      },
+      { orgId: 'org-partial', customerAddress: { country: 'PL' } },
+    ]
+
+    const result = await report()
+
+    expect(result.filings[0].country).toBe('IT')
+  })
+
   it('does not flag a clean sweep as truncated', async () => {
     // The control that keeps the flag meaningful. A `truncated` that is
     // always true is exactly as useless as one that is always false.
