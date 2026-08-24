@@ -9,6 +9,64 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.12 — 2026-08-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.11...v1.0.0-beta.12)
+
+### Fixed
+
+- **commerce:** a product image on a white-label storefront stops naming aglyn.app ([AGL-1726](https://linear.app/aglyn/issue/AGL-1726))
+- **domains:** a platform-reserved name cannot be claimed as a site domain ([AGL-1430](https://linear.app/aglyn/issue/AGL-1430))
+- **billing,console:** a delivery that only landed on a RETRY stops being invisible ([AGL-1948](https://linear.app/aglyn/issue/AGL-1948))
+- **selfhost,ops:** the upload-CORS allowlist is derived, audited and reclaimed ([AGL-1452](https://linear.app/aglyn/issue/AGL-1452))
+- **commerce:** a site collaborator is no longer an admin at the refund gate ([AGL-2372](https://linear.app/aglyn/issue/AGL-2372))
+- **commerce:** a reconstructed subscription states its tax regime ([AGL-2323](https://linear.app/aglyn/issue/AGL-2323))
+
+### Documentation
+
+- **trust:** the Google Ads row argued from a policy premise that is now false ([AGL-1736](https://linear.app/aglyn/issue/AGL-1736))
+- **trust:** author-chosen image and CSS hosts are disclosed, and not proxied ([AGL-1736](https://linear.app/aglyn/issue/AGL-1736))
+- **security:** the tenant img-src reports came back, and they refuse the flip ([AGL-1726](https://linear.app/aglyn/issue/AGL-1726))
+
+<details>
+<summary>Also in this release: 1 chore, 1 ci, 2 test</summary>
+
+- **release:** package.json catches up to the tags, at beta.12 ([AGL-1617](https://linear.app/aglyn/issue/AGL-1617))
+- **ops:** the upload-CORS allowlist gets a scheduled drift check ([AGL-1452](https://linear.app/aglyn/issue/AGL-1452))
+- **aglyn:** health-report fixtures carry the required retried field ([AGL-1948](https://linear.app/aglyn/issue/AGL-1948))
+- **commerce:** the register allowlist is proven to refuse an author ([AGL-2372](https://linear.app/aglyn/issue/AGL-2372))
+
+</details>
+
+## v1.0.0-beta.11 — 2026-08-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.10...v1.0.0-beta.11)
+
+### Added
+
+- **console:** the entry editor carries the publication controls ([AGL-2498](https://linear.app/aglyn/issue/AGL-2498))
+- **console:** a content entry publish date is settable, and can be backdated ([AGL-2497](https://linear.app/aglyn/issue/AGL-2497))
+- **docs:** status.aglyn.com lands on the status page, not the docs home ([AGL-2496](https://linear.app/aglyn/issue/AGL-2496))
+- **legal:** Aglyn is the marketplace facilitator, and the Terms now say so ([AGL-1956](https://linear.app/aglyn/issue/AGL-1956))
+- **legal:** a third-party host cannot receive data undeclared ([AGL-1648](https://linear.app/aglyn/issue/AGL-1648))
+
+### Fixed
+
+- **ops:** an unreadable backup listing is "unknown", not "backup failed" ([AGL-1843](https://linear.app/aglyn/issue/AGL-1843))
+- **docs:** the status page shows billing and scheduled jobs, and its own copy says so ([AGL-2496](https://linear.app/aglyn/issue/AGL-2496))
+- **commerce:** the merchant-facing tax copy stops contradicting the Terms ([AGL-1956](https://linear.app/aglyn/issue/AGL-1956))
+- **docs:** the status page monitored nothing, and had nowhere to send you ([AGL-2496](https://linear.app/aglyn/issue/AGL-2496))
+- **rules:** a revoked billing.view stops Firestore delivering the subscription doc ([AGL-243](https://linear.app/aglyn/issue/AGL-243))
+- **console:** a failed permission read denies instead of answering "owner" ([AGL-243](https://linear.app/aglyn/issue/AGL-243))
+- **console:** a permission gate holds instead of painting the ledger it is about to refuse ([AGL-243](https://linear.app/aglyn/issue/AGL-243))
+
+<details>
+<summary>Also in this release: 1 test</summary>
+
+- **guards:** a disclosure registry may name what it discloses ([AGL-1648](https://linear.app/aglyn/issue/AGL-1648))
+
+</details>
+
 ## v1.0.0-beta.10 — 2026-08-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.9...v1.0.0-beta.10)
