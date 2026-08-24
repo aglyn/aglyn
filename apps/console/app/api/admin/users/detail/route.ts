@@ -164,6 +164,8 @@ type LegalDisclosure =
       acceptedVersions: []
       latestAcceptedVersion: null
       currentVersionAcceptedAt: null
+      latestAcceptedAt: null
+      changedDocumentKeys: null
       reacceptanceRequired: null
       reacceptanceReason: null
       arbitration: null
@@ -189,6 +191,8 @@ async function readLegalDisclosure(
       acceptedVersions: [],
       latestAcceptedVersion: null,
       currentVersionAcceptedAt: null,
+      latestAcceptedAt: null,
+      changedDocumentKeys: null,
       reacceptanceRequired: null,
       reacceptanceReason: null,
       arbitration: null,

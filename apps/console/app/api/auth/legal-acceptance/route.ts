@@ -162,6 +162,10 @@ async function statusHandler(request: Request): Promise<Response> {
   try {
     const status = await getLegalAcceptanceStatus(uid, {
       currentVersion: LEGAL_DOCUMENT_VERSION,
+      // The manifest published now, so the status can say WHICH documents
+      // moved since this person last agreed. Same constant the POST beside
+      // this one pins onto the record it writes.
+      currentDocuments: LEGAL_DOCUMENTS,
     })
     return Response.json(
       {
@@ -170,6 +174,12 @@ async function statusHandler(request: Request): Promise<Response> {
         acceptedVersions: status.acceptedVersions,
         latestAcceptedVersion: status.latestAcceptedVersion,
         currentVersionAcceptedAt: status.currentVersionAcceptedAt,
+        // WHEN they last agreed, and WHAT has moved since — the two facts the
+        // banner needs to acknowledge an existing acceptance instead of
+        // reading like a first-time ask. Neither carries the IP or the user
+        // agent, so the rule below still holds.
+        latestAcceptedAt: status.latestAcceptedAt,
+        changedDocumentKeys: status.changedDocumentKeys,
         reacceptanceRequired: status.reacceptanceRequired,
         reacceptanceReason: status.reacceptanceReason,
         arbitration: status.arbitration,

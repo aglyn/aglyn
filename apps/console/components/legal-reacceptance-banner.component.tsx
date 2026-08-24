@@ -53,6 +53,47 @@ import { postLegalAcceptance } from '../utils/legal-consent'
  * server's clock, and it is idempotent per version, so a double click, a
  * retry, or two tabs cannot produce a second record or move the §18.5
  * timestamp.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * THE WORDING IS THE FEATURE (2026-08-24)
+ *
+ * Zach, 2026-08-24: "Okay then leave it and they can agree again, but don't
+ * phrase it that they havent agreed before it creates confusion and
+ * frustration, I know I agree yesterday (but we updated overnight)."
+ *
+ * ⚠️ RE-ACCEPTANCE ON A VERSION CHANGE STAYS. An earlier pass on the same day
+ * was briefed to suppress it — "accept once, never ask again" — and then to
+ * keep the machinery behind a default-off flag. BOTH were withdrawn before
+ * anything shipped. Do not re-derive either from the arguments for them: ToS
+ * §5.3's continued-use theory does make re-acceptance contractually optional,
+ * and the decision is nevertheless to keep asking. The problem was never the
+ * asking.
+ *
+ * The problem is that the two reasons used to share a voice, and the common
+ * one — `version-superseded`, a person who agreed and whose documents moved
+ * under them — read as though we held no record of them. To someone who
+ * clicked agree yesterday that is both wrong and insulting, and it is the
+ * exact experience Zach hit.
+ *
+ * So the two branches are now genuinely different situations:
+ *
+ *   `version-superseded`   LEADS WITH THE ACKNOWLEDGEMENT, and names the DAY
+ *                          they agreed, because a date is what a person
+ *                          recognises. "You last agreed to v1, current is v2"
+ *                          is engineer-facing noise — the version id is not
+ *                          rendered here at all.
+ *
+ *   `never-accepted`       Says we have no record ON THIS ACCOUNT, framed as
+ *                          the records gap it usually is (an account older
+ *                          than clickwrap capture, or an SSO/invite door that
+ *                          never showed a consent control) — OUR gap, not an
+ *                          accusation that they failed to do something.
+ *
+ * ⚠️ `acceptedAt` IS NULLABLE and `strictNullChecks` is OFF repo-wide, so a
+ * date sentence that does not branch renders "on undefined" or, worse,
+ * `new Date(null)` — 1 January 1970. `formatAcceptedOn` returns null instead
+ * and the copy drops to a dateless acknowledgement that is still an
+ * acknowledgement. Both branches are covered in the spec.
  */
 
 interface LegalStatus {
@@ -60,6 +101,43 @@ interface LegalStatus {
   reacceptanceRequired: boolean
   reacceptanceReason: 'none' | 'never-accepted' | 'version-superseded'
   latestAcceptedVersion: string | null
+  /** ISO of the last acceptance; null when unknown or never. */
+  latestAcceptedAt: string | null
+  /** Which pinned documents moved. Null means UNKNOWN — say nothing. */
+  changedDocumentKeys: string[] | null
+}
+
+/** What a person calls the document, keyed by the manifest's stable key. */
+const DOCUMENT_LABELS: Record<string, string> = {
+  terms: 'Terms of Service',
+  privacy: 'Privacy Policy',
+}
+
+/**
+ * The DAY they agreed, in the reader's locale, or null.
+ *
+ * Null for an absent timestamp AND for an unparseable one. With
+ * `strictNullChecks` off, `new Date(null)` is the epoch and `new Date(undefined)`
+ * is Invalid Date — one prints a confident lie and the other prints
+ * "Invalid Date" to a customer, so neither may reach the DOM.
+ */
+function formatAcceptedOn(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  const parsed = new Date(iso)
+  if (Number.isNaN(parsed.getTime())) return null
+  return parsed.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })
+}
+
+/** "the Terms of Service", "the Terms of Service and the Privacy Policy". */
+function joinDocumentLabels(keys: string[]): string {
+  const labels = keys.map((key) => DOCUMENT_LABELS[key] ?? key)
+  if (labels.length === 0) return ''
+  if (labels.length === 1) return labels[0]
+  return `${labels.slice(0, -1).join(', ')} and the ${labels[labels.length - 1]}`
 }
 
 function LegalLinks() {
@@ -138,6 +216,15 @@ export function LegalReacceptanceBanner() {
   if (!status?.reacceptanceRequired) return null
 
   const superseded = status.reacceptanceReason === 'version-superseded'
+  const acceptedOn = formatAcceptedOn(status.latestAcceptedAt)
+  // Only when the comparison actually ran AND found something. Null is
+  // "unknown" and an empty array would mean the documents are byte-identical,
+  // which is not a state this banner should be rendering in — either way,
+  // claim nothing.
+  const changed =
+    status.changedDocumentKeys && status.changedDocumentKeys.length > 0
+      ? joinDocumentLabels(status.changedDocumentKeys)
+      : null
 
   return (
     <Alert
@@ -149,22 +236,42 @@ export function LegalReacceptanceBanner() {
       }
     >
       <Stack spacing={0.5}>
-        <Typography variant="body2">
-          {superseded
-            ? `${PLATFORM_BRAND_NAME}’s `
-            : `Please confirm you agree to ${PLATFORM_BRAND_NAME}’s `}
-          <LegalLinks />
-          {superseded
-            ? ` have been updated. Please review and confirm you agree to continue.`
-            : '.'}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          {superseded
-            ? `You last agreed to version ${
-                status.latestAcceptedVersion ?? '—'
-              }; the current version is ${status.currentVersion}.`
-            : 'We have no record of your acceptance on this account.'}
-        </Typography>
+        {superseded ? (
+          <>
+            {/* The acknowledgement comes FIRST and in its own sentence, so
+                the person reads "you already did this" before they read that
+                anything is being asked of them. */}
+            <Typography variant="body2">
+              {acceptedOn
+                ? `Thanks for agreeing to ${PLATFORM_BRAND_NAME}’s `
+                : `You’ve already agreed to ${PLATFORM_BRAND_NAME}’s `}
+              <LegalLinks />
+              {acceptedOn
+                ? ` on ${acceptedOn}. We’ve updated them since, so please take another look and confirm you’re happy to continue.`
+                : `. We’ve updated them since, so please take another look and confirm you’re happy to continue.`}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {changed
+                ? `What changed: the ${changed}. Your earlier agreement stays on record — this adds to it.`
+                : 'Your earlier agreement stays on record — this adds to it.'}
+            </Typography>
+          </>
+        ) : (
+          <>
+            <Typography variant="body2">
+              {'We don’t have a record of your acceptance of '}
+              {`${PLATFORM_BRAND_NAME}’s `}
+              <LegalLinks />
+              {' on this account. Please take a look and confirm to continue.'}
+            </Typography>
+            {/* Framed as OUR gap, because it usually is one. */}
+            <Typography variant="caption" color="text.secondary">
+              {
+                'This is usually because the account was created before we started keeping these records, or through single sign-on or an invite that never showed one.'
+              }
+            </Typography>
+          </>
+        )}
       </Stack>
     </Alert>
   )
