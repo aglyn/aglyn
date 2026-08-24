@@ -81,6 +81,8 @@ const EXCEPTIONS: Record<string, string> = {
  * header has been renamed away, fails rather than lingering.
  */
 const CARD_EXCEPTIONS: Record<string, string> = {
+  'apps/console/app/(app)/billing/page.tsx#{org.orgName ?? org.slug ?? org.$id}':
+    'The workspace picker on the org-agnostic billing entry point (AGL-2430) — the same navigational card the org jump page renders, and exempt for the same reason: it names one of the reader\'s own workspaces and claims nothing about billing. The surface itself carries help="billing" on its DashboardLayout, which is where the explanation belongs.',
   'apps/console/app/(app)/[orgSlug]/hosts/[host]/admin/page.tsx#"Navigation"':
     'A vertical TabList — the page\'s own navigation rail, not a feature. Its two tabs (Plugins, Danger zone) each open a card that carries its own help, so a help icon here would explain the act of clicking a tab.',
 }

@@ -115,6 +115,23 @@ export enum Route {
   ORG_MARKETPLACE_PUBLISH_PLUGIN = '/[orgSlug]/marketplace/publish/plugin',
   ORG_SETTINGS = '/[orgSlug]/settings',
   MANAGE_BILLING = '/[orgSlug]/billing',
+  // The ONE billing URL that carries no org (AGL-2430).
+  //
+  // Everything else on this table is org-scoped, which is correct for a
+  // console and wrong for the only caller that cannot template a URL:
+  // Stripe's dunning emails. "Payment method updates" takes a single static
+  // link for every customer in the account — there is no `{{org}}` to
+  // interpolate — so a table with no org-agnostic billing entry means those
+  // emails can only ever point at a page that is not billing. Today all four
+  // of them point at the marketing homepage, which is how a failed card
+  // becomes a cancelled subscription with no reachable way to fix it.
+  //
+  // This resolves the org from the SESSION instead of from the URL: one
+  // workspace goes straight through, several offer a choice, none says so.
+  // `billing` is a reserved subdomain (`RESERVED_SUBDOMAINS`), so no org can
+  // hold this slug and the literal segment can never shadow a real
+  // `/[orgSlug]`.
+  BILLING_ENTRY = '/billing',
   MANAGE_USER_SETTINGS = '/manage/user',
   MANAGE_NOTIFICATIONS = '/manage/notifications',
   AUTH_SIGN_IN = '/signin',
@@ -285,6 +302,7 @@ export interface RoutePayload {
   [Route.MANAGE_SUPPORT_TICKETS]: { orgSlug: string }
   [Route.MANAGE_SUPPORT_FORUM]: { orgSlug: string }
   [Route.MANAGE_BILLING]: { orgSlug: string }
+  [Route.BILLING_ENTRY]: undefined
   [Route.HOST_INBOX]: { orgSlug: string; host: string }
   [Route.HOST_CONTACTS]: { orgSlug: string; host: string }
   [Route.HOST_SETUP]: { orgSlug: string; host: string }
