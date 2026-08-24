@@ -69,6 +69,8 @@ const hostWith = (overrides: Record<string, unknown> = {}) => ({
 const jsonLdFor = async (options: {
   cover?: unknown
   host?: Record<string, unknown>
+  /** Extra fields merged onto the entry — dates, for AGL-2497 below. */
+  entry?: Record<string, unknown>
 }) => {
   mockLoad.mockResolvedValue({
     props: {
@@ -82,6 +84,7 @@ const jsonLdFor = async (options: {
           slug: 'hello',
           excerpt: 'An entry',
           ...('cover' in options ? { coverImage: options.cover } : {}),
+          ...options.entry,
         },
       },
     },
@@ -106,6 +109,7 @@ const jsonLdFor = async (options: {
 const articleFrom = async (options: {
   cover?: unknown
   host?: Record<string, unknown>
+  entry?: Record<string, unknown>
 }) => {
   const blocks = await jsonLdFor(options)
   const article = blocks.find((block) => block.value['@type'] === 'Article')
@@ -186,5 +190,91 @@ describe('Article structured data resolves its cover (AGL-1343)', () => {
     })
 
     expect(article.value.image).toBeUndefined()
+  })
+})
+
+/**
+ * `Article.datePublished` carries the author-chosen publish date (AGL-2497).
+ *
+ * The console can now set an entry's `publishedAt`, including to a PAST
+ * instant, so an archive imported from another site can be dated truthfully
+ * instead of claiming every post went out on migration day.
+ *
+ * This surface was never broken and is deliberately unchanged — which is
+ * exactly why it needs asserting HERE. The whole feature is worth nothing if
+ * the value the console writes does not come out the other end, and the
+ * console suite can only prove what it put into Firestore. These render the
+ * route and read the emitted structured data, so the two halves meet: what
+ * `apps/console/specs/content-entry-publish-date.spec.tsx` proves is WRITTEN
+ * to `publishedAt` is what these prove is PUBLISHED as `datePublished`.
+ *
+ * A `Timestamp` reaches this code as `{ seconds }` — the shape the loader
+ * hands over — so that is what is fed in.
+ */
+describe('Article.datePublished reflects the stored publish date (AGL-2497)', () => {
+  /** 2019-05-01T14:30:00Z — comfortably before any migration date. */
+  const BACKDATED_SECONDS = 1_556_721_000
+  const MIGRATED_SECONDS = 1_756_000_000
+
+  it('emits a BACKDATED instant, not the day the entry was imported', async () => {
+    const migrated = await articleFrom({
+      entry: { publishedAt: { seconds: MIGRATED_SECONDS } },
+    })
+    const backdated = await articleFrom({
+      entry: { publishedAt: { seconds: BACKDATED_SECONDS } },
+    })
+
+    // Before: every imported post claimed the migration date. After: the date
+    // the author set. The two must not be the same string, or the control
+    // that writes it is not reaching this surface at all.
+    expect(migrated.value.datePublished).toBe('2025-08-24T01:46:40.000Z')
+    expect(backdated.value.datePublished).toBe('2019-05-01T14:30:00.000Z')
+    expect(backdated.value.datePublished).not.toBe(
+      migrated.value.datePublished,
+    )
+  })
+
+  it('OMITS the field for an entry that was never published', async () => {
+    const article = await articleFrom({ entry: {} })
+
+    // Absent, never `1970-01-01`. `strictNullChecks` is off repo-wide, so an
+    // arithmetic fallback on a missing date compiles clean and publishes the
+    // epoch — a date Google would read as real.
+    expect(article.value.datePublished).toBeUndefined()
+    expect(article.raw).not.toContain('1970')
+    // An omission, not a bail-out: the rest of the node still renders.
+    expect(article.value.headline).toBe('Hello')
+  })
+
+  it('keeps dateModified tracking updatedAt, independent of the publish date', async () => {
+    // The regression control for the backdating feature. `dateModified` is
+    // what Google reads for freshness and it must go on meaning "last
+    // edited" — re-dating a post is not editing it, so the console's write
+    // names `publishedAt` alone and this stays put.
+    const article = await articleFrom({
+      entry: {
+        publishedAt: { seconds: BACKDATED_SECONDS },
+        updatedAt: { seconds: MIGRATED_SECONDS },
+      },
+    })
+
+    expect(article.value.datePublished).toBe('2019-05-01T14:30:00.000Z')
+    expect(article.value.dateModified).toBe('2025-08-24T01:46:40.000Z')
+  })
+
+  /**
+   * The one-letter guard, at the far end of the pipe.
+   *
+   * `publishedAt` (when it WENT live) and `publishAt` (when it is DUE to)
+   * differ by one letter and now sit beside each other in the console. If
+   * they were ever conflated, the visible symptom would be here: a scheduled
+   * post announcing a publication date it has not reached.
+   */
+  it('never reads the SCHEDULER field as the publication date', async () => {
+    const article = await articleFrom({
+      entry: { publishAt: { seconds: MIGRATED_SECONDS }, status: 'scheduled' },
+    })
+
+    expect(article.value.datePublished).toBeUndefined()
   })
 })

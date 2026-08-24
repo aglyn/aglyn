@@ -38,6 +38,18 @@ import { COLLECTION_TEMPLATE_SCREEN_FIELDS } from '../../../../constants/collect
 // it, assigning its template. What an author cannot do is publish an ENTRY,
 // which is a client-direct write this route never touches and the rules
 // refuse on `status`/`publishedAt`/`publishAt`.
+//
+// AGL-2497 asked for a settable — specifically a BACKDATABLE — publish date,
+// and this refusal is deliberately unchanged by it. The refusal was never
+// what stood in the way: this route governs the COLLECTION document, an
+// entry's `publishedAt` is not a field it can write for anybody, and opening
+// it would have created a second, weaker writer beside the one that already
+// works. The authorised path already existed —
+// `canPublishHostContent(hostId)` in the entries rule block admits an admin
+// or an editor's client-direct `updateDoc` of `publishedAt` and refuses an
+// `author`'s — and what was missing was a CONTROL that wrote it. The console
+// now has one (the Publish date dialog on /content). Nothing here is looser
+// than it was.
 const HOST_WRITER_ROLES = new Set(['admin', 'editor', 'author'])
 
 /** Keys the client may set; everything else is dropped rather than trusted. */

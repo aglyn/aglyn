@@ -21,6 +21,7 @@ import { MEDIA_ALT_MAX_LENGTH } from '@aglyn/aglyn/app-utils/media-metadata'
 import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
 import {
   mdiCalendarClock,
+  mdiCalendarEdit,
   mdiChevronDown,
   mdiCogOutline,
   mdiDeleteOutline,
@@ -190,6 +191,23 @@ const formatStampFull = (value: any): string | undefined => {
   const date = value?.toDate?.()
   if (!date) return undefined
   return date.toLocaleString()
+}
+
+/**
+ * A `Date` in the value shape `<input type="datetime-local">` accepts
+ * (AGL-2497): LOCAL wall-clock, minute precision, no zone suffix.
+ *
+ * `toISOString()` is the obvious wrong answer — it converts to UTC, so the
+ * input would open showing a different instant than the one it was seeded
+ * with anywhere but Greenwich, and the editor would "correct" a date that was
+ * already right.
+ */
+const toDateTimeLocalValue = (date: Date): string => {
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}`
+  )
 }
 
 const HostContent: NextPageWithLayout<Record<string, never>> = () => {
@@ -696,6 +714,15 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     entry: any
     at: string
   } | null>(null)
+  /**
+   * Backdating (AGL-2497): the entry being re-dated + its datetime-local
+   * value. Its own state beside `scheduler`, not a mode on it — see
+   * `handleSetPublishDate` for why the two must not merge.
+   */
+  const [publishDate, setPublishDate] = useState<{
+    entry: any
+    at: string
+  } | null>(null)
 
   const handleSaveEntry = useCallback(async () => {
     if (!editor || !selected) return
@@ -871,8 +898,32 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
           'entries',
           entry.$id,
         ),
+        /**
+         * Publishing stamps the instant only when the entry does not already
+         * carry a date of its own (AGL-2497).
+         *
+         * `Timestamp.now()` used to be unconditional, so an entry's publish
+         * date was always the moment somebody clicked this — which is what
+         * made an imported archive tell Google every post in it went out on
+         * migration day. `publishedAt` is the field `Article.datePublished`
+         * is wired to, and this was one of the two writers that could reach
+         * it; the other is the backdating dialog below.
+         *
+         * `??`, not a truthy test: an entry with no publish date has the
+         * field ABSENT, and `strictNullChecks` is off repo-wide, so any
+         * arithmetic fallback (`(x?.seconds ?? 0) * 1000`) would compile
+         * clean and date the post to 1 Jan 1970. Three states stay distinct —
+         * a real Timestamp, absent, and unpublished.
+         *
+         * There is no stale value to resurrect: unpublishing DELETES the
+         * field, so publish → unpublish → publish stamps now, exactly as it
+         * did before.
+         */
         publish
-          ? { status: 'published', publishedAt: Timestamp.now() }
+          ? {
+              status: 'published',
+              publishedAt: entry.publishedAt ?? Timestamp.now(),
+            }
           : { status: 'draft', publishedAt: deleteField() },
       )
       enqueueSnackbar(publish ? 'Entry published' : 'Entry unpublished', {
@@ -923,6 +974,82 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     })
     setScheduler(null)
   }, [scheduler, selected, firestore, hostId, enqueueSnackbar, logActivity])
+
+  /**
+   * Setting an entry's publish date, in the PAST (AGL-2497).
+   *
+   * ## Why this is a second affordance and not a mode on the scheduler
+   *
+   * Backdating and scheduling are different features that happen to share a
+   * concept. Folding them together means relaxing `handleScheduleEntry`'s
+   * `<= new Date()` refusal, and after that "Schedule" silently accepts a
+   * past instant that nothing will ever act on — the scheduler breaks and
+   * says nothing. So the two guards here are COMPLEMENTARY and between them
+   * tile the line with no gap and no overlap: this one refuses the future and
+   * names where the future lives, `handleScheduleEntry` refuses the past,
+   * unchanged.
+   *
+   * ## Why this needs no change to any tamper guard
+   *
+   * This is the ordinary client-direct entry update. The Firestore rules
+   * already admit a `publishedAt` write on `canPublishHostContent(hostId)` —
+   * admin or editor — and already refuse it to an `author`, and
+   * /api/hosts/collections still refuses a client-supplied
+   * `status`/`publishedAt`/`publishAt` because that route governs the
+   * COLLECTION document and never touches an entry. Nothing here widens what
+   * an arbitrary client may write. The field was always writable by an
+   * authorised editor; what did not exist was a control that wrote it.
+   *
+   * ## What the write deliberately does NOT say
+   *
+   * It names exactly one field. Not `status` — re-dating is not publishing,
+   * and a draft keeps its date to itself until somebody publishes it. Not
+   * `updatedAt` — that is what `Article.dateModified` reads, and it has to go
+   * on meaning "last edited" rather than "last re-dated". A one-field
+   * `updateDoc` also cannot lose a sibling the way a defaulted converter over
+   * a partial write can; entries carry no converter, and this keeps it true
+   * regardless.
+   */
+  const handleSetPublishDate = useCallback(async () => {
+    if (!publishDate || !selected) return
+    const at = new Date(publishDate.at)
+    // `new Date('')` is Invalid Date, not the epoch — and the NaN check is
+    // what keeps it that way. An emptied input must reach no write at all.
+    if (Number.isNaN(at.getTime())) {
+      return enqueueSnackbar('Pick a date and time', {
+        variant: 'warning',
+        persist: false,
+      })
+    }
+    if (at > new Date()) {
+      return enqueueSnackbar(
+        'A published date cannot be in the future — use Schedule for that',
+        { variant: 'warning', persist: false },
+      )
+    }
+    await updateDoc(
+      doc(
+        firestore,
+        'hosts',
+        hostId,
+        'collections',
+        selected.$id,
+        'entries',
+        publishDate.entry.$id,
+      ),
+      { publishedAt: Timestamp.fromDate(at) },
+    )
+    enqueueSnackbar(`Published date set to ${at.toLocaleString()}`, {
+      variant: 'success',
+      persist: false,
+    })
+    logActivity('Edited entry published date', {
+      type: 'content',
+      id: publishDate.entry.$id,
+      name: publishDate.entry.title,
+    })
+    setPublishDate(null)
+  }, [publishDate, selected, firestore, hostId, enqueueSnackbar, logActivity])
 
   const handleDeleteEntry = useCallback(
     (entry: any) => async () => {
@@ -1755,6 +1882,46 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                                     ),
                                     onClick: () =>
                                       void handleTogglePublish(entry)(),
+                                  },
+                                  {
+                                    key: 'published-date',
+                                    /*
+                                      Named in the PAST TENSE, and the whole
+                                      point of the wording. `publishedAt`
+                                      (when it went out) and `publishAt` (when
+                                      it is due to) are one letter apart, and a
+                                      "Publish date…" sitting beside
+                                      "Schedule…" would be read as the same
+                                      feature by anybody who had not written
+                                      both. Every label in this dialog says
+                                      PUBLISHED, every label in the scheduler
+                                      says PUBLISH AT.
+                                    */
+                                    label: 'Edit published date…',
+                                    icon: (
+                                      <MdiIcon
+                                        path={mdiCalendarEdit.path}
+                                        size={0.8}
+                                      />
+                                    ),
+                                    onClick: () => {
+                                      /*
+                                        Seeded from the entry's OWN date when
+                                        it has one and from now when it does
+                                        not — never from a zero. `publishedAt`
+                                        is absent on a draft, and the seductive
+                                        `(x?.seconds ?? 0) * 1000` would open
+                                        this dialog on 1 Jan 1970 and offer to
+                                        store it (AGL-2497).
+                                      */
+                                      const current =
+                                        entry.publishedAt?.toDate?.() ??
+                                        new Date()
+                                      setPublishDate({
+                                        entry,
+                                        at: toDateTimeLocalValue(current),
+                                      })
+                                    },
                                   },
                                   {
                                     key: 'schedule',
@@ -2956,6 +3123,53 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
             onClick={handleScheduleEntry}
           >
             {'Schedule'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      {/*
+        Backdating (AGL-2497) — a SEPARATE dialog from Schedule above, and
+        worded so the two cannot be mistaken for each other. Schedule is about
+        a moment that has not happened; this is about what the entry claims
+        about a moment that has.
+      */}
+      <Dialog
+        open={Boolean(publishDate)}
+        onClose={() => setPublishDate(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{'Edit published date'}</DialogTitle>
+        <DialogContent
+          sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+        >
+          <Typography variant="body2" color="text.secondary">
+            {'The date this entry says it WAS published — what search ' +
+              'engines read as its publication date. Set it in the past to ' +
+              'date posts brought over from another site correctly.'}
+          </Typography>
+          <TextField
+            size="small"
+            type="datetime-local"
+            label="Published on"
+            value={publishDate?.at ?? ''}
+            onChange={(event) =>
+              setPublishDate((prev) =>
+                prev ? { ...prev, at: event.target.value } : prev,
+              )
+            }
+            slotProps={{ inputLabel: { shrink: true } }}
+            helperText="To publish at a future time, use Schedule instead."
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPublishDate(null)}>{'Cancel'}</Button>
+          <Button
+            variant="contained"
+            color="primary"
+            disabled={!publishDate?.at}
+            onClick={handleSetPublishDate}
+          >
+            {'Save published date'}
           </Button>
         </DialogActions>
       </Dialog>
