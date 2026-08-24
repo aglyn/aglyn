@@ -818,6 +818,147 @@ export const CURSOR_THROTTLE_MS = 60
 export const CURSOR_MIN_DELTA = 0.002
 
 /**
+ * What a pointer move should cause. Nothing here writes — the caller owns
+ * every RTDB call, so what lands in the presence store is unchanged and
+ * stays auditable in one place.
+ */
+export type CursorIntent = 'skip' | 'withdraw' | { x: number; y: number }
+
+/**
+ * Decide what one pointer move means, at most once per throttle interval
+ * (AGL-2486).
+ *
+ * ## The asymmetry this closes
+ *
+ * `onMove` used to stamp its throttle clock — `last = now` — on the ONE path
+ * that writes a position, and on no other. Every path that decides not to
+ * write left the clock untouched, so `now - last` stayed above the interval
+ * and the gate at the top opened for the very next `pointermove`.
+ *
+ * The gate was therefore only throttling the WRITE. Everything in front of
+ * the write ran at full pointer-event rate — `getCanvasRoot()`,
+ * `getBoundingClientRect()`, and, for a pointer inside the box but occluded
+ * by a panel, `document.elementFromPoint()` plus `pointerIsOnCanvas`. Two
+ * forced layouts per move, on the besigner's hottest path, for a decision
+ * that had already been made 8 ms earlier and could not have changed.
+ *
+ * It bit hardest exactly where you least want it: a hand resting still over
+ * the canvas (the `CURSOR_MIN_DELTA` bail-out), and a pointer parked off the
+ * canvas or over the Assist drawer — the states a pointer spends most of its
+ * time in. Stamping the clock once the gate has opened rate-limits the whole
+ * decision instead of just its last step.
+ *
+ * ## What this does and does not change for other clients
+ *
+ * Nothing about the payload, and nothing about the ceiling: a move that
+ * writes stamps the clock with the same `now` it always did, so the write
+ * rate is the same `CURSOR_THROTTLE_MS` contract peers already read.
+ *
+ * The one observable difference, stated rather than buried: a move that
+ * declines to write now also consumes the interval, so a genuine move
+ * arriving within `CURSOR_THROTTLE_MS` of a declined one waits out the
+ * remainder — at most 60 ms of latency on a signal that is 60 ms-granular by
+ * construction. The withdrawals that matter for correctness do not go
+ * through here at all: `blur`, `visibilitychange` and the `focusin` re-check
+ * call the caller's withdraw path directly and stay immediate, which is what
+ * keeps the AGL-2486 "cursor parked while typing in Assist" fix intact.
+ */
+export function createCursorTracker(options: {
+  getRoot: () => Element | null | undefined
+  /** `document.elementFromPoint`, injected so the hit test can be counted. */
+  elementAt: (clientX: number, clientY: number) => Element | null
+  throttleMs?: number
+  minDelta?: number
+}): {
+  /** What this pointer move means. Throttled — see above. */
+  move: (clientX: number, clientY: number, now: number) => CursorIntent
+  /**
+   * Re-decide at the last known viewport position, without a pointer move.
+   * Deliberately NOT throttled: it fires on focus changes, not on pointer
+   * traffic, and a stale cursor left on a colleague's screen is the bug it
+   * exists to prevent.
+   */
+  recheck: () => CursorIntent
+  /**
+   * Take the cursor down. Returns whether a write is actually owed — a
+   * cursor already withdrawn must not be withdrawn again.
+   */
+  withdraw: () => boolean
+} {
+  const {
+    getRoot,
+    elementAt,
+    throttleMs = CURSOR_THROTTLE_MS,
+    minDelta = CURSOR_MIN_DELTA,
+  } = options
+  let last = 0
+  let lastX = -1
+  let lastY = -1
+  /** The last VIEWPORT position, so a re-check can hit-test it again. */
+  let lastClientX = -1
+  let lastClientY = -1
+  /** 'withdraw' only when there is something on screen to take down. */
+  const withdrawIntent = (): CursorIntent =>
+    lastX < 0 && lastY < 0 ? 'skip' : 'withdraw'
+  const offCanvas = (root: Element, clientX: number, clientY: number) =>
+    // INSIDE the box is not the same as ON the canvas. A drawer, dialog,
+    // modal backdrop or side panel drawn over the canvas leaves the box
+    // exactly where it was, so the geometry still says "valid position"
+    // while the pointer is demonstrably somewhere else. See
+    // `pointerIsOnCanvas` — and note the caller withdraws the cursor rather
+    // than freezing it, because a cursor parked where somebody used to be
+    // reading is the same lie told more slowly.
+    !pointerIsOnCanvas(root, elementAt(clientX, clientY))
+  return {
+    move(clientX, clientY, now) {
+      if (now - last < throttleMs) return 'skip'
+      // THE STAMP, before any measuring — this is the fix. Everything below
+      // costs layout, and none of it may run more than once per interval.
+      last = now
+      const root = getRoot()
+      if (!root) return 'skip'
+      const box = root.getBoundingClientRect()
+      if (!box.width || !box.height) return 'skip'
+      const x = (clientX - box.left) / box.width
+      const y = (clientY - box.top) / box.height
+      // Outside the document is not a position worth sending — and if we
+      // were previously inside it, the stale one has to be withdrawn.
+      if (x < 0 || x > 1 || y < 0 || y > 1) return withdrawIntent()
+      lastClientX = clientX
+      lastClientY = clientY
+      if (offCanvas(root, clientX, clientY)) return withdrawIntent()
+      // A pointer that has not really moved costs a write for a position
+      // nobody's screen would change by. This is the guard that matters
+      // most: a hand resting on the mouse generates a steady trickle of
+      // sub-pixel moves, and the throttle alone happily forwards all of it.
+      if (
+        Math.abs(x - lastX) < minDelta &&
+        Math.abs(y - lastY) < minDelta
+      ) {
+        return 'skip'
+      }
+      lastX = x
+      lastY = y
+      return { x, y }
+    },
+    recheck() {
+      if (lastClientX < 0 && lastClientY < 0) return 'skip'
+      const root = getRoot()
+      if (!root) return 'skip'
+      return offCanvas(root, lastClientX, lastClientY)
+        ? withdrawIntent()
+        : 'skip'
+    },
+    withdraw() {
+      if (lastX < 0 && lastY < 0) return false
+      lastX = -1
+      lastY = -1
+      return true
+    },
+  }
+}
+
+/**
  * How often a tab re-stamps `lastSeenAt` while it just sits there.
  *
  * Without this there is no liveness signal at all: `lastSeenAt` was only
@@ -1620,18 +1761,18 @@ export function usePresence(options: {
   useEffect(() => {
     if (!broadcastCursor || !session) return undefined
     let frame: number | null = null
-    let last = 0
-    let lastX = -1
-    let lastY = -1
-    /** The last VIEWPORT position, so a re-check can hit-test it again. */
-    let lastClientX = -1
-    let lastClientY = -1
+    // Owns the throttle clock and the last position, and does every
+    // measurement — see `createCursorTracker` for why the clock has to be
+    // stamped by the decision rather than by the write.
+    const tracker = createCursorTracker({
+      getRoot: () => getCanvasRootRef.current?.(),
+      elementAt: (clientX, clientY) =>
+        document.elementFromPoint(clientX, clientY),
+    })
     const clearCursor = () => {
       const meRef = meRefHolder.current
       if (!meRef) return
-      if (lastX < 0 && lastY < 0) return
-      lastX = -1
-      lastY = -1
+      if (!tracker.withdraw()) return
       // RTDB has no "delete this field" in an update object; null is it. A
       // cursor left behind when the pointer leaves the canvas is a lie that
       // would sit on someone else's screen indefinitely.
@@ -1645,57 +1786,18 @@ export function usePresence(options: {
       // A hidden tab has no pointer worth broadcasting, and a background tab
       // that keeps writing is pure cost.
       if (typeof document !== 'undefined' && document.hidden) return
-      const now = Date.now()
-      if (now - last < CURSOR_THROTTLE_MS) return
-      const root = getCanvasRootRef.current?.()
-      if (!root) return
-      const box = root.getBoundingClientRect()
-      if (!box.width || !box.height) return
-      const x = (event.clientX - box.left) / box.width
-      const y = (event.clientY - box.top) / box.height
-      // Outside the document is not a position worth sending — and if we
-      // were previously inside it, the stale one has to be withdrawn.
-      if (x < 0 || x > 1 || y < 0 || y > 1) {
+      const intent = tracker.move(event.clientX, event.clientY, Date.now())
+      if (intent === 'skip') return
+      if (intent === 'withdraw') {
         clearCursor()
         return
       }
-      lastClientX = event.clientX
-      lastClientY = event.clientY
-      // INSIDE the box is not the same as ON the canvas. A drawer, dialog,
-      // modal backdrop or side panel drawn over the canvas leaves the box
-      // exactly where it was, so the geometry still says "valid position"
-      // while the pointer is demonstrably somewhere else. See
-      // `pointerIsOnCanvas` — and note it withdraws the cursor rather than
-      // freezing it, because a cursor parked where somebody used to be
-      // reading is the same lie told more slowly.
-      if (
-        !pointerIsOnCanvas(
-          root,
-          document.elementFromPoint(event.clientX, event.clientY),
-        )
-      ) {
-        clearCursor()
-        return
-      }
-      // A pointer that has not really moved costs a write for a position
-      // nobody's screen would change by. This is the guard that matters
-      // most: a hand resting on the mouse generates a steady trickle of
-      // sub-pixel moves, and the throttle alone happily forwards all of it.
-      if (
-        Math.abs(x - lastX) < CURSOR_MIN_DELTA &&
-        Math.abs(y - lastY) < CURSOR_MIN_DELTA
-      ) {
-        return
-      }
-      last = now
-      lastX = x
-      lastY = y
       if (frame) cancelAnimationFrame(frame)
       frame = requestAnimationFrame(() => {
         frame = null
         void update(meRef, {
-          cursorX: Math.round(x * 10_000) / 10_000,
-          cursorY: Math.round(y * 10_000) / 10_000,
+          cursorX: Math.round(intent.x * 10_000) / 10_000,
+          cursorY: Math.round(intent.y * 10_000) / 10_000,
           lastSeenAt: Date.now(),
         }).catch(() => undefined)
       })
@@ -1711,17 +1813,7 @@ export function usePresence(options: {
      * stays "what is under the pointer".
      */
     const recheck = () => {
-      if (lastClientX < 0 && lastClientY < 0) return
-      const root = getCanvasRootRef.current?.()
-      if (!root) return
-      if (
-        !pointerIsOnCanvas(
-          root,
-          document.elementFromPoint(lastClientX, lastClientY),
-        )
-      ) {
-        clearCursor()
-      }
+      if (tracker.recheck() === 'withdraw') clearCursor()
     }
     window.addEventListener('pointermove', onMove, { passive: true })
     window.addEventListener('blur', clearCursor)
