@@ -9,6 +9,42 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.9 — 2026-08-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/12c1d7ddf...v1.0.0-beta.9)
+
+### Added
+
+- **billing:** a visitor-record ceiling refuses, and the site's owner is told ([AGL-1529](https://linear.app/aglyn/issue/AGL-1529), [AGL-2265](https://linear.app/aglyn/issue/AGL-2265), [AGL-2266](https://linear.app/aglyn/issue/AGL-2266), [AGL-1655](https://linear.app/aglyn/issue/AGL-1655), [AGL-2155](https://linear.app/aglyn/issue/AGL-2155), [AGL-889](https://linear.app/aglyn/issue/AGL-889), [AGL-2231](https://linear.app/aglyn/issue/AGL-2231), [AGL-1666](https://linear.app/aglyn/issue/AGL-1666), [AGL-2303](https://linear.app/aglyn/issue/AGL-2303))
+- **white-label:** a custom console domain allowlists itself for App Check ([AGL-1378](https://linear.app/aglyn/issue/AGL-1378))
+
+### Fixed
+
+- **tax:** the staff return can finally answer the nexus question ([AGL-1956](https://linear.app/aglyn/issue/AGL-1956), [AGL-1904](https://linear.app/aglyn/issue/AGL-1904), [AGL-1811](https://linear.app/aglyn/issue/AGL-1811))
+- **commerce:** the sales tax stays with the platform that owes it ([AGL-1956](https://linear.app/aglyn/issue/AGL-1956), [AGL-1904](https://linear.app/aglyn/issue/AGL-1904), [AGL-1811](https://linear.app/aglyn/issue/AGL-1811), [AGL-1544](https://linear.app/aglyn/issue/AGL-1544))
+- **tools:** the two seeders stop fighting over one teammate email ([AGL-1617](https://linear.app/aglyn/issue/AGL-1617))
+- **billing:** a no-op add-on quantity change stops billing a $0 proration pair ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486), [AGL-535](https://linear.app/aglyn/issue/AGL-535))
+- **billing:** a test-mode console says so instead of "no invoices yet" ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486), [AGL-1137](https://linear.app/aglyn/issue/AGL-1137))
+
+### Documentation
+
+- **selfhost:** a screenshot note stops reading as a Docker-image claim ([AGL-2434](https://linear.app/aglyn/issue/AGL-2434))
+- **tax:** the nexus table reaches the working papers and the docs ([AGL-1956](https://linear.app/aglyn/issue/AGL-1956), [AGL-2021](https://linear.app/aglyn/issue/AGL-2021))
+- **legal:** an undisclosed subprocessor is published, the 30-day notice deleted ([AGL-1648](https://linear.app/aglyn/issue/AGL-1648))
+- **analytics:** the docs GA env var was never set, and this file said it was ([AGL-1597](https://linear.app/aglyn/issue/AGL-1597))
+- **staff-console:** the lockdown page says where a lock does not reach on the tenant API ([AGL-2495](https://linear.app/aglyn/issue/AGL-2495), [AGL-1621](https://linear.app/aglyn/issue/AGL-1621))
+- **legal:** the subprocessor notice has a 30-day clock and nothing to run it ([AGL-1648](https://linear.app/aglyn/issue/AGL-1648))
+
+<details>
+<summary>Also in this release: 2 test, 2 ci</summary>
+
+- **tools:** the first customer's whole path is one harness, red beside every green ([AGL-1514](https://linear.app/aglyn/issue/AGL-1514))
+- **nx:** bound the jest fleet, and the digest now shows its working ([AGL-1617](https://linear.app/aglyn/issue/AGL-1617))
+- **billing:** every free cap is driven to a refusal, and proven to be that cap ([AGL-1529](https://linear.app/aglyn/issue/AGL-1529), [AGL-2163](https://linear.app/aglyn/issue/AGL-2163))
+- **gate:** a truncated test log now leaves a digest and an artifact ([AGL-1617](https://linear.app/aglyn/issue/AGL-1617))
+
+</details>
+
 ## v1.0.0-beta.6 — 2026-08-20
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/f2bac3cd1...v1.0.0-beta.6)
