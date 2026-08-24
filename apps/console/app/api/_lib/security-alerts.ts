@@ -70,8 +70,18 @@ export const DEVICE_COOKIE = 'aglyn_device'
 /** A year. Re-set on every mint, so an active device never lapses. */
 export const DEVICE_COOKIE_MAX_AGE_S = 365 * 24 * 60 * 60
 
-/** Firestore subcollection holding a user's recognized devices. */
-export const DEVICES_COLLECTION = 'devices'
+/**
+ * Firestore subcollection holding a user's recognized devices.
+ *
+ * Declared in `device-registry.ts` and re-exported here so the existing
+ * importers keep working (AGL-1513). It moved because the read/revoke helpers
+ * need it and this module reaches the email renderer, whose module-scope brand
+ * tokens make importing one constant from here a whole mail stack — see the
+ * note on the declaration.
+ */
+export { DEVICES_COLLECTION } from './device-registry'
+// `export … from` does not bind the name locally, and this module uses it.
+import { DEVICES_COLLECTION } from './device-registry'
 
 /**
  * How many existing devices the alert decision reads (AGL-1959).

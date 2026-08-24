@@ -28,6 +28,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 import { LEGAL_DOCUMENT_VERSION } from '../../../../../constants/legal-documents'
+import { type DeviceRow, readDeviceRows } from '../../../_lib/device-registry'
 
 /**
  * Staff user detail (AGL-244): everything the console needs to answer
@@ -202,6 +203,32 @@ async function readLegalDisclosure(
   }
 }
 
+/**
+ * The account's sign-in history, so staff can answer "my laptop was stolen"
+ * (AGL-1513 part 2).
+ *
+ * The registry has been written on every sign-in since AGL-665 and, until
+ * AGL-2318, read by nothing; that card gave the OWNER a list, and a support
+ * call still had none. Staff could disable the whole account and nothing
+ * narrower.
+ *
+ * FAILS LOUD, like the legal disclosure above and for the same reason: an
+ * empty list rendered from a failed read says "this person has only ever
+ * signed in from one place", which is the single most misleading answer this
+ * surface can give in the conversation it exists for.
+ */
+async function readDeviceDisclosure(
+  uid: string,
+  firestore: unknown,
+): Promise<{ lookupFailed: boolean; rows: DeviceRow[] }> {
+  try {
+    return { lookupFailed: false, rows: await readDeviceRows(firestore as any, uid) }
+  } catch (error) {
+    console.error('[admin/users/detail] device registry read failed', error)
+    return { lookupFailed: true, rows: [] }
+  }
+}
+
 async function handler(request: Request): Promise<Response> {
   const { method, query, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
@@ -247,9 +274,10 @@ async function handler(request: Request): Promise<Response> {
       firestore.collection('users').doc(uid).collection('orgs').limit(50).get(),
       firestore.collection('users').doc(uid).get(),
     ])
-    const [phone, legal] = await Promise.all([
+    const [phone, legal, devices] = await Promise.all([
       readPhoneDisclosure(profile),
       readLegalDisclosure(uid, firestore),
+      readDeviceDisclosure(uid, firestore),
     ])
     const memberships = await Promise.all(
       reverse.docs.map(async (entry) => {
@@ -339,6 +367,12 @@ async function handler(request: Request): Promise<Response> {
        * same human, and both were written long before anything read them.
        */
       legal,
+      /**
+       * Sign-in history, and what the staff sign-out control acts on
+       * (AGL-1513 part 2). `lookupFailed` is kept separate from an empty list
+       * on purpose — see `readDeviceDisclosure`.
+       */
+      devices,
     }, { status: 200 })
   } catch (error) {
     // An unverifiable credential is a 401, not a fault of ours

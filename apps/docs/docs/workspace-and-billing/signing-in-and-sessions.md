@@ -197,6 +197,13 @@ the same Security section.
 If the card cannot load your history it says so. That is not the same as an
 empty list — do not read a failed load as "nothing else has signed in".
 
+**If you cannot get in yourself** — the stolen device is the one with your email
+on it, or you are locked out — [support](support-and-community.md) can do this
+for you. It is the same action with the same effect, taken against the same
+list, and it is recorded against the staff member who took it. It does **not**
+disable your account and does **not** change your password, so you can sign in
+again the moment it is done.
+
 ## Passkeys
 
 **Manage Account → Security → Passkeys** lists every passkey on your account,

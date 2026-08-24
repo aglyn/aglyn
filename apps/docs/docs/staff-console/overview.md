@@ -173,6 +173,42 @@ and emails the holder that an admin changed it. Both actions need the **super** 
 role and are audited; the password itself is never recorded. An account with no email
 address supports neither.
 
+### Sign one device out {#sign-one-device-out}
+
+A **Sign-in history** card on the same detail page lists every device that has signed
+in to the account — browser and system, location, IP, first and last seen — and can
+end the sessions on one of them. It is the answer to *"someone stole my laptop"* when
+the person cannot reach their own Security tab, which is most of those calls.
+
+Use it instead of **Disable**. Disabling takes the account away: they cannot then sign
+in on their phone and carry on working. This does not touch the account or the
+password.
+
+**Read the confirmation out loud before you click it.** Two things are true and both
+surprise people:
+
+- **Every device signs out, not just the named one.** Firebase has no per-device
+  refresh-token revocation, so the only lever that reaches the stored credential in
+  another browser is account-wide. What *is* per-device is what happens next: the
+  signed-out device is refused every time it tries to come back, because it cannot
+  produce a fresh authentication, while the account holder signs in again normally and
+  keeps working. The honest sentence is **"everyone signs out once, you sign back in,
+  that device does not."**
+- **A page already open on the signed-out device may keep reading data for up to an
+  hour.** Anything that goes through our servers stops within about fifteen seconds.
+  Direct database reads from a tab that is already open survive until its token
+  expires; it cannot get another one.
+
+If the account holder may still have working sessions they do not recognise — or the
+device is one you cannot see in the list — **change the password too**, which revokes
+on the same terms and additionally takes back the credential.
+
+Super staff only, and audited with the device id and the account. The account holder
+has the same control themselves under **Manage account → Security → Recent sign-ins**.
+
+If the card says the registry **could not be read**, that is not the same as "no other
+devices": do not tell anyone their account is clean from that screen until it loads.
+
 ### Staff notes {#staff-notes}
 
 Free-text support/billing context on each organization's detail

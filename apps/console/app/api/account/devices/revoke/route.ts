@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { authForPool, firebaseAdmin, invalidateTokenRevocationCache } from '@aglyn/tenant-data-admin'
-import { DEVICES_COLLECTION } from '../../../_lib/security-alerts'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { isValidDeviceId, revokeDeviceSession } from '../../../_lib/device-registry'
 
 // lockdown-423: exempt — account-scoped, and the one action worth keeping
 // reachable during an incident. There is no org context here and no capability
@@ -80,8 +80,9 @@ async function handler(request: Request): Promise<Response> {
   }
   // A path-shaped id would address a document outside this user's own
   // subcollection. `.doc()` on a slashed id resolves a nested path, so the
-  // check is not cosmetic.
-  if (!deviceId || deviceId.includes('/') || deviceId.length > 200) {
+  // check is not cosmetic. Shared with the staff door (AGL-1513), because two
+  // doors onto one subcollection must refuse the same ids.
+  if (!isValidDeviceId(deviceId)) {
     return Response.json({ error: 'Invalid device' }, { status: 400 })
   }
 
@@ -92,53 +93,28 @@ async function handler(request: Request): Promise<Response> {
     // be a way for the holder of a stolen token to sign the real owner out.
     const decoded = await auth.verifyIdToken(idToken, true)
     const uid = decoded.uid
-    const ref = firebaseAdmin
-      .app()
-      .firestore()
-      .collection('users')
-      .doc(uid)
-      .collection(DEVICES_COLLECTION)
-      .doc(deviceId)
 
-    const nowMs = Date.now()
-    const existed = await firebaseAdmin
-      .app()
-      .firestore()
-      .runTransaction(async (tx) => {
-        const snapshot = await tx.get(ref)
-        if (!snapshot.exists) return false
-        // The row is STAMPED, never deleted. A deleted row hides the device
-        // and revokes nothing, and it would also make that browser read as a
-        // brand-new device on its next sign-in — mailing the owner a fresh
-        // "new device" alert about the stranger they just tried to evict.
-        tx.set(
-          ref,
-          { revokedAt: nowMs, revokedBy: 'owner' },
-          { merge: true },
-        )
-        return true
-      })
+    // Stamp-then-revoke, in the owning pool, with the cache drop — all of it
+    // in `_lib/device-registry.ts` since AGL-1513, so the staff door cannot
+    // drift from this one.
+    const outcome = await revokeDeviceSession({
+      firestore: firebaseAdmin.app().firestore(),
+      uid,
+      deviceId,
+      tenantId: decoded.firebase?.tenant ?? null,
+      revokedBy: 'owner',
+      nowMs: Date.now(),
+    })
 
-    if (!existed) {
+    if (!outcome.existed) {
       return Response.json({ error: 'Unknown device' }, { status: 404 })
     }
-
-    // The only lever that reaches the refresh token in the other browser's
-    // storage. Firebase has no per-device revocation, so this ends every
-    // session on the account — the card says so in those words rather than
-    // implying a narrower effect than it has.
-    const tenantId = decoded.firebase?.tenant ?? null
-    await authForPool(tenantId).revokeRefreshTokens(uid)
-    // AGL-1881. Without this the process that just accepted the caller's own
-    // token would keep serving it from its own 15s cache — the one window a
-    // person watching the button flip would actually notice.
-    invalidateTokenRevocationCache(uid, tenantId)
 
     return Response.json(
       {
         ok: true,
         deviceId,
-        revokedAt: nowMs,
+        revokedAt: outcome.revokedAt,
         // Named in the response, not only in the copy, so a caller cannot
         // present this as a per-device sign-out by accident.
         signedOutEverywhere: true,

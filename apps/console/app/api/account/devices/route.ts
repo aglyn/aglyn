@@ -17,7 +17,7 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { DEVICES_COLLECTION } from '../../_lib/security-alerts'
+import { DEVICE_LIST_LIMIT, readDeviceRows } from '../../_lib/device-registry'
 
 // lockdown-423: exempt — a read-only view of the caller's OWN sign-in history,
 // and the one page somebody is sent to BY a security email. A lockdown that
@@ -60,12 +60,10 @@ import { DEVICES_COLLECTION } from '../../_lib/security-alerts'
  */
 
 /**
- * Enough history to recognise a stranger, bounded so one person's account
- * cannot make this an expensive read. Ordered newest-first on `lastSeenAt`,
- * a single-field index Firestore maintains automatically.
+ * The read itself lives in `_lib/device-registry.ts` (AGL-1513): the staff
+ * console renders the same history for a support call, and two shapings of the
+ * same rows is how one of them quietly loses a field.
  */
-const DEVICE_LIMIT = 50
-
 async function handler(request: Request): Promise<Response> {
   const { method, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
@@ -80,64 +78,14 @@ async function handler(request: Request): Promise<Response> {
 
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
-    const snapshot = await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('users')
+    const devices = await readDeviceRows(
+      firebaseAdmin.app().firestore(),
       // THE TOKEN'S uid, never one from the request. This is the whole access
       // control on the endpoint, and a uid parameter would make it a way to
       // read anyone's sign-in history.
-      .doc(decoded.uid)
-      .collection(DEVICES_COLLECTION)
-      .orderBy('lastSeenAt', 'desc')
-      .limit(DEVICE_LIMIT)
-      .get()
-      // Devices recorded before `lastSeenAt` existed still have to appear: an
-      // ordering that silently drops rows would make a review surface answer
-      // "you have never signed in from anywhere else".
-      .catch(() =>
-        firebaseAdmin
-          .app()
-          .firestore()
-          .collection('users')
-          .doc(decoded.uid)
-          .collection(DEVICES_COLLECTION)
-          .limit(DEVICE_LIMIT)
-          .get(),
-      )
-
-    const devices = snapshot.docs
-      .map((doc) => {
-        const data = doc.data() as Record<string, unknown>
-        return {
-          id: doc.id,
-          deviceName:
-            typeof data['deviceName'] === 'string' ? data['deviceName'] : null,
-          // The full string as well as the summary: "Chrome on Windows" is
-          // what someone reads, and the raw agent is what they compare when
-          // two rows summarise the same.
-          userAgent:
-            typeof data['userAgent'] === 'string' ? data['userAgent'] : null,
-          location:
-            typeof data['location'] === 'string' ? data['location'] : null,
-          ip: typeof data['ip'] === 'string' ? data['ip'] : null,
-          firstSeenMs: Number(data['createdAt'] ?? 0) || null,
-          lastSeenMs: Number(data['lastSeenAt'] ?? 0) || null,
-          // AGL-1959. A revoked device keeps its row rather than disappearing:
-          // deleting it would hide the device and revoke nothing, and the same
-          // browser would then read as BRAND NEW on its next sign-in — mailing
-          // the owner a fresh "new device" alert about the stranger they just
-          // evicted.
-          revokedAtMs: Number(data['revokedAt'] ?? 0) || null,
-          // AGL-1959. Recorded without an email because it shared an IP and an
-          // operating system with a device already known. Surfaced, because
-          // suppression must silence the alert and never the evidence — a
-          // sign-in nobody can see is the one outcome that would make this a
-          // detection hole instead of a noise fix.
-          alertSuppressedAtMs: Number(data['alertSuppressedAt'] ?? 0) || null,
-        }
-      })
-      .sort((a, b) => (b.lastSeenMs ?? 0) - (a.lastSeenMs ?? 0))
+      decoded.uid,
+      DEVICE_LIST_LIMIT,
+    )
 
     return Response.json(
       { devices },

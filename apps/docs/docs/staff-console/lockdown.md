@@ -501,6 +501,47 @@ nothing. To take a platform subdomain down, use the **Site (host)** scope.
 **Expiry and modes** work as everywhere else. Read-only is accepted but rarely
 what you want here: a name dispute is a full refusal or nothing.
 
+## One device, not the account {#device-scope}
+
+The narrowest thing on this page, and the only one that is **not** a lockdown
+scope. It lives on the user's detail page in Users admin rather than on the
+lockdown route, and it is here because it is what you reach for instead of the
+user scope when the incident is *"someone stole my laptop"*.
+
+The **user scope** disables the account. That is right for a compromised or
+abusive *account*, and wrong for a compromised *device*: the person calling has
+done nothing wrong and still needs to work. **Sign-in history → Sign out** ends
+the sessions without disabling anything — see
+[Sign one device out](overview.md#sign-one-device-out) for how to operate it and
+what to say.
+
+**What it actually guarantees, because it is easy to overstate in both
+directions.** The refresh-token revocation underneath is account-wide — Firebase
+offers nothing narrower — so every device signs out once. The *per-device* part
+is the refusal afterwards: the signed-out device carries a revocation stamp and
+is refused at the session boundary every time it comes back, because it cannot
+produce a fresh authentication. The account holder signs in again and keeps
+working. So: **everyone signs out once, they sign back in, that device does
+not.**
+
+**Why it is not true single-session revocation, decided rather than skipped
+(AGL-1513).** Dropping the account-wide revocation would leave the other
+sessions untouched, which sounds like the better product. It was measured and
+rejected: the per-device stamp is enforced at the session **mint** and the
+cross-subdomain **exchange**, and a browser that is *already signed in* passes
+through neither. Without the account-wide revoke it would keep minting fresh ID
+tokens from its own refresh token and keep opening every Bearer-token console
+API route — not for an hour, indefinitely. That is not a narrower control, it is
+no control. Making it real would mean carrying the device identity into the
+server-wide revocation check that every API door already runs, which is a
+change worth its own issue and is not this one.
+
+**The residual, stated plainly.** Anything that goes through our servers stops
+within about fifteen seconds (the cached revocation epoch). A tab already open
+on the signed-out device can keep reading the database directly until its ID
+token expires, up to an hour, because security rules key on that token and not
+on our cookie. It cannot obtain another one.
+
 ## Asset quarantine — one file, not the site that serves it
 
 When the problem is **one uploaded file** — malware in a PDF, an abusive image,
