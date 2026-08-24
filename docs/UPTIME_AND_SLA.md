@@ -113,39 +113,61 @@ there is somewhere else to go when it is gone.
 Nothing, unless `DOCS_STATUS_TARGETS` is set on the `aglyn-docs` Vercel
 project — and for weeks it was set on no scope at all, so the page shipped
 reading *"not configured to check any services"* while `/pricing` pointed
-customers at it (AGL-2411 found it, AGL-2496 fixed it). Set 2026-08-24 to five
-targets:
+customers at it (AGL-2411 found it, AGL-2496 fixed it). Set 2026-08-24, first to
+five targets, then narrowed to three, then widened to **six** on Zach's call the
+same evening:
 
-| Card | Origin | Path |
-| --- | --- | --- |
-| Console | `app.aglyn.com` | `/api/health` |
-| Published sites | `aglyn.com` | `/api/health/render/site` |
-| Marketing site | `aglyn.com` | `/api/health/render/marketing` |
+| Card | Origin | Path | Asserts |
+| --- | --- | --- | --- |
+| Console | `app.aglyn.com` | `/api/health` | Firestore reachable from the console runtime |
+| Published sites | `aglyn.com` | `/api/health/render/site` | a real tenant page server-renders to a non-empty node tree |
+| Site delivery | `aglyn.com` | `/api/health` | Firestore reachable from the tenant runtime |
+| Marketing site | `aglyn.com` | `/api/health/render/marketing` | the same render check, for `cname--aglyn.com` |
+| Billing | `app.aglyn.com` | `/api/health/billing` | the Stripe webhook destination is enabled and deliveries are landing |
+| Scheduled jobs | `app.aglyn.com` | `/api/health/crons` | every cron job stamped its beat inside its own schedule + grace |
 
-**Three, not more, and the page's own copy is what decides that.** Its
-explainer tells the reader, in shipped product copy, that *"internal
-subsystems — scheduled jobs, backups, billing and abuse controls — are
-monitored separately and continuously, and are not shown here"*. A first cut of
-this value added Billing and Scheduled jobs as cards, which made the page
-contradict its own explainer and would have painted the customer-facing surface
-red for a silent cron. **The env var must not out-promise the page.** If a card
-is ever added here, that paragraph has to change in the same commit.
+**Six, and the page's explainer is what makes six legal.** The middle state of
+that history is the lesson: a first cut added Billing and Scheduled jobs while
+the shipped explainer still told the reader that *"internal subsystems —
+scheduled jobs, backups, billing and abuse controls — … are not shown here"*, so
+the page contradicted itself and was narrowed back to three. **The env var must
+not out-promise the page, and the page must not out-promise the env var.** The
+explainer now names billing and scheduled jobs as shown, says plainly that
+neither is part of serving, and disclaims only what is genuinely absent —
+backups, abuse controls, the error beacon.
 
-:::caution Four things that will bite whoever edits this value
+**Why `Site delivery` and `Published sites` are both cards, and are not
+duplicates.** The render canary resolves ONE subject site (`demo`) internally.
+If that single workspace's content breaks, `render/site` goes red and would
+otherwise tell every customer that published sites are down. The plain tenant
+liveness card is the disambiguator: both red is a platform event, `sites` red
+and `delivery` green is our sample page, not their site.
+
+:::caution Five things that will bite whoever edits this value
 1. **The grammar is `name|label|origin|description|path`, comma-separated.** A
-   comma **in a description** silently truncates the card and starts a new,
-   malformed one. Parse a candidate value through `parseTargets` from
-   `apps/docs/src/status-model.ts` before setting it.
+   comma **in a description** does more than truncate the description: every
+   field after it shifts, so the entry loses its `path` and silently falls back
+   to `/api/health` — the card then probes the wrong endpoint and reads green.
+   Measured, not assumed: `…|Payments, invoices and subscription updates|/api/health/billing`
+   parses to `desc="Payments"`, `path="/api/health"`. Parse a candidate value
+   through `parseTargets` from `apps/docs/src/status-model.ts` before setting
+   it, and assert the **probe URLs**, not just the card count.
 2. **Docusaurus bakes it at BUILD time** into `customFields`. Setting the
    variable without redeploying `aglyn-docs` changes nothing.
 3. **Unset must keep meaning OFF, never ours** (AGL-2124). Do not "fix" a
    self-hoster's blank page with an Aglyn default; their build would print our
    uptime as theirs during their outage.
-4. `backups`, `signups` and `rate-limits` are deliberately **not** cards, for
-   the same reason as billing and crons — and `backups` most of all, since it
-   goes degraded on the ordinary managed-backup lifecycle (AGL-1843: four and a
-   half days red while backups were fine). A customer-facing page that reds for
-   that is one customers learn to ignore.
+4. **`backups` must not become a card.** It LATCHES by design — degraded until
+   a bad restore point is gone, because a missing backup is a condition rather
+   than an event — and it spent four and a half days red while backups were
+   healthy (AGL-1843, still open). A customer-facing page that reds for that is
+   one customers learn to scroll past.
+5. `signups`, `rate-limits` and `error-beacon` are deliberately **not** cards
+   either. `rate-limits` fails soft, so a degraded window changed nothing a
+   customer could see — and publishing it announces when our abuse controls
+   were weakest. `signups` degraded means we suspect a signup farm. The error
+   beacon watches our own telemetry: if it is dead we are blind and the
+   customer's site is fine.
 :::
 
 `DOCS_STATUS_FALLBACK_URL` is the second variable this page reads. It prints
@@ -165,7 +187,15 @@ carrying **zero** `data-status-target` nodes is the unconfigured failure above.
 ### The external monitors (UptimeRobot, free tier)
 
 Five **keyword** monitors, keyword `"status":"ok"`, `ALERT_NOT_EXISTS`, 5-minute
-interval, email to zach@aglyn.com — same five targets as the cards above.
+interval, email to zach@aglyn.com — Console, Published sites, Marketing site,
+Billing and Scheduled jobs.
+
+⚠️ **The monitor set and the card set are no longer identical.** The sixth card,
+`Site delivery` (`aglyn.com/api/health`), has **no** external monitor: the docs
+page probes it, and nothing pages on it. 45 free slots remain, so closing that
+is a monitor creation and nothing else. Do not close it the other way by
+dropping the card — the card is what tells a reader that a red `Published sites`
+is our sample workspace rather than their site.
 
 **Keyword and not plain HTTP, deliberately.** A plain HTTP monitor passes a 200
 whose body says `"status":"degraded"`, which is precisely the shape of the

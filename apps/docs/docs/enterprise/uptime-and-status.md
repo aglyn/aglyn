@@ -8,9 +8,10 @@ description: The live status page, what it does and does not show, and why there
 
 ## The status page
 
-**[docs.aglyn.com/status](/status)** checks the console, the published-site
-runtime, and an end-to-end page render live, from your browser, when you load
-it — and again every minute while the page is open.
+**[docs.aglyn.com/status](/status)** checks six things live, from your browser,
+when you load it — and again every minute while the page is open: the console,
+an end-to-end render of a real published page, the runtime that serves every
+published site, the marketing site, billing, and scheduled jobs.
 
 It shows whether each surface is responding **right now**, in one of three
 words:
@@ -27,10 +28,12 @@ observed rather than rounding either way.
 
 Two limits worth knowing before you rely on it:
 
-- **It covers the surfaces you use.** Internal subsystems — scheduled jobs,
-  backups, billing, abuse controls — are monitored continuously and separately,
-  and are not on the page. They can be degraded while everything on it is
-  green, because none of them changes whether your site is serving.
+- **It covers the surfaces you use, plus billing and scheduled jobs.** Those
+  two are not part of serving: a published site keeps working while either is
+  degraded, so a red card there means invoices or background work are affected
+  and nothing else on the page is. Backups, abuse controls and our own error
+  reporting are still **not** on the page — they are monitored continuously and
+  separately, and none of them changes whether your site is serving.
 - **It is not an independent monitor.** It is served from a different
   deployment than the services it reports on, so a console outage does not take
   it down. It is not served from a different *provider*, so an outage broad
