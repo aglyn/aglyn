@@ -61,10 +61,20 @@
  */
 
 /**
- * The six addresses named in a published legal document as the route for a
- * statutory or contractual process. These are the auto-reply targets.
+ * The six published legal/ops intakes. These are the auto-reply targets.
  *
- * Verified as Groups 2026-08-19 (AGL-1911).
+ * Verified as Groups 2026-08-19 (AGL-1911): each is real, `Who can post` =
+ * *Anyone on the web*, unmoderated, single member.
+ *
+ * Five are named in a published legal document as the route for a statutory or
+ * contractual process. `support@` is the exception and its status has now moved
+ * twice: it acquired the DPA §7.2 sub-processor objection route on 2026-08-18
+ * and lost it on 2026-08-24, when the `/legal/subprocessors` change log removed
+ * the advance-notice commitment "and the objection window that ran with it".
+ * It stays in this list because it is still the published intake on four
+ * product surfaces (lockdown 503, quarantine notice, sanctions 451, the §512
+ * intakes) — it lost a statutory clock, not its traffic. `docs/EMAIL_SETUP.md`
+ * carries the long form.
  */
 export const STATUTORY_INTAKE_ADDRESSES = Object.freeze([
   'abuse@aglyn.com',

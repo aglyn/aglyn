@@ -42,17 +42,29 @@ without re-plumbing.
 | `security@aglyn.com` | Privacy Policy §6; Terms §3.3; `docs.aglyn.com/trust` | `zach@aglyn.com` |
 | `abuse@aglyn.com` | Acceptable Use Policy | `zach@aglyn.com` |
 | `dmca@aglyn.com` | Copyright/DMCA Policy | `zach@aglyn.com` |
-| `support@aglyn.com` | **DPA §7.2 and `/legal/subprocessors`** — the sub-processor objection route, which is the SCC Clause 9 (Option 2) objection mechanism, since 2026-08-18. Also the value of `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL`, printed on the lockdown 503, the quarantine notice, the sanctions 451 and the abuse/counter-notice intakes | `zach@aglyn.com` |
+| `support@aglyn.com` | **No legal document, as of 2026-08-24** — see below. The value of `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL`, printed on the lockdown 503, the quarantine notice, the sanctions 451 and the abuse/counter-notice intakes | `zach@aglyn.com` |
 
-> ⚠️ `support@` acquired a legal obligation on 2026-08-18 and this table said "No legal
-> document" until AGL-1648 caught it. Two things follow. First, it is now the **only**
-> published data-protection route that is not `privacy@` — the DPA's own Annex A names
-> `privacy@` as the data-importer contact, so the contract offers two addresses for
-> data-protection correspondence (AGL-1648 draft R2 proposes consolidating on `privacy@`).
-> Second, `support@` is the one address in this table whose value is **configurable**
-> (`NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL`), so a self-host operator changes what a clause in
-> Aglyn's own DPA points at. Neither is a bug today; both are reasons the consolidation is
-> the right call.
+> ⚠️ **`support@` acquired a legal obligation on 2026-08-18 and lost it again on
+> 2026-08-24.** This row read "No legal document" until AGL-1648 caught the first change;
+> it then read "DPA §7.2 — the SCC Clause 9 (Option 2) objection mechanism" until AGL-2400
+> caught the second. Both times the runbook was wrong for days, in opposite directions,
+> which is the argument for the guard rather than for a third hand-edit.
+>
+> What changed: the `/legal/subprocessors` change log, dated **August 24, 2026**, records
+> *"Removed the thirty-day advance-notice commitment for new subprocessors and the
+> objection window that ran with it; Section 7.2 of the DPA is amended to match."*
+> Verified against the live pages the same day — live DPA §7.2 now carries no objection
+> mechanism and no address at all, and `/legal/subprocessors` publishes no address at all.
+> `privacy@` is once again the only published data-protection route, which is where
+> AGL-1648 draft R2 wanted to consolidate anyway; that draft's §7.2 proposals are moot.
+>
+> Still true and still worth knowing: `support@` is the one address in this table whose
+> value is **configurable** (`NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL`), so a self-host operator
+> changes what these product surfaces point at.
+>
+> ⚠️ **This does not demote `support@` out of the six.** It is still a published intake on
+> four product surfaces and still single-member with no auto-reply. It loses a statutory
+> clock, not its traffic.
 
 Also live as groups: `info@`, `hello@`, `help@`, `sales@`, `billing@`,
 `accounting@`, `admin@`, `talent@`, `copyright@`, `webmaster@` (the DMARC `rua`
