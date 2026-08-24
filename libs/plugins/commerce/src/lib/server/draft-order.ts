@@ -457,10 +457,21 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
         0,
         120,
       ),
-      ...(feeCents > 0
-        ? { 'payment_intent_data[application_fee_amount]': String(feeCents) }
-        : {}),
-      'payment_intent_data[transfer_data][destination]': String(accountId),
+      // THE CONNECT SPLIT (AGL-1956). A Stripe Tax payment link computes its
+      // tax against AGLYN's registrations and Aglyn remits it (AGL-1904), so
+      // the merchant gets a FIXED `transfer_data[amount]` and no
+      // `application_fee_amount`: the fee form transfers `amount_total − fee`,
+      // and `amount_total` includes that tax. A manual-rate or untaxed link is
+      // unchanged. See `commerce-connect-transfer.ts`.
+      ...CommerceModel.destinationChargeParams({
+        accountId: String(accountId),
+        feeCents,
+        taxOwner: useStripeTax ? 'platform' : 'merchant',
+        merchantGoodsCents: itemsCents,
+        shippingFloorCents: CommerceModel.shippingFloorCents(
+          shippingPlan.options,
+        ),
+      }),
       ...(email ? { customer_email: email } : {}),
       success_url: `${consoleProductsUrl}?draft=paid`,
       cancel_url: `${consoleProductsUrl}?draft=canceled`,
@@ -470,6 +481,24 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
       'metadata[productId]': productId,
       ...(variantId ? { 'metadata[variantId]': variantId } : {}),
       'metadata[feeCents]': String(feeCents),
+      // See the AGL-1956 note in `checkout.ts` — recorded only on the shape
+      // where the merchant's payout is no longer the whole charge.
+      ...(useStripeTax
+        ? {
+            'metadata[transferCents]': String(
+              CommerceModel.platformLiableTransferCents({
+                feeCents,
+                merchantGoodsCents: itemsCents,
+                shippingFloorCents: CommerceModel.shippingFloorCents(
+                  shippingPlan.options,
+                ),
+              }),
+            ),
+            'metadata[transferShippingCents]': String(
+              CommerceModel.shippingFloorCents(shippingPlan.options),
+            ),
+          }
+        : {}),
     })
     // Both keys or neither (AGL-1720's rule, inherited). Stripe will not apply
     // a shipping rate without an address to ship to, and a merchant who

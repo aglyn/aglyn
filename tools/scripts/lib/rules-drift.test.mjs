@@ -791,6 +791,13 @@ describe('the checker is wired (workflow + package.json)', () => {
       // workflow at all. `check:test-wiring` could not have caught that: it
       // sweeps `*.test.mjs`/`*.spec.mjs` and this is a `check-*.mjs`.
       'test:week-one-preflight',
+      // AGL-1617 — the CI test digest. Main Gate 32685698590 and NX CI
+      // 32687205268 both went red with nothing but "Failed tasks: -
+      // console:test" because GitHub truncates the MIDDLE of a long
+      // ##[group] and jest prints its failure block there. The digest that
+      // replaces that silence is only worth anything if its INCONCLUSIVE
+      // verdict still works, and this suite is the only thing that runs it.
+      'test:ci-test-digest',
     ]) {
       // Match the STEP syntax, not the bare script name — the workflow's own
       // comments mention these scripts, and an assertion a comment can
@@ -835,6 +842,7 @@ describe('the checker is wired (workflow + package.json)', () => {
       'check:nul-bytes', // AGL-1890
       'check:lint-tools', // AGL-2480
       'test:week-one-preflight', // AGL-1617
+      'test:ci-test-digest', // AGL-1617
     ]) {
       assert.ok(
         typeof pkg.scripts[script] === 'string' && pkg.scripts[script] !== '',

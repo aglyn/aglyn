@@ -299,6 +299,18 @@ jobs:
       # grades red, which is the direction the self-test wants anyway.
       - run: npm run test:week-one-preflight
 
+      # test:ci-test-digest  The CI test digest (AGL-1617). Main Gate run
+      # 32685698590 and NX CI run 32687205268 both went red with nothing but
+      # "Failed tasks: - console:test": GitHub truncates the MIDDLE of a long
+      # ##[group] and jest prints its failure block in the middle, so the full
+      # 244,397-line log carried zero FAIL markers and zero failed-test
+      # summaries. main-gate.yml and nx-ci.yml now tee their test run and
+      # print this digest on failure. What this step guards is the digest
+      # itself, and above all its THIRD verdict: a task that failed with no
+      # failed test in the log must grade INCONCLUSIVE, never clean. Pure
+      # node, no network, ~1s.
+      - run: npm run test:ci-test-digest
+
       - run: npm run test:standalone-installs
 
       - run: npm run check:standalone-installs

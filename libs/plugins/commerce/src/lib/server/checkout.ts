@@ -838,17 +838,29 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         ? { 'line_items[0][tax_rates][0]': recurringTaxRateId }
         : {}),
       ...(useStripeTax ? { 'automatic_tax[enabled]': 'true' } : {}),
-      // Stripe rejects a zero application fee. Since AGL-2152 a one-time
-      // charge always carries at least the card cost, so this guard only
-      // still fires for a charge base that resolved to nothing at all.
-      ...(!isSubscription && feeCents > 0
-        ? { 'payment_intent_data[application_fee_amount]': String(feeCents) }
-        : {}),
+      // THE CONNECT SPLIT, and on a Stripe Tax sale it is a fixed TRANSFER
+      // rather than a fee (AGL-1956). `automatic_tax` computes against Aglyn's
+      // registrations and Aglyn remits it (AGL-1904), but
+      // `application_fee_amount` makes Stripe transfer `amount_total − fee` —
+      // and `amount_total` has that tax inside it, so every taxed sale handed
+      // the state's money to the merchant. See
+      // `commerce-connect-transfer.ts` for the full mechanism and for why the
+      // two knobs are mutually exclusive.
+      //
+      // Subscriptions are untouched here: a Stripe Subscription has no
+      // `transfer_data[amount]` to fix, only `application_fee_percent`, so the
+      // recurring path cannot be repaired this way. It is left exactly as it
+      // was rather than half-changed — see the AGL-1956 note in
+      // `billing-webhook.ts`.
       ...(!isSubscription
-        ? {
-            'payment_intent_data[transfer_data][destination]':
-              String(accountId),
-          }
+        ? CommerceModel.destinationChargeParams({
+            accountId: String(accountId),
+            feeCents,
+            taxOwner: useStripeTax ? 'platform' : 'merchant',
+            merchantGoodsCents: amountCents,
+            shippingFloorCents:
+              CommerceModel.shippingFloorCents(shippingPlan.options),
+          })
         : {}),
       // Substituted by Stripe on redirect — see the note in `cart-checkout.ts`
       // (AGL-1641). The single-product path returns the shopper to the product
@@ -863,6 +875,29 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       ...(variantId ? { 'metadata[variantId]': variantId } : {}),
       'metadata[quantity]': String(quantity),
       'metadata[feeCents]': String(feeCents),
+      // WHAT THE MERCHANT WAS ACTUALLY PAID, on the sales where Aglyn fixed it
+      // (AGL-1956). Only a Stripe Tax sale carries this: it is the one shape
+      // where `transfer.amount` is no longer `charge.amount`, so it is the one
+      // shape where the figure cannot be re-derived from the charge. The
+      // shipping baseline rides along because the gap between it and the
+      // shipping the shopper actually chose is money owed BACK to the
+      // merchant, and a number nobody wrote down is a number nobody can repay.
+      ...(useStripeTax && !isSubscription
+        ? {
+            'metadata[transferCents]': String(
+              CommerceModel.platformLiableTransferCents({
+                feeCents,
+                merchantGoodsCents: amountCents,
+                shippingFloorCents: CommerceModel.shippingFloorCents(
+                  shippingPlan.options,
+                ),
+              }),
+            ),
+            'metadata[transferShippingCents]': String(
+              CommerceModel.shippingFloorCents(shippingPlan.options),
+            ),
+          }
+        : {}),
       // The same two facts on the SESSION, because that is the object
       // `billing-webhook.ts` is handed when it writes the subscription record
       // (AGL-2323). Mirrored rather than moved: the subscription copy above is

@@ -396,11 +396,45 @@ async function handler(request: Request): Promise<Response> {
     }
 
     const existing = items.find((item) => item?.price?.id === priceId)
-    if (!existing && quantity === 0) {
-      // Nothing to remove; report the no-op instead of calling Stripe.
+    /**
+     * This add-on's quantity RIGHT NOW: 0 when no item exists, and `null`
+     * when an item exists but Stripe reports no quantity on it at all
+     * (metered variants carry none).
+     *
+     * Deliberately not folded to 0. `strictNullChecks` is off repo-wide, so
+     * nothing here would flag `Number(existing.quantity) || 0` — and that
+     * reads a MISSING quantity as "already zero", which would short-circuit
+     * a removal into never happening. 0 is a legitimate quantity; absent is
+     * not the same value, and the no-op test below has to tell them apart.
+     */
+    const currentQuantity: number | null = existing
+      ? Number.isFinite(Number(existing.quantity))
+        ? Math.floor(Number(existing.quantity))
+        : null
+      : 0
+    if (currentQuantity === quantity) {
+      // Nothing changes; report the no-op instead of calling Stripe.
+      //
+      // Two shapes of no-op: nothing to remove (no item, quantity 0), and
+      // AGL-2486 — setting the quantity to the one it already has. Stripe
+      // answers ANY subscription-item update under `create_prorations` with
+      // the proration pair, whether or not the quantity moved: a credit for
+      // unused time and a charge for remaining time, same item, same price,
+      // same period, cancelling exactly. They land as pending invoice items
+      // and surface on the next invoice as two lines totalling $0.00
+      // (invoice #3VKIUCFB-0002), which reads to a customer as a charge
+      // nobody can explain.
+      //
+      // Real changes still prorate: `create_prorations` below is deliberate
+      // (AGL-535, nothing charged today, it rides the next invoice). The
+      // defect was issuing the update at all when nothing changed.
+      //
+      // No `seatAddons` mirror write, same as every no-op here has always
+      // done: the map this answers with IS the subscription's current one,
+      // and the webhook owns convergence (AGL-527).
       return Response.json(
         action === 'preview'
-          ? { amountDueCents: 0, currency: 'usd' }
+          ? { amountDueCents: 0, prorationCents: 0, currency: 'usd' }
           : { ok: true, quantities: addonQuantitiesFromItems(items) },
         { status: 200 },
       )

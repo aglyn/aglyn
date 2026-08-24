@@ -519,7 +519,7 @@ hand and redact.)*
 - **✅ Captured 2026-08-23. ⚠️ RE-SHOT the same day — the first image was wrong.**
   Opening the dialog writes nothing; the key is only created on submit, which the
   shot never presses.
-- **⚠️ The published image showed THIRTEEN rows and was missing `Orders — record
+- **⚠️ The captured screenshot showed THIRTEEN rows and was missing `Orders — record
   shipments`.** `orders:write` was added to the picker by `0354a2bf8`, which is an
   **ancestor of the capture commit** — so the code was in the tree and the image
   still lacked the row. The capture ran against a dev server compiled from an

@@ -104,18 +104,65 @@ export function orgBillingRef(orgId: string) {
  */
 export async function readOrgBilling(orgId: string): Promise<OrgBillingDoc> {
   if (!orgId) return {}
+  return projectBillingMode(await readStoredOrgBilling(orgId))
+}
+
+/**
+ * The STORED document, before any mode projection — both physical ids intact.
+ *
+ * Private on purpose: a caller holding this holds two answers to "which
+ * customer", which is the ambiguity `projectBillingMode` exists to remove. It
+ * is factored out only so the mode census below reads the very same bytes
+ * `readOrgBilling` reads, org-doc fallback included. Two separate reads would
+ * be two chances to diverge, and the census exists precisely to explain what
+ * `readOrgBilling` returned.
+ */
+async function readStoredOrgBilling(orgId: string): Promise<OrgBillingDoc> {
   const billingSnapshot = await orgBillingRef(orgId).get()
   if (billingSnapshot.exists) {
-    return projectBillingMode((billingSnapshot.data() ?? {}) as OrgBillingDoc)
+    return (billingSnapshot.data() ?? {}) as OrgBillingDoc
   }
   const orgSnapshot = await db().collection('orgs').doc(orgId).get()
   // The legacy inline fields predate mode-keying entirely, so anything found
   // there is a LIVE id by construction — the org doc was last written by a
-  // `sk_live_` deployment. Projected all the same, so a test-mode read of an
-  // un-backfilled org gets no customer rather than a live one.
-  return projectBillingMode(
-    pickOrgBillingFields(orgSnapshot.data() as never) as OrgBillingDoc,
-  )
+  // `sk_live_` deployment. Projected by the caller all the same, so a
+  // test-mode read of an un-backfilled org gets no customer rather than a live
+  // one.
+  return pickOrgBillingFields(orgSnapshot.data() as never) as OrgBillingDoc
+}
+
+/**
+ * Which Stripe MODES this org has a stored customer for (AGL-2486, follow-up).
+ *
+ * `readOrgBilling` answering `stripeCustomerId: null` has two completely
+ * different meanings — "this workspace has never been billed" and "this
+ * workspace's customer lives in the other Stripe world and THIS deployment
+ * cannot see it" — and every surface downstream rendered them as the same
+ * sentence, "No invoices yet." That is the swallowed-query-as-measured-zero
+ * shape: nothing looks wrong, and the wrong reading is the reassuring one.
+ *
+ * The fix is NOT to fall back to the other mode's id — that fallback is the
+ * original bug, and it stays deleted. It is to let a caller say which of the
+ * two silences it is looking at.
+ *
+ * Returns BOOLEANS, never ids. A test-mode surface asking this question must
+ * not come away holding a live `cus_…`: it would have no legitimate use for
+ * one, and putting it in a JSON response would publish a live customer id to
+ * every browser on a test deployment.
+ */
+export async function readOrgBillingCustomerModes(
+  orgId: string,
+): Promise<{ live: boolean; test: boolean }> {
+  if (!orgId) return { live: false, test: false }
+  const stored = (await readStoredOrgBilling(orgId)) as Record<string, unknown>
+  // A stored `null` (the webhook's "Stripe says this is gone") and an empty
+  // string are both absences, so presence is a non-empty STRING — not `in`,
+  // and not truthiness on an unknown.
+  const present = (value: unknown) => typeof value === 'string' && value.length > 0
+  return {
+    live: present(stored['stripeCustomerId']),
+    test: present(stored[STRIPE_CUSTOMER_ID_TEST_FIELD]),
+  }
 }
 
 /**

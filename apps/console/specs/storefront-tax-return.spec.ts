@@ -49,6 +49,7 @@ import {
 import {
   storefrontTexasAglynLiableCents,
   taxReturnAttention,
+  taxReturnFacilitatedJurisdictionRows,
   taxReturnWebfileLines,
   type TaxReturnPayload,
 } from '../utils/tx-return-webfile'
@@ -464,5 +465,113 @@ describe('the Webfile report cannot be filed past storefront tax (AGL-1904)', ()
     // decide the treatment of.
     expect(lines.find((line) => line.item === 'Item 1')?.dollars).toBe('100.00')
     expect(lines.find((line) => line.item === 'Item 2')?.dollars).toBe('80.00')
+  })
+})
+
+/**
+ * FACILITATED SALES BY BUYER STATE — the nexus question (AGL-1956).
+ *
+ * Aglyn accepted marketplace-facilitator status, so every state asks the same
+ * thing: how much did you facilitate into me, in how many transactions. The
+ * figures were already computed by `storefrontTaxSummary` and already carried
+ * in the staff payload; NOTHING RENDERED THEM, and the one by-state table on
+ * the page was sourced from `platformRevenue` — Aglyn's own SaaS invoices —
+ * while labelled the nexus early-warning list.
+ *
+ * These guards were each forced red before being written the right way round.
+ */
+describe('taxReturnFacilitatedJurisdictionRows (AGL-1956)', () => {
+  const payloadFor = (
+    rows: StorefrontTaxReturnRowInput[],
+  ): TaxReturnPayload =>
+    ({
+      storefront: {
+        summary: storefrontTaxSummary(rows, Q3_2026),
+        truncated: false,
+        undatedRows: 0,
+        rows: [],
+      },
+    }) as unknown as TaxReturnPayload
+
+  /** A California sale on a manual-rate store — a merchant remits it. */
+  const CA_MANUAL_ROW: StorefrontTaxReturnRowInput = {
+    ...MANUAL_ROW,
+    id: 'in_manual_ca',
+    customerAddress: { country: 'US', state: 'CA' },
+  }
+  /** A Florida sale that collected NOTHING — Aglyn is unregistered there. */
+  const FL_UNTAXED_ROW: StorefrontTaxReturnRowInput = {
+    ...AGLYN_LIABLE_ROW,
+    id: 'cs_tax_fl',
+    grossCents: 25000,
+    taxCents: 0,
+    customerAddress: { country: 'US', state: 'FL' },
+    taxLines: [{ amountCents: 0, taxableAmountCents: 0 }],
+  }
+
+  it('counts the sale whoever remits the tax — the threshold does not care', () => {
+    // THE GUARD THAT MATTERS. Nexus is measured on facilitated sales, so a
+    // merchant-remitted sale counts exactly as much as an Aglyn-remitted one.
+    // Reading only the `aglynLiable` bucket would under-report every state
+    // where Aglyn collects nothing — which is every state a threshold is
+    // actually about.
+    const rows = taxReturnFacilitatedJurisdictionRows(
+      payloadFor([AGLYN_LIABLE_ROW, MANUAL_ROW, CA_MANUAL_ROW]),
+    )
+    const texas = rows.find((row) => row.jurisdiction === 'US-TX')
+    expect(texas?.transactionCount).toBe(2)
+    // $100.00 Stripe-Tax + $100.00 manual, both net of their own tax.
+    expect(texas?.totalSalesDollars).toBe('200.00')
+    expect(texas?.taxCollectedDollars).toBe('16.25')
+    // ...but only Aglyn's $8.25 of it is Aglyn's to remit. The two questions
+    // are answered off one row and must not blur.
+    expect(texas?.aglynLiableTaxDollars).toBe('8.25')
+
+    const california = rows.find((row) => row.jurisdiction === 'US-CA')
+    expect(california?.transactionCount).toBe(1)
+    expect(california?.aglynLiableTaxDollars).toBe('0.00')
+  })
+
+  it('flags a state with sales and no tax — the one worth watching', () => {
+    const rows = taxReturnFacilitatedJurisdictionRows(
+      payloadFor([AGLYN_LIABLE_ROW, FL_UNTAXED_ROW]),
+    )
+    const florida = rows.find((row) => row.jurisdiction === 'US-FL')
+    expect(florida?.untaxed).toBe(true)
+    expect(florida?.totalSalesDollars).toBe('250.00')
+    expect(rows.find((row) => row.jurisdiction === 'US-TX')?.untaxed).toBe(false)
+  })
+
+  it('puts Texas first, then the largest state — never alphabetical', () => {
+    // Texas is the unconditional obligation (a Texas LLC has no in-state
+    // threshold), so it leads however small it is. Florida outsells it here.
+    const rows = taxReturnFacilitatedJurisdictionRows(
+      payloadFor([AGLYN_LIABLE_ROW, FL_UNTAXED_ROW, CA_MANUAL_ROW]),
+    )
+    expect(rows.map((row) => row.jurisdiction)).toEqual([
+      'US-TX',
+      'US-FL',
+      'US-CA',
+    ])
+  })
+
+  it('never sums Aglyn’s own revenue into it', () => {
+    // The bug this replaces read `payload.summary` — platformRevenue. A
+    // payload carrying ONLY Aglyn's own sales must produce no facilitated
+    // rows at all, or the nexus table is answering with the wrong taxpayer.
+    const aglynOwnSalesOnly = {
+      summary: {
+        byJurisdiction: {
+          'US-TX': {
+            transactionCount: 9,
+            totalSalesCents: 900000,
+            taxableSalesCents: 720000,
+            taxCollectedCents: 59400,
+          },
+        },
+      },
+    } as unknown as TaxReturnPayload
+    expect(taxReturnFacilitatedJurisdictionRows(aglynOwnSalesOnly)).toEqual([])
+    expect(taxReturnFacilitatedJurisdictionRows(null)).toEqual([])
   })
 })

@@ -215,7 +215,37 @@ jobs:
       - run: npx nx run docs:typecheck
       - run: npx nx run-many -t lint --all --parallel=3
       - run: node tools/scripts/run-guards.mjs --concurrency 4
-      - run: npx nx run-many -t test --all --parallel=3 --maxWorkers=2
+      # The test run, TEE'd (AGL-1617). Run 32685698590 failed here with the
+      # whole of its diagnosis being "Failed tasks: - console:test": GitHub
+      # truncates the MIDDLE of a long ##[group] and jest prints its failure
+      # block in the middle, so the 244,397-line job log carried zero FAIL
+      # markers. The tee keeps the untruncated bytes as an artifact and the
+      # digest prints a summary small enough that it cannot itself be cut.
+      #
+      # set -o pipefail is NOT optional. GitHub's default shell is
+      # `bash -e {0}` and -e does NOT imply pipefail, so `nx ... | tee f`
+      # would exit with TEE's status — zero, always — and this step, the one
+      # the whole gate exists for, would report green on every red test run.
+      - name: test
+        run: |
+          set -o pipefail
+          npx nx run-many -t test --all --parallel=3 --maxWorkers=2 2>&1 | tee "$RUNNER_TEMP/nx-test.log"
+
+      # --task-failed: this step only runs because the job is already red, so
+      # the premise comes from the workflow rather than from a log that may
+      # not contain it. A log with nothing in it is INCONCLUSIVE, not clean.
+      - if: failure()
+        run: node tools/scripts/lib/ci-test-digest.mjs "$RUNNER_TEMP/nx-test.log" --task-failed
+
+      # The raw bytes. Named per job so a second upload in the same run
+      # cannot collide with this one.
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nx-test-log-main-gate-full
+          path: ${{ runner.temp }}/nx-test.log
+          retention-days: 7
+          if-no-files-found: warn
 
       # PRODUCTION builds, named individually. A bare `nx run-many -t build`
       # once went green while BOTH Next production builds errored on a

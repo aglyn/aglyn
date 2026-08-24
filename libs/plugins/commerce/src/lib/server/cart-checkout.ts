@@ -767,16 +767,14 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         feeCents + Aglyn.storefrontProcessingCostCents(chargeCents),
       )
     }
-    if (feeCents > 0) {
-      params.set(
-        'payment_intent_data[application_fee_amount]',
-        String(feeCents),
-      )
-    }
-    params.set(
-      'payment_intent_data[transfer_data][destination]',
-      String(accountId),
-    )
+    // THE CONNECT SPLIT IS EMITTED BELOW, NOT HERE (AGL-1956). It used to be
+    // written at this point, which is ABOVE the tax decision — and the shape
+    // of the split now depends on that decision: a Stripe Tax sale must send a
+    // fixed `transfer_data[amount]` instead of `application_fee_amount`,
+    // because the fee form transfers `amount_total − fee` and `amount_total`
+    // carries tax that AGLYN owes. `feeCents` is final as of this line; only
+    // its emission moved. See `commerce-connect-transfer.ts`.
+    //
     // Address collection feeds order shipping + destination tax later, and is
     // the enforcing half of the plan above (AGL-1721) — emitted from the
     // plan's own country list, never a default, so it cannot widen past the
@@ -908,10 +906,53 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     )
     params.set('cancel_url', `${backUrl}${separator}order=canceled`)
     if (email) params.set('customer_email', email)
+    // THE CONNECT SPLIT (AGL-1956), emitted here because it needs the tax
+    // decision taken above. On a Stripe Tax cart the tax is computed against
+    // AGLYN's registrations and is Aglyn's to remit (AGL-1904), so the
+    // merchant is paid a FIXED `transfer_data[amount]` and no
+    // `application_fee_amount` is sent at all — the fee form would have Stripe
+    // transfer `amount_total − fee`, handing the state's money to the
+    // merchant. A manual-rate or untaxed cart keeps the fee form byte for
+    // byte. See `commerce-connect-transfer.ts` for why only one of the two
+    // knobs may ever be present.
+    const cartTaxOwner =
+      taxDecision.kind === 'stripe-automatic' ? 'platform' : 'merchant'
+    const cartShippingFloorCents = CommerceModel.shippingFloorCents(
+      shippingPlan.options,
+    )
+    Object.entries(
+      CommerceModel.destinationChargeParams({
+        accountId: String(accountId),
+        feeCents,
+        taxOwner: cartTaxOwner,
+        merchantGoodsCents: chargedItemsCents,
+        shippingFloorCents: cartShippingFloorCents,
+      }),
+    ).forEach(([key, value]) => params.set(key, value))
     params.set('metadata[type]', 'commerce-cart')
     params.set('metadata[hostId]', hostId)
     params.set('metadata[cartId]', cartId)
     params.set('metadata[feeCents]', String(Math.max(0, feeCents)))
+    // Only on the shape where `transfer.amount` is no longer `charge.amount`,
+    // so the merchant's actual payout stops being derivable from the charge
+    // (AGL-1956). The shipping baseline is the other half: the difference
+    // between it and the option the shopper chose is owed back to the merchant.
+    if (cartTaxOwner === 'platform') {
+      params.set(
+        'metadata[transferCents]',
+        String(
+          CommerceModel.platformLiableTransferCents({
+            feeCents,
+            merchantGoodsCents: chargedItemsCents,
+            shippingFloorCents: cartShippingFloorCents,
+          }),
+        ),
+      )
+      params.set(
+        'metadata[transferShippingCents]',
+        String(cartShippingFloorCents),
+      )
+    }
     // Set only when units were actually reserved (AGL-2356). Its ABSENCE is
     // what tells the webhook there is nothing to release — right for a cart of
     // untracked or backorder lines, and right for a session minted before this

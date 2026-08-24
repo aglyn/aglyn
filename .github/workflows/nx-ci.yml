@@ -283,4 +283,96 @@ jobs:
       # package reaching it lands on every published customer page. ~1s.
       - run: npm run check:aglyn-barrel
 
-      - run: npx nx affected -t lint test build --parallel=3
+      # The affected run, TEE'd (AGL-1617). Run 32687205268 failed here with
+      # the whole of its diagnosis being "Failed tasks: - console:test":
+      # GitHub truncates the MIDDLE of a long ##[group] and jest prints its
+      # failure block in the middle, so the job log carried zero FAIL markers
+      # and zero failed-test summaries. The tee keeps the untruncated bytes as
+      # an artifact; the digest prints a summary too small to be cut.
+      #
+      # set -o pipefail is NOT optional. GitHub's default shell is
+      # `bash -e {0}` and -e does NOT imply pipefail, so `nx ... | tee f`
+      # would exit with TEE's status — zero, always — and every red test run
+      # in this job would report green.
+      # Split out of the single `nx affected -t lint test build` this used to
+      # be (AGL-1617). Both halves of the split serve the SAME hypothesis, and
+      # it is a hypothesis, not a proven cause — read this before changing it.
+      #
+      # The evidence: production merge 12c1d7ddf and main HEAD bea7cd7ea are
+      # the same tree byte for byte (`git rev-parse <sha>^{tree}` matches, and
+      # 12c1d7ddf^2 IS bea7cd7ea). On that identical tree, Main Gate run
+      # 32688434102 ran `nx run-many -t test --all --parallel=3 --maxWorkers=2`
+      # and went GREEN through all nine phases including the production builds,
+      # while NX CI run 32687205268 ran `nx affected -t lint test build
+      # --parallel=3` and went RED twice — the original and a `--failed`
+      # rerun. `nx run console:test --maxWorkers=2` is green locally too: 586
+      # suites, 6821 tests. Same bytes, three greens under one invocation and
+      # two reds under the other, so `console:test` is not a broken test —
+      # the INVOCATION is the variable.
+      #
+      # The two invocations differed in exactly two ways, and this step removes
+      # both:
+      #
+      # 1. No `--maxWorkers`, so jest defaults to roughly `cpus - 1` workers
+      #    PER PROJECT. Measured locally: `nx run plugins-commerce:test` peaks
+      #    at 9 jest-worker children on a 10-core box with no flag, and at
+      #    exactly 2 with `--maxWorkers=2`. On a 4-vCPU / 16 GB runner that
+      #    difference is most of the memory budget.
+      # 2. `build` was co-scheduled with `test` at `--parallel=3`, so two Next
+      #    production builds could run alongside the jest fleet. Main Gate runs
+      #    its builds as separate later steps, and passes.
+      #
+      # An OOM-killed jest worker produces PRECISELY the signature we got: the
+      # nx task fails, and the log holds zero ` FAIL ` markers, zero
+      # `Tests: … failed` summaries and no heap message. No SIGKILL line was
+      # found either — but the middle of that group was truncated away, so its
+      # absence is not evidence against the theory. Hence: leading hypothesis,
+      # and the digest step below is what will settle it next time.
+      #
+      # Do NOT quietly drop `--maxWorkers=2` to make CI faster. It is the one
+      # difference between the invocation measured green on this tree and the
+      # one measured red on it. The flag DOES reach jest rather than being
+      # swallowed by nx: `maxWorkers` is a first-class option of the
+      # `@nx/jest:jest` executor (its schema.json declares it; jest.impl.js
+      # forwards it into jest's config), nx echoes it per task as
+      # `> nx run <project>:test --maxWorkers=2`, and it survives a
+      # MULTI-target invocation — `nx run-many -t lint test --maxWorkers=2`
+      # still peaked at exactly 2 workers. Neither build executor sets
+      # `additionalProperties: false`, so the extra option is ignored rather
+      # than fatal for them.
+      #
+      # nrwl/nx-set-shas above is untouched by this split. It exports NX_BASE
+      # and NX_HEAD through $GITHUB_ENV; nx re-reads them from process.env on
+      # every invocation (nx/src/utils/command-line-utils.js), and all three
+      # steps here still run after it in the same job — so all three resolve
+      # the identical affected set. Verified locally: two separate
+      # `nx show projects --affected` invocations under one exported
+      # NX_BASE/NX_HEAD return byte-identical project lists.
+      - run: npx nx affected -t lint --parallel=3
+
+      - name: test
+        run: |
+          set -o pipefail
+          npx nx affected -t test --parallel=3 --maxWorkers=2 2>&1 | tee "$RUNNER_TEMP/nx-test.log"
+
+      # --task-failed: this step only runs because the job is already red, so
+      # the premise comes from the workflow rather than from a log that may
+      # not contain it. A log with nothing in it is INCONCLUSIVE, not clean.
+      - if: failure()
+        run: node tools/scripts/lib/ci-test-digest.mjs "$RUNNER_TEMP/nx-test.log" --task-failed
+
+      # The raw bytes. Named per job — a different name from main-gate.yml's,
+      # so neither can ever collide with the other.
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nx-test-log-nx-ci-main
+          path: ${{ runner.temp }}/nx-test.log
+          retention-days: 7
+          if-no-files-found: warn
+
+      # Builds LAST and on their own, so nothing competes with the jest fleet
+      # for the runner's 16 GB. A red test step skips this, which is the same
+      # coverage the single combined invocation gave: nx failed the whole
+      # thing at the first failing task anyway.
+      - run: npx nx affected -t build --parallel=3

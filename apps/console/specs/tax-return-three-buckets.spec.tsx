@@ -285,3 +285,38 @@ describe('the staff tax-return page renders all three buckets (AGL-2163)', () =>
     expect(text).toContain('$12.00')
   })
 })
+
+/**
+ * THE BY-STATE TABLE IS ACTUALLY ON THE SCREEN (AGL-1956).
+ *
+ * `storefrontTaxSummary` had been computing `byJurisdiction` for every bucket,
+ * and the API had been serialising it whole, since AGL-1904. Nothing rendered
+ * it — so Aglyn could not answer "how much did we facilitate into this state"
+ * from any surface, while the one by-state table on the page was sourced from
+ * `platformRevenue` and labelled the nexus early-warning list.
+ *
+ * This asserts the DOM, because a view-model unit test would have passed just
+ * as happily while the table stayed unrendered — which is precisely the state
+ * the code was already in.
+ */
+describe('facilitated sales by buyer state reach the screen (AGL-1956)', () => {
+  it('renders the Texas storefront slice, not the bucket total', async () => {
+    const text = await rendered()
+    expect(text).toContain('Facilitated sales by buyer state')
+    // $3000.00 is `storefront.aglynLiable.byJurisdiction['US-TX']
+    // .totalSalesCents` and appears nowhere else in the payload — the bucket
+    // table prints the $5000.00 gross instead. So this figure can only have
+    // arrived through the new by-state view model.
+    expect(text).toContain('$3000.00')
+    expect(text).toContain('US-TX')
+  })
+
+  it('relabels the platformRevenue table so it stops claiming to be the nexus list', async () => {
+    const text = await rendered()
+    // The old header promised facilitated-sales nexus data over Aglyn's own
+    // SaaS invoices. Both halves are asserted: the honest name is present and
+    // the misleading one is gone.
+    expect(text).toContain('Aglyn’s own sales by jurisdiction')
+    expect(text).not.toContain('All jurisdictions')
+  })
+})

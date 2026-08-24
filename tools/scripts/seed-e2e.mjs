@@ -110,7 +110,22 @@ const unverifiedOwnerOrgId = E2E_UNVERIFIED_OWNER_UID
 // no staff claim, which is what the team member detail page needs to render
 // its editable state (AGL-921).
 export const E2E_TEAMMATE_UID = 'e2e-teammate'
-export const E2E_TEAMMATE_EMAIL = 'teammate@aglyn.test'
+/**
+ * DERIVED FROM THE UID, never spelled out (AGL-1617). This fixture and the
+ * demo-org one (`seed-demo-org.mjs`) both wanted "the teammate" and both
+ * literally wrote `teammate@aglyn.test`, but their converge is keyed on uid —
+ * so the second seeder to run found nothing at its own uid, fell through to
+ * `createUser`, and Firebase rejected it with `auth/email-already-exists`.
+ * That throw lands BEFORE the org, roster and host writes below, so the loser
+ * left a half-built fixture behind and named an email rather than the script
+ * that owned it.
+ *
+ * Deriving the address from the uid makes email uniqueness a consequence of
+ * uid uniqueness, which the two seeders already have by prefix (`e2e-` vs
+ * `demo-`) and which Firebase enforces anyway. A shared address cannot be
+ * reintroduced without first duplicating a uid.
+ */
+export const E2E_TEAMMATE_EMAIL = `${E2E_TEAMMATE_UID}@aglyn.test`
 
 try {
   await auth.getUser(E2E_UID)
@@ -138,7 +153,14 @@ await auth.setCustomUserClaims(E2E_UID, { staff: true, staffRole: 'super' })
 // and an account with no email address refuses password help outright.
 try {
   await auth.getUser(E2E_TEAMMATE_UID)
+  // `email` is converged too, not just the password: an emulator seeded
+  // before AGL-1617 holds this uid at the old shared `teammate@aglyn.test`,
+  // and the roster write below now stores the derived address. Without this
+  // the Auth record and the Firestore member doc would disagree about the
+  // account's own email — and the endpoints that resolve a member through the
+  // Admin SDK read Auth, while the console renders Firestore.
   await auth.updateUser(E2E_TEAMMATE_UID, {
+    email: E2E_TEAMMATE_EMAIL,
     password: E2E_PASSWORD,
     emailVerified: true,
   })

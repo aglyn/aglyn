@@ -1815,9 +1815,25 @@ there is the merchant's to make, not one we can make for them.
    `docsGaTrackingId ? {…} : undefined`, so docs.aglyn.com loaded no GA tag at
    all.
 
-   Zach set it to `G-YW5PG16YTM` on **2026-08-23**. Docusaurus bakes env vars
-   into the static build, so it changes nothing until `aglyn-docs` next
-   deploys.
+   ⚠️ **This section previously recorded that Zach set it to `G-YW5PG16YTM` on
+   2026-08-23. That was wrong, and it went unchallenged for a day.** Measured on
+   **2026-08-24**: `aglyn-docs` had **zero** project-level environment variables,
+   and `DOCS_GA_TRACKING_ID` was absent from the team shared set as well (15
+   shared keys, checked via `GET /v1/env` — the source `vercel env ls` cannot
+   see). The variable had never existed on any scope, so `docs.aglyn.com` served
+   no GA tag at all for the whole period this file claimed it was configured.
+
+   Created **2026-08-24** as `encrypted` (**not** `sensitive` — a GA4 measurement
+   id is public and ships in client JS; marking it sensitive would only destroy
+   verifiability) on all three targets, then redeployed. Docusaurus bakes env
+   vars into the static build, so the redeploy was required, not optional.
+
+   Verified on the live page rather than from the dashboard — `gtag/js?id=G-YW5PG16YTM`
+   is present and `dataLayer` reads `consent default` → `consent default (EEA/UK)`
+   → `set content_group` → `js` → `config`, which is the AGL-1597 ordering holding.
+
+   **The lesson, since this file was the thing that lied:** a written record that
+   an env var was set is not evidence it was set. Read the wire.
 
    ⚠️ **That deploy was, until AGL-1597's second pass, going to publish an
    ungated tag.** The consent-mode default was present in the head but emitted
@@ -1886,7 +1902,7 @@ there is the merchant's to make, not one we can make for them.
 | ------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `GA4_MEASUREMENT_ID`                  | Vercel production                | Target property for server-side `purchase`, `refund`, `subscription_cancelled` and `site_published`; value is `G-YW5PG16YTM` | ✅ **present on `aglyn-console`, `aglyn-tenant` and `aglyn-docs`** since 2026-08-17 12:15 UTC                     |
 | `GA4_API_SECRET`                      | Vercel production, **sensitive** | Measurement Protocol auth                                                                                                    | ✅ **present on all three** since 2026-08-17 12:15 UTC (was a shared variable linked to zero projects until then) |
-| `DOCS_GA_TRACKING_ID`                 | Vercel production (`aglyn-docs`) | Loads the docs gtag at all — `undefined` means **no tag** (AGL-2124)                                                         | ⏳ **set 2026-08-23** to `G-YW5PG16YTM`; takes effect on the next `aglyn-docs` deploy (Docusaurus bakes it in)     |
+| `DOCS_GA_TRACKING_ID`                 | `aglyn-docs`, all three targets  | Loads the docs gtag at all — `undefined` means **no tag** (AGL-2124)                                                         | ✅ **created 2026-08-24** as `encrypted`, `G-YW5PG16YTM`, and confirmed live on the wire. The prior "set 2026-08-23" entry was **false** — the var had never existed on any scope. |
 | `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` | already set                      | Console's client-side GA + `client_id` capture                                                                               | ✅ set, `G-YW5PG16YTM`                                                                                            |
 
 > The dated 2026-08-14 verdict earlier in this file describes the **pre-flip**

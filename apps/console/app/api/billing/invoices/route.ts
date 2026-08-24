@@ -24,6 +24,7 @@ import {
   readOrgBilling,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+import { describeMissingStripeCustomer } from '../../_lib/stripe-customer-mode-notice'
 
 // lockdown-423: exempt — a billing-locked org must be able to SEE what it owes to pay it;
 // part of the recovery surface AGL-1501 keeps sessions alive for.
@@ -77,7 +78,18 @@ async function handler(request: Request): Promise<Response> {
     // the backfill has not reached.
     const customerId = (await readOrgBilling(orgId)).stripeCustomerId
     if (!customerId) {
-      return Response.json({ invoices: [], hasMore: false }, { status: 200 })
+      // Empty is not necessarily "never billed" (AGL-2486). The stored customer
+      // id is mode-scoped, so a test-mode deployment reading a live-only org
+      // gets nothing — and the card said "No invoices yet." over an intact
+      // history. Say which silence this is; the ids themselves stay behind.
+      return Response.json(
+        {
+          invoices: [],
+          hasMore: false,
+          ...(await describeMissingStripeCustomer(orgId)),
+        },
+        { status: 200 },
+      )
     }
     // Drafts are excluded server-side: they have no number, hosted page,
     // or PDF yet, and Stripe may still discard them.

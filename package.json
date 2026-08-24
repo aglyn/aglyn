@@ -1,7 +1,7 @@
 {
   "name": "aglyn",
   "description": "",
-  "version": "1.0.0-beta.8",
+  "version": "1.0.0-beta.9",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": "github:aglyn/aglyn",
@@ -81,6 +81,7 @@
     "test:demo-brands": "node --test tools/scripts/lib/demo-brands.test.mjs",
     "test:uptime-targets": "node --test tools/scripts/lib/uptime-targets.test.mjs",
     "test:week-one-preflight": "node tools/scripts/check-week-one-preflight.mjs --self-test",
+    "test:ci-test-digest": "node --test tools/scripts/lib/ci-test-digest.test.mjs",
     "test:deploy-guard": "node --test tools/scripts/lib/clean-deploy-source.test.mjs",
     "test:gate-script": "bash tools/gate.sh --self-test",
     "test:media-sha256-backfill": "node --test tools/scripts/lib/media-content-sha256-backfill.test.mjs",

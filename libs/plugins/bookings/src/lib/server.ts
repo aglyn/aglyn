@@ -88,6 +88,7 @@ registerPluginJob({
   },
 })
 import {
+  addHostLead,
   firebaseAdmin,
   getOrgForHost,
   meterHostEmail,
@@ -608,34 +609,37 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         return res.status(502).json({ error: 'Payment setup failed' })
       }
       // Lead lands now; the confirmation email + workflow event fire from
-      // the payment webhook.
-      await hostRef
-        .collection('leads')
-        .add({
+      // the payment webhook. Through the one writer that enforces
+      // `LEADS_MAX_PER_HOST` (AGL-1529) — a refused lead never fails the
+      // booking, and the trip is recorded for the site's owner either way.
+      await addHostLead({
+        hostRef,
+        hostId,
+        lead: {
           email,
           // AGL-2303 — `campaign-send` reads `leads.name` and nothing wrote
           // it, so the leads audience was addressed by nobody's name.
           ...(name ? { name } : {}),
           source: 'booking',
-          createdAt: FieldValue.serverTimestamp(),
-        })
-        .catch(() => undefined)
+        },
+      })
       return res
         .status(200)
         .json({ bookingId, startsAtMs, endsAtMs, checkoutUrl: session.url })
     }
 
-    // Bookings double as leads for the site owner (mirrors sign-ups).
-    await hostRef
-      .collection('leads')
-      .add({
+    // Bookings double as leads for the site owner (mirrors sign-ups), through
+    // the one bounded writer (AGL-1529), same as the checkout branch above.
+    await addHostLead({
+      hostRef,
+      hostId,
+      lead: {
         email,
         // AGL-2303, same as the checkout branch above.
         ...(name ? { name } : {}),
         source: 'booking',
-        createdAt: FieldValue.serverTimestamp(),
-      })
-      .catch(() => undefined)
+      },
+    })
 
     // Event trigger (AGL-128/148/159).
     // In-app notification to the site's managers (AGL-259).

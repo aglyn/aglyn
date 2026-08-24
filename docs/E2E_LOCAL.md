@@ -64,6 +64,35 @@ pre-warms each route so dev-server compiles don't eat the navigation
 timeout, then asserts seeded content on every page. Failures drop full-page
 screenshots into `tmp/e2e-artifacts/`.
 
+## Launch smoke — the whole first-customer path (AGL-1514)
+
+```bash
+# emulators + a console dev server with the emulator flags (any port,
+# default 4300) + a tenant server on 4500
+FIRESTORE_EMULATOR_HOST=localhost:8082 \
+FIREBASE_AUTH_EMULATOR_HOST=localhost:9099 \
+  node tools/e2e/launch-smoke.e2e.mjs
+```
+
+`tools/e2e/launch-smoke.e2e.mjs` walks SIGN UP → ORG → HOST → PUBLISH →
+served on the local stand-in for `*.aglyn.app`, which is the
+`*.localhost:4500` branch of `apps/tenant/middleware.ts` — the same
+string-strip as the `.aglyn.app` branch one case above it. Like
+`seed-e2e.mjs` it refuses to run without both emulator-host vars, so it can
+never be pointed at production.
+
+Every step first breaks its own precondition and asserts the matching
+refusal, so a step that quietly stopped enforcing anything goes red rather
+than staying green. Results are recorded in three states — a step that could
+not be run reports `INCONCLUSIVE`, never `PASS`. That matters for the ISR
+assertions in particular: under `next dev` there is no incremental cache at
+all, so the MISS/HIT pair only means something against a production build,
+and the harness marks those inconclusive when it finds a dev server.
+
+What it cannot exercise locally, and does not claim to: Vercel's edge,
+wildcard DNS, wildcard TLS. Knobs: `SMOKE_CONSOLE_URL`, `SMOKE_TENANT_PORT`,
+`SMOKE_TIMEOUT_MS`, `SMOKE_RUN_ID`, `E2E_CHROME_PATH`.
+
 ## The three bugs this setup fixed (July 2026)
 
 Context for future spelunkers — the "auth-race wall" was actually three
