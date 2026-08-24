@@ -276,7 +276,12 @@ line on the invoice.
   plugin purchase. If you ever do, that's a bug worth reporting.
 
 Sales tax on **your own** storefront's sales to **your** customers is a separate
-thing, configured by you — see
+charge from the tax on your Aglyn invoice, and it is allocated by Terms of
+Service §10.7: for storefront sales Aglyn acts as a **marketplace facilitator**,
+so where applicable law gives Aglyn a collection obligation Aglyn calculates,
+collects and remits that tax itself — added on top at checkout, and never
+transferred to your connected payment account. Flat rates you configure yourself
+(lodging, service and similar) stay yours to set and to remit. See
 [Shipping &amp; taxes](../../commerce-and-bookings/commerce/overview.md#shipping--taxes).
 
 ### Platform fees

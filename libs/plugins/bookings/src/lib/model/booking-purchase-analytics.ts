@@ -134,7 +134,8 @@ export interface BookingPurchaseSource {
  *
  * ## Tax is excluded, and no `tax` param is sent
  *
- * The merchant is seller of record for their own service tax, so what they
+ * A booking's tax is the merchant's own configured flat rate, which Terms
+ * §10.7 does not reach (AGL-1956) — so it stays theirs to remit, and what was
  * collected is money held for an authority rather than revenue. `value` is
  * therefore ex-tax, and no GA4 `tax` param rides beside it — beside an ex-tax
  * `value` that param asserts a relationship that does not hold and invites the
