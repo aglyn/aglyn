@@ -100,6 +100,27 @@ import { authForPool } from './auth-pools'
 import { evaluateSsoDomainPolicy } from './sso-domain-policy'
 import firebaseAdmin from './firebase-admin'
 
+/**
+ * ## One predicate, two callers
+ *
+ * The seven conditions live in {@link qualifiesAsBreakGlassOwner}, asked of
+ * ONE uid, because two places need the same answer about different people:
+ *
+ *  - {@link findBreakGlassOrgOwners} asks it of every owner on the roster,
+ *    which is what the enforcement pre-flight consumes;
+ *  - the ownership-transfer guard asks it of the person about to BECOME the
+ *    only owner, before the transfer happens (AGL-1888).
+ *
+ * The second caller exists because an org has exactly one owner at a time —
+ * `transferOrgOwnership` moves the role rather than adding a second holder —
+ * so a transfer can move the whole of an org's break-glass protection onto an
+ * account inside the pool, after the pre-flight has already passed, with the
+ * sweep long since finished. The pre-flight is a gate at one moment; this is
+ * the same question asked again at the only other moment the answer can
+ * change. Written as one function rather than two so the transfer guard
+ * cannot drift into a second, laxer definition of who counts.
+ */
+
 /** An org owner who would still be able to sign in without the org's IdP. */
 export interface SsoBreakGlassOwner {
   uid: string
@@ -127,6 +148,103 @@ const NOT_FOUND = 'auth/user-not-found'
 
 const codeOf = (error: unknown): string =>
   String((error as { code?: unknown })?.code ?? '')
+
+/** Whether ONE account would still be a way in without the org's IdP. */
+export interface SsoBreakGlassVerdict {
+  /** The qualifying owner, or null when this account does not count. */
+  owner: SsoBreakGlassOwner | null
+  /**
+   * A lookup failed for a reason that is not "no such user". `owner` is then
+   * null because we could not establish that it should be anything else —
+   * never because we established the account does not qualify. A caller must
+   * refuse on this, not treat it as a clean negative.
+   */
+  unavailable: boolean
+}
+
+const DOES_NOT_QUALIFY: SsoBreakGlassVerdict = {
+  owner: null,
+  unavailable: false,
+}
+const COULD_NOT_CHECK: SsoBreakGlassVerdict = { owner: null, unavailable: true }
+
+/**
+ * The seven conditions, asked of one uid.
+ *
+ * Callers must distinguish the two answers that both carry a null owner. A
+ * null owner with `unavailable` false means "we checked, and no"; a null owner
+ * with `unavailable` true means "we could not check". Collapsing them is how a
+ * swallowed query starts rendering as a measured zero.
+ *
+ * @param uid - the account being judged. NOT checked for org membership here;
+ *   both callers establish that first, by different routes (a roster query,
+ *   and `transferOrgOwnership`'s own "must already be a member" transaction).
+ * @param providerId - the org's SAML provider id, so a project-pool record
+ *   holding only that provider cannot qualify
+ * @param tenantId - the org's GCIP pool, checked for the collision in (4)
+ */
+export async function qualifiesAsBreakGlassOwner(
+  uid: string,
+  providerId: string,
+  tenantId: string,
+): Promise<SsoBreakGlassVerdict> {
+  let record
+  try {
+    // Written inline rather than through a hoisted `projectPool` const so
+    // the AGL-1122 guard can SEE that the receiver is pool-scoped: it
+    // matches on the receiver text, and a variable named `projectPool` is
+    // indistinguishable to it from a bare `auth().getUser`. A guard that
+    // cannot read a legitimate call is one somebody widens, so the call
+    // site moves instead of the guard.
+    record = await authForPool(null).getUser(uid)
+  } catch (error) {
+    // Not in the project pool is the ORDINARY answer here — it means this
+    // owner signs in through the IdP like everyone else. Anything else is
+    // an outage, and an outage must not read as a clean negative.
+    if (codeOf(error) !== NOT_FOUND) {
+      console.error(`[sso] project-pool lookup failed for ${uid}`, error)
+      return COULD_NOT_CHECK
+    }
+    return DOES_NOT_QUALIFY
+  }
+  // (5) Both halves. A disabled account is not a way in, and an unverified
+  // address cannot reach an org setting to undo enforcement.
+  //
+  // These two also subsume (3): the emailless cross-pool artifact has no
+  // address, so it never gets past the line below. That is why there is no
+  // `isIdentifiedUserRecord` call here — it could never be the condition
+  // that rejects anything, and a guard no mutation can break is not a
+  // guard.
+  if (record.disabled) return DOES_NOT_QUALIFY
+  if (!record.email || !record.emailVerified) return DOES_NOT_QUALIFY
+  // (6) The same rule the in-pool assessment applies. Also the second half
+  // of (3): a record with no providers at all cannot qualify.
+  const providers = (record.providerData ?? [])
+    .map((info) => info?.providerId)
+    .filter((id): id is string => Boolean(id) && id !== providerId)
+  if (!providers.length) return DOES_NOT_QUALIFY
+  // (7) A domain the operator requires SSO for. Read from the RULE, not
+  // from whether the switch happens to be on today.
+  if (evaluateSsoDomainPolicy({ email: record.email, tenantId: null }).refused) {
+    return DOES_NOT_QUALIFY
+  }
+  // (4) Last, because it costs a call: the same uid in the org's own pool.
+  try {
+    await authForPool(tenantId).getUser(uid)
+    // It answered — this uid names an account in the pool as well, so the
+    // sweep will touch it and "which record is this owner" has no answer.
+    return DOES_NOT_QUALIFY
+  } catch (error) {
+    if (codeOf(error) !== NOT_FOUND) {
+      console.error(`[sso] tenant-pool lookup failed for ${uid}`, error)
+      return COULD_NOT_CHECK
+    }
+  }
+  return {
+    owner: { uid, email: record.email ?? null, providers },
+    unavailable: false,
+  }
+}
 
 /**
  * Org owners who hold a credential the org's IdP does not mediate.
@@ -161,62 +279,13 @@ export async function findBreakGlassOrgOwners(
   let unavailable = false
 
   for (const uid of ownerUids) {
-    let record
-    try {
-      // Written inline rather than through a hoisted `projectPool` const so
-      // the AGL-1122 guard can SEE that the receiver is pool-scoped: it
-      // matches on the receiver text, and a variable named `projectPool` is
-      // indistinguishable to it from a bare `auth().getUser`. A guard that
-      // cannot read a legitimate call is one somebody widens, so the call
-      // site moves instead of the guard.
-      record = await authForPool(null).getUser(uid)
-    } catch (error) {
-      // Not in the project pool is the ORDINARY answer here — it means this
-      // owner signs in through the IdP like everyone else. Anything else is
-      // an outage, and an outage must not read as a clean negative.
-      if (codeOf(error) !== NOT_FOUND) {
-        console.error(`[sso] project-pool lookup failed for ${uid}`, error)
-        unavailable = true
-      }
-      continue
-    }
-    // (5) Both halves. A disabled account is not a way in, and an unverified
-    // address cannot reach an org setting to undo enforcement.
-    //
-    // These two also subsume (3): the emailless cross-pool artifact has no
-    // address, so it never gets past the line below. That is why there is no
-    // `isIdentifiedUserRecord` call here — it could never be the condition
-    // that rejects anything, and a guard no mutation can break is not a
-    // guard.
-    if (record.disabled) continue
-    if (!record.email || !record.emailVerified) continue
-    // (6) The same rule the in-pool assessment applies. Also the second half
-    // of (3): a record with no providers at all cannot qualify.
-    const providers = (record.providerData ?? [])
-      .map((info) => info?.providerId)
-      .filter((id): id is string => Boolean(id) && id !== providerId)
-    if (!providers.length) continue
-    // (7) A domain the operator requires SSO for. Read from the RULE, not
-    // from whether the switch happens to be on today.
-    if (
-      evaluateSsoDomainPolicy({ email: record.email, tenantId: null }).refused
-    ) {
-      continue
-    }
-    // (4) Last, because it costs a call: the same uid in the org's own pool.
-    try {
-      await authForPool(tenantId).getUser(uid)
-      // It answered — this uid names an account in the pool as well, so the
-      // sweep will touch it and "which record is this owner" has no answer.
-      continue
-    } catch (error) {
-      if (codeOf(error) !== NOT_FOUND) {
-        console.error(`[sso] tenant-pool lookup failed for ${uid}`, error)
-        unavailable = true
-        continue
-      }
-    }
-    owners.push({ uid, email: record.email ?? null, providers })
+    const verdict = await qualifiesAsBreakGlassOwner(uid, providerId, tenantId)
+    // Accumulated rather than returned early: one unreachable owner must not
+    // hide the qualifying one standing next to them, and it must not be
+    // forgotten either. An org is safe if ANY owner qualifies, and the caller
+    // still gets told the picture is incomplete.
+    if (verdict.unavailable) unavailable = true
+    if (verdict.owner) owners.push(verdict.owner)
   }
 
   return { owners, unavailable }

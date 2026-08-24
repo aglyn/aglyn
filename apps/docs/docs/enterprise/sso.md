@@ -152,8 +152,23 @@ To count, the owner must:
   cannot reach organization settings, so it could not turn enforcement back
   off — which is the entire job.
 
-The rehearsal names them. If your organization has none, make one: promoting a
-member to Owner is something you do yourself, on the Members page.
+The rehearsal names them. If your organization has none, you change who holds
+the role yourself — but read the next paragraph first, because it is not what
+you might expect.
+
+**An organization has exactly one Owner.** There is no way to appoint a second
+one, and the Members page offers only Admin, Editor and Viewer. What you can do
+is **transfer** the role, under **Settings → Transfer ownership**: the person
+you choose becomes the Owner and you become an Admin. So satisfying this
+requirement means handing the Owner role to whoever signs in outside your
+identity pool — often the account that set the organization up in the first
+place — and staying on as an Admin yourself.
+
+Admin keeps organization settings, members, invites and every host, so the
+day-to-day does not change. Four things move with the role: transferring
+ownership again, changing the workspace URL, deleting the organization, and
+being exempt from an admin-initiated password reset. Decide with that in mind —
+the person you transfer to is the person who can transfer it back.
 
 One residual worth knowing: if that owner's login and your identity provider
 are the same vendor — a Workspace SAML application plus a Workspace Google
@@ -183,11 +198,34 @@ bought, which is the point, but it also means a departed admin left on it is a
 standing password into your organization. Saving replaces the list rather than
 adding to it, so removing someone is a matter of unticking them.
 
+#### Transferring ownership while you are enforcing
+
+Because there is only one Owner, that single account usually *is* your whole
+way back in. So while single sign-on is enforced, we **refuse an ownership
+transfer that would leave you without one** — moving the role onto an account
+inside your identity pool would undo the requirement above without anyone
+noticing, at a moment when the rehearsal is not running and the pool has
+already been swept.
+
+The refusal happens before anything is written, and it is recorded on your
+organization's activity log so the attempt is visible rather than silent. If
+the transfer is what you actually want, **stop enforcing single sign-on first**,
+transfer, then turn enforcement back on — the rehearsal will run again and tell
+you where you stand. A designated in-pool break-glass account also satisfies
+this, since that designation belongs to the organization rather than to the
+Owner and a transfer cannot take it away.
+
+The same refusal applies to us. Support cannot transfer your organization past
+this check either.
+
 #### If we cannot check
 
 The owner check can fail on our side. When it does, enforcement is **refused**
 and the page says the check did not complete rather than telling you your
 organization has nobody. Nothing changes; rehearse again.
+
+An ownership transfer refuses on the same terms, for the same reason: an
+unanswered check is not a reason to move the only key you have.
 
 ## Consequences worth knowing before you switch
 
