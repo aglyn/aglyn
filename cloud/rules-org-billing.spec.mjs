@@ -33,6 +33,12 @@ const ADMIN = 'uid-admin'
 const ORG_VIEWER = 'uid-org-viewer'
 const COLLABORATOR = 'uid-collaborator'
 const OUTSIDER = 'uid-outsider'
+/** AGL-243: an admin whose `billing.view` a per-member override revokes. */
+const REVOKED_ADMIN = 'uid-admin-billing-revoked'
+/** The control: an override that touches a DIFFERENT key entirely. */
+const OTHER_OVERRIDE_ADMIN = 'uid-admin-other-override'
+/** The control that stops a default of false: an admin with no map at all. */
+const BARE_ADMIN = 'uid-admin-no-permissions-field'
 const CUSTOMER_ID = 'cus_TestCustomer'
 
 const env = await initializeTestEnvironment({
@@ -84,6 +90,28 @@ await env.withSecurityRulesDisabled(async (context) => {
     role: 'viewer',
     allHosts: true,
   })
+  // AGL-243. A real admin — `canManageOrg()` is TRUE for them, which is
+  // precisely why the role-only rule delivered the document. `billing.view`
+  // is revoked by a per-member override, so the console refuses them and so
+  // does every billing route.
+  await setDoc(doc(db, 'orgs', ORG, 'members', REVOKED_ADMIN), {
+    role: 'admin',
+    allHosts: true,
+    permissions: { 'billing.view': false },
+  })
+  // Carries a permissions map, but says nothing about billing. The rule must
+  // read the KEY, not the presence of the field.
+  await setDoc(doc(db, 'orgs', ORG, 'members', OTHER_OVERRIDE_ADMIN), {
+    role: 'admin',
+    allHosts: true,
+    permissions: { 'members.manage': false, 'billing.manage': false },
+  })
+  // No `permissions` field at all — the shape of every member in every org
+  // today. If this one is denied, the ruleset locks out every paying customer.
+  await setDoc(doc(db, 'orgs', ORG, 'members', BARE_ADMIN), {
+    role: 'admin',
+    allHosts: true,
+  })
   // A site collaborator: a real membership, scoped to one host. `role: 'editor'`
   // here is NOT an org-wide editor — `allHosts: false` is what makes it scoped.
   await setDoc(doc(db, 'orgs', ORG, 'members', COLLABORATOR), {
@@ -117,7 +145,33 @@ await check('an OUTSIDER cannot read the billing doc', () =>
   assertFails(getDoc(billingDoc(as(OUTSIDER)))),
 )
 
-// ── The control that stops this becoming a lockout ──────────────────────────
+// ── AGL-243: the rules gate on ROLE, the product gates on PERMISSION ────────
+// The residual left by the console-side fix. This member is an admin, so
+// `canManageOrg()` is true and the old rule handed them the document — the
+// Stripe customer id, the price id, the subscription status and the seat
+// add-ons — while the page and the API both refused them. Nothing painted it;
+// it was in devtools.
+await check('an ADMIN whose billing.view is REVOKED cannot read the billing doc', () =>
+  assertFails(getDoc(billingDoc(as(REVOKED_ADMIN)))),
+)
+
+// ── The controls that stop this becoming a lockout ──────────────────────────
+// ⚠️ Read these as the load-bearing half. "The revoked admin is denied" also
+// passes against a rule that denies EVERY admin, which is every paying
+// customer's billing page.
+await check('CONTROL — an ADMIN with NO permissions field still reads it', () =>
+  assertSucceeds(getDoc(billingDoc(as(BARE_ADMIN)))),
+)
+await check('CONTROL — an ADMIN whose overrides never mention billing.view still reads it', () =>
+  assertSucceeds(getDoc(billingDoc(as(OTHER_OVERRIDE_ADMIN)))),
+)
+// And the two seeded at the top of the file, re-stated here for the same
+// reason: `permissions` absent must not read as `permissions` empty-and-false.
+await check('CONTROL — the plain OWNER is unaffected by the permission layer', () =>
+  assertSucceeds(getDoc(billingDoc(as(OWNER)))),
+)
+
+// ── The control that stops the AGL-1028 boundary regressing ─────────────────
 // If these fail, the change is worse than the bug: a collaborator who cannot
 // read `plan`/`entitlements` is locked out of the site they were invited to.
 await check('CONTROL — a COLLABORATOR still reads the org doc', () =>
@@ -157,6 +211,9 @@ await env.withSecurityRulesDisabled(async (context) => {
     doc(db, 'orgs', ORG, 'billing', 'stripe'),
     doc(db, 'orgs', ORG, 'members', OWNER),
     doc(db, 'orgs', ORG, 'members', ADMIN),
+    doc(db, 'orgs', ORG, 'members', REVOKED_ADMIN),
+    doc(db, 'orgs', ORG, 'members', OTHER_OVERRIDE_ADMIN),
+    doc(db, 'orgs', ORG, 'members', BARE_ADMIN),
     doc(db, 'orgs', ORG, 'members', ORG_VIEWER),
     doc(db, 'orgs', ORG, 'members', COLLABORATOR),
     doc(db, 'orgs', ORG),

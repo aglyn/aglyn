@@ -171,6 +171,36 @@ service cloud.firestore {
       function orgNotSuspended() {
         return orgMember().get('orgSuspended', false) != true;
       }
+      /**
+       * A PER-MEMBER permission override, read straight off the membership
+       * doc (AGL-243).
+       *
+       * The rules gate on ROLE; the page and the API gate on PERMISSION. An
+       * admin whose `billing.view` is revoked is correctly refused by both of
+       * those — and Firestore still handed the subscription document to their
+       * browser. Nothing painted it; it sat in devtools with the Stripe
+       * customer id, the price id and the seat add-ons in it.
+       *
+       * `permissions` is a flat `Record<string, boolean>` on the member doc
+       * (`AglynOrgMember`), and `orgMember()` is a get() every caller here
+       * already pays for — identical get()s in one evaluation are billed once
+       * — so this costs no extra document access.
+       *
+       * DEFAULT TRUE, and that is the whole safety argument: an absent key
+       * means "no override", which is the state of every member in every org
+       * today. A default of false would deny every paying owner the moment
+       * this ruleset deploys. This narrows the rule for members who carry an
+       * explicit `false` and changes nothing for anyone else.
+       *
+       * ⚠️ THIS IS THE PER-MEMBER LAYER ONLY. The resolver in
+       * `resolveOrgPermissions` has three: per-member overrides beat a custom
+       * role (`member.roleId` -> `orgs/{orgId}/roles/{roleId}`), which beats
+       * the role default. The custom-role layer is NOT enforced here and
+       * deliberately so — see the note on the `billing` match below.
+       */
+      function memberGrants(permission) {
+        return orgMember().get('permissions', {}).get(permission, true) == true;
+      }
 
       // Still ANY member, including a scoped collaborator (AGL-1026): this doc
       // carries `plan` and `entitlements`, which every console surface gates
@@ -412,8 +442,47 @@ service cloud.firestore {
        * only thing about a subscription a non-manager can still see, and it
        * carries no amount, price id or customer id.
        */
+      /**
+       * ROLE ALONE WAS NOT THE GATE THE PRODUCT ENFORCES (AGL-243).
+       *
+       * This read `isStaff() || canManageOrg()`. The page and the API both
+       * gate on the PERMISSION `billing.view`, which a per-member override can
+       * revoke from an admin — so such a member was refused by the console and
+       * by every route, and Firestore delivered this document to their browser
+       * anyway. `memberGrants` closes that for the per-member layer at zero
+       * extra document reads.
+       *
+       * `canManageOrg()` is unchanged and still leads: this is a narrowing,
+       * not a re-grant. There is exactly ONE match block on this path — the
+       * org block deliberately has no `{document=**}` catch-all (see the note
+       * further down) — so there is no looser sibling to defeat it.
+       *
+       * ⛔ STILL OPEN: the CUSTOM-ROLE layer. `member.roleId` points at
+       * `orgs/{orgId}/roles/{roleId}`, whose map can also revoke
+       * `billing.view`, and rules cannot resolve that faithfully without
+       * a second cross-document get() plus a correct three-layer precedence
+       * (per-member beats custom role beats role default) reimplemented in
+       * CEL. A naive OR of the two layers OVER-denies — an admin whose custom
+       * role revokes `billing.view` but whose per-member map re-grants it is
+       * permitted by the resolver and would be locked out by the rule — and a
+       * dangling `roleId` makes get() return null, which denies where the
+       * resolver falls back to the role defaults. Both failure modes lock out
+       * paying customers, so it is not being attempted during the freeze.
+       *
+       * The fix that layer needs is DENORMALISATION, not a cleverer rule:
+       * `syncOrgAuthProjections` already writes `scopeTokens` onto the member
+       * doc for exactly this reason. Extend it to write the RESOLVED map —
+       *
+       *   orgs/{orgId}/members/{uid}.resolvedPermissions:
+       *     Record<string, boolean>   // all three layers already applied
+       *
+       * — recomputed whenever the member, their `roleId`, or that role doc
+       * changes, and then this rule becomes `memberGrants` against
+       * `resolvedPermissions` with the same default-true backfill semantics.
+       */
       match /billing/{billingDocId} {
-        allow read: if isStaff() || canManageOrg();
+        allow read: if isStaff() ||
+          (canManageOrg() && memberGrants('billing.view'));
         allow write: if false;
       }
 
