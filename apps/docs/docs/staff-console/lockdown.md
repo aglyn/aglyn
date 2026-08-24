@@ -826,6 +826,59 @@ the way it is:
   so the cap-full remedy — release stale entries — required remembering a
   media id nobody remembers.
 
+## The tenant API surface — where a lock does and does not reach {#tenant-api-coverage}
+
+Worth knowing before you press the button, because it is the one place a lock
+is *narrower* than it looks.
+
+The tenant middleware is what takes a locked site off the air, and **its
+matcher deliberately excludes `/api`**. It exists to stop cached pages serving.
+So under a full org or host takedown the site's pages 503 while its API routes
+keep answering unless each one gates itself. Lockdown also **fails open** on
+every read path — an unreachable Firestore answers "not locked", because a
+database blip must not weld every customer site shut — which means the per-route
+gate is the whole of the enforcement in both the normal and the degraded case.
+
+Since AGL-2495 every route under `apps/tenant/app/api` has a written
+disposition, held by `apps/tenant/specs/lockdown-tenant-api-coverage.spec.ts`.
+A new route fails that spec by existing until someone decides which it is:
+
+| Disposition | What it means |
+|---|---|
+| **Wired** | the route asks the verdict and returns the refusal itself — visitor writes (`forms/submit`, the plugin dispatcher), the analytics beacon, `protection/unlock` |
+| **Delegated** | a shared module runs the verdict for it, named in the file — the media CDN handler, the page loader, the edit-access mint |
+| **Exempt** | it must stay reachable while locked, and says why in the file *and* in the spec's audit table — the 503 notice page, the verdict probe, the abuse intake, the DMCA counter-notice, the health probes |
+| **Known-open** | it still serves site content or metadata through a takedown, recorded by name and held write-free |
+
+**What a full lock stops on the tenant API, that it did not before:**
+
+- `POST /api/protection/unlock` — a password-protected screen's node tree. It
+  verified the password and returned the composed page while the site around it
+  was 503ing. It now answers the same 423 a paused write gets, after the
+  brute-force counter and before the screen read. Read-only locks are
+  unaffected: a site that is still serving still unlocks.
+- `GET /api/screen/not-found` — the host's *designed* 404 body. The loader
+  behind it was a second entry point that never resolved a verdict, so a locked
+  site kept handing out its own header, footer and nav to anyone hitting a
+  missing URL. It now falls back to the platform status screen.
+
+**What a full lock still does NOT stop, and it is deliberate that you can read
+the list rather than discover it:** `collections-rss`, `sitemap`, `robots`,
+`manifest`, `host/{hostId}`, the published `screen` list, and the plugin fetch
+proxy. All are reads or metadata, all are frozen by name in that spec, and each
+is asserted to stay **write-free** — an ungated read is a disclosure decision
+somebody made; an ungated write is the defect. Closing them needs a
+read-refusing gate across the tenant API, which is a decision with its own
+blast radius and has not been taken.
+
+The same spec holds the **background jobs**, for the reason the AGL-1621 drill
+found: `apps/tenant/utils/publish-schedule-job.ts` ran a scheduled publish on
+platform credentials from a secret-gated route, outside every gate, so a
+publish could fire on a locked host. It is gated now and the spec names it if
+that line ever leaves. Six plugin jobs (four in commerce, two in bookings) are
+recorded as still ungated — the runner, not the call site, is where that should
+be fixed.
+
 ## Operating it
 
 1. Open **Staff → Lockdown** (or suspend a workspace from its org detail page —
