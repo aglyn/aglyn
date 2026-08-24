@@ -619,4 +619,56 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       ).toBeCloseTo(0.0338, 6)
     })
   })
+
+  /**
+   * THE MARKETPLACE TAKE RATE (AGL-2194 P8), published 2026-08-24.
+   *
+   * Until that date `/pricing` stated this NOWHERE — grepping the live page
+   * for "take rate", "revenue share" and "20%" returned zero hits, while
+   * `checkout.ts` charged it on every marketplace sale. A publisher on
+   * Advanced read "0%" under a heading that says *what Aglyn takes on a sale*
+   * and kept 80% of their listing sale. That is the one number on this page
+   * where the product charged MORE than the page disclosed.
+   *
+   * The sentence now published under TRANSACTION FEES reads:
+   *
+   *   "Selling through the Aglyn marketplace is separate from the rates above
+   *    and does not step down with your plan: Aglyn keeps 20% of a marketplace
+   *    listing sale on every paid plan, and 30% on Free."
+   *
+   * Pinned here for the same reason as every other row in this file: the other
+   * side of the comparison is OUTSIDE the repo, so these are transcriptions of
+   * what the public page served, not values derived from the constants. If
+   * `marketplaceFeePct` moves and this file is not updated in the same commit,
+   * the published sentence has silently become false — which is exactly how
+   * the pre-2026-08-09 metered rates rotted.
+   */
+  describe('marketplace take rate — fetched 2026-08-24', () => {
+    it('is 30% on Free', () => {
+      expect(PLAN_ENTITLEMENTS.free.marketplaceFeePct).toBe(30)
+    })
+
+    it('is 20% on EVERY paid plan, enterprise included', () => {
+      const paid = (Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]).filter(
+        (plan) => plan !== 'free',
+      )
+      // Named rather than a loop body assertion so a failure prints WHICH plan
+      // drifted, not merely that one did.
+      expect(
+        Object.fromEntries(
+          paid.map((plan) => [plan, PLAN_ENTITLEMENTS[plan].marketplaceFeePct]),
+        ),
+      ).toEqual(Object.fromEntries(paid.map((plan) => [plan, 20])))
+    })
+
+    it('is NOT reduced by the storefront transaction fee, which reaches 0%', () => {
+      // The published sentence claims the marketplace rate "does not step down
+      // with your plan". That claim is only meaningful because the storefront
+      // ladder beside it DOES reach zero — if both fell to 0% the sentence
+      // would be noise. Advanced is where they diverge most visibly.
+      expect(PLAN_ENTITLEMENTS.advanced.transactionFeeDigitalPct).toBe(0)
+      expect(PLAN_ENTITLEMENTS.advanced.transactionFeePhysicalPct).toBe(0)
+      expect(PLAN_ENTITLEMENTS.advanced.marketplaceFeePct).toBe(20)
+    })
+  })
 })
