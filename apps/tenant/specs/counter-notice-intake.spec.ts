@@ -90,10 +90,20 @@ const mockDocHandle = (path: string) => ({
 
 let mockNotifications: Record<string, any>[] = []
 
+const mockPlatformEmailMeter: number[] = []
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   notifyStaff: async (payload: Record<string, any>) => {
     mockNotifications.push(payload)
+  },
+  // Recorded, not stubbed to a no-op. This mock is an ALLOW-LIST — an export
+  // it omits is `undefined` at the call site, not a missing-module error, so
+  // the receipt's meter would have failed as `is not a function` deep inside
+  // a best-effort path. Counting the calls turns that silence into an
+  // assertion (AGL-1438).
+  meterPlatformEmail: async (count = 1) => {
+    mockPlatformEmailMeter.push(count)
   },
   firebaseAdmin: {
     app: () => ({
@@ -235,6 +245,7 @@ beforeEach(() => {
   mockWriteThrows = false
   mockNotifications = []
   mockSentEmails = []
+  mockPlatformEmailMeter.length = 0
   mockEmailConfigured = true
   mockEmailThrows = false
   mockResolvedHost = { $id: 'host-acme', orgId: 'org-9' }
@@ -534,6 +545,24 @@ describe('the subscriber is emailed a copy of their receipt', () => {
     await POST(formPost(COMPLETE))
     await POST(formPost(COMPLETE))
     expect(mockSentEmails).toHaveLength(1)
+  })
+
+  it('counts the receipt against the PLATFORM meter, not the host', async () => {
+    // AGL-1438: every `sendEmail` call site is metered or reasonedly exempt.
+    // Platform scope is the whole point here — the recipient is the person
+    // FILING against a site, so billing the reported host for the receipt sent
+    // to their accuser would be perverse. One send, one platform unit.
+    await POST(formPost(COMPLETE))
+    expect(mockSentEmails).toHaveLength(1)
+    expect(mockPlatformEmailMeter).toEqual([1])
+  })
+
+  it('meters nothing when the deployment cannot send', async () => {
+    // The meter follows the send, not the attempt. A self-host with no
+    // RESEND_API_KEY must not accrue a cost for mail that never left.
+    mockEmailConfigured = false
+    await POST(formPost(COMPLETE))
+    expect(mockPlatformEmailMeter).toEqual([])
   })
 
   it('still records the counter-notice when mail is unconfigured', async () => {

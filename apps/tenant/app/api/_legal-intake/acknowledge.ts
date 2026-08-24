@@ -68,6 +68,7 @@
 
 import * as Aglyn from '@aglyn/aglyn/server'
 import { sendEmail } from '@aglyn/shared-util-email'
+import { meterPlatformEmail } from '@aglyn/tenant-data-admin'
 import { contactText } from './chrome'
 
 /**
@@ -131,6 +132,12 @@ export async function acknowledgeCounterNotice(options: {
       `than out of yours.\n\n` +
       `${KEEP_THIS}${signOff('legal')}\n`,
   })
+  // Platform scope, not host (AGL-1438). These are Aglyn's own legal
+  // obligations and the recipient is the REPORTER, not the site's
+  // customer — billing a reported site for the receipt sent to the
+  // person reporting it would be perverse. Metered after the send and
+  // only when it happened, so an unconfigured deployment counts nothing.
+  if (result.sent) await meterPlatformEmail()
   return { sent: result.sent }
 }
 
@@ -173,5 +180,11 @@ export async function acknowledgeAbuseReport(options: {
       `${nextStep}\n\n` +
       `${KEEP_THIS}${signOff(isCopyright ? 'legal' : 'support')}\n`,
   })
+  // Platform scope, not host (AGL-1438). These are Aglyn's own legal
+  // obligations and the recipient is the REPORTER, not the site's
+  // customer — billing a reported site for the receipt sent to the
+  // person reporting it would be perverse. Metered after the send and
+  // only when it happened, so an unconfigured deployment counts nothing.
+  if (result.sent) await meterPlatformEmail()
   return { sent: result.sent }
 }

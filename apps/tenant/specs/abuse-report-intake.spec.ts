@@ -87,10 +87,20 @@ const mockDocHandle = (path: string) => ({
 
 let mockNotifications: Record<string, any>[] = []
 
+const mockPlatformEmailMeter: number[] = []
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   notifyStaff: async (payload: Record<string, any>) => {
     mockNotifications.push(payload)
+  },
+  // Recorded, not stubbed to a no-op. This mock is an ALLOW-LIST — an export
+  // it omits is `undefined` at the call site, not a missing-module error, so
+  // the receipt's meter would have failed as `is not a function` deep inside
+  // a best-effort path. Counting the calls turns that silence into an
+  // assertion (AGL-1438).
+  meterPlatformEmail: async (count = 1) => {
+    mockPlatformEmailMeter.push(count)
   },
   firebaseAdmin: {
     app: () => ({
@@ -225,6 +235,7 @@ beforeEach(() => {
   mockWriteThrows = false
   mockNotifications = []
   mockSentEmails = []
+  mockPlatformEmailMeter.length = 0
   mockEmailConfigured = true
   mockResolvedHost = { $id: 'host-evil', orgId: 'org-9' }
 })
