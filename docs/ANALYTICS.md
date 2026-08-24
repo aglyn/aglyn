@@ -1064,12 +1064,45 @@ patched to `undefined` stays in the composed object as `undefined` rather than
 being dropped from it, which is the difference between clearing a stamp and
 leaving the previous value standing.
 
-**Known gap, accepted:** the first `page_view` of a cold load races the token
-read and goes out unstamped — the same window in which `user_id` is also still
-unset, so it is an existing condition rather than a new one. Every later hit in
-the session carries the stamp. The _override_ path below closes this for a
-browser that has opted in, because a localStorage read is synchronous and a
-token read is not.
+**Known gap — and it is WIDER than "the first `page_view`" (measured on
+production, 2026-08-24).** The claims read is asynchronous and the tag is not,
+so the boot burst ships before the stamp lands. Read off `window.dataLayer` on
+`app.aglyn.com`, signed in as staff, with the browser override deliberately
+cleared (`?aglyn_internal=0`):
+
+```
+0:consent 1:consent 2:set{}       3:set+title  4:set+title  5:js
+6:config  7:config  8:event page_view  11:event TTFB
+…
+19:set STAMPED  …  23:set STAMPED
+```
+
+The first `set` carrying `traffic_type` is index **19**. Both `config` calls,
+the manual `page_view` and the first web-vitals hit are already gone by then.
+GA4's data filter matches per EVENT, so those hits — which include
+`session_start` and `first_visit` — are not filterable: **an un-opted-in staff
+browser still contributes one user and one session to every report**, which is
+precisely the outcome §8 says `setDefaultEventParameters` avoids. It avoids the
+_taxonomy_ version of that failure, not the _timing_ one.
+
+The same page with the override ON puts a stamped `set` at index **2**, ahead
+of `js` and `config` — every hit of the session carries it, because a
+`localStorage` read is synchronous and a token read is not.
+
+So the ordering of mechanisms is the opposite of the intuitive one. **The
+browser opt-in (§8b) is the primary mechanism on the console too**, not a
+supplement for the logged-out surfaces; the claims predicate is what covers the
+_rest_ of the session, catches a browser nobody remembered to mark, and is the
+only thing that follows the actor into an impersonation session. Neither is
+redundant, and neither is sufficient alone.
+
+**Do not "fix" this by writing the override from the claims.** A browser
+auto-marked because staff signed in there once stays marked after a customer
+signs in on the same browser — and clearing it on a non-staff session would
+wipe the deliberate opt-in the release drills depend on (§8b). Wrongly flagging
+a real customer erases them from every report, permanently. The GA-side IP rule
+(§8d) is the mechanism that closes the boot window without that risk, because
+GA applies it server-side at collection time, to hit zero, with no race at all.
 
 ### 8b. Claims are not enough — the browser-pinned override (AGL-2064/AGL-2065)
 
@@ -1217,6 +1250,23 @@ whole year-to-date history is 30 views / 6 users, ~24 of them `/signin` on
 Vercel _preview_ URLs of the console. Preview traffic reaching a production
 property was not a risk — it was most of what that property ever recorded.
 
+**Verified live on `localhost:4200`, 2026-08-24, not inferred from the code.**
+This is worth re-measuring rather than trusting, because
+`apps/console/.env.development.local` still sets
+`NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID="G-YW5PG16YTM"` — the **production**
+stream. The gate is the only thing between a dev server and the live property.
+A signed-in console page on the dev server reported `typeof window.gtag ===
+'undefined'`, `window.dataLayer.length === 0`, and **zero** of its 83 loaded
+resources on any Google Analytics host.
+
+The negative is a real one rather than a blind grep: the same inventory _does_
+list five `*.google*` resources (`recaptcha/api.js`, two
+`*.googleapis.com` auth calls, an avatar) — so the probe can see Google traffic
+when there is Google traffic, and simply found no tag. What it did find is
+`_ga` and `_ga_YW5PG16YTM` cookies still sitting on `localhost` — residue from
+before AGL-2067, and proof the hole was real. They are per-origin, so they
+cannot reach the production property; they are stale, not active.
+
 ### 8d. What is left for Zach to click
 
 The **Internal Traffic** data filter **exists** in property 302497406 and is
@@ -1224,22 +1274,39 @@ currently in **Testing** mode. Zach set it Active on 2026-08-18 and reverted it
 to Testing the same day, deliberately, because the coverage above was expanding
 while it was on.
 
+✅ **`traffic_type` is already registered** as an event-scoped custom dimension
+— it is one of the 18 counted off the live property on 2026-08-24 (see *Still
+outstanding*). Earlier versions of this section and of AGL-1637 said to register
+it; that instruction is spent.
+
 Remaining, and all of it is his click — nothing in this repo can do it:
 
-1. **Verify in Testing mode.** With the filter in Testing, `Test data filter
-name` is available as a dimension in reports and DebugView. Confirm it
+1. **Opt each browser in, once per origin — do this FIRST, not last.** The
+   three URLs in §8b. It was written last here for years and that ordering was
+   wrong: §8's measurement shows an un-opted-in browser is only stamped from
+   part-way through the session, so on the console this step is what makes the
+   user and session counts correct at all, not a tidy-up. Forgetting it is
+   silent. (Verified present on this machine's Chrome profile for
+   `app.aglyn.com`, `aglyn.com` and `docs.aglyn.com` on 2026-08-24.)
+2. **Add the IP rule as well, and for a better reason than "a weaker net".**
+   Admin → Data Streams → (3230351080) → Configure tag settings → Show all →
+   **Define internal traffic**. GA applies an IP rule server-side at collection
+   time, so it stamps `traffic_type=internal` on **hit zero** — including the
+   `session_start` / `first_visit` pair the browser mechanisms cannot reach on
+   a cold load. It is not a lesser version of the parameter; it is the only
+   thing covering the boot window. Its real limits are the ones AGL-1582 gives:
+   a dynamic residential IP, and staff working from anywhere. Keep the default
+   rule name `internal` so it writes the same value the code writes.
+3. **Verify in Testing mode.** With the filter in Testing, `Test data filter
+   name` is available as a dimension in reports and DebugView. Confirm it
    matches a staff session, an impersonation session and an opted-in
    logged-out marketing session, and that an ordinary customer session is
    **not** matched. Both directions — a filter verified in one direction only
    is the one that erases real users.
-2. **Register `traffic_type` as a custom dimension** if it is not already, so
-   the match is visible in standard reports rather than only in DebugView.
-3. **Set it Active** once (1) passes. ⚠️ An Active filter **permanently and
+4. **Set it Active** once (3) passes. ⚠️ An Active filter **permanently and
    irrecoverably discards** everything it matches. It is not retroactive in
    either direction: data already collected is not re-filtered, and data
    discarded while Active cannot be recovered.
-4. **Opt each browser in, once per origin** — the three URLs in §8b. This is
-   the step most likely to be forgotten, and forgetting it is silent.
 
 Click-list on AGL-1637.
 
@@ -2073,7 +2140,15 @@ there is the merchant's to make, not one we can make for them.
    > running lambda actually has. Ask the deployment, and always diff against an
    > older one as a negative control.
 
-   #### `DOCS_GA_TRACKING_ID` — set 2026-08-23, not yet deployed
+   #### `DOCS_GA_TRACKING_ID` — created and deployed 2026-08-24 ✅
+
+   Re-confirmed in a browser on 2026-08-24 while verifying AGL-1582:
+   `docs.aglyn.com` now loads the tag and configs `G-YW5PG16YTM` with
+   `anonymize_ip: true`, and the internal-traffic snippet's
+   `gtag('set', {traffic_type:'internal'})` sits at `dataLayer` index 3 —
+   after `content_group: 'docs'`, before `config`, which is the order it has
+   to be in. AGL-1637 item 2b is **done**; any list still showing it open is
+   stale.
 
    Verified 2026-08-19: the live `aglyn-docs` production deployment
    (`dpl_DEMJtAphsh…`) carried `GA4_API_SECRET` and `GA4_MEASUREMENT_ID` but
