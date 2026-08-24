@@ -217,6 +217,10 @@ in the component's working version are not what you get.
 A component can place instances of other components. Expansion runs to a depth of **5**,
 which also bounds a component that accidentally references itself.
 
+Nested components expand on the canvas too, not only in Preview and on the live site — so a
+shared button inside a shared nav is drawn where you are editing, and publishing that button
+updates every open canvas that shows it, however deeply it is nested.
+
 ## Used by
 
 A component's detail page has a **Used by** card listing everything that places an instance
