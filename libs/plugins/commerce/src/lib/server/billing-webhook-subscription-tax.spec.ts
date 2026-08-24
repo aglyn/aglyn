@@ -195,16 +195,38 @@ let reversalStatus = 200
 let reversalErrorBody: any = null
 /** The AGL-2317 fee refund standing on the fee object, as Stripe would report. */
 let feeRefundedSoFar = 0
+/** What the paginated `GET /transfers/{id}/reversals?limit=100` answers. */
+let listReversalsBody: any = { data: [] }
+let listReversalsStatus = 200
+/** Cents Stripe ACCEPTED as reversals — the merchant's balance really moving. */
+let reversalsAcceptedCents = 0
+let reversalCounter = 0
 
 const defaultFetch = async (url: any, _init?: any): Promise<any> => {
   const href = String(url)
+  // The full re-read, taken only when Stripe says the embedded list is
+  // truncated. Matched BEFORE the POST branch — same path, different verb.
+  if (href.includes('/reversals?limit=')) {
+    return {
+      ok: listReversalsStatus < 400,
+      status: listReversalsStatus,
+      json: async () => listReversalsBody,
+    } as any
+  }
   if (href.includes('/reversals')) {
+    const asked = Number(
+      new URLSearchParams(String((_init as any)?.body ?? '')).get('amount') ?? 0,
+    )
+    // Only a reversal Stripe ACCEPTED moves money. A 400 that is counted as
+    // reversed would let a failed attempt look like a successful one, which is
+    // exactly the retry behaviour these tests exist to measure.
+    if (reversalStatus < 400) reversalsAcceptedCents += asked
     return {
       ok: reversalStatus < 400,
       status: reversalStatus,
       json: async () =>
         reversalStatus < 400
-          ? { id: 'trr_1', amount: reversalAmountAsked() }
+          ? { id: `trr_${++reversalCounter}`, amount: asked }
           : reversalErrorBody,
     } as any
   }
@@ -256,8 +278,13 @@ const defaultFetch = async (url: any, _init?: any): Promise<any> => {
 const fetchMock = jest.fn(defaultFetch)
 
 function callsMatching(fragment: string) {
-  return fetchMock.mock.calls.filter((call) =>
-    String(call[0]).includes(fragment),
+  return fetchMock.mock.calls.filter(
+    (call) =>
+      String(call[0]).includes(fragment) &&
+      // The paginated re-read is a GET on the same path as the reversal POST.
+      // `/reversals` means "reversals CREATED"; the read is asserted through
+      // its own `?limit=` fragment.
+      !(fragment === '/reversals' && String(call[0]).includes('?limit=')),
   )
 }
 
@@ -269,22 +296,13 @@ function postedAmount(fragment: string): number {
   )
 }
 
-function reversalAmountAsked(): number {
-  return postedAmount('/reversals')
-}
-
-/** Every cent this delivery pulled back out of the connected account. */
+/**
+ * Every cent actually pulled back out of the connected account — counted from
+ * the reversals Stripe ACCEPTED, never from the requests made. A refused
+ * request moves nothing, and counting it would hide a broken retry.
+ */
 function reversedCents(): number {
-  return callsMatching('/reversals').reduce(
-    (sum, call) =>
-      sum +
-      Number(
-        new URLSearchParams(String((call[1] as any)?.body ?? '')).get(
-          'amount',
-        ) ?? 0,
-      ),
-    0,
-  )
+  return reversalsAcceptedCents
 }
 
 /** Every cent the AGL-2317 correction handed BACK to the connected account. */
@@ -438,6 +456,10 @@ beforeEach(() => {
   reversalStatus = 200
   reversalErrorBody = null
   feeRefundedSoFar = 0
+  reversalsAcceptedCents = 0
+  reversalCounter = 0
+  listReversalsBody = { data: [] }
+  listReversalsStatus = 200
   chargeFixture = {
     id: 'ch_2',
     amount: CHARGE_CENTS,
@@ -618,13 +640,21 @@ describe('a Stripe Tax subscription cycle (AGL-1956)', () => {
     )
   })
 
-  /** STRUCTURAL: the key is deterministic on the invoice id and nothing else. */
-  it('keys the reversal on the invoice id', async () => {
+  /**
+   * STRUCTURAL: the key is the invoice id plus the ATTEMPT number.
+   *
+   * Measured in test mode: Stripe stores a 4xx under an idempotency key and
+   * replays it (`Idempotent-Replayed: true`), and retrying the same key with a
+   * corrected body is refused with `idempotency_error`. A key fixed on the
+   * invoice alone therefore makes a once-failed reversal permanently
+   * impossible. See `reverseSubscriptionTaxToPlatform`.
+   */
+  it('keys the reversal on the invoice id AND the attempt', async () => {
     await deliver(STRIPE_TAX_INVOICE)
 
     expect(
       (callsMatching('/reversals')[0][1] as any).headers['Idempotency-Key'],
-    ).toBe('subscription-tax-reversal-in_2')
+    ).toBe('subscription-tax-reversal-in_2-1')
   })
 
   it('records what it pulled back, so a shortfall is queryable', async () => {
@@ -789,6 +819,209 @@ describe('a redelivered subscription invoice (AGL-1956)', () => {
 })
 
 // ---------------------------------------------------------------------------
+// The claim — what replaces the fixed idempotency key
+// ---------------------------------------------------------------------------
+
+/**
+ * The key now varies per attempt, because Stripe caches a 4xx under it
+ * (measured). That moves the no-double-reversal guarantee entirely onto the
+ * claim and the adopt-by-metadata check, so both are pinned here.
+ */
+describe('the in-flight claim (AGL-1956)', () => {
+  const markerPath = 'hosts/host-1/subscriptions/sub_1/taxReversals/in_2'
+
+  /**
+   * TWO DELIVERIES RACING. Only one can win the claim transaction; the other
+   * must stand down without calling Stripe. This is what stops the varying
+   * key from becoming a double-reversal.
+   */
+  it('stands down when another delivery holds the claim', async () => {
+    docs.set(markerPath, {
+      invoiceId: 'in_2',
+      hostId: 'host-1',
+      attempt: 1,
+      inFlightAtMs: Date.now(),
+    })
+
+    await deliver(STRIPE_TAX_INVOICE)
+
+    expect(callsMatching('/reversals')).toHaveLength(0)
+    expect(callsMatching('/v1/charges/')).toHaveLength(0)
+    expect(reversedCents()).toBe(0)
+  })
+
+  /**
+   * The holder died. A stale claim may be taken over — but the reversal it
+   * already created is ADOPTED, never duplicated. With a per-attempt key
+   * Stripe would happily execute a second reversal, so this check is the
+   * thing standing between a crash and taking the merchant's money twice.
+   */
+  it('takes over a stale claim but adopts the dead attempt’s reversal', async () => {
+    docs.set(markerPath, {
+      invoiceId: 'in_2',
+      hostId: 'host-1',
+      attempt: 1,
+      inFlightAtMs: Date.now() - 30 * 60_000,
+    })
+    transferFixture = {
+      ...transferFixture,
+      amount_reversed: TAX_CENTS,
+      reversals: {
+        data: [
+          {
+            id: 'trr_dead_attempt',
+            amount: TAX_CENTS,
+            metadata: { aglynTaxInvoiceId: 'in_2' },
+          },
+        ],
+      },
+    }
+
+    await deliver(STRIPE_TAX_INVOICE)
+
+    expect(callsMatching('/reversals')).toHaveLength(0)
+    expect(reversedCents()).toBe(0)
+    expect(markerDoc()).toMatchObject({
+      status: 'reversed',
+      reversedCents: TAX_CENTS,
+      adopted: true,
+    })
+  })
+
+  /** A stale claim with nothing on the transfer really does re-attempt. */
+  it('takes over a stale claim and retries under a fresh key', async () => {
+    docs.set(markerPath, {
+      invoiceId: 'in_2',
+      hostId: 'host-1',
+      attempt: 3,
+      inFlightAtMs: Date.now() - 30 * 60_000,
+    })
+
+    await deliver(STRIPE_TAX_INVOICE)
+
+    expect(
+      (callsMatching('/reversals')[0][1] as any).headers['Idempotency-Key'],
+    ).toBe('subscription-tax-reversal-in_2-4')
+    expect(reversedCents()).toBe(TAX_CENTS)
+  })
+
+  /**
+   * A settled row is settled forever — a claim that has already reversed is
+   * never re-taken, however stale it looks.
+   */
+  it('never re-claims a settled reversal', async () => {
+    docs.set(markerPath, {
+      invoiceId: 'in_2',
+      hostId: 'host-1',
+      attempt: 1,
+      reversedCents: TAX_CENTS,
+      inFlightAtMs: Date.now() - 30 * 60_000,
+    })
+
+    await deliver(STRIPE_TAX_INVOICE)
+
+    expect(callsMatching('/reversals')).toHaveLength(0)
+    expect(callsMatching('/v1/charges/')).toHaveLength(0)
+  })
+
+  /**
+   * GUARD 2 must not be defeated by Stripe's list cap. The embedded
+   * `reversals` list returns only the first 10; a transfer with more is
+   * re-read in full, and an unreadable re-read THROWS rather than proceeding —
+   * "unknown" is not "none" when the wrong answer double-reverses.
+   */
+  it('re-reads a truncated reversal list before deciding to reverse', async () => {
+    transferFixture = {
+      ...transferFixture,
+      amount_reversed: TAX_CENTS,
+      reversals: { data: [], has_more: true },
+    }
+    listReversalsBody = {
+      data: [
+        {
+          id: 'trr_page_2',
+          amount: TAX_CENTS,
+          metadata: { aglynTaxInvoiceId: 'in_2' },
+        },
+      ],
+    }
+
+    await deliver(STRIPE_TAX_INVOICE)
+
+    expect(callsMatching('/reversals?limit=100')).toHaveLength(1)
+    expect(reversedCents()).toBe(0)
+    expect(markerDoc()).toMatchObject({ adopted: true, reversedCents: TAX_CENTS })
+  })
+
+  it('throws rather than reverse when the truncated list will not read', async () => {
+    transferFixture = {
+      ...transferFixture,
+      reversals: { data: [], has_more: true },
+    }
+    listReversalsStatus = 500
+
+    await expect(deliver(STRIPE_TAX_INVOICE)).rejects.toThrow(/reversal list/)
+    expect(reversedCents()).toBe(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The refund interaction — Stripe's cap, measured
+// ---------------------------------------------------------------------------
+
+/**
+ * MEASURED in test mode: a refund with `reverse_transfer=true` against a
+ * transfer this code has already partially reversed does NOT error and does
+ * NOT over-reverse. Stripe caps the additional reversal at what remains.
+ *
+ *   tax reversal 825 → FULL refund 11325  → amount_reversed 11325 (capped)
+ *   tax reversal 825 → refund 5000        → amount_reversed 5825
+ *   reversal 11000   → refund 5000        → amount_reversed 11325 (capped)
+ *
+ * So `refund.ts` needs no new error handling. What this suite must pin is the
+ * OTHER side of that arrangement: this code must never ask for more than the
+ * transfer has left, because that request DOES 400.
+ */
+describe('living beside a refund that reverses the transfer (AGL-1956)', () => {
+  it('never asks Stripe for more than the transfer has remaining', async () => {
+    // A refund already pulled back all but 300.
+    transferFixture = { ...transferFixture, amount_reversed: CHARGE_CENTS - 300 }
+
+    await deliver(STRIPE_TAX_INVOICE)
+
+    const asked = Number(
+      new URLSearchParams(
+        String((callsMatching('/reversals')[0][1] as any).body),
+      ).get('amount'),
+    )
+    expect(asked).toBe(300)
+    expect(asked).toBeLessThanOrEqual(300)
+  })
+
+  /**
+   * The measured cap restated as OUR invariant: whatever a refund has already
+   * taken, our reversal plus theirs can never exceed the transfer.
+   */
+  it('keeps total reversals within the transfer, whatever the refund took', async () => {
+    for (const alreadyReversed of [0, 500, 10500, CHARGE_CENTS]) {
+      docs.delete('hosts/host-1/subscriptions/sub_1/taxReversals/in_2')
+      docs.delete('hosts/host-1/subscriptions/sub_1/invoices/in_2')
+      fetchMock.mockClear()
+      reversalsAcceptedCents = 0
+      transferFixture = {
+        ...transferFixture,
+        amount_reversed: alreadyReversed,
+        reversals: { data: [] },
+      }
+
+      await deliver(STRIPE_TAX_INVOICE)
+
+      expect(alreadyReversed + reversedCents()).toBeLessThanOrEqual(CHARGE_CENTS)
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Failure
 // ---------------------------------------------------------------------------
 
@@ -804,13 +1037,16 @@ describe('when the reversal cannot be made (AGL-1956)', () => {
 
     await expect(deliver(STRIPE_TAX_INVOICE)).rejects.toThrow(/tax reversal/)
     expect(invoiceDocs()).toHaveLength(1)
-    expect(markerDoc()).toBeUndefined()
+    // The claim must be RELEASED, not left held — the redelivery Stripe sends
+    // IS the retry, and a row that still looks busy would turn it away.
+    expect(markerDoc()).toMatchObject({ status: 'retrying', inFlightAtMs: null })
+    expect(markerDoc().reversedCents).toBeUndefined()
   })
 
   /**
    * INSUFFICIENT BALANCE is neither transient nor final: it is money Aglyn
-   * owes a state and does not have. `reversedCents` is left UNSET so a later
-   * delivery re-attempts, the shortfall is recorded, and staff are told.
+   * owes a state and does not have. The claim is RELEASED so a later delivery
+   * re-attempts under a fresh key, the shortfall is recorded, staff are told.
    */
   it('leaves an insufficient-balance failure retryable, recorded and visible', async () => {
     reversalStatus = 400
@@ -823,14 +1059,17 @@ describe('when the reversal cannot be made (AGL-1956)', () => {
     expect(markerDoc()).toMatchObject({
       status: 'insufficient',
       owedCents: TAX_CENTS,
-      attempts: 1,
+      attempt: 1,
+      inFlightAtMs: null,
     })
-    // The claim is NOT set, which is what makes the next delivery try again.
-    expect(markerDoc().reversedCents).toBeNull()
+    // Never settled, which is what makes the next delivery try again.
+    expect(markerDoc().reversedCents).toBeUndefined()
     expect(staffNotifications).toHaveLength(1)
     expect(String(staffNotifications[0].body)).toContain('$8.25')
 
-    // And it really does try again.
+    // And it really does try again — under a DIFFERENT key, which is the only
+    // thing that lets Stripe execute it at all (measured: a replayed key
+    // returns the stored 4xx, and a changed body under it is refused).
     reversalStatus = 200
     reversalErrorBody = null
     await deliver(STRIPE_TAX_INVOICE, 'invoice.payment_succeeded')
@@ -838,8 +1077,17 @@ describe('when the reversal cannot be made (AGL-1956)', () => {
     expect(markerDoc()).toMatchObject({
       status: 'reversed',
       reversedCents: TAX_CENTS,
-      attempts: 2,
+      attempt: 2,
     })
+    const keys = callsMatching('/reversals').map(
+      (call) => (call[1] as any).headers['Idempotency-Key'],
+    )
+    expect(keys).toEqual([
+      'subscription-tax-reversal-in_2-1',
+      'subscription-tax-reversal-in_2-2',
+    ])
+    expect(new Set(keys).size).toBe(2)
+    expect(reversedCents()).toBe(TAX_CENTS)
   })
 
   /**

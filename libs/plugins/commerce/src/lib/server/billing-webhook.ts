@@ -1128,11 +1128,43 @@ async function chargeSubscriptionFeeOnItemsOnly(
  *    and the record being written. The reversal carries
  *    `metadata[aglynTaxInvoiceId]`, so the next delivery finds it and ADOPTS
  *    it rather than creating a second one.
- * 3. **A deterministic `Idempotency-Key`** derived from the invoice id, so
- *    even a delivery that raced past both reads is handed Stripe's stored
- *    response instead of moving money again. Note this one EXPIRES (Stripe
- *    drops keys after 24h) and a redelivery can arrive days later, so it is
- *    the backstop and never the primary guard.
+ * 3. **A per-ATTEMPT `Idempotency-Key`**, `…-{invoiceId}-{attempt}`, so a
+ *    duplicate of the SAME attempt is handed Stripe's stored response instead
+ *    of moving money again.
+ *
+ * ## Why the key carries an attempt number — MEASURED, and it contradicts the docs
+ *
+ * The key used to be `…-{invoiceId}` alone. Measured in test mode against the
+ * live API, that is a permanent dead end for retries:
+ *
+ *   - a reversal refused with 400 is **stored** under the key, and replaying
+ *     the same request returns the same 400 with `Idempotent-Replayed: true`
+ *     (`tr_3U7rqHDYHP4psn7h3M8c405O`);
+ *   - retrying the same key with a CORRECTED body is refused outright with
+ *     `idempotency_error` — "Keys for idempotent requests can only be used
+ *     with the same parameters" — and the transfer stayed at
+ *     `amount_reversed=0`.
+ *
+ * Stripe's documentation says results are only saved once an endpoint has
+ * begun executing and that validation failures are not saved. The observation
+ * disagrees, and the observation is what ships. With a fixed key, a reversal
+ * that failed once could NEVER succeed, and Aglyn would silently keep owing a
+ * state money it never clawed back — a worse failure than the double-reversal
+ * the key was defending against.
+ *
+ * So the key varies per attempt and the no-double-reversal guarantee moves
+ * entirely onto guards 1 and 2, which do not depend on Stripe at all:
+ *
+ *   - two deliveries racing cannot both act, because the in-flight claim is
+ *     taken in a TRANSACTION and only one can win it;
+ *   - a delivery that crashed mid-flight releases its claim by staleness, and
+ *     the next one finds its reversal on the transfer by metadata and ADOPTS
+ *     it rather than creating a second.
+ *
+ * Guard 2 is therefore load-bearing rather than a nicety. The reversal
+ * metadata was confirmed to round-trip on `GET /v1/transfers/{id}`
+ * (`trr_1U7rrQDYHP4psn7ha7jtjgzj`), and the embedded `reversals` list is
+ * re-read in full when Stripe says it has more.
  *
  * The marker doc is deliberately NOT the invoice document. `invoices/{id}`
  * existing IS the ledger's idempotency key, and a merge-set against a missing
@@ -1170,15 +1202,21 @@ async function reverseSubscriptionTaxToPlatform(
   const markerRef = subscriptionRef.collection('taxReversals').doc(invoiceId)
 
   /**
+   * How long an in-flight claim is honoured before a later delivery may take
+   * it over. A webhook handler that has not finished inside this has died;
+   * guard 2 is what makes the takeover safe.
+   */
+  const CLAIM_STALE_MS = 10 * 60_000
+
+  /**
    * Settles this invoice's reversal step exactly once.
    *
-   * `reversedCents` is the claim: present — 0 included — means settled, and
-   * every later delivery returns before touching Stripe. `null` deliberately
-   * does NOT settle, which is how the insufficient-balance case stays
-   * retryable while still being on the books.
+   * `reversedCents` present — 0 included — means settled, and every later
+   * delivery returns before touching Stripe. The in-flight claim is dropped in
+   * the same write so a settled row never looks busy.
    */
   const settle = async (
-    reversedCents: number | null,
+    reversedCents: number,
     fields: Record<string, unknown>,
   ): Promise<boolean> =>
     firebaseAdmin
@@ -1187,25 +1225,72 @@ async function reverseSubscriptionTaxToPlatform(
       .runTransaction(async (transaction) => {
         const fresh = await transaction.get(markerRef)
         if (fresh.exists && fresh.get('reversedCents') != null) return false
-        // `strictNullChecks` is off repo-wide, so a malformed stored counter
-        // would sail through as `NaN` and Firestore rejects NaN outright —
-        // which would turn a recoverable retry into a lost record.
-        const priorAttempts = Number(fresh.get('attempts') ?? 0)
         transaction.set(
           markerRef,
           {
             invoiceId,
             hostId,
             reversedCents,
-            attempts:
-              (Number.isFinite(priorAttempts) ? Math.max(0, priorAttempts) : 0) +
-              1,
+            inFlightAtMs: null,
             settledAtMs: Date.now(),
             ...fields,
           },
           { merge: true },
         )
         return true
+      })
+
+  /**
+   * Gives the claim back WITHOUT settling, so the next delivery takes a fresh
+   * attempt number and therefore a fresh idempotency key. This is the whole
+   * retry mechanism: a transient refusal and an insufficient destination
+   * balance both land here.
+   */
+  const release = async (fields: Record<string, unknown> = {}) => {
+    await markerRef
+      .set({ invoiceId, hostId, inFlightAtMs: null, ...fields }, { merge: true })
+      .catch(() => undefined)
+  }
+
+  /**
+   * Takes the in-flight claim, or answers 0 when this delivery must stand
+   * down. Only one of two racing deliveries can win the transaction, which is
+   * what stops both of them reversing.
+   */
+  const claim = async (taxCents: number): Promise<number> =>
+    firebaseAdmin
+      .app()
+      .firestore()
+      .runTransaction(async (transaction) => {
+        const fresh = await transaction.get(markerRef)
+        if (fresh.exists) {
+          if (fresh.get('reversedCents') != null) return 0
+          const inFlight = Number(fresh.get('inFlightAtMs') ?? 0)
+          if (
+            Number.isFinite(inFlight) &&
+            inFlight > 0 &&
+            Date.now() - inFlight < CLAIM_STALE_MS
+          ) {
+            return 0
+          }
+        }
+        // `strictNullChecks` is off repo-wide, so a malformed stored counter
+        // would sail through as `NaN`, poison the idempotency key and be
+        // rejected by Firestore. Guarded rather than trusted.
+        const prior = Number(fresh.get('attempt') ?? 0)
+        const attempt = (Number.isFinite(prior) ? Math.max(0, prior) : 0) + 1
+        transaction.set(
+          markerRef,
+          {
+            invoiceId,
+            hostId,
+            taxCents,
+            attempt,
+            inFlightAtMs: Date.now(),
+          },
+          { merge: true },
+        )
+        return attempt
       })
 
   if (decision.kind === 'unreadable') {
@@ -1230,11 +1315,6 @@ async function reverseSubscriptionTaxToPlatform(
   }
 
   const taxCents = decision.taxCents
-  // The pre-read. Every ordinary redelivery stops here, before any Stripe call.
-  const existingMarker = await markerRef.get().catch(() => null)
-  if (existingMarker?.exists && existingMarker.get('reversedCents') != null) {
-    return
-  }
 
   const stripeKey = process.env.STRIPE_SECRET_KEY
   if (!stripeKey) {
@@ -1245,166 +1325,212 @@ async function reverseSubscriptionTaxToPlatform(
     return
   }
 
-  const chargeId = await resolveInvoiceChargeId(invoice, stripeKey)
-  if (!chargeId) {
-    // A taxed invoice settled entirely from a customer credit balance raises
-    // no charge, so there is no transfer and nothing to pull back.
-    console.error(
-      'Subscription tax not reversed: the invoice names no charge (AGL-1956)',
-      { hostId, invoiceId },
-    )
-    await settle(0, { status: 'no-charge', taxCents })
-    return
+  // GUARD 1. Every ordinary redelivery stops here, before any Stripe call, and
+  // two racing deliveries cannot both get past it.
+  const attempt = await claim(taxCents)
+  if (!attempt) return
+  try {
+    await runReversal(attempt)
+  } catch (error) {
+    // The claim must not outlive a failed attempt, or the redelivery Stripe
+    // sends — which IS the retry — would find the row busy and stand down.
+    await release({ status: 'retrying', taxCents, owedCents: taxCents })
+    throw error
   }
-  const charge = await stripeGet(
-    `https://api.stripe.com/v1/charges/${encodeURIComponent(chargeId)}`,
-    stripeKey,
-  )
-  if (!charge.ok) {
-    if (isTransientStripeStatus(charge.status)) {
-      throw new Error(
-        `Stripe charge read failed (${charge.status}) for invoice ${invoiceId} (AGL-1956)`,
+  return
+
+  async function runReversal(attemptNumber: number): Promise<void> {
+    const chargeId = await resolveInvoiceChargeId(invoice, stripeKey)
+    if (!chargeId) {
+      // A taxed invoice settled entirely from a customer credit balance raises
+      // no charge, so there is no transfer and nothing to pull back.
+      console.error(
+        'Subscription tax not reversed: the invoice names no charge (AGL-1956)',
+        { hostId, invoiceId },
       )
+      await settle(0, { status: 'no-charge', taxCents })
+      return
     }
-    console.error(
-      'Subscription tax not reversed: Stripe refused the charge read (AGL-1956)',
-      { hostId, invoiceId, chargeId, error: charge.body?.error },
+    const charge = await stripeGet(
+      `https://api.stripe.com/v1/charges/${encodeURIComponent(chargeId)}`,
+      stripeKey,
     )
-    await settle(0, { status: 'charge-unreadable', taxCents })
-    return
-  }
-  const transferId = String(charge.body?.transfer ?? '')
-  if (!transferId) {
-    // No transfer means nothing was ever handed to the merchant — the tax is
-    // already sitting on the platform balance.
-    await settle(0, { status: 'no-transfer', taxCents, chargeId })
-    return
-  }
-  const transfer = await stripeGet(
-    `https://api.stripe.com/v1/transfers/${encodeURIComponent(transferId)}`,
-    stripeKey,
-  )
-  if (!transfer.ok) {
-    if (isTransientStripeStatus(transfer.status)) {
-      throw new Error(
-        `Stripe transfer read failed (${transfer.status}) for invoice ${invoiceId} (AGL-1956)`,
+    if (!charge.ok) {
+      if (isTransientStripeStatus(charge.status)) {
+        throw new Error(
+          `Stripe charge read failed (${charge.status}) for invoice ${invoiceId} (AGL-1956)`,
+        )
+      }
+      console.error(
+        'Subscription tax not reversed: Stripe refused the charge read (AGL-1956)',
+        { hostId, invoiceId, chargeId, error: charge.body?.error },
       )
+      await settle(0, { status: 'charge-unreadable', taxCents })
+      return
     }
-    console.error(
-      'Subscription tax not reversed: Stripe refused the transfer read (AGL-1956)',
-      { hostId, invoiceId, transferId, error: transfer.body?.error },
+    const transferId = String(charge.body?.transfer ?? '')
+    if (!transferId) {
+      // No transfer means nothing was ever handed to the merchant — the tax is
+      // already sitting on the platform balance.
+      await settle(0, { status: 'no-transfer', taxCents, chargeId })
+      return
+    }
+    const transfer = await stripeGet(
+      `https://api.stripe.com/v1/transfers/${encodeURIComponent(transferId)}`,
+      stripeKey,
     )
-    await settle(0, { status: 'transfer-unreadable', taxCents })
-    return
-  }
-  // Guard 2 — the crash window. A previous delivery's POST landed and its
-  // record did not; adopt it rather than reversing the tax a second time.
-  const adopted = ((transfer.body?.reversals?.data ?? []) as any[]).find(
-    (item) => String(item?.metadata?.aglynTaxInvoiceId ?? '') === invoiceId,
-  )
-  if (adopted) {
-    const adoptedCents = Math.max(0, Math.round(Number(adopted.amount ?? 0)))
-    await settle(adoptedCents, {
+    if (!transfer.ok) {
+      if (isTransientStripeStatus(transfer.status)) {
+        throw new Error(
+          `Stripe transfer read failed (${transfer.status}) for invoice ${invoiceId} (AGL-1956)`,
+        )
+      }
+      console.error(
+        'Subscription tax not reversed: Stripe refused the transfer read (AGL-1956)',
+        { hostId, invoiceId, transferId, error: transfer.body?.error },
+      )
+      await settle(0, { status: 'transfer-unreadable', taxCents })
+      return
+    }
+    // GUARD 2 — the crash window, and LOAD-BEARING now that the idempotency key
+    // varies per attempt. A previous attempt's POST landed and its record did
+    // not; adopt it rather than reversing the tax a second time.
+    //
+    // The embedded list is capped (Stripe returns the first 10), so a transfer
+    // carrying more reversals than that is re-read in full. Missing an existing
+    // reversal here would double-reverse, which is the one outcome this whole
+    // function is built to prevent — worth the extra call in the rare case.
+    let reversalList = (transfer.body?.reversals?.data ?? []) as any[]
+    if (transfer.body?.reversals?.has_more === true) {
+      const full = await stripeGet(
+        `https://api.stripe.com/v1/transfers/${encodeURIComponent(
+          transferId,
+        )}/reversals?limit=100`,
+        stripeKey,
+      )
+      if (!full.ok) {
+        // Unknown is NOT "none": proceeding here could create a second reversal.
+        throw new Error(
+          `Stripe reversal list read failed (${full.status}) for invoice ${invoiceId} (AGL-1956)`,
+        )
+      }
+      reversalList = (full.body?.data ?? []) as any[]
+    }
+    const adopted = reversalList.find(
+      (item) => String(item?.metadata?.aglynTaxInvoiceId ?? '') === invoiceId,
+    )
+    if (adopted) {
+      const adoptedCents = Math.max(0, Math.round(Number(adopted.amount ?? 0)))
+      await settle(adoptedCents, {
+        status: 'reversed',
+        taxCents,
+        transferId,
+        reversalId: String(adopted.id ?? ''),
+        adopted: true,
+        ...(adoptedCents < taxCents
+          ? { owedCents: taxCents - adoptedCents }
+          : {}),
+      })
+      return
+    }
+    const transferCents = Math.max(0, Math.round(Number(transfer.body?.amount ?? 0)))
+    const alreadyReversedCents = Math.max(
+      0,
+      Math.round(Number(transfer.body?.amount_reversed ?? 0)),
+    )
+    const remainingCents = Math.max(0, transferCents - alreadyReversedCents)
+    const reverseCents = Math.min(taxCents, remainingCents)
+    if (!(reverseCents > 0)) {
+      // Nothing left on the transfer — a refund with `reverse_transfer` got here
+      // first. The money is back on the platform balance either way; what Aglyn
+      // must NOT do is call this settled without saying so.
+      console.error(
+        'Subscription tax not reversed: the transfer has nothing left (AGL-1956)',
+        { hostId, invoiceId, transferId, transferCents, alreadyReversedCents },
+      )
+      await settle(0, {
+        status: 'nothing-left',
+        taxCents,
+        transferId,
+        owedCents: taxCents,
+      })
+      return
+    }
+    const response = await fetch(
+      `https://api.stripe.com/v1/transfers/${encodeURIComponent(
+        transferId,
+      )}/reversals`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${stripeKey}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+          // GUARD 3, per ATTEMPT. Stripe stores a 4xx under the key and replays
+          // it (measured — see the note on this function), so a key fixed on the
+          // invoice alone would make a once-failed reversal permanently
+          // unretryable. The attempt number comes from the claim above, so two
+          // racing deliveries still cannot both reach this line.
+          'Idempotency-Key': `subscription-tax-reversal-${invoiceId}-${attemptNumber}`,
+        },
+        body: new URLSearchParams({
+          amount: String(reverseCents),
+          'metadata[aglynTaxInvoiceId]': invoiceId,
+          'metadata[hostId]': hostId,
+        }).toString(),
+      },
+    ).catch(() => null)
+    const body = response ? await response.json().catch(() => null) : null
+    if (!response || !response.ok) {
+      if (!response || isTransientStripeStatus(response.status)) {
+        throw new Error(
+          `Stripe refused the subscription tax reversal for invoice ${invoiceId} ` +
+            `(${response ? response.status : 'network'}) (AGL-1956)`,
+        )
+      }
+      // THE ONE THAT IS NEITHER TRANSIENT NOR FINAL. An insufficient destination
+      // balance is money Aglyn owes a state and does not have, so it must stay
+      // retryable: the claim is RELEASED rather than settled, and the next
+      // delivery takes attempt+1 — a fresh idempotency key, which is the only
+      // thing that lets Stripe execute it at all.
+      const insufficient = String(body?.error?.code ?? '') === 'balance_insufficient'
+      console.error(
+        'Stripe refused the subscription tax reversal (AGL-1956)',
+        { hostId, invoiceId, transferId, reverseCents, error: body?.error },
+      )
+      const failureFields = {
+        taxCents,
+        transferId,
+        owedCents: taxCents,
+        reason: String(body?.error?.message ?? ''),
+      }
+      if (insufficient) {
+        await release({ status: 'insufficient', ...failureFields })
+      } else {
+        await settle(0, { status: 'refused', ...failureFields })
+      }
+      void notifyStaff({
+        type: 'system.announcement',
+        title: 'A subscription sales-tax reversal failed',
+        body:
+          `$${(taxCents / 100).toFixed(2)} of sales tax on invoice ${invoiceId} ` +
+          `is still with the merchant and Aglyn owes it. ` +
+          (insufficient
+            ? 'The connected account had insufficient balance; this will retry.'
+            : `Stripe refused: ${String(body?.error?.message ?? 'no reason given')}`),
+      }).catch(() => undefined)
+      return
+    }
+    const reversedCents = Math.max(0, Math.round(Number(body?.amount ?? reverseCents)))
+    await settle(reversedCents, {
       status: 'reversed',
       taxCents,
       transferId,
-      reversalId: String(adopted.id ?? ''),
-      adopted: true,
-      ...(adoptedCents < taxCents
-        ? { owedCents: taxCents - adoptedCents }
-        : {}),
+      reversalId: String(body?.id ?? ''),
+      // A transfer that could only give back part of the tax. Recorded so the
+      // shortfall is a number somebody can query, not a rounding nobody sees.
+      ...(reversedCents < taxCents ? { owedCents: taxCents - reversedCents } : {}),
     })
-    return
   }
-  const transferCents = Math.max(0, Math.round(Number(transfer.body?.amount ?? 0)))
-  const alreadyReversedCents = Math.max(
-    0,
-    Math.round(Number(transfer.body?.amount_reversed ?? 0)),
-  )
-  const remainingCents = Math.max(0, transferCents - alreadyReversedCents)
-  const reverseCents = Math.min(taxCents, remainingCents)
-  if (!(reverseCents > 0)) {
-    // Nothing left on the transfer — a refund with `reverse_transfer` got here
-    // first. The money is back on the platform balance either way; what Aglyn
-    // must NOT do is call this settled without saying so.
-    console.error(
-      'Subscription tax not reversed: the transfer has nothing left (AGL-1956)',
-      { hostId, invoiceId, transferId, transferCents, alreadyReversedCents },
-    )
-    await settle(0, {
-      status: 'nothing-left',
-      taxCents,
-      transferId,
-      owedCents: taxCents,
-    })
-    return
-  }
-  const response = await fetch(
-    `https://api.stripe.com/v1/transfers/${encodeURIComponent(
-      transferId,
-    )}/reversals`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${stripeKey}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-        // Guard 3. Deterministic on the invoice id and NOTHING else — not the
-        // amount, not an attempt counter — because a key that varies is a key
-        // that lets a racing delivery reverse a second time.
-        'Idempotency-Key': `subscription-tax-reversal-${invoiceId}`,
-      },
-      body: new URLSearchParams({
-        amount: String(reverseCents),
-        'metadata[aglynTaxInvoiceId]': invoiceId,
-        'metadata[hostId]': hostId,
-      }).toString(),
-    },
-  ).catch(() => null)
-  const body = response ? await response.json().catch(() => null) : null
-  if (!response || !response.ok) {
-    if (!response || isTransientStripeStatus(response.status)) {
-      throw new Error(
-        `Stripe refused the subscription tax reversal for invoice ${invoiceId} ` +
-          `(${response ? response.status : 'network'}) (AGL-1956)`,
-      )
-    }
-    // THE ONE THAT IS NEITHER TRANSIENT NOR FINAL. `reversedCents` is left
-    // unset on purpose, so this stays claimable and every later delivery
-    // re-attempts it.
-    const insufficient = String(body?.error?.code ?? '') === 'balance_insufficient'
-    console.error(
-      'Stripe refused the subscription tax reversal (AGL-1956)',
-      { hostId, invoiceId, transferId, reverseCents, error: body?.error },
-    )
-    await settle(insufficient ? null : 0, {
-      status: insufficient ? 'insufficient' : 'refused',
-      taxCents,
-      transferId,
-      owedCents: taxCents,
-      reason: String(body?.error?.message ?? ''),
-    })
-    void notifyStaff({
-      type: 'system.announcement',
-      title: 'A subscription sales-tax reversal failed',
-      body:
-        `$${(taxCents / 100).toFixed(2)} of sales tax on invoice ${invoiceId} ` +
-        `is still with the merchant and Aglyn owes it. ` +
-        (insufficient
-          ? 'The connected account had insufficient balance; this will retry.'
-          : `Stripe refused: ${String(body?.error?.message ?? 'no reason given')}`),
-    }).catch(() => undefined)
-    return
-  }
-  const reversedCents = Math.max(0, Math.round(Number(body?.amount ?? reverseCents)))
-  await settle(reversedCents, {
-    status: 'reversed',
-    taxCents,
-    transferId,
-    reversalId: String(body?.id ?? ''),
-    // A transfer that could only give back part of the tax. Recorded so the
-    // shortfall is a number somebody can query, not a rounding nobody sees.
-    ...(reversedCents < taxCents ? { owedCents: taxCents - reversedCents } : {}),
-  })
 }
 
 /**
