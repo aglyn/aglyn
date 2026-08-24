@@ -694,6 +694,100 @@ export function projectRoom(
   return { entries, people: [...people.values()], ownOtherSessions }
 }
 
+/** What one projection commits into React state. */
+export type RoomProjection = ReturnType<typeof projectRoom>
+
+/**
+ * Commit a projection only when it DIFFERS from the one already on screen
+ * (AGL-2486).
+ *
+ * ## The runaway this exists to stop
+ *
+ * Zach, 2026-08-24, in the besigner on a marketing screen — not a warning, a
+ * React bail-out:
+ *
+ *   Maximum update depth exceeded.
+ *     at usePresence.useEffect.project      (use-presence.ts, setEntries)
+ *     at usePresence.useEffect.unsubscribe  (the room onValue callback)
+ *     at usePresence.useEffect.clearCursor  (the update() that withdraws a cursor)
+ *     at usePresence.useEffect.onMove       (a pointermove)
+ *
+ * Read that stack from the bottom: a pointer move called `clearCursor`, which
+ * called `update()`, and the room's `onValue` ran **inside that call** —
+ * `eventQueueRaiseQueuedEventsMatchingPredicate` in `@firebase/database`
+ * "synchronously raises all events" for a changed path, and a local write is
+ * applied optimistically before the server ever answers. So every write this
+ * tab makes re-enters its own room listener in the same stack frame.
+ *
+ * That alone would be survivable. What made it a loop is that `project()` then
+ * called three `setState`s with FRESHLY ALLOCATED arrays, unconditionally —
+ * so a write of our own re-rendered the entire besigner tree even though the
+ * projection could not possibly have changed. And it provably could not:
+ * `projectRoom` SKIPS this tab's own session — see the `TAB_SESSION_ID` guard
+ * in its second pass — so nothing this tab writes about itself, not a cursor
+ * position, not a cursor withdrawal, not a heartbeat's `lastSeenAt`, reaches
+ * the output at all.
+ *
+ * The pump ran at three rates at once: the cursor broadcast (up to ~16/s while
+ * the pointer moves), `clearCursor` (unthrottled — `onMove` only stamps its
+ * throttle on the path that WRITES a position), and the 20 s heartbeat. Dense
+ * enough, and React's nested-update counter passes 50 and gives up.
+ *
+ * ## Why a content key rather than dropping a dependency
+ *
+ * Removing the state from the effect, or silencing the lint rule, would trade
+ * a visible loop for a stale closure. The defect is one of IDENTITY: equal
+ * content arriving as a new array. So the bail-out is on content — React's own
+ * `Object.is` bail-out then does the rest, because an unchanged projection
+ * keeps the previous array instance.
+ *
+ * `JSON.stringify` over the whole projection rather than a hand-listed field
+ * set, deliberately. A list of "the fields the UI draws" goes blind the moment
+ * somebody draws one more, and the failure mode of THAT is an overlay that
+ * silently stops updating — far worse than the cost of stringifying a handful
+ * of small objects at most ~16 times a second. Every error here is a FALSE
+ * NEGATIVE: a spurious commit costs one render, never a missed one.
+ *
+ * A peer's own heartbeat still commits, because a peer's `lastSeenAt` really is
+ * part of the projection. That is one render per peer per 20 s, which is noise
+ * next to their cursor traffic and is not what any of this is about.
+ */
+export function createRoomProjector(
+  uid: string,
+  commit: (projected: RoomProjection) => void,
+): {
+  /** Returns whether this projection was committed. */
+  project: (
+    room: Record<string, Record<string, PresenceEntry> | PresenceEntry>,
+    now: number,
+  ) => boolean
+  /**
+   * Forget what is on screen.
+   *
+   * Called wherever something OTHER than a projection writes the presence
+   * state — the room refusal below blanks it — because the next projection
+   * would otherwise be compared against a screen that no longer shows it and
+   * skipped. `null` rather than `''`, since a real key is never empty and an
+   * empty room must still be able to commit.
+   */
+  reset: () => void
+} {
+  let committed: string | null = null
+  return {
+    project(room, now) {
+      const projected = projectRoom(room, uid, now)
+      const key = JSON.stringify(projected)
+      if (key === committed) return false
+      committed = key
+      commit(projected)
+      return true
+    },
+    reset() {
+      committed = null
+    },
+  }
+}
+
 /**
  * Pointer moves are cheap to generate and expensive to broadcast.
  *
@@ -1338,12 +1432,15 @@ export function usePresence(options: {
     // sitting in a room nobody is writing to produces no snapshot, so a
     // purely event-driven projection would leave it on screen forever.
     let lastRoom: Record<string, Record<string, PresenceEntry>> = {}
-    const project = () => {
-      const projected = projectRoom(lastRoom, uid, Date.now())
+    // Commits only what CHANGED — see `createRoomProjector` for the runaway
+    // this closes, and for why the bail-out is on content rather than on a
+    // dependency list.
+    const projector = createRoomProjector(uid, (projected) => {
       setEntries(projected.entries)
       setPeople(projected.people)
       setOwnOtherSessions(projected.ownOtherSessions)
-    }
+    })
+    const project = () => projector.project(lastRoom, Date.now())
 
     const unsubscribe = onValue(
       ref(database, roomPath),
@@ -1414,6 +1511,9 @@ export function usePresence(options: {
         setEntries([])
         setPeople([])
         setOwnOtherSessions(0)
+        // The screen no longer shows a projection, so the next one must
+        // commit even if it is identical to the last one that did.
+        projector.reset()
       },
     )
 
