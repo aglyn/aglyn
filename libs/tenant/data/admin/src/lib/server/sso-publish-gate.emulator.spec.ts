@@ -25,10 +25,14 @@
  *
  * `publishSsoDomains` is the ONLY writer of the top-level `ssoDomains`
  * collection, and a live `ssoDomains/{domain}` doc is what routes that
- * domain's sign-ins to an org's IdP. One line carries the whole invariant:
+ * domain's sign-ins to an org's IdP. One line carries the whole invariant —
+ * as of AGL-1887 it admits on TWO positive markers and no third:
  *
  *   const claim = await claimRef(orgId, domain).get()
- *   if (!claim.exists || claim.get('verified') !== true) continue
+ *   if (!claim.exists) continue
+ *   const proven =
+ *     claim.get('verified') === true ||
+ *     isStaffAttestedClaim(claim.get('attestedBy'))
  *
  * Delete that line before AGL-1912 and every suite in the repo still passed.
  * The token side of domain verification is well covered by
@@ -57,6 +61,24 @@
  * regression that wrote the doc and forgot to push the name would be invisible
  * to the return value alone. The routing doc is the thing sign-in reads.
  *
+ * ## The attested half (AGL-1887)
+ *
+ * AGL-1887 added a SECOND way to be proven — a staff attestation, for the orgs
+ * onboarded before self-serve domain verification existed — and for a while
+ * this suite could not see it. Measured, not assumed: deleting the whole
+ * `|| isStaffAttestedClaim(...)` clause left all six original cases green,
+ * because every fixture here was either verified or unverified and none was
+ * attested. The unit suite `sso-attested-restore.spec.ts` covered the branch
+ * against doubles; nothing covered it against Firestore.
+ *
+ * That distinction is the entire reason this file exists. `attestedBy` is read
+ * with `claim.get('attestedBy')`, and on a real snapshot an absent field comes
+ * back `undefined` while a double may hand back `null`, `''`, or a getter that
+ * throws — and `strictNullChecks` is OFF repo-wide, so an absent attestation
+ * folds to falsy with no type error to catch a mistake either way. The cases
+ * below pin both directions against the real thing: an attested claim
+ * publishes, and an attestation that is not a non-empty string does not.
+ *
  * Skipped unless FIRESTORE_EMULATOR_HOST is set. Start the emulator
  * (`npm run firebase:emulate`), then:
  *
@@ -80,12 +102,23 @@ const UNVERIFIED_DOMAIN = 'unverified.sso-publish-gate-fixture.com'
 const TRUTHY_DOMAIN = 'truthy.sso-publish-gate-fixture.com'
 const OTHER_ORGS_DOMAIN = 'other-org.sso-publish-gate-fixture.com'
 
+/** Never DNS-proven, but a named staff member vouched for it (AGL-1887). */
+const ATTESTED_DOMAIN = 'attested.sso-publish-gate-fixture.com'
+/** An `attestedBy` of whitespace — present, and worth nothing. */
+const BLANK_ATTESTATION_DOMAIN = 'blank-attestation.sso-publish-gate-fixture.com'
+/** An `attestedBy` that is truthy but names nobody. */
+const NONSTRING_ATTESTATION_DOMAIN =
+  'nonstring-attestation.sso-publish-gate-fixture.com'
+
 const ALL_DOMAINS = [
   VERIFIED_DOMAIN,
   MISSING_CLAIM_DOMAIN,
   UNVERIFIED_DOMAIN,
   TRUTHY_DOMAIN,
   OTHER_ORGS_DOMAIN,
+  ATTESTED_DOMAIN,
+  BLANK_ATTESTATION_DOMAIN,
+  NONSTRING_ATTESTATION_DOMAIN,
 ]
 
 if (EMULATED && !getApps().length) {
@@ -154,6 +187,34 @@ describeEmulated('the SSO publish gate refuses an unproven domain (AGL-1912)', (
       token: 'fixture-token',
       verified: true,
     })
+    // AGL-1887, the shape the pre-self-serve orgs are in: no token and no DNS
+    // proof, because domain verification did not exist when they were
+    // onboarded — just a staff member on record saying they checked. Seeded
+    // with `verified: false` EXPLICITLY rather than omitted, so this fixture
+    // cannot publish by accident through the `verified` clause; the only route
+    // to a green here is the attestation clause.
+    await claim(ORG, ATTESTED_DOMAIN).set({
+      domain: ATTESTED_DOMAIN,
+      verified: false,
+      attestedBy: 'staff-uid-fixture',
+      attestationNote: 'ownership confirmed out of band',
+    })
+    // Present but empty. `isStaffAttestedClaim` trims before measuring, and
+    // this is what proves the trim is load-bearing rather than decorative.
+    await claim(ORG, BLANK_ATTESTATION_DOMAIN).set({
+      domain: BLANK_ATTESTATION_DOMAIN,
+      verified: false,
+      attestedBy: '   ',
+    })
+    // Truthy, and names nobody. The attestation's whole value is that it is
+    // ATTRIBUTABLE, so a check relaxed to `!!attestedBy` — which reads as
+    // equivalent — would accept this and publish a domain no person vouched
+    // for. The mirror of the `verified: 'true'` case above.
+    await claim(ORG, NONSTRING_ATTESTATION_DOMAIN).set({
+      domain: NONSTRING_ATTESTATION_DOMAIN,
+      verified: false,
+      attestedBy: true,
+    })
     // MISSING_CLAIM_DOMAIN gets no claim document at all, on purpose.
   }, 60_000)
 
@@ -216,6 +277,50 @@ describeEmulated('the SSO publish gate refuses an unproven domain (AGL-1912)', (
     // (org, domain) pair would hand it over.
     expect(await publish(ORG, OTHER_ORGS_DOMAIN)).toEqual([])
     const doc = await db.collection('ssoDomains').doc(OTHER_ORGS_DOMAIN).get()
+    expect(doc.exists).toBe(false)
+  }, 60_000)
+
+  it('THE ATTESTED CONTROL: a staff-attested claim publishes without DNS (AGL-1887)', async () => {
+    // The admit half of AGL-1887, against real Firestore. Deleting the
+    // `|| isStaffAttestedClaim(...)` clause reddens exactly this case and
+    // nothing else in the file — which is the coverage that was missing.
+    expect(await publish(ORG, ATTESTED_DOMAIN)).toEqual([ATTESTED_DOMAIN])
+    const doc = await db.collection('ssoDomains').doc(ATTESTED_DOMAIN).get()
+    expect(doc.exists).toBe(true)
+    expect(doc.get('orgId')).toBe(ORG)
+    expect(doc.get('active')).toBe(true)
+
+    // The attestation is a MARKER, not a voucher that gets spent: the claim
+    // still says `verified: false` afterwards, and publishing did not quietly
+    // promote it. An implementation that collapsed the two facts would make an
+    // attested domain indistinguishable from a DNS-proven one in the data.
+    const claim = await db
+      .collection('orgs')
+      .doc(ORG)
+      .collection('ssoDomains')
+      .doc(ATTESTED_DOMAIN)
+      .get()
+    expect(claim.get('verified')).toBe(false)
+    expect(claim.get('attestedBy')).toBe('staff-uid-fixture')
+  }, 60_000)
+
+  it('refuses an attestation that is blank, and writes nothing', async () => {
+    expect(await publish(ORG, BLANK_ATTESTATION_DOMAIN)).toEqual([])
+    const doc = await db
+      .collection('ssoDomains')
+      .doc(BLANK_ATTESTATION_DOMAIN)
+      .get()
+    expect(doc.exists).toBe(false)
+  }, 60_000)
+
+  it('refuses an attestation that is truthy but names nobody', async () => {
+    // The widening this issue forbids, in its most plausible form: relaxing
+    // the marker to `!!attestedBy` reddens this case.
+    expect(await publish(ORG, NONSTRING_ATTESTATION_DOMAIN)).toEqual([])
+    const doc = await db
+      .collection('ssoDomains')
+      .doc(NONSTRING_ATTESTATION_DOMAIN)
+      .get()
     expect(doc.exists).toBe(false)
   }, 60_000)
 
