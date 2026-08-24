@@ -256,6 +256,14 @@ export const GridItems = forwardRef<any, GridItemsProps>((props, ref) => {
               // Without this a flex column refuses to shrink below its content's
               // intrinsic width and the grid track overflows with it.
               minWidth: 0,
+              // An item whose children rendered NOTHING must not leave a gap.
+              // A plugin widget slot renders an empty fragment when no plugin
+              // is entitled for it, and the wrapper it leaves behind is still
+              // a flex child — so the column's `gap` is applied on both sides
+              // of a zero-height box, drawing a hole exactly where the absent
+              // card was. `:empty` is exact: the wrapper has no element and no
+              // text node in that case and only in that case.
+              '& > *:empty': { display: 'none' },
             }}
           >
             {column.entries.map(({ item, index }) => {
