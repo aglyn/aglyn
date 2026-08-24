@@ -124,8 +124,12 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
     () => mergeOrgBillingOverOrg(orgDoc as Record<string, unknown>, orgBilling),
     [orgDoc, orgBilling],
   )
-  const { permissions, can, loaded: permissionsLoaded } =
-    useOrgPermissions()
+  const {
+    permissions,
+    can,
+    loaded: permissionsLoaded,
+    errored: permissionsErrored,
+  } = useOrgPermissions()
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
   const { confirm } = useConfirmationContext()
@@ -848,6 +852,19 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
           <Alert severity="warning">
             {'You do not have permission to view billing for this ' +
               'organization — ask an organization admin for access.'}
+          </Alert>
+        ) : permissionsErrored ? (
+          // The member read FAILED (AGL-243 residual). Until this fix the
+          // `catch` published `loaded: true` over an untouched `ALL_GRANTED`,
+          // so this page took the else-branch below and painted the whole
+          // ledger to whoever was looking. The hold is now the default, and
+          // this branch exists so the hold is not a spinner that never stops:
+          // it states what is unknown WITHOUT accusing the reader of lacking
+          // access, because that is precisely what we failed to determine.
+          <Alert severity="error">
+            {"We couldn't confirm your access to billing for this " +
+              'organization. Reload the page — if this keeps happening, ' +
+              'contact support.'}
           </Alert>
         ) : !permissionsLoaded || !orgReady ? (
           // AGL-1422. Of every surface in the console this is the one that
