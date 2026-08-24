@@ -198,6 +198,9 @@ jest.mock('@aglyn/aglyn/server', () => ({
   Route: { MANAGE_BILLING: 'MANAGE_BILLING', ADMIN_OVERVIEW: 'ADMIN_OVERVIEW' },
   // THE REAL classifier, ledger and write observer. Stubbing any of the
   // three would make this whole suite an assertion about a test double.
+  classifyDeliveryLag: jest.requireActual(
+    '@aglyn/aglyn/app-utils/webhook-delivery',
+  ).classifyDeliveryLag,
   classifyWebhookDelivery: jest.requireActual(
     '@aglyn/aglyn/app-utils/webhook-delivery',
   ).classifyWebhookDelivery,

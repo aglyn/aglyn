@@ -314,6 +314,147 @@ export function classifyWebhookDelivery(input: {
 }
 
 /**
+ * How long after Stripe CREATES an event its first delivery attempt may
+ * plausibly take to reach us, in seconds. Mirrors `RETRY_LAG_SECONDS` in
+ * `tools/scripts/lib/stripe-webhook-health.mjs`, under the same
+ * read-the-`.mjs`-as-text drift guard as the lists above.
+ *
+ * Calibrated against the live account on 2026-08-18: the five deliveries that
+ * succeeded first time landed in 1.0–3.7s; the one that did not —
+ * `evt_1U49XtDYHP4psn7hA9VHPnZz`, whose three 400s ARE the three failures the
+ * Stripe Dashboard was showing — landed 16,665s (4h 37m) late. Two minutes
+ * sits three orders of magnitude clear of the healthy band and still inside
+ * Stripe's first automatic retry interval, so it separates the two without
+ * straddling either.
+ */
+export const RETRY_LAG_SECONDS = 120
+
+/**
+ * What a delivery's lag says about the attempts BEFORE it.
+ *
+ * `unknown` is a first-class outcome, not a synonym for either answer. See
+ * {@link classifyDeliveryLag} for why that matters more here than usual.
+ */
+export type WebhookDeliveryAttempt = 'first-attempt' | 'retried' | 'unknown'
+
+/** Why {@link classifyDeliveryLag} answered as it did. */
+export type WebhookDeliveryLagReason =
+  | 'measured'
+  | 'created-absent'
+  | 'created-not-a-number'
+  | 'created-non-positive'
+  | 'received-unusable'
+  | 'clock-skew'
+
+export interface WebhookDeliveryLagVerdict {
+  attempt: WebhookDeliveryAttempt
+  /** Seconds between `event.created` and our claim. Null unless `measured`. */
+  lagSeconds: number | null
+  reason: WebhookDeliveryLagReason
+}
+
+/**
+ * DID THIS DELIVERY ONLY LAND ON A RETRY? (AGL-2039, the last arm of AGL-1948)
+ *
+ * ## The reconciliation this exists to close
+ *
+ * `/api/health/billing` scores EVENTS and `GET /v1/events?delivery_success=false`
+ * is a TERMINAL-state filter: it selects events that are still pending or
+ * failed EVERY attempt. An event that 400s three times and then succeeds on
+ * the fourth reads back `delivery_success: true` and is, to that filter,
+ * indistinguishable from one that succeeded immediately. The Stripe Dashboard
+ * scores delivery ATTEMPTS, so the same hour reads 0% here and 30% there —
+ * and both numbers are right. The three real failures were visible only in
+ * the second reading, and each was a mirror that did not run when it should
+ * have.
+ *
+ * The recoverable half of the attempt history is in our own data. The route
+ * claims `stripeEvents/{id}` AFTER signature verification and DELETES the
+ * claim when a handler throws, so the stamp always records the attempt that
+ * actually got through. The distance from `event.created` to that stamp is
+ * the delivery lag, and a lag of minutes means an earlier attempt failed.
+ *
+ * ## Why this is decided at WRITE time, not at read time
+ *
+ * The obvious implementation reads `receivedAt` off every claim document in
+ * the window and subtracts. That turns a `.count()` aggregation — one
+ * integer, zero documents read — into a document scan on a PUBLIC,
+ * unauthenticated health endpoint polled every five minutes. Deciding here,
+ * once, at the moment of the claim, lets the probe stay an aggregation over a
+ * marker field, exactly like AGL-1954's `inertAtMs`.
+ *
+ * ## Absent, zero and unknown are THREE different things
+ *
+ * `strictNullChecks` is off repo-wide, so an absent `created` folds to falsy
+ * and a naive `Number(event?.created ?? 0)` yields 0 — which subtracts to a
+ * lag of ~1.7 BILLION seconds and reports every such delivery as a retry,
+ * forever, on a perfectly healthy webhook. A monitoring signal that reds on
+ * its own missing input is worse than no signal, because it is the thing that
+ * gets muted. So each of those inputs is rejected by name:
+ *
+ * | input                       | attempt    | reason                  |
+ * |-----------------------------|------------|-------------------------|
+ * | field absent / null         | `unknown`  | `created-absent`        |
+ * | a string, NaN, Infinity     | `unknown`  | `created-not-a-number`  |
+ * | `0` or negative             | `unknown`  | `created-non-positive`  |
+ * | our own stamp unusable      | `unknown`  | `received-unusable`     |
+ * | created in the FUTURE by more than the bar | `unknown` | `clock-skew` |
+ *
+ * A lag between `-threshold` and `+threshold` is `first-attempt`: sub-second
+ * clock skew between Stripe's clock and ours is ordinary and is not evidence
+ * of anything.
+ *
+ * Pure: no clock, no I/O. The caller supplies both timestamps.
+ */
+export function classifyDeliveryLag(input: {
+  /** `event.created`, in unix SECONDS, exactly as Stripe sent it. */
+  eventCreatedSeconds: unknown
+  /** When we claimed the event, in unix MILLISECONDS. */
+  receivedAtMs: unknown
+  /** Overridable so the spec can prove the rule rather than the constant. */
+  thresholdSeconds?: number
+}): WebhookDeliveryLagVerdict {
+  const threshold = input.thresholdSeconds ?? RETRY_LAG_SECONDS
+  const created = input.eventCreatedSeconds
+  if (created === undefined || created === null) {
+    return { attempt: 'unknown', lagSeconds: null, reason: 'created-absent' }
+  }
+  if (typeof created !== 'number' || !Number.isFinite(created)) {
+    return {
+      attempt: 'unknown',
+      lagSeconds: null,
+      reason: 'created-not-a-number',
+    }
+  }
+  // Zero is the value an absent field folds to under the repo's null rules,
+  // and no Stripe event was created at the epoch. Rejected by name so it can
+  // never be mistaken for a measurement.
+  if (created <= 0) {
+    return {
+      attempt: 'unknown',
+      lagSeconds: null,
+      reason: 'created-non-positive',
+    }
+  }
+  const received = input.receivedAtMs
+  if (typeof received !== 'number' || !Number.isFinite(received) || received <= 0) {
+    return { attempt: 'unknown', lagSeconds: null, reason: 'received-unusable' }
+  }
+  const lagSeconds = received / 1000 - created
+  // An event stamped in OUR future by more than the threshold is a clock
+  // disagreement, not a fast delivery, and reporting it as a healthy first
+  // attempt would be an answer we cannot support.
+  if (lagSeconds < -threshold) {
+    return { attempt: 'unknown', lagSeconds: null, reason: 'clock-skew' }
+  }
+  return {
+    attempt: lagSeconds > threshold ? 'retried' : 'first-attempt',
+    lagSeconds,
+    reason: 'measured',
+  }
+}
+
+/**
  * Which required events is a destination NOT subscribed to? (AGL-1948)
  *
  * The same blind spot from the configuration side, and the cheaper half of

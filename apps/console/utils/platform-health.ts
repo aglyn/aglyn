@@ -77,9 +77,9 @@ export const HEALTH_PROBES: readonly HealthProbeDescriptor[] = [
     path: '/api/health/billing',
     auth: 'public',
     meaning:
-      'Stripe still has an enabled destination for us, subscribed to every event we need, whose deliveries land AND actually move something — plus the separate Connect destination that carries connected-account events. Degraded means Stripe is trying to tell us about money and it is not getting through — subscriptions, refunds and entitlements stop moving while checkout keeps taking payments, or connected merchants keep selling on a charge-eligibility flag that stopped being refreshed.',
+      'Stripe still has an enabled destination for us, subscribed to every event we need, whose deliveries land ON THE FIRST ATTEMPT and actually move something — plus the separate Connect destination that carries connected-account events. Degraded means Stripe is trying to tell us about money and it is not getting through — subscriptions, refunds and entitlements stop moving while checkout keeps taking payments, or connected merchants keep selling on a charge-eligibility flag that stopped being refreshed.',
     remedy:
-      'Read the code. endpoint-missing / endpoint-disabled is a Stripe dashboard fix. events-unsubscribed names the exact event that fell off the destination — `npm run setup:stripe` re-adds it (this is the AGL-1798 shape: no failed delivery, no error, just silence). deliveries-failing is ours (signature, a rolled secret). handlers-inert is the worst one and the least obvious: deliveries ARE landing and answering 200, and the handler is doing nothing with them — check what stopped being registered, then read the `inert: true` events in stripeEvents for the ids and types. connect-endpoint-missing / connect-endpoint-disabled / connect-events-unsubscribed are the SECOND destination, not the one above: connected-account events are delivered only to a destination created with `connect: true`, so without it `syncConnectAccountStatus` never runs and a merchant whose Stripe account got restricted keeps selling until a shopper meets the failure at payment. `npm run setup:stripe` creates it — note `connect: true` is settable only at creation, so a wrong one must be deleted, not edited. Run `npm run audit:stripe-webhook` for the full join. A quiet window with no events is healthy, not blind — this never keys on the absence of deliveries.',
+      'Read the code. endpoint-missing / endpoint-disabled is a Stripe dashboard fix. events-unsubscribed names the exact event that fell off the destination — `npm run setup:stripe` re-adds it (this is the AGL-1798 shape: no failed delivery, no error, just silence). deliveries-failing is ours (signature, a rolled secret). deliveries-retried means the deliveries DID land — on a second or later attempt, so earlier ones failed and every event-scored count above reads a healthy zero; this is the only arm that sees what the Stripe Dashboard error rate sees, so read the `retriedAtMs` events in stripeEvents for the ids, types and lag, and check what was failing at that hour (a deploy, a cold start, a rolled secret half-applied). handlers-inert is the worst one and the least obvious: deliveries ARE landing and answering 200, and the handler is doing nothing with them — check what stopped being registered, then read the `inert: true` events in stripeEvents for the ids and types. connect-endpoint-missing / connect-endpoint-disabled / connect-events-unsubscribed are the SECOND destination, not the one above: connected-account events are delivered only to a destination created with `connect: true`, so without it `syncConnectAccountStatus` never runs and a merchant whose Stripe account got restricted keeps selling until a shopper meets the failure at payment. `npm run setup:stripe` creates it — note `connect: true` is settable only at creation, so a wrong one must be deleted, not edited. Run `npm run audit:stripe-webhook` for the full join. A quiet window with no events is healthy, not blind — this never keys on the absence of deliveries.',
   },
   {
     id: 'errorBeacon',
@@ -244,6 +244,24 @@ function checkFacts(name: string, check: Record<string, unknown>): string[] {
     )
   } else if ('inert' in check) {
     facts.push('could not tell whether deliveries did anything')
+  }
+  /*==========================================
+   * THE ATTEMPTS THE EVENT COUNTS CANNOT SEE, WORDED (AGL-2039).
+   *
+   * `undelivered: 0` sits directly above this line and means "no event failed
+   * EVERY attempt". A reader takes that as "no failures", which is how
+   * AGL-1906's 0.00% got quoted against the Stripe Dashboard's 30%. So this
+   * line says attempts, out loud, next to it.
+   *=========================================*/
+  const retried = num(check['retried'])
+  if (retried !== null) {
+    facts.push(
+      retried === 0
+        ? 'every delivery landed on its first attempt'
+        : `${retried} deliver${retried === 1 ? 'y' : 'ies'} only landed on a RETRY — earlier attempts failed`,
+    )
+  } else if ('retried' in check) {
+    facts.push('could not tell whether any delivery needed a retry')
   }
   const unsubscribed = check['unsubscribedEvents']
   if (Array.isArray(unsubscribed)) {

@@ -29,6 +29,7 @@ import { after } from 'next/server'
 // classifier separates "moved nothing" from "correctly moved nothing".
 import {
   buildRoute,
+  classifyDeliveryLag,
   classifyWebhookDelivery,
   createWebhookEffectLedger,
   observeWrites,
@@ -294,8 +295,62 @@ async function handler(request: Request): Promise<Response> {
         .doc(eventId)
     : null
   if (eventRef) {
+    /*==========================================
+     * DID THIS DELIVERY ONLY LAND ON A RETRY? (AGL-2039 / AGL-1948)
+     *
+     * The last blind spot in the billing alarm, and the one that made
+     * AGL-1906's "0.00% error rate" read as a flat contradiction of the
+     * Stripe Dashboard's 30%. Neither was wrong: `delivery_success=false` is
+     * a TERMINAL-state filter over EVENTS, so an event that 400s three times
+     * and then succeeds is a clean `true`; the Dashboard's denominator is
+     * delivery ATTEMPTS, and it counted the three. The three were AGL-1551.
+     *
+     * The attempt history is recoverable from our own side exactly once: the
+     * claim below is written by the attempt that actually GOT THROUGH, so the
+     * distance from `event.created` to now IS the delivery lag, and a lag of
+     * minutes means earlier attempts failed. Decided HERE rather than by the
+     * health probe reading `receivedAt` off every claim in the window, because
+     * that would turn a `.count()` aggregation on a public unauthenticated
+     * endpoint into a document scan. Same trade as `inertAtMs` (AGL-1954):
+     * decide once at write time, aggregate a marker field at read time.
+     *
+     * `retriedAtMs` is a SEPARATE numeric field for the same reason
+     * `inertAtMs` is — the `processed` aggregation ranges over `receivedAt`,
+     * and a marker sharing that field would inflate the count beside it. A
+     * range on one field is served by the automatic single-field index, so
+     * this needs no `firebase-firestore.indexes.json` change.
+     *
+     * `classifyDeliveryLag` answers `unknown` — and stamps NOTHING — for an
+     * absent, zero or non-numeric `created`. That is load-bearing:
+     * `strictNullChecks` is off, so `event?.created ?? 0` would subtract to a
+     * lag of ~1.7 billion seconds and mark every delivery a retry forever.
+     *=========================================*/
+    const receivedAt = new Date()
+    const lag = classifyDeliveryLag({
+      eventCreatedSeconds: event?.created,
+      receivedAtMs: receivedAt.getTime(),
+    })
+    if (lag.attempt === 'retried') {
+      console.warn(
+        '[billing/webhook] a delivery only landed on a RETRY — earlier attempt(s) failed',
+        { eventId, type, lagSeconds: Math.round(lag.lagSeconds) },
+      )
+    }
     try {
-      await eventRef.create({ type, receivedAt: new Date() })
+      await eventRef.create({
+        type,
+        receivedAt,
+        // Present ONLY on a delivery measured as late, so an ordinary claim
+        // stays `{ type, receivedAt }` and the two aggregations cannot
+        // contaminate each other.
+        ...(lag.attempt === 'retried'
+          ? {
+              retriedAtMs: receivedAt.getTime(),
+              retriedType: type,
+              deliveryLagSeconds: Math.round(lag.lagSeconds),
+            }
+          : {}),
+      })
     } catch {
       // A held claim from a PARTIAL failure is not an ordinary duplicate
       // (AGL-2157): it means an earlier delivery of this event ran side

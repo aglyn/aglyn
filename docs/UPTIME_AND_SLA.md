@@ -475,8 +475,33 @@ Notes that keep these honest:
   AGL-1798 shape, and the quietest of them: Stripe simply stops sending that
   one, so there is no failed delivery to count and every other number reads a
   perfectly healthy zero), when a delivery **landed, answered 200 and moved
-  nothing** (`handlers-inert`, AGL-1954), or when the census
-  could not be taken at all (`stripe-unavailable`; unknown is never a pass).
+  nothing** (`handlers-inert`, AGL-1954), when a delivery **only landed on a
+  retry** (`deliveries-retried`, AGL-2039), when the separate **Connect**
+  destination is absent, disabled or has lost `account.updated`
+  (`connect-endpoint-missing` / `connect-endpoint-disabled` /
+  `connect-events-unsubscribed`, AGL-2122 — a second destination sharing the
+  same URL, told apart only by its `aglyn_scope=connect` metadata stamp,
+  without which `syncConnectAccountStatus` never runs and a restricted
+  merchant keeps selling on a stale `stripeChargesEnabled`), or when the
+  census could not be taken at all (`stripe-unavailable`; unknown is never a
+  pass).
+  `deliveries-retried` is the arm that reconciles this check with the Stripe
+  Dashboard. `delivery_success=false` is a **terminal-state** filter over
+  EVENTS: an event that 400s three times and then succeeds on the fourth reads
+  back clean, so it is zero in `undelivered`, present in `processed` and zero
+  in `inert` — every number here describes a healthy hour while three real
+  attempts failed. The Dashboard's denominator is delivery **attempts**, which
+  is why AGL-1906 reported 0.00% over the same window the Dashboard showed 30%
+  for and both figures were correct; the three attempts it could not see were
+  AGL-1551's. The webhook now decides lateness at claim time — the distance
+  from `event.created` to the claim written by the attempt that actually got
+  through — and stamps `retriedAtMs` past 120 seconds, calibrated against a
+  measured healthy band of 1.0–3.7s and the AGL-1551 event's 16,665s. Deciding
+  it at write time is what keeps the probe a `.count()` aggregation rather
+  than a document scan on a public endpoint. An absent, zero or non-numeric
+  `created` stamps **nothing**: `strictNullChecks` is off repo-wide, so
+  folding it to zero would read as a 56-year lag and red this check
+  permanently on its own missing input.
   `handlers-inert` is the one that closes the last blind spot in this check:
   Stripe scores the status code, so a handler that drops the work silently
   keeps `delivery_success` true and `undelivered` at zero. The webhook now

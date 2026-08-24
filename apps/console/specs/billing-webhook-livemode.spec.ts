@@ -203,6 +203,9 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // The route's "did this delivery do anything" verdict is the thing under
   // test in `billing-webhook-inert.spec.ts`, and a hand-written double here
   // would let this suite keep passing while the real rule changed under it.
+  classifyDeliveryLag: jest.requireActual(
+    '@aglyn/aglyn/app-utils/webhook-delivery',
+  ).classifyDeliveryLag,
   classifyWebhookDelivery: jest.requireActual(
     '@aglyn/aglyn/app-utils/webhook-delivery',
   ).classifyWebhookDelivery,
