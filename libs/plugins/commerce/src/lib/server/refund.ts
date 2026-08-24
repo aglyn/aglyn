@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
+import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { createHash } from 'crypto'
 import { recordContactRefund } from './contact-refund'
 import { flagOrderRestock } from './restock-flag'
@@ -180,9 +181,41 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
     if (!hostSnapshot.exists) {
       return res.status(404).json({ error: 'Unknown site' })
     }
+    // TWO CHECKS, and they answer different questions (AGL-2372).
+    //
+    // The first is the HOST-level fact the Firestore rules also enforce, and
+    // it stays: `memberRoles` is the projection the rules read, so dropping it
+    // here would let this route and the database disagree.
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
     if (memberRole !== 'admin') {
       return res.status(403).json({ error: 'Refunds require a site admin' })
+    }
+    // The second is WHOSE admin, and it is the one this gate was missing.
+    //
+    // `memberRoles` is a per-host projection of `hostAccess`, and
+    // `/api/hosts/members` will grant a SITE COLLABORATOR `admin` on one site
+    // (`hostAccess: { [hostId]: 'admin' }`, `allHosts: false`). That writes the
+    // literal string `'admin'` into `memberRoles[uid]` — byte-identical to an
+    // org owner's. So the check above cannot tell a contractor invited to run
+    // one microsite from the person who owns the business, and refunding is
+    // money leaving that business.
+    //
+    // `orgWide` is the discriminator, and it needs no new role: it is
+    // `isOrgWideMember` (AGL-1026) — owner/admin of the org, an explicit
+    // `allHosts` member, or the legacy pre-`allHosts` shape — and it is false
+    // for every scoped collaborator. Same pairing `pos-order.ts` uses.
+    //
+    // BOTH halves are required. `hostRole` is re-tested rather than assumed
+    // from `memberRole`: an org-wide member can still be scoped down to
+    // `editor` on this host, and `resolveOrgPermissions` is the resolver that
+    // knows it. It fails CLOSED on a lookup error when a host is named
+    // (AGL-506), and `denied()` returns `orgWide: false` / `hostRole: null`,
+    // so an absent membership refuses rather than folding to permitted.
+    const membership = await resolveOrgPermissions(decoded.uid, { hostId })
+    if (!membership.orgWide || membership.hostRole !== 'admin') {
+      return res
+        .status(403)
+        .json({ error: 'Refunds require an admin of the whole workspace' })
     }
     const orderRef = hostRef.collection('orders').doc(orderId)
     const orderSnapshot = await orderRef.get()
