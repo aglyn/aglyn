@@ -672,7 +672,7 @@ export const collectionEntriesSchema: Aglyn.ComponentSchema<CollectionEntriesPro
     displayName: 'Collection Entries',
     description: 'Repeats its children once per entry in a content collection.',
     category: Aglyn.ComponentCategory.DATA_DISPLAY,
-    icon: { path: mdiPostOutline.path, sx: { color: '#00796b' } },
+    icon: { path: mdiPostOutline.path, sx: { color: 'secondary.main' } },
     attributes: [
       {
         name: 'collectionSlug',
@@ -1061,7 +1061,7 @@ export const collectionEntryBodySchema: Aglyn.ComponentSchema<CollectionEntryBod
     displayName: 'Entry Body',
     description: "The current entry's markdown body, on an entry template.",
     category: Aglyn.ComponentCategory.TEXT,
-    icon: { path: mdiTextLong.path, sx: { color: '#00796b' } },
+    icon: { path: mdiTextLong.path, sx: { color: 'secondary.main' } },
     flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
     attributes: [
       {
@@ -1306,7 +1306,7 @@ export const collectionRelatedSchema: Aglyn.ComponentSchema<CollectionRelatedPro
     displayName: 'Related Posts',
     description: "Other entries sharing this one's category or tags.",
     category: Aglyn.ComponentCategory.DATA_DISPLAY,
-    icon: { path: mdiNewspaperVariantOutline.path, sx: { color: '#00796b' } },
+    icon: { path: mdiNewspaperVariantOutline.path, sx: { color: 'secondary.main' } },
     flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
     attributes: [
       {
@@ -1463,7 +1463,7 @@ export const collectionShareSchema: Aglyn.ComponentSchema<CollectionShareProps> 
     displayName: 'Share Bar',
     description: 'Share buttons for the current page, plus a copy link.',
     category: Aglyn.ComponentCategory.NAVIGATION,
-    icon: { path: mdiShareVariant.path, sx: { color: '#00796b' } },
+    icon: { path: mdiShareVariant.path, sx: { color: 'secondary.main' } },
     flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
     attributes: [
       {
@@ -1675,7 +1675,7 @@ export const collectionEntryMetaSchema: Aglyn.ComponentSchema<CollectionEntryMet
     description:
       'The byline row for an entry — author, date, category and tags.',
     category: Aglyn.ComponentCategory.TEXT,
-    icon: { path: mdiTagOutline.path, sx: { color: '#00796b' } },
+    icon: { path: mdiTagOutline.path, sx: { color: 'secondary.main' } },
     flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
     attributes: [
       {
@@ -1883,7 +1883,7 @@ export const collectionCategoriesSchema: Aglyn.ComponentSchema<CollectionCategor
     displayName: 'Category Pills',
     description: 'A pill per collection category, each filtering the listing.',
     category: Aglyn.ComponentCategory.NAVIGATION,
-    icon: { path: mdiTagMultipleOutline.path, sx: { color: '#00796b' } },
+    icon: { path: mdiTagMultipleOutline.path, sx: { color: 'secondary.main' } },
     flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
     attributes: [
       {
@@ -2031,7 +2031,7 @@ export const collectionSearchSchema: Aglyn.ComponentSchema<CollectionSearchProps
     description:
       'A search box for a content collection, with a suggestions dropdown.',
     category: Aglyn.ComponentCategory.NAVIGATION,
-    icon: { path: mdiMagnify.path, sx: { color: '#00796b' } },
+    icon: { path: mdiMagnify.path, sx: { color: 'secondary.main' } },
     flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
     attributes: [
       {
@@ -2084,7 +2084,7 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
       'Repeats a card (title, date, excerpt, Read more) per published ' +
       'entry of a content collection',
     category: Aglyn.ComponentCategory.BLOCKS,
-    icon: { path: mdiPostOutline.path, sx: { color: '#00796b' } },
+    icon: { path: mdiPostOutline.path, sx: { color: 'secondary.main' } },
     data: {
       $id: null,
       componentId: ENTRIES_ID,
@@ -2125,7 +2125,7 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
     pluginId: BUNDLE_ID,
     description: "Renders the current entry's markdown body, themed",
     category: Aglyn.ComponentCategory.TEXT,
-    icon: { path: mdiTextLong.path, sx: { color: '#00796b' } },
+    icon: { path: mdiTextLong.path, sx: { color: 'secondary.main' } },
     data: {
       $id: null,
       componentId: ENTRY_BODY_ID,
@@ -2141,7 +2141,7 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
     description:
       "Other entries sharing the current entry's category or tags",
     category: Aglyn.ComponentCategory.DATA_DISPLAY,
-    icon: { path: mdiNewspaperVariantOutline.path, sx: { color: '#00796b' } },
+    icon: { path: mdiNewspaperVariantOutline.path, sx: { color: 'secondary.main' } },
     data: {
       $id: null,
       componentId: RELATED_ID,
@@ -2160,7 +2160,7 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
     pluginId: BUNDLE_ID,
     description: 'X, LinkedIn, Facebook, and copy-link buttons for the page',
     category: Aglyn.ComponentCategory.NAVIGATION,
-    icon: { path: mdiShareVariant.path, sx: { color: '#00796b' } },
+    icon: { path: mdiShareVariant.path, sx: { color: 'secondary.main' } },
     data: {
       $id: null,
       componentId: SHARE_ID,
@@ -2176,7 +2176,7 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
     description:
       "Links to each of the collection's categories, filtering the listing",
     category: Aglyn.ComponentCategory.NAVIGATION,
-    icon: { path: mdiTagMultipleOutline.path, sx: { color: '#00796b' } },
+    icon: { path: mdiTagMultipleOutline.path, sx: { color: 'secondary.main' } },
     data: {
       $id: null,
       componentId: CATEGORIES_ID,
@@ -2194,7 +2194,7 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
     pluginId: BUNDLE_ID,
     description: 'Author · date · category line with tag chips for the entry',
     category: Aglyn.ComponentCategory.TEXT,
-    icon: { path: mdiTagOutline.path, sx: { color: '#00796b' } },
+    icon: { path: mdiTagOutline.path, sx: { color: 'secondary.main' } },
     data: {
       $id: null,
       componentId: ENTRY_META_ID,
