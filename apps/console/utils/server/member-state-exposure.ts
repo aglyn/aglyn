@@ -218,8 +218,32 @@ export interface SubjectCountrySignals {
   declaredCountry?: string | null
   /** `platformRevenue.customerAddress.country` — Stripe billing address. */
   billingCountry?: string | null
+  /**
+   * The declared countries of **every** org this person belongs to (AGL-2008).
+   *
+   * A uid is a member of arbitrarily many orgs — that is a designed feature,
+   * not an edge case: an agency sits in 50+ workspaces (AGL-2336) and a
+   * contractor added to ten client workspaces owns none of them. So "the
+   * user's org" is not a thing, and picking one of them is a coin flip.
+   * Disagreement here resolves to `ambiguous` exactly as it does for sign-in.
+   */
+  declaredCountries?: readonly (string | null | undefined)[]
+  /** The billing countries of every org this person belongs to. */
+  billingCountries?: readonly (string | null | undefined)[]
   /** Trailing tokens of `users/{uid}/devices.location`, one per device. */
   signInCountries?: readonly (string | null | undefined)[]
+}
+
+/** The distinct, valid alpha-2 codes in a set of raw signals. */
+function distinctCountries(
+  values: readonly (string | null | undefined)[],
+): string[] {
+  const seen = new Set<string>()
+  for (const value of values) {
+    const code = normaliseCountry(value)
+    if (code) seen.add(code)
+  }
+  return [...seen]
 }
 
 export interface ResolvedSubjectCountry {
@@ -240,25 +264,50 @@ export interface ResolvedSubjectCountry {
 export function resolveSubjectCountry(
   signals: SubjectCountrySignals,
 ): ResolvedSubjectCountry {
-  const declared = normaliseCountry(signals?.declaredCountry)
-  if (declared) return { country: declared, provenance: 'declared' }
-
-  const billing = normaliseCountry(signals?.billingCountry)
-  if (billing) return { country: billing, provenance: 'billing' }
-
-  const seen = new Set<string>()
-  for (const value of signals?.signInCountries ?? []) {
-    const code = normaliseCountry(value)
-    if (code) seen.add(code)
+  // Each tier is a SET, and a tier that disagrees with itself refuses rather
+  // than picks. Two orgs billing to different countries is the same kind of
+  // evidence as two sign-ins from different countries: not evidence for
+  // either. This used to apply only to sign-in, so an arbitrary one of a
+  // contractor's client orgs silently outranked their own device history.
+  const declared = distinctCountries([
+    signals?.declaredCountry,
+    ...(signals?.declaredCountries ?? []),
+  ])
+  if (declared.length === 1) {
+    return { country: declared[0], provenance: 'declared' }
   }
-  if (seen.size === 1) {
-    return { country: [...seen][0], provenance: 'sign-in-ip' }
-  }
-  if (seen.size > 1) {
+  if (declared.length > 1) {
     return {
       country: null,
       provenance: 'ambiguous',
-      candidates: [...seen].sort(),
+      candidates: declared.sort(),
+    }
+  }
+
+  const billing = distinctCountries([
+    signals?.billingCountry,
+    ...(signals?.billingCountries ?? []),
+  ])
+  if (billing.length === 1) {
+    return { country: billing[0], provenance: 'billing' }
+  }
+  if (billing.length > 1) {
+    return {
+      country: null,
+      provenance: 'ambiguous',
+      candidates: billing.sort(),
+    }
+  }
+
+  const seen = distinctCountries(signals?.signInCountries ?? [])
+  if (seen.length === 1) {
+    return { country: seen[0], provenance: 'sign-in-ip' }
+  }
+  if (seen.length > 1) {
+    return {
+      country: null,
+      provenance: 'ambiguous',
+      candidates: seen.sort(),
     }
   }
   return { country: null, provenance: 'unknown' }

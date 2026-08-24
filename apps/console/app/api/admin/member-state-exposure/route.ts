@@ -119,7 +119,22 @@ async function handler(request: Request): Promise<Response> {
     // 2. Declared country per org, and each org's member uids.
     const orgSnap = await firestore.collection('orgs').limit(ORG_CAP).get()
     const declaredByOrg = new Map<string, string>()
-    const orgOfUser = new Map<string, string>()
+    // EVERY org a uid belongs to, not one of them (AGL-2008). A uid in more
+    // than one org is a designed case, not an edge one — an agency sits in
+    // 50+ workspaces (AGL-2336), and `free-workspace-cap.ts` says outright
+    // that "a contractor added to ten client workspaces owns none of them".
+    // This was a `Map<uid, orgId>` filled first-wins from inside the
+    // `Promise.all` below, so the org that won was decided by whichever
+    // subcollection read returned first: the same population could produce a
+    // different filing list on a second run, and a client org's billing
+    // address silently outranked the person's own sign-in history. Collect
+    // them all and let `resolveSubjectCountry` refuse when they disagree.
+    const orgsOfUser = new Map<string, Set<string>>()
+    const attribute = (uid: string, orgId: string) => {
+      const existing = orgsOfUser.get(uid)
+      if (existing) existing.add(orgId)
+      else orgsOfUser.set(uid, new Set([orgId]))
+    }
     for (const doc of orgSnap.docs) {
       const org = doc.data() as Record<string, unknown>
       const contact = org.contact as
@@ -131,18 +146,16 @@ async function handler(request: Request): Promise<Response> {
           : ''
       if (country) declaredByOrg.set(doc.id, country)
       const ownerUid = typeof org.ownerUid === 'string' ? org.ownerUid : ''
-      if (ownerUid) orgOfUser.set(ownerUid, doc.id)
+      if (ownerUid) attribute(ownerUid, doc.id)
     }
     // Members carry no country of their own, so a member is attributed to
-    // their org's country when they have no device of their own to speak for
-    // them. Reading the subcollection per org rather than a collection group,
-    // because `members` is also a name other trees use.
+    // their orgs' countries when they have no device of their own to speak
+    // for them. Reading the subcollection per org rather than a collection
+    // group, because `members` is also a name other trees use.
     await Promise.all(
       orgSnap.docs.map(async (orgDoc) => {
         const members = await orgDoc.ref.collection('members').get()
-        for (const member of members.docs) {
-          if (!orgOfUser.has(member.id)) orgOfUser.set(member.id, orgDoc.id)
-        }
+        for (const member of members.docs) attribute(member.id, orgDoc.id)
       }),
     )
 
@@ -159,11 +172,15 @@ async function handler(request: Request): Promise<Response> {
             ),
           )
           .filter(Boolean) as string[]
-        const orgId = orgOfUser.get(userDoc.id) ?? ''
+        const orgIds = [...(orgsOfUser.get(userDoc.id) ?? [])]
         subjects.push({
           id: userDoc.id,
-          declaredCountry: orgId ? declaredByOrg.get(orgId) : null,
-          billingCountry: orgId ? billingByOrg.get(orgId) : null,
+          declaredCountries: orgIds
+            .map((orgId) => declaredByOrg.get(orgId))
+            .filter(Boolean) as string[],
+          billingCountries: orgIds
+            .map((orgId) => billingByOrg.get(orgId))
+            .filter(Boolean) as string[],
           signInCountries,
         })
       }),
@@ -198,4 +215,17 @@ async function handler(request: Request): Promise<Response> {
 }
 
 export const dynamic = 'force-dynamic'
+/**
+ * The fan-out is real, so ask for the same window every other bulk staff route
+ * asks for (`run-erasures`, `backfill-scope`, `audit-archive`, all 60).
+ *
+ * Worst case at the caps above is ~7,000 Firestore round trips: one `orgs`
+ * page, one `users` page, one `platformRevenue` page, then a `members` get per
+ * org (≤2,000) and a `devices` get per user (≤5,000). This route shipped with
+ * no `maxDuration` at all, so it inherited the platform default — and a report
+ * that 504s is a report that fails at exactly the moment §3.3 of
+ * `BREACH_NOTIFICATION.md` sends someone to it, with the 72-hour clock running.
+ * A timeout here is indistinguishable from "we cannot say".
+ */
+export const maxDuration = 60
 export { handler as GET }

@@ -182,6 +182,27 @@ once before you ever need it so the shape of the answer is not a surprise:
 GET /api/admin/member-state-exposure      # staff claim required
 ```
 
+**How to actually call it, because there is no page for it.** Every other
+staff surface is a console page that mints its own token; this one is a route
+with no screen, so the token has to come from somewhere. Do not spend the
+clock discovering that — the route needs an **ID token**, not the session
+cookie, so a plain `curl` with your browser cookies returns `401`:
+
+1. Sign in to `https://app.aglyn.com` as a staff account.
+2. Open **Staff → Organizations** (`/admin/orgs`) with DevTools → **Network**
+   recording. Loading that page fires `GET /api/admin/orgs` carrying
+   `Authorization: Bearer <your staff ID token>` (`admin/orgs/page.tsx:88`).
+3. Right-click that request → **Copy → Copy as cURL**.
+4. Paste it, change the path to `/api/admin/member-state-exposure`, run it.
+
+The token is good for about an hour. A `401` means it expired — reload
+`/admin/orgs` and copy a fresh one. A `403` means the account has no `staff`
+claim. **Do this once cold**, today, not at hour one of an incident.
+
+⚠️ **`truncated: true` means the answer is a LOWER BOUND** and the buckets
+must not be filed from as though complete. Raise the caps in the route rather
+than reading past it.
+
 It returns one bucket per supervisory authority — the Member State, the
 authority's name, the filing URL — plus `unknown`, `ambiguous` and
 `outsideScope`. The buckets and those three **sum to the population**: nobody
@@ -212,7 +233,16 @@ purposes. Nothing is collected for this.
   to read off.
 * **Members have no country of their own.** `orgs/{orgId}/members/{uid}` has
   no address, phone or locale field, so a member is placed by their own
-  devices or by their org — never by anything they declared.
+  devices or by their orgs — never by anything they declared.
+* **A person in several orgs that disagree is `ambiguous`, not placed.** One
+  uid belongs to arbitrarily many orgs by design — an agency sits in 50+
+  workspaces (AGL-2336), and a contractor added to ten client workspaces owns
+  none of them. Where those orgs bill to different countries, that is not
+  evidence for any of them, so the report refuses in the same way it refuses
+  two disagreeing sign-ins. **Expect a visibly larger `ambiguous` count than
+  the number of people who travel** — agencies and contractors land there too,
+  and that is the honest answer rather than a filing built on whichever client
+  paid last.
 * **Site visitors and site members cannot be bucketed at all.** For those we
   are **processor**: the customer notifies, and their visitors' consent record
   carries a country that never leaves the visitor's own browser (AGL-1498).
