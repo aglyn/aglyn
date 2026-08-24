@@ -2269,9 +2269,14 @@ describe('who may ring a sale (AGL-2262)', () => {
   }
 
   it('refuses a role the projection could never have written', async () => {
-    // `HostAccessRole` is exactly admin | editor | viewer. Anything else is a
-    // legacy value, a typo, or a role someone adds later — and none of them
+    // A legacy value, a typo, or a role someone adds later — and none of them
     // is a decision to let that person take money.
+    //
+    // `manager` is on this list because it is the role people REACH for when
+    // they mean "the person who may override at the till" (AGL-2372), and it
+    // has never existed: `HostAccessRole` is `admin | editor | author |
+    // viewer`. Anyone building an elevated register control has to build it
+    // out of those four, or decide to mint a fifth.
     for (const role of ['manager', 'contributor', 'billing', 'member', '']) {
       const result = await postAs(role)
       expect(result.status).toBe(403)
@@ -2282,6 +2287,22 @@ describe('who may ring a sale (AGL-2262)', () => {
   it('still refuses a viewer and a stranger', async () => {
     expect((await postAs('viewer')).status).toBe(403)
     expect((await postAs(undefined)).status).toBe(403)
+    expect(orderDocs()).toHaveLength(0)
+  })
+
+  /**
+   * AND REFUSES AN `author`, which is a role the projection CAN produce.
+   *
+   * The cases above are all values `hostRoleFor` could never write, so they
+   * prove the allowlist rejects nonsense and nothing more. `author` (AGL-2334)
+   * arrived AFTER AGL-2262 closed, is grantable on any host through
+   * `/api/hosts/members`, and is admitted by the `!role || role === 'viewer'`
+   * denylist this route used to carry — so it is the one value that
+   * distinguishes the two forms on a role that really exists. An author edits
+   * content; taking cash and minting a card QR is not editing content.
+   */
+  it('refuses an author, a role that DOES exist and is not a cashier', async () => {
+    expect((await postAs('author')).status).toBe(403)
     expect(orderDocs()).toHaveLength(0)
   })
 
