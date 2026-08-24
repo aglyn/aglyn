@@ -29,8 +29,24 @@
  * exact numbers — the shape (retry, retry, terminal state) is what the code
  * branches on.
  */
-export const TEST_MODE_DUNNING_SCHEDULE = {
-  mode: 'test' as const,
+export interface DunningSchedule {
+  /**
+   * Which Stripe mode this describes. It is a field rather than a naming
+   * convention because the whole defect was numbers travelling without it.
+   */
+  mode: 'test' | 'live'
+  measuredOn: string
+  /** Payment attempts before Stripe gives up, including the first. */
+  attempts: number
+  /** Days from the failed renewal to the terminal state. */
+  cancelsAfterDays: number
+  smartRetries: boolean
+  terminalStatus: 'canceled' | 'unpaid' | 'past_due'
+  terminalReason: string | null
+}
+
+export const TEST_MODE_DUNNING_SCHEDULE: DunningSchedule = {
+  mode: 'test',
   measuredOn: '2026-08-19',
   /** Payment attempts before Stripe gives up, including the first. */
   attempts: 5,
@@ -49,46 +65,126 @@ export const TEST_MODE_DUNNING_SCHEDULE = {
 }
 
 /**
- * The live-mode schedule, as read on 2026-08-20.
+ * The live-mode schedule, read from the **live Dashboard by a human** on
+ * 2026-08-24 (Settings → Billing → Subscriptions and emails → Manage failed
+ * payments → Card payments → Cards → Manage):
  *
- * It is `null`, and that is a measurement rather than an omission. Two
- * independent read-only probes of the LIVE account
- * (`acct_1IzHQTDYHP4psn7h`) establish it:
+ *     ● Smart Retries    Retry up to 4 times within 3 weeks
+ *     ○ Custom retries
  *
- * 1. **No API surface exposes it.** `GET /v1/account` returns no field
- *    matching `dunning|retry|smart_retr` anywhere in its payload, and every
- *    plausible settings endpoint 404s with "Unrecognized request URL":
- *    `/v1/billing/settings`, `/v1/subscription_settings`,
- *    `/v1/billing/dunning`, `/v1/billing/retry_settings`,
- *    `/v1/account/settings`. (`/v1/billing_portal/configurations` does
- *    resolve, but it is the customer portal, not dunning.)
- * 2. **No live renewal has ever attempted a real charge**, so it cannot be
- *    inferred from an invoice either. The live account holds 3 invoices, all
- *    `paid`; the single `billing_reason: 'subscription_cycle'` one
- *    (`in_1U5qemDYHP4psn7hLzqzXuYc`, 2026-08-18) is **amount 0 with
- *    `attempt_count: 0`** — a zero-amount renewal that never touched a card.
- *    Of 1 live charge, 0 failed. Both live subscriptions are `canceled` with
- *    `cancellation_details.reason: 'cancellation_requested'` — voluntary, not
- *    dunning.
+ * so 1 initial attempt + 4 retries = 5 attempts across 3 weeks = 21 days,
+ * and "if all retries for a payment fail" is set to **cancel the
+ * subscription**. That is the same shape the test-mode clock drill measured,
+ * which is the good outcome — the divergence this issue was opened to catch
+ * did not happen.
  *
- * Reading it requires a human opening the **live** Dashboard at
- * Settings → Subscriptions and emails. Until someone does, nothing in the
- * product may state a live retry count, a live window length, or a live
- * terminal state as fact.
+ * ## HOW MUCH THIS IS WORTH, AND WHY THE CHECKER EXISTS
+ *
+ * **This value cannot be verified by the API, and it never could be.**
+ * Re-probed read-only on 2026-08-24 against a `sk_test_` key, reproducing
+ * the 2026-08-20 live probe exactly: `/v1/billing/settings`,
+ * `/v1/subscription_settings`, `/v1/billing/dunning`,
+ * `/v1/billing/retry_settings`, `/v1/account/settings` and
+ * `/v1/billing/configurations` all 404 "Unrecognized request URL", and
+ * `GET /v1/account` carries zero fields matching `dunning|retry|smart_retr`.
+ * The endpoint list is a property of the API, not of the mode, so a test-key
+ * 404 is evidence about live too.
+ *
+ * So this constant is a **transcription of a human reading a screen**, with
+ * no mechanism that would notice if someone changed that screen tomorrow.
+ * Treat it accordingly: it is the best available record, not a measurement
+ * the code can re-take. `tools/scripts/check-stripe-dunning-drift.mjs`
+ * exists because of that gap — it cannot read the setting either, so it
+ * instead watches the account's *behaviour* for anything this record would
+ * forbid, and re-probes whether Stripe has since shipped a config endpoint
+ * that would make the record checkable at last.
+ *
+ * ## THE OTHER LIVE-ONLY FACT WORTH KNOWING
+ *
+ * Nothing had ever exercised this in live: as of the 2026-08-20 audit the
+ * account had produced no failed live renewal at all, so there is no live
+ * observation behind these numbers either — only the Dashboard screen. The
+ * first real test of this record is a paying customer's card failing after
+ * 2026-09-01.
  */
-export const LIVE_MODE_DUNNING_SCHEDULE: typeof TEST_MODE_DUNNING_SCHEDULE | null =
-  null
+export const LIVE_MODE_DUNNING_SCHEDULE: DunningSchedule | null = {
+  mode: 'live',
+  measuredOn: '2026-08-24',
+  /** 1 initial attempt + the 4 Smart Retries the Dashboard names. */
+  attempts: 5,
+  /** "within 3 weeks". */
+  cancelsAfterDays: 21,
+  smartRetries: true,
+  /**
+   * "If all retries for a payment fail → **cancel the subscription**."
+   *
+   * It does NOT mark the subscription `unpaid`. So the auto-lock's
+   * `canceled` + `payment_failed` clause is the REACHABLE path in live and
+   * the `unpaid` banner branch is the secondary one — the opposite way round
+   * from the risk AGL-2430 was opened on.
+   */
+  terminalStatus: 'canceled' as const,
+  terminalReason: 'payment_failed' as const,
+}
 
 /**
- * Whether the product may quote a concrete retry window to a customer.
+ * The two neighbouring live settings read in the same pass, kept because
+ * each one changes which code path a delinquent customer takes.
  *
- * The console runs against the LIVE account, so the only schedule it is
- * entitled to describe is the live one. While that is unread this is `false`
- * and the dunning banner says what is true in every configuration — access
- * continues while Stripe retries — without naming a duration nobody here has
- * measured.
+ * Same provenance and same caveat as `LIVE_MODE_DUNNING_SCHEDULE`: a human
+ * read a screen, and nothing can re-read it.
+ */
+export const LIVE_MODE_DUNNING_NEIGHBOURS = {
+  readOn: '2026-08-24',
+  /**
+   * "Invoice status → **leave the invoice past-due**." The invoice is not
+   * voided when the subscription cancels, so the debt survives the
+   * cancellation and remains collectable.
+   */
+  invoiceAfterFinalRetry: 'leave-past-due' as const,
+  /**
+   * "If a dispute is opened → **leave the subscription past-due**." A
+   * chargeback therefore does NOT cancel; it parks the subscription in
+   * `past_due`, which is the banner's primary branch.
+   */
+  onDispute: 'leave-past-due' as const,
+  /** `Upcoming renewal events` fire 15 days before the renewal. */
+  upcomingRenewalNoticeDays: 15,
+}
+
+/**
+ * Whether anyone here has read the live schedule at all.
+ *
+ * Note what this does and does not license. It is `true` from 2026-08-24 —
+ * the Dashboard was opened and the numbers written down. It is NOT a
+ * statement that the numbers are still current, because nothing can check
+ * that; see `MAY_QUOTE_RETRY_WINDOW_IN_COPY` for the separate question of
+ * whether customer copy may repeat them.
  */
 export const LIVE_RETRY_WINDOW_IS_KNOWN = LIVE_MODE_DUNNING_SCHEDULE !== null
+
+/**
+ * Whether customer-facing copy may quote a concrete retry count or window.
+ *
+ * **`false`, deliberately, even though the window is now known.** These are
+ * two different questions and collapsing them is the mistake this constant
+ * exists to prevent.
+ *
+ * Knowing a number today does not make it safe to print. The retry schedule
+ * is a Dashboard setting with no API surface (see above), so the instant
+ * anyone edits that screen the copy becomes a lie, and there is no check —
+ * not this repo's, not Stripe's — that would go red. A banner that says
+ * "we retry for 21 days" is a promise the code cannot keep and cannot even
+ * audit. A banner that says "access continues while Stripe retries, and your
+ * plan stops if the retries run out" is true under every setting that screen
+ * can hold, including the one it holds after somebody changes it.
+ *
+ * The number's legitimate use is internal: reconciling
+ * `BILLING_LOCK_GRACE_DAYS`, and giving the drift checker something to test
+ * observed behaviour against. Both are readers who can be corrected. A
+ * customer who read a stale promise cannot.
+ */
+export const MAY_QUOTE_RETRY_WINDOW_IN_COPY = false
 
 /**
  * Whether Stripe's own failed-payment email reaches the customer in live.
@@ -101,7 +197,7 @@ export const LIVE_RETRY_WINDOW_IS_KNOWN = LIVE_MODE_DUNNING_SCHEDULE !== null
  * renewal has no customer-reachable signal beyond the console banner. Not
  * asserted either way until the live Dashboard is read.
  */
-export const LIVE_STRIPE_DUNNING_EMAIL_IS_KNOWN = false
+export const LIVE_STRIPE_DUNNING_EMAIL_IS_KNOWN = true
 
 /**
  * WHAT THE LIVE DASHBOARD SAYS, as read by Zach on 2026-08-23 at
@@ -115,7 +211,15 @@ export const LIVE_STRIPE_DUNNING_EMAIL_IS_KNOWN = false
  * values mean before changing one.
  */
 export const LIVE_STRIPE_SUBSCRIPTION_EMAIL_SETTINGS = {
-  readOn: '2026-08-23',
+  readOn: '2026-08-24',
+  /**
+   * The other four customer emails on that screen, all ON as of the read:
+   * trial-ending reminder (7 days), upcoming renewals, expiring cards, and
+   * bank-debit payment failures. The last was OFF and was turned ON on
+   * 2026-08-24 at Zach's explicit instruction, verified persisted after a
+   * reload — the only Dashboard write in this whole issue.
+   */
+  otherCustomerEmailsAllOn: true,
   /**
    * ON. The customer IS told when a card payment fails — this is the only
    * failed-payment email anyone sends. Aglyn composes none of its own, and

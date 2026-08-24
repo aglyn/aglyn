@@ -45,7 +45,10 @@
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
-import { LIVE_RETRY_WINDOW_IS_KNOWN } from '../utils/stripe-dunning-schedule'
+import {
+  LIVE_RETRY_WINDOW_IS_KNOWN,
+  MAY_QUOTE_RETRY_WINDOW_IN_COPY,
+} from '../utils/stripe-dunning-schedule'
 
 export {}
 
@@ -174,16 +177,32 @@ describe('the dunning banner survives the flip to unpaid (AGL-1877)', () => {
    * number we possess (five attempts, 21.08 days, terminal `canceled`) came
    * off a TEST clock, and this banner renders against LIVE.
    *
-   * So while `LIVE_RETRY_WINDOW_IS_KNOWN` is false the copy may describe the
-   * SHAPE — retries happen, access continues, the plan stops if they run out
-   * — and may not quote a count, a duration, or a date.
+   * ## THE LIVE SCHEDULE IS NOW KNOWN, AND THE COPY STILL MAY NOT QUOTE IT
    *
-   * This is the guard that keeps the measured test-mode numbers from drifting
-   * back into customer-facing copy. Deleting the constant, or setting it true
-   * without a live Dashboard read behind it, is what it is here to catch.
+   * As of 2026-08-24 a human read the live Dashboard, so
+   * `LIVE_RETRY_WINDOW_IS_KNOWN` is `true` and this test deliberately does
+   * NOT assert on it any more. The governing constant is
+   * `MAY_QUOTE_RETRY_WINDOW_IN_COPY`, which stays `false`, and the two are
+   * separate on purpose: knowing a number today does not make it safe to
+   * print, because the setting has no API surface and nothing — not this
+   * suite, not the drift checker — can notice the day somebody edits that
+   * Dashboard screen. A quoted window would become a lie silently.
+   *
+   * So the copy may describe the SHAPE — retries happen, access continues,
+   * the plan stops if they run out — and may not quote a count, a duration,
+   * or a date. That sentence is true under every setting the screen can
+   * hold, including the one it holds after it is changed.
+   *
+   * This is the guard that keeps the measured numbers out of customer-facing
+   * copy. Flipping `MAY_QUOTE_RETRY_WINDOW_IN_COPY` is what it is here to
+   * catch — and note that flipping it is not enough on its own: whoever does
+   * it owes a mechanism that would go red when the Dashboard changes.
    */
-  it('quotes no retry count or duration while the LIVE schedule is unread', () => {
-    expect(LIVE_RETRY_WINDOW_IS_KNOWN).toBe(false)
+  it('quotes no retry count or duration, though the LIVE schedule is now read', () => {
+    expect(MAY_QUOTE_RETRY_WINDOW_IN_COPY).toBe(false)
+    // Asserted so the pair cannot silently collapse back into one flag: the
+    // window being READ must never be mistaken for the copy being ALLOWED.
+    expect(LIVE_RETRY_WINDOW_IS_KNOWN).toBe(true)
 
     const { container } = renderBanner(orgAt('past_due'))
     const copy = container.textContent ?? ''

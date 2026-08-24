@@ -122,6 +122,7 @@
     "check:backup-copies": "node tools/scripts/check-backup-copies.mjs",
     "check:authorized-domains": "node tools/scripts/check-authorized-domains.mjs",
     "check:app-check-debug-tokens": "node tools/scripts/check-app-check-debug-tokens.mjs",
+    "check:stripe-dunning-drift": "node tools/scripts/check-stripe-dunning-drift.mjs",
     "check:upload-cors": "node tools/scripts/check-upload-cors.mjs",
     "check:firewall-posture": "node tools/scripts/check-firewall-posture.mjs",
     "check:env-isolation": "node tools/deploy/verify-env-isolation.mjs",

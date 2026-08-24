@@ -356,14 +356,16 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   // longer true here, and repeating it would be worse than saying nothing.
   //
   // That copy used to name "the retry window" as though its length were a
-  // known quantity (AGL-2430). It is not. The retry schedule and the
-  // after-the-final-retry behaviour are Dashboard settings held
-  // independently per mode, with no API surface at all — see
-  // `LIVE_RETRY_WINDOW_IS_KNOWN` in utils/stripe-dunning-schedule.ts for the
-  // read-only probe that establishes it. Every number we have is from a TEST
-  // clock, and this banner renders against the LIVE account. So it now says
-  // only what is true in every possible configuration: access continues
-  // while Stripe retries, and the plan stops if the retries run out.
+  // known quantity (AGL-2430). The live window HAS since been read off the
+  // Dashboard — 4 Smart Retries within 3 weeks, then cancel — and this copy
+  // still does not quote it, deliberately. The retry schedule is a Dashboard
+  // setting with no API surface at all, so the day somebody edits that
+  // screen, a quoted number here becomes a lie and nothing goes red. See
+  // `MAY_QUOTE_RETRY_WINDOW_IN_COPY` in utils/stripe-dunning-schedule.ts for
+  // the full argument, and check:stripe-dunning-drift for the only thing
+  // that watches the setting at all. So this says what is true under every
+  // configuration that screen can hold: access continues while Stripe
+  // retries, and the plan stops if the retries run out.
   const lapsed = billingStatus === 'unpaid'
   if (billingStatus === 'past_due' || lapsed) {
     return (
