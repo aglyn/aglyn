@@ -53,6 +53,7 @@ jest.mock('next/navigation', () => ({ notFound: () => mockNotFound() }))
 
 import {
   adoptRestoredPool,
+  aimAuthAtPool,
   signInWithPooledCustomToken,
 } from '../utils/pooled-custom-token'
 import { StaffGuard } from '../components/staff-guard.component'
@@ -258,5 +259,122 @@ describe('StaffGuard still refuses a non-staff session', () => {
     )
     await waitFor(() => expect(screen.getByText('staff console')).toBeTruthy())
     expect(mockNotFound).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * The REVERSE cross-pool exchange, which the fix's own docblock named as the
+ * reason its assignment is unconditional — and which nothing enforced outside
+ * the custom-token exchange.
+ *
+ * `auth.tenantId` is sticky instance state. `/sso` sets it as soon as the
+ * domain lookup resolves, BEFORE the popup, so an SSO attempt that is
+ * cancelled or refused leaves it set; `signOut()` does not clear it
+ * (`@firebase/auth` 1.13.4 clears `currentUser` and the redirect user and
+ * never touches the pool); and the `← Back to sign in` escape hatch is an
+ * `AppLink`, i.e. a Next `<Link>`, so the SAME instance carries the tenant
+ * onto the sign-in page.
+ *
+ * A password sign-in then fails for a user who exists, and `/signup` fails
+ * worse than a refusal: `createUserWithEmailAndPassword` on a tenanted
+ * instance SUCCEEDS and provisions the account inside that GCIP tenant,
+ * invisible to project-level `listUsers()`.
+ */
+describe('a project-pool credential is aimed at the project pool', () => {
+  const ROOT = join(__dirname, '..')
+
+  it('normalises an absent pool to the project pool', () => {
+    const auth = { tenantId: TENANT as string | null }
+    aimAuthAtPool(auth, null)
+    expect(auth.tenantId).toBeNull()
+  })
+
+  it('is unconditional — undefined is the project pool, not "no opinion"', () => {
+    const auth = { tenantId: TENANT as string | null }
+    aimAuthAtPool(auth, undefined)
+    expect(auth.tenantId).toBeNull()
+  })
+
+  it('still aims at a named tenant when one is given', () => {
+    const auth = { tenantId: null as string | null }
+    aimAuthAtPool(auth, TENANT)
+    expect(auth.tenantId).toBe(TENANT)
+  })
+
+  it.each([
+    ['app/(auth)/signin/page.tsx', 'signInWithAnyConfirmedAddress'],
+    ['app/(auth)/signup/page.tsx', 'createUserWithEmailAndPassword'],
+  ])('%s aims at the project pool BEFORE the credential call', (file, call) => {
+    const source = readFileSync(join(ROOT, file), 'utf8')
+    const aimedAt = source.indexOf('aimAuthAtPool(firebaseAuth, null)')
+    // The CALL, not the import and not the local DECLARATION of the same
+    // name — anchored on the instance it is handed, which is what makes it a
+    // call on the shared pool. `signin/page.tsx` declares its own
+    // `signInWithAnyConfirmedAddress(firebaseAuth, …)` above the handler, and
+    // matching that instead would have made this assertion unfalsifiable.
+    const credentialAt = source.search(
+      new RegExp('(?<!function )' + call + '\\(\\s*firebaseAuth\\b'),
+    )
+    expect(aimedAt).toBeGreaterThan(-1)
+    expect(credentialAt).toBeGreaterThan(-1)
+    // ORDER is the whole point, exactly as it is for the exchange above:
+    // aiming the instance after the call is the same bug.
+    expect(aimedAt).toBeLessThan(credentialAt)
+  })
+
+  it('has no UNCONSIDERED federated or password credential call site', () => {
+    // A new call site must decide its pool rather than inherit whatever the
+    // last SSO attempt left behind. Adding one reds this until it is listed.
+    const CREDENTIAL =
+      /\b(signInWithEmailAndPassword|createUserWithEmailAndPassword|signInWithPopup|signInWithRedirect)\s*\(/
+    const SKIP = new Set(['node_modules', '.next', 'dist', 'specs', '.turbo'])
+    const walk = (dir: string, out: string[] = []): string[] => {
+      for (const entry of readdirSync(dir)) {
+        if (SKIP.has(entry)) continue
+        const full = join(dir, entry)
+        if (statSync(full).isDirectory()) walk(full, out)
+        else if (/\.tsx?$/.test(full) && !/\.spec\.tsx?$/.test(full)) out.push(full)
+      }
+      return out
+    }
+    const sites = walk(ROOT)
+      // Server routes hold no client `Auth` instance, so they have no pool to
+      // aim; `api/auth/resolve-identifier` only NAMES the call in a docblock.
+      .filter((file) => !file.startsWith(join(ROOT, 'app', 'api')))
+      .filter((file) => CREDENTIAL.test(readFileSync(file, 'utf8')))
+      .map((file) => file.slice(ROOT.length + 1))
+      .sort()
+    expect(sites).toEqual([
+      // Re-authenticates the CURRENT user to change their password, so the
+      // right pool is the one that user is already in — inherited, never
+      // guessed.
+      'app/(app)/manage/user/page.tsx',
+      // Aims at the project pool (this block).
+      'app/(auth)/signin/page.tsx',
+      'app/(auth)/signup/page.tsx',
+      // Sets the tenant itself, from the domain lookup — the one site that
+      // legitimately aims AWAY from the project pool.
+      'app/(auth)/sso/page.tsx',
+      // Same inheritance as manage/user: it re-signs the identity that was
+      // just signed in, on an instance already in that identity's pool.
+      'components/session-reauth-dialog.component.tsx',
+    ])
+  })
+
+  it('reaches the files this block is about', () => {
+    // A walk that scans nothing passes for free.
+    const SKIP = new Set(['node_modules', '.next', 'dist', 'specs', '.turbo'])
+    const walk = (dir: string, out: string[] = []): string[] => {
+      for (const entry of readdirSync(dir)) {
+        if (SKIP.has(entry)) continue
+        const full = join(dir, entry)
+        if (statSync(full).isDirectory()) walk(full, out)
+        else if (/\.tsx?$/.test(full) && !/\.spec\.tsx?$/.test(full)) out.push(full)
+      }
+      return out
+    }
+    const seen = walk(ROOT).map((file) => file.slice(ROOT.length + 1))
+    expect(seen).toContain('app/(auth)/signin/page.tsx')
+    expect(seen).toContain('app/(auth)/signup/page.tsx')
   })
 })

@@ -92,6 +92,7 @@ import { rememberOnboardingPlanIntent } from '../../../utils/onboarding-plan-int
 import { rememberSignUpCampaign } from '../../../utils/signup-campaign'
 import isMobileBrowser from '../../../utils/is-mobile-browser'
 import { createGoogleOAuthProvider } from '../../../utils/oauth-providers'
+import { aimAuthAtPool } from '../../../utils/pooled-custom-token'
 import guardPopupLoading from '../../../utils/popup-loading-guard'
 import { WORKSPACE_DOMAIN } from '../../../constants/workspace-domain'
 
@@ -452,6 +453,14 @@ function SignUp() {
       // before the account exists (AGL-1497). Set here, after the gate above,
       // so the marker can only ever mean "this person consented".
       markLegalConsent()
+      // A self-signup belongs in the PROJECT pool, and `auth.tenantId` is
+      // sticky instance state that `/sso` sets and nothing clears (AGL-1993).
+      // Worse here than on `/signin`: a refusal would at least be visible,
+      // whereas `createUserWithEmailAndPassword` on a tenanted instance
+      // SUCCEEDS and provisions the account inside that GCIP tenant, where
+      // project-level `listUsers()` cannot see it — the AGL-1962 phantom
+      // shape, created by an ordinary signup.
+      aimAuthAtPool(firebaseAuth, null)
       await setPersistence(firebaseAuth, browserLocalPersistence)
         .then(() => {
           if (values) {

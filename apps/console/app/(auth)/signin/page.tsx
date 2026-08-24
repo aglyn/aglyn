@@ -74,6 +74,7 @@ import {
 } from '../../../utils/interactive-signin'
 import isMobileBrowser from '../../../utils/is-mobile-browser'
 import { createGoogleOAuthProvider } from '../../../utils/oauth-providers'
+import { aimAuthAtPool } from '../../../utils/pooled-custom-token'
 import {
   describePasskeySignInFailure,
   signInWithPasskey,
@@ -223,6 +224,12 @@ function SignIn() {
       // mobile redirect round-trip; the session hook mints the shared
       // cookie on return instead of validating a stale one (AGL-463).
       markInteractiveSignIn()
+      // Both doors below are PROJECT-pool credentials, and `auth.tenantId` is
+      // sticky instance state that `/sso` sets and nothing clears (AGL-1993).
+      // The `← Back to sign in` link on `/sso` is a client-side `<Link>`, so an
+      // abandoned SSO attempt hands this page an instance still aimed at the
+      // GCIP tenant — and a password sign-in there fails for a user who exists.
+      aimAuthAtPool(firebaseAuth, null)
       await setPersistence(firebaseAuth, browserLocalPersistence)
         .then(() => {
           if (values) {
