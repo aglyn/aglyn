@@ -1363,12 +1363,28 @@ Reporting is the **grouping and alerting**, and GA4 is product analytics and
 should not be carrying stack traces at all. Adding a fourth vendor (Sentry) is
 a subprocessor-list decision, deliberately deferred.
 
-**Genuinely missing, by contrast:** Firebase **Performance Monitoring** is not
-initialised anywhere (the package is present only because the `firebase`
-umbrella ships every entry point — "in package.json" is not integration), and
-there is **no Web Vitals / RUM of any kind** in any app. Those are real gaps
-rather than impossible ones — filed rather than assumed worthwhile, since each
-has to answer what it tells us that we cannot already see.
+**Firebase Performance Monitoring is still not initialised anywhere** — zero
+import sites; the package is in the closure only because the `firebase`
+umbrella ships every entry point, and "in package.json" is not integration.
+
+⚠️ **The sentence that used to sit here — "there is no Web Vitals / RUM of any
+kind in any app" — is FALSE and has been since 2026-08-18.** AGL-1642 shipped
+`web-vitals` → GA4 on both the console and the tenant; it is in production and
+described in "The 2026-08-17 coverage pass" above, in this same document. The
+stale claim is corrected rather than deleted because this section is the one a
+reader lands on when asking "what performance telemetry do we have", and it
+was answering "none".
+
+**Firebase Perf is deferred, not missing (AGL-1856).** Page-load metrics are
+covered by AGL-1642, so the only thing it would add is automatic **network
+request** monitoring — client-observed latency and success rate per URL
+pattern, which neither GA4 nor the error beacon can see. The decision rule is
+on AGL-1856: adopt only if a real "what is the client-observed success rate /
+latency of endpoint X" question goes unanswered once the RUM data is
+reportable. **The CWV breakdown dimensions (`metric_rating`, `metric_id`) were
+only registered 2026-08-24** (AGL-2327), and GA4 dimensions are not
+retroactive, so the first reportable RUM data starts then — the evaluation
+window opens ~2026-09-07, after the beta launch, not before it.
 
 ### 10. The console sends exactly one `page_view` per page, with a real URL (AGL-1643)
 
