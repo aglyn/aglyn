@@ -162,6 +162,24 @@ jest.mock('./firebase-admin', () => ({
   },
 }))
 
+/**
+ * The reCAPTCHA admin path (AGL-1378) rides the same service-account
+ * credential firebase-admin already holds, so the only thing to stand in for
+ * is the token itself. `firebase-admin/app` is mocked rather than
+ * `./recaptcha-allowlist`, so the request bodies asserted below — the
+ * `updateMask`, the full domain list — are the real ones.
+ */
+jest.mock('firebase-admin/app', () => ({
+  __esModule: true,
+  getApp: () => ({
+    options: {
+      credential: {
+        getAccessToken: async () => ({ access_token: 'ya29.test-token', expires_in: 3600 }),
+      },
+    },
+  }),
+}))
+
 const resolveChallengeTxt = jest.fn<Promise<string[]>, [string]>()
 jest.mock('./sso-provisioning', () => {
   const actual = jest.requireActual('./sso-provisioning')
@@ -192,12 +210,59 @@ const OTHER_ORG = 'org_rival'
 const fetchMock = jest.fn()
 const originalEnv = { ...process.env }
 
+const SITE_KEY = '6LfnSnAbAAAAAG2PGTSOXQKQwv2snLGzMzuF1TWT'
+const KEY_NAME = `projects/52453122264/keys/${SITE_KEY}`
+const KEY_URL = `https://recaptchaenterprise.googleapis.com/v1/${KEY_NAME}`
+
+/** Live `allowedDomains`, mutated by a PATCH exactly as the real key is. */
+let allowedDomains: string[]
+
 function respond(status: number, body: unknown = {}) {
   return {
     ok: status >= 200 && status < 300,
     status,
     json: async () => body,
   } as unknown as Response
+}
+
+function recaptchaKeyBody() {
+  return {
+    name: KEY_NAME,
+    displayName: 'Aglyn',
+    webSettings: {
+      allowAllDomains: false,
+      allowedDomains: [...allowedDomains],
+      allowAmpTraffic: true,
+      integrationType: 'SCORE',
+    },
+  }
+}
+
+/**
+ * Turn App Check on for a block, so the allowlist write is exercised.
+ *
+ * Off by default in `beforeEach` — deliberately, and not because the root
+ * `.env` happens not to carry the site key today. An env var that leaked in
+ * later would otherwise start every Vercel-only assertion counting an extra
+ * request, and the failure would look like the wrong thing entirely.
+ */
+function enableAppCheck(): void {
+  process.env.NEXT_PUBLIC_RECAPTCHA_PUBLIC_KEY = SITE_KEY
+  process.env.RECAPTCHA_ADMIN_KEY_NAME = KEY_NAME
+}
+
+/** Every PATCH body the reCAPTCHA key received, in order. */
+function allowlistWrites(): Array<{ webSettings: { allowedDomains: string[] } }> {
+  return fetchMock.mock.calls
+    .filter((call) => String(call[0]).startsWith(KEY_URL) && call[1]?.method === 'PATCH')
+    .map((call) => JSON.parse(call[1].body))
+}
+
+/** Every name that reached Vercel, in order. */
+function vercelPosts(): string[] {
+  return fetchMock.mock.calls
+    .filter((call) => String(call[0]).includes('api.vercel.com') && call[1]?.method !== 'DELETE')
+    .map((call) => JSON.parse(call[1].body).name)
 }
 
 /** An org on a plan that grants `whiteLabel`, and one that does not. */
@@ -212,12 +277,20 @@ beforeEach(() => {
   versions.clear()
   transactionAttempts = 0
   seedOrgs()
-  fetchMock.mockReset().mockResolvedValue(respond(200))
+  allowedDomains = ['aglyn.com', 'localhost', 'aglyn.app', 'auth.aglyn.com', 'app.aglyn.com']
+  fetchMock.mockReset().mockImplementation(async (url: string, init: any) => {
+    if (!String(url).startsWith(KEY_URL)) return respond(200)
+    if ((init?.method ?? 'GET') === 'GET') return respond(200, recaptchaKeyBody())
+    allowedDomains = [...JSON.parse(init.body).webSettings.allowedDomains]
+    return respond(200, recaptchaKeyBody())
+  })
   global.fetch = fetchMock as unknown as typeof fetch
   resolveChallengeTxt.mockReset().mockResolvedValue([])
   process.env.VERCEL_TOKEN = 'tok_test'
   process.env.VERCEL_CONSOLE_PROJECT_ID = 'prj_console'
   process.env.VERCEL_TEAM_ID = 'team_test'
+  delete process.env.NEXT_PUBLIC_RECAPTCHA_PUBLIC_KEY
+  delete process.env.RECAPTCHA_ADMIN_KEY_NAME
   jest.spyOn(console, 'error').mockImplementation(() => undefined)
 })
 
@@ -570,6 +643,143 @@ describe('activateConsoleDomain — Vercel, against the CONSOLE project', () => 
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  describe('the App Check reCAPTCHA allowlist (AGL-1378)', () => {
+    it('puts the SERVING name on the reCAPTCHA key, and marks the claim active', async () => {
+      enableAppCheck()
+      await verified('console.acme.com')
+      const result = await activateConsoleDomain({ orgId: ORG, domain: 'console.acme.com' })
+
+      expect(result.status).toBe(200)
+      expect(result.attachment.allowlist.outcome).toBe('listed')
+      expect(allowedDomains).toContain('console.acme.com')
+      expect(store.get('consoleDomains/console.acme.com')).toMatchObject({
+        status: 'active',
+        appCheckState: 'listed',
+      })
+    })
+
+    it('writes the allowlist AFTER Vercel, and only for the primary', async () => {
+      // Order: allowlisting a name we do not serve hands that origin the right
+      // to use our site key for nothing back. Primary only: a twin is a 308
+      // that never executes the console, and would spend one of the 250.
+      enableAppCheck()
+      await verified('acme.com')
+      await activateConsoleDomain({ orgId: ORG, domain: 'acme.com' })
+
+      expect(vercelPosts()).toEqual(['acme.com', 'www.acme.com'])
+      expect(allowlistWrites()).toHaveLength(1)
+      expect(allowedDomains).toContain('acme.com')
+      expect(allowedDomains).not.toContain('www.acme.com')
+
+      const firstAllowlistCall = fetchMock.mock.calls.findIndex((call) =>
+        String(call[0]).startsWith(KEY_URL),
+      )
+      const lastVercelCall = fetchMock.mock.calls.reduce(
+        (last, call, index) => (String(call[0]).includes('api.vercel.com') ? index : last),
+        -1,
+      )
+      expect(firstAllowlistCall).toBeGreaterThan(lastVercelCall)
+    })
+
+    it('the write is masked to allowedDomains and keeps every entry already there', async () => {
+      enableAppCheck()
+      await verified('console.acme.com')
+      await activateConsoleDomain({ orgId: ORG, domain: 'console.acme.com' })
+
+      const patch = fetchMock.mock.calls.find(
+        (call) => String(call[0]).startsWith(KEY_URL) && call[1]?.method === 'PATCH',
+      )
+      expect(patch[0]).toBe(`${KEY_URL}?updateMask=webSettings.allowedDomains`)
+      expect(JSON.parse(patch[1].body).webSettings.allowedDomains).toEqual([
+        'aglyn.com',
+        'localhost',
+        'aglyn.app',
+        'auth.aglyn.com',
+        'app.aglyn.com',
+        'console.acme.com',
+      ])
+    })
+
+    it('STAYS VERIFIED when the allowlist write fails, even though Vercel took it', async () => {
+      // The whole point. A claim reported `active` while unlisted is a console
+      // that renders, routes, and refuses every sign-in with 401 — surfacing
+      // to the customer as "Missing or insufficient permissions", which is
+      // also what a Security Rules verdict says. Never report it ready.
+      enableAppCheck()
+      await verified('console.acme.com')
+      fetchMock.mockImplementation(async (url: string) =>
+        String(url).startsWith(KEY_URL)
+          ? respond(403, { error: { message: 'Permission denied' } })
+          : respond(200),
+      )
+      const result = await activateConsoleDomain({ orgId: ORG, domain: 'console.acme.com' })
+
+      expect(result.status).toBe(502)
+      expect(result.error).toContain('cannot pass App Check')
+      expect(result.attachment.attached).toBe(true)
+      expect(result.attachment.ready).toBe(false)
+      expect(store.get('consoleDomains/console.acme.com')).toMatchObject({
+        status: 'verified',
+        vercelState: 'attached',
+        appCheckState: 'failed',
+        activatedAt: null,
+      })
+    })
+
+    it('STAYS VERIFIED when the key is at its 250-domain ceiling', async () => {
+      // `full` is the easy one to mistake for a warning. It is not: the
+      // customer's console cannot attest, exactly as if the write had errored.
+      enableAppCheck()
+      allowedDomains = Array.from({ length: 250 }, (_, i) => `customer-${i}.example.com`)
+      await verified('console.acme.com')
+      const result = await activateConsoleDomain({ orgId: ORG, domain: 'console.acme.com' })
+
+      expect(result.status).toBe(502)
+      expect(result.attachment.allowlist.outcome).toBe('full')
+      expect(store.get('consoleDomains/console.acme.com')).toMatchObject({ status: 'verified' })
+    })
+
+    it('never touches the reCAPTCHA key when Vercel refused the name', async () => {
+      enableAppCheck()
+      await verified('console.acme.com')
+      fetchMock.mockImplementation(async (url: string) =>
+        String(url).includes('api.vercel.com')
+          ? respond(400, { error: { code: 'invalid_domain' } })
+          : respond(200, recaptchaKeyBody()),
+      )
+      await activateConsoleDomain({ orgId: ORG, domain: 'console.acme.com' })
+
+      expect(
+        fetchMock.mock.calls.filter((call) => String(call[0]).startsWith(KEY_URL)),
+      ).toHaveLength(0)
+    })
+
+    it('activates without touching the key when this deployment runs no App Check', async () => {
+      // Self-host. `NEXT_PUBLIC_RECAPTCHA_PUBLIC_KEY` unset means nothing
+      // gates the console, so refusing the activation would be wrong.
+      await verified('console.acme.com')
+      const result = await activateConsoleDomain({ orgId: ORG, domain: 'console.acme.com' })
+
+      expect(result.status).toBe(200)
+      expect(result.attachment.allowlist.outcome).toBe('unenforced')
+      expect(
+        fetchMock.mock.calls.filter((call) => String(call[0]).startsWith(KEY_URL)),
+      ).toHaveLength(0)
+    })
+
+    it('REFUSES when App Check runs but the admin key name was never configured', async () => {
+      // The dangerous middle: config absence must not read as "off" on a
+      // deployment that is demonstrably enforcing App Check.
+      process.env.NEXT_PUBLIC_RECAPTCHA_PUBLIC_KEY = SITE_KEY
+      await verified('console.acme.com')
+      const result = await activateConsoleDomain({ orgId: ORG, domain: 'console.acme.com' })
+
+      expect(result.status).toBe(502)
+      expect(result.attachment.allowlist.detail).toContain('RECAPTCHA_ADMIN_KEY_NAME')
+      expect(store.get('consoleDomains/console.acme.com')).toMatchObject({ status: 'verified' })
+    })
+  })
+
   it('stays verified rather than active when Vercel refuses a name', async () => {
     await verified('console.acme.com')
     fetchMock.mockResolvedValue(respond(400, { error: { code: 'invalid_domain' } }))
@@ -593,6 +803,38 @@ describe('releaseConsoleDomain', () => {
     ])
     expect(store.has('consoleDomains/acme.com')).toBe(false)
     expect(store.has('consoleDomains/www.acme.com')).toBe(false)
+  })
+
+  it('takes the name back off the reCAPTCHA key before dropping the claim', async () => {
+    // A claim deleted while the name is still on the key leaves an origin we
+    // no longer serve holding a permanent right to mint App Check tokens
+    // against our site key — and spends one of the 250 forever, with nothing
+    // in Firestore left to say why.
+    enableAppCheck()
+    allowedDomains = [...allowedDomains, 'acme.com']
+    await claimConsoleDomain(ORG, 'acme.com')
+    const result = await releaseConsoleDomain({ orgId: ORG, domain: 'acme.com' })
+
+    expect(result.released).toBe(true)
+    expect(result.allowlist.outcome).toBe('removed')
+    expect(allowedDomains).not.toContain('acme.com')
+    expect(allowedDomains).toContain('aglyn.com')
+  })
+
+  it('KEEPS the claim when the key refuses the reclaim', async () => {
+    enableAppCheck()
+    allowedDomains = [...allowedDomains, 'acme.com']
+    await claimConsoleDomain(ORG, 'acme.com')
+    fetchMock.mockImplementation(async (url: string, init: any) => {
+      if (!String(url).startsWith(KEY_URL)) return respond(200)
+      if ((init?.method ?? 'GET') === 'GET') return respond(200, recaptchaKeyBody())
+      return respond(403, { error: { message: 'Permission denied' } })
+    })
+    const result = await releaseConsoleDomain({ orgId: ORG, domain: 'acme.com' })
+
+    expect(result.released).toBe(false)
+    expect(result.error).toContain('still on the App Check allowlist')
+    expect(store.has('consoleDomains/acme.com')).toBe(true)
   })
 
   it('KEEPS the claim when a detach fails', async () => {

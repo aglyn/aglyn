@@ -29,6 +29,7 @@ Sections (each skips with instructions when its credential is absent):
 | Stripe | Products/prices (lookup-key idempotent) + subscription webhook via `setup-stripe.mjs` | `STRIPE_SECRET_KEY` (+ `STRIPE_WEBHOOK_URL`) |
 | Vercel env sync | Upserts the console/tenant projects' env vars from the current shell (incl. `ANTHROPIC_API_KEY` for AI assist, AGL-89) | `VERCEL_TOKEN`, `VERCEL_CONSOLE_PROJECT_ID`, `VERCEL_TENANT_PROJECT_ID` (+ `VERCEL_TEAM_ID`) |
 | Staff claim | Grants the `staff` custom claim via `set-staff-claim.mjs` | `FIREBASE_PROJECT_ID/CLIENT_EMAIL/PRIVATE_KEY` + `--staff <uid-or-email>` |
+| *(not converged)* | **App Check reCAPTCHA allowlist** — a one-time IAM grant on the project the reCAPTCHA key lives in, plus `RECAPTCHA_ADMIN_KEY_NAME`. Without both, a custom console domain (AGL-1099) attaches and routes but every sign-in there 401s. See [`docs/APPCHECK_DOMAIN_ALLOWLIST.md`](APPCHECK_DOMAIN_ALLOWLIST.md) | `gcloud` auth (owner on the key's project) |
 
 ## What tenants get automatically (no setup)
 

@@ -23,19 +23,30 @@
  * *"Do NOT ship 1099b alone: attaching a domain that then cannot authenticate
  * is worse than not attaching it, because it looks finished."* Nothing here is
  * reachable from a user-facing path, nothing calls `activateConsoleDomain`, and
- * no domain has been attached. Two things must land first:
+ * no domain has been attached. One thing must still land first:
  *
- * - **1099d — the App Check reCAPTCHA allowlist.** The 1099a proof-of-concept
- *   (`docs/design/agl-1099a-poc-findings.md`) measured that App Check, *not*
- *   Firebase's authorized-domain list, is the gate: an unattested
- *   `signInWithCustomToken` 401s with "Firebase App Check token is invalid"
- *   **before** token validation. Same page, same app id, only the origin
- *   differing — an allowlisted origin minted a token and reached credential
- *   validation; a non-allowlisted one failed at `appCheck/recaptcha-error`. So
- *   the allowlist entry is a hard **functional** prerequisite and not merely
- *   the commercial ceiling the design called it. **1099d blocks 1099c.**
  * - **1099e — the handoff itself.** A console domain shares no parent domain
  *   with `aglyn.com`, so the `.aglyn.com` session cookie cannot reach it.
+ *
+ * ## 1099d is no longer one of them (AGL-1378, closed 2026-08-23)
+ *
+ * The 1099a proof-of-concept (`docs/design/agl-1099a-poc-findings.md`)
+ * measured that App Check, *not* Firebase's authorized-domain list, is the
+ * gate: an unattested `signInWithCustomToken` 401s with "Firebase App Check
+ * token is invalid" **before** token validation. Same page, same app id, only
+ * the origin differing — an allowlisted origin minted a token and reached
+ * credential validation; a non-allowlisted one failed at
+ * `appCheck/recaptcha-error`. That finding stands, and it is why the allowlist
+ * entry is a hard **functional** prerequisite rather than the commercial
+ * ceiling the design called it.
+ *
+ * What was wrong was the conclusion that the entry could only be added by
+ * hand. That rested on probing `aglyn-main`, which is not the project the key
+ * lives in; the key was auto-migrated into `recaptcha-migrated-…`, where the
+ * Enterprise API is enabled, we hold owner, and `projects.keys.patch` on
+ * `webSettings.allowedDomains` answers 200. `activateConsoleDomain` now writes
+ * the serving name through `recaptcha-allowlist.ts` and refuses to mark the
+ * claim `active` if that write does not land.
  *
  * ## Why this is not `/api/domains/attach|verify|detach`
  *
@@ -76,6 +87,12 @@ import {
   SSO_CHALLENGE_PREFIX,
   type DomainCheck,
 } from './sso-provisioning'
+import {
+  allowConsoleOrigin,
+  allowlistSatisfied,
+  reclaimConsoleOrigin,
+  type RecaptchaAllowlistResult,
+} from './recaptcha-allowlist'
 import {
   attachProjectDomain,
   detachProjectDomain,
@@ -513,7 +530,14 @@ export async function verifyConsoleDomain(options: {
 export interface ConsoleDomainAttachment {
   domain: string
   results: WorkspaceDomainResult[]
+  /** Vercel's verdict alone: every claimed name is on the console project. */
   attached: boolean
+  /**
+   * Attached **and** able to attest — the only thing a caller may treat as
+   * "the customer can use this domain". `attached && !ready` is a real and
+   * reachable state: Vercel serves the name, App Check refuses it.
+   */
+  ready: boolean
   /**
    * Non-null when a name this claim SERVES on cannot complete a large upload
    * (AGL-1452), carrying the exact ordered command that fixes it.
@@ -531,6 +555,21 @@ export interface ConsoleDomainAttachment {
    * `storage.buckets.update`.
    */
   uploadCorsRemedy: string | null
+  /**
+   * The App Check reCAPTCHA allowlist write for the SERVING name (AGL-1378).
+   *
+   * Unlike `uploadCorsRemedy` this is **not** advisory. A console origin the
+   * key has never heard of cannot solve reCAPTCHA, so `getToken` fails with
+   * `appCheck/recaptcha-error` and Identity Platform refuses the first
+   * `signInWithCustomToken` with `401 UNAUTHENTICATED` — before it looks at
+   * the token. The domain would serve a console that renders and can never
+   * sign anyone in, and the customer-visible symptom is "Missing or
+   * insufficient permissions", indistinguishable from a rules verdict.
+   *
+   * So this participates in `attached`: a claim does not reach `active` unless
+   * `allowlistSatisfied()` says the origin can attest.
+   */
+  allowlist: RecaptchaAllowlistResult
 }
 
 /**
@@ -598,11 +637,26 @@ export async function activateConsoleDomain(options: {
     (result) => result.outcome === 'attached' || result.outcome === 'already-exists',
   )
   const uploadCorsRemedy = pendingUploadCorsRemedy(results)
+
+  // AGL-1378. Vercel first, deliberately: allowlisting a name we do not
+  // actually serve would hand that origin the right to use our App Check site
+  // key for nothing in return. Only the primary — a twin is a 308 and never
+  // executes the console.
+  //
+  // If this loses, the claim stays `verified`. A domain reported ready while
+  // unlisted is the failure that costs a customer a day of "permission
+  // denied" tickets against rules that are perfectly correct.
+  const allowlist = attached
+    ? await allowConsoleOrigin(primary)
+    : ({ outcome: 'failed', domain: primary, detail: 'Vercel did not accept every name' } as const)
+  const ready = attached && allowlistSatisfied(allowlist.outcome)
+
   await claimRef(domain).set(
     {
-      status: attached ? 'active' : 'verified',
+      status: ready ? 'active' : 'verified',
       vercelState: attached ? 'attached' : 'pending',
-      activatedAt: attached
+      appCheckState: allowlist.outcome,
+      activatedAt: ready
         ? (snapshot.get('activatedAt') ??
           firebaseAdmin.firestore.FieldValue.serverTimestamp())
         : null,
@@ -615,13 +669,17 @@ export async function activateConsoleDomain(options: {
   )
   const view = claimView(domain, {
     ...snapshot.data(),
-    status: attached ? 'active' : 'verified',
+    status: ready ? 'active' : 'verified',
   })
   return {
     claim: view,
-    error: attached ? null : 'Vercel did not accept every name',
-    status: attached ? 200 : 502,
-    attachment: { domain: primary, results, attached, uploadCorsRemedy },
+    error: ready
+      ? null
+      : attached
+        ? `The domain is attached but cannot pass App Check: ${allowlist.detail ?? allowlist.outcome}`
+        : 'Vercel did not accept every name',
+    status: ready ? 200 : 502,
+    attachment: { domain: primary, results, attached, ready, uploadCorsRemedy, allowlist },
   }
 }
 
@@ -636,7 +694,13 @@ export async function activateConsoleDomain(options: {
 export async function releaseConsoleDomain(options: {
   orgId: string
   domain: string
-}): Promise<{ released: boolean; results: WorkspaceDomainResult[]; error: string | null }> {
+}): Promise<{
+  released: boolean
+  results: WorkspaceDomainResult[]
+  /** Present once the reclaim was attempted — absent when Vercel refused first. */
+  allowlist?: RecaptchaAllowlistResult
+  error: string | null
+}> {
   const orgId = String(options?.orgId ?? '')
   const { domain } = validateConsoleDomain(options?.domain)
   if (!domain) return { released: false, results: [], error: 'Invalid domain' }
@@ -663,12 +727,29 @@ export async function releaseConsoleDomain(options: {
       error: 'The domain is still attached to the project',
     }
   }
+
+  // AGL-1378, the reclaim half. Same ordering rule as Vercel: give the
+  // capability back before dropping the record of it. A claim deleted while
+  // the name is still on the reCAPTCHA key leaves an origin we no longer
+  // serve holding a permanent right to mint App Check tokens against our site
+  // key, with nothing left in Firestore that says why it is there — and it
+  // silently spends one of the 250 slots forever.
+  const allowlist = await reclaimConsoleOrigin(names[0])
+  if (!allowlistSatisfied(allowlist.outcome)) {
+    return {
+      released: false,
+      results,
+      allowlist,
+      error: `The domain is off Vercel but still on the App Check allowlist: ${allowlist.detail ?? allowlist.outcome}`,
+    }
+  }
+
   const batch = firestore().batch()
   for (const name of names) {
     batch.delete(firestore().collection(CONSOLE_DOMAINS_COLLECTION).doc(name))
   }
   await batch.commit()
-  return { released: true, results, error: null }
+  return { released: true, results, allowlist, error: null }
 }
 
 /**
