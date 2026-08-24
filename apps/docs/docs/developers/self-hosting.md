@@ -224,7 +224,7 @@ started with it in `env_file` but built without it still runs the compiled-in
 ### `NEXT_PUBLIC_CONSOLE_URL` {#console-url}
 
 Your console's public origin. Unset, it falls back to `https://app.aglyn.com`,
-and three things follow from that:
+and four things follow from that:
 
 - A visitor who reaches your tenant runtime on a hostname it cannot resolve is
   redirected to **Aglyn's** console — your user, mid-session, on our domain.
@@ -233,6 +233,12 @@ and three things follow from that:
   alone, so your tenant runtime stops carrying a redirect target at a console
   you do not run.
 - The admin bar and the links inside transactional email point at us.
+- Campaign forwarding (AGL-1731) decorates console-bound links with the
+  visitor's `utm_*`, and this variable is the **only** origin it will touch.
+  Unset, your own signup links get nothing — the campaign is attached to
+  Aglyn's origin instead of yours, so your acquisition reporting reads as a
+  silent zero. Setting it to an **empty** value is not a way to opt out
+  either way: forwarding switches off entirely rather than falling back to us.
 
 ### `AGLYN_STANDALONE` {#aglyn-standalone}
 

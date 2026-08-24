@@ -265,6 +265,23 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'Reader of DOCS_URL; the literal is its default (a docs build, not runtime).',
   },
   {
+    file: 'apps/tenant/app/[host]/[[...slug]]/site-analytics.tsx',
+    count: 1,
+    reason:
+      'AGL-1731. CONSOLE_ORIGIN — reader of NEXT_PUBLIC_CONSOLE_URL, the same ' +
+      'variable and the same default as the three other tenant-runtime ' +
+      'readers, and documented as such under `NEXT_PUBLIC_CONSOLE_URL` in ' +
+      'apps/docs/docs/developers/self-hosting.md. It is the campaign-hop ' +
+      'ALLOWLIST, not a destination: the one origin whose links get a ' +
+      '`utm_*` put on them, so widening it is what would leak. ' +
+      '`campaign-forwarding.ts` itself writes no host and invents no default ' +
+      "— it normalises the caller's origin and returns a no-op uninstaller " +
+      'when that yields nothing, so an operator who configures the variable ' +
+      'to their own console never reaches this literal, and one who sets it ' +
+      'empty gets forwarding switched off rather than links decorated toward ' +
+      'us. Landed unlisted in 9e1ade2fc, which left this ratchet red on main.',
+  },
+  {
     file: 'apps/tenant/app/[host]/admin-bar/admin-bar-slot.tsx',
     count: 1,
     reason:
