@@ -265,25 +265,42 @@ function isDueScheduled(value: FirebaseFirestore.DocumentData): boolean {
  * has already found a due scheduled entry. A collection with nothing due pays
  * nothing, which is almost every render.
  *
- * Fails OPEN on an unindexed host, inherited from `getOrgForHost` returning
- * null: that is the pre-billing contract every other entitlement caller here
- * follows, and the failure direction that cannot dark-hole a paying
- * customer's content.
+ * THREE answers, not two, and the third is the point. `refused` means we read
+ * the plan and it does not carry the entitlement. `unresolved` means we could
+ * not find out. Both withhold the entry, but only `refused` may write the
+ * terminal marker — burning a schedule permanently on the strength of a
+ * hostIndex miss or a transient rejection would destroy a customer's post for
+ * a reason that may not be true a second later.
  *
- * And fails open on a THROW, which is not belt-and-braces. The only caller is
- * inside `getCollectionContent`'s try/catch, and that catch returns an empty
- * collection — so an org read that rejects would not degrade scheduling, it
- * would blank every entry on the page, published ones included. A plan check
- * must never be able to take the content down with it.
+ * Withholding on `unresolved` rather than publishing is what every other
+ * entitlement caller in this library already does: `run-event-actions`,
+ * `run-event-workflows` and `apply-publish-schedule` all pass a possibly
+ * undefined org straight into `checkEntitlement`, which resolves a missing
+ * plan as free and denies (AGL-247). Opening here instead would make this the
+ * one gate in the lib that admits when it cannot see — the exact shape of the
+ * free-tier leak `no-plan-gated-entitlement` exists to forbid.
+ *
+ * The blast radius of withholding is deliberately small: `isLive` answers true
+ * for `status: 'published'` before it ever consults this, so an unresolved
+ * read hides only the due-scheduled entry, never the published ones, and the
+ * next render retries.
  */
-async function scheduledPublishingAllowed(hostId: string): Promise<boolean> {
+type SchedulePermission = 'allowed' | 'refused' | 'unresolved'
+
+async function scheduledPublishingPermission(
+  hostId: string,
+): Promise<SchedulePermission> {
   try {
     const org = (await getOrgForHost(hostId))?.org
-    if (!org) return true
-    return checkEntitlement(org, 'scheduledPublishing')
+    if (!org) return 'unresolved'
+    return checkEntitlement(org, 'scheduledPublishing') ? 'allowed' : 'refused'
   } catch (error) {
+    // Caught rather than thrown: the only caller sits inside
+    // `getCollectionContent`'s try/catch, which returns an EMPTY collection —
+    // so an unhandled rejection here would blank every published entry on the
+    // page, not just the scheduled one.
     console.error(error)
-    return true
+    return 'unresolved'
   }
 }
 
@@ -299,15 +316,15 @@ async function scheduledPublishingAllowed(hostId: string): Promise<boolean> {
  * and records its refusal since AGL-1185 — entries were simply never wired
  * to either, which is why the leak was invisible from the screens side.
  *
- * `allowScheduled` is threaded in rather than resolved here so the org read
+ * The permission is threaded in rather than resolved here so the org read
  * happens once per call site instead of once per entry.
  */
 function isLive(
   value: FirebaseFirestore.DocumentData,
-  allowScheduled: boolean,
+  permission: SchedulePermission,
 ): boolean {
   if (value['status'] === 'published') return true
-  return allowScheduled && isDueScheduled(value)
+  return permission === 'allowed' && isDueScheduled(value)
 }
 
 /**
@@ -327,11 +344,14 @@ function isLive(
 function flipDueEntry(
   docRef: FirebaseFirestore.DocumentReference,
   value: FirebaseFirestore.DocumentData,
-  allowScheduled: boolean,
+  permission: SchedulePermission,
 ): void {
   if (value['status'] !== 'scheduled') return
   if (scheduleAlreadyRefused(value)) return
-  if (!allowScheduled) {
+  // `unresolved` writes NOTHING. It withholds this render and leaves the
+  // schedule exactly as it found it, so a later render can still publish it.
+  if (permission === 'unresolved') return
+  if (permission === 'refused') {
     if (!isDueScheduled(value)) return
     docRef
       .update({ scheduleStatus: ENTRY_SCHEDULE_SKIPPED })
@@ -427,25 +447,25 @@ async function listLiveEntries(
   const due = entriesQuery.docs.filter((entryDoc) =>
     isDueScheduled(entryDoc.data()),
   )
-  const allowScheduled = due.length
-    ? await scheduledPublishingAllowed(hostId)
-    : true
+  const permission: SchedulePermission = due.length
+    ? await scheduledPublishingPermission(hostId)
+    : 'allowed'
 
   // Record the terminal refusal on its own pass, because a refused entry is
   // NOT live and so never reaches the `flipDueEntry` inside the map below.
   // Without this the entry stays due forever: excluded from every render, and
   // re-reading the org on each one.
-  if (!allowScheduled) {
+  if (permission !== 'allowed') {
     for (const entryDoc of due) {
-      flipDueEntry(entryDoc.ref, entryDoc.data(), false)
+      flipDueEntry(entryDoc.ref, entryDoc.data(), permission)
     }
   }
 
   return entriesQuery.docs
-    .filter((entryDoc) => isLive(entryDoc.data(), allowScheduled))
+    .filter((entryDoc) => isLive(entryDoc.data(), permission))
     .map((entryDoc) => {
       const value = entryDoc.data()
-      flipDueEntry(entryDoc.ref, value, allowScheduled)
+      flipDueEntry(entryDoc.ref, value, permission)
       return {
         $id: entryDoc.id,
         title: value['title'] ?? entryDoc.id,
@@ -589,20 +609,20 @@ export async function getCollectionContent(options: {
       const dueHere = entryQuery.docs.filter((docSnapshot) =>
         isDueScheduled(docSnapshot.data()),
       )
-      const allowScheduled = dueHere.length
-        ? await scheduledPublishingAllowed(hostId)
-        : true
-      if (!allowScheduled) {
+      const permission: SchedulePermission = dueHere.length
+        ? await scheduledPublishingPermission(hostId)
+        : 'allowed'
+      if (permission !== 'allowed') {
         for (const docSnapshot of dueHere) {
-          flipDueEntry(docSnapshot.ref, docSnapshot.data(), false)
+          flipDueEntry(docSnapshot.ref, docSnapshot.data(), permission)
         }
       }
       const entryDoc = entryQuery.docs.find((docSnapshot) =>
-        isLive(docSnapshot.data(), allowScheduled),
+        isLive(docSnapshot.data(), permission),
       )
       if (entryDoc) {
         const value = entryDoc.data()
-        flipDueEntry(entryDoc.ref, value, allowScheduled)
+        flipDueEntry(entryDoc.ref, value, permission)
         data.entry = {
           $id: entryDoc.id,
           title: value['title'] ?? entrySlug,

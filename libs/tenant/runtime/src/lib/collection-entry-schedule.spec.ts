@@ -414,27 +414,43 @@ describe('the plan gate on entry scheduling (AGL-471)', () => {
     expect(orgReads).toBe(1)
   })
 
-  it('publishes when the host has no org at all — the pre-billing fail-open', async () => {
+  it('withholds — does not publish — when the host resolves to no org', async () => {
+    // Consistency with every other entitlement caller in this lib
+    // (`run-event-actions`, `run-event-workflows`, `apply-publish-schedule`):
+    // they all hand a possibly-undefined org to `checkEntitlement`, which
+    // resolves a missing plan as free and DENIES (AGL-247). A gate that opened
+    // when it could not see would be the free-tier leak shape that
+    // `no-plan-gated-entitlement` exists to forbid.
     orgForHost = null
     entryDocs = [scheduledEntry({ publishAt: AN_HOUR_AGO() })]
     const content = await listing()
-    expect(content.entries.map((entry) => entry.$id)).toEqual(['entry-1'])
+    expect(content.entries).toEqual([])
   })
 
-  it('does not blank the collection when the org read throws', async () => {
+  it('does NOT burn the schedule when the org could not be resolved', async () => {
+    // The difference between `refused` and `unresolved`, and the reason the
+    // permission is a tri-state. A hostIndex miss is not evidence about the
+    // plan, so writing the terminal marker here would destroy a customer's
+    // post over a condition that may not be true a second later.
+    orgForHost = null
+    entryDocs = [scheduledEntry({ publishAt: AN_HOUR_AGO() })]
+    await listing()
+    expect(flips['entry-1']).toBeUndefined()
+  })
+
+  it('withholds only the scheduled entry when the org read throws', async () => {
     // The failure that must not happen. The only caller sits inside
     // `getCollectionContent`'s try/catch, and that catch returns an EMPTY
-    // collection — so a rejecting org read would take down every published
-    // entry on the page, not just the scheduled one.
+    // collection — so a rejecting org read that escaped would take down every
+    // PUBLISHED entry on the page too. The published one is the assertion
+    // that matters; the scheduled one is merely deferred to the next render.
     orgReadThrows = true
     entryDocs = [
       { $id: 'entry-1', title: 'Live', slug: 'live', status: 'published' },
       scheduledEntry({ $id: 'entry-2', slug: 'b', publishAt: AN_HOUR_AGO() }),
     ]
     const content = await listing()
-    expect(content.entries.map((entry) => entry.$id).sort()).toEqual([
-      'entry-1',
-      'entry-2',
-    ])
+    expect(content.entries.map((entry) => entry.$id)).toEqual(['entry-1'])
+    expect(flips['entry-2']).toBeUndefined()
   })
 })
