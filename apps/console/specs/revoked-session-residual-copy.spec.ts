@@ -55,7 +55,7 @@
  *    and must positively say the tab can still CHANGE data.
  *  - The day someone lands the `auth_time` assertion that would make the
  *    original sentence true, this file goes red on the anchor and names every
- *    surface whose copy may then be narrowed back — rather than leaving four
+ *    surface whose copy may then be narrowed back — rather than leaving five
  *    now-pessimistic surfaces to be found by hand.
  *
  * The storage carve-out is pinned the same way round, so "uploaded files are
@@ -71,14 +71,25 @@
  *      (anti-vacuity: a sweep matching nothing must not pass)
  *   6. open the storage rules to the client                     reddens
  *      (so "uploaded files are the exception" cannot outlive the deny)
+ *   7. revert the STAFF card's rendered copy, docblock untouched reddens
  *
  * Each was planted against a COPY of the tree in a scratch directory, never
  * by mutating the shared checkout; the scratch mirror was confirmed green
  * first, so the reds are the plants and not the mirror.
+ *
+ * Red 7 is the one that earned its keep. On its first attempt it did NOT
+ * fire: the guard was reading source comments, so the staff card's docblock
+ * — which explains the fix — satisfied the assertion about the fix while the
+ * sentence a human reads had been reverted. `readCopy` exists because of
+ * that. A planted red that does not fire is the only reason this file is
+ * worth anything; had I stopped at "all six pass", I would have shipped a
+ * guard that could not see the surface I had just added to it.
  */
 
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+
+import { stripTypeScriptComments } from '@aglyn/aglyn/foundation/definitions/write-deny-coverage.util'
 
 const ROOT = resolve(__dirname, '../../..')
 
@@ -103,8 +114,29 @@ const normalize = (text: string): string =>
     .replace(/\s+/g, ' ')
     .toLowerCase()
 
-const readNormalized = (relativePath: string): string =>
-  normalize(read(relativePath))
+/**
+ * The COPY of a surface: what a person actually reads, with source comments
+ * removed so that a docblock cannot stand in for a rendered string.
+ *
+ * This is not defensive tidying — it is the hole this file shipped with for
+ * about ten minutes. The staff card's docblock says "keep reading AND WRITING
+ * for up to an hour" as part of explaining WHY the copy says what it says.
+ * With comments left in, reverting the user-facing sentence to "keep reading
+ * data" still passed, because the explanation of the fix satisfied the
+ * assertion about the fix. The planted red for that surface did not fire, and
+ * that is the only reason this exists.
+ *
+ * Reuses `stripTypeScriptComments` rather than reaching for a regex: the
+ * naive version is not string-aware, and a strings-full component like this
+ * one is exactly where `https://` inside a literal gets read as a line
+ * comment and silently deletes the rest of the line.
+ */
+const readCopy = (relativePath: string): string => {
+  const raw = read(relativePath)
+  return normalize(
+    /\.tsx?$/.test(relativePath) ? stripTypeScriptComments(raw) : raw,
+  )
+}
 
 /**
  * The rules files that decide what a still-valid-but-revoked ID token can do
@@ -115,15 +147,23 @@ const RTDB_RULES = 'cloud/firebase-database.rules.json'
 const STORAGE_RULES = 'cloud/firebase-storage.rules'
 
 /**
- * Every surface that describes the residual. Four, because this promise is
+ * Every surface that describes the residual. Five, because this promise is
  * made to the customer, to the operator who repeats it to the customer, and
- * twice in the console at the moment of the click.
+ * in the console at the moment of the click — on the owner's own card and on
+ * the staff card that ends someone else's session.
+ *
+ * The staff card was corrected independently in `04a894742`, from the same
+ * observation reached separately: "no rule reads `auth.token.auth_time`, so a
+ * still-valid ID token keeps its full write access until it expires". Two
+ * people finding this within an hour of each other is the argument for
+ * pinning it rather than fixing it twice.
  */
 const SURFACES = [
   'apps/docs/docs/workspace-and-billing/signing-in-and-sessions.md',
   'apps/docs/docs/staff-console/overview.md',
   'apps/docs/docs/staff-console/lockdown.md',
   'apps/console/components/recent-sign-ins-card.component.tsx',
+  'apps/console/components/staff-user-device-sessions-card.component.tsx',
 ] as const
 
 /**
@@ -164,7 +204,7 @@ function storageDeniesClient(): boolean {
 describe('a revoked device’s residual access, and what we say about it', () => {
   it('reads every surface it claims to check (anti-vacuity)', () => {
     for (const surface of SURFACES) {
-      const text = readNormalized(surface)
+      const text = readCopy(surface)
       expect(text.length).toBeGreaterThan(200)
       // Each surface must actually be talking about this, or the sweeps below
       // are asserting nothing about a file that merely exists.
@@ -194,7 +234,7 @@ describe('a revoked device’s residual access, and what we say about it', () =>
       )
     }
     for (const surface of SURFACES) {
-      const text = readNormalized(surface)
+      const text = readCopy(surface)
       for (const claim of READ_ONLY_CLAIMS) {
         expect({ surface, claim, present: text.includes(claim) }).toEqual({
           surface,
@@ -207,7 +247,7 @@ describe('a revoked device’s residual access, and what we say about it', () =>
 
   it('every surface positively says the tab can still change data', () => {
     for (const surface of SURFACES) {
-      const text = readNormalized(surface)
+      const text = readCopy(surface)
       const admits = WRITE_ADMISSIONS.some((phrase) => text.includes(phrase))
       expect({ surface, admits }).toEqual({ surface, admits: true })
     }
