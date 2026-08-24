@@ -591,8 +591,33 @@ describe('the advertising-tag gate', () => {
       const withoutComments = (source: string) =>
         source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
-      const offenders = files.filter(({ source }) => {
+      // Files whose PURPOSE is to disclose the vendor (AGL-1648). The
+      // subprocessor registry names `connect.facebook.net` and the
+      // advertising-tags module path inside STRING LITERALS — prose, which
+      // survives comment-stripping — because naming what it discloses is the
+      // entire point of a disclosure registry. Measured: 2 occurrences of the
+      // script host, 1 of the module path, and ZERO of `fbq`.
+      //
+      // This is a classification, not a hole. The executable signals below are
+      // still checked for these files; only the bare substring is exempted. And
+      // the registry is imported by nothing but its own spec, so it cannot load
+      // anything even if it wanted to.
+      const DISCLOSURE_ONLY = new Set([
+        'apps/console/constants/subprocessor-inventory.ts',
+      ])
+
+      // Executable use — an actual import, or an actual call. Applies to EVERY
+      // file including the disclosure ones, so a real pixel added to the
+      // registry tomorrow still turns this red.
+      const executesTheVendor = (code: string) =>
+        /(?:from|import|require)\s*\(?\s*['"][^'"]*app-utils\/advertising-tags/.test(
+          code,
+        ) || /\bfbq\s*\(/.test(code)
+
+      const offenders = files.filter(({ file, source }) => {
         const code = withoutComments(source)
+        if (executesTheVendor(code)) return true
+        if (DISCLOSURE_ONLY.has(file)) return false
         return (
           code.includes('app-utils/advertising-tags') ||
           code.includes(META_PIXEL_VENDOR.scriptMatch) ||
@@ -600,6 +625,14 @@ describe('the advertising-tag gate', () => {
         )
       })
       expect(offenders.map((f) => f.file)).toEqual([])
+
+      // The exemption must not be able to rot into a blanket pass: prove the
+      // allowlisted file is still caught when it genuinely executes the vendor.
+      expect(
+        executesTheVendor("import { x } from '../app-utils/advertising-tags'"),
+      ).toBe(true)
+      expect(executesTheVendor('fbq("track", "PageView")')).toBe(true)
+      expect(executesTheVendor('"we disclose connect.facebook.net"')).toBe(false)
     })
 
     it('and the gate is mounted from exactly one place — the tenant route', () => {
