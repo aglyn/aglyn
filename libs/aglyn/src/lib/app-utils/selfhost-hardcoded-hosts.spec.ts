@@ -95,6 +95,24 @@ function stripComments(source: string): string {
  */
 const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
   {
+    file: 'apps/console/utils/stripe-dunning-schedule.ts',
+    count: 1,
+    reason:
+      'AGL-2430. A documentation constant recording the exact URL a human pastes into the LIVE Stripe Dashboard so card-failure emails reach a page where the card can be changed. Grepped for importers: there are none — it never executes, and a self-host operator resolves nothing from it. It names `app.` deliberately, not the apex, which is the fact being recorded.',
+  },
+  {
+    file: 'tools/scripts/check-external-facts.mjs',
+    count: 6,
+    reason:
+      'AGL-2193. The daily external-fact checker. Its hostnames are the checker\'s OWN self-test fixtures — including deliberate negative controls such as `aglyn.com.evil.net` that must NOT match. A build tool, never shipped, and the literals are the test data.',
+  },
+  {
+    file: 'tools/scripts/stripe-connect-reversal-drill.mjs',
+    count: 1,
+    reason:
+      'AGL-1956. `business_profile[url]` on a TEST-MODE Stripe drill account. A drill script, never shipped and never run against live.',
+  },
+  {
     file: 'apps/console/app/(app)/[orgSlug]/marketplace/[listingId]/listing-social-card.ts',
     count: 1,
     reason:

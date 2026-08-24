@@ -21,7 +21,12 @@ import type { ReactNode } from 'react'
 // Title-only shell (AGL-1059): the page is a client component, and a client
 // component cannot export `metadata` — so its title lives here, in the
 // nearest server layout. The suffix comes from the root title template.
-export const metadata: Metadata = { title: 'Billing' }
+// Deliberately NOT 'Billing' — the org-scoped page at
+// `(app)/[orgSlug]/billing` already owns that title, and two identical titles
+// make the GA4 Pages report unable to tell them apart (AGL-2430). This route
+// is the org-agnostic entry Stripe's dunning emails point at; when it renders
+// at all rather than redirecting, what the visitor sees IS a workspace choice.
+export const metadata: Metadata = { title: 'Billing — choose a workspace' }
 
 export default function BillingEntryTitleLayout({
   children,
