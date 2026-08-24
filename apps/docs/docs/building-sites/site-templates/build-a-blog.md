@@ -229,6 +229,26 @@ in the block library:
   label box to drop that pill and leave only the category pills; the box then reads
   `none`, which is the value that actually persists — typing `none` yourself does the
   same thing. Renders nothing until the collection has categories.
+- **Collection Search** — a search box for one collection, with a suggestions dropdown.
+  Drop it wherever the field belongs — typically in the listing's toolbar row, opposite
+  the Category Pills — and it searches the entries that listing is drawn from. Typing
+  opens a panel of matching posts (title, category chip, date and a line of excerpt);
+  the entry cards underneath are left alone, so a reader skimming the list never loses
+  their place. Pressing Enter goes to the site-wide [search results](../site-search/overview.md)
+  page, which is also what the panel's **View all results** link does — so the box works
+  even before any JavaScript runs. Attributes: **Collection slug** (blank = the
+  collection from the URL) and **Search placeholder** (blank = "Search posts…").
+
+  Matching is fuzzy and forgives typos, which is what makes it different from the
+  site-wide **Search Box** element: that one searches your whole site by substring and
+  navigates to a results page; this one answers inside the listing, about one
+  collection. A miss always names how many entries it looked through — and says so when
+  the collection holds more than were read — rather than implying the post does not
+  exist. Renders nothing until the collection has published entries.
+
+  The Collection Entries block has a **Search** switch of its own, which puts a field
+  inside the block. Use that one when you want the cards themselves filtered in place;
+  use this one when the field belongs somewhere the block does not reach.
 
 ### Category filtering
 

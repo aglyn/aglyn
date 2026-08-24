@@ -19,6 +19,7 @@ import {
   AUTHORS_MAX_PER_HOST,
   type CollectionCategory,
   collectionCategorySlug,
+  COLLECTION_SOURCE_MAX,
   collectionTotalPages,
   type ContentAuthorRecord,
   entryMatchesCategoryRoute,
@@ -320,7 +321,11 @@ async function listLiveEntries(
   // sort client-side like the version lists.
   const entriesQuery = await entriesRef
     .where('status', 'in', ['published', 'scheduled'])
-    .limit(100)
+    // Named rather than literal (AGL-1516): a search index has to be able to
+    // say "this read reached its bound", and it can only do that against a
+    // bound it shares with the query. `collectionSourceReachedBound` reads
+    // the same constant.
+    .limit(COLLECTION_SOURCE_MAX)
     .get()
   return entriesQuery.docs
     .filter((entryDoc) => isLive(entryDoc.data()))

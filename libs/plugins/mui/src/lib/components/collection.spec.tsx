@@ -23,6 +23,7 @@ import {
   CollectionEntryBody,
   CollectionEntryMeta,
   CollectionRelated,
+  CollectionSearch,
   CollectionShare,
   collectionCategoriesSchema,
   collectionEntriesSchema,
@@ -30,6 +31,7 @@ import {
   collectionEntryMetaSchema,
   collectionPresets,
   collectionRelatedSchema,
+  collectionSearchSchema,
   collectionShareSchema,
 } from './collection'
 
@@ -286,6 +288,31 @@ describe('Collection entries search (AGL-1516)', () => {
     })
     expect(screen.getByText('No matches for “zzzz”.')).toBeTruthy()
     expect(screen.queryByText(/are not searched/)).toBeNull()
+  })
+
+  it('will not claim completeness over a CAPPED read (AGL-1516)', () => {
+    // The third truncation, and the invisible one. `searchTotal` counts the
+    // entries the SERVER saw, and that read carries its own limit — so a
+    // block holding every entry of a 400-post collection's first 100
+    // satisfies `index.length === searchTotal` exactly, and takes the one
+    // branch that claims to have looked everywhere. `searchCapped` is the
+    // only thing that separates "this is all there is" from "this is all I
+    // read".
+    render(
+      <CollectionEntries search searchIndex={index} searchTotal={2} searchCapped>
+        {cards}
+      </CollectionEntries>,
+    )
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'zzzz' },
+    })
+    expect(screen.queryByText('No matches for “zzzz”.')).toBeNull()
+    expect(
+      screen.getByText(
+        'No matches for “zzzz” in the 2 entries shown here — the rest of ' +
+          'the collection is not searched.',
+      ),
+    ).toBeTruthy()
   })
 
   it('falls back to the perPage reading when no total was stamped', () => {
@@ -623,6 +650,158 @@ describe('Collection entries search — suggestions (AGL-1525)', () => {
     for (const value of values) expect(value).toBeTruthy()
     for (const option of (attribute?.options ?? []) as any[]) {
       expect(String(option.label ?? '').trim()).toBeTruthy()
+    }
+  })
+})
+
+describe('Collection Search block (AGL-1516, Figma 494:1220)', () => {
+  const index = [
+    {
+      title: 'Design it live',
+      excerpt: 'how besigner renders the page',
+      url: '/blog/design-it-live',
+      date: 'Nov 14, 2023',
+      category: 'Guides',
+    },
+    {
+      title: 'One platform, not a stack',
+      excerpt: 'commerce forms media',
+      url: '/blog/one-platform',
+    },
+  ]
+  const box = (props: Record<string, unknown> = {}) =>
+    render(
+      <CollectionSearch searchIndex={index} searchTotal={index.length} {...props} />,
+    )
+  const type = (value: string) =>
+    fireEvent.change(screen.getByRole('textbox'), { target: { value } })
+  const viewAll = () =>
+    screen
+      .queryAllByRole('link')
+      .find((link) => link.textContent?.startsWith('View all results'))
+
+  it('is a block of its own, so the frame toolbar can hold it', () => {
+    // The whole reason this element exists (AGL-1516). The entries block's
+    // field is that block's first child and cannot be lifted into a toolbar
+    // row; the pills cannot be moved in either, because every child of an
+    // entries block is cloned once per entry. Standalone and self-closing is
+    // what makes "pills left, search + RSS right" authorable at all.
+    expect(collectionSearchSchema.$id).toBe(
+      Aglyn.COLLECTION_SEARCH_COMPONENT_ID,
+    )
+    expect(collectionSearchSchema.flags?.selfClosing).toBe(
+      Aglyn.FEATURE_FLAG.ENABLED,
+    )
+    const names = (collectionSearchSchema.attributes ?? []).map(
+      (item) => item.name,
+    )
+    expect(names).toEqual(['collectionSlug', 'searchPlaceholder'])
+    // The server-stamped facts stay un-authorable: an author who could edit
+    // them could make the box lie about how far it looked.
+    expect(names).not.toContain('searchIndex')
+    expect(names).not.toContain('searchTotal')
+    expect(names).not.toContain('searchCapped')
+  })
+
+  it('suggests matching entries with chip, date and excerpt', () => {
+    box()
+    type('besigner')
+    expect(screen.getByText('Design it live')).toBeTruthy()
+    expect(screen.getByText('Guides')).toBeTruthy()
+    expect(screen.getByText('Nov 14, 2023')).toBeTruthy()
+    expect(screen.queryByText('One platform, not a stack')).toBeNull()
+  })
+
+  it('opens nothing until the reader actually types', () => {
+    box()
+    expect(viewAll()).toBeUndefined()
+    type('   ')
+    expect(viewAll()).toBeUndefined()
+  })
+
+  it('submits to the site search, so Enter works without the panel', () => {
+    const { container } = box()
+    const form = container.querySelector('form')
+    expect(form?.getAttribute('action')).toBe('/search')
+    expect(form?.getAttribute('method')).toBe('get')
+    expect(form?.querySelector('input')?.getAttribute('name')).toBe('q')
+    expect(screen.getAllByRole('search')).toHaveLength(1)
+  })
+
+  it('reports the SIZE of what it searched, never a bare "no matches"', () => {
+    // This box reads a bounded set. A flat "No matches." would be a claim
+    // about the whole collection that the index behind it cannot support.
+    box()
+    type('zzzz')
+    expect(
+      screen.getByText('No matches for “zzzz” in the 2 entries searched here.'),
+    ).toBeTruthy()
+    expect(screen.queryByText('No matches for “zzzz”.')).toBeNull()
+    // And the site-wide escape hatch, which is exactly what a miss needs.
+    expect(viewAll()?.getAttribute('href')).toBe('/search?q=zzzz')
+  })
+
+  it('says so when the READ was capped, not just when the window was', () => {
+    // The failure this guards is silent: `searchIndex.length ===
+    // searchTotal` is satisfied by a box holding 100 of 400 posts, because
+    // `searchTotal` counts what the server saw and the server's read stops
+    // at its limit. Without the flag the miss above claims a completeness it
+    // never had.
+    box({ searchCapped: true })
+    type('zzzz')
+    expect(
+      screen.getByText(
+        'No matches for “zzzz” in the 2 entries searched here — the ' +
+          'collection holds more, which this box has not read.',
+      ),
+    ).toBeTruthy()
+  })
+
+  it('renders NO field on a live surface with nothing stamped', () => {
+    // Unknown collection, empty collection, or a page composed before this
+    // block existed. A field here could only ever answer "no matches", which
+    // reads as a fact about the query rather than about the absent index.
+    render(<CollectionSearch />)
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.queryByRole('search')).toBeNull()
+  })
+
+  it('stays INERT on an editing surface — read-only, no panel, no form', () => {
+    const { container } = render(
+      <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>
+        <CollectionSearch />
+      </Aglyn.ScreenLinkContext.Provider>,
+    )
+    const input = screen.getByRole('textbox') as HTMLInputElement
+    expect(input.readOnly).toBe(true)
+    expect(container.querySelector('form')).toBeNull()
+    fireEvent.change(input, { target: { value: 'anything' } })
+    expect(viewAll()).toBeUndefined()
+  })
+
+  it('honours the placeholder, and falls back to the frame wording', () => {
+    box({ searchPlaceholder: 'Search the changelog…' })
+    expect(
+      (screen.getByRole('textbox') as HTMLInputElement).placeholder,
+    ).toBe('Search the changelog…')
+    screen.getByRole('textbox').remove()
+    box()
+    expect(
+      (screen.getByRole('textbox') as HTMLInputElement).placeholder,
+    ).toBe('Search posts…')
+  })
+
+  it('keeps its compose-time props OFF the DOM', () => {
+    const { container } = box({ collectionSlug: 'blog', searchCapped: true })
+    const html = container.innerHTML
+    for (const leak of [
+      'collectionSlug',
+      'searchIndex',
+      'searchTotal',
+      'searchCapped',
+      'searchPlaceholder',
+    ]) {
+      expect(html).not.toContain(leak)
     }
   })
 })

@@ -511,3 +511,60 @@ describe('composeNodesWithChrome fills Entry Meta blocks (AGL-1385)', () => {
     expect(composed).toBeTruthy()
   })
 })
+
+describe('composeNodesWithChrome fills Collection Search blocks (AGL-1516)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    setup()
+  })
+
+  /** As dropped into a listing toolbar beside the pills and the RSS button. */
+  const withSearch = () => ({
+    root: { $id: 'root', componentId: 'div', nodes: ['box'] },
+    box: {
+      $id: 'box',
+      componentId: 'collectionSearch',
+      parentId: 'root',
+      props: {},
+      nodes: [],
+    },
+  })
+
+  const entries = [
+    { $id: 'e1', title: 'Design it live', slug: 'design-it-live', excerpt: 'besigner' },
+    { $id: 'e2', title: 'One platform', slug: 'one-platform', excerpt: 'commerce' },
+  ]
+
+  it('stamps the collection’s index onto the block', async () => {
+    // The wiring, not the expansion: the block only ever reaches
+    // `expandCollectionSearch` if the pipeline counts it as a reason to
+    // resolve a collection source and then runs the stage. A composed page
+    // that skipped either would render an element that silently shows
+    // nothing — the exact failure this issue spent three passes on.
+    const composed = (await composeNodesWithChrome({
+      hostId: 'h1',
+      screenNodes: withSearch(),
+      collection: { slug: 'blog', entries },
+    })) as any
+
+    expect(composed['box'].props.searchIndex).toEqual([
+      { title: 'Design it live', excerpt: 'besigner', url: '/blog/design-it-live' },
+      { title: 'One platform', excerpt: 'commerce', url: '/blog/one-platform' },
+    ])
+    expect(composed['box'].props.searchTotal).toBe(2)
+  })
+
+  it('CONTROL — the block carries none of it beforehand', () => {
+    const json = JSON.stringify(withSearch())
+    expect(json).not.toContain('searchIndex')
+    expect(json).not.toContain('design-it-live')
+  })
+
+  it('leaves the block alone with no collection in context', async () => {
+    const composed = (await composeNodesWithChrome({
+      hostId: 'h1',
+      screenNodes: withSearch(),
+    })) as any
+    expect('searchIndex' in composed['box'].props).toBe(false)
+  })
+})
