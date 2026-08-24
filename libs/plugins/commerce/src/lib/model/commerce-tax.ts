@@ -81,10 +81,16 @@ export interface TaxRate {
  * What is still true, and is why this module did not change: these FLAT RATES
  * are the manual/lodging/service path, which never touches Aglyn's
  * registrations and is not what §10.7 covers. The rates a merchant types here
- * remain theirs to determine. The merchant-facing copy in
- * `tax-settings-card.component.tsx` and `storefront-tax-summary-card.component.tsx`
- * still reads as though §10.3 were unchanged, and is an OWED follow-up
- * (AGL-1956) — it is now narrower than the Terms it was written against.
+ * remain theirs to determine.
+ *
+ * The merchant-facing copy this note used to call an OWED follow-up is DONE.
+ * `storefront-tax-summary-card.component.tsx` said "Aglyn does not make that
+ * determination for you" and was rewritten to §10.7 in `f7e5465f5`.
+ * `tax-settings-card.component.tsx` was read and needed no change — it governs
+ * exactly these flat lodging/service rates, which §10.7 does not reach, so it
+ * was already saying the right thing about the right taxes. Recorded rather
+ * than deleted: the next reader should not have to re-derive that the second
+ * card's silence is correct rather than overlooked.
  */
 export interface FlatTaxRate {
   /** Percent, e.g. 6. Absent or non-positive = off, which is the default. */

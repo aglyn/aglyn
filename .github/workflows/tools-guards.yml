@@ -512,6 +512,41 @@ jobs:
       - run: npm run test:no-tax-identifiers
 
       - run: npm run check:no-tax-identifiers
+
+      # AGL-1956. On 2026-08-24 Aglyn accepted marketplace-facilitator status
+      # and published ToS §10.7, which tells every merchant that on a
+      # storefront sale the tax "is collected into Aglyn's processor account,
+      # is not transferred to your connected payment account, and is remitted
+      # by Aglyn to the taxing authority." That is not a policy sentence — it
+      # is a description of four Stripe parameters, and nothing checked them.
+      #
+      # The defect that issue closed was ONE wrong parameter pairing:
+      # `application_fee_amount` beside `automatic_tax[enabled]` on a
+      # destination charge, which transfers `amount_total − fee` to the
+      # merchant while `amount_total` has Aglyn's sales tax inside it. Both
+      # keys are individually correct, the session is created, the shopper is
+      # charged the right total, and every downstream number stays plausible.
+      # No unit test on a single call site can see it, because the defect is a
+      # RELATIONSHIP between two keys in one request.
+      #
+      # The AGL-1956 close-out recorded that five charge sites hand-roll their
+      # Connect parameters rather than calling the one emitter, so that
+      # module's claim to be the single emitter "is not true of the codebase",
+      # and that a guard was warranted but was not built inside the freeze.
+      # This is that guard: the note as an exit code.
+      #
+      # Self-test first, as everywhere else here — and it earns the order.
+      # This guard's scanner has to tell a Stripe parameter from a COMMENT
+      # about a Stripe parameter, in a repository whose comments discuss
+      # `on_behalf_of` and `Stripe-Account` at length precisely because they
+      # must never be sent. A scanner that could not draw that line would
+      # either fire on every explanatory comment or be silenced into
+      # uselessness, so the self-test pins both directions before the sweep's
+      # green is worth anything.
+      - run: npm run test:facilitator-charge-shape
+
+      - run: npm run check:facilitator-charge-shape
+
       # AGL-2025. Unlike every step above, these two are about the CONTENT of
       # apps/ and libs/, not about tools/ — which is why the `paths:` filter
       # gained those two roots. A colour pinned into `libs/plugins` cannot

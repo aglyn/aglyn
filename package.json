@@ -146,6 +146,8 @@
     "test:pricing-tables": "node --test tools/scripts/lib/pricing-tables.test.mjs",
     "check:no-tax-identifiers": "node tools/scripts/check-no-tax-identifiers.mjs",
     "test:no-tax-identifiers": "node tools/scripts/check-no-tax-identifiers.mjs --selftest",
+    "check:facilitator-charge-shape": "node tools/scripts/check-facilitator-charge-shape.mjs",
+    "test:facilitator-charge-shape": "node tools/scripts/check-facilitator-charge-shape.mjs --self-test",
     "check:brand-literals": "node tools/scripts/check-brand-literals.mjs",
     "check:dependency-egress": "node tools/scripts/check-dependency-egress.mjs",
     "check:next-public-access": "node tools/scripts/check-next-public-access.mjs",
