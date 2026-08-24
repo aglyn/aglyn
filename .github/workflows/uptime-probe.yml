@@ -23,12 +23,21 @@ name: Uptime probe
 #
 # Optional:
 #   var CONSOLE_BASE_URL — defaults to https://app.aglyn.com
-#   var TENANT_BASE_URL  — defaults to https://demo.aglyn.com
+#   var TENANT_BASE_URL  — defaults to https://demo.aglyn.app
 #
 # Both must be hosts that SERVE the app, not ones that redirect to it. The
 # probe refuses to follow a 3xx and reports it, because a redirecting host is
 # exactly the misconfiguration that broke every scheduled cron run for a week
 # after the aglyn.io → aglyn.com move (AGL-786).
+#
+# ⚠️ "serves the app" is not the same as "answers /api/health", and the
+# tenant default was wrong on exactly that distinction until 2026-08-23
+# (AGL-1617). It read https://demo.aglyn.com — a workspace-subdomain shape
+# with no host doc behind it, whose ROOT 404s — and because health routes are
+# host-independent this workflow reported UP every fifteen minutes on a
+# hostname that served no page. Neither variable was set, so the literal
+# below is what actually ran. `tools/scripts/lib/uptime-targets.test.mjs`
+# now fails if the tenant target goes back to that shape.
 
 on:
   schedule:
@@ -66,7 +75,7 @@ jobs:
         run: |
           node tools/scripts/probe-uptime.mjs \
             "console=${CONSOLE_BASE_URL:-https://app.aglyn.com}" \
-            "tenant=${TENANT_BASE_URL:-https://demo.aglyn.com}"
+            "tenant=${TENANT_BASE_URL:-https://demo.aglyn.app}"
         env:
           CONSOLE_BASE_URL: ${{ vars.CONSOLE_BASE_URL }}
           TENANT_BASE_URL: ${{ vars.TENANT_BASE_URL }}

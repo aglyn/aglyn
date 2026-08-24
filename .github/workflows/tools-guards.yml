@@ -270,6 +270,15 @@ jobs:
       # Pure node, no emulator, under a second.
       - run: npm run test:demo-brands
 
+      # test:uptime-targets  WHAT the uptime probe watches (AGL-1617). Two
+      # separate blindnesses: the tenant target was a workspace-subdomain
+      # shape whose root 404s — health routes are host-independent, so the
+      # probe was green every fifteen minutes on a hostname serving no page —
+      # and the two render canaries built to replace the dead GCP page checks
+      # had no reader at all. The canary half is derived from the filesystem,
+      # so a third canary fails this until a monitor points at it. Pure node.
+      - run: npm run test:uptime-targets
+
       - run: npm run test:standalone-installs
 
       - run: npm run check:standalone-installs

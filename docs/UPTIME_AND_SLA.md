@@ -18,7 +18,7 @@ measure availability and will commit to a number once there is a quarter of it
 
 ```
 GET  https://app.aglyn.com/api/health          console
-GET  https://demo.aglyn.com/api/health         tenant runtime
+GET  https://demo.aglyn.app/api/health         tenant runtime
 GET  https://app.aglyn.com/api/health/backups  Firestore backup state (AGL-1490)
 GET  https://app.aglyn.com/api/health/signups  org-creation volume (AGL-1536)
 GET  https://app.aglyn.com/api/health/rate-limits
