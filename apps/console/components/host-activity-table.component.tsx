@@ -18,6 +18,7 @@
 
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
+  Alert,
   Button,
   Stack,
   Table,
@@ -64,6 +65,13 @@ export function HostActivityTable(props: HostActivityTableProps) {
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(true)
+  /*
+   * The `catch` below emptied `rows` and the render then claimed "No activity
+   * yet" — a failed read presented as a proven-empty audit log, the same lie
+   * the sibling `HostActivityCard` told for a different reason (AGL-2486).
+   * "Found nothing" and "could not look" are now separate states.
+   */
+  const [unreadable, setUnreadable] = useState(false)
 
   const loadPage = useCallback(
     async (targetPage: number, cursor?: QueryDocumentSnapshot) => {
@@ -80,6 +88,7 @@ export function HostActivityTable(props: HostActivityTableProps) {
           ),
         )
         const docs = snapshot.docs.slice(0, pageSize)
+        setUnreadable(false)
         setRows(docs.map((entry) => ({ $id: entry.id, ...entry.data() })))
         setHasMore(snapshot.docs.length > pageSize)
         setPage(targetPage)
@@ -91,6 +100,7 @@ export function HostActivityTable(props: HostActivityTableProps) {
         })
       } catch (error) {
         console.error(error)
+        setUnreadable(true)
         setRows([])
         setHasMore(false)
       } finally {
@@ -118,7 +128,18 @@ export function HostActivityTable(props: HostActivityTableProps) {
       contentBordered="all"
     >
       <Stack spacing={1.5}>
-        {rows.length === 0 && !loading ? (
+        {unreadable && !loading ? (
+          <Stack spacing={1.5} sx={{ alignItems: 'flex-start' }}>
+            <Alert severity="warning" sx={{ width: '100%' }}>
+              {'Could not read the activity log. This is NOT the same as ' +
+                'nothing having happened — do not read this as an empty ' +
+                'history.'}
+            </Alert>
+            <Button size="small" onClick={() => void loadPage(0)}>
+              {'Try again'}
+            </Button>
+          </Stack>
+        ) : rows.length === 0 && !loading ? (
           <Typography variant="body2" color="text.secondary">
             {'No activity yet — changes made in the console appear here.'}
           </Typography>
