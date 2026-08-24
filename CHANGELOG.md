@@ -9,6 +9,27 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.10 — 2026-08-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.9...v1.0.0-beta.10)
+
+### Added
+
+- **billing:** one static URL Stripe can mail lands a customer on their own billing page ([AGL-2430](https://linear.app/aglyn/issue/AGL-2430))
+- **tools:** an issue states the external fact that finishes it, re-read daily ([AGL-2193](https://linear.app/aglyn/issue/AGL-2193), [AGL-2396](https://linear.app/aglyn/issue/AGL-2396), [AGL-2379](https://linear.app/aglyn/issue/AGL-2379))
+
+### Fixed
+
+- **commerce:** a failed tax reversal can be retried, because Stripe caches the refusal ([AGL-1956](https://linear.app/aglyn/issue/AGL-1956))
+- **commerce:** a subscription cycle stops handing Aglyn's sales tax to the merchant ([AGL-1956](https://linear.app/aglyn/issue/AGL-1956), [AGL-2317](https://linear.app/aglyn/issue/AGL-2317))
+
+<details>
+<summary>Also in this release: 1 test</summary>
+
+- **billing:** the renewal path is rehearsable on a test clock ([AGL-1877](https://linear.app/aglyn/issue/AGL-1877), [AGL-1878](https://linear.app/aglyn/issue/AGL-1878), [AGL-2401](https://linear.app/aglyn/issue/AGL-2401))
+
+</details>
+
 ## v1.0.0-beta.9 — 2026-08-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/12c1d7ddf...v1.0.0-beta.9)
