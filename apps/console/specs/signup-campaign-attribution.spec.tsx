@@ -238,7 +238,7 @@ describe('campaign attribution at signup (AGL-1731)', () => {
 
     // The whole payload, not `objectContaining` — a param that is present but
     // empty is the failure mode here, and `objectContaining` would pass on it.
-    expect(signUpEvents()[0][1]).toEqual({
+    expect(signUpEvents()[0][1]).toStrictEqual({
       method: 'password',
       campaign_source: 'google',
       campaign_medium: 'cpc',
@@ -275,7 +275,7 @@ describe('campaign attribution at signup (AGL-1731)', () => {
     // Not an empty object, not a null — absent. "Arrived from nowhere,
     // confirmed" and "never asked" have to stay distinguishable.
     expect(campaignWrites()).toHaveLength(0)
-    expect(signUpEvents()[0][1]).toEqual({ method: 'password' })
+    expect(signUpEvents()[0][1]).toStrictEqual({ method: 'password' })
   })
 
   it('never lets an address off the URL reach the hit or the document', async () => {
@@ -286,7 +286,7 @@ describe('campaign attribution at signup (AGL-1731)', () => {
 
     await signUpThroughPasswordDoor()
 
-    expect(signUpEvents()[0][1]).toEqual({
+    expect(signUpEvents()[0][1]).toStrictEqual({
       method: 'password',
       campaign_name: 'sept-launch',
     })
@@ -300,7 +300,7 @@ describe('campaign attribution at signup (AGL-1731)', () => {
 
     await signUpThroughPasswordDoor()
 
-    expect(signUpEvents()[0][1]).toEqual({
+    expect(signUpEvents()[0][1]).toStrictEqual({
       method: 'password',
       campaign_source: 'hn',
     })
@@ -351,7 +351,7 @@ describe('campaign attribution at signup (AGL-1731)', () => {
     expect(campaignWrites()[0].data.signupCampaign.query).toBe(
       'utm_source=google&utm_medium=cpc&utm_campaign=sept-launch',
     )
-    expect(signUpEvents()[0][1]).toEqual({
+    expect(signUpEvents()[0][1]).toStrictEqual({
       method: 'password',
       campaign_source: 'google',
       campaign_medium: 'cpc',

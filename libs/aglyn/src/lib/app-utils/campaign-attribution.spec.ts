@@ -167,7 +167,16 @@ describe('campaignEventParams — what rides the GA4 hit (AGL-1731)', () => {
     // The call site spreads this into `sign_up`'s params. Returning undefined
     // keys instead of no keys would put `campaign_source: undefined` on every
     // organic signup and make the dimension unreadable.
-    expect(campaignEventParams(null)).toEqual({})
+    //
+    // Asserted on the KEYS, not with `toEqual({})`. `toEqual` ignores
+    // properties whose value is `undefined`, so it passes on
+    // `{ campaign_source: undefined }` — the exact defect this test names.
+    // Found by mutation: the `toEqual` version of these two lines survived a
+    // helper rewritten to emit undefined keys. With `strictNullChecks` off the
+    // types would not have objected either.
+    expect(Object.keys(campaignEventParams(null))).toEqual([])
+    expect(campaignEventParams(null)).toStrictEqual({})
     expect(Object.keys(campaignEventParams({}))).toEqual([])
+    expect(campaignEventParams({})).toStrictEqual({})
   })
 })
