@@ -25,13 +25,17 @@ export interface CardColumnsProps {
   /**
    * Columns at the wide breakpoint. Always one below `md`.
    *
-   * Two is right far more often than it looks. A third column was measured on
-   * the screen version view — whose cards were authored `lg: 4`, i.e. three
-   * abreast — and it is WORSE, because multicol may not reorder: with one card
-   * (`SEO`) taller than a third of the flow, Chrome's balance came out
-   * 988/764/278px, 932px of raggedness, against 210px at two columns. More
-   * columns means less room to even them out. Raise this only against a
-   * measurement.
+   * Two is right far more often than it looks, and a third column is not a
+   * free improvement: multicol may not REORDER, so one card taller than its
+   * share of the flow strands the columns after it. Measured while this
+   * component was briefly tried on the screen version view — five cards, one
+   * of them 764px — Chrome balanced three columns to 988/764/278px, 932px of
+   * raggedness, against 210px at two. More columns means less room to even
+   * them out. Raise this only against a measurement.
+   *
+   * When a page genuinely wants columns of DIFFERENT widths, this is the wrong
+   * component: multicol cannot span. `GridItems masonry` can, and that is what
+   * the screen version view ended up using.
    */
   columns?: number
   /** Gutter, in theme spacing units. */
@@ -114,13 +118,12 @@ export default function CardColumns({
           // column track past the edge.
           minWidth: 0,
         },
-        // A card that renders NOTHING must not weigh on the balance. The
-        // screen version view puts `<PluginWidgetSlot slot="hostActivity">`
-        // in this flow, and that renders an empty fragment for a workspace
-        // with no activity plugin entitled — leaving a wrapper carrying only
-        // its bottom margin, which multicol counts as real content and
-        // balances the columns around. `:empty` is exact here: the wrapper
-        // has no element and no text node in that case and only in that case.
+        // A card that renders NOTHING must not weigh on the balance. A plugin
+        // widget slot renders an empty fragment when no plugin is entitled for
+        // it, leaving a wrapper that carries only its bottom margin — which
+        // multicol counts as real content and balances the columns around.
+        // `:empty` is exact here: the wrapper has no element and no text node
+        // in that case and only in that case.
         // More specific than the `& > *` above (`:empty` adds a class-level
         // component), so `display: none` wins over `display: block`.
         '& > *:empty': { display: 'none' },

@@ -86,7 +86,6 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import ScreenAnalyticsCard from '../../../../../../../../../../components/analytics/screen-analytics-card.component'
-import CardColumns from '../../../../../../../../../../components/card-columns.component'
 import AuthenticatedLayout from '../../../../../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../../../../../../components/layouts/main.layout'
@@ -161,6 +160,35 @@ const VISIBILITY_OPTIONS = [
  * document loads (AGL-1261). See the effect that uses it.
  */
 const SCREEN_LOAD_OVERLAY_MAX_MS = 12000
+
+/**
+ * The two card widths in the detail band, as `GridItems masonry` reads them
+ * (AGL-2486).
+ *
+ * Three columns at `lg`, and NOT three equal ones — Zach: "I like that this
+ * before had 3 columns, we just don't need to make all of 3 columns, some
+ * could be 2 columns and 1". `masonry` buckets items by their `size`, so these
+ * two values ARE the arrangement: every `CARD_WIDE` card stacks in one column
+ * two thirds across, every `CARD_NARROW` card stacks in the other. Each column
+ * is a flex stack at natural heights, which is what stops a short card from
+ * being stretched to a tall neighbour — the defect this replaced.
+ *
+ * Which card gets which width is content-driven, and the content said the
+ * opposite of what it looks like. Measured on this page in Chrome, in one run
+ * across four splits, `SEO` gets TALLER as it widens — 738px at a 354px
+ * column, 764px at 480px, 857px at 732px, 989px at 984px — because it is
+ * dominated by a fixed-aspect social-image preview that scales with the card.
+ * `Publishing` shrinks (279px → 241px) because its chips and buttons stop
+ * wrapping. So the form-and-button cards take the wide column and the
+ * image-led `SEO` card takes the narrow one; the reverse (`SEO` wide) was
+ * measured at a 1291px band against this arrangement's 1066px.
+ *
+ * The widths collapse with the viewport, so nothing ever spans more columns
+ * than exist: two equal columns at `md`, one at `xs`, where the cards read in
+ * the authored order.
+ */
+const CARD_WIDE = { xs: 12, md: 6, lg: 8 } as const
+const CARD_NARROW = { xs: 12, md: 6, lg: 4 } as const
 
 function ScreenDetails() {
   const params = useParams<{
@@ -1000,38 +1028,27 @@ function ScreenDetails() {
         }
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          {/* The detail cards read as a BALANCED multi-column flow
-              (AGL-2486). Zach: "card masonry needs fixed". They declared
-              `size: { xs: 12, md: 6, lg: 4 }` — a rigid flex row, in which
-              every item is as tall as the tallest one beside it. `SEO` (three
-              fields and a media picker) and `Basic Details` are several times
-              the height of `Publishing` and `Page Activity`, so the short
-              cards were stretched to the tall ones and the page drew a screen
-              of dead space under them.
+          {/* MASONRY (AGL-2486). Zach: "card masonry needs fixed". Without
+              `masonry` this is a twelve-column flex ROW, in which every item
+              is as tall as the tallest one beside it — measured here, `Page
+              Activity` sat in a 741px row cell carrying a 278px card, a 463px
+              hole, and the two rows together wasted 898px. With it, each
+              width becomes a COLUMN that stacks its own cards at their
+              natural heights, and a short card beside a tall one costs
+              nothing.
 
-              Not `GridItems masonry`: within a band it groups items by their
-              `size`, and cards that all declare one width are ONE bucket — a
-              single third-of-the-page column with the rest of the page empty,
-              which is how the staff org page regressed. `CardColumns` hands
-              the break placement to the browser, and `column-fill: balance`
-              is the mechanism that evens the columns out whatever the cards
-              weigh today.
-
-              TWO columns, not the three the `lg: 4` implied. Measured on this
-              page in Chrome, at a 1488px content width: three columns pack
-              shorter (987px against 1159px) but come out 988/764/278 —
-              932px of raggedness, barely better than the rows being replaced —
-              because multicol may not reorder, and `SEO` alone is taller than
-              a third of the flow. Two columns leave 210px. The complaint here
-              is the ragged hole, not the page length.
-
-              `Versions` and `Raw JSON` stay full width underneath: a version
-              table and a JSON dump earn the whole row. */}
-          <CardColumns
+              `CARD_WIDE`/`CARD_NARROW` above are the whole arrangement: two
+              thirds and one third of a three-column band, with the widths
+              chosen from measured card behaviour. `Versions` and `Raw JSON`
+              declare a full width, which `masonry` gives a band of its own —
+              so they stay full width BELOW the band rather than being pulled
+              into a column, and the authored reading order survives. */}
+          <GridItems
             spacing={3}
+            masonry
             items={[
               {
-                key: 'basic-details',
+                size: CARD_WIDE,
                 children: (
                   <CardDisplay
                     header={'Basic Details'}
@@ -1072,7 +1089,7 @@ function ScreenDetails() {
                 ),
               },
               {
-                key: 'publishing',
+                size: CARD_WIDE,
                 children: (
                   <CardDisplay
                     header={'Publishing'}
@@ -1245,7 +1262,7 @@ function ScreenDetails() {
                 ),
               },
               {
-                key: 'page-access',
+                size: CARD_WIDE,
                 children: (
                   <CardDisplay
                     header={'Page Access'}
@@ -1319,7 +1336,7 @@ function ScreenDetails() {
                 ),
               },
               {
-                key: 'seo',
+                size: CARD_NARROW,
                 children: (
                   <CardDisplay
                     header={'SEO'}
@@ -1383,11 +1400,12 @@ function ScreenDetails() {
                 ),
               },
               {
-                key: 'page-activity',
+                size: CARD_NARROW,
                 children: (
                   // The slot renders an empty fragment when no activity
-                  // plugin is entitled — `CardColumns` drops the wrapper via
-                  // `:empty` so an absent widget cannot skew the balance.
+                  // plugin is entitled — `GridItems masonry` drops the item
+                  // wrapper via `:empty`, so an absent widget cannot leave a
+                  // gap at the bottom of the column.
                   <PluginWidgetSlot
                     slot="hostActivity"
                     hostId={hostId}
@@ -1396,11 +1414,6 @@ function ScreenDetails() {
                   />
                 ),
               },
-            ]}
-          />
-          <GridItems
-            spacing={3}
-            items={[
               {
                 size: { xs: 12 },
                 children: (
