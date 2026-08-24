@@ -275,7 +275,10 @@ jest.mock('next/navigation', () => ({
   // the active tab into `?tab=` with a shallow replace — so the router and
   // pathname it asks for have to exist here, or every render throws before a
   // single seed assertion runs.
-  useRouter: () => ({ replace: jest.fn() }),
+  // `push` as well as `replace` since AGL-2498: the entry editor is a
+  // routed detail page, so every door into it mirrors `?entry=` into the
+  // address. A router without `push` throws inside the click handler.
+  useRouter: () => ({ replace: jest.fn(), push: jest.fn() }),
   usePathname: () => '/org/hosts/site/content',
 }))
 

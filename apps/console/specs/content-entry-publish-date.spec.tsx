@@ -268,7 +268,10 @@ jest.mock('../hooks/use-firestore-doc', () => ({
 jest.mock('../constants/docs-links', () => ({ docsHelp: () => ({}) }))
 jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
-  useRouter: () => ({ replace: jest.fn() }),
+  // `push` as well as `replace` since AGL-2498: the entry editor is a
+  // routed detail page, so every door into it mirrors `?entry=` into the
+  // address. A router without `push` throws inside the click handler.
+  useRouter: () => ({ replace: jest.fn(), push: jest.fn() }),
   usePathname: () => '/org/hosts/site/content',
 }))
 

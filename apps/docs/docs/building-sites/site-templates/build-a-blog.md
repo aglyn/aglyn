@@ -58,6 +58,12 @@ export. Export anything you may want before you confirm.
 Add **rich blog entries** with images, a **live preview**, and **scheduling** so posts
 publish at the right time.
 
+**New entry**, or clicking any row in the entries table, opens that entry on **its own
+page**. The page has its own address, so you can bookmark an entry you're mid-way
+through or paste the link to a colleague and they land on the same one. **Back to
+entries** — or your browser's Back button — returns to the list; if the entry has edits
+you haven't saved, you're asked before they're dropped.
+
 Each entry carries, besides the title, excerpt, cover image, and markdown body:
 
 - **Category** — a single bucket (e.g. `Guides`) used for filtering and related posts,
@@ -73,7 +79,7 @@ Each entry carries, besides the title, excerpt, cover image, and markdown body:
 
 The same three publication controls live in **two places**, so you can decide when a post goes
 live without leaving what you're doing: the entry row's **actions menu** in the list,
-and a **Publication** panel at the bottom of the entry editor itself.
+and a **Publication** panel at the bottom of the entry's own page.
 
 - **Publish** / **Unpublish** — takes the entry live, or pulls it back, immediately.
 - **Schedule…** — pick a **Publish at** time in the **future** (the past is refused).
