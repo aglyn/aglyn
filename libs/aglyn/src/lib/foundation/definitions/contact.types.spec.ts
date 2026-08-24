@@ -64,19 +64,23 @@ describe('normalizePhone', () => {
 
 describe('normalizeAddress', () => {
   it('trims and uppercases the country', () => {
+    // Fictional on purpose, and it must stay that way (AGL-1491). What this
+    // proves is trimming and case-folding; the strings are load-bearing for
+    // nothing. This repo is PUBLIC, and a real residential address in a
+    // fixture is published permanently — git history does not forget.
     expect(
       normalizeAddress({
-        line1: '  125 Johnston Ln ',
-        city: 'Jarrell',
+        line1: '  1 Directory Row ',
+        city: 'Testville',
         state: 'TX',
-        postalCode: '76537',
+        postalCode: '00000',
         country: 'us',
       }),
     ).toEqual({
-      line1: '125 Johnston Ln',
-      city: 'Jarrell',
+      line1: '1 Directory Row',
+      city: 'Testville',
       state: 'TX',
-      postalCode: '76537',
+      postalCode: '00000',
       country: 'US',
     })
   })

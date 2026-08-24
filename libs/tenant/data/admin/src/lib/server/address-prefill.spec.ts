@@ -131,7 +131,7 @@ describe('the IdP address prefill', () => {
     // Workspace spells them, so this fails if the gate is removed.
     const firestore = fakeFirestore()
     const result = await seedUserProfile(UID, {
-      address: parts({ city: 'Jarrell', state: 'TX', postalCode: '76537' }),
+      address: parts({ city: 'Testville', state: 'TX', postalCode: '00000' }),
       firestore,
     })
     expect(result.fields).not.toContain('address')
@@ -166,7 +166,7 @@ describe('the IdP address prefill', () => {
     // as no street rather than as a key that is present.
     const firestore = fakeFirestore()
     await seedUserProfile(UID, {
-      address: parts({ line1: '   ', city: 'Jarrell', postalCode: '76537' }),
+      address: parts({ line1: '   ', city: 'Testville', postalCode: '00000' }),
       firestore,
     })
     expect(firestore.docs('users')[UID].address).toBeUndefined()
@@ -253,14 +253,27 @@ describe('a real Workspace assertion, resolver and seed together', () => {
   // The three rows the SAML app maps, sourced from Directory → Contact
   // information → Address (Home). No street row is mapped, which is the whole
   // of why this must not be stored.
+  //
+  // THE VALUES ARE FICTIONAL ON PURPOSE, and must stay that way (AGL-1491).
+  // What these specs prove is the SHAPE of the assertion — a city, a region and
+  // a postcode with no street line — and the shape is what the gate reads. The
+  // literal values are load-bearing for nothing here: every expectation below
+  // compares against these same constants, so they hold identically whatever
+  // the strings say.
+  //
+  // This repo is PUBLIC, and the real rows resolve to a residential address
+  // that AGL-1491 exists to get off public surfaces. Pasting it back in the
+  // name of fidelity would publish the exact value the gate above was built to
+  // stop us STORING — a worse leak than the one it fixes, and permanent,
+  // because git history does not forget.
   const workspaceAssertion = {
     firebase: {
       sign_in_attributes: {
         firstName: 'Zach',
         lastName: 'Gover',
-        city: 'Jarrell',
+        city: 'Testville',
         region: 'TX',
-        postalCode: '76537',
+        postalCode: '00000',
       },
     },
   }
@@ -269,9 +282,9 @@ describe('a real Workspace assertion, resolver and seed together', () => {
     // Fails on purpose if the resolver stopped reading them: then the seed
     // assertions below would pass for the wrong reason.
     expect(resolveIdpAddress(workspaceAssertion)).toMatchObject({
-      city: 'Jarrell',
+      city: 'Testville',
       state: 'TX',
-      postalCode: '76537',
+      postalCode: '00000',
       line1: '',
     })
   })
@@ -310,17 +323,17 @@ describe('a real Workspace assertion, resolver and seed together', () => {
         firebase: {
           sign_in_attributes: {
             ...workspaceAssertion.firebase.sign_in_attributes,
-            streetAddress: '125 Johnston Ln',
+            streetAddress: '1 Directory Row',
           },
         },
       }),
       firestore,
     })
     expect(firestore.docs('users')['sso-uid-workspace-full'].address).toEqual({
-      line1: '125 Johnston Ln',
-      city: 'Jarrell',
+      line1: '1 Directory Row',
+      city: 'Testville',
       state: 'TX',
-      postalCode: '76537',
+      postalCode: '00000',
     })
   })
 })
