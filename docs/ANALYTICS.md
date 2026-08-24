@@ -1640,14 +1640,89 @@ this order, because each one makes the next invisible:
    not carrying it. This is where a still-missing breakdown most likely lives
    now. See "Still outstanding" below.
 
+4. **Address.** The two credentials travel in the QUERY STRING, and GA4's
+   Measurement Protocol answers **2xx to almost anything** — including a hit
+   whose `api_secret` is missing or wrong, which it accepts and then silently
+   discards. So `response.ok` cannot detect a misaddressed hit and
+   `{ sent: true }` is not evidence of delivery. A mutation run on 2026-08-24
+   confirmed the consequence: the collector host could be changed to
+   `example.invalid` and `api_secret` dropped from the URL entirely, and the
+   suite stayed **green** — every assertion read the request BODY and nothing
+   read where it was going. Now pinned by "the hit is addressed correctly, not
+   merely shaped correctly" in `ga4-measurement-protocol.spec.ts`. A test is
+   the ONLY place this class of mistake can be caught.
+
 The sender is silent by design on cause 1 — `{ sent: false, reason:
-'not-configured' }`, no log — and cause 2 is silent by construction, because
-the process is gone. Neither shows up as an error anywhere, which is why the
-order above matters more than usual.
+'not-configured' }`, no log — cause 2 is silent by construction, because
+the process is gone, and cause 4 is silent by Google's design. None shows up
+as an error anywhere, which is why the order above matters more than usual.
+
+#### ✅ The transport is PROVEN live — measured 2026-08-24, from the property
+
+The strongest available evidence, and it needed no test hit: **the property has
+received `subscription_cancelled`** (Admin → Events → Recent events, 28-day
+window). That event has **no client-side emitter anywhere in the repo** — it
+exists only in `sendGa4SubscriptionCancelled`, over the Measurement Protocol.
+Its arrival therefore proves, end to end, that the credentials are present on
+the running lambda, the endpoint is right, the payload is accepted, and the
+`after()` scheduling actually runs. `purchase` — also server-only — corroborates.
+
+That retires the "four server events ship to nothing" finding on evidence
+rather than on this document's say-so. Note what it does NOT prove: `refund`
+and `stripe_connected` have not been received, but both go through the same
+`postGa4Event` on the same credentials as the two that landed, so the transport
+is not the explanation — no refund and no Connect activation has occurred in
+the window. Absence of an event is not evidence of a broken sender, and this is
+the distinction the 2026-08-19 smoke pass got wrong in the other direction.
+
+⚠️ **Never verify by sending a test hit into property 302497406.** It is the
+property the September funnel is read from, MP hits cannot be deleted, and a
+rehearsal `purchase` becomes permanent revenue. Use GA4 **DebugView** with a
+`debug_mode` hit, or the `/debug/mp/collect` validation endpoint, which
+validates a payload and stores nothing.
 
 ### Still outstanding
 
-0. **Register five more custom dimensions** (AGL-1562), all **event-scoped**,
+> **⚑ READ THIS FIRST — the live property was counted on 2026-08-24 (AGL-2327),
+> and most of the list below is DONE.** Read from the property, not from this
+> document and not from the repo: a custom definition is property-side state
+> that no code can observe, and the previous version of this section listed as
+> outstanding fourteen dimensions that had already been registered a week
+> earlier. That is the same failure this whole §13 is about — a stale note is
+> not inert, and this one would have sent someone to re-do finished work while
+> the genuinely missing items stayed missing.
+>
+> **Measured quota** (Admin → Data display → Custom definitions → *Quota
+> information*):
+>
+> | Registry | Used | Cap |
+> | -- | -- | -- |
+> | Custom dimensions, **event**-scoped | **18** | 50 |
+> | Custom dimensions, user-scoped | 2 | 25 |
+> | Custom dimensions, item-scoped | 0 | 10 |
+> | Custom **metrics**, event-scoped | **2** | 50 |
+> | Calculated metrics | 0 | 5 |
+>
+> **Registered event-scoped dimensions (18):** `billing_interval`,
+> `campaign_medium`, `campaign_name`, `campaign_source`, `content_id`,
+> `content_type`, `experiment_action`, `experiment_id`, `first_publish`,
+> `form_location`, `form_name`, `link_domain`, `link_id`, `method`, `plan`,
+> `surface`, `traffic_type`, `variant_id`.
+> **Registered user-scoped:** `org_plan`, `org_role`.
+> **Registered custom metrics (2):** `tenure_days`, `metric_value`.
+>
+> So: **item 0 is DONE** (all five, Aug 17) · **0b is DONE** (all three,
+> Aug 17) · **0c is DONE** (all three campaign dimensions, Aug 20 — the ad
+> deadline is met) · **0d is DONE** (`plan` as a dimension AND `tenure_days`
+> as a metric, both Aug 17; the registry trap it warns about was avoided) ·
+> **0e is HALF done** — `metric_value` is registered, `metric_delta` is not.
+>
+> **What is actually left is 0g, plus `metric_delta`: 15 parameters.** With 18
+> of 50 event-scoped dimension slots and 2 of 50 metric slots used, all of it
+> fits with room to spare — 12 new dimensions takes the property to 30/50, and
+> 3 new metrics to 5/50. The cap is not a constraint on this decision.
+
+0. ✅ **DONE 2026-08-17.** ~~Register five more custom dimensions~~ (AGL-1562), all **event-scoped**,
    before the events are worth reporting on. Every parameter the two link
    events carry is new, and an unregistered param is collected but never
    appears as a breakdown — which reads exactly like the event not carrying
@@ -1661,11 +1736,16 @@ order above matters more than usual.
    | Link id        | `link_id`       | Which outbound link, by label                                                                        |
    | Surface        | `surface`       | `site` vs `docs` (AGL-1579); Hostname covers the domains, this covers surfaces sharing one           |
 
-0d. **Register `plan` as a dimension and `tenure_days` as a METRIC**
-   (AGL-2327). Both are sent by `sendGa4SubscriptionCancelled` and appear on
+0d. ✅ **DONE 2026-08-17** — verified against the property 2026-08-24. `plan`
+   is an event-scoped **dimension** and `tenure_days` is an event-scoped
+   custom **metric**, which is the right pair of registries. Kept for the
+   warning below, which is the reusable part.
+
+   ~~Register `plan` as a dimension and `tenure_days` as a METRIC~~
+   (AGL-2327). Both are sent by `sendGa4SubscriptionCancelled` and appeared on
    **neither** the registered list above **nor** either outstanding list — so
-   the churn event arrives as one undifferentiated count and plan-tier churn
-   mix and tenure-at-cancellation, the two numbers it exists for, are
+   the churn event arrived as one undifferentiated count and plan-tier churn
+   mix and tenure-at-cancellation, the two numbers it exists for, were
    unreachable. `plan` is event-scoped custom **dimension**.
 
    ⚠️ `tenure_days` is NOT a dimension, and registering it as one is the
@@ -1678,24 +1758,37 @@ order above matters more than usual.
    event-scoped, unit **Standard**) can produce one. Same registry, different
    tab; the parameter name is unchanged.
 
-0e. **Register the Core Web Vitals custom METRICS** (AGL-1642). `metric_value`
-   and `metric_delta` are numeric and are on no list anywhere — the repo has
-   never had a custom-metric registry at all, which is why they were never
-   noticed missing: every audit read the DIMENSIONS list, and a metric is
+0e. ⚠️ **HALF DONE.** **Register the Core Web Vitals custom METRICS**
+   (AGL-1642). Numeric, so they belong in the **Custom metrics** tab — every
+   audit before 2026-08-20 read only the DIMENSIONS list, and a metric is
    invisible from there. Without them the CWV events arrive as a count of
    measurements with no measurement in it, and "what is real-user LCP" stays
    the unanswerable question AGL-1642 existed to answer.
 
-   | Metric name  | Event parameter | Unit     | Why                                                               |
-   | ------------ | --------------- | -------- | ----------------------------------------------------------------- |
-   | Metric value | `metric_value`  | Standard | The metric's current value — the number the report is OF          |
-   | Metric delta | `metric_delta`  | Standard | Its change since the last report, for the multi-report metrics    |
+   | Metric name  | Event parameter | Unit     | State | Why                                                            |
+   | ------------ | --------------- | -------- | ----- | -------------------------------------------------------------- |
+   | Metric value | `metric_value`  | Standard | ✅ registered 2026-08-17 | The metric's current value — the number the report is OF |
+   | Metric delta | `metric_delta`  | Standard | ❌ **still missing** | Its change since the last report, for the multi-report metrics |
 
-   `value` needs nothing — it is GA4's built-in event value. `metric_id`,
-   `metric_rating` and `surface` are strings and belong on the DIMENSION list
-   above.
+   `value` needs nothing — it is GA4's built-in event value, and because
+   `reportMetric` sends `value: metric.delta`, the delta is *already* readable
+   as Event value. `metric_delta` is therefore the lowest-priority item on
+   this whole page: register it for an explicit column, not to make a number
+   reachable. `metric_id`, `metric_rating` and `surface` are strings and
+   belong on the DIMENSION list above — `surface` is registered, the other two
+   are in 0g.
 
-0c. **Register the three campaign dimensions** (AGL-1731), all
+   ⚠️ **`FCP` is NOT emitted, and any list saying otherwise is wrong.**
+   `METRIC_HANDLER_NAMES` in `web-vitals-rum.ts` is `['onCLS', 'onINP',
+   'onLCP', 'onTTFB']` — four, deliberately. The live property agrees exactly:
+   `CLS`, `INP`, `LCP` and `TTFB` appear in Admin → Events → Recent events and
+   `FCP` does not. Registering anything "for FCP" buys a permanently empty
+   report.
+
+0c. ✅ **DONE 2026-08-20** — all three verified on the property 2026-08-24,
+   which means the "before the first ad runs" deadline was met and September
+   signups will be attributable. ~~Register the three campaign dimensions~~
+   (AGL-1731), all
    **event-scoped**, and do it BEFORE the first ad runs — an unregistered
    param is collected but not reportable, so the campaign would be on every
    hit and in no report:
@@ -1715,7 +1808,8 @@ order above matters more than usual.
    `login` needs nothing new — `method` is already registered, and `sso` is a
    new VALUE of it, not a new dimension.
 
-0b. **Register three more for the site-runtime events** (AGL-1591), all
+0b. ✅ **DONE 2026-08-17** — all three verified on the property 2026-08-24.
+~~Register three more for the site-runtime events~~ (AGL-1591), all
 **event-scoped**:
 
 | Dimension name    | Event parameter     | Why                                                                                                     |
@@ -1775,30 +1869,70 @@ there is the merchant's to make, not one we can make for them.
    item 0 describes, one level larger. Found 2026-08-20 by diffing the fired
    params against every list above:
 
-   | Event family                          | Params fired but unregistered                                      |
-   | ------------------------------------- | ------------------------------------------------------------------ |
-   | Retention funnel (AGL-1865)           | `reason`, `surface`, `from_plan`, `to_plan`, `funnel_completed`     |
-   | Plan changes from the grid (AGL-2235) | `from_plan`, `to_plan`, `interval`, `effective_at`                  |
-   | Aglyn Assist (AGL-1860/AGL-1988)      | `tier`, `grounded`, `feedback`, `action`                            |
-   | Core Web Vitals (AGL-1642)            | `metric_id`, `metric_rating` (dimensions; the numbers are in 0e)    |
+   Re-derived against the live property 2026-08-24: `surface` was on this
+   list and is in fact **registered**, so the real total is **15**, not 16.
+   This is now the complete outstanding set — the click-list, in order.
 
-   `percent_off` and `duration_months` on `winback_discount_accepted` are
-   NUMBERS — custom **metrics**, like `tenure_days`, not dimensions; a save
-   recorded without an averageable price reads as free, which is the exact
-   thing AGL-1620 reported them to prevent.
+   **Custom dimensions** — Admin → Data display → Custom definitions →
+   *Custom dimensions* → Create, all **Event**-scoped (12; takes 18/50 → 30/50):
 
-   The dimension quota is **50 event-scoped**, and the lists above now total
-   well under it, so this is a clicking job rather than a prioritization one.
+   | Dimension name   | Event parameter    | Fired by                                  | Why |
+   | ---------------- | ------------------ | ----------------------------------------- | --- |
+   | Metric rating    | `metric_rating`    | CWV (AGL-1642)                            | `good`/`needs-improvement`/`poor` — **the entire point of RUM**, and readable without percentile math |
+   | Metric id        | `metric_id`        | CWV (AGL-1642)                            | Per-pageview dedup/grouping key |
+   | Churn reason     | `reason`           | `churn_survey_submitted`                  | **Why they left** — the one question the survey exists to ask |
+   | From plan        | `from_plan`        | `downsell_accepted`, `plan_downgrade_scheduled`, `plan_upgraded` | The tier left — one dimension serves all three events |
+   | To plan          | `to_plan`          | same three                                | The tier taken; the pair is the whole movement |
+   | Funnel completed | `funnel_completed` | `cancellation_completed`                  | Separates surveyed departures from support/dashboard ones |
+   | Billing interval (plan change) | `interval` | `plan_downgrade_scheduled`, `plan_upgraded` | Cadence of the new plan. NOTE it is `interval`, **not** the already-registered `billing_interval` — a different param name, so it needs its own dimension |
+   | Effective at     | `effective_at`     | `plan_downgrade_scheduled`                | Decision date vs effect date — the window a save is still possible in |
+   | Assist tier      | `tier`             | `assistant_message_sent`                  | `free` vs `entitled` |
+   | Assist grounded  | `grounded`         | `assistant_message_sent`                  | Ungrounded questions at volume ARE the docs-gap signal |
+   | Assist feedback  | `feedback`         | `assistant_feedback`                      | `up`/`down` — otherwise thumbs are one undifferentiated count |
+   | Assist action    | `action`           | `assistant_proposal_shown`/`_confirmed`   | The shown-to-confirmed ratio per action; a ratio near 1 means the confirm gate is a speed bump |
+
+   **Custom metrics** — same screen, *Custom metrics* tab, **Event**-scoped,
+   unit **Standard** (3; takes 2/50 → 5/50):
+
+   | Metric name      | Event parameter   | Why |
+   | ---------------- | ----------------- | --- |
+   | Percent off      | `percent_off`     | The discount a save was bought with |
+   | Duration months  | `duration_months` | How long that discount runs — with `percent_off`, the cost of the save |
+   | Metric delta     | `metric_delta`    | Lowest priority — already readable as GA4's built-in Event value (see 0e) |
+
+   `percent_off` and `duration_months` are NUMBERS — custom **metrics**, like
+   `tenure_days`, not dimensions; a save recorded without an averageable price
+   reads as free, which is the exact thing AGL-1620 reported them to prevent.
+   `grounded` and `funnel_completed` are booleans and are **dimensions**: GA
+   reports them as the strings `true`/`false`, which is a breakdown, not a
+   number to average.
+
+   The dimension quota is **50 event-scoped** against 18 used, and the metric
+   quota 50 against 2, so this is a clicking job rather than a prioritization
+   one — everything above fits with 20 dimension slots still spare.
    Register nothing speculatively: an unregistered param is still COLLECTED,
    so registration can wait for the question, but the answer is unavailable for
    the period before it — GA does not backfill a dimension.
 
+   ⚠️ **Ordering is not cosmetic.** `metric_rating` and the four retention
+   params are the ones whose events are firing TODAY; the Assist four fire
+   only where Assist is used. Every day a param is unregistered is a day of
+   that breakdown lost permanently, so register top-down.
+
 1. **Mark the remaining key events.** Admin → Events → _Mark as key event_.
-   `sign_up` is marked; `purchase` is a key event by GA default. GA will not let
-   an event be marked **until it has been seen at least once**, so
-   `generate_lead`, `site_published`, `begin_checkout` and `stripe_connected`
-   have to wait for their first hit. Until marked they are ordinary events and
-   appear as conversions nowhere.
+   Re-read from the property 2026-08-24: **`sign_up`, `purchase`,
+   `select_content` and `site_published` are already marked.** GA will not let
+   an event be marked **until it has been seen at least once**, so the rest
+   split by whether the property has seen them:
+
+   - **`generate_lead` can be marked NOW** — it is in Recent events, so the
+     block has lifted and nothing but the click is missing.
+   - **`begin_checkout` and `stripe_connected` still cannot be** — neither has
+     ever been received. Re-check after the first paid beta checkout and the
+     first merchant Connect onboarding; this is a sweep to run a few days into
+     beta, not now.
+
+   Until marked they are ordinary events and appear as conversions nowhere.
 
    The AGL-1562 additions join that queue. `select_content` and `click` have
    never been seen by the property — they had no call sites until now — so
