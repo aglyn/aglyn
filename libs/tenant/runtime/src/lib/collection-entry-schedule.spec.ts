@@ -51,6 +51,19 @@
 
 /** Every `ref.update(...)` the loader performed, keyed by entry id. */
 const flips: Record<string, Array<Record<string, unknown>>> = {}
+
+/**
+ * The org the plan gate sees, and a count of how often it was asked (AGL-471).
+ *
+ * The COUNT is asserted, not decorative. The gate is on the tenant render hot
+ * path, and the whole reason it is arranged as two passes is that a collection
+ * with nothing due must never read the org at all. A regression there is pure
+ * cost — invisible in behaviour, visible only on the bill.
+ */
+let orgForHost: { orgId: string; org: Record<string, unknown> } | null = null
+let orgReads = 0
+/** `getOrgForHost` rejects, for the fail-open case. */
+let orgReadThrows = false
 let entryDocs: Array<Record<string, unknown>> = []
 const collectionDoc: { fields: Record<string, unknown> | null } = {
   fields: null,
@@ -119,6 +132,14 @@ const firestore = {
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: { app: () => ({ firestore: () => firestore }) },
+  // The plan gate's only dependency (AGL-471). Absent, the call threw and
+  // `getCollectionContent`'s try/catch folded it into an EMPTY collection —
+  // which is how a missing mock impersonates "this blog has no posts".
+  getOrgForHost: async (hostId: string) => {
+    orgReads += 1
+    if (orgReadThrows) throw new Error(`org read failed for ${hostId}`)
+    return orgForHost
+  },
 }))
 
 // The render cache is not under test, and a cached read would make the
@@ -142,6 +163,9 @@ const AN_HOUR_AGO = () => ({ seconds: nowSeconds() - 3600 })
 beforeEach(() => {
   for (const key of Object.keys(flips)) delete flips[key]
   entryDocs = []
+  orgForHost = { orgId: 'org-1', org: { plan: 'business' } }
+  orgReads = 0
+  orgReadThrows = false
   collectionDoc.fields = {
     displayName: 'Blog',
     slug: 'blog',
@@ -291,5 +315,126 @@ describe('a draft is never live, however it is dated', () => {
     const content = await listing()
     expect(content.entries).toEqual([])
     expect(flips['entry-1']).toBeUndefined()
+  })
+})
+
+describe('the plan gate on entry scheduling (AGL-471)', () => {
+  /**
+   * The leak this closes.
+   *
+   * `scheduledPublishing` is a Business entitlement and the SCREENS path has
+   * enforced it since AGL-471 — but entries were wired to neither half. The
+   * console wrote `status: 'scheduled'` for any plan and this render path
+   * published it, so scheduling worked end to end on Free. Nothing failed;
+   * that is why it survived.
+   */
+  const onFree = () => {
+    orgForHost = { orgId: 'org-1', org: { plan: 'free' } }
+  }
+
+  it('publishes a due entry for an entitled plan — the paying case still works', async () => {
+    entryDocs = [scheduledEntry({ publishAt: AN_HOUR_AGO() })]
+    const content = await listing()
+    expect(content.entries.map((entry) => entry.$id)).toEqual(['entry-1'])
+  })
+
+  it('keeps a due entry OFF the listing when the plan cannot schedule', async () => {
+    onFree()
+    entryDocs = [scheduledEntry({ publishAt: AN_HOUR_AGO() })]
+    const content = await listing()
+    expect(content.entries).toEqual([])
+  })
+
+  it('keeps it off its own routed page too, not just the listing', async () => {
+    onFree()
+    entryDocs = [scheduledEntry({ publishAt: AN_HOUR_AGO() })]
+    const content = await entryPage()
+    expect(content.entry).toBeNull()
+  })
+
+  it('records the refusal instead of leaving it due forever', async () => {
+    onFree()
+    entryDocs = [scheduledEntry({ publishAt: AN_HOUR_AGO() })]
+    await listing()
+    // Left as a bare pending `scheduled`, the entry stays permanently due —
+    // so the day the org upgrades, the next render publishes a post that was
+    // scheduled months ago and forgotten. This is the AGL-1185 argument,
+    // ported from screens.
+    expect(flips['entry-1']).toEqual([
+      { scheduleStatus: 'skipped-unentitled' },
+    ])
+  })
+
+  it('never publishes a refused entry, even after an upgrade', async () => {
+    entryDocs = [
+      scheduledEntry({
+        publishAt: AN_HOUR_AGO(),
+        scheduleStatus: 'skipped-unentitled',
+      }),
+    ]
+    // Entitled now — the refusal must still be terminal.
+    const content = await listing()
+    expect(content.entries).toEqual([])
+    expect(flips['entry-1']).toBeUndefined()
+  })
+
+  it('does not re-read the org for an entry it already refused', async () => {
+    onFree()
+    entryDocs = [
+      scheduledEntry({
+        publishAt: AN_HOUR_AGO(),
+        scheduleStatus: 'skipped-unentitled',
+      }),
+    ]
+    await listing()
+    expect(orgReads).toBe(0)
+  })
+
+  it('never asks the plan question when nothing is due', async () => {
+    // The cost guard. A published entry and a future-dated one between them
+    // cover every non-due shape; neither may reach the org read.
+    entryDocs = [
+      { $id: 'entry-1', title: 'Live', slug: 'live', status: 'published' },
+      scheduledEntry({ $id: 'entry-2', publishAt: IN_AN_HOUR() }),
+    ]
+    await listing()
+    expect(orgReads).toBe(0)
+  })
+
+  it('asks it exactly once for a page full of due entries', async () => {
+    onFree()
+    entryDocs = [
+      scheduledEntry({ $id: 'entry-1', slug: 'a', publishAt: AN_HOUR_AGO() }),
+      scheduledEntry({ $id: 'entry-2', slug: 'b', publishAt: AN_HOUR_AGO() }),
+      scheduledEntry({ $id: 'entry-3', slug: 'c', publishAt: AN_HOUR_AGO() }),
+    ]
+    await listing()
+    // Per call site, not per entry — `getOrgForHost` is request-deduped in
+    // production, but this path must not depend on that to stay cheap.
+    expect(orgReads).toBe(1)
+  })
+
+  it('publishes when the host has no org at all — the pre-billing fail-open', async () => {
+    orgForHost = null
+    entryDocs = [scheduledEntry({ publishAt: AN_HOUR_AGO() })]
+    const content = await listing()
+    expect(content.entries.map((entry) => entry.$id)).toEqual(['entry-1'])
+  })
+
+  it('does not blank the collection when the org read throws', async () => {
+    // The failure that must not happen. The only caller sits inside
+    // `getCollectionContent`'s try/catch, and that catch returns an EMPTY
+    // collection — so a rejecting org read would take down every published
+    // entry on the page, not just the scheduled one.
+    orgReadThrows = true
+    entryDocs = [
+      { $id: 'entry-1', title: 'Live', slug: 'live', status: 'published' },
+      scheduledEntry({ $id: 'entry-2', slug: 'b', publishAt: AN_HOUR_AGO() }),
+    ]
+    const content = await listing()
+    expect(content.entries.map((entry) => entry.$id).sort()).toEqual([
+      'entry-1',
+      'entry-2',
+    ])
   })
 })
