@@ -56,10 +56,27 @@ There is deliberately **no `linker` config in our code**, and none is needed:
 is delivered to the tag from the GA UI. Grepping for `linker` and concluding
 cross-domain is unconfigured is the wrong inference.
 
-What is **not** established is that a real session actually stitches, which
-needs GA DebugView or a Realtime check across the hop — Zach's console, and on
-the click-list. Two structural reasons it is best-effort rather than certain,
-both worth knowing before reading the funnel:
+✅ **The `_gl` decoration itself is now PROVEN on the wire (2026-08-24).** A real
+mouse click on the `/pricing` "Get started" CTA rewrote the anchor from
+`https://app.aglyn.com/signup` to the same URL carrying `_gl=1*…*_ga*…*_ga_YW5PG16YTM*…`
+— the client id and the session state, crossing the hop. The probe recorded the
+href at **both** `mousedown` (undecorated) and `click` (decorated), so it is not
+a green that could not have gone red: gtag decorates in its own click handler,
+and the mousedown reading is the built-in negative control. The old note here —
+"absence of `_gl=` on the landed URL is the tell" — is still true but is no
+longer the only evidence available.
+
+⚠️ **A landing route that redirects will strip it.** Measured in the same pass:
+clicking the same CTA while signed in lands on `https://app.aglyn.com/` with no
+`_gl`, because `/signup` bounces an authenticated user and the redirect drops
+the query string. A logged-out visitor — the only one whose stitch matters —
+renders `/signup` directly and the parameter is consumed. Do not read a bare
+landed URL on a signed-in staff browser as a broken linker.
+
+What is **still not** established is that GA4 then reports it as one session with
+the original source retained, which needs DebugView or Realtime across the hop —
+Zach's console, and on the click-list. Two structural reasons it is best-effort
+rather than certain, both worth knowing before reading the funnel:
 
 - **The `_gl` decoration requires a loaded tag at click time.** On `aglyn.com`
   gtag is consent-gated and never loads for a visitor who has not granted, so
@@ -1269,10 +1286,21 @@ cannot reach the production property; they are stale, not active.
 
 ### 8d. What is left for Zach to click
 
-The **Internal Traffic** data filter **exists** in property 302497406 and is
-currently in **Testing** mode. Zach set it Active on 2026-08-18 and reverted it
-to Testing the same day, deliberately, because the coverage above was expanding
-while it was on.
+🔴 **The Internal Traffic data filter is ACTIVE, not Testing — corrected
+2026-08-24 by reading Admin → Data filters on the live property.** It shows
+`Internal Traffic · Internal Traffic · Exclude · **Active**`. Property change
+history records four `Data filter / Internal Traffic / Modified` entries, the
+last at **2026-08-18 19:38 GMT-5 (2026-08-19 00:38 UTC)**, and nothing since.
+The earlier "reverted to Testing the same day" note described 2026-08-18
+14:16 GMT-5 and was overtaken that evening; it stood here stale for five days.
+
+This matters because it changes what a mistake costs. An Active filter
+**permanently and irrecoverably discards** every matching hit at collection
+time, so any surface that wrongly stamps `traffic_type: 'internal'` is not
+mis-labelling data, it is deleting it — and every day since 2026-08-19 has been
+filtered, not merely flagged. AGL-2065 (the console stamp fires only for STAFF)
+and AGL-2064 (the marketing/docs stamp) are therefore both live-data decisions
+now, not staging ones.
 
 ✅ **`traffic_type` is already registered** as an event-scoped custom dimension
 — it is one of the 18 counted off the live property on 2026-08-24 (see *Still
@@ -1297,16 +1325,19 @@ Remaining, and all of it is his click — nothing in this repo can do it:
    thing covering the boot window. Its real limits are the ones AGL-1582 gives:
    a dynamic residential IP, and staff working from anywhere. Keep the default
    rule name `internal` so it writes the same value the code writes.
-3. **Verify in Testing mode.** With the filter in Testing, `Test data filter
-   name` is available as a dimension in reports and DebugView. Confirm it
-   matches a staff session, an impersonation session and an opted-in
-   logged-out marketing session, and that an ordinary customer session is
-   **not** matched. Both directions — a filter verified in one direction only
-   is the one that erases real users.
-4. **Set it Active** once (3) passes. ⚠️ An Active filter **permanently and
-   irrecoverably discards** everything it matches. It is not retroactive in
-   either direction: data already collected is not re-filtered, and data
-   discarded while Active cannot be recovered.
+3. ✅ **Verified in Testing, then set Active — both DONE 2026-08-18/19.** The
+   Testing-mode check was run in both directions on the `Test data filter name`
+   dimension (a staff session matched `Internal Traffic`; an ordinary session in
+   the *same city* did not, so it keyed on `traffic_type` and not on geography),
+   and the filter was set Active at 2026-08-19 00:38 UTC. Kept because the
+   two-direction requirement is the reusable part: a filter verified in one
+   direction only is the one that erases real users.
+4. ✅ **Already Active.** ⚠️ Restated because it is now load-bearing rather than
+   hypothetical: an Active filter **permanently and irrecoverably discards**
+   everything it matches, and it is not retroactive in either direction — data
+   already collected is not re-filtered, and data discarded while Active cannot
+   be recovered. Any change to who gets stamped `internal` now changes what is
+   deleted.
 
 Click-list on AGL-1637.
 
@@ -1821,35 +1852,41 @@ validates a payload and stores nothing.
 > not inert, and this one would have sent someone to re-do finished work while
 > the genuinely missing items stayed missing.
 >
-> **Measured quota** (Admin → Data display → Custom definitions → *Quota
-> information*):
+> **⚑⚑ RE-READ 2026-08-24 (later the same day, AGL-1637 audit): EVERY
+> registration item below is now DONE.** The 18/2 reading quoted here was taken
+> in the morning; Zach registered the remaining 15 definitions at 06:25–06:27
+> GMT-5, and the property now reads **30 event-scoped dimensions and 5 custom
+> metrics**. Counted row by row off Admin → Data display → Custom definitions
+> (both tabs, both pages of the dimension list), and corroborated by Account
+> change history, which logs each `Created` with a timestamp and `zach@aglyn.com`.
 >
-> | Registry | Used | Cap |
-> | -- | -- | -- |
-> | Custom dimensions, **event**-scoped | **18** | 50 |
-> | Custom dimensions, user-scoped | 2 | 25 |
-> | Custom dimensions, item-scoped | 0 | 10 |
-> | Custom **metrics**, event-scoped | **2** | 50 |
-> | Calculated metrics | 0 | 5 |
+> | Registry | Used (2026-08-24 AM) | Used (2026-08-24 PM) | Cap |
+> | -- | -- | -- | -- |
+> | Custom dimensions, **event**-scoped | 18 | **30** | 50 |
+> | Custom dimensions, user-scoped | 2 | 2 | 25 |
+> | Custom dimensions, item-scoped | 0 | 0 | 10 |
+> | Custom **metrics**, event-scoped | 2 | **5** | 50 |
+> | Calculated metrics | 0 | 0 | 5 |
 >
-> **Registered event-scoped dimensions (18):** `billing_interval`,
+> **Registered event-scoped dimensions (30):** `action`, `billing_interval`,
 > `campaign_medium`, `campaign_name`, `campaign_source`, `content_id`,
-> `content_type`, `experiment_action`, `experiment_id`, `first_publish`,
-> `form_location`, `form_name`, `link_domain`, `link_id`, `method`, `plan`,
-> `surface`, `traffic_type`, `variant_id`.
+> `content_type`, `effective_at`, `experiment_action`, `experiment_id`,
+> `feedback`, `first_publish`, `form_location`, `form_name`, `from_plan`,
+> `funnel_completed`, `grounded`, `interval`, `link_domain`, `link_id`,
+> `metric_id`, `metric_rating`, `method`, `plan`, `reason`, `surface`, `tier`,
+> `to_plan`, `traffic_type`, `variant_id`.
 > **Registered user-scoped:** `org_plan`, `org_role`.
-> **Registered custom metrics (2):** `tenure_days`, `metric_value`.
+> **Registered custom metrics (5):** `duration_months`, `metric_delta`,
+> `metric_value`, `percent_off`, `tenure_days`.
 >
-> So: **item 0 is DONE** (all five, Aug 17) · **0b is DONE** (all three,
-> Aug 17) · **0c is DONE** (all three campaign dimensions, Aug 20 — the ad
-> deadline is met) · **0d is DONE** (`plan` as a dimension AND `tenure_days`
-> as a metric, both Aug 17; the registry trap it warns about was avoided) ·
-> **0e is HALF done** — `metric_value` is registered, `metric_delta` is not.
+> So: **0, 0b, 0c, 0d, 0e and 0g are ALL DONE.** `metric_delta` — the item this
+> section called "the lowest-priority item on this whole page" — is registered
+> too. **Nothing on the registration list is outstanding.** 20 dimension slots
+> and 45 metric slots remain spare, so the cap never became a constraint.
 >
-> **What is actually left is 0g, plus `metric_delta`: 15 parameters.** With 18
-> of 50 event-scoped dimension slots and 2 of 50 metric slots used, all of it
-> fits with room to spare — 12 new dimensions takes the property to 30/50, and
-> 3 new metrics to 5/50. The cap is not a constraint on this decision.
+> ⚠️ Note the display-name trap that bit one of these: `interval` had to be
+> named **`Plan change interval`** — GA4 rejects parentheses in a display name.
+> The parameter name is what reports key on, so the rename is cosmetic only.
 
 0. ✅ **DONE 2026-08-17.** ~~Register five more custom dimensions~~ (AGL-1562), all **event-scoped**,
    before the events are worth reporting on. Every parameter the two link
@@ -1887,7 +1924,9 @@ validates a payload and stores nothing.
    event-scoped, unit **Standard**) can produce one. Same registry, different
    tab; the parameter name is unchanged.
 
-0e. ⚠️ **HALF DONE.** **Register the Core Web Vitals custom METRICS**
+0e. ✅ **DONE 2026-08-24** — `metric_delta` was registered at 06:27 GMT-5 and
+   verified on the *Custom metrics* tab the same day; both rows below are now
+   green. ~~⚠️ **HALF DONE.**~~ **Register the Core Web Vitals custom METRICS**
    (AGL-1642). Numeric, so they belong in the **Custom metrics** tab — every
    audit before 2026-08-20 read only the DIMENSIONS list, and a metric is
    invisible from there. Without them the CWV events arrive as a count of
@@ -1897,7 +1936,7 @@ validates a payload and stores nothing.
    | Metric name  | Event parameter | Unit     | State | Why                                                            |
    | ------------ | --------------- | -------- | ----- | -------------------------------------------------------------- |
    | Metric value | `metric_value`  | Standard | ✅ registered 2026-08-17 | The metric's current value — the number the report is OF |
-   | Metric delta | `metric_delta`  | Standard | ❌ **still missing** | Its change since the last report, for the multi-report metrics |
+   | Metric delta | `metric_delta`  | Standard | ✅ registered 2026-08-24 | Its change since the last report, for the multi-report metrics |
 
    `value` needs nothing — it is GA4's built-in event value, and because
    `reportMetric` sends `value: metric.delta`, the delta is *already* readable
@@ -1993,10 +2032,15 @@ there is the merchant's to make, not one we can make for them.
      the source of truth; revisit the moment a price is changed in Stripe
      first. `purchase` is unaffected — it reads `amount_paid` off the invoice.
 
-0g. **Two whole event families carry params on no registration list**, so
-   they currently arrive as undifferentiated counts — the same failure mode
-   item 0 describes, one level larger. Found 2026-08-20 by diffing the fired
-   params against every list above:
+0g. ✅ **DONE 2026-08-24** — all 12 dimensions and all 3 metrics below were
+   registered at 06:19–06:27 GMT-5 and counted off the live property that
+   afternoon. Kept for the reasoning, and for the two traps it records (the
+   `interval`/`billing_interval` collision, and numbers belonging in the metric
+   registry). ~~**Two whole event families carry params on no registration
+   list**~~, so
+   they ~~currently~~ *used to* arrive as undifferentiated counts — the same
+   failure mode item 0 describes, one level larger. Found 2026-08-20 by diffing
+   the fired params against every list above:
 
    Re-derived against the live property 2026-08-24: `surface` was on this
    list and is in fact **registered**, so the real total is **15**, not 16.
@@ -2054,12 +2098,25 @@ there is the merchant's to make, not one we can make for them.
    an event be marked **until it has been seen at least once**, so the rest
    split by whether the property has seen them:
 
-   - **`generate_lead` can be marked NOW** — it is in Recent events, so the
-     block has lifted and nothing but the click is missing.
-   - **`begin_checkout` and `stripe_connected` still cannot be** — neither has
-     ever been received. Re-check after the first paid beta checkout and the
-     first merchant Connect onboarding; this is a sweep to run a few days into
-     beta, not now.
+   - ✅ **`generate_lead` was marked 2026-08-24** (change history: `Key event
+     settings / Modified`, 06:29 GMT-5). The **Key events** tab now reads 5 of
+     5: `generate_lead`, `purchase`, `select_content`, `sign_up`,
+     `site_published`.
+   - **`begin_checkout` and `stripe_connected` still cannot be** — re-read from
+     Admin → Events → *Recent events* on 2026-08-24: the property has seen **19**
+     event names in the last 28 days (`click`, `CLS`, `first_visit`,
+     `generate_lead`, `INP`, `LCP`, `login`, `page_view`, `purchase`,
+     `screen_view`, `scroll`, `select_content`, `session_start`, `sign_up`,
+     `site_published`, `subscription_cancelled`, `TTFB`, `user_engagement`,
+     `view_search_results`) and neither of those two is among them. Re-check
+     after the first paid beta checkout and the first merchant Connect
+     onboarding; this is a sweep to run a few days into beta, not now.
+
+   > 🟢 **Note what that 19-event list independently proves:** `purchase` and
+   > `subscription_cancelled` are **server-only** events sent by the Measurement
+   > Protocol, and both have been received. The transport is live on the running
+   > lambdas — no further env-var archaeology is warranted, and `FCP` is absent
+   > exactly as `METRIC_HANDLER_NAMES` predicts.
 
    Until marked they are ordinary events and appear as conversions nowhere.
 
