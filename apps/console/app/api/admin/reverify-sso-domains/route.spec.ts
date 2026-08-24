@@ -39,6 +39,17 @@
  * revoked the domain by some other field.
  */
 
+/**
+ * A MODULE, not a script. Without a top-level `export` this file has no
+ * module scope of its own, and its `mock*` consts land in the same global
+ * namespace as every other console spec — where `mockAuditAdd` and
+ * `mockClaimSet` already exist. `tsc` catches that as a redeclaration; jest
+ * does not, because it runs each suite in its own context. So the collision
+ * is invisible until the typecheck runs, which is exactly when nobody is
+ * looking for it.
+ */
+export {}
+
 const mockNotifyOrgAdmins = jest.fn(
   async (_orgId: string, _payload: unknown) => undefined,
 )
