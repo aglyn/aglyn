@@ -43,6 +43,7 @@ import { dirname, join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { compareToBaseline, findBrandLiterals } from './lib/brand-literals.mjs'
+import { remedy } from './lib/ratchet-baseline.mjs'
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const BASELINE_PATH = join(
@@ -279,7 +280,7 @@ if (asJson) {
     )
 
   console.log('')
-  if (verdict.regressions.length)
+  if (verdict.regressions.length) {
     console.log(
       `${verdict.regressions.length} file(s) gained a hardcoded brand name. ` +
         'User-visible copy must read the configured brand — ' +
@@ -288,6 +289,15 @@ if (asJson) {
         'operator cannot edit source to rename the product, and a white-label ' +
         'org must not see ours.',
     )
+    console.log(
+      remedy(
+        verdict.regressions,
+        BASELINE_PATH,
+        'the name is the legal entity Aglyn LLC rather than product copy, or ' +
+          'the string is never rendered',
+      ),
+    )
+  }
   if (verdict.stale.length)
     console.log(
       `${verdict.stale.length} baseline row(s) are stale — the file is clean ` +

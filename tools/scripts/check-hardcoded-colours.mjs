@@ -44,6 +44,7 @@ import {
   compareToBaseline,
   findHardcodedColours,
 } from './lib/hardcoded-colours.mjs'
+import { remedy } from './lib/ratchet-baseline.mjs'
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const BASELINE_PATH = join(
@@ -262,13 +263,21 @@ if (asJson) {
     )
 
   console.log('')
-  if (verdict.regressions.length)
+  if (verdict.regressions.length) {
     console.log(
       `${verdict.regressions.length} file(s) gained a hardcoded colour. Use a ` +
-        'theme token — `sx: { color: \'primary.main\' }` — or, if the value ' +
-        'genuinely cannot be themed (email HTML, which has no CSS vars), ' +
-        're-baseline with `--write` and say why in the commit.',
+        'theme token — `sx: { color: \'primary.main\' }` — which is the fix in ' +
+        'almost every case.',
     )
+    console.log(
+      remedy(
+        verdict.regressions,
+        BASELINE_PATH,
+        'the value genuinely cannot be themed, as in email HTML, which has ' +
+          'no CSS vars',
+      ),
+    )
+  }
   if (verdict.stale.length)
     console.log(
       `${verdict.stale.length} baseline row(s) are stale — the file is clean ` +
