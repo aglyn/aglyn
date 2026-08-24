@@ -107,6 +107,12 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'AGL-1452. The daily upload-CORS drift checker. The literal is the default project fallback for a build tool that is never shipped; a self-host operator runs it against their own project id.',
   },
   {
+    file: 'apps/console/constants/subprocessor-inventory.ts',
+    count: 1,
+    reason:
+      "AGL-1577. PROSE, not a host. The single occurrence sits inside a `reason` string explaining why an unprovisioned @aglyn.com address cannot be verified by test send — the default routing rule accepts mail for a non-existent address and suppresses the bounce, so the operator has to confirm the Google Group exists instead. It is an English sentence in a documentation field; nothing parses, fetches or resolves it, and a self-hoster's deployment reaches nothing because of it.",
+  },
+  {
     file: 'apps/console/utils/stripe-dunning-schedule.ts',
     count: 1,
     reason:
