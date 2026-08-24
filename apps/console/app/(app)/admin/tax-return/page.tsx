@@ -92,6 +92,7 @@ import {
   taxReturnAttention,
   taxReturnCsv,
   taxReturnCsvFilename,
+  taxReturnFacilitatedJurisdictionRows,
   taxReturnJurisdictionRows,
   taxReturnMarketplaceLines,
   taxReturnPeriodOptions,
@@ -160,6 +161,13 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
     [payload],
   )
   // The other two of the three buckets the route computes (AGL-2163).
+  // Facilitated sales BY STATE (AGL-1956) — already computed server-side and
+  // already in this payload; nothing rendered it, so the nexus question had no
+  // answer on any screen. See `taxReturnFacilitatedJurisdictionRows`.
+  const facilitatedByState = useMemo(
+    () => taxReturnFacilitatedJurisdictionRows(payload),
+    [payload],
+  )
   const storefrontBuckets = useMemo(
     () => taxReturnStorefrontRows(payload),
     [payload],
@@ -633,6 +641,125 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                     'a lower bound.'}
                 </Typography>
               ) : null}
+
+              {/*
+                WHERE THE SHOPPERS WERE (AGL-1956). Aglyn is a marketplace
+                facilitator, so every state asks the same question — how much
+                did you facilitate into me, in how many transactions — and
+                nothing on any screen could answer it. The figures were already
+                being computed by `storefrontTaxSummary` and already arriving in
+                this payload; only the rendering was missing.
+
+                The three liability buckets are SUMMED here, deliberately: a
+                threshold counts the sale whoever remits the tax. Who remits is
+                still carried per row, so the nexus question and the "what do we
+                owe" question stay separable.
+              */}
+              <Typography variant="subtitle2" sx={{ mt: 3 }}>
+                {'Facilitated sales by buyer state'}
+              </Typography>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mt: 0.5, mb: 1.5 }}
+              >
+                {'What Aglyn facilitated into each state, whoever remits the ' +
+                  'tax — the figure an economic-nexus threshold is measured ' +
+                  'against. Texas needs no threshold: a Texas LLC has nexus ' +
+                  'there unconditionally. A state showing sales and no tax is ' +
+                  'the one to watch.'}
+              </Typography>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>{'Buyer state'}</TableCell>
+                    <TableCell align="right">{'Sales'}</TableCell>
+                    <TableCell align="right">{'Total sales'}</TableCell>
+                    <TableCell align="right">{'Tax collected'}</TableCell>
+                    <TableCell align="right">{'Of which Aglyn owes'}</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {facilitatedByState.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5}>
+                        <Typography variant="body2" color="text.secondary">
+                          {payload
+                            ? 'No storefront sales recorded in this period.'
+                            : loading
+                              ? 'Loading…'
+                              : '—'}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    facilitatedByState.map((row) => (
+                      <TableRow key={row.jurisdiction}>
+                        <TableCell>
+                          <Stack
+                            direction="row"
+                            spacing={1}
+                            sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                          >
+                            <Typography variant="body2">
+                              {row.jurisdiction === 'unknown'
+                                ? 'Not stated'
+                                : row.jurisdiction}
+                            </Typography>
+                            {row.isTexas ? (
+                              <Chip
+                                size="small"
+                                color="warning"
+                                label="Registered"
+                              />
+                            ) : row.untaxed ? (
+                              <Chip
+                                size="small"
+                                variant="outlined"
+                                label="No tax collected"
+                              />
+                            ) : null}
+                          </Stack>
+                        </TableCell>
+                        <TableCell align="right">
+                          {row.transactionCount}
+                        </TableCell>
+                        <TableCell
+                          align="right"
+                          sx={{ fontFamily: 'monospace' }}
+                        >
+                          {`$${row.totalSalesDollars}`}
+                        </TableCell>
+                        <TableCell
+                          align="right"
+                          sx={{ fontFamily: 'monospace' }}
+                        >
+                          {`$${row.taxCollectedDollars}`}
+                        </TableCell>
+                        <TableCell
+                          align="right"
+                          sx={{
+                            fontFamily: 'monospace',
+                            fontWeight:
+                              Number(row.aglynLiableTaxDollars) > 0 ? 600 : 400,
+                          }}
+                        >
+                          {`$${row.aglynLiableTaxDollars}`}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: 'block', mt: 1.5 }}
+              >
+                {'A LOWER BOUND. A storefront sale that collected no tax at ' +
+                  'all files no row, so it is missing here — which is exactly ' +
+                  'the population a nexus check wants. Recorded on AGL-1956.'}
+              </Typography>
             </CardDisplay>
 
             {/*
@@ -705,12 +832,26 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
               ) : null}
             </CardDisplay>
 
+            {/*
+              THE LABEL WAS WRITING A CHEQUE THE SOURCE COULD NOT CASH
+              (AGL-1956). This card reads `payload.summary`, which is
+              `platformRevenue` — AGLYN'S OWN SaaS invoices. It nonetheless
+              called itself "the early-warning list for economic nexus in
+              another state", which is a question about FACILITATED storefront
+              sales and is answered by the by-state table in the storefront card
+              above. A staff reader checking nexus would have read Aglyn's
+              subscription revenue and believed it was merchant sales.
+
+              Relabelled rather than resourced: the two collections describe two
+              different taxpayers' money and must never be summed, so the fix is
+              two adjacent honest tables, not one merged one.
+            */}
             <CardDisplay
-              header={'All jurisdictions'}
+              header={'Aglyn’s own sales by jurisdiction'}
               help={docsHelp('salesTaxReturn', {
                 anchor: '#all-jurisdictions',
                 excerpt:
-                  'Every buyer state in the period. Texas is the return; the rest is the audit trail for why that revenue is not on it, and the early warning for nexus elsewhere.',
+                  'Every buyer state for Aglyn’s OWN subscription and add-on revenue in the period. Texas is the return; the rest is the audit trail for why that revenue is not on it.',
               })}
               contentGutterX
               contentGutterY
@@ -720,9 +861,12 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                 color="text.secondary"
                 sx={{ mb: 1.5 }}
               >
-                {'Texas is the return. The other rows are the record of why ' +
-                  'the rest of the period is not on it — and the ' +
-                  'early-warning list for economic nexus in another state.'}
+                {'Aglyn’s own subscription and add-on revenue, by the ' +
+                  'customer’s state. Texas is the return; the other rows are ' +
+                  'the record of why the rest of the period is not on it. ' +
+                  'For nexus from MERCHANTS’ sales, read “Facilitated sales ' +
+                  'by buyer state” above — a different taxpayer’s money, and ' +
+                  'never summed with this.'}
               </Typography>
               <Table size="small">
                 <TableHead>

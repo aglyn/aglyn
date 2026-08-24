@@ -811,6 +811,102 @@ export function taxReturnStorefrontRows(
   })
 }
 
+/** One state's facilitated storefront sales, for the nexus question. */
+export interface TaxReturnFacilitatedJurisdictionRow {
+  jurisdiction: string
+  isTexas: boolean
+  transactionCount: number
+  totalSalesDollars: string
+  taxCollectedDollars: string
+  /** The part of `taxCollectedDollars` Aglyn holds and must remit. */
+  aglynLiableTaxDollars: string
+  /** True when NO tax was collected on any sale into this state. */
+  untaxed: boolean
+}
+
+/**
+ * FACILITATED SALES BY STATE — the economic-nexus question (AGL-1956).
+ *
+ * Aglyn is a marketplace facilitator, so the question a state asks is "how much
+ * did you facilitate INTO this state, and in how many transactions" — not "how
+ * much tax did you collect there". A state Aglyn is not registered in collects
+ * nothing by definition, which is exactly why collection cannot be the
+ * measure: the states worth watching are the ones showing $0 tax and a rising
+ * sales figure.
+ *
+ * So this SUMS the three liability buckets per jurisdiction. That is not a
+ * violation of the rule that `platformRevenue` and `storefrontTaxCollected`
+ * must never be summed — that rule is about two different COLLECTIONS
+ * describing two different taxpayers' money, and it still holds: nothing here
+ * touches `payload.summary`, which is Aglyn's own SaaS revenue. Within the
+ * storefront collection the buckets differ only in WHO REMITS, and a nexus
+ * threshold counts the sale whoever remits it.
+ *
+ * Who remits is still carried, per row, as `aglynLiableTaxDollars` — because
+ * the two questions ("do we have nexus here" and "what do we owe here") are
+ * answered off the same rows and must not be allowed to blur into each other.
+ *
+ * ⚠️ This is a LOWER BOUND, and deliberately so rather than silently:
+ * `storefront-tax-record.ts` files no row at all for a sale whose `taxMode`
+ * resolves to `none`, so a wholly untaxed storefront sale is invisible here.
+ * That is the population nexus detection most needs, and closing it is a
+ * write-side change recorded on AGL-1956 rather than smuggled into a report.
+ * Texas does not depend on any of this — a Texas LLC has no in-state economic
+ * nexus threshold, so the Texas obligation is unconditional from 2026-09-01
+ * (AGL-1811) whatever this table says.
+ */
+export function taxReturnFacilitatedJurisdictionRows(
+  payload: TaxReturnPayload | null,
+): TaxReturnFacilitatedJurisdictionRow[] {
+  const summary = payload?.storefront?.summary
+  if (!summary) return []
+  const totals = new Map<
+    string,
+    { count: number; salesCents: number; taxCents: number; aglynCents: number }
+  >()
+  const buckets: Array<['aglynLiable' | 'merchantManual' | 'connectedAccountLiable', boolean]> =
+    [
+      ['aglynLiable', true],
+      ['merchantManual', false],
+      ['connectedAccountLiable', false],
+    ]
+  for (const [id, aglynLiable] of buckets) {
+    const byJurisdiction = summary[id]?.byJurisdiction ?? {}
+    for (const [jurisdiction, figures] of Object.entries(byJurisdiction)) {
+      const entry = totals.get(jurisdiction) ?? {
+        count: 0,
+        salesCents: 0,
+        taxCents: 0,
+        aglynCents: 0,
+      }
+      const taxCents = Number(figures?.taxCollectedCents ?? 0)
+      entry.count += Number(figures?.transactionCount ?? 0)
+      entry.salesCents += Number(figures?.totalSalesCents ?? 0)
+      entry.taxCents += taxCents
+      if (aglynLiable) entry.aglynCents += taxCents
+      totals.set(jurisdiction, entry)
+    }
+  }
+  return [...totals.entries()]
+    .map(([jurisdiction, entry]) => ({
+      jurisdiction,
+      isTexas: jurisdiction === TX_JURISDICTION,
+      transactionCount: entry.count,
+      totalSalesDollars: centsToDollars(entry.salesCents),
+      taxCollectedDollars: centsToDollars(entry.taxCents),
+      aglynLiableTaxDollars: centsToDollars(entry.aglynCents),
+      untaxed: entry.taxCents === 0,
+    }))
+    .sort(
+      (a, b) =>
+        // Texas first — it is the one unconditional obligation — then by the
+        // figure a threshold is actually measured against.
+        Number(b.isTexas) - Number(a.isTexas) ||
+        Number(b.totalSalesDollars) - Number(a.totalSalesDollars) ||
+        a.jurisdiction.localeCompare(b.jurisdiction),
+    )
+}
+
 /** One label/value line of the marketplace figures (AGL-2137). */
 export interface TaxFigureLine {
   label: string
