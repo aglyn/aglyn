@@ -1100,6 +1100,22 @@ async function chargeSubscriptionFeeOnItemsOnly(
  * therefore the WHOLE principal, and the merchant hands back the gross while
  * Aglyn keeps its commission.
  *
+ * ⚑ THAT EQUALITY IS NO LONGER UNIVERSAL (AGL-1956). A `mode: 'stripe'`
+ * storefront sale now sends a FIXED `transfer_data[amount]` and no
+ * application fee at all, because Stripe Tax on a platform session computes
+ * against AGLYN's registrations and Aglyn remits it — the fee form would have
+ * transferred the tax to the merchant. On those charges `transfer.amount` is
+ * `goods + shipping − fee`, strictly LESS than `charge.amount`.
+ *
+ * Nothing below needed changing, and that is worth saying explicitly rather
+ * than leaving to be rediscovered: the share is already computed as
+ * `principal × transfer.amount ÷ charge.amount`, so the ratio simply stops
+ * being 1 and the merchant hands back their share of the principal and no
+ * part of the tax — which is correct, because the tax was never theirs and
+ * Aglyn has to refund it to the shopper's bank out of its own balance. The
+ * ratio was written for a partially-refunded transfer; it now earns its keep
+ * on every taxed sale too.
+ *
  * That asymmetry with the refund door is deliberate, not an oversight.
  * `refund.ts` sends `refund_application_fee: 'true'` alongside
  * `reverse_transfer`, so a REFUND returns Aglyn's commission; this door sends
