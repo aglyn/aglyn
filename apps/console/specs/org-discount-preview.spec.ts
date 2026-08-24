@@ -15,8 +15,12 @@
  * limitations under the License.
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   checkDiscountMargin,
+  MARGIN_SCOPE_NOTE,
+  orgCogsBasisSummary,
   orgCogsInputFrom,
   orgCogsPreview,
   orgMonthlyCogsUsd,
@@ -154,5 +158,91 @@ describe('the staff org discount preview', () => {
 
     const busy = orgCogsPreview(true, BUSY_ROLLUP, 2)
     expect(busy.status === 'ready' && busy.cogs.basis).toBe('measured')
+  })
+
+  /**
+   * AGL-1930. Two claims the staff quote card makes about a margin figure,
+   * both of which were wrong or missing.
+   */
+  describe('what the quote card says about the number (AGL-1930)', () => {
+    it('does not call a measured org "no usage recorded yet"', () => {
+      // Production 2026-08-24: every one of the 6 orgs rates `basis: 'floor'`,
+      // and 9 of their 14 rollups carry real usage — the card told staff that
+      // ALL of them had no usage recorded. The measured figure below is
+      // orgs/jWmGooWE3L/usage/2026-08 exactly.
+      const measured = orgMonthlyCogsUsd(
+        {
+          storageGb: 0.041155,
+          pageViews: 2169,
+          formSubmissions: 7,
+          contactsCount: 5,
+        },
+        1,
+      )
+      expect(measured.basis).toBe('floor')
+      const note = orgCogsBasisSummary(measured, '2026-08')
+      expect(note).toContain('2026-08')
+      expect(note).not.toContain('no usage recorded yet')
+      // It still names the floor as the figure being charged, because it is.
+      expect(note).toContain('floor')
+
+      // The genuinely empty org is the only one that may say so.
+      expect(orgCogsBasisSummary(orgMonthlyCogsUsd({}, 1), '2026-08')).toBe(
+        'per-site floor — no usage recorded yet',
+      )
+      // And a measured org names the month it measured, not "this month".
+      expect(
+        orgCogsBasisSummary(orgMonthlyCogsUsd(BUSY_ROLLUP, 2), '2026-07'),
+      ).toBe('measured from 2026-07 usage')
+    })
+
+    it('states what the margin excludes', () => {
+      // Nothing in the app costs support, acquisition or overhead, so every
+      // margin figure in the staff console is a contribution margin. A staff
+      // member reading "net margin 78%" had no way to know that.
+      expect(MARGIN_SCOPE_NOTE).toMatch(/contribution margin/i)
+      expect(MARGIN_SCOPE_NOTE).toMatch(/support/i)
+      expect(MARGIN_SCOPE_NOTE).toMatch(/CAC|acquisition/i)
+      expect(MARGIN_SCOPE_NOTE).toMatch(/overhead/i)
+    })
+
+    it('prints it on every screen that shows a margin', () => {
+      // A constant nobody renders is worse than no label: the caveat reads as
+      // shipped in review and a staff member still sees a bare percentage.
+      // Every surface that formats `marginPct` is listed here, so adding a
+      // fourth one without its caveat has to be a deliberate edit to this
+      // list.
+      const screens = [
+        'app/(app)/admin/orgs/[orgId]/page.tsx',
+        'app/(app)/admin/coupons/page.tsx',
+      ]
+      for (const screen of screens) {
+        const source = readFileSync(join(__dirname, '..', screen), 'utf8')
+        expect(source).toContain('marginPct')
+        expect(source).toContain('MARGIN_SCOPE_NOTE')
+      }
+      // The org page shows TWO margin figures — the coupon rating and the
+      // enterprise quote card — and both need it.
+      const orgPage = readFileSync(
+        join(__dirname, '..', 'app/(app)/admin/orgs/[orgId]/page.tsx'),
+        'utf8',
+      )
+      expect(
+        orgPage.split('MARGIN_SCOPE_NOTE').length - 1,
+      ).toBeGreaterThanOrEqual(3)
+    })
+
+    it('leaves the quote card no floor of its own to drift on', () => {
+      // The card rated enterprise deals against `>= 0.75` / `>= 0.65` written
+      // into its JSX. Re-tuning `NET_MARGIN_FLOOR_PCT` — the whole subject of
+      // AGL-1930 — would have moved the guardrail and left this screen
+      // underwriting against the old numbers.
+      const orgPage = readFileSync(
+        join(__dirname, '..', 'app/(app)/admin/orgs/[orgId]/page.tsx'),
+        'utf8',
+      )
+      expect(orgPage).toContain('netMarginRating')
+      expect(orgPage).not.toMatch(/marginPct\s*>=\s*0\.\d/)
+    })
   })
 })

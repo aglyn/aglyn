@@ -296,6 +296,12 @@ left after Stripe's fees and the plan's own cost. It is illustrative only: the b
 check runs on the server when the discount is actually applied, so a rating that looks
 survivable is not permission.
 
+That percentage is a **contribution margin**: net revenue less infrastructure COGS, and
+nothing else. Support, customer acquisition and overhead are not in the figure anywhere,
+so treat it as a ceiling rather than a profit. The infrastructure number behind it is a
+per-site floor for almost every organization — measured usage only replaces it once it
+costs more than the floor, which no organization's usage does yet.
+
 **Existing coupons** lists every Stripe coupon with its promotion codes, redemption
 count, and a **valid** or **expired** state.
 

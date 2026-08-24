@@ -19,6 +19,7 @@
 import {
   checkDiscountMargin,
   DISCOUNT_APPROVAL_THRESHOLD_PCT,
+  MARGIN_SCOPE_NOTE,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
@@ -393,6 +394,13 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                       {'Illustrative only. The binding check runs against the ' +
                         'organization’s own plan, sites and measured usage when ' +
                         'the coupon is applied.'}
+                    </Typography>
+                    {/* AGL-1930 — say what the margin percentage above is a
+                        margin ON. Nothing in the model costs support,
+                        acquisition or overhead, and a staff member has no way
+                        to know that from "Net margin 78.1%". */}
+                    <Typography variant="caption" color="text.secondary">
+                      {MARGIN_SCOPE_NOTE}
                     </Typography>
                   </Stack>
                 </Alert>
