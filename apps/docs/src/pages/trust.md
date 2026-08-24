@@ -67,7 +67,7 @@ It is listed here now; whether a pixel is configured on any Aglyn surface is a
 setting rather than something this page can demonstrate, which is exactly why
 the capability is disclosed instead of the rollout state.
 
-## Hosts our customers choose, which are not on that list
+## Hosts our customers choose, which are not on that list {#hosts-our-customers-choose-which-are-not-on-that-list}
 
 The table above, and the published register it defers to, list the parties
 **Aglyn** engages. There is a second set of recipients that a reviewer should
@@ -91,6 +91,23 @@ owner is responsible for naming them in their own privacy notice. The same
 applies to a URL typed while editing in the console: it loads the same way for
 anyone who opens that editor.
 
+**A plugin can be the chooser instead of the site owner, and then that
+paragraph does not hold.** An installed marketplace plugin may ship its own
+stylesheet, which we render into the published page's own CSS — the same
+unlayered slot a Custom HTML `css` block occupies, through the same scheme
+filter. A `url(...)` in it reaches the visitor's browser by exactly the route
+described above, except that the host was picked by the **plugin's publisher**,
+on a site whose owner did not choose it and generally cannot see it. So we do
+not put that one on the site owner to name: they could not enumerate it if they
+tried. What stands behind it instead is review — plugin code that can render on
+a published site runs only on the staff-signed realm tier, so those bytes were
+read by a person before they shipped and the version can be revoked
+platform-wide at render time. Reviewed is not proxied and we are not implying
+it is: the request still travels from the visitor's browser to the publisher's
+host. If you have installed a plugin and want to know what it references, write
+to `privacy@aglyn.com` and we will tell you what is in the version you are
+running.
+
 What we do about it, written as current configuration rather than as an
 assurance:
 
@@ -99,6 +116,9 @@ assurance:
   accept only `https:`, `data:` and `blob:`. A refused reference is rewritten
   to `url(about:invalid)`, which loads nothing and leaves the surrounding CSS
   rule valid rather than corrupting it.
+- A plugin's own stylesheet goes through that same filter, on the published
+  page and in the editor canvas alike. The host is not restricted there either,
+  and there it is the publisher's host rather than the site owner's.
 - Markdown and post images, collection covers, event covers and the marketing
   popup refuse `http:` for the same reason.
 - **The storefront image fields do not yet.** Product, cart, wishlist, related
@@ -205,7 +225,11 @@ are explicit below about the tier that is not:
   implies — so that tier is not sandboxed, and saying otherwise would be the
   more comfortable claim rather than the true one. It is gated on a staff trust
   grant plus an **Ed25519 signature** verified before execution, and it fails
-  closed when the signing key is absent.
+  closed when the signing key is absent. The egress proxy in the bullet above
+  is a property of the sandbox and does not extend to this tier: whatever a
+  realm plugin's components and stylesheet reference is fetched by the
+  visitor's own browser, as described under [Hosts our customers
+  choose](#hosts-our-customers-choose-which-are-not-on-that-list).
 - Every published version is **content-addressed by SHA-256**, and the hash is
   recomputed over the fetched bytes before they execute — on both tiers — so
   the running bytes are the reviewed bytes.
