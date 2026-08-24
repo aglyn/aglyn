@@ -66,9 +66,15 @@ describe('analytics-events (AGL-1561)', () => {
     it('prefers a configured transport over window.gtag, so the console keeps its Firebase user_id', () => {
       const calls = installGtag()
       const viaTransport: Array<[string, Record<string, unknown>]> = []
-      configureAnalyticsTransport((name, params) =>
-        viaTransport.push([name, params]),
-      )
+      // Block body, not a concise one: `push` returns a number, and
+      // `AnalyticsTransport` returns `void | Promise<void>` since AGL-1580.
+      // TypeScript's rule that a void-returning signature accepts any returned
+      // value applies to a BARE `void` — not to `void` inside a union — so the
+      // concise form stopped compiling the moment the type gained its async
+      // arm.
+      configureAnalyticsTransport((name, params) => {
+        viaTransport.push([name, params])
+      })
 
       trackEvent('login', { method: 'password' })
 
