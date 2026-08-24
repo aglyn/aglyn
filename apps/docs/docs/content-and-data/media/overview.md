@@ -263,6 +263,30 @@ You can also type any external image URL into the field by hand — useful for h
 image hosted elsewhere. Images placed before this shipped keep rendering exactly as they
 did.
 
+### What hotlinking means for your visitors {#hotlinking-and-your-visitors}
+
+Hotlinking is a supported feature and we do not intend to remove it, but it has a
+consequence worth knowing before you rely on it: **your visitor's browser fetches that file
+from that host directly, and we do not proxy it.** Aglyn never sits in the middle of the
+request, so the host you named receives the visitor's IP address, their browser
+user-agent and the address of the page they are reading, and it can set its own cookies on
+them.
+
+That makes it your choice rather than ours, and it follows that:
+
+- The host is **not** on Aglyn's
+  [subprocessor list](https://aglyn.com/legal/subprocessors), and it never will be. That
+  list names the parties Aglyn engages to process data. You engaged this one, and only you
+  know which sites and pages it is on — so if you hotlink, name those hosts in **your own**
+  privacy notice.
+- **This field does not check what you type.** An `http://` address ships exactly as
+  entered; browsers block it on an `https` page as mixed content, so the image simply fails
+  to appear. Paste `https://` links. Some other surfaces do refuse `http://` outright —
+  [Trust & security](/trust#hosts-our-customers-choose-which-are-not-on-that-list) lists
+  which ones, per surface.
+- Uploading the file to your media library instead avoids all of it, and gets you the CDN,
+  WebP variants and stable URLs described above.
+
 When a visitor saves a delivered file, it keeps the asset's **original filename and
 extension**, even though the URL itself doesn't carry one — the CDN response declares the
 name. [Download file](#download-file) in the console arrives under that same name by a
