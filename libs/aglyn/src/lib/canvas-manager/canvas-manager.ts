@@ -1268,7 +1268,18 @@ export class CanvasManager {
   ): void {
     if (!node) throw new Error('Invalid node')
     this.saveHistory()
-    node.props = stripUndefinedDeep({ ...props })
+    // Write to the node the MAP holds, not the reference the caller kept
+    // (AGL-2486). Callers hold node objects across time — the besigner's
+    // focus store keeps the selection that way — and every wholesale replace
+    // of the map (`undo`, `redo`, `applyNodes`, a draft restore) builds fresh
+    // instances. Assigning to the caller's copy then mutates an orphan: no
+    // error, no dirty state, and the author's edit is simply gone. Re-resolve
+    // by `$id` so the write always reaches the canvas.
+    //
+    // The fallback keeps a node that is genuinely not in the map — deleted,
+    // or never inserted — behaving as before rather than being resurrected.
+    const target = this.getNode(node.$id) ?? node
+    target.props = stripUndefinedDeep({ ...props })
   }
 
   public static nestDenormalizedNodes(

@@ -304,7 +304,33 @@ function withLastSelectedNode<P>(
 
   const WithLastSelectedNode = observer((props: P) => {
     const { ...rest } = props
-    const lastSelected = Besigner.focus.getLastSelected()
+    const selected = Besigner.focus.getLastSelected()
+    /**
+     * The LIVE node for that selection, re-resolved by id every render
+     * (AGL-2486).
+     *
+     * The focus store holds node OBJECTS, not ids. Anything that replaces the
+     * canvas map wholesale — `undo`, `redo`, a co-editing `applyNodes`, a
+     * local-draft restore — builds fresh node instances and leaves the store
+     * pointing at the pre-restore ones. The panels then read their fields from
+     * an orphan and, worse, write back through it: `updateNodeProps` assigns
+     * `node.props` on an object the canvas no longer owns, so the edit lands
+     * nowhere. Nothing throws and nothing marks the document dirty, so an
+     * author sees their new text in the box, an unchanged canvas, and `UP TO
+     * DATE` — the reported "the Text attribute silently discards edits".
+     *
+     * Resolving here rather than in the three panels because they share this
+     * one seam, and it is `observer`-tracked: `getNode` reads the observable
+     * map, so a restore re-renders the panel with the live node instead of
+     * leaving stale values in the fields.
+     *
+     * A node the map no longer has (deleted, or a test node that was never in
+     * it) falls back to the stored object, which is exactly today's behaviour
+     * for that case — there is no live node to prefer.
+     */
+    const lastSelected = selected
+      ? Aglyn.canvas.getNode(selected.$id) ?? selected
+      : selected
 
     return (
       <>
