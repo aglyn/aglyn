@@ -177,6 +177,53 @@ describe('/api/health/crons', () => {
     expect(body.checks['plugin-jobs-beat'].code).toBe('job-never-reported')
   })
 
+  it('still 503s for the job AGL-1617 moved, at the grace it moved it to', async () => {
+    // END-TO-END, on the exact row the incident was about. Moving
+    // `campaigns-process-scheduled` off GitHub Actions and onto Cloud
+    // Scheduler was allowed to change WHERE it is fired from and WHEN it is
+    // considered late — it was not allowed to make this endpoint any less
+    // able to notice it going quiet. A fix that quietly stopped detecting
+    // would be worse than the 104-minute gap it was fixing.
+    const now = Date.now()
+    mockStore = healthyStore(now)
+    // SEVENTY-FIVE minutes, and the number is not arbitrary. A grace is a
+    // FLOOR, not the exact bar: the verdict compares the mark against the
+    // last fire that is already `graceMinutes` old, so where that lands
+    // depends on the clock's phase against the schedule. With a 45-minute
+    // grace on a 15-minute cron the row reds somewhere between 45 and 60
+    // minutes of silence — 50 minutes reds on a wall clock at :00 and does
+    // not at :07, which is a flake waiting to happen in a suite that runs at
+    // whatever time it runs. 75 is past the ceiling and therefore red at
+    // every phase, while still being comfortably inside the 90-minute grace
+    // this job used to carry — so this test also fails if the grace is ever
+    // widened back. `health-report-crons.spec.ts` pins the exact 45/46
+    // boundary against a frozen clock.
+    mockStore['campaigns-process-scheduled'] = {
+      jobId: 'campaigns-process-scheduled',
+      atMs: now - 75 * 60_000,
+    }
+
+    const { GET } = await freshRoute()
+    const response = await GET()
+    const body = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(body.checks['campaigns-process-scheduled'].ok).toBe(false)
+    expect(body.checks['campaigns-process-scheduled'].code).toBe('job-silent')
+    // The body says which runner to go and look at — the remediation for a
+    // Cloud Scheduler row and a GitHub Actions row are different places.
+    expect(body.checks['campaigns-process-scheduled'].runner).toBe(
+      'cloud-scheduler',
+    )
+    expect(body.checks['campaigns-process-scheduled'].graceMinutes).toBe(45)
+    // And it is still the only red row: the move did not make this a check
+    // that reds the board wholesale.
+    const red = Object.entries(body.checks)
+      .filter(([, check]) => !(check as { ok: boolean }).ok)
+      .map(([id]) => id)
+    expect(red).toEqual(['campaigns-process-scheduled'])
+  })
+
   it('is degraded — not green — when the marks cannot be read at all', async () => {
     mockListThrows = true
     const { GET } = await freshRoute()

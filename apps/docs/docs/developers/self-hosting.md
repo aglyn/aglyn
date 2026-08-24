@@ -329,10 +329,11 @@ disables its feature rather than breaking the stack:
 | Scheduled jobs | `CRON_SECRET` — the job routes stay dormant without it. See [below](#scheduled-jobs) for what that silently switches off |
 | Customer issue reports | `LINEAR_API_KEY` and `LINEAR_CUSTOMER_REPORTS_TEAM_ID` — both required. See [below](#issue-reports) |
 | The every-minute job beat | `AGLYN_JOB_RUNNER_URL`, only if you deploy `cloud/functions`. See [below](#scheduled-jobs) |
+| The fifteen-minute console sweeps | `AGLYN_CONSOLE_URL`, only if you deploy `cloud/functions`. See [below](#scheduled-jobs) |
 
 ### Scheduled jobs {#scheduled-jobs}
 
-Two separate mechanisms, and missing either is quiet rather than loud.
+Three separate mechanisms, and missing any of them is quiet rather than loud.
 
 **`CRON_SECRET`** is the shared secret every scheduled route checks. Without
 it those routes answer `501` and do nothing — including audit archival,
@@ -351,6 +352,36 @@ its own `PLUGIN_JOBS_SECRET` while none of its own jobs ran. Unset, the beat
 now refuses to fire and logs the variable name once per tick. Set it to a
 tenant origin on *your* deployment, for example
 `https://sites.example.com/api/plugins/run-jobs`.
+
+**`AGLYN_CONSOLE_URL`** also only matters if you deploy `cloud/functions`. Its
+`consoleFastCrons` job runs every fifteen minutes and POSTs the two console
+routes that cannot wait for a slower scheduler: **scheduled campaign sends**
+and the sweep that finishes a **custom domain** once its certificate or DNS
+settles. Set it to the origin that *serves* your console — not one that
+redirects to it, because a redirect drops the POST body and the
+`x-cron-secret` header. Unset, the job refuses to fire and names the variable,
+for the same reason `AGLYN_JOB_RUNNER_URL` has no default.
+
+Aglyn's own deployment moved these two off GitHub Actions in AGL-1617: GitHub
+coalesces and silently drops scheduled triggers under load, which is fine for
+a nightly job and not fine for one a customer set a clock time on. If you
+schedule these some other way, **anything hourly or slower will quietly break
+the promise the campaign composer makes** — it accepts a time down to the
+minute. `/api/health/crons` is the check that notices; it reds a
+fifteen-minute job after roughly three missed fires.
+
+`CRON_SECRET` reaches this function through Secret Manager
+(`firebase functions:secrets:set CRON_SECRET`) and must equal the console's.
+`AGLYN_PROBE_TOKEN` is optional and only needed if a bot-protection layer sits
+in front of your console; unset, the header is simply not sent.
+
+Both non-secret variables live in a dotenv file in `cloud/functions/` —
+copy `cloud/functions/.env.example` to `.env.<your-project-id>` **before your
+first `firebase deploy --only functions`**. The Firebase CLI writes whatever
+that file contains onto the deployed service, so a missing file does not mean
+"keep the current values", it means "deploy with none". Both beats have no
+defaults, so that is a pair of jobs that stop firing with no error anywhere
+except a `job-silent` row on `/api/health/crons`.
 
 ### Customer issue reports {#issue-reports}
 

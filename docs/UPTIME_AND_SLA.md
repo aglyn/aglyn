@@ -587,10 +587,24 @@ Notes that keep these honest:
   not by the work, and the expected time comes from the job's cron rather than
   a fixed interval — so `usage-email`, which runs hourly on the 1st and 2nd
   and not at all afterwards, reads green for the twenty-nine days it is
-  deliberately idle. Grace per job is generous on purpose (6h daily, 24h
-  weekly, 90 min for the frequent sweeps): GitHub delays scheduled workflows
-  routinely, and a row that reds on ordinary lateness is one people mute.
+  deliberately idle. **Grace is a property of the RUNNER, and it is a floor
+  rather than the exact bar** — the verdict compares the mark against the last
+  fire already that old, so the phase of the clock against the schedule
+  decides where the threshold lands. GitHub Actions rows carry 6h (daily) and
+  24h (weekly) because GitHub delays scheduled workflows routinely and a row
+  that reds on ordinary lateness is one people mute. The two Cloud Scheduler
+  rows added by AGL-1617 carry **45 minutes on a 15-minute schedule — red
+  between 45 and 60 minutes of silence, three missed fires** — because Cloud
+  Scheduler does not drift. That tightening is the point of the move: the 90
+  minutes they used to carry was GitHub's drift budget, bought with six
+  missed sends of a feature `/product/marketing` sells.
   **Clearing event:** the next invocation of that job; nothing latches.
+  **⚠️ A SINGLE PROBE OF THIS ENDPOINT PROVES NOTHING.** It memoises its
+  Firestore read for five minutes **per lambda instance**, and a burst lands
+  on many. During the 2026-08-24 incident 36 probes split cleanly — ~19
+  instances holding a pre-beat memo at `age 103–105m / 503`, ~17 fresh at
+  `age 1m / 200`. Either single answer, taken alone, would have been believed
+  and been wrong. Burst, and read the spread.
   **⚠️ STILL OWED, AND IT HAS NOW COST SOMETHING.** The `scheduled-jobs` row
   in the table above has never been created in Monitoring. Verified against
   the live project on 2026-08-23: `gcloud monitoring uptime list-configs

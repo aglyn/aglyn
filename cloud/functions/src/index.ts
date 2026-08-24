@@ -27,6 +27,17 @@ import { signupsCreationVerdict } from './signups-lock'
 const PLUGIN_JOBS_SECRET = defineSecret('PLUGIN_JOBS_SECRET')
 
 /**
+ * Shared secret for the CONSOLE's scheduled routes. Must match `CRON_SECRET`
+ * on the console Vercel project — every cron route compares it and answers
+ * 401 when it does not match, 501 when it is unset there.
+ *
+ * The same value `.github/workflows/scheduled-crons.yml` sends as
+ * `x-cron-secret` for the daily and weekly jobs. Two callers, one secret, on
+ * purpose: rotating it is one act (docs/SECRET_ROTATION.md), not two.
+ */
+const CONSOLE_CRON_SECRET = defineSecret('CRON_SECRET')
+
+/**
  * Tenant origin to poke. Any host on THIS deployment works — the runner is not
  * host-scoped — but it must be a host on this deployment (AGL-2176).
  *
@@ -44,6 +55,39 @@ const PLUGIN_JOBS_SECRET = defineSecret('PLUGIN_JOBS_SECRET')
  * cannot see at all.
  */
 const JOB_RUNNER_URL = process.env.AGLYN_JOB_RUNNER_URL?.trim()
+
+/**
+ * Console origin to poke for the high-frequency cron routes below.
+ *
+ * NO DEFAULT, for the AGL-2176 reason one variable up: a wrong-but-plausible
+ * default sends a request carrying OUR `CRON_SECRET` to somebody else's host
+ * while our own jobs quietly never run. Unset means the beat does not fire and
+ * says which variable to set, once per tick.
+ *
+ * It must be the host that SERVES the console, not one that redirects to it.
+ * A redirect drops the POST body and the `x-cron-secret` header — that is
+ * AGL-786, and the fetch below refuses to follow one so it fails loudly
+ * instead of quietly succeeding at nothing.
+ */
+const CONSOLE_URL = process.env.AGLYN_CONSOLE_URL?.trim()?.replace(/\/+$/, '')
+
+/**
+ * Optional Vercel Bot Protection bypass, same header and same token as every
+ * other Aglyn-owned caller of our own hosts (`tools/scripts/lib/probe-headers.mjs`,
+ * `scheduled-crons.yml`, `uptime-probe.yml`).
+ *
+ * ABSENT MEANS NOT SENT, never a crash — the failure direction the shared
+ * helper argues for. A self-hoster with no firewall in front of their console
+ * needs nothing here; on app.aglyn.com an unrecognised automated client is
+ * answered with a 429 Security Checkpoint page, which the status check below
+ * reports by number (AGL-2483).
+ *
+ * A plain env var rather than a Secret Manager binding so that "not
+ * configured" is a state this can HAVE. `defineSecret` makes a deploy fail
+ * when the secret does not exist, which would make the whole function
+ * undeployable for every operator who does not need it.
+ */
+const PROBE_TOKEN = process.env.AGLYN_PROBE_TOKEN?.trim()
 
 /**
  * The platform's job beat (AGL-1159).
@@ -117,6 +161,174 @@ export const pluginJobsBeat = onSchedule(
     if (result?.ran?.length) {
       logger.info('plugin jobs ran', { ran: result.ran })
     }
+  },
+)
+
+/*==============================================================
+ * THE CONSOLE'S HIGH-FREQUENCY CRONS (AGL-1617)
+ *=============================================================*/
+
+/**
+ * The schedule the two routes below are driven on, five-field UTC cron.
+ *
+ * Pinned as a named constant because `scheduled-crons-wiring.spec.ts` reads
+ * this file as text and asserts it against `SCHEDULED_JOBS` — the inventory
+ * `/api/health/crons` judges these jobs against. A schedule changed here and
+ * not there would silently redefine what "on time" means.
+ */
+const CONSOLE_FAST_CRON_SCHEDULE = '*/15 * * * *'
+
+/**
+ * WHY THESE TWO ARE NOT ON GITHUB ACTIONS ANY MORE.
+ *
+ * They were, until AGL-1617. GitHub coalesces and silently DROPS scheduled
+ * triggers under load, and it does so per workflow — `scheduled-crons.yml`
+ * carried fourteen `- cron:` entries and each run served exactly one, resolved
+ * from `github.event.schedule`. Measured over 2026-08-22..24: the workflow
+ * should have fired at least seven times an hour from the every-15-minute and
+ * every-20-minute entries alone and actually fired **two to four**, a delivery
+ * rate under 40%.
+ * Because the surviving runs were split across both schedules, the campaign
+ * processor specifically went **104 minutes** without a beat on 2026-08-24 —
+ * on a fifteen-minute schedule — and the `scheduled-jobs` uptime monitor
+ * correctly 503ed.
+ *
+ * That is not a monitoring artifact and not something a longer grace fixes:
+ * `/product/marketing` SELLS "Schedule campaigns and overlays ahead of time",
+ * the processor claims at most ten due campaigns per invocation, and a
+ * backlog only drains at 40/hour while the schedule actually holds.
+ *
+ * The contrast was in the same health payload the whole time: `pluginJobsBeat`
+ * above runs on Cloud Scheduler at `every 1 minutes` and reported an age of
+ * zero. Cloud Scheduler is punctual; GitHub's scheduler is best-effort and
+ * says so. So the frequent jobs move to the punctual runner and the daily and
+ * weekly ones — for which an hour of drift is nothing — stay where they are.
+ *
+ * ONE function for both, not two: it is one Cloud Scheduler job rather than
+ * two (the free tier is three jobs per billing account and `pluginJobsBeat`
+ * already holds one), and the two routes are independent below, so neither can
+ * stop the other. `finish-domain-attachments` moves from every twenty minutes
+ * to every fifteen in the process, which is the direction AGL-2010 argued for
+ * anyway — the customer is sitting there waiting for their site.
+ *
+ * THIS FUNCTION WRITES NO BEAT, deliberately. Each ROUTE stamps its own
+ * `platformCronBeats/{jobId}` when it is invoked, so a tick that fired
+ * perfectly and got a 401 back leaves no mark and `/api/health/crons` goes red
+ * — which is correct. A beat written up here would mean "the scheduler is
+ * alive", and the scheduler being alive is not the thing anyone downstream
+ * needs to be true.
+ */
+const CONSOLE_FAST_CRON_ROUTES: readonly string[] = [
+  '/api/campaigns/process-scheduled',
+  '/api/admin/finish-domain-attachments',
+]
+
+/** One route's outcome, for the log line. */
+async function postConsoleCron(route: string): Promise<void> {
+  const url = `${CONSOLE_URL}${route}`
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'x-cron-secret': CONSOLE_CRON_SECRET.value(),
+  }
+  if (PROBE_TOKEN) headers['x-aglyn-probe'] = PROBE_TOKEN
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers,
+    // The routes treat a bodyless POST as their normal invocation; a body is
+    // how `report-usage` and friends resume a sweep, and neither of these
+    // chunks.
+    body: '{}',
+    // AGL-786. fetch would follow the redirect and drop `x-cron-secret` doing
+    // it, turning a misconfigured origin into a request that 200s having
+    // authenticated as nobody. Manual, so a 3xx is a status we can name.
+    redirect: 'manual',
+    signal: AbortSignal.timeout(240_000),
+  })
+
+  const text = await response.text().catch(() => '')
+  if (response.status >= 300 && response.status < 400) {
+    logger.error('console cron redirected — AGLYN_CONSOLE_URL is not the host that serves the console', {
+      route,
+      status: response.status,
+      location: response.headers.get('location') ?? '',
+    })
+    return
+  }
+  if (response.status === 207) {
+    // "Finished, and something in it needs a person" — the same meaning the
+    // workflow gives it, and the same reason it must not read as success.
+    logger.error('console cron finished with failures (207)', { route, body: text.slice(0, 2000) })
+    return
+  }
+  if (!response.ok) {
+    logger.error('console cron refused', { route, status: response.status, body: text.slice(0, 2000) })
+    return
+  }
+  if (text.replace(/\s/g, '').includes('"done":false')) {
+    // A resumable sweep (AGL-1141). This caller does not loop on `nextCursor`,
+    // because neither route chunks today — so if one starts to, it must be a
+    // loud error here rather than a sweep that silently stops after chunk one.
+    logger.error('console cron returned done:false — this caller does not resume sweeps', {
+      route,
+      body: text.slice(0, 2000),
+    })
+    return
+  }
+  logger.debug('console cron ok', { route, status: response.status })
+}
+
+/**
+ * Drives the console's high-frequency cron routes on Cloud Scheduler.
+ *
+ * See `CONSOLE_FAST_CRON_ROUTES` above for why these two are here and the
+ * daily/weekly jobs are not.
+ */
+export const consoleFastCrons = onSchedule(
+  {
+    schedule: CONSOLE_FAST_CRON_SCHEDULE,
+    timeZone: 'Etc/UTC',
+    secrets: [CONSOLE_CRON_SECRET],
+    // No retry: the next tick is fifteen minutes away and both routes are
+    // idempotent claim-and-work sweeps, so a retried tick can only duplicate
+    // reads. A run that fails is visible as a silent job on /api/health/crons
+    // within the grace, which is the signal that matters.
+    retryCount: 0,
+    timeoutSeconds: 540,
+  },
+  async () => {
+    if (!CONSOLE_URL) {
+      logger.error(
+        'console cron beat skipped — set AGLYN_CONSOLE_URL to the origin that ' +
+          'SERVES your console, e.g. https://app.example.com. Until it is set, ' +
+          'no scheduled email campaign will send and no pending custom domain ' +
+          'will finish attaching.',
+      )
+      return
+    }
+    if (!PROBE_TOKEN) {
+      // Not fatal — a console with no bot protection in front of it needs
+      // nothing here. Said once per tick so that a 429 below has an
+      // explanation sitting next to it rather than three files away.
+      logger.debug(
+        'AGLYN_PROBE_TOKEN is not set; these POSTs will be challenged by ' +
+          'Vercel Bot Protection on any host that has it enabled.',
+      )
+    }
+
+    // allSettled, not a loop with awaits: one route that throws must not stop
+    // the other from being called at all. They share nothing but a secret.
+    const outcomes = await Promise.allSettled(
+      CONSOLE_FAST_CRON_ROUTES.map((route) => postConsoleCron(route)),
+    )
+    outcomes.forEach((outcome, index) => {
+      if (outcome.status === 'rejected') {
+        logger.error('console cron threw', {
+          route: CONSOLE_FAST_CRON_ROUTES[index],
+          error: String(outcome.reason),
+        })
+      }
+    })
   },
 )
 

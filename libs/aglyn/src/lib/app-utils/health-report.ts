@@ -1723,9 +1723,11 @@ export interface ScheduledJob {
   label: string
   /**
    * Five-field cron, UTC. The SAME string the scheduler holds — the wiring
-   * spec asserts each one against `.github/workflows/scheduled-crons.yml`,
-   * so an edit there that is not made here fails the build rather than
-   * quietly changing what "on time" means.
+   * spec asserts each one against its runner's source of truth
+   * (`.github/workflows/scheduled-crons.yml` for `github-actions`,
+   * `cloud/functions/src/index.ts` for `cloud-scheduler`), so an edit there
+   * that is not made here fails the build rather than quietly changing what
+   * "on time" means.
    */
   cron: string
   runner: CronRunner
@@ -1741,6 +1743,25 @@ export interface ScheduledJob {
    * second"; a grace that reds on ordinary lateness is alert fatigue, and an
    * alert people learn to ignore is the failure this issue is about wearing
    * a different hat.
+   *
+   * SO THE GRACE IS A PROPERTY OF THE RUNNER, not of the job (AGL-1617). The
+   * ninety minutes the two frequent sweeps used to carry was GitHub's drift
+   * budget, and it was bought with detection: on a fifteen-minute schedule it
+   * takes SIX consecutive missed fires before anything is said. Moving those
+   * two onto Cloud Scheduler — which is punctual, as `plugin-jobs-beat` has
+   * been demonstrating at `every 1 minutes` in the same payload the whole
+   * time — is what let the bar go back UP, to forty-five minutes and three
+   * missed fires. That direction is the point: widening a grace to make a
+   * monitor agree with a runner that drops 60% of its triggers is not a fix,
+   * it is deciding not to look.
+   *
+   * IT IS A FLOOR, NOT THE EXACT BAR. `cronJobsHealth` compares the mark
+   * against the last fire that is ALREADY this old, so where the threshold
+   * lands depends on the clock's phase against the schedule: forty-five
+   * minutes on a fifteen-minute cron reds somewhere between 45 and 60 minutes
+   * of silence, six hours on a daily one between 6h and 30h. Quote the range,
+   * not the number, when reasoning about how fast a dead job is found — and
+   * never write a test that only holds at one phase.
    */
   graceMinutes: number
   /** What stops happening when this job stops. Rendered on the board. */
@@ -1750,9 +1771,17 @@ export interface ScheduledJob {
 /**
  * THE INVENTORY.
  *
- * Twelve GitHub Actions schedules (`.github/workflows/scheduled-crons.yml`)
- * and one real Cloud Scheduler job (firebase-schedule-pluginJobsBeat-us-central1),
- * confirmed as the only job in `aglyn-main` on 2026-08-20.
+ * Eleven GitHub Actions schedules (`.github/workflows/scheduled-crons.yml`) —
+ * the daily and weekly jobs, for which an hour of drift is nothing — and
+ * three rows driven by Cloud Scheduler out of `cloud/functions/src/index.ts`:
+ * `pluginJobsBeat` (every minute) and the two the `consoleFastCrons` job
+ * carries every fifteen (AGL-1617).
+ *
+ * `scheduled-crons-wiring.spec.ts` holds BOTH runners against their source —
+ * the workflow for the `github-actions` rows, the functions file for the
+ * `cloud-scheduler` ones — in both directions. An inventory row for a job
+ * nobody schedules and a scheduled job nobody watches are the same bug seen
+ * from opposite ends, and both fail the build.
  *
  * `report-usage` appears TWICE and is two jobs, not one. The 02:00 run
  * rolls up the closed month and is the only run that ever reaches Stripe;
@@ -1882,19 +1911,24 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     id: 'campaigns-process-scheduled',
     label: 'Scheduled email campaigns',
     cron: '*/15 * * * *',
-    runner: 'github-actions',
-    target: '/api/campaigns/process-scheduled',
-    graceMinutes: 90,
+    // MOVED OFF GITHUB ACTIONS (AGL-1617), with the row below it. See the
+    // grace note on `graceMinutes` for why that let the bar go UP.
+    runner: 'cloud-scheduler',
+    target: 'consoleFastCrons → console /api/campaigns/process-scheduled',
+    graceMinutes: 45,
     drives:
       'Claims and sends due campaigns. If it stops, a campaign the composer showed as Scheduled sits there and never sends — the AGL-2134 shape, which is sold on /product/marketing.',
   },
   {
     id: 'finish-domain-attachments',
     label: 'Custom domain re-check',
-    cron: '*/20 * * * *',
-    runner: 'github-actions',
-    target: '/api/admin/finish-domain-attachments',
-    graceMinutes: 90,
+    // Every fifteen minutes rather than twenty since AGL-1617: it shares one
+    // Cloud Scheduler job with the campaign processor, and AGL-2010's argument
+    // was always that a customer is sitting there waiting for their site.
+    cron: '*/15 * * * *',
+    runner: 'cloud-scheduler',
+    target: 'consoleFastCrons → console /api/admin/finish-domain-attachments',
+    graceMinutes: 45,
     drives:
       'Re-checks pending custom domains after the certificate or DNS settles (AGL-2010). If it stops, a correctly-configured domain stays dark until a human presses Re-attach.',
   },

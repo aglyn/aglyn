@@ -143,6 +143,87 @@ describe('cronJobsHealth', () => {
     expect(checks['plugin-jobs-beat'].code).toBe('job-silent')
   })
 
+  /*==========================================
+   * AGL-1617. The gap that started this, and the bar that catches it.
+   *=========================================*/
+  it('goes RED for the campaign processor at the gap that was actually measured', () => {
+    // 2026-08-24: `campaigns-process-scheduled`, on a fifteen-minute
+    // schedule, went 104 minutes without a beat because GitHub Actions was
+    // delivering under 40% of this workflow's scheduled triggers. This is
+    // that reading, and it must be a defect.
+    const beats = allFresh().map((beat) =>
+      beat.jobId === 'campaigns-process-scheduled'
+        ? { ...beat, atMs: NOW - 104 * MINUTE }
+        : beat,
+    )
+    const checks = cronJobsHealth(beats, WATCHING_SINCE, 3, NOW)
+    expect(checks['campaigns-process-scheduled'].ok).toBe(false)
+    expect(checks['campaigns-process-scheduled'].code).toBe('job-silent')
+    expect(checks['campaigns-process-scheduled'].lastBeatAgeMinutes).toBe(104)
+    expect(healthStatus(checks)).toBe('degraded')
+  })
+
+  it('now catches a gap the old ninety-minute grace let through', () => {
+    // THE POINT OF MOVING RUNNERS, stated as a test rather than as a comment.
+    // Ninety minutes was GitHub's drift budget, and on a fifteen-minute
+    // schedule it bought silence for SIX consecutive missed fires. Cloud
+    // Scheduler does not drift, so the bar went back up to forty-five and
+    // three. A 50-minute gap — three missed sends of a feature we sell — is
+    // the band that changed hands.
+    // Read from the shipped inventory rather than restated, so this compares
+    // two graces against the REAL schedule. `strictNullChecks` is off
+    // repo-wide, so a renamed id would spread `undefined` into a row with no
+    // cron and fail somewhere unhelpful — hence the explicit check.
+    const shipped = SCHEDULED_JOBS.find(
+      (job) => job.id === 'campaigns-process-scheduled',
+    )
+    expect(shipped).toBeDefined()
+    expect(shipped.cron).toBe('*/15 * * * *')
+
+    const silentFor = (minutes: number, graceMinutes: number) =>
+      cronJobsHealth(
+        [{ jobId: 'campaigns-process-scheduled', atMs: NOW - minutes * MINUTE }],
+        WATCHING_SINCE,
+        3,
+        NOW,
+        [{ ...shipped, graceMinutes }],
+      )['campaigns-process-scheduled']
+
+    // The grace this ships with: red.
+    expect(silentFor(50, 45).ok).toBe(false)
+    expect(silentFor(50, 45).code).toBe('job-silent')
+    // The grace it replaced, on the identical input: green. If this line
+    // ever starts passing as `false`, the two graces have stopped differing
+    // and the change was undone.
+    expect(silentFor(50, 90).ok).toBe(true)
+  })
+
+  it('puts the campaign processor bar at three missed fires, either side', () => {
+    // BOTH SIDES, because only a pair proves the bar is where it is said to
+    // be. A one-sided "45 minutes is fine" passes just as happily at a grace
+    // of twenty — the schedule is fifteen minutes and the arithmetic rounds
+    // to the same fire — which is a test that cannot tell alert fatigue from
+    // detection. NOW is 12:00:00 exactly and the fires are :00/:15/:30/:45,
+    // so with a 45-minute grace the last fire already past its grace is
+    // 11:15 and the boundary is exact.
+    const silentFor = (minutes: number) =>
+      cronJobsHealth(
+        [{ jobId: 'campaigns-process-scheduled', atMs: NOW - minutes * MINUTE }],
+        WATCHING_SINCE,
+        3,
+        NOW,
+      )['campaigns-process-scheduled']
+
+    // 45 minutes late: two fires missed. A Cloud Run cold start, a Scheduler
+    // retry, a probe landing between fires — all of this must read green, or
+    // the row gets muted and we are back to not looking.
+    expect(silentFor(45).ok).toBe(true)
+    // 46: three missed fires, and on a feature we sell that is a delivery
+    // delay somebody paid for. Red.
+    expect(silentFor(46).ok).toBe(false)
+    expect(silentFor(46).code).toBe('job-silent')
+  })
+
   it('clears itself the moment the job reports again', () => {
     // Nothing latches (the AGL-1843 rule). The named clearing event is the
     // next invocation, and here it is.

@@ -212,12 +212,26 @@ outage.
 2. Set the new `CRON_SECRET` on the shared record, **production only**.
 3. Add a dev/preview record with a throwaway value.
 4. `gh secret set CRON_SECRET` — the GitHub Actions crons in
-   `.github/workflows/scheduled-crons.yml` send it as `x-cron-secret` to 12
-   console routes. **Vercel and GitHub must move together**; whichever lags,
-   every cron 401s in the gap.
-5. Redeploy console **and** tenant (the plugin cron routes live on both).
-6. Verify: dispatch one cron manually and confirm 200; confirm an unsubscribe
-   link from an already-sent campaign still resolves.
+   `.github/workflows/scheduled-crons.yml` send it as `x-cron-secret` to the
+   daily and weekly console routes. **Vercel and GitHub must move together**;
+   whichever lags, every cron 401s in the gap.
+5. **THREE HOLDERS, NOT TWO (AGL-1617).** `firebase functions:secrets:set
+   CRON_SECRET --project aglyn-main`, then `firebase deploy --only
+   functions:consoleFastCrons` so the new version is bound. That Cloud
+   Scheduler job drives `campaigns/process-scheduled` and
+   `finish-domain-attachments` every fifteen minutes; miss this step and
+   those two — a feature `/product/marketing` sells, and every pending custom
+   domain — 401 silently while the eleven GitHub Actions jobs stay green.
+   `/api/health/crons` reds them within 45–60 minutes, which is the backstop,
+   not the plan.
+6. Redeploy console **and** tenant (the plugin cron routes live on both).
+7. Verify: dispatch one cron manually and confirm 200; confirm an unsubscribe
+   link from an already-sent campaign still resolves; and confirm the two
+   Cloud Scheduler rows on `/api/health/crons` show a fresh
+   `lastBeatAgeMinutes`. **Fire that check more than once** — the endpoint
+   memoises its Firestore read for five minutes *per lambda instance*, so a
+   single request can be answered by a memo written before the rotation and
+   prove nothing either way.
 
 There is **no grace period**. `isCronAuthorized` compares against exactly one
 value; there is no key list and no previous-secret fallback.
