@@ -21,6 +21,7 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  listUsersAcrossPools,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import {
@@ -75,6 +76,9 @@ import {
 const USER_CAP = 5000
 const ORG_CAP = 2000
 const REVENUE_CAP = 5000
+/** One `listUsers` page, and how many of them before the sweep reports a cut. */
+const AUTH_PAGE_SIZE = 1000
+const AUTH_PAGE_CAP = 20
 
 async function handler(request: Request): Promise<Response> {
   const { method, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -160,22 +164,99 @@ async function handler(request: Request): Promise<Response> {
       }),
     )
 
-    // 3. Sign-in countries per user, from the security-alert device records.
+    // 3. THE POPULATION — every account holder, not only the ones who have a
+    //    `users/{uid}` profile DOCUMENT.
+    //
+    // This read used to BE the population, and that quietly lost people.
+    // Adding a member writes `orgs/{orgId}/members/{uid}` and the reverse
+    // index `users/{uid}/orgs/{orgId}` (`organizations.ts:1124,1325`), and
+    // writes `users/{uid}` ITSELF nowhere. That document is created only by
+    // `seedUserProfile`, on sign-in — and even then "best-effort by contract:
+    // the profile self-heals on the next sign-in", so a rejected seed leaves
+    // the same hole behind a user who has signed in and has devices.
+    //
+    // Firestore EXCLUDES such a phantom parent from a collection query: a
+    // document that exists only as the ancestor of subcollection documents is
+    // not returned by `collection('users').get()`. So a person invited to an
+    // org who has not signed in yet — whose email we hold on the member row,
+    // and who is squarely a data subject in a breach of it — was not reported
+    // as `unknown`. They were ABSENT: outside `totalSubjects`, and therefore
+    // outside the denominator, so `coverage` read BETTER the more people we
+    // could not place. That is the exact failure this whole issue exists to
+    // prevent — an omission wearing the shape of completeness — and it is the
+    // one an authority probes first.
+    //
+    // So the population is a UNION of three registers, and each is here
+    // because the other two miss somebody real:
+    //
+    //  a. **Firebase Auth, across every pool** — the account register itself,
+    //     and the only exhaustive one. `erase.ts:1367` already treats it as
+    //     the truth for exactly this reason ("an absent profile doc is not an
+    //     absent account"), falling back to `findUserByUidAcrossPools` when
+    //     Firestore holds nothing. It catches the account that signed up,
+    //     never verified its email — the session route refuses BEFORE the
+    //     seed runs — and never joined an org, which neither register below
+    //     can see at all.
+    //  b. **`users/{uid}` profile documents** — a subset of (a) in principle,
+    //     kept because it is the register the devices hang off.
+    //  c. **Org rosters** — every member uid and `ownerUid` from step 2. Not
+    //     redundant with (a): erasure deletes the auth record and can leave
+    //     the membership row behind (`resolve-people.ts:28` names the state,
+    //     "a deleted account whose membership lingers"), and we still hold
+    //     that person's email on the roster row.
+    //
+    // (c) is free — `orgsOfUser` is already in hand. (a) costs one paginated
+    // sweep. Both are worth it: the register this route used to call the
+    // population was (b) alone, and (b) is measured at **1 account in 3**
+    // (`user-profiles.ts:30`, production, 2026-07-30).
     const userSnap = await firestore.collection('users').limit(USER_CAP).get()
+    const populationUids = new Set<string>(
+      userSnap.docs.map((userDoc: { id: string }) => userDoc.id),
+    )
+    for (const uid of orgsOfUser.keys()) populationUids.add(uid)
+
+    // The auth sweep. A failure here must not be swallowed into a smaller
+    // population that still looks like a complete one, so it is recorded and
+    // surfaced rather than caught and ignored.
+    let authTruncated = false
+    let authSweepFailed = false
+    try {
+      let pageToken: string | undefined = undefined
+      let pages = 0
+      do {
+        const page = await listUsersAcrossPools(AUTH_PAGE_SIZE, pageToken)
+        for (const pooled of page.users) populationUids.add(pooled.record.uid)
+        if (page.tenantTruncated?.length) authTruncated = true
+        pageToken = page.nextPageToken ?? undefined
+        pages += 1
+      } while (pageToken && pages < AUTH_PAGE_CAP)
+      if (pageToken) authTruncated = true
+    } catch (error) {
+      console.error('[admin/member-state-exposure] auth sweep failed', error)
+      authSweepFailed = true
+    }
+
     const subjects: ExposureSubject[] = []
     await Promise.all(
-      userSnap.docs.map(async (userDoc) => {
-        const devices = await userDoc.ref.collection('devices').get()
+      [...populationUids].map(async (uid) => {
+        // By ref rather than through a snapshot, because for a recovered uid
+        // there IS no snapshot — and a subcollection under a document that
+        // does not exist reads perfectly well.
+        const devices = await firestore
+          .collection('users')
+          .doc(uid)
+          .collection('devices')
+          .get()
         const signInCountries = devices.docs
-          .map((device) =>
+          .map((device: { data: () => unknown }) =>
             deviceLocationCountry(
               (device.data() as { location?: unknown }).location as string,
             ),
           )
           .filter(Boolean) as string[]
-        const orgIds = [...(orgsOfUser.get(userDoc.id) ?? [])]
+        const orgIds = [...(orgsOfUser.get(uid) ?? [])]
         subjects.push({
-          id: userDoc.id,
+          id: uid,
           declaredCountries: orgIds
             .map((orgId) => declaredByOrg.get(orgId))
             .filter(Boolean) as string[],
@@ -193,7 +274,17 @@ async function handler(request: Request): Promise<Response> {
       truncated:
         userSnap.size >= USER_CAP ||
         orgSnap.size >= ORG_CAP ||
-        revenueSnap.size >= REVENUE_CAP,
+        revenueSnap.size >= REVENUE_CAP ||
+        authTruncated ||
+        authSweepFailed,
+      /**
+       * The population is a lower bound because the ACCOUNT REGISTER could
+       * not be swept, not because a Firestore page filled up. Reported
+       * separately from `truncated` because the remedy differs: a filled page
+       * is a cap to raise, a failed sweep is a report to re-run. Either way a
+       * reader must not treat the buckets as the whole population.
+       */
+      authSweepFailed,
       generatedAt: new Date().toISOString(),
       // Stated in the payload, not only in the docs: a reader who gets this
       // as JSON during an incident must not have to go and find the caveat.
@@ -226,7 +317,10 @@ export const dynamic = 'force-dynamic'
  *
  * Worst case at the caps above is ~7,000 Firestore round trips: one `orgs`
  * page, one `users` page, one `platformRevenue` page, then a `members` get per
- * org (≤2,000) and a `devices` get per user (≤5,000). This route shipped with
+ * org (≤2,000) and a `devices` get per subject. That last count is the UNION
+ * of the `users` page and the org rosters rather than the page alone, so it is
+ * bounded by ≤5,000 profiles plus the members recovered from step 2. This
+ * route shipped with
  * no `maxDuration` at all, so it inherited the platform default — and a report
  * that 504s is a report that fails at exactly the moment §3.3 of
  * `BREACH_NOTIFICATION.md` sends someone to it, with the 72-hour clock running.

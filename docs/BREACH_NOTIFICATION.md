@@ -203,11 +203,46 @@ claim. **Do this once cold**, today, not at hour one of an incident.
 must not be filed from as though complete. Raise the caps in the route rather
 than reading past it.
 
+⚠️ **`authSweepFailed: true` is the same warning for a different reason** — the
+account register itself could not be read, so people are missing from the
+population rather than from a page that filled up. The remedy differs: a filled
+page is a cap to raise, a failed sweep is a report to **re-run**. Do not file
+from the buckets while it is set.
+
 It returns one bucket per supervisory authority — the Member State, the
 authority's name, the filing URL — plus `unknown`, `ambiguous` and
 `outsideScope`. The buckets and those three **sum to the population**: nobody
 is dropped, because a report that silently omits the people it could not place
 reads as completeness and is the first thing an authority will probe.
+
+**Who is IN the population, and why it is three registers.** This is the part
+that was wrong, and it was wrong in the direction that under-counts a filing
+obligation. The report is computed over the union of:
+
+1. **Firebase Auth, across every pool** — the account register, and the only
+   exhaustive one. It is the only register that sees an account which signed
+   up, never verified its email and never joined an org: the session route
+   refuses at `emailUnverifiedResponse()` *before* `seedUserProfile` runs, so
+   such an account can never have a profile document.
+2. **`users/{uid}` profile documents** — the register the sign-in devices hang
+   off.
+3. **Org rosters** — every `members/{uid}` and `ownerUid`. Not redundant with
+   (1): erasure deletes the auth record and can leave the membership row
+   behind, and that row still carries the person's email.
+
+⚠️ **The report used to be computed over (2) alone**, and `users/{uid}` is
+**not** created when somebody is added to an org — adding a member writes the
+member row and the reverse index `users/{uid}/orgs/{orgId}`, and Firestore does
+not return such a *phantom parent* from a collection query. The profile
+document is born only at sign-in, and was measured at **1 account in 3**
+(`user-profiles.ts:30`, production, 2026-07-30). Anyone missing was not
+reported as `unknown` — they were absent, outside `totalSubjects`, hence
+outside the denominator, **so `coverage` read better the more people we could
+not place.** If you are reading a report generated before 2026-08-24, treat its
+population as a fraction of the real one.
+
+**What it is built from.** Three signals we already hold for other stated
+purposes. Nothing is collected for this.
 
 **What it is built from.** Three signals we already hold for other stated
 purposes. Nothing is collected for this.
