@@ -52,8 +52,25 @@ Other flags: `--brands a,b,c` (which packs, one host each), `--dry-run`
 
 ```bash
 FIREBASE_PROJECT_ID=… FIREBASE_CLIENT_EMAIL=… FIREBASE_PRIVATE_KEY=… \
-  node tools/scripts/seed-demo-host.mjs --host demo --brand bakery
+  node tools/scripts/seed-demo-host.mjs --host <hostId|subdomain> --brand <id>
 ```
+
+> **⛔ Never run this against `demo` in production (AGL-1617).** The example
+> here used to read `--host demo --brand bakery`. There is no `hosts/demo`
+> document: the `demo` subdomain is served by a legacy push-id host in an
+> individual's personal org that holds **zero** `seed-` documents and four
+> renderer test screens. The command would *resolve* and appear to succeed —
+> and that is the trap. `pruneSeedFixtures` only removes `seed-` ids, of which
+> that host has none, so the dev screens survive while `ensureHost` merges a
+> new `displayName`/`theme` and `seedBrand` adds a competing home screen,
+> leaving the site worse than it was. `demo` is also the tenant middleware's
+> fallback for `app.aglyn.com`, every Vercel preview and `localhost:4500`, so
+> the blast radius is well outside the demo. Do the brand work on the seeded
+> hosts instead.
+
+Note this script **resolves** a host, it never creates one: `--host` on a
+subdomain that does not exist fails with `No host with id or subdomain "…"`.
+Creating hosts is `seed-demo-org.mjs --create-hosts`.
 
 `--host` accepts a host **id** or **subdomain** (defaults to `demo`).
 `--brand` defaults to `bakery`, so an unflagged run seeds what this script
@@ -66,16 +83,16 @@ optional when `FIRESTORE_EMULATOR_HOST` is set.
 A pack is not a string table. Three sites that differ only in colour still
 read as one template, so a pack also decides **which modules exist at all**.
 
-| module | bakery | dental | legal | restaurant | fitness |
-| --- | :-: | :-: | :-: | :-: | :-: |
-| commerce | ✓ | — | — | ✓ | ✓ |
-| bookable services | ✓ | ✓ | — | — | ✓ |
-| reservations | — | — | — | ✓ | — |
-| site members | ✓ | — | ✓ | — | ✓ |
-| overlays | bar | bar | — | bar + popup | popup |
-| experiments | ✓ | — | — | ✓ | ✓ |
-| locations | 1 | 0 | 0 | **2** | 1 |
-| home sections | 2 | 3 | 3 | 3 | 3 |
+| module | bakery | dental | legal | restaurant | fitness | showcase |
+| --- | :-: | :-: | :-: | :-: | :-: | :-: |
+| commerce | ✓ | — | — | ✓ | ✓ | — |
+| bookable services | ✓ | ✓ | — | — | ✓ | — |
+| reservations | — | — | — | ✓ | — | — |
+| site members | ✓ | — | ✓ | — | ✓ | — |
+| overlays | bar | bar | — | bar + popup | popup | — |
+| experiments | ✓ | — | — | ✓ | ✓ | — |
+| locations | 1 | 0 | 0 | **2** | 1 | 0 |
+| home sections | 2 | 3 | 3 | 3 | 3 | 3 |
 
 Each pack also carries its own `theme` (palette, Google font, border
 radius) and a home screen composed from a different set of section
@@ -86,6 +103,30 @@ deliberate: it is what proves the switcher is crossing between businesses.
 To add a pack, add an entry to `BRANDS` in
 `tools/scripts/lib/demo-brands.mjs`. The engine skips any module the pack
 leaves `null` or empty, so a partial pack is valid.
+
+### `showcase` is not a demo site
+
+`showcase` is the **render canary's subject** (AGL-1617), not part of the
+sales demo, and it is deliberately absent from `AGENCY_DEMO_BRANDS` — an
+unflagged `seed-demo-org.mjs` run still seeds exactly the four agency
+brands. Seed it explicitly:
+
+```bash
+node tools/scripts/seed-demo-org.mjs --org <orgId|orgSlug> --create-hosts --brands showcase
+```
+
+`/api/health/render/site` grades only "host resolved + non-empty node
+tree", so an ordinary customer edit can never page on-call. That assertion
+only means something while something else guarantees the tree — which is
+why the canary's subject must be a host whose content comes from this file
+and is never hand-edited. Point it there with
+`AGLYN_CANARY_SITE_HOST=showcase`.
+
+It must NOT be one of the four agency brands: those are edited before
+customer calls, which is exactly the "an ordinary edit pages on-call"
+failure the structural assertion exists to avoid. It also carries no
+commerce and no prices — the host this replaced published a fake
+`$9/$29/$79` pricing table to the open internet.
 
 ## What gets seeded
 

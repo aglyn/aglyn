@@ -785,6 +785,12 @@ describe('the checker is wired (workflow + package.json)', () => {
       // reached any of its 214 `.mjs` files — the tree every other guard on
       // this list is written in. This step is the only thing that lints them.
       'check:lint-tools',
+      // AGL-1617 — the launch pre-flight's self-test. The script asserts
+      // brand content per demo host, which is the ONLY thing guaranteeing the
+      // render canary's structural verdict means anything, and it ran in no
+      // workflow at all. `check:test-wiring` could not have caught that: it
+      // sweeps `*.test.mjs`/`*.spec.mjs` and this is a `check-*.mjs`.
+      'test:week-one-preflight',
     ]) {
       // Match the STEP syntax, not the bare script name — the workflow's own
       // comments mention these scripts, and an assertion a comment can
@@ -828,6 +834,7 @@ describe('the checker is wired (workflow + package.json)', () => {
       'test:nul-bytes', // AGL-1890
       'check:nul-bytes', // AGL-1890
       'check:lint-tools', // AGL-2480
+      'test:week-one-preflight', // AGL-1617
     ]) {
       assert.ok(
         typeof pkg.scripts[script] === 'string' && pkg.scripts[script] !== '',

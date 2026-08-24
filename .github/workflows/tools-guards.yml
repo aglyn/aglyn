@@ -279,6 +279,26 @@ jobs:
       # so a third canary fails this until a monitor points at it. Pure node.
       - run: npm run test:uptime-targets
 
+      # test:week-one-preflight  The launch pre-flight's OWN self-test
+      # (AGL-1617). The script implements every mechanically-checkable item of
+      # runbook precondition P4, including the per-host brand-content
+      # assertion that is the only thing standing behind the render canary's
+      # deliberately structural verdict — and it ran in NO WORKFLOW AT ALL. It
+      # slipped past `check:test-wiring` legitimately: that guard sweeps
+      # `*.test.mjs` / `*.spec.mjs`, and this is a `check-*.mjs`, so nothing
+      # was ever going to notice.
+      #
+      # This step runs `--self-test`, NOT the live check, and the distinction
+      # is the whole design. The live run reads a Google Drive shared drive
+      # and live Stripe; in CI it can only ever exit 2 (could-not-evaluate),
+      # which is a check that cannot pass — theatre, not wiring. The
+      # self-test runs every check against a deliberately broken fixture in
+      # its own mkdtemp and FAILS IF ANY CHECK STAYS GREEN, so what this
+      # guards is that the pre-flight can still detect the things it claims
+      # to. Secretless and offline-safe: a fetch that cannot reach the network
+      # grades red, which is the direction the self-test wants anyway.
+      - run: npm run test:week-one-preflight
+
       - run: npm run test:standalone-installs
 
       - run: npm run check:standalone-installs

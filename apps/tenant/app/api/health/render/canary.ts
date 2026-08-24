@@ -43,15 +43,43 @@
  * ## Both hosts are OURS, deliberately
  *
  * A canary pinned to content a customer controls pages the on-call engineer
- * for somebody else's edit. `demo` is the platform's own demonstration site,
- * which is why the middleware falls back to it for `app.aglyn.com` and every
- * preview deployment; nobody outside Aglyn can unpublish it. The marketing
- * host is Aglyn's own site. Neither can be taken away by a customer, and
- * neither assertion looks at page COPY — see `renderHealth`, which grades a
- * resolved host and a non-empty composed node tree and nothing else.
+ * for somebody else's edit. Neither host here can be taken away by a
+ * customer, and neither assertion looks at page COPY — see `renderHealth`,
+ * which grades a resolved host and a non-empty composed node tree and
+ * nothing else.
  *
  * Both are overridable so a self-host operator can point these at their own
  * sites rather than at hosts that do not exist in their install.
+ *
+ * ## ⚠️ "Ours" is not the same as MAINTAINED (AGL-1617)
+ *
+ * This block used to claim `demo` was "the platform's own demonstration site
+ * … nobody outside Aglyn can unpublish it". Only the second half was ever
+ * true, and the first half is what made the endpoint misleading. An audit
+ * found there is no `hosts/demo` document at all: the `demo` subdomain is
+ * served by a legacy push-id host in an individual's personal org, on a
+ * starter plan, holding zero seed documents and four renderer test screens.
+ * It publicly served `CLICK ME`, nineteen `hello` nodes, a fake pricing table
+ * and unresolved `{{Message}}` tokens — and graded GREEN throughout, because
+ * nineteen nodes is a non-empty tree.
+ *
+ * The structural assertion was not the defect and must not be tightened into
+ * a content match; `render-canary-can-go-red.spec.ts` exists to keep an
+ * ordinary edit from paging on-call. The SUBJECT was the defect. A structural
+ * assertion is only meaningful when something guarantees the tree, so the
+ * subject belongs on a host whose content is produced by a script in version
+ * control and never hand-edited: the `showcase` brand pack
+ * (`tools/scripts/lib/demo-brands.mjs`), seeded into the demo org and
+ * selected with `AGLYN_CANARY_SITE_HOST=showcase`.
+ *
+ * Deliberately NOT one of the four brand demo sites — sales edits those
+ * before customer calls, which reintroduces exactly the failure above.
+ *
+ * The `|| 'demo'` fallback in `siteHost()` below is therefore KNOWN-WEAK and
+ * is still the default on purpose. Changing it to `not-configured` (the
+ * tidier shape `marketingHost()` uses) before `showcase` exists and the env
+ * var is set would 503 the canary and redden the public status page. Host
+ * first, env second, default third.
  */
 import {
   renderHealth,
