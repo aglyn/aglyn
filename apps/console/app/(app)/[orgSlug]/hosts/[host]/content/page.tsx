@@ -724,6 +724,34 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     at: string
   } | null>(null)
 
+  /**
+   * Opening the two date dialogs — ONE definition each, because AGL-2498
+   * gave both a second caller.
+   *
+   * Scheduling used to be reachable only from the list row's overflow menu,
+   * so somebody writing an entry had to close the editor, find the row and
+   * open a different menu to decide when it went live. These controls now
+   * appear in the editor as well, and the seeding is the part that must not
+   * be copied: `publishAt` opens an hour out (a schedule is a FUTURE
+   * instant), `publishedAt` opens on the entry's own date (a publication
+   * date is a PAST one), and a hand-copied twin is how those two swap over
+   * without anything failing loudly.
+   */
+  const openScheduler = useCallback((entry: any) => {
+    const initial = new Date(Date.now() + 60 * 60 * 1000)
+    initial.setMinutes(0, 0, 0)
+    setScheduler({ entry, at: toDateTimeLocalValue(initial) })
+  }, [])
+
+  const openPublishDate = useCallback((entry: any) => {
+    // The entry's OWN date when it has one, now when it does not — never a
+    // zero. `publishedAt` is absent on a draft and `strictNullChecks` is off
+    // repo-wide, so `(x?.seconds ?? 0) * 1000` would open on 1 Jan 1970 and
+    // offer to store it (AGL-2497).
+    const current = entry.publishedAt?.toDate?.() ?? new Date()
+    setPublishDate({ entry, at: toDateTimeLocalValue(current) })
+  }, [])
+
   const handleSaveEntry = useCallback(async () => {
     if (!editor || !selected) return
     const title = editor.title.trim()
@@ -1904,24 +1932,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                                         size={0.8}
                                       />
                                     ),
-                                    onClick: () => {
-                                      /*
-                                        Seeded from the entry's OWN date when
-                                        it has one and from now when it does
-                                        not — never from a zero. `publishedAt`
-                                        is absent on a draft, and the seductive
-                                        `(x?.seconds ?? 0) * 1000` would open
-                                        this dialog on 1 Jan 1970 and offer to
-                                        store it (AGL-2497).
-                                      */
-                                      const current =
-                                        entry.publishedAt?.toDate?.() ??
-                                        new Date()
-                                      setPublishDate({
-                                        entry,
-                                        at: toDateTimeLocalValue(current),
-                                      })
-                                    },
+                                    onClick: () => openPublishDate(entry),
                                   },
                                   {
                                     key: 'schedule',
@@ -1932,20 +1943,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                                         size={0.8}
                                       />
                                     ),
-                                    onClick: () => {
-                                      const initial = new Date(
-                                        Date.now() + 60 * 60 * 1000,
-                                      )
-                                      initial.setMinutes(0, 0, 0)
-                                      const pad = (value: number) =>
-                                        String(value).padStart(2, '0')
-                                      setScheduler({
-                                        entry,
-                                        at:
-                                          `${initial.getFullYear()}-${pad(initial.getMonth() + 1)}-` +
-                                          `${pad(initial.getDate())}T${pad(initial.getHours())}:${pad(initial.getMinutes())}`,
-                                      })
-                                    },
+                                    onClick: () => openScheduler(entry),
                                   },
                                 ]
                                 if (published && siteBase) {
@@ -2787,6 +2785,144 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
               </Box>
             )}
           </Box>
+          {/*
+            Publication controls, where the writing happens (AGL-2498).
+
+            Zach: "We are also missing the ability schedule publishing on the
+            content collections, only via the expanded menu on the list." All
+            three controls existed and all three lived on the LIST row, so
+            deciding when a post went live meant closing the editor, finding
+            the row and opening a different menu.
+
+            They are the SAME actions the row menu runs — `handleTogglePublish`,
+            `openScheduler`, `openPublishDate`, shared rather than copied — so
+            there is one behaviour with two doors, not two implementations to
+            drift apart. They are deliberately NOT folded into the draft save
+            below: publishing is an explicit act, and a Save button that also
+            published would make every typo fix a publication event.
+
+            Shown only for an entry that EXISTS. There is nothing to publish,
+            schedule or date until the draft has been created, and offering it
+            would write to an id no document answers to.
+
+            ## The one-letter hazard, in the one place both dates are visible
+
+            `publishedAt` (when it WENT live) and `publishAt` (when it is DUE
+            to) differ by a single letter, and this is the first surface that
+            shows both at once. So each row states its own tense — "Published"
+            against a past instant, "Scheduled for" against a future one — and
+            the two buttons are worded apart ("Edit published date" vs
+            "Schedule"). They remain separate fields, separate dialogs and
+            separate guards; only the doorway is shared.
+          */}
+          {editor?.id
+            ? (() => {
+                const current = entries.find(
+                  (item: any) => item.$id === editor.id,
+                )
+                if (!current) return null
+                const isPublished = current.status === 'published'
+                const isScheduled =
+                  current.status === 'scheduled' && current.publishAt
+                return (
+                  <>
+                    <Divider sx={{ mt: 1 }} />
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 1,
+                      }}
+                    >
+                      <Typography variant="subtitle2">
+                        {'Publication'}
+                      </Typography>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        useFlexGap
+                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                      >
+                        <Chip
+                          size="small"
+                          label={
+                            isPublished
+                              ? 'Published'
+                              : isScheduled
+                                ? 'Scheduled'
+                                : 'Draft'
+                          }
+                          color={
+                            isPublished
+                              ? 'success'
+                              : isScheduled
+                                ? 'info'
+                                : 'default'
+                          }
+                        />
+                        <Typography variant="body2" color="text.secondary">
+                          {isPublished
+                            ? // PAST tense against `publishedAt` — the date
+                              // the article claims, and what
+                              // `Article.datePublished` carries (AGL-2497).
+                              `Published ${formatStampFull(current.publishedAt) ?? '—'}`
+                            : isScheduled
+                              ? // FUTURE tense against `publishAt`. Naming
+                                // the field's tense in the sentence is what
+                                // keeps the two apart on screen.
+                                `Scheduled for ${formatStampFull(current.publishAt) ?? '—'}`
+                              : 'Not published yet'}
+                        </Typography>
+                      </Stack>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        useFlexGap
+                        sx={{ flexWrap: 'wrap' }}
+                      >
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={
+                            <MdiIcon
+                              path={
+                                isPublished
+                                  ? mdiPublishOff.path
+                                  : mdiPublish.path
+                              }
+                              size={0.8}
+                            />
+                          }
+                          onClick={() => void handleTogglePublish(current)()}
+                        >
+                          {isPublished ? 'Unpublish' : 'Publish'}
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={
+                            <MdiIcon path={mdiCalendarEdit.path} size={0.8} />
+                          }
+                          onClick={() => openPublishDate(current)}
+                        >
+                          {'Edit published date…'}
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={
+                            <MdiIcon path={mdiCalendarClock.path} size={0.8} />
+                          }
+                          onClick={() => openScheduler(current)}
+                        >
+                          {'Schedule…'}
+                        </Button>
+                      </Stack>
+                    </Box>
+                  </>
+                )
+              })()
+            : null}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
