@@ -168,9 +168,26 @@ whole reason this document exists.
    credentials on development and preview (AGL-2401). Production keeps the
    live values. This removes the `sk_live_` key from every laptop **and** stops
    `deploymentLivemode()` reading a preview build as the live deployment.
+   - ⚠️ **Splitting the record is not the same as fixing the mode, and the
+     sharing check cannot tell them apart.** A development record holding the
+     *live* key satisfies every rule in step 5 as written: production is on its
+     own record, nothing is shared, findings go to zero. It is also exactly the
+     defect AGL-2401 was filed for. This is the likely slip, because the value
+     already in the field you copied from is the live one.
+   - So `verify-env-isolation.mjs` asks the mode separately, from
+     `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` — public by construction (Next inlines
+     it into every browser bundle) and required to match the secret key's mode.
+     Set the **test** publishable key on development and preview in the same
+     pass, or the run stays red and correctly so.
+   - ⚠️ Store that publishable key as `encrypted`, **not** `sensitive` — see
+     "What not to do". `sensitive` is write-only, so the checker cannot read it
+     back and reports the environment's mode as **UNKNOWN**, which is a
+     finding, not a pass. `aglyn-tenant`'s development and preview copies were
+     added `encrypted`/`sensitive` on 2026-08-23 and are in that state now.
 
 Redeploy both projects, then re-run `npm run check:env-isolation`. Everything
-above should have dropped off the findings list.
+above should have dropped off the findings list, and the mode section should be
+empty too.
 
 ### Block B — rotations with a lockstep dependency
 

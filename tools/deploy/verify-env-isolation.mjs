@@ -24,17 +24,31 @@
 //   node tools/deploy/verify-env-isolation.mjs --deployment
 //        # ALSO: did a config change actually reach the running deployment?
 //
-// Exit codes: 0 = every secret is environment-isolated; 1 = at least one
-// secret spans production and a non-production environment; 2 = the check
-// could not be performed (no token, an API error, or the evidence failed its
-// own negative control — see "This check must be able to fail").
+// Exit codes: 0 = every secret is environment-isolated AND no non-production
+// environment is pointed at the live Stripe account; 1 = at least one secret
+// spans production and a non-production environment, or at least one
+// non-production environment reads LIVE or UNKNOWN; 2 = the check could not be
+// performed (no token, an API error, or the evidence failed its own negative
+// control — see "This check must be able to fail").
 //
-// ## IT NEVER READS A VALUE, AND THAT IS NOT A LIMITATION
+// ## TWO QUESTIONS, NOT ONE
 //
-// This script decides everything from env var METADATA. It never passes
-// `decrypt=true`, never runs `vercel env pull`, never writes a value to disk
-// and never prints one. It does not need to, because sameness is decidable
-// from the record shape alone:
+// SHARING — does one record's value cover production and a laptop? — is
+// decidable from metadata alone, and everything below is built on that.
+//
+// MODE — which Stripe account does a non-production environment point at? — is
+// not, and it is the question AGL-2401 was actually filed about. Split the
+// Stripe records as the runbook says and the sharing verdict goes green even
+// if the new development record holds the live key. See `stripeModeOf`, which
+// answers it from the PUBLISHABLE key: public by construction, inlined into
+// every browser bundle, and required to match the secret key's mode.
+//
+// ## IT NEVER HOLDS A SECRET, AND THAT IS NOT A LIMITATION
+//
+// This script never passes `decrypt=true`, never runs `vercel env pull`, never
+// writes a value to disk and never prints one. The sharing verdict is decided
+// from env var METADATA alone, because sameness is decidable from the record
+// shape:
 //
 //   A Vercel environment variable is a RECORD with one value and a `target`
 //   array. Two environments can only hold DIFFERENT values if they are
@@ -53,6 +67,14 @@
 // 122 records carry one). The guarantee is therefore enforced in code, by
 // `metadataOnly()` below, which drops every field but four the moment a
 // response arrives. Read that comment before changing how records are read.
+//
+// The ONE exception is the mode probe, and it is narrow by construction: a
+// single allowlisted `NEXT_PUBLIC_` key — a value Next inlines into every
+// browser bundle, so not a secret by anyone's definition — reduced at the same
+// boundary to one of the three words `live`, `test`, `unknown`. No prefix, no
+// truncation, nothing derived from the key beyond which published constant it
+// begins with. `stripeModeOf()` returns `undefined` for every other name, so
+// it cannot be widened into a general value reader by adding a table entry.
 //
 // The inverse — a record that spans only `production` — proves nothing about
 // the OTHER environments (they may have their own record, or none). That is
@@ -187,6 +209,10 @@ const ACCEPTED = {
 const KNOWN_ISSUE = {
   STRIPE_SECRET_KEY: 'AGL-2401',
   STRIPE_WEBHOOK_SECRET: 'AGL-2401',
+  // Never a SHARING finding — publishable keys are public, so `isAllowed()`
+  // excuses it. It appears in the MODE section instead, which is a different
+  // question about the same issue.
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: 'AGL-2401',
   CRON_SECRET: 'AGL-2403',
   TOKEN_SIGNING_SECRET: 'AGL-2403',
   RESEND_API_KEY: 'AGL-2403',
@@ -310,6 +336,69 @@ async function api(token, path) {
 const metadataOnly = (records) =>
   (records ?? []).map(({ key, target, type, projectId }) => ({ key, target, type, projectId }))
 
+/**
+ * ## THE SECOND QUESTION: WHICH STRIPE ACCOUNT, NOT JUST WHICH RECORD
+ *
+ * Everything above decides SHARING. It cannot decide MODE, and the difference
+ * is the whole of AGL-2401.
+ *
+ * Follow the runbook, split `STRIPE_SECRET_KEY` into a production record and a
+ * development/preview record, and the sharing verdict goes GREEN — whatever
+ * the second record contains. Paste the live key into it (the likely slip: it
+ * is the value already in the dashboard field you just copied from) and this
+ * check would report the defect it was written for as fixed. A guard that
+ * passes the exact mistake it exists to catch is worse than no guard, because
+ * someone will believe it.
+ *
+ * So mode is asked separately, and asked of the one Stripe variable that can
+ * be read without holding a secret.
+ *
+ * ### Why the PUBLISHABLE key is a legitimate probe
+ *
+ * `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` is not a credential. Next inlines every
+ * `NEXT_PUBLIC_` variable into the browser bundle, so this one is served to
+ * every visitor of every deployment; Stripe publishes it for exactly that
+ * reason. `isAllowed()` already excuses the whole `NEXT_PUBLIC_` class from
+ * the sharing rule on that basis — this uses the same fact for the opposite
+ * purpose.
+ *
+ * And it answers the right question, because the two keys are not independent:
+ * a publishable key of one mode cannot transact against a secret key of the
+ * other, which is why `apps/console/.env.development.local.example` carries the
+ * line "must match the secret key mode above". `pk_live_` in `development`
+ * means that environment is pointed at the LIVE Stripe account.
+ *
+ * ### It still never holds a value
+ *
+ * The classification happens HERE, at the boundary, and what survives is one
+ * of three literal strings — `'live'`, `'test'`, `'unknown'`. Not a prefix,
+ * not a truncation, nothing derived from the key material beyond which of two
+ * published constants it begins with. `metadataOnly` above is untouched and
+ * still governs every other record in the tree.
+ *
+ * Returns `undefined` for any key that is not on the allowlist, so no future
+ * edit can widen this into a general value reader by adding a name to a table.
+ */
+const STRIPE_MODE_PROBE = 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY'
+const MODE_PREFIX = { live: 'pk_live_', test: 'pk_test_' }
+
+const stripeModeOf = (record) => {
+  if (record?.key !== STRIPE_MODE_PROBE) return undefined
+  const value = record?.value
+  // Stored `sensitive` or `encrypted`: the API returns no plaintext and this
+  // script will not ask for one. That is UNKNOWN, and unknown is reported —
+  // never rounded down to "fine". aglyn-tenant's development and preview
+  // records are in this state as of 2026-08-23.
+  if (typeof value !== 'string' || !value) return 'unknown'
+  for (const [mode, prefix] of Object.entries(MODE_PREFIX)) {
+    if (value.startsWith(prefix)) return mode
+  }
+  return 'unknown'
+}
+
+const withStripeMode = (records) =>
+  (records ?? []).map((record) => ({ ...metadataOnly([record])[0], mode: stripeModeOf(record) }))
+
 /** Team-shared records. Invisible to `vercel env ls`; see the header. */
 async function sharedRecords(token) {
   const out = []
@@ -317,7 +406,7 @@ async function sharedRecords(token) {
   for (let page = 0; page < 20; page += 1) {
     const suffix = until ? `&until=${encodeURIComponent(until)}` : ''
     const body = await api(token, `/v2/env?teamId=${TEAM_SCOPE}&limit=100${suffix}`)
-    out.push(...metadataOnly(body?.data))
+    out.push(...withStripeMode(body?.data))
     until = body?.pagination?.next ?? null
     if (!until) return out
   }
@@ -326,7 +415,7 @@ async function sharedRecords(token) {
 
 async function projectRecords(token, project) {
   const body = await api(token, `/v9/projects/${project.id}/env?teamId=${TEAM_SCOPE}&decrypt=false`)
-  return metadataOnly(body?.envs)
+  return withStripeMode(body?.envs)
 }
 
 /**
@@ -343,6 +432,30 @@ const spansProduction = (record) => {
 }
 
 const isAllowed = (key) => key.startsWith('NEXT_PUBLIC_') || Object.hasOwn(ALLOW_SHARED, key)
+
+/**
+ * Which non-production environments this record points at the LIVE Stripe
+ * account from — or leaves undecidable.
+ *
+ * Independent of `spansProduction` on purpose. A `pk_live_` record targeting
+ * ONLY `development` shares nothing with production and is still the AGL-2401
+ * defect: that environment can move real money. Deciding this from sharing
+ * would miss precisely the state the runbook creates.
+ *
+ * `ACCEPTED` is honoured per environment, so a decision to point PREVIEW at
+ * live (Zach's stated reason for the key being there — a preview build that
+ * exercises the real payment path before release) silences preview and leaves
+ * development still failing. Same table, same attribution requirement.
+ *
+ * Returns null when there is nothing to report.
+ */
+const liveModeOutsideProduction = (record) => {
+  if (record?.mode !== 'live' && record?.mode !== 'unknown') return null
+  const target = new Set(record?.target ?? [])
+  const accepted = new Set(ACCEPTED[record.key]?.environments ?? [])
+  const envs = NON_PRODUCTION.filter((env) => target.has(env) && !accepted.has(env))
+  return envs.length ? { envs, mode: record.mode } : null
+}
 
 /**
  * The reasons in ALLOW_SHARED are load-bearing, not decoration: an excuse
@@ -443,11 +556,31 @@ function evaluateRecords({ shared, byProject }) {
 
   const findings = []
   const controls = []
+  const modes = []
+
+  /**
+   * The mode question, asked of every record in either scope. Separate list,
+   * separate verdict line — folding it into `findings` would have made the
+   * count in the output mean two different things.
+   */
+  const recordMode = (scope, record, projects) => {
+    const live = liveModeOutsideProduction(record)
+    if (!live) return
+    modes.push({
+      scope,
+      key: record.key,
+      environments: live.envs,
+      mode: live.mode,
+      projects,
+      issue: KNOWN_ISSUE[record.key] ?? null,
+    })
+  }
 
   for (const record of shared) {
+    const linked = PROJECTS.filter((p) => (record.projectId ?? []).includes(p.id)).map((p) => p.label)
+    recordMode('team-shared', record, linked)
     const also = spansProduction(record)
     if (!also || isAllowed(record.key)) continue
-    const linked = PROJECTS.filter((p) => (record.projectId ?? []).includes(p.id)).map((p) => p.label)
     findings.push({
       scope: 'team-shared',
       key: record.key,
@@ -469,6 +602,7 @@ function evaluateRecords({ shared, byProject }) {
       )
     }
     for (const record of records) {
+      recordMode(project.label, record, [project.label])
       const also = spansProduction(record)
       if (!also || isAllowed(record.key)) continue
       findings.push({
@@ -482,7 +616,8 @@ function evaluateRecords({ shared, byProject }) {
   }
 
   findings.sort((a, b) => a.key.localeCompare(b.key) || a.scope.localeCompare(b.scope))
-  return { findings, controls }
+  modes.sort((a, b) => a.scope.localeCompare(b.scope) || a.key.localeCompare(b.key))
+  return { findings, controls, modes }
 }
 
 async function main() {
@@ -503,7 +638,7 @@ async function main() {
     byProject.push({ project, records: await projectRecords(token, project) })
   }
 
-  const { findings, controls } = evaluateRecords({ shared, byProject })
+  const { findings, controls, modes } = evaluateRecords({ shared, byProject })
   for (const control of controls) {
     note(`  ${control.project}: ${control.records} records; negative control OK (${control.splitKeys.length} per-env split key(s))`)
   }
@@ -520,14 +655,26 @@ async function main() {
   // Waived sharing is REPORTED, never silent. An accepted decision that stops
   // being visible is indistinguishable from one nobody ever made.
   const accepted = Object.entries(ACCEPTED).map(([key, d]) => ({ key, ...d }))
-  const result = { ok: findings.length === 0, findings, accepted, controls, deployments }
+  const result = {
+    ok: findings.length === 0 && modes.length === 0,
+    findings,
+    modes,
+    accepted,
+    controls,
+    deployments,
+  }
 
   if (JSON_OUT) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`)
   } else {
     process.stdout.write('\n')
-    if (!findings.length) {
-      process.stdout.write('OK — no secret spans production and a non-production environment.\n')
+    if (!findings.length && !modes.length) {
+      process.stdout.write(
+        'OK — no secret spans production and a non-production environment, and no\n' +
+          'non-production environment is pointed at the live Stripe account.\n',
+      )
+    } else if (!findings.length) {
+      process.stdout.write('No secret spans production and a non-production environment.\n')
     } else {
       process.stdout.write(
         `${findings.length} secret(s) hold the SAME value in production and a non-production environment:\n\n`,
@@ -546,6 +693,29 @@ async function main() {
         'Each is ONE Vercel record covering several environments, so the value is\n' +
           'identical by construction. Split the record: keep production on its own,\n' +
           'and give development/preview their own record with a different value.\n',
+      )
+    }
+    if (modes.length) {
+      process.stdout.write(
+        `\n${modes.length} non-production environment(s) are pointed at the LIVE Stripe\n` +
+          'account, or cannot be shown not to be:\n\n',
+      )
+      for (const m of modes) {
+        const owner = m.issue ? `  [${m.issue}]` : '  [UNTRACKED]'
+        process.stdout.write(
+          `  ${m.key}\n` +
+            `    scope        ${m.scope}\n` +
+            `    environments ${m.environments.join(', ')}\n` +
+            `    mode         ${m.mode === 'live' ? 'LIVE (pk_live_)' : 'UNKNOWN — stored sensitive, not readable'}\n` +
+            `    reaches      ${m.projects.join(', ') || '(linked to no project — inert)'}\n` +
+            `  ${owner}\n\n`,
+        )
+      }
+      process.stdout.write(
+        'Splitting the RECORD does not fix this — a separate development record\n' +
+          'holding the live key passes the check above and fails here, which is the\n' +
+          'whole reason this section exists. UNKNOWN is not a pass: a value this\n' +
+          'script may not read cannot be reported safe.\n',
       )
     }
     if (accepted.length) {
@@ -577,7 +747,7 @@ async function main() {
     }
   }
 
-  process.exit(findings.length ? 1 : 0)
+  process.exit(findings.length || modes.length ? 1 : 0)
 }
 
 /**
@@ -704,6 +874,68 @@ function selfTest() {
     'no serialization of a projected record can contain the plaintext',
     !JSON.stringify(projected).includes('PLAINTEXT'),
   )
+
+  // 11. THE MODE CHECK, and every case here is one the live read cannot
+  //     exercise. Today console's publishable key is `pk_live_` on all three
+  //     targets and tenant's development/preview copies are stored
+  //     `sensitive`, so a run against Vercel proves only that LIVE and UNKNOWN
+  //     go red. Nothing about it proves the check goes GREEN on `pk_test_` —
+  //     i.e. that finishing the work is reportable — nor that it stays silent
+  //     for every other variable in the tree.
+  const probe = (value, target, extra = {}) =>
+    withStripeMode([{ key: STRIPE_MODE_PROBE, target, type: 'plain', value, ...extra }])
+  // Non-empty, because an empty shared scope is itself a negative control that
+  // aborts — see case 8.
+  const modesOf = (records) => evaluate([record('ANY', ['production'])], records).modes
+
+  check('a pk_live_ publishable key classifies as live', probe('pk_live_51abc', ['production'])[0].mode === 'live')
+  check('a pk_test_ publishable key classifies as test', probe('pk_test_51abc', ['production'])[0].mode === 'test')
+  check('an unreadable publishable key classifies as unknown', probe(undefined, ['production'])[0].mode === 'unknown')
+  // Not "the output does not contain this needle" — a truncation would pass
+  // that and still be key material. The property is that the output is drawn
+  // from a CLOSED SET of three words, whatever the input.
+  check(
+    'the probe emits one of three verdict words, whatever the value',
+    ['pk_live_51SECRET', 'pk_test_51SECRET', 'sk_live_51SECRET', 'garbage', '', undefined].every((v) =>
+      ['live', 'test', 'unknown'].includes(probe(v, ['production'])[0].mode),
+    ),
+  )
+  check(
+    'no other key is ever value-read, whatever it holds',
+    withStripeMode([{ key: 'STRIPE_SECRET_KEY', target: ['production'], value: 'sk_live_x' }])[0].mode === undefined,
+  )
+
+  check('live mode in production ALONE is not a finding', modesOf(probe('pk_live_1', ['production'])).length === 0)
+  check('test mode in development is not a finding', modesOf(probe('pk_test_1', ['development', 'preview'])).length === 0)
+
+  // THE RED THIS SECTION EXISTS FOR: the shape the runbook itself creates.
+  // Sharing is clean — production is on its own record — and the environment
+  // is still pointed at the live account.
+  const splitButLive = evaluate(
+    [record('ANY', ['production'])],
+    [...probe('pk_live_1', ['development', 'preview']), ...probe('pk_live_1', ['production'])],
+  )
+  check('a SPLIT record holding a live key is clean on sharing', splitButLive.findings.length === 0)
+  check('…and is still a MODE finding', splitButLive.modes.length === 1)
+  check(
+    '…naming both non-production environments',
+    splitButLive.modes[0]?.environments.join() === 'development,preview',
+  )
+  check('…and carrying its issue id', splitButLive.modes[0]?.issue === 'AGL-2401')
+
+  check('an unreadable non-production value is a finding, not a pass', modesOf(probe(undefined, ['development'])).length === 1)
+  check('…and says UNKNOWN rather than claiming live', modesOf(probe(undefined, ['development']))[0]?.mode === 'unknown')
+
+  // ACCEPTED silences ONE environment, never the other — the same asymmetry
+  // the sharing rule uses, for the same reason.
+  const savedAccepted = ACCEPTED[STRIPE_MODE_PROBE]
+  ACCEPTED[STRIPE_MODE_PROBE] = { environments: ['preview'], who: 'self-test', why: 'self-test fixture' }
+  const partly = modesOf(probe('pk_live_1', ['development', 'preview']))
+  check('an accepted environment is silenced', partly[0]?.environments.join() === 'development')
+  ACCEPTED[STRIPE_MODE_PROBE] = { environments: ['development', 'preview'], who: 'self-test', why: 'self-test fixture' }
+  check('accepting both environments clears the finding', modesOf(probe('pk_live_1', ['development', 'preview'])).length === 0)
+  if (savedAccepted === undefined) delete ACCEPTED[STRIPE_MODE_PROBE]
+  else ACCEPTED[STRIPE_MODE_PROBE] = savedAccepted
 
   process.stdout.write(`\n${failures.length ? `${failures.length} FAILED` : 'all self-test cases pass'}\n`)
   process.exit(failures.length ? 1 : 0)
