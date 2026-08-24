@@ -22,6 +22,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
   Button,
+  Checkbox,
   Chip,
   Divider,
   Stack,
@@ -62,6 +63,16 @@ interface SsoConfig {
   enforced?: boolean
   domains?: string[]
   idp?: { entityId: string; ssoUrl: string; certificates: string[] }
+  /**
+   * Accounts the org designated to keep a non-IdP way in (AGL-1888).
+   *
+   * The server has read this since the pre-flight landed, and
+   * `enforce-apply` refuses outright while it names nobody effective — so
+   * without a control here, step 4 of a self-serve setup dead-ended in a
+   * refusal the admin could do nothing about except email us. That is the
+   * one shape a self-serve flow may not have.
+   */
+  breakGlassUids?: string[]
 }
 
 interface ServiceMetadata {
@@ -70,16 +81,48 @@ interface ServiceMetadata {
   authDomain: string
 }
 
+interface EnforcementAccount {
+  uid: string
+  email: string | null
+  unlinked: string[]
+  kept: string[]
+  skipped?: string
+}
+
 interface EnforcementPreview {
   scanned: number
   changed: number
-  accounts: Array<{
-    uid: string
-    email: string | null
-    unlinked: string[]
-    kept: string[]
-    skipped?: string
-  }>
+  accounts: EnforcementAccount[]
+}
+
+/** The refusal body `enforce-apply` answers 400 with (AGL-1888). */
+interface LockoutAssessment {
+  safe: boolean
+  /** Designated uids that genuinely hold a non-IdP method. */
+  retainedBy: string[]
+  /** Designated uids that protect nothing — the ones to replace. */
+  ineffective: string[]
+}
+
+/**
+ * Would designating this account actually keep a way in?
+ *
+ * Mirrors `assessSsoLockoutRisk` deliberately, and over the same fact it
+ * uses: an account protects the org only when it holds a provider that is
+ * NOT the org's IdP. Designating an account whose sole credential is the SAML
+ * link is the most natural way to get this wrong, because it looks exactly
+ * like protection and fails in precisely the situation it exists for.
+ *
+ * The plan is read BEFORE designation, so both halves count: `unlinked` is
+ * what enforcement would strip (all non-IdP by construction), and `kept` is
+ * what it would leave — which for an already-designated or would-orphan
+ * account is the whole set.
+ */
+function protectsIfDesignated(
+  account: EnforcementAccount,
+  providerId: string | undefined,
+): boolean {
+  return [...account.unlinked, ...account.kept].some((id) => id !== providerId)
 }
 
 /** A read-only value the customer has to copy into their IdP. */
@@ -160,8 +203,27 @@ export function OrgSsoCard() {
   const [entityId, setEntityId] = useState('')
   const [ssoUrl, setSsoUrl] = useState('')
   const [certificate, setCertificate] = useState('')
+  /**
+   * The SECOND certificate, and the reason the field exists at all.
+   *
+   * An IdP signing certificate expires, and every IdP rotates by publishing
+   * the next one alongside the current one for an overlap window. GCIP takes
+   * a LIST — `x509Certificates` — and the route has always accepted
+   * `certificates: []`, but the card sent exactly one, so the only rotation
+   * this UI could express was "replace it at the instant it expires". Get
+   * that instant wrong in either direction and every assertion fails
+   * signature validation: too early and the old one is gone while the IdP is
+   * still signing with it, too late and the new one is unknown. For an org
+   * that has enforced SSO that is not a degraded sign-in, it is a lockout,
+   * and the only way out was to email us.
+   */
+  const [certificateNext, setCertificateNext] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [preview, setPreview] = useState<EnforcementPreview | null>(null)
+  /** Selected break-glass uids, seeded from the server and edited here. */
+  const [breakGlass, setBreakGlass] = useState<string[]>([])
+  /** The last refusal's assessment, so it can name the ineffective picks. */
+  const [lockout, setLockout] = useState<LockoutAssessment | null>(null)
   const [busy, setBusy] = useState(false)
   /**
    * Three states, not two (AGL-1376). `sso = {}` is the value BEFORE an answer
@@ -176,8 +238,21 @@ export function OrgSsoCard() {
     'pending',
   )
 
+  /**
+   * @param options.keepErrorBody return the REFUSAL BODY rather than null.
+   *
+   * `enforce-apply` answers 400 with a `lockout` assessment naming which
+   * designated accounts protect nothing — the only information that tells an
+   * admin which account to pick instead. Collapsing every failure to `null`
+   * threw that away and left the card with a sentence it could not act on.
+   * Opt-in, because every other caller routes through `run()`, which reads a
+   * truthy result as success.
+   */
   const request = useCallback(
-    async (body: Record<string, unknown>) => {
+    async (
+      body: Record<string, unknown>,
+      options?: { keepErrorBody?: boolean },
+    ) => {
       if (!orgId) return null
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const idToken = await (user as any)?.getIdToken?.()
@@ -195,7 +270,7 @@ export function OrgSsoCard() {
           variant: 'warning',
           persist: false,
         })
-        return null
+        return options?.keepErrorBody ? { ...payload, ok: false } : null
       }
       return payload
     },
@@ -225,8 +300,18 @@ export function OrgSsoCard() {
       setEntityId(idp.entityId ?? '')
       setSsoUrl(idp.ssoUrl ?? '')
       setCertificate((idp.certificates ?? [])[0] ?? '')
+      setCertificateNext((idp.certificates ?? [])[1] ?? '')
     }
     setDisplayName(payload.sso?.displayName ?? '')
+    // Seeded from the server rather than kept only in local state: the
+    // designation outlives this page, and an admin returning to it must see
+    // what is already designated instead of an empty picker that reads as
+    // "nothing is protecting you".
+    setBreakGlass(
+      Array.isArray(payload.sso?.breakGlassUids)
+        ? (payload.sso.breakGlassUids as string[])
+        : [],
+    )
     setLoadState('loaded')
   }, [request])
 
@@ -352,6 +437,28 @@ export function OrgSsoCard() {
   const canActivate = verifiedDomains.length > 0
   /** Live, but on an attestation no DNS record backs — the trap's precondition. */
   const attestedOnly = Boolean(governedDomains.length) && !verifiedDomains.length
+
+  /**
+   * What the SERVER has stored, not what is ticked on screen. An unsaved
+   * selection protects nobody, and gating the Enforce button on it would put
+   * the button back on the wrong side of the same door AGL-1375 was about.
+   */
+  const savedBreakGlass = sso.breakGlassUids ?? []
+  /**
+   * With nothing designated the refusal is CERTAIN — `assessSsoLockoutRisk`
+   * over an empty list can only answer unsafe — so the button is disabled and
+   * the reason is shown instead of being discovered by clicking. Where a
+   * designation exists but may be ineffective we do NOT guess: only the
+   * server re-plans the pool, so the click is allowed and the refusal is
+   * rendered with its list.
+   */
+  const hasBreakGlass = savedBreakGlass.length > 0
+  const emailForUid = (uid: string) =>
+    preview?.accounts.find((account) => account.uid === uid)?.email ?? null
+  /** Designations that have not been saved yet — the Save button's whole job. */
+  const breakGlassDirty =
+    [...breakGlass].sort().join(' ') !==
+    [...savedBreakGlass].sort().join(' ')
 
   return (
     <SsoCardShell>
@@ -575,6 +682,22 @@ export function OrgSsoCard() {
             onChange={(event) => setCertificate(event.target.value)}
             helperText="The public certificate from your IdP, PEM or base64"
           />
+          <TextField
+            label="Second signing certificate (optional)"
+            value={certificateNext}
+            size="small"
+            multiline
+            minRows={4}
+            disabled={busy || !canManage}
+            onChange={(event) => setCertificateNext(event.target.value)}
+            helperText={
+              'For certificate rotation. When your identity provider issues a ' +
+              'replacement, add it here while the current one is still live — ' +
+              'we accept assertions signed by either, so there is no instant ' +
+              'you have to get exactly right. Remove the old one once your ' +
+              'provider has switched over.'
+            }
+          />
           <Button
             variant="contained"
             disabled={busy || !canManage || !entityId || !ssoUrl || !certificate}
@@ -584,7 +707,12 @@ export function OrgSsoCard() {
                   action: 'save-idp',
                   entityId,
                   ssoUrl,
-                  certificates: [certificate],
+                  // Both, filtered — the route requires at least one and GCIP
+                  // takes a list. An empty second field must not become an
+                  // empty string in `x509Certificates`.
+                  certificates: [certificate, certificateNext]
+                    .map((value) => value.trim())
+                    .filter(Boolean),
                   displayName: displayName || 'Single sign-on',
                 },
                 'Identity provider saved',
@@ -684,6 +812,40 @@ export function OrgSsoCard() {
               'working. Rehearse it first: the rehearsal changes nothing and ' +
               'shows you exactly which accounts are affected.'}
           </Typography>
+
+          {/* Break-glass designation — the precondition, stated first. */}
+          <Alert severity={hasBreakGlass ? 'success' : 'info'}>
+            {hasBreakGlass
+              ? `${savedBreakGlass.length} break-glass account(s) designated. ` +
+                'They keep their password even after enforcement, so a lapsed ' +
+                'certificate or a removed application in your identity ' +
+                'provider cannot lock your organization out of itself.'
+              : 'Before you can enforce, designate at least one break-glass ' +
+                'account: someone who keeps a password even after ' +
+                'enforcement. If your identity provider stops answering — an ' +
+                'expired certificate, a deleted application — that account is ' +
+                'the only way back in, and we cannot let you in either. ' +
+                'Rehearse to pick one.'}
+          </Alert>
+          {/*
+            The refusal, rendered where it can be acted on (AGL-1888). The
+            snackbar carries the sentence; this carries the LIST — which of
+            the accounts you designated protects nothing. Naming an account
+            whose only credential is the SAML link is the natural mistake,
+            and it is invisible without this.
+          */}
+          {lockout && !lockout.safe && lockout.ineffective.length ? (
+            <Alert severity="error">
+              {'These designated accounts hold nothing but your identity ' +
+                'provider, so they would be locked out along with everyone ' +
+                'else: ' +
+                lockout.ineffective
+                  .map((uid) => emailForUid(uid) ?? uid)
+                  .join(', ') +
+                '. Pick an account that also has a password.'}
+            </Alert>
+          ) : null}
+
           <Stack direction="row" spacing={1}>
             <Button
               variant="outlined"
@@ -698,14 +860,17 @@ export function OrgSsoCard() {
             <Button
               variant="contained"
               color="warning"
-              disabled={busy || !canManage || !isActive || sso.enforced}
+              disabled={
+                busy || !canManage || !isActive || sso.enforced || !hasBreakGlass
+              }
               onClick={async () => {
                 try {
                   await confirm({
                     title: 'Enforce single sign-on?',
                     description:
                       'Passwords and linked social logins will be removed from ' +
-                      'every account in your identity pool. Anyone who has only ' +
+                      'every account in your identity pool, except the ' +
+                      'break-glass accounts you designated. Anyone who has only ' +
                       'those will need your identity provider to get back in. ' +
                       'This cannot be undone by turning enforcement off.',
                     confirmationButtonProps: { color: 'warning' },
@@ -713,10 +878,31 @@ export function OrgSsoCard() {
                 } catch {
                   return
                 }
-                void run(
-                  { action: 'enforce-apply', confirm: true },
-                  'Single sign-on enforced',
-                )
+                setBusy(true)
+                try {
+                  // NOT through `run()`: the refusal body is the point. A
+                  // designation can be present and still protect nobody, and
+                  // only the server knows which — it re-plans the whole pool
+                  // to find out.
+                  const result = await request(
+                    { action: 'enforce-apply', confirm: true },
+                    { keepErrorBody: true },
+                  )
+                  if (result && result.ok === false) {
+                    setLockout((result.lockout as LockoutAssessment) ?? null)
+                    return
+                  }
+                  if (result) {
+                    setLockout(null)
+                    enqueueSnackbar('Single sign-on enforced', {
+                      variant: 'success',
+                      persist: false,
+                    })
+                    await refresh()
+                  }
+                } finally {
+                  setBusy(false)
+                }
               }}
             >
               {'Enforce'}
@@ -742,28 +928,98 @@ export function OrgSsoCard() {
                   : `Nothing would change — all ${preview.scanned} accounts already sign in through your identity provider only.`}
               </Alert>
               {preview.accounts.length ? (
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>{'Account'}</TableCell>
-                      <TableCell>{'Would lose'}</TableCell>
-                      <TableCell>{'Keeps'}</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {preview.accounts.map((account) => (
-                      <TableRow key={account.uid}>
-                        <TableCell>{account.email ?? account.uid}</TableCell>
-                        <TableCell>
-                          {account.skipped
-                            ? 'Nothing — it would be left with no way in'
-                            : account.unlinked.join(', ') || '—'}
-                        </TableCell>
-                        <TableCell>{account.kept.join(', ') || '—'}</TableCell>
+                <>
+                  <Typography variant="body2" color="text.secondary">
+                    {'Tick the accounts that should keep their password as a ' +
+                      'way back in. Only an account that already has one ' +
+                      'other than your identity provider can be ticked — ' +
+                      'anything else would look like protection and provide ' +
+                      'none.'}
+                  </Typography>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell padding="checkbox">{'Break-glass'}</TableCell>
+                        <TableCell>{'Account'}</TableCell>
+                        <TableCell>{'Would lose'}</TableCell>
+                        <TableCell>{'Keeps'}</TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHead>
+                    <TableBody>
+                      {preview.accounts.map((account) => {
+                        const eligible = protectsIfDesignated(
+                          account,
+                          sso.providerId,
+                        )
+                        return (
+                          <TableRow key={account.uid}>
+                            <TableCell padding="checkbox">
+                              <Checkbox
+                                size="small"
+                                // An account holding nothing but the SAML link
+                                // cannot be a way back in when the SAML link
+                                // is what stopped working. The server refuses
+                                // it either way; disabling here means the
+                                // admin never has to discover that by being
+                                // refused.
+                                disabled={busy || !canManage || !eligible}
+                                checked={breakGlass.includes(account.uid)}
+                                slotProps={{
+                                  input: {
+                                    'aria-label': `Break-glass: ${account.email ?? account.uid}`,
+                                  },
+                                }}
+                                onChange={(event) =>
+                                  setBreakGlass((current) =>
+                                    event.target.checked
+                                      ? [...new Set([...current, account.uid])]
+                                      : current.filter(
+                                          (uid) => uid !== account.uid,
+                                        ),
+                                  )
+                                }
+                              />
+                            </TableCell>
+                            <TableCell>{account.email ?? account.uid}</TableCell>
+                            <TableCell>
+                              {account.skipped === 'break-glass'
+                                ? 'Nothing — designated break-glass'
+                                : account.skipped
+                                  ? 'Nothing — it would be left with no way in'
+                                  : account.unlinked.join(', ') || '—'}
+                            </TableCell>
+                            <TableCell>{account.kept.join(', ') || '—'}</TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    disabled={busy || !canManage || !breakGlassDirty}
+                    sx={{ alignSelf: 'flex-start' }}
+                    onClick={async () => {
+                      const saved = await run(
+                        { action: 'set-break-glass', uids: breakGlass },
+                        breakGlass.length
+                          ? 'Break-glass accounts saved'
+                          : 'Break-glass accounts cleared',
+                      )
+                      // A saved designation changes the plan, so the table on
+                      // screen now describes a sweep that will not happen.
+                      // Re-rehearse rather than leave a stale one that shows
+                      // the designated account still losing its password.
+                      if (saved) {
+                        const again = await run({ action: 'enforce-preview' })
+                        if (again?.preview) setPreview(again.preview)
+                        setLockout(null)
+                      }
+                    }}
+                  >
+                    {'Save break-glass accounts'}
+                  </Button>
+                </>
               ) : null}
             </Stack>
           ) : null}

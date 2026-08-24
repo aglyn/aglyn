@@ -39,6 +39,16 @@ import {
 /** Every `confirm()` the card opened, in order (AGL-1375). */
 const mockConfirmCalls: Array<{ title?: string; description?: string }> = []
 
+/**
+ * Whether the mocked `confirm()` accepts (AGL-1888).
+ *
+ * Cancelling is the default because most cases here assert what the user was
+ * TOLD without carrying out the destructive thing they were warned about. The
+ * enforcement cases need the other half — the refusal only exists on the far
+ * side of the confirmation.
+ */
+let mockConfirmOutcome: 'cancel' | 'accept' = 'cancel'
+
 /** Swapped per case; the card reads it through `useCurrentOrg`. */
 const mockOrgState: { org: Record<string, unknown>; ready: boolean } = {
   org: { plan: 'enterprise' },
@@ -93,7 +103,9 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
     // out the destructive action it was warning about.
     confirm: (options: { title?: string; description?: string }) => {
       mockConfirmCalls.push(options)
-      return Promise.reject(new Error('cancelled'))
+      return mockConfirmOutcome === 'accept'
+        ? Promise.resolve()
+        : Promise.reject(new Error('cancelled'))
     },
   }),
 }))
@@ -146,6 +158,7 @@ beforeEach(() => {
   mockOrgState.ready = true
   mockEntitled = true
   mockConfirmCalls.length = 0
+  mockConfirmOutcome = 'cancel'
 })
 
 describe('OrgSsoCard status claims (AGL-1376)', () => {
@@ -339,5 +352,177 @@ describe('OrgSsoCard activation gate (AGL-1375)', () => {
     expect(mockConfirmCalls).toHaveLength(1)
     expect(mockConfirmCalls[0].title).toBe('Turn single sign-on off?')
     expect(mockConfirmCalls[0].description).toMatch(/turn it back on without/)
+  })
+})
+
+/**
+ * AGL-1888 / AGL-1210: enforcement has to be REACHABLE from the console.
+ *
+ * `enforce-apply` re-plans the whole pool and refuses whenever no designated
+ * account keeps a method other than the org's IdP — a refusal no amount of
+ * clicking can clear, because the thing it asks for (`sso.breakGlassUids`)
+ * had no control anywhere in the product. The route action existed, the
+ * enforcement engine read it, the refusal named it, and an admin who reached
+ * step 4 of a self-serve setup could only email us. A capability that exists
+ * but cannot be reached from the console does not count.
+ *
+ * Each case pairs the refusal with the state that clears it: "disabled" on
+ * its own passes just as well on a button that is never enabled.
+ */
+const account = (over: Partial<Record<string, unknown>> = {}) => ({
+  uid: 'u-1',
+  email: 'owner@acme.com',
+  unlinked: ['password'],
+  kept: ['saml.acme'],
+  ...over,
+})
+
+/**
+ * A fetch that answers per ACTION rather than returning one body for
+ * everything: the enforcement flow is three different requests and a mock
+ * that cannot tell them apart proves nothing about which one was refused.
+ */
+const serveByAction = (
+  responses: Record<string, { body: unknown; status?: number }>,
+) => {
+  const calls: string[] = []
+  global.fetch = jest.fn(async (_url: unknown, init: { body?: string } = {}) => {
+    const action = String(JSON.parse(init.body ?? '{}').action ?? 'status')
+    calls.push(action)
+    const match = responses[action] ?? responses['status']
+    return jsonResponse(match.body, match.status ?? 200)
+  }) as unknown as typeof fetch
+  return calls
+}
+
+const liveOrg = (sso: Record<string, unknown> = {}) => ({
+  ok: true,
+  sso: {
+    tenantId: 't-1',
+    providerId: 'saml.acme',
+    status: 'active',
+    domains: ['acme.com'],
+    ...sso,
+  },
+  claims: [claim({ verified: true })],
+  metadata: null,
+})
+
+describe('OrgSsoCard break-glass designation (AGL-1888)', () => {
+  it('refuses to offer Enforce while nothing is designated, and says why', async () => {
+    serveByAction({ status: { body: liveOrg() } })
+
+    render(<OrgSsoCard />)
+
+    await screen.findByText('On')
+    expect(button('Enforce').disabled).toBe(true)
+    // The requirement is on screen BEFORE the button is reached for — the
+    // refusal used to be the first time anyone heard of it.
+    expect(
+      screen.getByText(/designate at least one break-glass account/i),
+    ).toBeTruthy()
+  })
+
+  it('offers Enforce once an account is designated', async () => {
+    serveByAction({ status: { body: liveOrg({ breakGlassUids: ['u-1'] }) } })
+
+    render(<OrgSsoCard />)
+
+    await screen.findByText('On')
+    expect(button('Enforce').disabled).toBe(false)
+    expect(screen.getByText(/1 break-glass account\(s\) designated/)).toBeTruthy()
+  })
+
+  it('lets an account that holds a password be ticked, and refuses one that does not', async () => {
+    serveByAction({
+      status: { body: liveOrg() },
+      'enforce-preview': {
+        body: {
+          ok: true,
+          preview: {
+            scanned: 2,
+            changed: 1,
+            accounts: [
+              account(),
+              // Nothing but the SAML link: designating it would look like
+              // protection and provide none, since it fails in exactly the
+              // situation break-glass exists for.
+              account({
+                uid: 'u-2',
+                email: 'samlonly@acme.com',
+                unlinked: [],
+                kept: ['saml.acme'],
+              }),
+            ],
+          },
+        },
+      },
+    })
+
+    render(<OrgSsoCard />)
+    await screen.findByText('On')
+    fireEvent.click(button('Rehearse'))
+
+    const eligible = (await screen.findByLabelText(
+      'Break-glass: owner@acme.com',
+    )) as HTMLInputElement
+    const useless = screen.getByLabelText(
+      'Break-glass: samlonly@acme.com',
+    ) as HTMLInputElement
+    expect(eligible.disabled).toBe(false)
+    expect(useless.disabled).toBe(true)
+
+    // And ticking it is what enables saving — the designation is the point,
+    // not the checkbox.
+    expect(button('Save break-glass accounts').disabled).toBe(true)
+    fireEvent.click(eligible)
+    expect(button('Save break-glass accounts').disabled).toBe(false)
+  })
+
+  it('names the designated accounts that protect nothing when the server refuses', async () => {
+    mockConfirmOutcome = 'accept'
+    serveByAction({
+      // Designated, so the button is live — but the server re-plans the pool
+      // and finds the pick holds nothing but the IdP link. Only the server
+      // knows this, which is why the click is allowed and the body is read.
+      status: { body: liveOrg({ breakGlassUids: ['u-2'] }) },
+      'enforce-preview': {
+        body: {
+          ok: true,
+          preview: {
+            scanned: 1,
+            changed: 0,
+            accounts: [
+              account({ uid: 'u-2', email: 'samlonly@acme.com', unlinked: [] }),
+            ],
+          },
+        },
+      },
+      'enforce-apply': {
+        status: 400,
+        body: {
+          error: 'Enforcing single sign-on would remove every sign-in method…',
+          lockout: { safe: false, retainedBy: [], ineffective: ['u-2'] },
+        },
+      },
+    })
+
+    render(<OrgSsoCard />)
+    await screen.findByText('On')
+    // Rehearse first so the uid can be rendered as the email a human knows.
+    fireEvent.click(button('Rehearse'))
+    await screen.findByLabelText('Break-glass: samlonly@acme.com')
+
+    fireEvent.click(button('Enforce'))
+
+    const refusal = await screen.findByText(
+      /hold nothing but your identity provider/,
+    )
+    // The LIST is the part that was being thrown away, and it has to be IN
+    // the refusal — the email also appears in the rehearsal table below, so
+    // a document-wide match would pass without the refusal naming anybody.
+    // And as the EMAIL, not the uid: `u-2` is not a thing an admin can act on.
+    expect(refusal.textContent).toMatch(/samlonly@acme\.com/)
+    expect(refusal.textContent).not.toMatch(/u-2/)
   })
 })

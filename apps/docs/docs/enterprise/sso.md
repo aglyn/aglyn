@@ -49,6 +49,20 @@ certificate**. Saving creates your identity pool and its SAML provider.
 Saving does **not** switch anything on. Your configuration sits inactive until
 you turn it on, so a half-entered setup can never start routing sign-ins.
 
+#### Rotating your signing certificate
+
+There is a **second certificate field**, and it exists so rotation never has a
+moment you have to time exactly right. Every IdP publishes the replacement
+certificate before the current one expires; paste the new one into the second
+field while the old one is still in the first, and we accept assertions signed
+by either. Once your provider has switched over, clear the old one.
+
+Doing it as a straight swap instead means picking an instant: too early and
+your IdP is still signing with a certificate we no longer accept, too late and
+it is signing with one we do not know yet. Either way every sign-in fails
+signature validation, and if you have enforced SSO there is no password to fall
+back on.
+
 ### 3. Turn it on
 
 Once at least one domain is verified and your provider is saved, **Turn on**
@@ -85,6 +99,34 @@ method being removed is reported and skipped rather than orphaned.
 
 Enforcement cannot be undone by turning it off. We remove a linked credential;
 we do not keep a copy to put back. Anyone affected re-links for themselves.
+
+### You must designate a break-glass account first
+
+Enforcing is **refused** until at least one account in your pool is designated
+as **break-glass**. This is not a warning you can dismiss — the button stays
+disabled and the sweep will not run.
+
+The reason is the failure it protects against. After enforcement, every account
+in your pool holds nothing but the link to your identity provider. If that
+provider stops answering — a lapsed signing certificate, an application deleted
+during a migration, a tenant moved — nobody can sign in, and **we cannot let you
+back in either**: your accounts live in your own pool and their only credential
+is the one that stopped working. A break-glass account keeps its password
+through the sweep, and it is the way back.
+
+Designate them from the rehearsal: it lists every account in the pool with a
+**Break-glass** checkbox, then **Save break-glass accounts**.
+
+Only an account that already holds a password or another linked login can be
+ticked. Designating an account whose sole credential is the SAML link looks
+exactly like protection and provides none — it fails in precisely the situation
+break-glass exists for — so both the checkbox and the server refuse it, and the
+refusal names which of your picks was ineffective.
+
+Keep the list current. It is a standing bypass of the enforcement you bought,
+which is the point, but it also means a departed admin left on it is a standing
+password into your organization. Saving replaces the list rather than adding to
+it, so removing someone is a matter of unticking them.
 
 ## Consequences worth knowing before you switch
 
