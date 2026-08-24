@@ -43,6 +43,8 @@ import { getApp } from 'firebase-admin/app'
 import '@aglyn/shared-util-fbserver'
 // The readable half of the server-error signal (AGL-1921) — see the block
 // comment in `reportServerError`.
+import { deploymentEnvironmentLabel } from '@aglyn/aglyn/server'
+
 import { recordServerError } from './rate-limit-store'
 
 const MAX_EVENTS_PER_REQUEST = 10
@@ -522,7 +524,7 @@ export async function writeBeaconHeartbeat(options: {
               tag: 'AGL-1923:beacon-heartbeat',
               service: options.service,
               version: process.env['VERCEL_GIT_COMMIT_SHA']?.slice(0, 7) ?? null,
-              environment: process.env['VERCEL_ENV'] ?? 'development',
+              environment: deploymentEnvironmentLabel(),
             },
           },
         ],
