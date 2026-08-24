@@ -32,7 +32,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { describe, it } from 'node:test'
@@ -40,9 +40,12 @@ import { fileURLToPath } from 'node:url'
 
 import {
   CAPS,
+  CRASH_PROBES,
   VERDICTS,
   digestLog,
+  endsMidToken,
   formatDigest,
+  lastLineOf,
   looksTruncated,
   stripAnsi,
   stripLogPrefix,
@@ -430,8 +433,7 @@ describe('the workflows actually USE the digest (AGL-1617)', () => {
   ]
 
   for (const [name, artifact] of workflows) {
-    it(`${name} tees the test run, digests it, and uploads the raw log`, async () => {
-      const { readFileSync } = await import('node:fs')
+    it(`${name} tees the test run, digests it, and uploads the raw log`, () => {
       const yaml = readFileSync(
         join(repoRoot, '.github', 'workflows', name),
         'utf8',
@@ -470,5 +472,182 @@ describe('the workflows actually USE the digest (AGL-1617)', () => {
   it('the two artifact names are distinct', () => {
     const names = workflows.map(([, artifact]) => artifact)
     assert.equal(new Set(names).size, names.length)
+  })
+})
+
+describe('crash vs truncation — the INCONCLUSIVE branch must show its working', () => {
+  // The whole reason this section exists: on the AGL-1617 log EVERY crash
+  // signal is absent, and the honest reading of that is "the log is too short
+  // to say", not "nothing crashed". A digest that printed only what it FOUND
+  // would render that silence as an empty section, which reads like a clean
+  // bill of health. So every probe is printed either way.
+  const inconclusive = [
+    'NX  Running target test for 38 projects failed',
+    'Failed tasks:',
+    '',
+    '- console:test',
+    '',
+  ].join('\n')
+
+  it('prints EVERY probe, absent ones included', () => {
+    const text = formatDigest(digestLog(inconclusive))
+    for (const probe of CRASH_PROBES) {
+      assert.ok(
+        text.includes(probe.label),
+        `the digest must name the ${probe.label} probe even when absent`,
+      )
+    }
+    assert.match(text, /SIGKILL \.+ absent/)
+    assert.match(text, /heap out of memory \.+ absent/)
+    assert.match(text, /log ends mid-line/)
+    assert.match(text, /log ends mid-token/)
+  })
+
+  it('says an absent signal is NOT evidence against a crash', () => {
+    const text = formatDigest(digestLog(inconclusive))
+    assert.match(text, /NOT evidence against a crash/)
+  })
+
+  it('flips a probe to FOUND when the signal is really there', () => {
+    const oom = inconclusive.replace(
+      'NX  Running',
+      'FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory\nNX  Running',
+    )
+    const result = digestLog(oom)
+    const text = formatDigest(result)
+    assert.match(text, /heap out of memory \.+ FOUND/)
+    assert.match(text, /V8 fatal error \.+ FOUND/)
+    assert.match(text, /SIGKILL \.+ absent/)
+    assert.equal(result.verdict, VERDICTS.INCONCLUSIVE)
+  })
+
+  it('calls 137 out by name — 128 + 9 is SIGKILL, the OOM signature', () => {
+    const killed = `${inconclusive}\n##[error]Process completed with exit code 137\n`
+    const result = digestLog(killed)
+    assert.ok(
+      result.exitCodes.some((e) => e.startsWith('137')),
+      `137 not captured: ${JSON.stringify(result.exitCodes)}`,
+    )
+    const text = formatDigest(result)
+    assert.match(text, /non-zero exit code \.+ 137/)
+    assert.match(text, /128 \+ 9 = SIGKILL/)
+    assert.match(text, /OOM killer/)
+  })
+
+  it('does not invent an exit code from a shell fragment', () => {
+    // The real log contains `exit 1; }` inside an echoed guard script. A
+    // loose matcher turned that into a reported task exit code — a fact
+    // invented out of someone else quoting a shell.
+    const echoed =
+      "test -x node_modules/.bin/eslint || { echo 'not installed'; exit 1; }\n"
+    assert.deepEqual(digestLog(echoed).exitCodes, [])
+    assert.deepEqual(
+      digestLog('##[error]Process completed with exit code 1.\n').exitCodes.map(
+        (e) => e.split(/\s+/)[0],
+      ),
+      ['1'],
+    )
+  })
+
+  it('detects a cut mid-TOKEN, distinctly from a cut mid-line', () => {
+    assert.equal(endsMidToken('  ● billing meter › counts the rec'), true)
+    assert.equal(endsMidToken('apps/console/specs/billing-met'), true)
+    // Ends between lines: not mid-token.
+    assert.equal(endsMidToken('all done\n'), false)
+    assert.equal(endsMidToken(''), false)
+    // Ends on punctuation — a complete-looking line with no newline.
+    assert.equal(endsMidToken('Ran all test suites.'), false)
+    const text = formatDigest(
+      digestLog('NX  Running target test for 38 projects failed\n- conso'),
+    )
+    assert.match(text, /log ends mid-token \.+ YES/)
+  })
+
+  it('prints the last line verbatim so the cut is visible', () => {
+    assert.equal(
+      lastLineOf(
+        'full\tRun npx nx\t2026-08-24T03:43:17.5967479Z Cleaning up orphan processes\n',
+      ),
+      'Cleaning up orphan processes',
+    )
+    const text = formatDigest(
+      digestLog('NX  Running target test for 38 projects failed\n- conso'),
+    )
+    assert.match(text, /last line: "- conso"/)
+  })
+
+  it('strips a BOM that sits AFTER the tab columns', () => {
+    // GitHub stamps a BOM on the first line of each step, which lands between
+    // the job/step columns and the timestamp — not at the start of the line.
+    assert.equal(
+      stripLogPrefix(
+        'report\tComplete job\t\uFEFF2026-08-24T03:43:17.5Z Cleaning up',
+      ),
+      'Cleaning up',
+    )
+  })
+})
+
+describe('nx-ci.yml must not re-create the invocation that went red (AGL-1617)', () => {
+  const repoRoot2 = join(here, '..', '..', '..')
+  const yaml = readFileSync(
+    join(repoRoot2, '.github', 'workflows', 'nx-ci.yml'),
+    'utf8',
+  )
+  // Comment lines stripped before any "must NOT contain" assertion. The
+  // comment block above the step QUOTES the old red invocation verbatim, so
+  // a negative match against the whole file is falsified by the prose that
+  // explains why the invocation was changed.
+  const steps = yaml
+    .split('\n')
+    .filter((l) => !/^\s*#/.test(l))
+    .join('\n')
+
+  it('bounds jest workers on the test invocation', () => {
+    // The one measured difference between the invocation that is green on
+    // this tree and the one that is red on it. Dropping it to "speed CI up"
+    // is the regression this assertion exists to catch.
+    assert.match(
+      steps,
+      /npx nx affected -t test [^\n]*--maxWorkers=2/,
+      'nx-ci.yml must pass --maxWorkers=2 to the test invocation',
+    )
+  })
+
+  it('does not co-schedule build with test in one invocation', () => {
+    assert.ok(
+      !/npx nx affected -t [^\n]*\btest\b[^\n]*\bbuild\b/.test(steps) &&
+        !/npx nx affected -t [^\n]*\bbuild\b[^\n]*\btest\b/.test(steps),
+      'build must not share an invocation with test — two Next production ' +
+        'builds alongside the jest fleet is half the OOM hypothesis',
+    )
+    // …but build must still RUN. Splitting it out and then losing it would
+    // be a far worse bug than the one being fixed.
+    assert.match(
+      steps,
+      /npx nx affected -t build/,
+      'build must still run in its own step',
+    )
+    assert.match(
+      steps,
+      /npx nx affected -t lint/,
+      'lint must still run in its own step',
+    )
+  })
+
+  it('every nx affected step still runs AFTER nx-set-shas', () => {
+    // Splitting one step into three is only safe because NX_BASE / NX_HEAD
+    // are environment variables the action exports through $GITHUB_ENV, which
+    // every LATER step in the job inherits. A step that drifted above the
+    // action would silently fall back to a different base and shrink what CI
+    // tests — a quieter and worse bug than the red being fixed.
+    const shas = steps.indexOf('nrwl/nx-set-shas')
+    assert.ok(shas > -1, 'nx-ci.yml must still use nrwl/nx-set-shas')
+    for (const match of steps.matchAll(/npx nx affected -t \w+/g)) {
+      assert.ok(
+        match.index > shas,
+        `"${match[0]}" must come after nx-set-shas, not before it`,
+      )
+    }
   })
 })

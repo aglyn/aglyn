@@ -112,6 +112,48 @@ const NON_FAILURE_BULLETS = Object.freeze([
 ])
 
 /**
+ * The signals that would separate a CRASH from a TRUNCATION (AGL-1617).
+ *
+ * Every one of these is reported as found-or-absent, never silently omitted.
+ * That matters more here than anywhere else in this file: on the log this
+ * tool was written for, ALL of them are absent, and the honest reading of
+ * that is "the log is too short to say", not "nothing crashed". A digest
+ * that printed only what it found would let an empty section be misread as a
+ * clean bill of health.
+ */
+export const CRASH_PROBES = Object.freeze([
+  { label: 'SIGKILL', test: (l) => /SIGKILL|\bkilled\b/i.test(l) },
+  { label: 'SIGSEGV', test: (l) => /SIGSEGV|segmentation fault/i.test(l) },
+  { label: 'SIGTERM/SIGABRT', test: (l) => /SIGTERM|SIGABRT/.test(l) },
+  {
+    label: 'heap out of memory',
+    test: (l) =>
+      /JavaScript heap out of memory|Allocation failed - JavaScript heap|Reached heap limit/.test(
+        l,
+      ),
+  },
+  { label: 'V8 fatal error', test: (l) => /FATAL ERROR:/.test(l) },
+  {
+    label: 'jest worker died',
+    test: (l) =>
+      /A jest worker process .* failed|Jest worker encountered \d+ child process exception|Call retries were exceeded/.test(
+        l,
+      ),
+  },
+  {
+    label: 'worker force-exited',
+    test: (l) =>
+      /worker process has failed to exit gracefully and has been force exited/i.test(
+        l,
+      ),
+  },
+  {
+    label: 'resource exhaustion',
+    test: (l) => /\bENOSPC\b|\bENOMEM\b|out of memory|no space left/i.test(l),
+  },
+])
+
+/**
  * Strip ANSI colour, both as real escape bytes and in the caret-escaped form.
  *
  * The real-escape branch takes the full CSI grammar plus OSC, so a cursor
@@ -145,7 +187,10 @@ export function stripAnsi(text) {
 export function stripLogPrefix(line) {
   return line
     .replace(/^\uFEFF/, '')
-    .replace(/^(?:[^\t]*\t)*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z ?/, '')
+    .replace(
+      /^(?:[^\t]*\t)*\uFEFF?\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z ?/,
+      '',
+    )
     .replace(/^##\[(?:group|endgroup)\]/, '')
 }
 
@@ -173,7 +218,9 @@ export function digestLog(text, opts = {}) {
   const summaries = []
   const failedTasks = []
   const crashes = []
+  const exitCodes = []
   const taskFailureSignals = []
+  const found = new Set()
 
   let inFailedTasks = false
 
@@ -211,16 +258,26 @@ export function digestLog(text, opts = {}) {
     }
 
     // --- crash shapes, which are the likeliest cause of an INCONCLUSIVE --
-    if (
-      /SIGSEGV|SIGTERM|SIGKILL|SIGABRT/.test(line) ||
-      /JavaScript heap out of memory/.test(line) ||
-      /Allocation failed - JavaScript heap/.test(line) ||
-      /FATAL ERROR:/.test(line) ||
-      /A jest worker process .* failed/.test(line) ||
-      /Jest worker encountered \d+ child process exceptions/.test(line) ||
-      /ENOSPC|ENOMEM|Killed process|out of memory/i.test(line)
-    ) {
-      pushUnique(crashes, trimmed.slice(0, 200))
+    for (const probe of CRASH_PROBES) {
+      if (probe.test(line)) {
+        pushUnique(crashes, `${probe.label}: ${trimmed.slice(0, 160)}`)
+        found.add(probe.label)
+      }
+    }
+
+    // --- exit codes -------------------------------------------------------
+    // 137 is the one worth staring at: 128 + 9 = SIGKILL, which on a CI
+    // runner is nearly always the kernel OOM killer taking a jest worker.
+    // Anchored to a REPORTED exit, not the word "exit". The real log
+    // contains the shell fragment `exit 1; }` inside an echoed guard
+    // script, and counting that as a task exit code is a fact invented out
+    // of someone else quoting a shell.
+    const exit =
+      /(?:exited with (?:code|status)|with exit (?:code|status)|exit code)\s+(\d{1,3})\b/i.exec(
+        trimmed,
+      )
+    if (exit && exit[1] !== '0') {
+      pushUnique(exitCodes, `${exit[1]}  ${trimmed.slice(0, 140)}`)
     }
 
     // --- failed suites ---------------------------------------------------
@@ -273,8 +330,15 @@ export function digestLog(text, opts = {}) {
     failedTasks,
     crashes,
     taskFailureSignals,
+    exitCodes,
+    crashProbes: CRASH_PROBES.map((probe) => ({
+      label: probe.label,
+      found: found.has(probe.label),
+    })),
     lineCount: lines.length,
     truncated: looksTruncated(text),
+    endsMidToken: endsMidToken(text),
+    lastLine: lastLineOf(text),
   }
 }
 
@@ -309,6 +373,35 @@ function pushUnique(list, value) {
   list.push(value)
 }
 
+/**
+ * Did the log stop in the middle of a WORD, rather than merely between two
+ * lines? A process that exits normally almost always ends its output on a
+ * line boundary; a truncated stream stops wherever the byte budget ran out.
+ * Reported alongside `truncated`, never instead of it — a healthy log can
+ * also lack a trailing newline, so neither flag is a verdict on its own.
+ */
+export function endsMidToken(text) {
+  const s = String(text)
+  if (s === '' || /\n$/.test(s)) return false
+  const tail = lastLineOf(s)
+  // Ends on a word/path character with no closing punctuation or whitespace,
+  // or on a dangling escape sequence that never reached its final byte.
+  // NOT `.` or `-`: a line ending in a full stop ("Ran all test suites.")
+  // is a COMPLETE line that merely lacks its newline, and calling that a
+  // mid-token cut would make the flag fire on healthy logs.
+  // eslint-disable-next-line no-control-regex
+  return /[\w/\\]$/.test(tail) || /\x1b\[?[0-9;]*$/.test(tail)
+}
+
+/** The last line, for printing verbatim so a human can see where it stopped. */
+export function lastLineOf(text) {
+  const s = String(text)
+  if (s === '') return ''
+  const lines = s.split(/\r\n|\n|\r/)
+  if (lines.at(-1) === '') lines.pop()
+  return stripLogPrefix(stripAnsi(lines.at(-1) ?? '')).trimEnd()
+}
+
 function section(out, title, items, cap) {
   if (items.length === 0) return
   out.push(`${title} (${items.length})`)
@@ -338,6 +431,7 @@ export function formatDigest(result, source = '') {
   )
   section(out, 'nx failed tasks:', result.failedTasks, CAPS.tasks)
   section(out, 'Crash / resource signals:', result.crashes, CAPS.crashes)
+  section(out, 'Non-zero exit codes:', result.exitCodes, CAPS.crashes)
 
   if (result.verdict === VERDICTS.INCONCLUSIVE) {
     out.push(
@@ -346,13 +440,36 @@ export function formatDigest(result, source = '') {
       'a truncated log (GitHub drops the MIDDLE of a long ##[group], which is',
       'exactly where jest prints its failure block). Download the nx-test.log',
       'artifact attached to this run — it is the untruncated bytes.',
+      '',
+      'Crash vs truncation — every signal, found OR absent:',
     )
-    if (result.truncated) {
+    for (const probe of result.crashProbes ?? []) {
+      const dots = '.'.repeat(Math.max(2, 32 - probe.label.length))
+      out.push(`  ${probe.label} ${dots} ${probe.found ? 'FOUND' : 'absent'}`)
+    }
+    const codes = (result.exitCodes ?? []).map((e) => e.split(/\s+/)[0])
+    out.push(
+      `  non-zero exit code ............... ${codes.length ? codes.join(', ') : 'absent'}`,
+      `  log ends mid-line ................ ${result.truncated ? 'YES' : 'no'}`,
+      `  log ends mid-token ............... ${result.endsMidToken ? 'YES' : 'no'}`,
+    )
+    if (result.lastLine) {
+      out.push(`  last line: ${JSON.stringify(result.lastLine.slice(0, 90))}`)
+    }
+    if (codes.includes('137')) {
       out.push(
         '',
-        'The log ends mid-line, so it was almost certainly cut short.',
+        'Exit code 137 is 128 + 9 = SIGKILL. On a CI runner that is almost',
+        'always the kernel OOM killer taking a jest worker.',
       )
     }
+    out.push(
+      '',
+      'An `absent` above is NOT evidence against a crash. GitHub drops the',
+      'middle of the group, and a SIGKILL or heap-limit line printed there',
+      'would not have survived either — which is exactly why the raw log is',
+      'uploaded as an artifact.',
+    )
     out.push('')
   } else if (result.verdict === VERDICTS.CLEAN) {
     out.push(
