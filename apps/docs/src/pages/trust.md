@@ -10,7 +10,7 @@ control below exists in the product today. The section on what we **do not**
 have is deliberately first, because that is the part a reviewer needs and the
 part a page like this usually buries.
 
-_Last reviewed 20 August 2026._
+_Last reviewed 24 August 2026._
 
 ## What we do not have
 
@@ -55,6 +55,52 @@ published register is meant to be exhaustive, and "we told you first on the
 engineering page" is not a defence for a register that is missing a row — so
 if that row is still absent from the published list once a tag is live, the
 register is wrong and we would like to hear about it at `privacy@aglyn.com`.
+
+## Hosts our customers choose, which are not on that list
+
+The table above, and the published register it defers to, list the parties
+**Aglyn** engages. There is a second set of recipients that a reviewer should
+know about and that neither list can ever contain.
+
+A site built on Aglyn can reference an image, stylesheet or font that lives
+somewhere else — a URL pasted into a component or a post, a cover image, or a
+`url(...)` an author writes in their own CSS. That is a deliberate feature of
+the builder and we do not intend to remove it. Its consequence is worth stating
+plainly: **we do not proxy those requests.** The visitor's browser fetches the
+file from that host directly, so the host learns the visitor's IP address,
+their browser user-agent and the address of the page they are on, and can set
+its own cookies.
+
+We do not choose those hosts and we cannot enumerate them — they are picked
+per site by each site owner and can change with any edit — so they are not
+Aglyn subprocessors and do not belong on Annex III. The site owner engaged
+them and is the controller for their own visitors; the
+[DPA](https://aglyn.com/legal/dpa) says so in contract terms, and the site
+owner is responsible for naming them in their own privacy notice. The same
+applies to a URL typed while editing in the console: it loads the same way for
+anyone who opens that editor.
+
+What we do about it, written as current configuration rather than as an
+assurance:
+
+- The surfaces that put an author's URL into a page's own stylesheet — the
+  Custom HTML block's CSS, `style` attributes inside it, and the Styles panel —
+  accept only `https:`, `data:` and `blob:`. A refused reference is rewritten
+  to `url(about:invalid)`, which loads nothing and leaves the surrounding CSS
+  rule valid rather than corrupting it.
+- Markdown and post images, collection covers, event covers and the marketing
+  popup refuse `http:` for the same reason.
+- **The storefront image fields do not yet.** Product, cart, wishlist, related
+  products and the product feed emit the stored string unchecked, so an
+  `http:` URL entered there ships as typed. On an https page a browser blocks
+  it as mixed content, but that is the browser's behaviour and not a control of
+  ours. Closing this is open work; until it is closed, this is what those
+  fields actually do.
+- Published sites carry a **report-only** `img-src` policy, so off-site image
+  loads are counted rather than blocked. It is report-only on purpose and will
+  stay that way while the feature stands: an enforcing policy would silently
+  blank images on sites that are already published, revoking a documented
+  capability from customers with no error and no way for them to find out.
 
 ## Authentication
 
