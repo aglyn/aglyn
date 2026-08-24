@@ -148,6 +148,8 @@
     "test:pricing-tables": "node --test tools/scripts/lib/pricing-tables.test.mjs",
     "check:no-tax-identifiers": "node tools/scripts/check-no-tax-identifiers.mjs",
     "test:no-tax-identifiers": "node tools/scripts/check-no-tax-identifiers.mjs --selftest",
+    "check:residential-address": "node tools/scripts/check-residential-address.mjs",
+    "test:residential-address": "node --test tools/scripts/lib/residential-address.test.mjs",
     "check:facilitator-charge-shape": "node tools/scripts/check-facilitator-charge-shape.mjs",
     "test:facilitator-charge-shape": "node tools/scripts/check-facilitator-charge-shape.mjs --self-test",
     "check:brand-literals": "node tools/scripts/check-brand-literals.mjs",

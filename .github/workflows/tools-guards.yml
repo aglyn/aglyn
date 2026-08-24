@@ -534,6 +534,26 @@ jobs:
 
       - run: npm run check:no-tax-identifiers
 
+      # AGL-1491. Same two-step order, same reason, a different needle: the
+      # pre-move residential address. On 2026-08-24 four tracked spec files
+      # were found publishing it — three of them in one sweep, all of them
+      # `platformRevenue` fixtures pasted from a live Stripe invoice — and
+      # nothing was watching, because check:no-tax-identifiers guards the
+      # Comptroller identifiers and check:contact-addresses guards mailboxes.
+      #
+      # The unit test carries the burden of proof and drives the whole
+      # red/green matrix through SYNTHETIC needles, so neither it nor the
+      # guard ever holds the real value. It also pins the one false green this
+      # design is exposed to: each needle stores a cheap prefilter beside its
+      # digest, and a prefilter that disagrees with its digest would filter
+      # every window out before hashing and go permanently, silently green.
+      #
+      # Note this scans file CONTENT only. A commit MESSAGE carrying the
+      # address is just as public and is not covered here or anywhere.
+      - run: npm run test:residential-address
+
+      - run: npm run check:residential-address
+
       # AGL-1956. On 2026-08-24 Aglyn accepted marketplace-facilitator status
       # and published ToS §10.7, which tells every merchant that on a
       # storefront sale the tax "is collected into Aglyn's processor account,
