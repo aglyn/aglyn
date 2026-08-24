@@ -283,17 +283,27 @@ jobs:
       # package reaching it lands on every published customer page. ~1s.
       - run: npm run check:aglyn-barrel
 
-      # The affected run, TEE'd (AGL-1617). Run 32687205268 failed here with
-      # the whole of its diagnosis being "Failed tasks: - console:test":
-      # GitHub truncates the MIDDLE of a long ##[group] and jest prints its
-      # failure block in the middle, so the job log carried zero FAIL markers
-      # and zero failed-test summaries. The tee keeps the untruncated bytes as
-      # an artifact; the digest prints a summary too small to be cut.
+      # The affected run, REDIRECTED to a file (AGL-1617). It used to be
+      # `| tee`, and the tee was the reason the artifact was useless: a pipe
+      # makes nx's stdout ASYNCHRONOUS, and nx ends a failed run with
+      # process.exit(), which discards whatever is still in the pipe buffer.
+      # Measured both ways on this machine:
       #
-      # set -o pipefail is NOT optional. GitHub's default shell is
-      # `bash -e {0}` and -e does NOT imply pipefail, so `nx ... | tee f`
-      # would exit with TEE's status — zero, always — and every red test run
-      # in this job would report green.
+      #   node -e 'process.stdout.write("x".repeat(5e6)); process.exit(1)'
+      #     | wc -c   ->      65,550   (one pipe buffer, the rest dropped)
+      #     > file    ->   5,000,009   (a regular file is synchronous)
+      #
+      # nx prints FAILED tasks last, so the dropped tail was always the
+      # failing task's output. That is why `console:test` went five runs
+      # across both workflows with zero ` FAIL ` markers and zero
+      # `Tests: … failed` summaries reaching the log OR the artifact, and why
+      # the digest — which reads this same file — reported a clean-looking
+      # "1 failed suite" while nx named three failed projects. The bytes were
+      # never written, so no reader downstream could have recovered them.
+      #
+      # The cost of the redirect is that the step no longer streams live into
+      # the job log; it is `cat` at the end instead. The artifact is the
+      # diagnostic path and it is now complete, which it never was.
       # Split out of the single `nx affected -t lint test build` this used to
       # be (AGL-1617). Both halves of the split serve the SAME hypothesis, and
       # it is a hypothesis, not a proven cause — read this before changing it.
@@ -352,8 +362,11 @@ jobs:
 
       - name: test
         run: |
-          set -o pipefail
-          npx nx affected -t test --parallel=3 --maxWorkers=2 2>&1 | tee "$RUNNER_TEMP/nx-test.log"
+          status=0
+          npx nx affected -t test --parallel=3 --maxWorkers=2 \
+            > "$RUNNER_TEMP/nx-test.log" 2>&1 || status=$?
+          cat "$RUNNER_TEMP/nx-test.log"
+          exit "$status"
 
       # --task-failed: this step only runs because the job is already red, so
       # the premise comes from the workflow rather than from a log that may
