@@ -70,9 +70,19 @@ export const DEFAULT_TARGETS = [
  * two dead GCP uptime checks that fetched a REAL PAGE and had been answered
  * with a 429 Bot Protection checkpoint since 2026-08-21. They work. Nothing
  * read them: this list named only `error-beacon`, and the docs status page's
- * `DOCS_STATUS_TARGETS` is unset in production, so the page reports "not
+ * `DOCS_STATUS_TARGETS` was unset in production, so the page reported "not
  * configured to check any services". The replacement for two dead checks was
  * itself dark — the same written-but-never-read shape one layer up.
+ *
+ * Both readers exist as of 2026-08-24 (AGL-2496): this list names them, and
+ * `DOCS_STATUS_TARGETS` is now set on the `aglyn-docs` Vercel project so
+ * `docs.aglyn.com/status` renders a card per target. There is also an external
+ * keyword monitor per target. **None of that is asserted by this file** — the
+ * env var lives in a Vercel project and a build agent cannot read it, so the
+ * only in-repo signal remains the build-time warning in
+ * `apps/docs/docusaurus.config.ts`, which is a log line nobody is obliged to
+ * read. Re-confirm the page renders targets before quoting it as monitoring;
+ * `docs/UPTIME_AND_SLA.md` says how.
  *
  * A page render reached through `/api/*` is also the only way to observe "a
  * site still renders" from outside, since page routes are challenged for

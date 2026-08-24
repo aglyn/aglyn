@@ -439,8 +439,10 @@ merchant a revenue figure a few percent of their real one.
 
 **The number itself** is `totalCents - taxCents`. `totalCents` is Stripe's
 `amount_total` written verbatim by the webhook, so it reconciles with Stripe by
-construction; `taxCents` is the tax the webhook stored, excluded because the
-merchant is seller of record and tax collected is held for the state. As in
+construction; `taxCents` is the tax the webhook stored, excluded because tax
+collected is money held for a taxing authority rather than sales revenue —
+by Aglyn where Terms §10.7 gives it a facilitator collection obligation
+(AGL-1956), by the merchant where the rate was their own. As in
 AGL-1639, **no GA4 `tax` param** is sent beside an ex-tax `value`.
 
 `taxCents` was described here as simply `total_details.amount_tax`, and on the

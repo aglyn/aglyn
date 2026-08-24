@@ -6,6 +6,14 @@
   "installCommand": "npm install",
   "cleanUrls": true,
   "trailingSlash": false,
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/status",
+      "permanent": false,
+      "has": [{ "type": "host", "value": "status.aglyn.com" }]
+    }
+  ],
   "headers": [
     {
       "source": "/status",

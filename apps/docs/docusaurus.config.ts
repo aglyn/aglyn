@@ -58,6 +58,25 @@ const docsErrorBeaconEndpoint = env('DOCS_ERROR_BEACON_ENDPOINT')
  */
 const docsStatusTargets = env('DOCS_STATUS_TARGETS')
 
+/**
+ * An INDEPENDENT status page to fall back to, off this operator's hosting.
+ *
+ * The /status explainer admits in writing that it "is also not an independent
+ * monitor… an outage broad enough to take out the whole platform could take
+ * this page with it". That was an honest gap with nowhere to send the reader;
+ * a third-party monitor's own public page closes it, and the one thing such a
+ * link has to survive is this page being unreachable — so it is printed as a
+ * literal URL, not only as an anchor, for someone reading a cached copy or a
+ * screenshot (AGL-2496).
+ *
+ * UNSET → no link and no sentence, exactly like every other `DOCS_*` value
+ * here. This one matters more than most: a self-hosted build that hard-coded
+ * Aglyn's monitor would tell an operator's customers that AGLYN is up while
+ * THEIR platform is down — a false all-clear during someone else's outage,
+ * which is the AGL-2124 defect in its most damaging form.
+ */
+const docsStatusFallbackUrl = env('DOCS_STATUS_FALLBACK_URL')
+
 if (!docsStatusTargets) {
   console.warn(
     '\n[status] DOCS_STATUS_TARGETS is unset: /status will publish a page that' +
@@ -190,6 +209,7 @@ const config: Config = {
   customFields: {
     errorBeaconEndpoint: docsErrorBeaconEndpoint ?? null,
     statusTargets: docsStatusTargets ?? null,
+    statusFallbackUrl: docsStatusFallbackUrl ?? null,
   },
 
   // ⚠️ AN OWNED COPY of Docusaurus's default SSG template

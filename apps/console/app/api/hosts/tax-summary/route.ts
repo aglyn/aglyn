@@ -44,18 +44,20 @@ const ROW_CAP = 2000
  *
  * ## WHAT THIS ROUTE DOES NOT DO, and must never be extended to do
  *
- * It states NO position on who must remit. `storefront-tax.ts` reserves that
- * explicitly — marketplace-facilitator status "is a legal conclusion that
- * attaches by operation of law, it belongs to counsel, and nothing here
- * should be read as deciding it" — and this route respects the reservation
- * rather than routing around it. Zach's 2026-08-19 decision, verbatim in
- * shape: **ship the NUMBER, do not ship the LABEL.**
+ * It emits NO per-merchant, per-jurisdiction verdict on who must remit — and
+ * that is still true now that the facilitator question itself is answered.
+ * Zach decided on 2026-08-24 that Aglyn IS a marketplace facilitator for
+ * storefront sales, and Terms §10.7 publishes it (AGL-1956). But §10.7 is
+ * narrow by design: Aglyn calculates, collects and remits **where applicable
+ * law gives it an obligation for that transaction**, and asserts nothing
+ * anywhere else. A field answering "is Aglyn the facilitator for you" would
+ * flatten a per-transaction, per-jurisdiction test into one boolean about a
+ * merchant, which the Terms deliberately decline to state.
  *
- * So the response carries the three buckets SEPARATELY and never a merged
- * total. There is deliberately no field called `yoursToRemit`, no boolean
- * saying whether Aglyn is a facilitator for this merchant, and no jurisdiction
- * verdict. Getting that wrong in either direction is worse than the absence
- * it would fill: understate it and a merchant under-remits on our say-so;
+ * So the response still carries the three buckets SEPARATELY and never a merged
+ * total. There is deliberately no field called `yoursToRemit`. Getting that
+ * wrong in either direction is worse than the absence it would fill:
+ * understate it and a merchant under-remits on our say-so;
  * overstate it and they pay tax twice on money Aglyn already holds. A single
  * "tax collected" figure is the same error wearing a neutral name — it would
  * sum tax Aglyn holds and remits with tax the merchant owes, which is exactly

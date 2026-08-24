@@ -6,6 +6,7 @@
   "apps/console/app/(app)/admin/users/page.tsx": 1,
   "apps/console/app/api/_lib/linear-issues.ts": 1,
   "apps/console/components/staff-reversal-recovery-card.component.tsx": 1,
+  "apps/console/constants/subprocessor-inventory.ts": 4,
   "apps/console/utils/tx-return-webfile.ts": 20,
   "apps/docs/docusaurus.config.ts": 6,
   "apps/docs/src/pages/status.tsx": 1,

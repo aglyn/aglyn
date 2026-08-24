@@ -386,11 +386,17 @@ Each group breaks down by jurisdiction, with the sales, the taxable base
 Stripe stated, and the tax.
 
 :::warning Aglyn does not provide tax advice
-Who must remit sales tax to a given authority depends on the jurisdiction and
-on marketplace facilitator rules. Aglyn records what was collected and how it
-was calculated; it does **not** determine which portion is yours to remit, and
-nothing in this report should be read as making that determination. Confirm
-your obligations with a qualified tax professional.
+For storefront sales Aglyn acts as a **marketplace facilitator**, and where
+applicable law gives Aglyn a collection obligation it calculates, collects and
+remits that tax itself — added on top at checkout, held by Aglyn, and never
+transferred to your connected payment account. That is the first group above.
+Tax your store calculated at your own rate, and tax Stripe named your connected
+account liable for, stay yours.
+
+Aglyn still does not print a per-jurisdiction verdict for your business:
+Terms of Service §10.7 binds Aglyn only where it actually has an obligation for
+the transaction in question, which is a per-sale test rather than a fact about
+a merchant. Confirm your obligations with a qualified tax professional.
 :::
 
 Two things the figures do not yet include, both stated on the card itself:

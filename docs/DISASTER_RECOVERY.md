@@ -30,18 +30,33 @@ object mirror's contents against each source bucket, and exits 2 rather than 0
 when it cannot see. `--strict` is the acceptance test for both the off-project
 gap and the Cloud Storage gap below.
 
-**Backups can fail silently — and a READY backup can STOP being restorable.**
-(AGL-1490, AGL-1843.) As of 2026-08-17, **every backup this project has taken
-has flipped `READY` → `state: NOT_AVAILABLE` at roughly one week old**: the
-2026-08-02 backup (never READY as far as anyone observed), and the 2026-08-09
-backup — which was READY at age 4 days and was the *successfully restored
-source of the 2026-08-13 rehearsal* — was NOT_AVAILABLE by age 8 days. Both
-have `expireTime` months out, so this is not retention expiry. The flip window
-(~day 7) coincides with the 7-day PITR `versionRetentionPeriod`; cause is
-unestablished — the API exposes no reason field anywhere (list, describe, and
-raw REST all return only `name/database/databaseUid/snapshotTime/expireTime/state`).
-Until a Google support case resolves it, assume the **effective restorable
-depth is the single newest backup (≤ 7 days old)**, not 14 weeks — that is
+**`NOT_AVAILABLE` is a WINDOW, not a death — corrected 2026-08-24.**
+(AGL-1490, AGL-1843.) The reading below was written on 2026-08-17 and is now
+known to be wrong in its conclusion. A third observation of the *same backup
+ids* settles it:
+
+| backup id | 2026-08-13 | 2026-08-17/18 | 2026-08-24 |
+| --- | --- | --- | --- |
+| `3b5238df…` (2026-08-02) | `NOT_AVAILABLE` | `NOT_AVAILABLE` | **`READY`** (age 22 d) |
+| `eb4d21e3…` (2026-08-09) | `READY` | `NOT_AVAILABLE` | **`READY`** (age 15 d) |
+| `d14ce827…` (2026-08-16) | — | `READY` | **`READY`** (age 8 d) |
+
+The state flips in **both** directions, on backups whose `expireTime` is
+months away, independent of age. The predicted permanent day-7 degradation did
+not happen — `d14ce827` is `READY` at day 8. The API's own enum documents the
+state as "The backup is not available **at this moment**", and that temporal
+wording turns out to be literal. So the 2026-08-02 backup AGL-1490 was filed
+about was never broken, and **the effective restorable depth is the full
+retention window, not the single newest backup**. What the original
+observation got right is that a backup can be unusable at the moment you reach
+for it, which is reason enough for a second, independent copy — see "The
+weekly GCS export" below. The historical reading follows, kept because the
+export was built on it: as of 2026-08-17 it appeared that **every backup this
+project had taken flipped `READY` → `state: NOT_AVAILABLE` at roughly one week
+old**, the flip window (~day 7) coinciding with the 7-day PITR
+`versionRetentionPeriod`; cause unestablished — the API exposes no reason
+field anywhere (list, describe, and raw REST all return only
+`name/database/databaseUid/snapshotTime/expireTime/state`). That is
 why the weekly GCS export exists (see "The weekly GCS export" below): a copy
 whose lifetime we control, watched by the same health endpoint. Before you
 rely on a backup, check:
@@ -74,7 +89,7 @@ reads `FIRESTORE_DATABASE_ID` at call time. Unset (the norm) targets
 | Scenario | Tool | RPO | Caveats |
 | --- | --- | --- | --- |
 | Bad deploy / bad script / corruption noticed within 7 days | PITR clone | ~0 (any minute in the window) | Pick the pre-damage timestamp |
-| Damage older than 7 days | Weekly backup restore | Up to 7 days (Sunday snapshots); nominally 14 weeks back | Only `READY` backups — and as of 2026-08-17 every backup has gone `NOT_AVAILABLE` at ~1 week old (AGL-1843), so in practice this row currently collapses into the PITR window |
+| Damage older than 7 days | Weekly backup restore | Up to 7 days (Sunday snapshots); 14 weeks back | Only `READY` backups — and `NOT_AVAILABLE` is a transient window, not a death (measured flipping back to `READY`, 2026-08-24, AGL-1843). A backup you reach for may be momentarily unusable; the export below is the answer to that, not a shorter depth |
 | Damage older than 7 days, backup flipped | GCS export import (Procedure D) | Up to 7 days (Monday exports); 90-day lifecycle depth | Import is merge-by-id into a NEW database; export files do not expire out from under you the way a backup's `state` can |
 | `aglyn-main` project lost (deletion, billing kill, account compromise) | — | **Total loss.** No off-project copy exists | The remaining gap; see below |
 
@@ -356,7 +371,7 @@ dated so this never matters.
 
    | Copy of production data | Project | Location | State on 2026-08-19 |
    | --- | --- | --- | --- |
-   | Firestore managed backups (weekly, SUNDAY, 98-day retention) | `aglyn-main` | `nam5` | 3 backups: `2026-08-16` **READY**, `2026-08-09` and `2026-08-02` **NOT_AVAILABLE** — the ~day-7 flip continues |
+   | Firestore managed backups (weekly, SUNDAY, 98-day retention) | `aglyn-main` | `nam5` | On 2026-08-19: 3 backups, `2026-08-16` **READY**, `2026-08-09` and `2026-08-02` **NOT_AVAILABLE**. **Re-read 2026-08-24: 4 backups, ALL `READY`** — both previously-`NOT_AVAILABLE` ones recovered, so the "~day-7 flip" was a window, not a death (AGL-1843) |
    | `gs://aglyn-main-firestore-exports` | `aglyn-main` (543499566626) | US multi-region | 1 completed export (`2026-08-17T23-43-04Z`, 4.3 MiB), 90-day lifecycle |
    | `gs://aglyn-main.appspot.com` | `aglyn-main` | US multi-region | ~47 MiB of **primary** data, mirrored nightly to `gs://aglyn-dr-backup/media/` (gap 6, closed 2026-08-20) |
    | `gs://aglyn-main-plugin-artifacts` | `aglyn-main` | US multi-region | ~28 KiB of **primary** data, mirrored nightly to `gs://aglyn-dr-backup/plugin-artifacts/` (gap 6, closed 2026-08-20) |

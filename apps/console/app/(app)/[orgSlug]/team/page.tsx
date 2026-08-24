@@ -68,8 +68,18 @@ const ManageTeam: NextPageWithLayout<Record<string, never>> = () => {
               children: <OrgRolesCard />,
             },
             // Activity is permission-gated (AGL-243, org.auditLog).
+            //
+            // `permissionsLoaded &&`, never `!permissionsLoaded ||`. The old
+            // spelling rendered the audit log BECAUSE the permission read had
+            // not landed — an explicit opt-in to the fail-open, on the one card
+            // here that carries other people's data: actor names, what they
+            // did, to what, and when. The card issues its own Firestore query
+            // on mount, so an unentitled member both saw the feed and pulled
+            // it. Absent until permitted; the gate's unknown state is not a
+            // yes.
             ...(currentOrg?.$id &&
-            (!permissionsLoaded || can('org.auditLog'))
+            permissionsLoaded &&
+            can('org.auditLog')
               ? [
                   {
                     size: { xs: 12 },

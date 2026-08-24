@@ -267,7 +267,7 @@ only in `DISASTER_RECOVERY.md`. Verified live 2026-08-18.
 | Copy | Configured | Actually restorable | Evidence |
 | --- | --- | --- | --- |
 | Point-in-time recovery | 7 days (`versionRetentionPeriod: 604800s`) | 7 days | `gcloud firestore databases describe` |
-| Managed weekly backup | **98 days** (14 weeks, `8467200s`) | **effectively ≤ 7 days** — every backup this project has taken flips `READY` → `NOT_AVAILABLE` at ~day 7 with `expireTime` months out (AGL-1843) | `gcloud firestore backups schedules list`; `DISASTER_RECOVERY.md` |
+| Managed weekly backup | **98 days** (14 weeks, `8467200s`) | **98 days** — a backup may be momentarily `NOT_AVAILABLE` ("not available at this moment"), but that is a transient window, measured flipping back to `READY` days later, not a shorter effective depth (corrected 2026-08-24, AGL-1843) | `gcloud firestore backups schedules list`; `DISASTER_RECOVERY.md` |
 | Independent GCS export | 90-day bucket lifecycle, weekly Mondays 05:00 UTC | 90 days | `gs://aglyn-main-firestore-exports` (AGL-1843) |
 | Storage soft delete | 7 days | 7 days | bucket `soft_delete_policy` |
 

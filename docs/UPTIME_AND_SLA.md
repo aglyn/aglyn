@@ -82,14 +82,156 @@ database. A leading **or** trailing double underscore alone is fine; it is the
 pair that is reserved.
 :::
 
-## The status page
+## The status pages — there are TWO, and they are not redundant
 
-**https://docs.aglyn.com/status**
+| | Where | Job |
+| --- | --- | --- |
+| **https://docs.aglyn.com/status** | `aglyn-docs`, our Vercel | the branded page: live per-service detail, read from the visitor's own browser |
+| **https://stats.uptimerobot.com/7NGEl81zvD** | UptimeRobot, off our infrastructure | the always-up fallback: the only surface that can speak during a Vercel-wide or DNS outage |
 
-Served from the docs site on purpose. `aglyn-docs` is a separate Vercel project
-from the console and the tenant runtime, so a console outage does not take the
-page reporting it down with it — which is the whole job. A status page served by
-the thing it reports on is decoration.
+:::danger Neither one is "the" status page, and knowing which fails when is the point
+`aglyn-docs` is a separate Vercel **project** from the console and the tenant
+runtime, so a Firestore outage or a broken console deploy leaves the docs page
+up and reporting the failure — which is the whole job. But separate project is
+not separate **platform**, and `docs.aglyn.com` is not a separate **DNS zone**:
+
+| Failure | `docs.aglyn.com/status` | UptimeRobot page |
+| --- | --- | --- |
+| Firestore outage | survives, reports it | survives |
+| console/tenant build broken | survives, reports it | survives |
+| Vercel platform or region outage | **dies with them** | survives |
+| `aglyn.com` nameserver failure | **dies** | survives |
+
+So the Aglyn-hosted page's job is branding, detail and **linking to the other
+one** — not being the source of truth during an outage. A status page hosted on
+the infrastructure it reports on is theatre; this one is honest only because
+there is somewhere else to go when it is gone.
+:::
+
+### What `docs.aglyn.com/status` actually checks
+
+Nothing, unless `DOCS_STATUS_TARGETS` is set on the `aglyn-docs` Vercel
+project — and for weeks it was set on no scope at all, so the page shipped
+reading *"not configured to check any services"* while `/pricing` pointed
+customers at it (AGL-2411 found it, AGL-2496 fixed it). Set 2026-08-24, first to
+five targets, then narrowed to three, then widened to **six** on Zach's call the
+same evening:
+
+| Card | Origin | Path | Asserts |
+| --- | --- | --- | --- |
+| Console | `app.aglyn.com` | `/api/health` | Firestore reachable from the console runtime |
+| Published sites | `aglyn.com` | `/api/health/render/site` | a real tenant page server-renders to a non-empty node tree |
+| Site delivery | `aglyn.com` | `/api/health` | Firestore reachable from the tenant runtime |
+| Marketing site | `aglyn.com` | `/api/health/render/marketing` | the same render check, for `cname--aglyn.com` |
+| Billing | `app.aglyn.com` | `/api/health/billing` | the Stripe webhook destination is enabled and deliveries are landing |
+| Scheduled jobs | `app.aglyn.com` | `/api/health/crons` | every cron job stamped its beat inside its own schedule + grace |
+
+**Six, and the page's explainer is what makes six legal.** The middle state of
+that history is the lesson: a first cut added Billing and Scheduled jobs while
+the shipped explainer still told the reader that *"internal subsystems —
+scheduled jobs, backups, billing and abuse controls — … are not shown here"*, so
+the page contradicted itself and was narrowed back to three. **The env var must
+not out-promise the page, and the page must not out-promise the env var.** The
+explainer now names billing and scheduled jobs as shown, says plainly that
+neither is part of serving, and disclaims only what is genuinely absent —
+backups, abuse controls, the error beacon.
+
+**Why `Site delivery` and `Published sites` are both cards, and are not
+duplicates.** The render canary resolves ONE subject site (`demo`) internally.
+If that single workspace's content breaks, `render/site` goes red and would
+otherwise tell every customer that published sites are down. The plain tenant
+liveness card is the disambiguator: both red is a platform event, `sites` red
+and `delivery` green is our sample page, not their site.
+
+:::caution Five things that will bite whoever edits this value
+1. **The grammar is `name|label|origin|description|path`, comma-separated.** A
+   comma **in a description** does more than truncate the description: every
+   field after it shifts, so the entry loses its `path` and silently falls back
+   to `/api/health` — the card then probes the wrong endpoint and reads green.
+   Measured, not assumed: `…|Payments, invoices and subscription updates|/api/health/billing`
+   parses to `desc="Payments"`, `path="/api/health"`. Parse a candidate value
+   through `parseTargets` from `apps/docs/src/status-model.ts` before setting
+   it, and assert the **probe URLs**, not just the card count.
+2. **Docusaurus bakes it at BUILD time** into `customFields`. Setting the
+   variable without redeploying `aglyn-docs` changes nothing.
+3. **Unset must keep meaning OFF, never ours** (AGL-2124). Do not "fix" a
+   self-hoster's blank page with an Aglyn default; their build would print our
+   uptime as theirs during their outage.
+4. **`backups` must not become a card.** It LATCHES by design — degraded until
+   a bad restore point is gone, because a missing backup is a condition rather
+   than an event — and it spent four and a half days red while backups were
+   healthy (AGL-1843, still open). A customer-facing page that reds for that is
+   one customers learn to scroll past.
+5. `signups`, `rate-limits` and `error-beacon` are deliberately **not** cards
+   either. `rate-limits` fails soft, so a degraded window changed nothing a
+   customer could see — and publishing it announces when our abuse controls
+   were weakest. `signups` degraded means we suspect a signup farm. The error
+   beacon watches our own telemetry: if it is dead we are blind and the
+   customer's site is fine.
+:::
+
+`DOCS_STATUS_FALLBACK_URL` is the second variable this page reads. It prints
+the "if this page will not load, check the independent monitor" paragraph with
+the URL spelled out in full — the one link here written to be useful from a
+screenshot or a cached copy, because the moment it is needed is the moment this
+page will not render. Same rule as everything else: **unset prints nothing**, so
+a self-hosted build never tells an operator's customers that Aglyn is up while
+their own platform is down.
+
+Verify it from a browser, not curl — `aglyn-docs` runs Bot Protection at
+Challenge and answers an anonymous `curl` with **429**. The page stamps
+`data-status-overall` on the summary and `data-status-target` /
+`data-status-verdict` on each card, so the assertion is a DOM read, and a page
+carrying **zero** `data-status-target` nodes is the unconfigured failure above.
+
+### The external monitors (UptimeRobot, free tier)
+
+Five **keyword** monitors, keyword `"status":"ok"`, `ALERT_NOT_EXISTS`, 5-minute
+interval, email to zach@aglyn.com — Console, Published sites, Marketing site,
+Billing and Scheduled jobs.
+
+⚠️ **The monitor set and the card set are no longer identical.** The sixth card,
+`Site delivery` (`aglyn.com/api/health`), has **no** external monitor: the docs
+page probes it, and nothing pages on it. 45 free slots remain, so closing that
+is a monitor creation and nothing else. Do not close it the other way by
+dropping the card — the card is what tells a reader that a red `Published sites`
+is our sample workspace rather than their site.
+
+**Keyword and not plain HTTP, deliberately.** A plain HTTP monitor passes a 200
+whose body says `"status":"degraded"`, which is precisely the shape of the
+fifty-one-hour false green this file records further down. Do not "simplify" one
+of these back to an HTTP check.
+
+Free-tier facts, so nobody re-litigates them: **50 monitors** (five used),
+5-minute floor, keyword/ping/port/DNS/heartbeat all free, **one public status
+page free** at `stats.uptimerobot.com/<id>`. Paid: custom domain (Solo,
+$144/yr — this is what `status.aglyn.com` on UptimeRobot would cost), branding
+removal (Team, $468/yr), Slack (Solo), webhooks (Team), SSL-expiry monitoring.
+The REST API is on every plan at 10 req/min, and the status page's own
+`stats.uptimerobot.com/api/getMonitorList/<id>` is unauthenticated and sends
+`Access-Control-Allow-Origin: *` — so a browser page can read live monitor state
+with **no key and no env var**. It is undocumented; treat an unreadable answer
+as unknown, never as green.
+
+:::warning Its "100.000%" is not an uptime figure, and must never be quoted as one
+The UptimeRobot page prints an availability percentage. The monitors were
+created 2026-08-24, so that number is measured over hours, and its own
+`dailyRatios` are `0.000`/no-data for every earlier day. **This file's whole
+position is that we do not publish a number we cannot measure over time**
+(AGL-1148), and `/pricing` was already selling an SLA that does not exist
+(AGL-2411 F2). Linking the two pages is fine; letting a sales conversation
+quote that percentage is the exact failure both issues are about. The status
+page's link says so in its own copy — it calls it a second opinion on
+reachability, "not a service level we have committed to".
+
+⚠️ The monitor **names** carry the health-route paths (`Keyword on
+app.aglyn.com/api/health/billing`), and a free-tier status page cannot be
+`noindex`ed. Those endpoints are public and unauthenticated by design, so this
+is disclosure rather than exposure — but renaming the monitors to the card
+labels costs nothing and reads better to a customer.
+:::
+
+### How the docs page reads, and what it refuses to say
 
 It reads the health endpoints **live from the visitor's browser**, which is why
 those endpoints send `Access-Control-Allow-Origin: *`. Without it the browser
@@ -102,6 +244,52 @@ samples yet, and inventing "99.9%" from one successful fetch is how a status
 page loses its credibility. It also says "unreachable from your browser" rather
 than "down", because from a browser a real outage, a DNS failure and a local
 network problem are indistinguishable.
+
+`operational` is reachable from exactly one shape: HTTP 200 carrying our own
+`{"status":"ok"}`. Everything else — a 5xx, a 200 whose body claims `degraded`,
+a bot-protection interstitial, a redirect, an unparseable body, a timeout —
+lands in `degraded` or `unknown`, never in green. Each of those branches has
+been driven against the real page in a browser and watched to paint the right
+colour (AGL-2496); the rules themselves are pure functions in
+`apps/docs/src/status-model.ts` with a spec beside them.
+
+### `status.aglyn.com`
+
+Unclaimed today: it resolves through the `*.aglyn.com` wildcard to Vercel and
+answers `404 DEPLOYMENT_NOT_FOUND`. **When it is claimed, point it at
+`aglyn-docs` and serve `/status` — not at a besigner screen on the marketing
+site.** A marketing screen cannot probe anything live, cannot tell `unknown`
+from `down`, and would put the status page on `aglyn-tenant`, the runtime it is
+supposed to report on. Pointing it at UptimeRobot instead is the $144/yr option
+above.
+
+The footer of every marketing page already links `docs.aglyn.com/status`, so
+this is about giving the existing surface a memorable name, not about building
+a second one. **Two surfaces competing to be "the status page" is the failure
+mode to avoid** — whichever way this is done, one URL must end up serving the
+other.
+
+**Exact steps (Zach — this is a domain change, not an agent action):**
+
+1. Vercel → `aglyn-docs` → Settings → Domains → **Add** `status.aglyn.com`.
+   The apex is already on Vercel DNS, so no registrar work is needed and the
+   certificate issues automatically.
+2. Choose **redirect**, not rewrite: set the domain's redirect target to
+   `docs.aglyn.com` (Vercel offers this in the same dialog). A visitor typing
+   `status.aglyn.com` lands on the real page at its canonical URL, and there is
+   exactly one indexable copy.
+3. Add `{ "source": "/", "destination": "/status", "permanent": false }` to
+   `apps/docs/vercel.json`'s `redirects` **only if** step 2's redirect lands on
+   `/` rather than `/status` — check before adding, since a redirect chain is
+   worse than either link alone.
+4. Verify from a **browser**, not curl (`aglyn-docs` challenges anonymous
+   clients with 429): `status.aglyn.com` must end on the status page with
+   cards rendered, and `docs.aglyn.com/status` must still work unchanged.
+
+A rewrite (serving the page at `status.aglyn.com` without changing the URL) is
+the tempting option and the wrong one here: it produces two live copies of the
+same page, and every footer link, the `/pricing` FAQ and AGL-2411 F2 all name
+`docs.aglyn.com/status`.
 
 ## The probe
 
@@ -200,8 +388,25 @@ Notes that keep these honest:
   a half days — 210 consecutive windows, 6/6 probe regions — while the backups
   were entirely healthy (AGL-1843). An aged-out backup behind a good one is how
   a managed backup *ends*, not a failure; what reproduces AGL-1490 is a newest
-  run that produced nothing usable, so that is what is measured. Since
-  AGL-1843 the same endpoint carries a SECOND, separately-labeled check —
+  run that produced nothing usable, so that is what is measured.
+
+  **Second pass (2026-08-24, AGL-1843): the check now has THREE states, not
+  two.** Everything it could not establish — a transient upstream error, a
+  partial listing (`ListBackupsResponse.unreachable`), a run that had not
+  finished — used to collapse into `backup-failed`, the loudest thing it can
+  say, and in every one of those cases it was false. Indeterminate now answers
+  **200** with `determinate: false` and its own code (`backups-unreadable`,
+  `backups-partial`, `backups-not-ready-yet`). Three things bound that so it
+  is not fail-open: it is only tolerated while a backup younger than 8 days
+  exists, it never overrides a stale READY backup, and PERMANENT upstream
+  refusals (missing credential, 401/403/404) stay hard red so a revoked
+  `roles/datastore.backupsViewer` cannot silently retire the check. The same
+  pass also stopped reading `NOT_AVAILABLE` as damage at all: it is documented
+  as "not available **at this moment**", and the same backup ids were measured
+  flipping in BOTH directions (`3b5238df` and `eb4d21e3` were both
+  `NOT_AVAILABLE` on 2026-08-17 and both `READY` on 2026-08-24). What goes red
+  is the fact that actually matters — no restore point inside the age budget.
+  Since AGL-1843 the same endpoint carries a SECOND, separately-labeled check —
   `exports` — watching the weekly Firestore GCS export
   (`gs://aglyn-main-firestore-exports`, cron in `scheduled-crons.yml`): 503
   when no completed export exists or the newest is older than 8 days

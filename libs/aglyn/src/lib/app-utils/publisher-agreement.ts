@@ -84,8 +84,51 @@ import { LEGAL_ORIGIN, isPublishedLegalUrl } from './published-legal-pages'
  * from then on any body-text change costs a bump — see the same rule in
  * `apps/console/constants/legal-documents.ts`, where the clickwrap snapshots
  * collapsed back to `v1` on the identical argument.
+ *
+ * ## 2026-08-24 — `2026-08-24.1`, and why this one CANNOT be folded (AGL-1956)
+ *
+ * §13.3 changed twice in one sentence. The venue moved from Williamson County
+ * to TRAVIS County (Zach, 2026-08-24) — Williamson entered from the former
+ * Jarrell residential address, while every published Aglyn address is 5900
+ * Balcones Dr STE 100, Austin, TX 78731, which is Travis. And the clause cited
+ * "Terms of Service Section 19" for governing law and venue when those live at
+ * §18.6; §19 is General. A wrong cross-reference in a forum-selection clause is
+ * the kind of defect that gets argued about, so it was corrected in the same
+ * pass.
+ *
+ * Unlike 2026-08-22, this one takes the bump rather than only re-pinning, and
+ * the deciding reason is mechanical rather than editorial: THIS VERSION STRING
+ * IS PUBLISHED IN THE DOCUMENT. The page at {@link PUBLISHER_AGREEMENT_URL}
+ * serves `Agreement version: 2026-08-24.1` in its own second line, so the
+ * capture below contains it, and `publisher-agreement-version.spec.ts` asserts
+ * the snapshot contains `Agreement version: ${PUBLISHER_AGREEMENT_VERSION}`.
+ * Holding the constant at `2026-08-18.1` against that text would need the page
+ * republished to say so, and would otherwise record a publisher as having
+ * accepted `2026-08-18.1` while naming bytes that call themselves
+ * `2026-08-24.1`. That is a false record of exactly the shape the pin exists
+ * to prevent.
+ *
+ * ⚠️ THIS IS THE ONE PLACE THE CLICKWRAP ARGUMENT DOES NOT REACH. The signup
+ * clickwrap folded its 2026-08-24 corrections into `v1` and did not bump
+ * (`apps/console/constants/legal-documents.ts`) — Zach, 2026-08-24: no v2
+ * before launch. That works there because `v1` is a REPO-SIDE label: the
+ * published Terms carry a "Last updated" date and no version string at all, so
+ * the label can stay still while the text moves. Here the label is part of the
+ * document a publisher reads. The two schemes are not the same kind of thing
+ * and must not be reasoned about as one — that difference is the whole content
+ * of this paragraph.
+ *
+ * On the merits it would have been a bump anyway: a forum-selection clause is
+ * substance, not a typo — it names the court a publisher would have to travel
+ * to. The 2026-08-22 cost argument is unchanged and still cheap, production
+ * holding exactly one acceptance record which is Zach's own.
+ *
+ * §8.1 and §8.3 are UNTOUCHED and were already correct: they have said Aglyn is
+ * merchant of record and determines, collects and remits transaction tax since
+ * 2026-08-14. The Terms of Service moved TO them in this pass (new ToS §10.7),
+ * not the other way around.
  */
-export const PUBLISHER_AGREEMENT_VERSION = '2026-08-18.1'
+export const PUBLISHER_AGREEMENT_VERSION = '2026-08-24.1'
 
 export const PUBLISHER_AGREEMENT_TITLE = 'Marketplace Publisher Agreement'
 
@@ -124,10 +167,10 @@ export const PUBLISHER_AGREEMENT_TITLE = 'Marketplace Publisher Agreement'
  * snapshot of unpublished text is a false record.
  */
 export const PUBLISHER_AGREEMENT_SHA256 =
-  '37357a79f32e652e900ee9b87705751d7840e40e193afbee042abd7641ab8dfb'
+  '2df6e940f037b4630e53c8f63bad8604ef4bf370374b89afcd4ea7f9fe8e8d63'
 
 /** Byte length of the same snapshot — a cheap second check on the content. */
-export const PUBLISHER_AGREEMENT_BYTES = 13732
+export const PUBLISHER_AGREEMENT_BYTES = 13730
 
 /**
  * Canonical document, on the operator's legal origin beside the other terms.

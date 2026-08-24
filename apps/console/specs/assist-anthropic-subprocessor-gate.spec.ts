@@ -121,6 +121,10 @@ const MENTIONS_ONLY = new Map<string, string>([
     "The legal snapshot record. Its v3 note (2026-08-14, AGL-1555) says the Privacy Policy's §3 provider bullet DROPS Anthropic because `ANTHROPIC_API_KEY` is absent from production and the AI-assist route 501s — so the privacy page, not only /legal/subprocessors, was rewritten on that premise and becomes wrong when the key is set.",
   ],
   [
+    'apps/console/constants/subprocessor-inventory.ts',
+    'The subprocessor registry (AGL-1648) — the declarative disclosure of who Aglyn shares data with. It names the key because DISCLOSING the Anthropic relationship is its entire purpose, which makes it the one file whose mention is the opposite of an undisclosed data flow. Note it is imported by nothing but its own spec, so it reads no key and reaches no runtime.',
+  ],
+  [
     'libs/aglyn/src/lib/app-utils/release-flags.ts',
     'The `release_assist` description, which carries the precondition this suite pins.',
   ],

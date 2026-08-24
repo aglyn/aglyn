@@ -40,7 +40,9 @@ import {
   Alert,
   AlertTitle,
   Avatar,
+  Box,
   Button,
+  CircularProgress,
   MenuItem,
   Stack,
   TextField,
@@ -440,6 +442,20 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
             {'You do not have permission to manage settings for this ' +
               'organization — ask an organization admin for access.'}
           </Alert>
+        ) : !permissionsLoaded ? (
+          // THE HOLD IS PART OF THE GUARD — the billing page's defect, on the
+          // surface with the most sensitive contents. With the loading flag in
+          // the refusal branch alone, a pending member read renders the whole
+          // settings hub: the org identity, the API KEYS card and the SSO
+          // configuration card. `useOrgPermissions` fails open while loading,
+          // so `can()` answers as an owner until `loaded` — the unresolved
+          // state does not merely fail to refuse, it grants.
+          //
+          // A spinner rather than an early refusal (AGL-2474): accusing a
+          // legitimate admin on every navigation is the same bug mirrored.
+          <Box sx={{ p: 2 }}>
+            <CircularProgress size={24} />
+          </Box>
         ) : (
           <HubTabs
             tabs={[

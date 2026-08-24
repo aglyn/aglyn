@@ -115,18 +115,24 @@ function monthOptions(): Array<{ value: string; label: string; from: string; to:
  * `totals.taxCents` at a time and nothing else. This card is that absence
  * closed, and closing it is all it does.
  *
- * ## THE NUMBER, NOT THE LABEL — Zach's 2026-08-19 decision
+ * ## THE NUMBER, NOT THE LABEL — Zach's 2026-08-19 decision, as amended
  *
- * This card presents the buckets SEPARATELY and states no position on who must
- * remit which one. `storefront-tax.ts` reserves that question explicitly:
- * marketplace-facilitator status "is a legal conclusion that attaches by
- * operation of law, it belongs to counsel, and nothing here should be read as
- * deciding it."
+ * This card presents the buckets SEPARATELY and prints no per-row verdict on
+ * who must remit which one. That structure is unchanged. What changed is the
+ * premise underneath one sentence of the copy: on 2026-08-24 Zach decided
+ * Aglyn IS a marketplace facilitator for storefront sales and the Terms
+ * publish it at §10.7 (AGL-1956), so the old line — "Aglyn does not make that
+ * determination for you" — became a statement the company's own contract
+ * contradicts. It is corrected below.
  *
- * So the copy below describes HOW each figure was computed — who calculated
- * the rate, and against whose registration — and stops there. There is no
- * "yours to remit" column, no total across the buckets, and no link to a legal
- * conclusion Aglyn has not made. A merged "tax collected" figure would be the
+ * The rest of the 2026-08-19 decision survives intact, because §10.7 is
+ * narrow: it binds Aglyn only where applicable law gives it a collection
+ * obligation for the transaction in question, which is a per-sale,
+ * per-jurisdiction test and not a fact about a merchant. So the copy still
+ * describes HOW each figure was computed — who calculated the rate, and
+ * against whose registration — and adds only what §10.7 itself says about the
+ * bucket Aglyn holds. There is still no "yours to remit" column and no total
+ * across the buckets. A merged "tax collected" figure would be the
  * banned determination wearing a neutral name: it would sum tax Aglyn holds
  * and remits with tax the merchant owes, the exact conflation the module warns
  * about in bold — *the two store modes are DIFFERENT FACTS and must never be
@@ -285,23 +291,33 @@ export function StorefrontTaxSummaryCard(props: StorefrontTaxSummaryCardProps) {
         ) : (
           <>
             {/*
-              THE NON-ADVISORY NOTE, first and unmissable. It says what depends
-              on what, and stops: it names no jurisdiction, reaches no
-              conclusion about facilitator status, and links to no page that
-              does. Rendered ABOVE the numbers because it governs how all of
-              them should be read.
+              THE NON-ADVISORY NOTE, first and unmissable. Rendered ABOVE the
+              numbers because it governs how all of them should be read.
+
+              It now states the position Terms §10.7 publishes (AGL-1956)
+              instead of the sentence it used to carry — "Aglyn does not make
+              that determination for you" — which the Terms themselves have
+              contradicted since 2026-08-24. What it still does NOT do is
+              reach a per-merchant or per-jurisdiction verdict: §10.7 binds
+              Aglyn only where applicable law gives it an obligation, so the
+              note describes which bucket Aglyn holds and remits and leaves
+              the rest where the merchant's own rate put it.
             */}
             <Alert severity="info">
               These figures show what was collected and how each was
-              calculated. Who must remit sales tax to a given authority depends
-              on the jurisdiction and on marketplace facilitator rules, and
-              {PLATFORM_BRAND_NAME} does not make that determination for you.
-              {' '}
+              calculated. For storefront sales {PLATFORM_BRAND_NAME} acts as a
+              marketplace facilitator: where applicable law gives{' '}
+              {PLATFORM_BRAND_NAME} a collection obligation, the tax it
+              calculated is added on top at checkout, held by{' '}
+              {PLATFORM_BRAND_NAME} rather than transferred to your connected
+              payment account, and remitted by {PLATFORM_BRAND_NAME}. Tax
+              calculated at a rate you configured yourself stays yours. See
+              Terms of Service §10.7.{' '}
               <strong>
                 {PLATFORM_BRAND_NAME} does not provide tax advice.
               </strong>{' '}
-              Please
-              confirm your obligations with a qualified tax professional.
+              Please confirm your obligations with a qualified tax
+              professional.
             </Alert>
 
             <Typography variant="body2" color="text.secondary">

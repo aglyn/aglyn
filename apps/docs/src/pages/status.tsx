@@ -53,6 +53,7 @@ import {
 } from 'react'
 
 import {
+  fallbackLink,
   initialReadings,
   overallStatus,
   parseTargets,
@@ -77,6 +78,10 @@ export default function StatusPage(): ReactElement {
     () => parseTargets(siteConfig.customFields?.['statusTargets']),
     [siteConfig.customFields],
   )
+  // Where to send a reader when THIS page is the thing that is down. Not
+  // memoized alongside the targets on purpose: it is a string, it feeds no
+  // effect, and an unstable identity here cannot cost anything.
+  const fallbackUrl = fallbackLink(siteConfig.customFields?.['statusFallbackUrl'])
   const [readings, setReadings] = useState<Record<string, Reading>>(() =>
     initialReadings(targets),
   )
@@ -208,12 +213,43 @@ export default function StatusPage(): ReactElement {
           its own health report saying so; anything this page cannot read is reported
           as <strong>no reading</strong>, never as healthy.
         </p>
+        {/*
+          ⚠️ THIS PARAGRAPH AND `DOCS_STATUS_TARGETS` ARE ONE THING (AGL-2496).
+
+          It names, in product copy, which subsystems are on the page and which
+          are not. The card set is an env var on a Vercel project, so nothing in
+          this repository can assert the two agree — a value that adds a card
+          this paragraph disclaims makes the page contradict itself in front of
+          the customer, and a value that drops one makes it under-report. It has
+          gone wrong in BOTH directions already. Change the value and this
+          paragraph together, or do not change either.
+
+          What is deliberately still off the page, and why, since "add the rest
+          of the health routes" is the obvious next idea and is wrong:
+
+          - `backups` LATCHES. It stays degraded until a bad restore point is
+            gone, by design (a missing backup is a condition, not an event) —
+            and it spent four and a half days red while backups were healthy
+            (AGL-1843). A customer page that reds for that is one customers
+            learn to scroll past.
+          - `rate-limits` reports that our own abuse controls fell back to a
+            weaker cap for a window. It fails SOFT, so nothing a customer can
+            see changed — and publishing the window is telling the internet
+            when we were easiest to attack.
+          - `signups` is a wave detector. Degraded means we suspect a signup
+            farm, which is neither an outage nor anyone else's business.
+          - `error-beacon` watches our own error reporting. If it is dead we
+            are blind; the customer's site is fine.
+        */}
         <p style={{ fontSize: '0.9rem', color: 'var(--ifm-color-emphasis-700)' }}>
-          It covers the surfaces you use. Internal subsystems — scheduled jobs,
-          backups, billing and abuse controls — are monitored separately and
-          continuously, and are not shown here; they can be degraded while
-          everything on this page is green, and that is on purpose, because
-          nothing on that list changes whether your site is serving.
+          It covers the surfaces you use, plus two systems behind them whose
+          failure you would eventually feel: billing and scheduled jobs. Neither
+          is part of serving — a published site keeps working while either is
+          degraded — so a red card there means invoices or background work are
+          affected, and nothing else on this page is. Some internal subsystems
+          are still not shown: backups, abuse controls and our own error
+          reporting are monitored separately and continuously, because a problem
+          in any of them changes nothing about whether your site is serving.
         </p>
         <p style={{ fontSize: '0.9rem', color: 'var(--ifm-color-emphasis-700)' }}>
           It does <strong>not</strong> show uptime history or an availability percentage.
@@ -223,6 +259,34 @@ export default function StatusPage(): ReactElement {
           enough to take out the whole platform could take this page with it. If it does
           not load at all, assume that is a real signal.
         </p>
+        {/*
+          The one paragraph written to be read somewhere other than here.
+
+          It exists because the sentence above admits this page can go down
+          with the platform and then left the reader with nowhere to go. The
+          URL is spelled out rather than hidden behind link text on purpose:
+          the moment it is useful is the moment this page will not render, so
+          it has to survive being screenshotted, cached, or read aloud.
+
+          `rel="noopener"` because it is an off-site link, and no `noindex`
+          reasoning applies — we WANT this one findable.
+        */}
+        {fallbackUrl ? (
+          <p
+            data-status-fallback={fallbackUrl}
+            style={{ fontSize: '0.9rem', color: 'var(--ifm-color-emphasis-700)' }}
+          >
+            <strong>If this page will not load, check the independent monitor:</strong>{' '}
+            <a href={fallbackUrl} rel="noopener" target="_blank">
+              {fallbackUrl}
+            </a>
+            . It runs outside our hosting and checks the same services from the
+            outside, so it stays up when we do not. It reports only up or down —
+            it is a second opinion on reachability, not a service level we have
+            committed to, and the uptime figure it shows is its own measurement
+            over however long it has been watching.
+          </p>
+        ) : null}
         <p style={{ fontSize: '0.9rem', color: 'var(--ifm-color-emphasis-700)' }}>
           If a service shows <strong>no reading</strong> while everything else on your
           network works, that is worth reporting to us — from your browser, a real

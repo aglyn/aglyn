@@ -124,8 +124,12 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
     () => mergeOrgBillingOverOrg(orgDoc as Record<string, unknown>, orgBilling),
     [orgDoc, orgBilling],
   )
-  const { permissions, can, loaded: permissionsLoaded } =
-    useOrgPermissions()
+  const {
+    permissions,
+    can,
+    loaded: permissionsLoaded,
+    errored: permissionsErrored,
+  } = useOrgPermissions()
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
   const { confirm } = useConfirmationContext()
@@ -790,7 +794,15 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
     [orgId, user],
   )
   useEffect(() => {
-    if (!orgId || !user || (permissionsLoaded && !can('billing.view'))) return
+    // `!permissionsLoaded ||`, never `permissionsLoaded && !can(…)`. Written
+    // the second way this fires DURING the permission read: `can()` fails open
+    // to an owner's map while `loaded` is false, so the guard could only refuse
+    // once the answer was already in — which is exactly when it is no longer
+    // needed. The route 403s a reader without `billing.view`, so this was not
+    // the leak; it is the same mistake one layer down, and asking a question
+    // you are not yet entitled to ask is how a fail-open on the other side
+    // becomes a real one.
+    if (!orgId || !user || !permissionsLoaded || !can('billing.view')) return
     void fetchInvoices()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId, user, permissionsLoaded])
@@ -807,13 +819,54 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
       }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-        {/* Permission guard (AGL-243): billing.view gates the page. */}
+        {/* Permission guard (AGL-243): billing.view gates the page.
+
+            THE HOLD IS PART OF THE GUARD. This read
+            `permissionsLoaded && !can('billing.view') ? refusal : …page…`,
+            which puts the loading flag in the REFUSAL branch — so while the
+            member read was in flight the refusal was false and the else-branch
+            painted the entire ledger. Zach saw it: "we see it flicker with real
+            data then show this message they shouldn't see it at all." The plan,
+            the subscription status, the negotiated price and the renewal date
+            were all on screen first, and a screenshot or a screen recording
+            keeps them. 200ms is not a mitigation.
+
+            `useOrgPermissions` fails OPEN while loading — `can()` answers as an
+            owner until `loaded` — so a pending read does not merely fail to
+            refuse, it actively grants. That is
+            `feedback_loading_default_answers_a_question` on the surface where
+            it costs the most.
+
+            The two flags are independent reads: `orgReady` is a listener that
+            is routinely served from the persistent cache, `permissionsLoaded`
+            is a `getDoc` on `orgs/{orgId}/members/{uid}` — plus a SECOND read
+            when the member carries a `roleId` — behind `firestoreOneShotRetry`,
+            so it can trail by seconds on a retry. Neither may be assumed from
+            the other; both must land before anything is claimed.
+
+            Holding rather than refusing early is deliberate in the other
+            direction too (AGL-2474): rendering the refusal on a pending read
+            would accuse every legitimate admin of having no access on every
+            navigation. Unknown is its own state and gets the spinner. */}
         {permissionsLoaded && !can('billing.view') ? (
           <Alert severity="warning">
             {'You do not have permission to view billing for this ' +
               'organization — ask an organization admin for access.'}
           </Alert>
-        ) : !orgReady ? (
+        ) : permissionsErrored ? (
+          // The member read FAILED (AGL-243 residual). Until this fix the
+          // `catch` published `loaded: true` over an untouched `ALL_GRANTED`,
+          // so this page took the else-branch below and painted the whole
+          // ledger to whoever was looking. The hold is now the default, and
+          // this branch exists so the hold is not a spinner that never stops:
+          // it states what is unknown WITHOUT accusing the reader of lacking
+          // access, because that is precisely what we failed to determine.
+          <Alert severity="error">
+            {"We couldn't confirm your access to billing for this " +
+              'organization. Reload the page — if this keeps happening, ' +
+              'contact support.'}
+          </Alert>
+        ) : !permissionsLoaded || !orgReady ? (
           // AGL-1422. Of every surface in the console this is the one that
           // must not guess: `plan` below is `org?.plan ?? 'free'` and
           // `resolveOrgEntitlements(undefined)` is the free tier, so the

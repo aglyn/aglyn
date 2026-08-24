@@ -75,9 +75,12 @@ function toAmount(cents: number): number {
  *
  * ## Tax is excluded, and no `tax` param is sent
  *
- * On a tenant storefront the merchant is seller of record, so tax collected is
- * money held for the state, not revenue. Every mature ecommerce integration
- * reports revenue ex-tax and so do we.
+ * Tax collected is money held for a taxing authority, not revenue, whoever
+ * holds it — and on a storefront that is often Aglyn rather than the merchant,
+ * since Terms §10.7 makes Aglyn a marketplace facilitator where applicable law
+ * gives it a collection obligation (AGL-1956). Either way it is not the
+ * merchant's sales revenue. Every mature ecommerce integration reports revenue
+ * ex-tax and so do we.
  *
  * No GA4 `tax` param either, following AGL-1639 for the same reason it applied
  * there: `value` already EXCLUDES tax, and GA4's `tax` is documented as a cost

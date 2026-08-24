@@ -46,11 +46,28 @@
  * that moves every time the thing it would identify changes. `v1` is an opaque
  * revision id we own.
  *
- * TO PUBLISH A CHANGE: add `constants/legal/v2/`, bump `LEGAL_DOCUMENT_VERSION`
- * and the hashes here. You cannot quietly skip that step — the spec in
- * `specs/legal-document-version.spec.ts` re-hashes the snapshots and fails if
- * the text under a version no longer matches the hash recorded for it, so `v1`
- * can never come to mean two different documents.
+ * TO PUBLISH A CHANGE, BEFORE LAUNCH: publish first, re-capture from the live
+ * page, and update the hashes here — LEAVING `LEGAL_DOCUMENT_VERSION` AT `v1`.
+ * Zach, 2026-08-24: no v2 exists until Aglyn has released. See the 2026-08-24
+ * entry in the changelog below for the full reasoning; the short form is that
+ * a version can only supersede a version somebody accepted, and nobody has.
+ * Archive the re-captured bytes over `Acceptance-Snapshots/v1/<key>.txt` in
+ * the same pass — the archive is resolved by the CURRENT version folder, so a
+ * moved hash and an unmoved archive is the one combination that breaks.
+ *
+ * AFTER LAUNCH: bump `LEGAL_DOCUMENT_VERSION`, archive the new capture under
+ * the new version folder in Drive, and update the hashes here together. You
+ * cannot quietly skip that step — `npm run check:legal-snapshots` fetches the
+ * archived text for whatever version this constant names, re-hashes it, and
+ * fails if it disagrees, so a version can never come to mean two different
+ * documents once one has been agreed to.
+ *
+ * ⚠️ Neither path adds `constants/legal/v2/`. The snapshot TEXT left this repo
+ * on 2026-08-20 and lives in the shared drive at
+ * `Platform Docs/Legal/Acceptance-Snapshots/<version>/`; only the hash stays
+ * here. And `specs/legal-document-version.spec.ts` no longer re-hashes
+ * anything — it asserts the manifest's SHAPE, offline. The content check is
+ * `check:legal-snapshots`, which needs Drive credentials and runs in CI.
  */
 
 import { LEGAL_URLS } from './shared'
@@ -224,6 +241,16 @@ export interface LegalDocumentManifestEntry {
  *     dangerous edit available here. Both are recorded as open counsel
  *     questions on AGL-1794, not as oversights.
  *
+ *     ⚠️ NO LONGER CURRENT GUIDANCE (AGL-1956, 2026-08-24) — left standing as
+ *     the record of what the 2026-08-18 publish decided, not as advice. The
+ *     question this paragraph declined to answer has since been answered:
+ *     Aglyn accepts marketplace-facilitator status, §10.3 changed, and the new
+ *     §10.7 states the allocation. That correction was folded into `v1` rather
+ *     than cut as a `v2` (see the 2026-08-24 entry below), so there is no
+ *     version boundary here to look for — the label did not move and the text
+ *     did. Do not read this paragraph as current guidance to leave §10.3
+ *     alone.
+ *
  *     Also in the same publish: §2's Services definition and §12.3 now say
  *     "the Aglyn marketplace" (AGL-975), because a fresh snapshot carrying the
  *     old adjective would red the naming guard on a file that has no
@@ -328,55 +355,103 @@ export interface LegalDocumentManifestEntry {
  * Publication-first as always: the bytes come from the PAGE, never from a
  * hand-written file.
  *
- * 2026-08-24 (AGL-1648): the DPA and the Subprocessors page changed again, and
- * again NO BUMP — for the AGL-1990 reason above, which is worth restating
- * because it is the question every legal change now has to answer first.
- * Neither page is in `LEGAL_URLS`; both live in `LEGAL_REFERENCE_URLS`, which
- * exists precisely to hold published-but-not-clickwrapped documents. So
- * `LEGAL_DOCUMENT_VERSION` stays `v1`, the two hashes below are untouched, and
- * NO re-acceptance interstitial fires. Verified rather than assumed:
- * `check:legal-snapshots` re-hashed the archived v1 terms.txt (36704 bytes) and
- * privacy.txt (15286 bytes) after publication and both still match.
+ * v1 CORRECTIONS published 2026-08-24 (AGL-1956), folded into the SAME v1
+ * snapshot rather than cut as a v2 — the same call as the v4 corrections
+ * above, resting on the same fact that collapsed the whole ladder back to `v1`
+ * on 2026-08-20: production holds ZERO acceptance records. Aglyn has not
+ * launched. There is no accepted v1 for a v2 to supersede, so a v2 would
+ * assert a version history that never happened, and the re-acceptance
+ * interstitial it forces would be shown for a document nobody has ever
+ * accepted. `v1` is not a claim that the text never changed — it is a claim
+ * that nothing has been agreed to yet. Zach, 2026-08-24: "Legal documents
+ * should all still be v1, we have not released yet so a v2 should not exist
+ * yet. Everything is being updated in the v1."
  *
- * What changed, both gdoc-first then published then confirmed live:
+ * ⚠️ THE HASHES BELOW MOVED WITHOUT THE LABEL, and that is what "updated in
+ * the v1" MEANS. `v1` must pin the text that is actually live. Holding the
+ * label while leaving the old hashes standing would be the worse bug of the
+ * two — v1 would name text that no longer exists, and the clickwrap record
+ * would break in the opposite direction, claiming reproducibility for bytes
+ * nobody can produce. terms is re-pinned at 39042 bytes / `0fba3a…`, captured
+ * from the live page after publication. The archived
+ * `Acceptance-Snapshots/v1/terms.txt` was replaced with the same bytes in the
+ * same pass, because `check:legal-snapshots` resolves the archive by the
+ * CURRENT version folder and would otherwise be comparing this hash against
+ * the superseded 36704-byte capture.
  *
- *   - Subprocessors: **Linear** (Linear Orbit, Inc.) added as a subprocessor.
- *     The console's shipped "Report an issue" dialog has been POSTing the
- *     reporter's email and uid, the org name and id, and the report free text
- *     to `api.linear.app` on `LINEAR_API_KEY` — live in production, on no
- *     published list. Four green checks missed it, each structurally: the
- *     dependency-egress register scans hosts found in PACKAGES ON DISK and this
- *     is a first-party `fetch`; `cookie-inventory` keys on cookies and Linear
- *     sets none; `assist-anthropic-subprocessor-gate.spec.ts` covers exactly one
- *     vendor; and `check:legal-drift` compares prose to prose. The row is a
- *     CORRECTION, not advance notice — the change-log entry says so.
+ * ⚑ THE FIRST GENUINE BUMP HAPPENS AFTER LAUNCH, and this entry is not a
+ * precedent for one before then. The moment a single real acceptance exists
+ * the reasoning inverts: from then on any change to a pinned document costs a
+ * bump, because there is finally a version somebody agreed to and a superseded
+ * snapshot that has to stay resolvable out of history. If you are reading this
+ * later and wondering why a substantive Terms change — a tax allocation
+ * between Aglyn and its customers, no less — carries no version bump: that is
+ * why, and the answer expires at the first acceptance.
  *
- *   - DPA 7.2 and the Subprocessors intro: the thirty-day advance-notice
- *     commitment for new subprocessors, and the objection window that ran with
- *     it, are DELETED. Zach's call, 2026-08-24, on the ground that this is v1
- *     with no real customers. He was warned first and the warning stands:
- *     ⚠️ GDPR Art. 28(2) contemplates the controller having an opportunity to
- *     OBJECT to a sub-processor change under a general written authorisation,
- *     and a DPA that offers none is a finding waiting to happen in any
- *     enterprise security review. A middle option — keep notice, drop the fixed
- *     period — was offered and explicitly rejected. Do not quietly restore it;
- *     if it comes back it should come back as a decision, not as a tidy-up.
+ * WHAT THE 2026-08-24 PUBLISH CHANGED: Aglyn ACCEPTS marketplace-facilitator
+ * status for US sales tax (Zach, 2026-08-24), and the Terms are aligned to it.
+ * This is the decision the v5 note above recorded as deliberately unmade — the
+ * ⚠️ paragraph saying §10.3 was "UNTOUCHED for the same reason" no longer
+ * states current policy: changing it was correctly identified there as "a tax
+ * allocation between Aglyn and its customers", and that allocation has now
+ * been made.
  *
- *   - DPA 13.2(b), a CONSEQUENTIAL edit and not a discretionary one: it
- *     completed SCC Clause 9 Option 2 by POINTING at Section 7 for "the notice
- *     period and objection mechanism". With Section 7's period gone that
- *     sentence asserted a period the document no longer contains anywhere, so
- *     it now names the Subprocessors page as the then-current list and stops
- *     there. ⚠️ The practical effect is that Clause 9(a) Option 2's mandatory
- *     time-period blank is UNSPECIFIED again — the same defect AGL-1648 recorded
- *     as "the sharpest in the set" when it was an empty `[Specify time period]`
- *     on 08-14. It is now empty by decision rather than by oversight. That is a
- *     better failure mode and it is still the failure mode.
+ *   - NEW §10.7 "Sales Tax": Aglyn acts as a marketplace facilitator (a
+ *     marketplace provider, in Texas's wording) and, WHERE IT HAS AN
+ *     OBLIGATION UNDER THAT LAW, calculates, collects and remits sales, use
+ *     and similar transaction taxes; tax is added on top of the price, never
+ *     transferred to the connected account, and the merchant's share and the
+ *     platform fee are both computed on the pre-tax price. The scope sentence
+ *     is load-bearing and deliberately narrow — the clause creates no
+ *     obligation in a jurisdiction or for a transaction where Aglyn is not a
+ *     facilitator with a collection obligation. It does NOT promise universal
+ *     collection, because Aglyn cannot deliver that.
+ *   - §10.3 no longer says the merchant owes "the collection and remittance of
+ *     all applicable taxes"; it routes to §10.7. That sentence was the outlier:
+ *     MPA §8.1/§8.3 have said Aglyn is merchant of record and remits the tax on
+ *     the identical destination-charge shape since 2026-08-14, so the Terms
+ *     were contradicting the publisher agreement, and — after the AGL-1794
+ *     rewrite — contradicting §10.2 two paragraphs earlier.
+ *   - THE ECHOES MOVED WITH IT, which is most of the work: §4.3 dropped "taxes"
+ *     from the merchant's solely-responsible list; §4.5 was conflating tax on
+ *     the customer's PURCHASE OF AGLYN (still theirs) with tax on their OWN
+ *     SALES (now §10.7's) in one sentence and now splits them; §10.5's
+ *     no-liability sentence carves out Aglyn's own §10.7 obligation. The
+ *     Acceptable Use Policy's parallel bullet moved in the same publish — it is
+ *     not hash-pinned, so it costs no bump and has no hash here.
+ *   - §18.7's limitation period goes from one (1) year to two (2) years. A
+ *     one-year contractual deadline contradicted §19.12, which promises no
+ *     Texas DTPA right is waived while the DTPA carries a two-year statute
+ *     (Tex. Bus. & Com. Code §17.565). The clause now also yields to any longer
+ *     non-shortenable statutory period and says outright that it does not
+ *     shorten a consumer-protection limitations period.
+ *   - §18.2 and §18.6 venue: Williamson County -> TRAVIS County (Zach,
+ *     2026-08-24). Williamson entered from the former Jarrell residential
+ *     address; every published Aglyn address is 5900 Balcones Dr STE 100,
+ *     Austin, TX 78731, which is Travis. AGL-1917's checklist line asking to
+ *     "confirm the Williamson County venue is your preference" is ANSWERED: it
+ *     is not. The same correction landed in MPA §13.3 and the internal
+ *     Legal/README index, so no straggler contradicts the corrected clause.
  *
- * The `/legal` index cards carry their own copy of each document's date and are
- * a THIRD place that goes stale — `check:legal-index-dates` went red on both
- * cards and was fixed by republishing the index screen. Publishing a legal
- * document is three edits, not one.
+ * §18 is otherwise UNTOUCHED and must stay that way: AAA Consumer Clause
+ * Registry registration is DEFERRED on cost (Zach, 2026-08-24), and the
+ * decision was explicitly to keep naming AAA and to keep both the consumer
+ * arbitration clause and the class-action waiver. What changed in §18 are
+ * defects that are wrong on their own merits, not the structure.
+ *
+ * ⚠️ NO DTPA WAIVER EXISTS ANYWHERE and none was added. AGL-1917 flags a
+ * §17.42 waiver as possibly unenforceable against clickwrap consumers; that
+ * waiver was already REMOVED in the v4 pass (AGL-1565), and §19.12 today
+ * affirmatively disclaims any such waiver. The checklist item is stale, not
+ * outstanding — verified by grepping all nine published legal documents.
+ *
+ * Re-acceptance: NONE is forced, and none is owed. The console still answers
+ * "We have no record of your acceptance on this account" for every account it
+ * is asked about — the shape of a pre-release product with an empty clickwrap
+ * collection — so the interstitial a bump would raise has nobody to raise
+ * itself for. Privacy is UNCHANGED by this pass and served as the capture
+ * control, reproducing 15286 bytes / 42ea82… byte-for-byte before this set was
+ * taken.
  *
  * ## ONE snapshot in the tree, and why that is enough
  *
@@ -392,6 +467,12 @@ export interface LegalDocumentManifestEntry {
  * real acceptance exists this stops being true — from then on a bump is
  * required for any change, and the superseded snapshot's value is that the
  * recorded `sha256` can still be resolved out of history.
+ *
+ * That is why the changelog above runs v1…v6 and then reads `v1` again for
+ * 2026-08-24: the numbered entries are the pre-collapse ladder, kept as the
+ * publication history of the TEXT, while the live label has been `v1` since
+ * 2026-08-20 and stays `v1` until launch. A dated entry with no new number is
+ * the collapse working, not a missing bump.
  *
  * ## What the .txt is FOR, since it is not for reading
  *
@@ -431,8 +512,8 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'terms',
     url: LEGAL_URLS.TERMS,
     sha256:
-      'd3329d47541b1ad862d2254d3b2788490136c6d97639c9106e4af9c62b3f5bad',
-    bytes: 36704,
+      '0fba3a5fbc9305bf7501b0c1774c743588acb08c363f80509480bd824f38b795',
+    bytes: 39042,
   },
   {
     key: 'privacy',

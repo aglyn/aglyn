@@ -161,7 +161,12 @@ describe('backupsHealth', () => {
   it('fails when the NEWEST backup is unusable — the AGL-1490 gap', () => {
     // The 2026-08-02 backup failed silently and sat unnoticed for 11 days.
     // What made it an incident is that it was the NEWEST thing there was:
-    // nothing usable had been produced since. That must still page someone.
+    // nothing usable had been produced since. That must still page someone —
+    // and it does, on FRESHNESS, which is the honest reason. (The code moved
+    // from `backup-failed` to `backup-stale` in the second AGL-1843 pass: the
+    // 2026-08-02 backup is READY today, so "that backup is broken" was never
+    // a true statement about it. "There is no restore point inside the age
+    // budget" was, and still is.)
     const check = backupsHealth(
       [
         { state: 'NOT_AVAILABLE', snapshotTime: days(11) },
@@ -171,8 +176,30 @@ describe('backupsHealth', () => {
       NOW,
     )
     expect(check.ok).toBe(false)
-    expect(check.code).toBe('backup-failed')
+    expect(check.code).toBe('backup-stale')
     expect(check.states).toEqual({ NOT_AVAILABLE: 1, READY: 1 })
+  })
+
+  it('does NOT fail when the newest run flipped NOT_AVAILABLE behind a fresh READY (AGL-1843)', () => {
+    // The live false red this pass removes. `NOT_AVAILABLE` is documented as
+    // "not available AT THIS MOMENT" and was measured flipping in both
+    // directions: eb4d21e3 went READY (08-13) → NOT_AVAILABLE (08-17) →
+    // READY (08-24). So the moment Sunday's backup enters one of those
+    // windows while last week's is still READY, the old rule ("a non-READY
+    // backup newer than the newest READY one is a failure") fires 503
+    // `backup-failed` — with a two-day-old restorable backup sitting right
+    // there. On a five-minute email monitor that is ~288 mails a day.
+    const check = backupsHealth(
+      [
+        { state: 'NOT_AVAILABLE', snapshotTime: days(0) },
+        { state: 'READY', snapshotTime: days(2) },
+      ],
+      7,
+      NOW,
+    )
+    expect(check.ok).toBe(true)
+    expect(check.code).toBeUndefined()
+    expect(check.newestReadyAgeDays).toBe(2)
   })
 
   it('tolerates aged-out NOT_AVAILABLE backups behind a fresh READY (AGL-1843)', () => {
@@ -199,11 +226,12 @@ describe('backupsHealth', () => {
   })
 
   it('refuses to date an undateable non-READY backup in its own favour', () => {
-    // No `snapshotTime` means it cannot be shown to be older than the newest
-    // READY one, and "assume it aged out" is the assumption that hides a
-    // genuinely broken run.
+    // No `snapshotTime` means it cannot be shown to be older than anything,
+    // and "assume it aged out" is the assumption that hides a genuinely
+    // broken run. Only reachable once there is no fresh READY backup — with
+    // one, recovery is possible and no other row can make that false.
     const check = backupsHealth(
-      [{ state: 'NOT_AVAILABLE' }, { state: 'READY', snapshotTime: days(2) }],
+      [{ state: 'NOT_AVAILABLE' }, { state: 'READY', snapshotTime: days(12) }],
       7,
       NOW,
     )
@@ -218,7 +246,7 @@ describe('backupsHealth', () => {
       NOW,
     )
     expect(check.ok).toBe(false)
-    expect(check.code).toBe('backup-failed')
+    expect(check.code).toBe('no-ready-backup')
   })
 
   it('fails when the newest READY backup exceeds the age budget', () => {
@@ -232,12 +260,121 @@ describe('backupsHealth', () => {
     expect(check.newestReadyAgeDays).toBe(MAX_BACKUP_AGE_DAYS + 1)
   })
 
-  it('fails when no backup is READY at all — including an empty list', () => {
-    // The schedule exists, so "no backups" is a failure, not a fresh start.
-    expect(backupsHealth([], 7, NOW).code).toBe('no-ready-backup')
-    expect(
-      backupsHealth([{ state: 'CREATING', snapshotTime: days(0) }], 7, NOW).code,
-    ).toBe('no-ready-backup')
+  it('fails on an empty listing — the schedule exists, so nothing is a failure', () => {
+    const check = backupsHealth([], 7, NOW)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('no-ready-backup')
+    expect(check.determinate).toBeUndefined()
+  })
+
+  it('is INDETERMINATE while the only run so far is still creating', () => {
+    // "No run has completed yet" is not "the backup failed". Bounded: the
+    // moment that CREATING backup passes the age budget without ever going
+    // READY, the freshness rules below take over and this goes red.
+    const check = backupsHealth([{ state: 'CREATING', snapshotTime: days(0) }], 7, NOW)
+    expect(check.ok).toBe(true)
+    expect(check.determinate).toBe(false)
+    expect(check.code).toBe('backups-not-ready-yet')
+  })
+
+  it('is INDETERMINATE when every recent backup is inside a NOT_AVAILABLE window', () => {
+    // Measured, not hypothesised: 3b5238df and eb4d21e3 were BOTH
+    // NOT_AVAILABLE on 2026-08-17 and are BOTH READY on 2026-08-24. The
+    // flips are independent per backup, so all of them landing in a window
+    // at once is reachable — and it is a maintenance window, not a failure.
+    const check = backupsHealth(
+      [
+        { state: 'NOT_AVAILABLE', snapshotTime: days(1) },
+        { state: 'NOT_AVAILABLE', snapshotTime: days(7) },
+      ],
+      7,
+      NOW,
+    )
+    expect(check.ok).toBe(true)
+    expect(check.determinate).toBe(false)
+    expect(check.code).toBe('backups-not-ready-yet')
+    expect(check.newestReadyAgeDays).toBeNull()
+  })
+
+  it('goes RED once the NOT_AVAILABLE window outlasts the age budget', () => {
+    // The bound on the tolerance above. Nothing usable for nine days is a
+    // real loss of recovery capability whatever the states say.
+    const check = backupsHealth(
+      [{ state: 'NOT_AVAILABLE', snapshotTime: days(MAX_BACKUP_AGE_DAYS + 1) }],
+      7,
+      NOW,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('no-ready-backup')
+  })
+
+  it('treats a MISSING state as in-flight, not as a failure', () => {
+    // proto3 JSON omits a default-valued field, so a backup in
+    // `STATE_UNSPECIFIED` arrives with no `state` key at all. With
+    // strictNullChecks off that absence compiles clean straight into a red.
+    const check = backupsHealth([{ snapshotTime: days(0) }], 7, NOW)
+    expect(check.ok).toBe(true)
+    expect(check.code).toBe('backups-not-ready-yet')
+    expect(check.states).toEqual({ STATE_UNSPECIFIED: 1 })
+  })
+
+  it('a state-less, date-less row cannot manufacture `backup-failed`', () => {
+    // proto3 JSON omits BOTH default-valued fields, so a row Google has
+    // created but not yet populated arrives as `{}`. `strictNullChecks` is
+    // off repo-wide: those two `undefined`s sail through every comparison and
+    // fold into the loudest verdict this function has. What is genuinely
+    // wrong here is the STALE READY backup beside it, and that is what has to
+    // be reported — the empty row is a run in flight, not a failed one.
+    const check = backupsHealth(
+      [{}, { state: 'READY', snapshotTime: days(MAX_BACKUP_AGE_DAYS + 4) }],
+      7,
+      NOW,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('backup-stale')
+    expect(check.states).toEqual({ STATE_UNSPECIFIED: 1, READY: 1 })
+  })
+
+  it('is INDETERMINATE when the listing could not be read at all', () => {
+    // An upstream that errored says nothing about the backups. Reporting it
+    // as `backup-failed` is the AGL-1843 defect shape.
+    const check = backupsHealth(null, 7, NOW, { code: 'http-503' })
+    expect(check.ok).toBe(true)
+    expect(check.determinate).toBe(false)
+    expect(check.code).toBe('http-503')
+    expect(check.states).toEqual({})
+    expect(check.newestReadyAgeDays).toBeNull()
+  })
+
+  it('is INDETERMINATE, not red, when the listing came back PARTIAL', () => {
+    // `ListBackupsResponse.unreachable`: the API returns what it could see
+    // and names what it could not. "We saw no fresh READY backup" is not a
+    // finding when we did not see everything.
+    const check = backupsHealth([], 7, NOW, {
+      unreachable: ['projects/p/locations/nam5'],
+    })
+    expect(check.ok).toBe(true)
+    expect(check.determinate).toBe(false)
+    expect(check.code).toBe('backups-partial')
+  })
+
+  it('still trusts POSITIVE evidence under a partial listing', () => {
+    // Unreachable locations can only hide backups, never invent the fresh
+    // READY one we can already see — so this stays green, not unknown.
+    const check = backupsHealth([{ state: 'READY', snapshotTime: days(1) }], 7, NOW, {
+      unreachable: ['projects/p/locations/nam5'],
+    })
+    expect(check.ok).toBe(true)
+    expect(check.code).toBeUndefined()
+    expect(check.determinate).toBeUndefined()
+  })
+
+  it('a partial listing cannot mask an undateable broken backup', () => {
+    const check = backupsHealth([{ state: 'NOT_AVAILABLE' }], 7, NOW, {
+      unreachable: ['projects/p/locations/nam5'],
+    })
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('backup-failed')
   })
 
   it('tolerates CREATING beside a fresh READY — the Sunday window', () => {

@@ -47,12 +47,23 @@ while producing a backup that was `NOT_AVAILABLE`, and nothing noticed for eleve
 It covers two independent things:
 
 - **Google-managed backups**, shown as a state histogram (`1 READY · 2 NOT_AVAILABLE`).
-  Repeated `NOT_AVAILABLE` is the managed backups failing again.
+  `NOT_AVAILABLE` is **not** a failure — the API defines it as "not available at this
+  moment", and backups have been measured flipping out of it and back into `READY`
+  days later. Read the **age of the newest READY backup** instead; that is the number
+  the verdict is built on.
 - **GCS exports**, a portable weekly snapshot whose retention Aglyn controls. A stale
   export age means the weekly export job stopped running.
 
 Unlike the other probes, this one stays red until the situation is actually fixed — a
 missing restore point is a *condition*, not an event.
+
+**A check can also answer "I don't know."** When a check carries `determinate: false`
+the probe could not establish anything — the upstream errored, the listing came back
+partial, or no run has completed yet. That answers 200 on purpose: reporting an
+unreadable answer as a failed backup is what kept this endpoint at 503 for four and a
+half days with healthy backups behind it. It is bounded — nothing recent inside the
+8-day budget still goes red — but if you see `determinate: false` persisting across
+several probes, the check has stopped watching and that is worth chasing.
 
 ### Rate limiters
 
