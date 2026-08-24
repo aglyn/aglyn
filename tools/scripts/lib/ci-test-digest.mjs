@@ -284,9 +284,23 @@ export function digestLog(text, opts = {}) {
     // Anchored to a FAIL token at a word boundary followed by a path, so
     // prose that merely contains the word (`FAILURES`, `should FAIL when …`)
     // does not qualify.
-    const fail = /(?:^|\s)FAIL(?:\s+\[[^\]]*\])?\s+(\S+)/.exec(line)
-    if (fail && /[/\\]|\.[cm]?[jt]sx?$/.test(fail[1])) {
-      pushUnique(failedSuites, fail[1])
+    // TWO candidate tokens, because nx prints the same failure two ways. Its
+    // STREAMED form puts the project between the marker and the path —
+    // ` FAIL   plugins-data  libs/plugins/data/…/x.spec.tsx` — while the form
+    // it REPLAYS for a failed task omits it: ` FAIL  src/…/x.spec.tsx`. Only
+    // the first token was read, and a project name has neither a slash nor an
+    // extension, so every streamed failure was dropped here. That is half of
+    // why run 32720428088 named three failed projects and this digest
+    // reported one suite: `plugins-data` and `besigner-feature-designer` were
+    // printed ONLY in the streamed form (AGL-1617).
+    const fail = /(?:^|\s)FAIL(?:\s+\[[^\]]*\])?\s+(\S+)(?:\s+(\S+))?/.exec(
+      line,
+    )
+    if (fail) {
+      const suite = [fail[1], fail[2]].find(
+        (token) => token && /[/\\]|\.[cm]?[jt]sx?$/.test(token),
+      )
+      if (suite) pushUnique(failedSuites, suite)
     }
 
     // --- failed test names ------------------------------------------------

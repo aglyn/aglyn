@@ -1,0 +1,324 @@
+# Decision Log
+
+The record of **pricing, packaging and policy decisions that bind code** — who
+decided, when, and what evidence proves it. Append-only, newest first.
+
+It exists because the change-control rule had nothing behind it. The rule in
+`00-Pricing-Source-of-Truth` says a price or entitlement change must move
+*together* across six places, the last being the Pricing Decision Log — and for
+nine days nothing enforced that, so the whole retention/packaging arc
+(AGL-1859 / AGL-1862 / AGL-1863) landed with no entry naming any of it
+(AGL-1908). Worse, on 2026-08-24 the unenforced rule started **blocking real
+work**: an agent found a live entitlement leak and declined to close it partly
+because "AGL-1908's change-control rule requires publication legs I cannot do",
+with no artifact anywhere saying what had already been decided.
+
+---
+
+## Repo or Drive — which half is which
+
+Two documents, one decision. Get this backwards and you will either edit the
+wrong copy or trust a green check that never looked at anything.
+
+| | This file (`docs/DECISION_LOG.md`) | `Platform Docs/Pricing & Packaging/05-Pricing-Decision-Log` |
+|---|---|---|
+| Lives in | the **repo** (public) | **Google Drive**, shared drive |
+| Holds | the index: decision, date, decider, evidence, scope | the full record: reasoning, arithmetic, alternatives considered, blast radius |
+| Authority for a **pricing** decision | ❌ — points at Drive | ✅ **source of truth**, gdoc-first |
+| Read by CI | ✅ `npm run check:decision-log` | ❌ — CI has no Drive credentials |
+| Covered by `check:no-tax-identifiers` | ✅ | ❌ — it scans **tracked git files** and nothing else |
+
+**Consequences worth stating plainly:**
+
+* **Drive is outside every repo guard.** `check:no-tax-identifiers`,
+  `check:contact-addresses`, `check:brand-literals` — all of them sweep
+  `git ls-files`. Nothing on the shared drive is scanned by any of them.
+* **This repo is PUBLIC.** No taxpayer numbers, account identifiers, keys or
+  personal data in a file **or in a commit message**. The guard reads files
+  only; a commit message had to be rewritten on 2026-08-24 before it was
+  pushed. Sensitive identifiers live in Linear or Drive, never here.
+* **gdoc-first** for anything that is also published: write the Drive document
+  and the published page first, then bring the repo into line. Never the
+  reverse. Same rule the legal documents run on
+  (`apps/console/constants/legal-documents.ts`).
+* Anything scoped `pricing` in this file **must** exist as a same-dated entry in
+  the Drive log; `check:decision-log` asserts it whenever Drive is mounted, and
+  says so out loud when it is not.
+
+---
+
+## The change-control rule, and what actually enforces it
+
+Verbatim from `00-Pricing-Source-of-Truth` → "Change-control rule":
+
+> Any price or entitlement change must move **together** across:
+> `PLAN_PRICING` / `PLAN_ENTITLEMENTS` (code) → `setup-stripe.mjs` re-run
+> (Stripe live + test) → Figma "Pricing · Demo · Sales" → `aglyn.com/pricing`
+> **(hand-authored — must be edited)** → this doc + the Decision Log.
+
+| Leg | Enforced by | Notes |
+|---|---|---|
+| code ↔ the locked pin ↔ Stripe live | `npm run check:pricing-drift` | the `LOCKED` pin is a second, deliberate copy |
+| the generated `/pricing` compare table | `npm run check:pricing-tables` | plus `apps/console/specs/published-pricing-table-parity.spec.ts` |
+| **a decision is on record** | **`npm run check:decision-log`** | this file; the leg AGL-1908 was filed about |
+| `setup-stripe.mjs` | ⛔ **nothing** | a hand-maintained fourth copy of the price set |
+| Figma "Pricing · Demo · Sales" | ⛔ **nothing** | frame `92:107` is known stale — see 2026-08-18 below |
+| `aglyn.com/pricing` | ⛔ **nothing automatic** | hand-authored besigner content on the `aglyn-marketing` host; AGL-1885's pass runs against the **live page after** a republish |
+
+`check:decision-log` compares the **parsed values** of `PLAN_PRICING`,
+`PLAN_ENTITLEMENTS`, both metered rate tables, `METERED_MARKUP` and the two
+add-on constants between `origin/production` and the working tree. If any of
+them moved and this file did not move with them, it exits 1 and names the keys.
+Comments and refactors move freely — a path-level guard would have demanded a
+pricing decision for `d393d34a9`, a docblock, and a guard people route around is
+worse than none.
+
+**To add an entry:** copy the shape below. All three fields are required and the
+guard refuses an entry missing any of them — *"Decided by"* is what separates a
+decision from an opinion, *"Evidence"* is what lets the next reader check it
+rather than believe it, and a log that records a **guess** as a decision is
+worse than no log.
+
+```md
+## YYYY-MM-DD — one line saying what was decided
+
+- **Decided by:** who, when, and how they were asked
+- **Scope:** pricing | packaging | policy | legal | tax | commerce (comma-separated)
+- **Evidence:** commit SHAs, file paths, Linear ids
+```
+
+⚠️ Recording a decision here **is not** deciding one. Nothing in this file may
+introduce a price or an entitlement that Zach has not chosen.
+
+---
+
+## 2026-08-24 — Aglyn **is** a marketplace facilitator; commerce and plugin selling ship Sept 1
+
+- **Decided by:** Zach, 2026-08-24, asked directly and answered *"we are a marketplace facilitator, do whatever you need but yes it is shipping sept 1, including the marketplace selling features for plugins and commerce etc."* He was offered gating storefront payments off for the beta and **rejected** it; do not re-propose.
+- **Scope:** packaging, tax, commerce
+- **Evidence:** `f6131ace9`, `f7e5465f5`, `76cd31488` (AGL-1956); `npm run check:facilitator-charge-shape`; `CommerceModel.destinationChargeParams()` in `libs/plugins/commerce/src/lib/model/commerce-connect-transfer.ts`; Texas registration under AGL-1811
+
+Every buyer-facing charge is a **destination charge** on Aglyn's own platform
+account — `destinationChargeParams()` emits
+`payment_intent_data[transfer_data][destination]`, and `Stripe-Account` /
+`on_behalf_of` appear **nowhere in executable code**. Funds settle into Aglyn's
+balance first and transfer out.
+
+⚠️ **So Aglyn is the merchant of record, not the tenant.** Aglyn eats chargebacks
+from its own balance and the shopper sees `AGLYN` on the statement. The design
+that would have made the *merchant* the merchant of record is **direct** charges
+(a `Stripe-Account` header, the Shopify shape) and that is not what was built.
+Anyone reading "merchant of record = the merchant" into this decision has it
+backwards, and every tax consequence follows from the real shape: facilitated
+tenant sales count toward **Aglyn's own** economic-nexus thresholds.
+
+⛔ The Texas taxpayer number is recorded in Linear. It must never appear in this
+repo, in a file or in a commit message.
+
+## 2026-08-24 — `LEGAL_DOCUMENT_VERSION` stays `v1` until launch; the hashes still move
+
+- **Decided by:** Zach, 2026-08-24, verbatim: *"Legal documents should all still be v1, we have not released yet so a v2 should not exist yet. Everything is being updated in the v1."*
+- **Scope:** legal, change-control
+- **Evidence:** `apps/console/constants/legal-documents.ts:75` and its docblock; `npm run check:legal-snapshots`
+
+Pre-release with zero accepted acceptances, a `v2` would assert a version
+history that never happened. Substantive changes fold **into** v1.
+
+**The half that is not suspended:** the clickwrap hashes are still re-pinned
+whenever the published text changes, and the re-captured bytes are archived over
+`Acceptance-Snapshots/v1/<key>.txt` on Drive in the same pass. "Stay on v1" moves
+the *label*, not the pin — a stale pin breaks clickwrap in the worse direction.
+Re-acceptance itself stays.
+
+⛔ Do not edit a legal document or a legal page from this file's authority.
+Gdoc-first, and several are mid-publication.
+
+## 2026-08-24 — Advertising consent is narrowed back to explicit opt-in
+
+- **Decided by:** conformance to the **published** Privacy/Cookie policy, which is the authority — not a new product decision. Implemented under AGL-1649.
+- **Scope:** policy, consent
+- **Evidence:** `b42c1b071` (*"advertising needs an explicit yes again, as the policy says"*), preceded by `ca324b4e6`
+
+Consent had been widened so advertising rode along with a broader grant; the
+published policy promises an explicit yes. Recorded here so the next reader who
+finds the switch narrower than some tag documentation assumes has an answer that
+is not "someone tightened it."
+
+## 2026-08-24 — Under a read-only lockdown the analytics counters keep counting; host automations do not fire
+
+- **Decided by:** Claude, recorded in-repo at the time — **not** a Zach decision. Stands until contradicted.
+- **Scope:** packaging, billing
+- **Evidence:** `87dd09687` (AGL-1627); `apps/docs/docs/staff-console/lockdown.md` → "The analytics beacon, which a read-only lock splits in half"
+
+It belongs in a *packaging* log rather than a security one because those same
+counters are the meter. `/api/billing/report-usage` reads the same
+`hosts/{id}/analytics/{day}` documents that decide the **free plan's bandwidth
+band** and arm the **abuse ceiling**. A lock that froze them would under-bill a
+site that is still being served and quietly disarm a protection. The write half
+— firing host automations from inside a route named "analytics" — is exactly
+what a read-only lock is for, and it stops.
+
+## 2026-08-23 — The site-member / lead abuse ceiling is platform-wide, **not** a plan dimension
+
+- **Decided by:** Zach, 2026-08-23, chose "flat abuse ceiling, generous" from four options and explicitly declined alert-only (*"detection without protection"*)
+- **Scope:** packaging
+- **Evidence:** `aa29892e5`, `e32a93ea1` (AGL-1529); `libs/aglyn/src/lib/app-utils/visitor-record-ceiling.ts`
+
+`hosts/{hostId}/siteMembers` and `hosts/{hostId}/leads` are written by anonymous
+visitors on a public site and were bounded by nothing — the per-(host, IP) rate
+limiter fails soft and bounds the **rate**, not the total.
+
+⛔ **Do not add it to `PLAN_ENTITLEMENTS`.** Zach's reasoning has to survive into
+the code: a platform-wide ceiling keeps *"unlimited member accounts on every
+plan"* literally true, **because an abuse control is not something we sell**.
+AGL-889's "unlimited on every plan" is a pricing promise and `/pricing` must stay
+true under the Sept-1 lock. Same instrument already approved twice — AGL-1655
+(forms) and AGL-2155 (bandwidth).
+
+## 2026-08-21 — Agency's contacts overage rate is removed; its band is unlimited
+
+- **Decided by:** Zach, 2026-08-21, asked with options and answered *"Unlimited — drop the rate"*
+- **Scope:** pricing
+- **Evidence:** Drive Pricing Decision Log, entry `2026-08-21`
+
+Not an exception to the lock: an unlimited band has no "over", so the advertised
+rate was unreachable and nobody was ever charged it. A false advertisement, not
+a mis-charge. Full arithmetic in the Drive entry.
+
+## 2026-08-20 — Lodging and service tax become merchant-settable, default off
+
+- **Decided by:** Zach, 2026-08-20 (AGL-1969, AGL-2028)
+- **Scope:** pricing, tax
+- **Evidence:** Drive Pricing Decision Log, entry `2026-08-20`
+
+The merchant sets the rate; Aglyn computes, records and stamps it, and the copy
+says plainly that determining what they owe is theirs. Ships the mechanism
+without Aglyn taking a tax position. **Default-off means no existing merchant's
+charge changes**, so the Sept-1 lock holds.
+
+## 2026-08-19 — The margin lock is lifted for exactly three leaks, and for nothing else
+
+- **Decided by:** Zach, 2026-08-19, verbatim: *"make a minimum price floor that does not cause us to lose money. same thing with 2152 make sure we are not losing money"* — he selected **all three** options
+- **Scope:** pricing
+- **Evidence:** AGL-2152, AGL-2111, AGL-2343; Drive Pricing Decision Log, three entries dated `2026-08-19`
+
+The three: the physical-goods transaction fee (0% on a destination charge is a
+loss, not a break-even), cash/folio POS tenders recording no fee (the fee
+attaches to the **sale**, not the tender), and the absent marketplace listing
+minimum (the fixed 30¢ component dominates a small order).
+
+⚠️ This is a **narrow, explicit exception**. The standard Zach set is *"not
+losing money"* — derived from break-even arithmetic, not a round number. The
+rest of the lock holds: visibility may change, **the charged price may not**.
+
+## 2026-08-19 — The free tier hard-caps at three workspaces per person, with a staff-console control
+
+- **Decided by:** Zach, 2026-08-19, verbatim: *"3 but provide a control in the staff console."* Serves his top-line requirement that *"the free/hobby tier does hard cap so it always actually stays free."*
+- **Scope:** packaging
+- **Evidence:** `81c432500` (AGL-2265)
+
+The limit is **stored and staff-editable**, not a constant behind a redeploy.
+Two traps this area has already hit: a create-time quota can be laundered (lower
+the count, create, restore), and a loading default that answers as a real value.
+
+## 2026-08-18 — The Sept-1 launch price set is LOCKED
+
+- **Decided by:** Zach, 2026-08-18, asked with options and answered *"Lock all of it as listed"* — the partial-lock and hold-the-republish alternatives were offered and declined
+- **Scope:** pricing
+- **Evidence:** Drive Pricing Decision Log, entry `2026-08-18`; the `LOCKED` pin in `tools/scripts/check-pricing-drift.mjs`; `apps/console/specs/published-pricing-table-parity.spec.ts`; AGL-1885
+
+Figures live in the Drive entry, in the `LOCKED` pin, and on `/pricing`. They are
+deliberately **not** restated here — a second copy of a price is the copy that
+goes stale, which is why `check:pricing-drift` refuses one in `apps/docs` too.
+
+Three riders that keep being rediscovered as if they were bugs:
+
+1. **The boundary.** Tier *visibility* may change and how prominently a tier is
+   shown may change. **What is charged may not.** That is the line the retention
+   work (AGL-1859) runs inside.
+2. **`/pricing` publishes TWO different per-GB-month prices, and both are
+   correct.** `storagePerGbMonth` (metered infra pass-through,
+   `apps/console/utils/usage-metering.ts`) and `extraDataGbMonthlyUsd` (the
+   dataset storage add-on retail rate, `plan-entitlements.ts`) are different
+   quantities and are indistinguishable from the page alone. ⛔ Neither is a
+   drift to "fix". Confirm which constant you are holding before editing any
+   per-GB figure anywhere.
+3. **Figma frame `92:107` is the stale artifact, not the site.** It still carries
+   the pre-correction metered rates, and its form-submission figure is **off by
+   10×**. ⛔ The live page is right. An audit that treats Figma as ground truth
+   and "corrects" the site would move a locked customer-facing price by an order
+   of magnitude. Diff **layout** against Figma, never prices.
+
+Also standing: `METERED_UNIT_RATES_USD` and `ORG_COGS_UNIT_RATES_USD` carry the
+same three figures and must never drift apart; no grandfathering or price-lock
+language may appear anywhere (ToS §§4.7 / 5.5 / 6.5); and any winback coupon is
+`duration: once` or a short `repeating`, **never `forever`** (the AGL-1735
+lesson, enforced by `assertBoundedWinbackCoupon`).
+
+---
+
+# Open decisions
+
+Not decided. Listed here because each one is **blocked on the log existing** —
+they are packaging or disclosure calls whose change-control legs could not be
+described until there was somewhere to describe them. ⚠️ None of these may be
+resolved by an agent; each needs Zach.
+
+### Entry scheduling: is it `scheduledPublishing`, or deliberately free?
+
+**Screen and layout scheduling is entitlement-gated. Collection-entry scheduling
+is not — on any path.** Verified 2026-08-24 (AGL-1859), and the read-time flip
+re-verified independently for this entry:
+`libs/tenant/runtime/src/lib/get-collection-content.ts:250` updates a due entry
+to `status: 'published'` at render time, and the file contains no entitlement
+check at all — it never loads the org, so it structurally cannot make one. The
+console write (`content/page.tsx`) is a client-direct `updateDoc`, the Firestore
+rules are role-only, and bundle import restores `publishAt` through a second,
+separately-gated entry point (`app/api/_lib/site-export.ts`).
+
+So a free org can schedule blog posts today and they will publish, while
+`scheduledPublishing` is a paid entitlement. Closing it is an **entitlement**
+change — this log's change-control rule applies in full — and it revokes a live
+capability from orgs that may be relying on it, on the eve of a public beta.
+
+⚠️ Trap for whoever closes it: `resolveOrgEntitlements(null)` resolves to **free**
+defaults, so a gate on a read path that fails to load the org would silently stop
+a paying customer's scheduled posts. The fail direction is closed, and that is a
+content outage.
+
+**The question for Zach: does entry scheduling count as `scheduledPublishing`,
+or is it a free capability on purpose?**
+
+### The marketplace take rate is undisclosed on `/pricing`
+
+`resolveMarketplaceFeePct` charges **20% on paid plans and 30% on Free**
+(`libs/aglyn/src/lib/app-utils/plan-entitlements.ts:184`, `:257` … `:692`,
+resolver at `:2391`). `release_marketplace` is on in production and commerce
+ships launch day, and the page does not say it. A seller finds out at settlement.
+
+Disclosure is besigner click-work on the `aglyn-marketing` host — publication-first,
+not a repo change — plus a Drive Decision Log entry. **Blocked on Zach:** the
+copy, and whether the Free-plan 30% is disclosed as such.
+
+### `/pricing` tier visibility — the republish itself
+
+AGL-1859 §1's console half shipped (`e37e4e98b`: lower tiers collapse behind a
+disclosure, upgrades stay one-click). The `/pricing` half is hand-authored
+besigner content and no repo change can do it (AGL-2261). Until it happens
+AGL-1885's post-republish reconciliation — the pass that reads the **live** page,
+which is the only thing that proves what the edit produced — cannot run.
+
+### The re-acceptance banner copy
+
+Carried into AGL-1908's brief as a requirement: re-acceptance stays, but the
+banner must not imply the user never agreed. ⚠️ **Recorded as a question, not a
+decision** — no Zach quote stands behind it, and the console's current
+"no record of your acceptance" copy is literally true pre-launch. Needs his read
+before any wording moves, and any change is gdoc-first if it touches a legal page.
+
+### Event Calendar packaging
+
+`eventCalendar` is false on every plan including Advanced; only the add-on
+enables it. Bundle it into Advanced, or keep it add-on-only? Open in the Drive
+Source of Truth's alignment table; `/pricing` currently documents the behaviour
+without pre-empting the call.

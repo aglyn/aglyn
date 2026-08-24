@@ -35,6 +35,7 @@
  */
 import {
   deploymentCommitRef,
+  deploymentEnvironmentLabel,
   healthBody,
   healthHeadOf,
   healthHeaders,
@@ -70,7 +71,7 @@ export async function GET(): Promise<Response> {
       checks,
       commit: deploymentCommitRef(),
       version: platformVersion(),
-      environment: process.env['VERCEL_ENV'] ?? 'development',
+      environment: deploymentEnvironmentLabel(),
       region: process.env['VERCEL_REGION'] ?? null,
     }),
     { status: healthHttpStatus(status), headers: healthHeaders(status) },

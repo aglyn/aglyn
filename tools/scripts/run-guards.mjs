@@ -121,8 +121,10 @@ const REPO_WIDE = new Set([
   'check:brand-literals',
   'check:hardcoded-colours',
   'check:no-tax-identifiers',
+  'check:residential-address',
   'check:provider-key-exposure',
   'check:next-public-access',
+  'check:contact-addresses',
   // Compare a GENERATED artifact against a source that is no project's file.
   'check:pricing-tables',
   'generate:docs-help:check',
@@ -141,6 +143,11 @@ const REPO_WIDE = new Set([
   'check:test-wiring',
   'check:lint-tools',
   'check:docs-self-host',
+  // Reads every docs markdown page and every file under apps/docs/static/img.
+  // An uncaptured screenshot is invalidated by a commit to the PAGE, and a
+  // blank one by a commit to the IMAGE — neither of which is the guard's own
+  // project source in the way an affected-scoped run would need.
+  'check:docs-screenshots',
   'check:marketing-width-doctrine',
 ])
 

@@ -388,3 +388,128 @@ describe('purchase carries billing_interval only when it is known (AGL-1640)', (
     expect(result.synthesizedClientId).toBe(false)
   })
 })
+
+/**
+ * AGL-2327 — the five guards a mutation run proved NOTHING was reading.
+ *
+ * Every assertion above this block reads the request BODY. That is the right
+ * subject and it is not the whole subject: a Measurement Protocol hit is only
+ * delivered if the ADDRESS is right too, and the address was asserted nowhere.
+ * Breaking each of these five and re-running the suite left it green:
+ *
+ * - the collector host could be changed to anything at all;
+ * - `api_secret` could be dropped from the query string;
+ * - the `!response.ok` branch could be neutered, so a 500 from Google
+ *   reported `sent: true`;
+ * - `sendGa4Purchase`'s empty-client-id gate could be deleted, POSTing
+ *   `client_id: ''`;
+ * - `sendGa4SubscriptionCancelled` could skip the sanitizer entirely.
+ *
+ * The first two matter most and matter in the same way: GA4's Measurement
+ * Protocol answers **2xx to almost anything**, including a hit whose
+ * `api_secret` is missing or wrong, which it accepts and then discards. So
+ * `response.ok` cannot detect a misaddressed hit, `{ sent: true }` is not
+ * evidence of delivery, and a test asserting the URL is the ONLY place the
+ * mistake can be caught. That is the precise shape of "the events ship to
+ * nothing while every check stays green" — the report this issue opened with.
+ */
+describe('the hit is addressed correctly, not merely shaped correctly (AGL-2327)', () => {
+  beforeEach(() => {
+    process.env.GA4_MEASUREMENT_ID = 'G-TEST'
+    process.env.GA4_API_SECRET = 'secret'
+  })
+
+  const requestUrl = () =>
+    (fetchMock.mock.calls[0] as unknown as [string, unknown])[0]
+
+  it('POSTs to the real GA4 collector with BOTH credentials in the query', async () => {
+    await sendGa4SitePublished({ hostId: 'host-1' })
+
+    const url = requestUrl()
+    // The host, pinned. Nothing else in this file would notice the collector
+    // being pointed somewhere else entirely.
+    expect(url).toMatch(/^https:\/\/www\.google-analytics\.com\/mp\/collect\?/)
+    // `api_secret` is the credential GA validates and then says nothing about.
+    // Its absence is invisible at runtime — 204, no body, no warning — so it
+    // has to be visible here.
+    expect(url).toContain('api_secret=secret')
+    expect(url).toContain('measurement_id=G-TEST')
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      { method: string; headers: Record<string, string> },
+    ]
+    expect(init.method).toBe('POST')
+    expect(init.headers['Content-Type']).toBe('application/json')
+  })
+
+  it('both credentials are URL-ENCODED rather than concatenated raw', async () => {
+    process.env.GA4_API_SECRET = 'se cr&et'
+
+    await sendGa4SitePublished({ hostId: 'host-1' })
+
+    // A secret carrying `&` would otherwise terminate the parameter and be
+    // silently truncated — the hit still 2xxs and is still discarded.
+    expect(requestUrl()).toContain('api_secret=se%20cr%26et')
+  })
+
+  it('reports sent:false when GA answers with an error status', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 500 } as never)
+
+    const result = await sendGa4SitePublished({ hostId: 'host-1' })
+
+    // The `reason` is asserted, not just the boolean: it is what tells a log
+    // reader that GA rejected the hit rather than that config was absent.
+    expect(result).toEqual({
+      sent: false,
+      synthesizedClientId: true,
+      reason: 'http-500',
+    })
+  })
+
+  it('refuses to POST a purchase with no client id at all', async () => {
+    // Neither a captured browser id nor a Stripe customer to synthesize one
+    // from. A hit with `client_id: ''` is accepted by GA and attributed to
+    // nobody, so the money would be reported and be unreadable.
+    const result = await sendGa4Purchase({
+      transactionId: 'in_no_client',
+      value: 49,
+      currency: 'usd',
+      items: [],
+    })
+
+    expect(result).toEqual({
+      sent: false,
+      synthesizedClientId: false,
+      reason: 'no-client-id',
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('refuses to POST a refund with no client id at all', async () => {
+    const result = await sendGa4Refund({
+      transactionId: 'in_no_client',
+      value: 49,
+      currency: 'usd',
+      items: [],
+    })
+
+    expect(result.reason).toBe('no-client-id')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('runs the sanitizer on subscription_cancelled, not only on the others', async () => {
+    // `plan` is derived from Stripe price metadata, which is one edit away
+    // from carrying a person's address. The guarantee has to hold because the
+    // sanitizer RAN — not because this caller happened to pass something safe.
+    await sendGa4SubscriptionCancelled({
+      plan: 'billing@example.com',
+      stripeCustomerId: 'cus_1',
+    })
+
+    const params = JSON.parse(
+      (fetchMock.mock.calls[0] as unknown as [string, { body: string }])[1].body,
+    ).events[0].params
+    expect(Object.hasOwn(params, 'plan')).toBe(false)
+  })
+})

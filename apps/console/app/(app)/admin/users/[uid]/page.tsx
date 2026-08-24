@@ -51,6 +51,9 @@ import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../../components/staff-only.component'
 import MainLayout from '../../../../../components/layouts/main.layout'
 import PasswordAdminControls from '../../../../../components/password-admin-controls.component'
+import StaffUserDeviceSessionsCard, {
+  type StaffDeviceRow,
+} from '../../../../../components/staff-user-device-sessions-card.component'
 import StaffUserEraseCard from '../../../../../components/staff-user-erase-card.component'
 import { useImpersonationReason } from '../../../../../components/staff-impersonation-dialog.component'
 import { docsHelp } from '../../../../../constants/docs-links'
@@ -140,6 +143,15 @@ interface UserDetail {
         bytes?: number
       }>
     }>
+  }
+  /**
+   * Sign-in history + whether it could be read at all (AGL-1513 part 2).
+   * Optional because a console deployed against an older API response must
+   * render the page rather than crash on `.rows`.
+   */
+  devices?: {
+    lookupFailed: boolean
+    rows: StaffDeviceRow[]
   }
 }
 
@@ -639,6 +651,30 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                       }}
                     />
                   </CardDisplay>
+                ),
+              },
+              {
+                size: { xs: 12, md: 6 },
+                children: (
+                  /*
+                   * AGL-1513 part 2. The registry has recorded every sign-in
+                   * since AGL-665 and AGL-1959 gave the OWNER a list and a
+                   * sign-out; staff had neither, so "someone stole my laptop"
+                   * was answered by disabling the whole account. This is the
+                   * same write behind the same audit trail as every other
+                   * action on this page.
+                   */
+                  <StaffUserDeviceSessionsCard
+                    subjectLabel={detail.user.email ?? detail.user.uid}
+                    rows={detail.devices?.rows ?? []}
+                    // A missing `devices` key is a read that did not happen,
+                    // which is the same thing to a reader as a read that
+                    // failed — and the opposite of "no other devices".
+                    lookupFailed={detail.devices?.lookupFailed ?? true}
+                    onSignOut={async (deviceId) =>
+                      callManage({ action: 'signOutDevice', deviceId })
+                    }
+                  />
                 ),
               },
               {

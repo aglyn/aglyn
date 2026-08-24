@@ -178,6 +178,40 @@ every value already set against the old one and those pages fall back to the def
 Rename in place rather than deleting and re-adding.
 :::
 
+### Override an attribute on one instance
+
+Styles are not the only thing one placement can differ in. Select an instance, open the
+**Attributes** tab, and scroll to **Attribute overrides**: an **Override target** picker
+listing the same tree the Style target picker does, and under it the attributes of the
+element you pick — its variant, size, link, and so on.
+
+Set one and it applies to **that placement only**, layered over the component's own value.
+Leave a field empty and the component's value is what renders; the placeholder shows you
+what that is. A chip counts what this instance overrides, and each override lists beside it
+with an ✕ that hands the attribute back to the component.
+
+This is for the differences that are not worth a property. A property is the right answer
+when the difference is *content*, or when the same difference recurs across pages — it is
+named, documented and filled in on every instance. An override is for the one-off: this
+page's CTA is outlined, everywhere else it stays solid.
+
+**No** and `0` are real overrides and survive; an empty field is not an override at all.
+
+Component updates still flow through an override. An override replaces only the attributes
+it names, so an attribute the component **adds** later reaches every instance with the
+component's new value, overridden ones included.
+
+Two things are deliberately not overridable here:
+
+- **Content.** `Text` and rich text stay the component's, and come from the component or
+  from its [properties](#properties) — the same rule the style overrides follow.
+- **Styles**, which have their own layer on the [Styles](#restyle-one-instance) tab. One
+  place per kind of change, so the two can never disagree about what an instance looks
+  like.
+
+A handful of attributes are not offered per instance either — icon pickers, screen links,
+gradients and plugin settings. Change those in the component, or [detach](#detach).
+
 ## Retrofit duplicated sections
 
 If the same section has already been copied onto several pages, converting it is safe and
@@ -204,8 +238,10 @@ ids — the confirmation reads *"Detached — this copy no longer follows the co
 Use it when one page needs a variation the shared source shouldn't carry.
 
 What you get is what the page was showing. The property values set on that instance — and
-every [per-instance style](#restyle-one-instance) applied to it, on its outer element and
-on each element inside it — are baked into the copy as ordinary text, images and styles,
+every [per-instance style](#restyle-one-instance) and
+[attribute override](#override-an-attribute-on-one-instance) applied to it, on its outer
+element and on each element inside it — are baked into the copy as ordinary text, images,
+styles and attributes,
 so the section looks identical before and after; it is simply editable now. Nothing in the
 copy still points at a property.
 
@@ -216,6 +252,10 @@ in the component's working version are not what you get.
 
 A component can place instances of other components. Expansion runs to a depth of **5**,
 which also bounds a component that accidentally references itself.
+
+Nested components expand on the canvas too, not only in Preview and on the live site — so a
+shared button inside a shared nav is drawn where you are editing, and publishing that button
+updates every open canvas that shows it, however deeply it is nested.
 
 ## Used by
 

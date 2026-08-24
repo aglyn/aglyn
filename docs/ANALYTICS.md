@@ -56,10 +56,27 @@ There is deliberately **no `linker` config in our code**, and none is needed:
 is delivered to the tag from the GA UI. Grepping for `linker` and concluding
 cross-domain is unconfigured is the wrong inference.
 
-What is **not** established is that a real session actually stitches, which
-needs GA DebugView or a Realtime check across the hop — Zach's console, and on
-the click-list. Two structural reasons it is best-effort rather than certain,
-both worth knowing before reading the funnel:
+✅ **The `_gl` decoration itself is now PROVEN on the wire (2026-08-24).** A real
+mouse click on the `/pricing` "Get started" CTA rewrote the anchor from
+`https://app.aglyn.com/signup` to the same URL carrying `_gl=1*…*_ga*…*_ga_YW5PG16YTM*…`
+— the client id and the session state, crossing the hop. The probe recorded the
+href at **both** `mousedown` (undecorated) and `click` (decorated), so it is not
+a green that could not have gone red: gtag decorates in its own click handler,
+and the mousedown reading is the built-in negative control. The old note here —
+"absence of `_gl=` on the landed URL is the tell" — is still true but is no
+longer the only evidence available.
+
+⚠️ **A landing route that redirects will strip it.** Measured in the same pass:
+clicking the same CTA while signed in lands on `https://app.aglyn.com/` with no
+`_gl`, because `/signup` bounces an authenticated user and the redirect drops
+the query string. A logged-out visitor — the only one whose stitch matters —
+renders `/signup` directly and the parameter is consumed. Do not read a bare
+landed URL on a signed-in staff browser as a broken linker.
+
+What is **still not** established is that GA4 then reports it as one session with
+the original source retained, which needs DebugView or Realtime across the hop —
+Zach's console, and on the click-list. Two structural reasons it is best-effort
+rather than certain, both worth knowing before reading the funnel:
 
 - **The `_gl` decoration requires a loaded tag at click time.** On `aglyn.com`
   gtag is consent-gated and never loads for a visitor who has not granted, so
@@ -727,13 +744,29 @@ The category is off for every site that exists and is gated on the host
 turning it on **and** an analytics id being configured
 (`hostAsksAboutAdvertising()`); turning it on grants nothing by itself, it
 adds a second, separate question to the banner and to the preferences panel
-so a visitor has somewhere to say yes. Default-deny survives it: `implied`
-never grants advertising, a record written before the category existed reads
+so a visitor has somewhere to say yes. Default-deny survives it: only an
+explicit `accepted` grants advertising, in both postures and every region, so
+a record written before the category existed reads
 as never-asked rather than as a yes, the grant is re-derived on every read and
 write (so a hand-edited `localStorage` entry, or one left behind after a host
 switched the category back off, decays to denied), and advertising is clamped
 to analytics — `ad_storage: 'granted'` alongside `analytics_storage: 'denied'`
 is not a state this tool can reach.
+
+**The rule was wider for three days, 2026-08-21 to 2026-08-24.** AGL-2402
+(`a410d8785`) made the opt-out posture's `implied` default carry advertising,
+arguing it was safe by geography — an `implied` record can only ever be
+written outside the prior-consent regions, which is true and is still asserted
+in `visitor-consent-advertising.spec.ts`. What did not hold was the disclosure
+half of the argument. That commit stated the published Cookie Policy had been
+updated first; read against the live page, the policy says two different
+things — its "Marketing / advertising" paragraph does describe the opt-out
+posture, but the per-cookie table says `_gac`, `_gcl_au`, `_fbp` and `_fbc` are
+"set only where you have allowed advertising cookies", and "Your choices"
+repeats it. The behaviour was narrowed back to agree with the strictest
+published statement. Revisiting opt-out advertising means republishing the
+policy FIRST, and `consent-advertising-copy-drift.spec.ts` is the lock that
+makes the copy move with the rule in either direction.
 
 **Two payload builders, and the split is deliberate.** Both live in
 `libs/aglyn/src/lib/app-utils/visitor-consent.ts`, and between them they are
@@ -1048,12 +1081,45 @@ patched to `undefined` stays in the composed object as `undefined` rather than
 being dropped from it, which is the difference between clearing a stamp and
 leaving the previous value standing.
 
-**Known gap, accepted:** the first `page_view` of a cold load races the token
-read and goes out unstamped — the same window in which `user_id` is also still
-unset, so it is an existing condition rather than a new one. Every later hit in
-the session carries the stamp. The _override_ path below closes this for a
-browser that has opted in, because a localStorage read is synchronous and a
-token read is not.
+**Known gap — and it is WIDER than "the first `page_view`" (measured on
+production, 2026-08-24).** The claims read is asynchronous and the tag is not,
+so the boot burst ships before the stamp lands. Read off `window.dataLayer` on
+`app.aglyn.com`, signed in as staff, with the browser override deliberately
+cleared (`?aglyn_internal=0`):
+
+```
+0:consent 1:consent 2:set{}       3:set+title  4:set+title  5:js
+6:config  7:config  8:event page_view  11:event TTFB
+…
+19:set STAMPED  …  23:set STAMPED
+```
+
+The first `set` carrying `traffic_type` is index **19**. Both `config` calls,
+the manual `page_view` and the first web-vitals hit are already gone by then.
+GA4's data filter matches per EVENT, so those hits — which include
+`session_start` and `first_visit` — are not filterable: **an un-opted-in staff
+browser still contributes one user and one session to every report**, which is
+precisely the outcome §8 says `setDefaultEventParameters` avoids. It avoids the
+_taxonomy_ version of that failure, not the _timing_ one.
+
+The same page with the override ON puts a stamped `set` at index **2**, ahead
+of `js` and `config` — every hit of the session carries it, because a
+`localStorage` read is synchronous and a token read is not.
+
+So the ordering of mechanisms is the opposite of the intuitive one. **The
+browser opt-in (§8b) is the primary mechanism on the console too**, not a
+supplement for the logged-out surfaces; the claims predicate is what covers the
+_rest_ of the session, catches a browser nobody remembered to mark, and is the
+only thing that follows the actor into an impersonation session. Neither is
+redundant, and neither is sufficient alone.
+
+**Do not "fix" this by writing the override from the claims.** A browser
+auto-marked because staff signed in there once stays marked after a customer
+signs in on the same browser — and clearing it on a non-staff session would
+wipe the deliberate opt-in the release drills depend on (§8b). Wrongly flagging
+a real customer erases them from every report, permanently. The GA-side IP rule
+(§8d) is the mechanism that closes the boot window without that risk, because
+GA applies it server-side at collection time, to hit zero, with no race at all.
 
 ### 8b. Claims are not enough — the browser-pinned override (AGL-2064/AGL-2065)
 
@@ -1201,29 +1267,77 @@ whole year-to-date history is 30 views / 6 users, ~24 of them `/signin` on
 Vercel _preview_ URLs of the console. Preview traffic reaching a production
 property was not a risk — it was most of what that property ever recorded.
 
+**Verified live on `localhost:4200`, 2026-08-24, not inferred from the code.**
+This is worth re-measuring rather than trusting, because
+`apps/console/.env.development.local` still sets
+`NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID="G-YW5PG16YTM"` — the **production**
+stream. The gate is the only thing between a dev server and the live property.
+A signed-in console page on the dev server reported `typeof window.gtag ===
+'undefined'`, `window.dataLayer.length === 0`, and **zero** of its 83 loaded
+resources on any Google Analytics host.
+
+The negative is a real one rather than a blind grep: the same inventory _does_
+list five `*.google*` resources (`recaptcha/api.js`, two
+`*.googleapis.com` auth calls, an avatar) — so the probe can see Google traffic
+when there is Google traffic, and simply found no tag. What it did find is
+`_ga` and `_ga_YW5PG16YTM` cookies still sitting on `localhost` — residue from
+before AGL-2067, and proof the hole was real. They are per-origin, so they
+cannot reach the production property; they are stale, not active.
+
 ### 8d. What is left for Zach to click
 
-The **Internal Traffic** data filter **exists** in property 302497406 and is
-currently in **Testing** mode. Zach set it Active on 2026-08-18 and reverted it
-to Testing the same day, deliberately, because the coverage above was expanding
-while it was on.
+🔴 **The Internal Traffic data filter is ACTIVE, not Testing — corrected
+2026-08-24 by reading Admin → Data filters on the live property.** It shows
+`Internal Traffic · Internal Traffic · Exclude · **Active**`. Property change
+history records four `Data filter / Internal Traffic / Modified` entries, the
+last at **2026-08-18 19:38 GMT-5 (2026-08-19 00:38 UTC)**, and nothing since.
+The earlier "reverted to Testing the same day" note described 2026-08-18
+14:16 GMT-5 and was overtaken that evening; it stood here stale for five days.
+
+This matters because it changes what a mistake costs. An Active filter
+**permanently and irrecoverably discards** every matching hit at collection
+time, so any surface that wrongly stamps `traffic_type: 'internal'` is not
+mis-labelling data, it is deleting it — and every day since 2026-08-19 has been
+filtered, not merely flagged. AGL-2065 (the console stamp fires only for STAFF)
+and AGL-2064 (the marketing/docs stamp) are therefore both live-data decisions
+now, not staging ones.
+
+✅ **`traffic_type` is already registered** as an event-scoped custom dimension
+— it is one of the 18 counted off the live property on 2026-08-24 (see *Still
+outstanding*). Earlier versions of this section and of AGL-1637 said to register
+it; that instruction is spent.
 
 Remaining, and all of it is his click — nothing in this repo can do it:
 
-1. **Verify in Testing mode.** With the filter in Testing, `Test data filter
-name` is available as a dimension in reports and DebugView. Confirm it
-   matches a staff session, an impersonation session and an opted-in
-   logged-out marketing session, and that an ordinary customer session is
-   **not** matched. Both directions — a filter verified in one direction only
-   is the one that erases real users.
-2. **Register `traffic_type` as a custom dimension** if it is not already, so
-   the match is visible in standard reports rather than only in DebugView.
-3. **Set it Active** once (1) passes. ⚠️ An Active filter **permanently and
-   irrecoverably discards** everything it matches. It is not retroactive in
-   either direction: data already collected is not re-filtered, and data
-   discarded while Active cannot be recovered.
-4. **Opt each browser in, once per origin** — the three URLs in §8b. This is
-   the step most likely to be forgotten, and forgetting it is silent.
+1. **Opt each browser in, once per origin — do this FIRST, not last.** The
+   three URLs in §8b. It was written last here for years and that ordering was
+   wrong: §8's measurement shows an un-opted-in browser is only stamped from
+   part-way through the session, so on the console this step is what makes the
+   user and session counts correct at all, not a tidy-up. Forgetting it is
+   silent. (Verified present on this machine's Chrome profile for
+   `app.aglyn.com`, `aglyn.com` and `docs.aglyn.com` on 2026-08-24.)
+2. **Add the IP rule as well, and for a better reason than "a weaker net".**
+   Admin → Data Streams → (3230351080) → Configure tag settings → Show all →
+   **Define internal traffic**. GA applies an IP rule server-side at collection
+   time, so it stamps `traffic_type=internal` on **hit zero** — including the
+   `session_start` / `first_visit` pair the browser mechanisms cannot reach on
+   a cold load. It is not a lesser version of the parameter; it is the only
+   thing covering the boot window. Its real limits are the ones AGL-1582 gives:
+   a dynamic residential IP, and staff working from anywhere. Keep the default
+   rule name `internal` so it writes the same value the code writes.
+3. ✅ **Verified in Testing, then set Active — both DONE 2026-08-18/19.** The
+   Testing-mode check was run in both directions on the `Test data filter name`
+   dimension (a staff session matched `Internal Traffic`; an ordinary session in
+   the *same city* did not, so it keyed on `traffic_type` and not on geography),
+   and the filter was set Active at 2026-08-19 00:38 UTC. Kept because the
+   two-direction requirement is the reusable part: a filter verified in one
+   direction only is the one that erases real users.
+4. ✅ **Already Active.** ⚠️ Restated because it is now load-bearing rather than
+   hypothetical: an Active filter **permanently and irrecoverably discards**
+   everything it matches, and it is not retroactive in either direction — data
+   already collected is not re-filtered, and data discarded while Active cannot
+   be recovered. Any change to who gets stamped `internal` now changes what is
+   deleted.
 
 Click-list on AGL-1637.
 
@@ -1249,12 +1363,28 @@ Reporting is the **grouping and alerting**, and GA4 is product analytics and
 should not be carrying stack traces at all. Adding a fourth vendor (Sentry) is
 a subprocessor-list decision, deliberately deferred.
 
-**Genuinely missing, by contrast:** Firebase **Performance Monitoring** is not
-initialised anywhere (the package is present only because the `firebase`
-umbrella ships every entry point — "in package.json" is not integration), and
-there is **no Web Vitals / RUM of any kind** in any app. Those are real gaps
-rather than impossible ones — filed rather than assumed worthwhile, since each
-has to answer what it tells us that we cannot already see.
+**Firebase Performance Monitoring is still not initialised anywhere** — zero
+import sites; the package is in the closure only because the `firebase`
+umbrella ships every entry point, and "in package.json" is not integration.
+
+⚠️ **The sentence that used to sit here — "there is no Web Vitals / RUM of any
+kind in any app" — is FALSE and has been since 2026-08-18.** AGL-1642 shipped
+`web-vitals` → GA4 on both the console and the tenant; it is in production and
+described in "The 2026-08-17 coverage pass" above, in this same document. The
+stale claim is corrected rather than deleted because this section is the one a
+reader lands on when asking "what performance telemetry do we have", and it
+was answering "none".
+
+**Firebase Perf is deferred, not missing (AGL-1856).** Page-load metrics are
+covered by AGL-1642, so the only thing it would add is automatic **network
+request** monitoring — client-observed latency and success rate per URL
+pattern, which neither GA4 nor the error beacon can see. The decision rule is
+on AGL-1856: adopt only if a real "what is the client-observed success rate /
+latency of endpoint X" question goes unanswered once the RUM data is
+reportable. **The CWV breakdown dimensions (`metric_rating`, `metric_id`) were
+only registered 2026-08-24** (AGL-2327), and GA4 dimensions are not
+retroactive, so the first reportable RUM data starts then — the evaluation
+window opens ~2026-09-07, after the beta launch, not before it.
 
 ### 10. The console sends exactly one `page_view` per page, with a real URL (AGL-1643)
 
@@ -1546,6 +1676,120 @@ is gone by the time the redirect lands. `login` never carries them: a
 returning user's session was not produced by today's campaign, and stamping
 one on it would credit the ad for revenue it did not cause.
 
+#### 12a. Feeding the capture — the domain hop (AGL-1731)
+
+The parser, the four doors and the durable write all worked from the day §12
+landed, and **nothing reached them**. That was a second defect, not the same
+one, and it is what this section is about.
+
+`aglyn.com` is a tenant site and `app.aglyn.com` is the console — a real
+cross-origin hop, and until this section's fix nothing in this repository
+forwarded a query parameter across it. `onboardingSignupHref`
+(`libs/aglyn/src/lib/app-utils/onboarding-deep-link.ts`) builds a **fresh**
+`?plan=…&interval=…` URL, has no parameter through which a caller could pass
+anything else, and has **zero production callers** — by design, because the
+pricing CTAs are authored besigner content on `aglyn.com`, not repo files.
+
+So `utm_*` reached `/signup` only if a human had typed it into the CTA href.
+That is worse than nothing: a hardcoded `utm_source=google` is **static**, so
+every visitor who clicks that button is attributed to Google whether they came
+from Google, Hacker News or a bookmark. Confidently wrong attribution is harder
+to detect than absent attribution and reaches the same spend decisions — which
+is why a campaign the visitor actually arrived with now REPLACES an authored
+one rather than deferring to it.
+
+**What was actually needed** is per-visitor forwarding: the landing page copies
+the campaign off its OWN inbound URL onto the console-bound href at click time.
+
+**That is what `campaign-forwarding.ts` now does** (`libs/aglyn/src/lib/app-utils/`),
+installed by `site-analytics.tsx` beside the click and web-vitals listeners.
+`AppLink` (`libs/shared/ui/jsx`) was the obvious seam and is the wrong one
+twice over: it would need `useSearchParams` in a component the console renders
+on every page — a dynamic-rendering hazard on statically generated surfaces,
+paid on every route to fix a link on one — and it would still miss the links
+that matter, because besigner rich-text and Custom HTML anchors are written
+with `dangerouslySetInnerHTML` and have no React handler at all. A
+capture-phase listener on `document` sees every one of them, costs one
+listener, and renders nothing. It is the same seam, and the same argument, as
+the AGL-1562 click listener beside it.
+
+Two tiers, because nobody signs up from the page the ad landed on:
+
+| Tier | Source | Storage | Consent |
+| --- | --- | --- | --- |
+| 1 | `window.location.search` at click time | none | none needed — nothing is written to the device |
+| 2 | first touch of the visit, `sessionStorage` under `aglyn:campaign` | session-scoped, dies with the tab | `analytics_storage`, the same grant the tag waits for |
+
+Tier 2 wins when both exist: first touch is the question being asked, and last
+touch would disagree with GA4's own session attribution. Tier 1 is what still
+works for a visitor who declined analytics and converts from the landing page.
+A `sessionStorage` that throws reports **`unreadable`**, a third state distinct
+from "no campaign", and falls through to tier 1 rather than to silence — a
+`catch` returning null there is exactly how an unreadable source becomes a
+measured zero.
+
+Never gated on advertising storage: nothing here reads or writes an
+advertising identifier or sets a cookie, and AGL-1649 has advertising denied
+with no route for a host to grant it, so that gate would make the feature dead
+by construction rather than off.
+
+The three `utm_*` keys are replaced **wholesale**, never merged key by key, so
+a visitor's `utm_source` cannot be married to an author's `utm_campaign` and
+describe a campaign nobody ran. Everything else on the href — `plan`,
+`interval`, the AGL-1535 intent — is preserved. Only links to the configured
+`NEXT_PUBLIC_CONSOLE_URL` origin are touched; a third-party link never gets our
+campaign labels.
+
+**Accepted consequence:** the tenant runtime serves every customer site too, so
+a customer linking to our signup forwards their own inbound campaign into our
+acquisition report. Gating on "is this the operator's marketing host" needs a
+second configured origin, and a deployment that forgot to set it would forward
+nothing while looking healthy — a silent zero is the failure this issue is
+about, and it is worse than a few rows GA's Hostname dimension can separate.
+
+A side effect worth knowing: because real `utm_*` now arrives on
+`app.aglyn.com`, GA4's own **automatic** campaign collection reads them on the
+console landing pageview. The custom dimensions below are what joins a campaign
+to revenue; GA's session source/medium is fixed by the same forwarding for
+free. GA4's `_gl` linker still carries the **session** rather than `utm_*` into
+`users/{uid}`, and §"One property, one stream, three domains" above records why
+it is best-effort rather than certain.
+
+The one hop this repo *does* own was dropping the campaign and now does not:
+`sendToConsentGate` (`apps/console/utils/legal-consent.ts`) bounces the fourth
+account-creation door from `/signin` to `/signup` and used to build a bare
+`?consent=required`. It now re-parses the campaign through the same allowlist
+and re-serialises it — a parse-and-rebuild, not a string copy, so a marketing
+link cannot push anything else onto a URL this code owns.
+
+#### 12b. ⚠️ The capture is not gated on consent, and that is unresolved
+
+Both exits — the GA4 hit and the `users/{uid}` write — run for **every**
+signup, including a visitor who declined analytics on `aglyn.com` and a visitor
+whose browser sends Global Privacy Control.
+
+This is not a regression; it is the console's standing posture. `app.aglyn.com`
+has no consent banner, no region gate and no GPC handling
+(`platform-consent-default.ts` states it outright — "GA loads unconditionally
+on both (no gate can run here)"), and `hasGlobalPrivacyControl()` is read
+**only** on the tenant runtime. What §12 changed is *what* that ungated hit
+carries: a marketing label now travels with it and is stored durably against an
+identified person.
+
+Two things make this a question for counsel rather than a bug to fix here:
+
+- The pinned privacy policy (v2) has **no** marketing-attribution category in
+  its §1.1 account-data enumeration. The nearest disclosure is "referring URLs,
+  and similar analytics" under *automatically collected usage data* — a stretch
+  to read as covering a durable label joined to revenue.
+- §3 of that same policy promises a "Your Privacy Choices" control **on any
+  page**. On the console no such control exists on any page.
+
+Pinned as an executable assertion in
+`apps/console/specs/signup-campaign-attribution.spec.tsx` ("captures even under
+GPC, because the console has no gate"), so that answering the question requires
+deliberately changing that test rather than silently changing the product.
+
 ### 13. Why a server event can still report nothing with the credentials in place (AGL-2327)
 
 Three distinct causes have been mistaken for each other, twice. Check them in
@@ -1572,14 +1816,95 @@ this order, because each one makes the next invisible:
    not carrying it. This is where a still-missing breakdown most likely lives
    now. See "Still outstanding" below.
 
+4. **Address.** The two credentials travel in the QUERY STRING, and GA4's
+   Measurement Protocol answers **2xx to almost anything** — including a hit
+   whose `api_secret` is missing or wrong, which it accepts and then silently
+   discards. So `response.ok` cannot detect a misaddressed hit and
+   `{ sent: true }` is not evidence of delivery. A mutation run on 2026-08-24
+   confirmed the consequence: the collector host could be changed to
+   `example.invalid` and `api_secret` dropped from the URL entirely, and the
+   suite stayed **green** — every assertion read the request BODY and nothing
+   read where it was going. Now pinned by "the hit is addressed correctly, not
+   merely shaped correctly" in `ga4-measurement-protocol.spec.ts`. A test is
+   the ONLY place this class of mistake can be caught.
+
 The sender is silent by design on cause 1 — `{ sent: false, reason:
-'not-configured' }`, no log — and cause 2 is silent by construction, because
-the process is gone. Neither shows up as an error anywhere, which is why the
-order above matters more than usual.
+'not-configured' }`, no log — cause 2 is silent by construction, because
+the process is gone, and cause 4 is silent by Google's design. None shows up
+as an error anywhere, which is why the order above matters more than usual.
+
+#### ✅ The transport is PROVEN live — measured 2026-08-24, from the property
+
+The strongest available evidence, and it needed no test hit: **the property has
+received `subscription_cancelled`** (Admin → Events → Recent events, 28-day
+window). That event has **no client-side emitter anywhere in the repo** — it
+exists only in `sendGa4SubscriptionCancelled`, over the Measurement Protocol.
+Its arrival therefore proves, end to end, that the credentials are present on
+the running lambda, the endpoint is right, the payload is accepted, and the
+`after()` scheduling actually runs. `purchase` — also server-only — corroborates.
+
+That retires the "four server events ship to nothing" finding on evidence
+rather than on this document's say-so. Note what it does NOT prove: `refund`
+and `stripe_connected` have not been received, but both go through the same
+`postGa4Event` on the same credentials as the two that landed, so the transport
+is not the explanation — no refund and no Connect activation has occurred in
+the window. Absence of an event is not evidence of a broken sender, and this is
+the distinction the 2026-08-19 smoke pass got wrong in the other direction.
+
+⚠️ **Never verify by sending a test hit into property 302497406.** It is the
+property the September funnel is read from, MP hits cannot be deleted, and a
+rehearsal `purchase` becomes permanent revenue. Use GA4 **DebugView** with a
+`debug_mode` hit, or the `/debug/mp/collect` validation endpoint, which
+validates a payload and stores nothing.
 
 ### Still outstanding
 
-0. **Register five more custom dimensions** (AGL-1562), all **event-scoped**,
+> **⚑ READ THIS FIRST — the live property was counted on 2026-08-24 (AGL-2327),
+> and most of the list below is DONE.** Read from the property, not from this
+> document and not from the repo: a custom definition is property-side state
+> that no code can observe, and the previous version of this section listed as
+> outstanding fourteen dimensions that had already been registered a week
+> earlier. That is the same failure this whole §13 is about — a stale note is
+> not inert, and this one would have sent someone to re-do finished work while
+> the genuinely missing items stayed missing.
+>
+> **⚑⚑ RE-READ 2026-08-24 (later the same day, AGL-1637 audit): EVERY
+> registration item below is now DONE.** The 18/2 reading quoted here was taken
+> in the morning; Zach registered the remaining 15 definitions at 06:25–06:27
+> GMT-5, and the property now reads **30 event-scoped dimensions and 5 custom
+> metrics**. Counted row by row off Admin → Data display → Custom definitions
+> (both tabs, both pages of the dimension list), and corroborated by Account
+> change history, which logs each `Created` with a timestamp and `zach@aglyn.com`.
+>
+> | Registry | Used (2026-08-24 AM) | Used (2026-08-24 PM) | Cap |
+> | -- | -- | -- | -- |
+> | Custom dimensions, **event**-scoped | 18 | **30** | 50 |
+> | Custom dimensions, user-scoped | 2 | 2 | 25 |
+> | Custom dimensions, item-scoped | 0 | 0 | 10 |
+> | Custom **metrics**, event-scoped | 2 | **5** | 50 |
+> | Calculated metrics | 0 | 0 | 5 |
+>
+> **Registered event-scoped dimensions (30):** `action`, `billing_interval`,
+> `campaign_medium`, `campaign_name`, `campaign_source`, `content_id`,
+> `content_type`, `effective_at`, `experiment_action`, `experiment_id`,
+> `feedback`, `first_publish`, `form_location`, `form_name`, `from_plan`,
+> `funnel_completed`, `grounded`, `interval`, `link_domain`, `link_id`,
+> `metric_id`, `metric_rating`, `method`, `plan`, `reason`, `surface`, `tier`,
+> `to_plan`, `traffic_type`, `variant_id`.
+> **Registered user-scoped:** `org_plan`, `org_role`.
+> **Registered custom metrics (5):** `duration_months`, `metric_delta`,
+> `metric_value`, `percent_off`, `tenure_days`.
+>
+> So: **0, 0b, 0c, 0d, 0e and 0g are ALL DONE.** `metric_delta` — the item this
+> section called "the lowest-priority item on this whole page" — is registered
+> too. **Nothing on the registration list is outstanding.** 20 dimension slots
+> and 45 metric slots remain spare, so the cap never became a constraint.
+>
+> ⚠️ Note the display-name trap that bit one of these: `interval` had to be
+> named **`Plan change interval`** — GA4 rejects parentheses in a display name.
+> The parameter name is what reports key on, so the rename is cosmetic only.
+
+0. ✅ **DONE 2026-08-17.** ~~Register five more custom dimensions~~ (AGL-1562), all **event-scoped**,
    before the events are worth reporting on. Every parameter the two link
    events carry is new, and an unregistered param is collected but never
    appears as a breakdown — which reads exactly like the event not carrying
@@ -1593,11 +1918,16 @@ order above matters more than usual.
    | Link id        | `link_id`       | Which outbound link, by label                                                                        |
    | Surface        | `surface`       | `site` vs `docs` (AGL-1579); Hostname covers the domains, this covers surfaces sharing one           |
 
-0d. **Register `plan` as a dimension and `tenure_days` as a METRIC**
-   (AGL-2327). Both are sent by `sendGa4SubscriptionCancelled` and appear on
+0d. ✅ **DONE 2026-08-17** — verified against the property 2026-08-24. `plan`
+   is an event-scoped **dimension** and `tenure_days` is an event-scoped
+   custom **metric**, which is the right pair of registries. Kept for the
+   warning below, which is the reusable part.
+
+   ~~Register `plan` as a dimension and `tenure_days` as a METRIC~~
+   (AGL-2327). Both are sent by `sendGa4SubscriptionCancelled` and appeared on
    **neither** the registered list above **nor** either outstanding list — so
-   the churn event arrives as one undifferentiated count and plan-tier churn
-   mix and tenure-at-cancellation, the two numbers it exists for, are
+   the churn event arrived as one undifferentiated count and plan-tier churn
+   mix and tenure-at-cancellation, the two numbers it exists for, were
    unreachable. `plan` is event-scoped custom **dimension**.
 
    ⚠️ `tenure_days` is NOT a dimension, and registering it as one is the
@@ -1610,24 +1940,39 @@ order above matters more than usual.
    event-scoped, unit **Standard**) can produce one. Same registry, different
    tab; the parameter name is unchanged.
 
-0e. **Register the Core Web Vitals custom METRICS** (AGL-1642). `metric_value`
-   and `metric_delta` are numeric and are on no list anywhere — the repo has
-   never had a custom-metric registry at all, which is why they were never
-   noticed missing: every audit read the DIMENSIONS list, and a metric is
+0e. ✅ **DONE 2026-08-24** — `metric_delta` was registered at 06:27 GMT-5 and
+   verified on the *Custom metrics* tab the same day; both rows below are now
+   green. ~~⚠️ **HALF DONE.**~~ **Register the Core Web Vitals custom METRICS**
+   (AGL-1642). Numeric, so they belong in the **Custom metrics** tab — every
+   audit before 2026-08-20 read only the DIMENSIONS list, and a metric is
    invisible from there. Without them the CWV events arrive as a count of
    measurements with no measurement in it, and "what is real-user LCP" stays
    the unanswerable question AGL-1642 existed to answer.
 
-   | Metric name  | Event parameter | Unit     | Why                                                               |
-   | ------------ | --------------- | -------- | ----------------------------------------------------------------- |
-   | Metric value | `metric_value`  | Standard | The metric's current value — the number the report is OF          |
-   | Metric delta | `metric_delta`  | Standard | Its change since the last report, for the multi-report metrics    |
+   | Metric name  | Event parameter | Unit     | State | Why                                                            |
+   | ------------ | --------------- | -------- | ----- | -------------------------------------------------------------- |
+   | Metric value | `metric_value`  | Standard | ✅ registered 2026-08-17 | The metric's current value — the number the report is OF |
+   | Metric delta | `metric_delta`  | Standard | ✅ registered 2026-08-24 | Its change since the last report, for the multi-report metrics |
 
-   `value` needs nothing — it is GA4's built-in event value. `metric_id`,
-   `metric_rating` and `surface` are strings and belong on the DIMENSION list
-   above.
+   `value` needs nothing — it is GA4's built-in event value, and because
+   `reportMetric` sends `value: metric.delta`, the delta is *already* readable
+   as Event value. `metric_delta` is therefore the lowest-priority item on
+   this whole page: register it for an explicit column, not to make a number
+   reachable. `metric_id`, `metric_rating` and `surface` are strings and
+   belong on the DIMENSION list above — `surface` is registered, the other two
+   are in 0g.
 
-0c. **Register the three campaign dimensions** (AGL-1731), all
+   ⚠️ **`FCP` is NOT emitted, and any list saying otherwise is wrong.**
+   `METRIC_HANDLER_NAMES` in `web-vitals-rum.ts` is `['onCLS', 'onINP',
+   'onLCP', 'onTTFB']` — four, deliberately. The live property agrees exactly:
+   `CLS`, `INP`, `LCP` and `TTFB` appear in Admin → Events → Recent events and
+   `FCP` does not. Registering anything "for FCP" buys a permanently empty
+   report.
+
+0c. ✅ **DONE 2026-08-20** — all three verified on the property 2026-08-24,
+   which means the "before the first ad runs" deadline was met and September
+   signups will be attributable. ~~Register the three campaign dimensions~~
+   (AGL-1731), all
    **event-scoped**, and do it BEFORE the first ad runs — an unregistered
    param is collected but not reportable, so the campaign would be on every
    hit and in no report:
@@ -1647,7 +1992,8 @@ order above matters more than usual.
    `login` needs nothing new — `method` is already registered, and `sso` is a
    new VALUE of it, not a new dimension.
 
-0b. **Register three more for the site-runtime events** (AGL-1591), all
+0b. ✅ **DONE 2026-08-17** — all three verified on the property 2026-08-24.
+~~Register three more for the site-runtime events~~ (AGL-1591), all
 **event-scoped**:
 
 | Dimension name    | Event parameter     | Why                                                                                                     |
@@ -1702,35 +2048,93 @@ there is the merchant's to make, not one we can make for them.
      the source of truth; revisit the moment a price is changed in Stripe
      first. `purchase` is unaffected — it reads `amount_paid` off the invoice.
 
-0g. **Two whole event families carry params on no registration list**, so
-   they currently arrive as undifferentiated counts — the same failure mode
-   item 0 describes, one level larger. Found 2026-08-20 by diffing the fired
-   params against every list above:
+0g. ✅ **DONE 2026-08-24** — all 12 dimensions and all 3 metrics below were
+   registered at 06:19–06:27 GMT-5 and counted off the live property that
+   afternoon. Kept for the reasoning, and for the two traps it records (the
+   `interval`/`billing_interval` collision, and numbers belonging in the metric
+   registry). ~~**Two whole event families carry params on no registration
+   list**~~, so
+   they ~~currently~~ *used to* arrive as undifferentiated counts — the same
+   failure mode item 0 describes, one level larger. Found 2026-08-20 by diffing
+   the fired params against every list above:
 
-   | Event family                          | Params fired but unregistered                                      |
-   | ------------------------------------- | ------------------------------------------------------------------ |
-   | Retention funnel (AGL-1865)           | `reason`, `surface`, `from_plan`, `to_plan`, `funnel_completed`     |
-   | Plan changes from the grid (AGL-2235) | `from_plan`, `to_plan`, `interval`, `effective_at`                  |
-   | Aglyn Assist (AGL-1860/AGL-1988)      | `tier`, `grounded`, `feedback`, `action`                            |
-   | Core Web Vitals (AGL-1642)            | `metric_id`, `metric_rating` (dimensions; the numbers are in 0e)    |
+   Re-derived against the live property 2026-08-24: `surface` was on this
+   list and is in fact **registered**, so the real total is **15**, not 16.
+   This is now the complete outstanding set — the click-list, in order.
 
-   `percent_off` and `duration_months` on `winback_discount_accepted` are
-   NUMBERS — custom **metrics**, like `tenure_days`, not dimensions; a save
-   recorded without an averageable price reads as free, which is the exact
-   thing AGL-1620 reported them to prevent.
+   **Custom dimensions** — Admin → Data display → Custom definitions →
+   *Custom dimensions* → Create, all **Event**-scoped (12; takes 18/50 → 30/50):
 
-   The dimension quota is **50 event-scoped**, and the lists above now total
-   well under it, so this is a clicking job rather than a prioritization one.
+   | Dimension name   | Event parameter    | Fired by                                  | Why |
+   | ---------------- | ------------------ | ----------------------------------------- | --- |
+   | Metric rating    | `metric_rating`    | CWV (AGL-1642)                            | `good`/`needs-improvement`/`poor` — **the entire point of RUM**, and readable without percentile math |
+   | Metric id        | `metric_id`        | CWV (AGL-1642)                            | Per-pageview dedup/grouping key |
+   | Churn reason     | `reason`           | `churn_survey_submitted`                  | **Why they left** — the one question the survey exists to ask |
+   | From plan        | `from_plan`        | `downsell_accepted`, `plan_downgrade_scheduled`, `plan_upgraded` | The tier left — one dimension serves all three events |
+   | To plan          | `to_plan`          | same three                                | The tier taken; the pair is the whole movement |
+   | Funnel completed | `funnel_completed` | `cancellation_completed`                  | Separates surveyed departures from support/dashboard ones |
+   | Billing interval (plan change) | `interval` | `plan_downgrade_scheduled`, `plan_upgraded` | Cadence of the new plan. NOTE it is `interval`, **not** the already-registered `billing_interval` — a different param name, so it needs its own dimension |
+   | Effective at     | `effective_at`     | `plan_downgrade_scheduled`                | Decision date vs effect date — the window a save is still possible in |
+   | Assist tier      | `tier`             | `assistant_message_sent`                  | `free` vs `entitled` |
+   | Assist grounded  | `grounded`         | `assistant_message_sent`                  | Ungrounded questions at volume ARE the docs-gap signal |
+   | Assist feedback  | `feedback`         | `assistant_feedback`                      | `up`/`down` — otherwise thumbs are one undifferentiated count |
+   | Assist action    | `action`           | `assistant_proposal_shown`/`_confirmed`   | The shown-to-confirmed ratio per action; a ratio near 1 means the confirm gate is a speed bump |
+
+   **Custom metrics** — same screen, *Custom metrics* tab, **Event**-scoped,
+   unit **Standard** (3; takes 2/50 → 5/50):
+
+   | Metric name      | Event parameter   | Why |
+   | ---------------- | ----------------- | --- |
+   | Percent off      | `percent_off`     | The discount a save was bought with |
+   | Duration months  | `duration_months` | How long that discount runs — with `percent_off`, the cost of the save |
+   | Metric delta     | `metric_delta`    | Lowest priority — already readable as GA4's built-in Event value (see 0e) |
+
+   `percent_off` and `duration_months` are NUMBERS — custom **metrics**, like
+   `tenure_days`, not dimensions; a save recorded without an averageable price
+   reads as free, which is the exact thing AGL-1620 reported them to prevent.
+   `grounded` and `funnel_completed` are booleans and are **dimensions**: GA
+   reports them as the strings `true`/`false`, which is a breakdown, not a
+   number to average.
+
+   The dimension quota is **50 event-scoped** against 18 used, and the metric
+   quota 50 against 2, so this is a clicking job rather than a prioritization
+   one — everything above fits with 20 dimension slots still spare.
    Register nothing speculatively: an unregistered param is still COLLECTED,
    so registration can wait for the question, but the answer is unavailable for
    the period before it — GA does not backfill a dimension.
 
+   ⚠️ **Ordering is not cosmetic.** `metric_rating` and the four retention
+   params are the ones whose events are firing TODAY; the Assist four fire
+   only where Assist is used. Every day a param is unregistered is a day of
+   that breakdown lost permanently, so register top-down.
+
 1. **Mark the remaining key events.** Admin → Events → _Mark as key event_.
-   `sign_up` is marked; `purchase` is a key event by GA default. GA will not let
-   an event be marked **until it has been seen at least once**, so
-   `generate_lead`, `site_published`, `begin_checkout` and `stripe_connected`
-   have to wait for their first hit. Until marked they are ordinary events and
-   appear as conversions nowhere.
+   Re-read from the property 2026-08-24: **`sign_up`, `purchase`,
+   `select_content` and `site_published` are already marked.** GA will not let
+   an event be marked **until it has been seen at least once**, so the rest
+   split by whether the property has seen them:
+
+   - ✅ **`generate_lead` was marked 2026-08-24** (change history: `Key event
+     settings / Modified`, 06:29 GMT-5). The **Key events** tab now reads 5 of
+     5: `generate_lead`, `purchase`, `select_content`, `sign_up`,
+     `site_published`.
+   - **`begin_checkout` and `stripe_connected` still cannot be** — re-read from
+     Admin → Events → *Recent events* on 2026-08-24: the property has seen **19**
+     event names in the last 28 days (`click`, `CLS`, `first_visit`,
+     `generate_lead`, `INP`, `LCP`, `login`, `page_view`, `purchase`,
+     `screen_view`, `scroll`, `select_content`, `session_start`, `sign_up`,
+     `site_published`, `subscription_cancelled`, `TTFB`, `user_engagement`,
+     `view_search_results`) and neither of those two is among them. Re-check
+     after the first paid beta checkout and the first merchant Connect
+     onboarding; this is a sweep to run a few days into beta, not now.
+
+   > 🟢 **Note what that 19-event list independently proves:** `purchase` and
+   > `subscription_cancelled` are **server-only** events sent by the Measurement
+   > Protocol, and both have been received. The transport is live on the running
+   > lambdas — no further env-var archaeology is warranted, and `FCP` is absent
+   > exactly as `METRIC_HANDLER_NAMES` predicts.
+
+   Until marked they are ordinary events and appear as conversions nowhere.
 
    The AGL-1562 additions join that queue. `select_content` and `click` have
    never been seen by the property — they had no call sites until now — so
@@ -1809,7 +2213,15 @@ there is the merchant's to make, not one we can make for them.
    > running lambda actually has. Ask the deployment, and always diff against an
    > older one as a negative control.
 
-   #### `DOCS_GA_TRACKING_ID` — set 2026-08-23, not yet deployed
+   #### `DOCS_GA_TRACKING_ID` — created and deployed 2026-08-24 ✅
+
+   Re-confirmed in a browser on 2026-08-24 while verifying AGL-1582:
+   `docs.aglyn.com` now loads the tag and configs `G-YW5PG16YTM` with
+   `anonymize_ip: true`, and the internal-traffic snippet's
+   `gtag('set', {traffic_type:'internal'})` sits at `dataLayer` index 3 —
+   after `content_group: 'docs'`, before `config`, which is the order it has
+   to be in. AGL-1637 item 2b is **done**; any list still showing it open is
+   stale.
 
    Verified 2026-08-19: the live `aglyn-docs` production deployment
    (`dpl_DEMJtAphsh…`) carried `GA4_API_SECRET` and `GA4_MEASUREMENT_ID` but

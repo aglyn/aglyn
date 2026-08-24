@@ -53,6 +53,11 @@ const mockResolveOrgMembership = jest.fn()
 const mockCheckQuota = jest.fn()
 /** Every `tx.set` the create transaction performs, in order. */
 const mockTxSets: string[] = []
+/**
+ * What the TRANSACTION's uniqueness re-read finds — empty unless a test stages
+ * a competitor that committed inside the race window (AGL-2465).
+ */
+let mockRivalHosts: Array<{ id: string }> = []
 
 const ORG = { $id: 'org-1', slug: 'acme', plan: 'business' }
 
@@ -71,9 +76,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       }),
       firestore: () => ({
         collection: (name: string) => ({
-          // The subdomain-uniqueness probe, and the per-org site census.
+          // The subdomain-uniqueness probe, and the per-org site census. The
+          // probe always reports the name FREE: it runs outside any
+          // transaction, and `mockRivalHosts` below is what the transaction's
+          // own re-read sees. That split is the race window (AGL-2465) —
+          // pre-check clear, competitor committed before this create's commit.
           where: () => ({
-            limit: () => ({ get: async () => ({ empty: true }) }),
+            limit: () => ({ get: async () => ({ empty: true, docs: [] }) }),
             count: () => ({
               get: async () => ({ data: () => ({ count: 0 }) }),
             }),
@@ -89,13 +98,22 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         }),
         runTransaction: async (fn: (tx: unknown) => Promise<unknown>) =>
           fn({
-            get: async (ref: { path: string }) => ({
-              exists: true,
-              data: () => ORG,
-              get: (field: string) =>
-                field === 'hosts' ? {} : (ORG as Record<string, unknown>)[field],
-              ref,
-            }),
+            /**
+             * Overloaded like the real `Transaction.get`: a document reference
+             * or a QUERY. `claimHostForOrg` re-reads subdomain uniqueness in
+             * the transaction (AGL-2465); a query has no `path`.
+             */
+            get: async (target: { path?: string }) => {
+              if (!target?.path) return { docs: mockRivalHosts }
+              const ref = target as { path: string }
+              return {
+                exists: true,
+                data: () => ORG,
+                get: (field: string) =>
+                  field === 'hosts' ? {} : (ORG as Record<string, unknown>)[field],
+                ref,
+              }
+            },
             set: (ref: { path: string }) => {
               mockTxSets.push(ref.path)
             },
@@ -188,6 +206,7 @@ const post = () =>
 beforeEach(() => {
   jest.clearAllMocks()
   mockTxSets.length = 0
+  mockRivalHosts = []
   mockLockdownRefusal.mockResolvedValue(null)
   mockConsumeRateLimit.mockResolvedValue(allowed(20))
   mockResolveOrgMembership.mockResolvedValue({
@@ -293,5 +312,56 @@ describe('AGL-1968 · /api/hosts/create is rate limited', () => {
     // And the uid key must carry the uid, not a constant: a route that keyed
     // every caller the same would rate-limit the whole platform as one user.
     expect(keys).toContain('host-create:u-squatter')
+  })
+})
+
+/**
+ * AGL-2465. The console create path has NO idempotency key — a double-submit
+ * is two independent attempts, not a retry — so the only thing standing
+ * between it and two sites on one subdomain is the uniqueness re-read inside
+ * `claimHostForOrg`'s transaction. Before that read existed, both attempts
+ * passed the out-of-transaction pre-check and both wrote a host carrying the
+ * same `subdomain`, which every resolution path then answers with
+ * `where('subdomain','==',…).limit(1)` — undefined which site serves the
+ * address. The AGL-1848 shape, on the most expensive object to duplicate.
+ */
+describe('AGL-2465 · losing the subdomain race writes nothing', () => {
+  it('a competitor that commits inside the window makes this a 409, not a second site', async () => {
+    mockRivalHosts = [{ id: 'rival-host' }]
+    const response = await post()
+
+    expect(response.status).toBe(409)
+    expect((await response.json()).error).toContain('taken')
+    // The verdict is the WRITE, not the status: no host document, and no org
+    // directory claim, so no hostLimit slot is consumed either.
+    expect(mockTxSets).toEqual([])
+    expect(mockRegisterOrgHost).not.toHaveBeenCalled()
+  })
+
+  it('THE CONTROL: with no competitor the identical request creates the site', async () => {
+    const response = await post()
+    expect(response.status).toBe(200)
+    expect(mockTxSets).toEqual(['hosts/host-new', 'orgs/org-1'])
+    expect(mockRegisterOrgHost).toHaveBeenCalled()
+  })
+
+  it('a row for THIS host is not a conflict — only a different id is', async () => {
+    // `createResourceUid` is stubbed to 'host-new', so this is the site's own
+    // row. Matching on presence rather than on a different id would make every
+    // create refuse itself.
+    mockRivalHosts = [{ id: 'host-new' }]
+    const response = await post()
+    expect(response.status).toBe(200)
+    expect(mockTxSets).toEqual(['hosts/host-new', 'orgs/org-1'])
+  })
+
+  it('the 409 is NOT the quota 403 — the quota said yes', async () => {
+    mockRivalHosts = [{ id: 'rival-host' }]
+    expect(mockCheckQuota).not.toHaveBeenCalled()
+    const response = await post()
+    expect(response.status).toBe(409)
+    // The uniqueness read precedes the quota read inside the transaction, so
+    // a collision does not even reach the quota — and cannot be reported as one.
+    expect((await response.json()).error).not.toContain('Site limit')
   })
 })

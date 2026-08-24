@@ -14,7 +14,7 @@ name: Env isolation
 #
 # So this is the audit, on a schedule, with a verdict.
 #
-# ## It reads METADATA, never a value
+# ## It reads METADATA, never a secret
 #
 # A Vercel environment variable is a RECORD with one value and a `target`
 # array. A single record whose target spans `production` and `development` is
@@ -23,6 +23,18 @@ name: Env isolation
 # fact by pulling every value to a laptop and comparing salted hashes, i.e. by
 # putting ten production secrets in a file to prove they should not be in a
 # file. This asks the question the other way round.
+#
+# ## It also asks WHICH STRIPE ACCOUNT, which metadata cannot answer
+#
+# Sharing and mode are different questions, and only the second one is what
+# AGL-2401 is about. Split the Stripe records as the runbook says and the
+# sharing verdict goes green **even if the new development record holds the
+# live key** — the likely slip, since that is the value already on the
+# clipboard. So the checker classifies `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`,
+# which is public by construction (Next inlines it into every browser bundle)
+# and must match the secret key's mode, down to one of `live` / `test` /
+# `unknown` at the API boundary. `unknown` — a key stored `sensitive`, so
+# unreadable — is a finding, never a pass.
 #
 # ## The shared scope is the whole point
 #
@@ -34,7 +46,10 @@ name: Env isolation
 #
 # ## ⚠️ THIS JOB IS RED TODAY, AND THAT IS THE DELIVERABLE
 #
-# As of 2026-08-23 it reports 25 findings. Turning it green is remediation work
+# As of 2026-08-24 it reports 25 sharing findings and 3 mode findings —
+# aglyn-console's development and preview read `pk_live_`, and aglyn-tenant's
+# development and preview copies are stored `sensitive`, so UNKNOWN. Turning it
+# green is remediation work
 # in the Vercel dashboard (AGL-2403 / AGL-2401 / AGL-2402) — the runbook is
 # `docs/SECRET_ROTATION.md`. Do NOT add `continue-on-error`, and do NOT move a
 # finding into the checker's ACCEPTED table to quiet it: an ACCEPTED entry

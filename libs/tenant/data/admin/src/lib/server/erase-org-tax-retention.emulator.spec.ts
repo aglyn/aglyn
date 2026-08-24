@@ -152,8 +152,8 @@ describeEmulated(
           customerAddress: {
             country: 'US',
             state: 'TX',
-            city: 'Jarrell',
-            postalCode: '76537',
+            city: 'Testville',
+            postalCode: '00000',
           },
           taxLines: [
             {

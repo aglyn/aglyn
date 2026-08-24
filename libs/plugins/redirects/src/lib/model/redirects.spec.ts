@@ -16,6 +16,7 @@
  */
 
 import {
+  isExternalRedirectDestination,
   isSelfRedirect,
   normalizeRedirectDestination,
   normalizeRedirectSource,
@@ -311,5 +312,175 @@ describe('redirect regex matching is linear-time (SEC-M8)', () => {
     expect(compileRedirectRegex('a{500}')).toBeNull()
     // Ordinary bounded repeats are unaffected.
     expect(compileRedirectRegex('/p/(\\d{1,8})')).not.toBeNull()
+  })
+})
+
+/**
+ * The serve-path half of AGL-1881.
+ *
+ * The rules half stops an `author` from WRITING a hijack; these are about the
+ * rule that is already in Firestore. `matchRedirect` used to hand
+ * `rule.destination` back untouched, so anything stored — by a role the rules
+ * have since refused, or straight through the client SDK — became a
+ * `Location:` header on every request to the site.
+ *
+ * Every assertion here is paired: the refusal, and the legitimate rule beside
+ * it that must still fire. A gate that denies everything passes half of this
+ * file and is worse than the hole.
+ */
+describe('matchRedirect destination validation (AGL-1881)', () => {
+  const { matchRedirect } = require('./redirects')
+  const external = (over: Record<string, unknown> = {}) => [
+    {
+      source: '/(.*)',
+      destination: 'https://attacker.example/$1',
+      statusCode: 302,
+      kind: 'regex',
+      ...over,
+    },
+  ]
+
+  it('refuses an already-stored external destination with no publisher stamp', () => {
+    // The shape the review reported: one broad rule, one absolute target.
+    expect(matchRedirect(external() as any, '/anything')).toBeNull()
+    expect(matchRedirect(external() as any, '/')).toBeNull()
+  })
+
+  it('serves the same rule once a publisher has stamped it', () => {
+    // The positive control on the SAME rule. Without this the test above
+    // would pass against a matcher that refuses every external destination,
+    // which would break vanity domains and campaign links — a documented
+    // feature ("point old addresses at new pages or outside URLs").
+    expect(
+      matchRedirect(
+        external({ externalDestinationApprovedBy: 'uid-editor' }) as any,
+        '/promo',
+      ),
+    ).toMatchObject({ destination: 'https://attacker.example/promo' })
+  })
+
+  /**
+   * Which branch runs, proved value by value.
+   *
+   * `strictNullChecks` is OFF repo-wide, so an absent stamp is `undefined`, a
+   * stored one may be `null`, and a cleared one may be `''` — none of which
+   * error, and all of which have to land on the SAME side. A truthiness test
+   * would agree with three of these and disagree with the fourth.
+   */
+  it.each([
+    ['absent', {}],
+    ['undefined', { externalDestinationApprovedBy: undefined }],
+    ['null', { externalDestinationApprovedBy: null }],
+    ['empty string', { externalDestinationApprovedBy: '' }],
+    ['whitespace only', { externalDestinationApprovedBy: '   ' }],
+    ['not a string', { externalDestinationApprovedBy: true }],
+  ])('a %s stamp does not approve an external destination', (_label, over) => {
+    expect(matchRedirect(external(over) as any, '/x')).toBeNull()
+  })
+
+  it('never gates an internal destination on the stamp', () => {
+    // The blast radius of failing closed is external rules and nothing else.
+    expect(
+      matchRedirect(
+        [
+          {
+            source: '/(.*)',
+            destination: '/moved/$1',
+            statusCode: 301,
+            kind: 'regex',
+          },
+        ] as any,
+        '/old-page',
+      ),
+    ).toMatchObject({ destination: '/moved/old-page', statusCode: 301 })
+  })
+
+  it('skips a destination that no longer normalizes after substitution', () => {
+    /**
+     * The open redirect hiding inside an entirely internal-looking rule: `/$1`
+     * passes `normalizeRedirectDestination` at save time and becomes
+     * `//attacker.example` once the capture swallows a hostname. Only a
+     * POST-substitution check can see it, and the stamp gate cannot — the
+     * stored destination is a path.
+     */
+    const rules = [
+      { source: '/go/(.*)', destination: '/$1', statusCode: 302, kind: 'regex' },
+    ]
+    expect(matchRedirect(rules as any, '/go//attacker.example')).toBeNull()
+    /**
+     * The same rule WITH a publisher's stamp, so the approval gate is
+     * satisfied and normalization is the only thing left that can refuse it.
+     * Without this line the assertion above passes on either control and says
+     * nothing about which one ran — measured: deleting the normalize check
+     * left it green.
+     */
+    expect(
+      matchRedirect(
+        [
+          { ...rules[0], externalDestinationApprovedBy: 'uid-editor' },
+        ] as any,
+        '/go//attacker.example',
+      ),
+    ).toBeNull()
+    // …and the same rule still does its ordinary job.
+    expect(matchRedirect(rules as any, '/go/pricing')).toMatchObject({
+      destination: '/pricing',
+    })
+  })
+
+  it('skips stored destinations the console would never have accepted', () => {
+    // Written straight to Firestore, so console validation never saw them.
+    for (const destination of [
+      'javascript:alert(1)',
+      'data:text/html,<script></script>',
+      '//attacker.example',
+      'http://attacker.example',
+      '/has space',
+    ]) {
+      expect(
+        matchRedirect(
+          [{ source: '/x', destination, statusCode: 302, kind: 'exact' }] as any,
+          '/x',
+        ),
+      ).toBeNull()
+    }
+  })
+
+  it('falls through to the next rule rather than failing the request', () => {
+    // A refused rule must not take the site down, and must not shadow a good
+    // rule behind it — the same property an uncompilable pattern already has.
+    const rules = [
+      {
+        source: '/x',
+        destination: 'https://attacker.example',
+        statusCode: 302,
+        kind: 'exact',
+        priority: 1,
+      },
+      {
+        source: '/x',
+        destination: '/pricing',
+        statusCode: 302,
+        kind: 'exact',
+        priority: 2,
+      },
+    ]
+    expect(matchRedirect(rules as any, '/x')).toMatchObject({
+      destination: '/pricing',
+    })
+  })
+})
+
+describe('isExternalRedirectDestination (AGL-1881)', () => {
+  it('answers on "is it a path", so the unexpected meets the gate', () => {
+    expect(isExternalRedirectDestination('/pricing')).toBe(false)
+    expect(isExternalRedirectDestination('  /pricing  ')).toBe(false)
+    expect(isExternalRedirectDestination('https://example.com')).toBe(true)
+    expect(isExternalRedirectDestination('//example.com')).toBe(true)
+    expect(isExternalRedirectDestination('javascript:alert(1)')).toBe(true)
+    // The `strictNullChecks`-off cases: neither may read as "internal".
+    expect(isExternalRedirectDestination('')).toBe(true)
+    expect(isExternalRedirectDestination(undefined as any)).toBe(true)
+    expect(isExternalRedirectDestination(null as any)).toBe(true)
   })
 })

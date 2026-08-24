@@ -431,4 +431,87 @@ describe('reportServerError (AGL-1921)', () => {
     ).resolves.toBe('dropped')
     expect(fetchMock).not.toHaveBeenCalled()
   })
+
+  /*==========================================
+   * THE READABLE COUNT SURVIVES EVERY WAY THE LOGGING ARM CAN FAIL.
+   *
+   * `/api/health/server-errors` grades the marker, not the log — the log
+   * cannot be read back at all (`403 Permission denied for all log views`,
+   * measured against the production credential). So if the marker were
+   * recorded only on the success path, a dead transport would present as ZERO
+   * server errors, and it would present that way during precisely the incident
+   * that killed the transport. The ordering is the invariant; these are the
+   * tests that hold it.
+   *==========================================*/
+  describe('the marker is recorded above every gate', () => {
+    /** Load with `recordServerError` spied, so the ORDERING is observable. */
+    async function loadWithMarkerSpy(app: unknown) {
+      const recordServerError = jest.fn()
+      jest.doMock('./rate-limit-store', () => ({
+        __esModule: true,
+        recordServerError,
+      }))
+      const mod = await load(app)
+      return { mod, recordServerError }
+    }
+
+    it('counts the error when the write SUCCEEDS', async () => {
+      okFetch()
+      const { mod, recordServerError } = await loadWithMarkerSpy(HEALTHY_APP)
+      await mod.reportServerError({ message: 'boom' }, { service: 'console-web' })
+      expect(recordServerError).toHaveBeenCalledWith('console-web')
+    })
+
+    it('counts it when there is NO CREDENTIAL to write with', async () => {
+      jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+      okFetch()
+      const { mod, recordServerError } = await loadWithMarkerSpy(
+        new Error('no admin app'),
+      )
+      await expect(
+        mod.reportServerError({ message: 'boom' }, { service: 'tenant-web' }),
+      ).resolves.toBe('dropped')
+      expect(recordServerError).toHaveBeenCalledWith('tenant-web')
+    })
+
+    it('counts it when the TRANSPORT fails', async () => {
+      jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+      globalThis.fetch = jest
+        .fn()
+        .mockRejectedValue(new Error('socket hang up')) as unknown as typeof fetch
+      const { mod, recordServerError } = await loadWithMarkerSpy(HEALTHY_APP)
+      await mod.reportServerError({ message: 'boom' }, { service: 'tenant-web' })
+      expect(recordServerError).toHaveBeenCalledWith('tenant-web')
+    })
+
+    it('counts it when Logging REFUSES the write', async () => {
+      jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+      globalThis.fetch = jest
+        .fn()
+        .mockResolvedValue({ ok: false, status: 403 }) as unknown as typeof fetch
+      const { mod, recordServerError } = await loadWithMarkerSpy(HEALTHY_APP)
+      await mod.reportServerError({ message: 'boom' }, { service: 'console-web' })
+      expect(recordServerError).toHaveBeenCalledWith('console-web')
+    })
+
+    it('counts EVERY error past the Logging write budget', async () => {
+      // The budget suppresses Logging writes at 60/minute/instance. A spike is
+      // the event being watched for, so the COUNT must not be capped at the
+      // threshold's own scale by an unrelated cost control.
+      jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+      okFetch()
+      const { mod, recordServerError } = await loadWithMarkerSpy(HEALTHY_APP)
+      for (let i = 0; i < 70; i += 1) {
+        await mod.reportServerError({ message: `boom ${i}` }, { service: 'console-web' })
+      }
+      expect(recordServerError).toHaveBeenCalledTimes(70)
+    })
+
+    it('does NOT count a dropped empty message — that was never an error', async () => {
+      okFetch()
+      const { mod, recordServerError } = await loadWithMarkerSpy(HEALTHY_APP)
+      await mod.reportServerError({ message: '' }, { service: 'console-web' })
+      expect(recordServerError).not.toHaveBeenCalled()
+    })
+  })
 })

@@ -71,6 +71,7 @@ async function expandCollectionEntryBlocks(
   const slugs = new Set<string>()
   let hasRelated = false
   let hasCategories = false
+  let hasSearch = false
   for (const node of Object.values(nodes)) {
     if (node?.componentId === Aglyn.COLLECTION_ENTRIES_COMPONENT_ID) {
       const slug =
@@ -84,6 +85,17 @@ async function expandCollectionEntryBlocks(
         String(node?.props?.collectionSlug ?? '').trim() || collection?.slug
       if (slug) {
         hasCategories = true
+        slugs.add(slug)
+      }
+    }
+    // The standalone toolbar search box (AGL-1516, Figma 494:1220) needs the
+    // collection's entries to index, and rides the same source the listing
+    // beside it was built from — one read, one answer.
+    if (node?.componentId === Aglyn.COLLECTION_SEARCH_COMPONENT_ID) {
+      const slug =
+        String(node?.props?.collectionSlug ?? '').trim() || collection?.slug
+      if (slug) {
+        hasSearch = true
         slugs.add(slug)
       }
     }
@@ -142,9 +154,12 @@ async function expandCollectionEntryBlocks(
         collection?.categorySlug,
       )
     : expanded
-  if (!hasRelated || !collection?.entry) return withCategories
+  const withSearch = hasSearch
+    ? Aglyn.expandCollectionSearch(withCategories, sources, collection?.slug)
+    : withCategories
+  if (!hasRelated || !collection?.entry) return withSearch
   return Aglyn.expandCollectionRelated(
-    withCategories,
+    withSearch,
     sources[collection.slug],
     collection.entry,
   )

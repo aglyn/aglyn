@@ -36,8 +36,23 @@ const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
 // A per-boot fallback keeps dev working; production must set the env so
 // sessions survive deploys and instances agree.
+//
+// `||`, NOT `??`, and on a self-host install that is the whole difference
+// (AGL-2014). `.env.selfhost.example` ships `MEMBER_SESSION_SECRET=` blank and
+// compose `env_file` sets a blank line as the EMPTY STRING rather than leaving
+// it unset — so `??` did not fire, `SESSION_SECRET` was `''`, and `createHmac`
+// signs happily with an empty key. Every storefront member session cookie on a
+// template-following deployment was therefore signed with a key any reader of
+// this repository already has, i.e. forgeable. `||` restores the per-boot
+// random the comment above describes and the env template already promises
+// ("without it, sessions don't survive a restart and disagree across
+// instances") — unforgeable, and visibly degraded rather than silently open.
+//
+// Nothing caught it because `tools/scripts/selfhost-ci-env.mjs` FILLS this
+// variable before the image build, so the one job that builds these images
+// tests a configuration no operator following the template has.
 const SESSION_SECRET =
-  process.env.MEMBER_SESSION_SECRET ?? randomBytes(32).toString('hex')
+  process.env.MEMBER_SESSION_SECRET || randomBytes(32).toString('hex')
 
 export function hashMemberPassword(password: string): string {
   const salt = randomBytes(16).toString('hex')

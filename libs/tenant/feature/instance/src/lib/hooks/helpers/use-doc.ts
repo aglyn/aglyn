@@ -24,6 +24,7 @@ import {
   refusedRetryDelayMs,
   subscribeFirestoreSessionHeal,
 } from '../firestore-denial-reporter'
+import { CONFIRMABLE_LISTEN_OPTIONS } from './listen-options'
 import useModifyDocCallback, {
   type UseModifyDocCallback,
 } from './use-modify-doc-callback'
@@ -102,6 +103,10 @@ export function useDocData<T>(
     const subscribe = () => {
       unsubscribe = onSnapshot(
         ref,
+        // Without this the cache→server confirmation is never delivered and
+        // `fromCache` latches true for the life of the listener, refusing
+        // every guarded save on the page (AGL-2486). See `listen-options.ts`.
+        CONFIRMABLE_LISTEN_OPTIONS,
         (snapshot) => {
           if (cancelled) return
           // Only the SERVER answering refunds the retry budget, and only a

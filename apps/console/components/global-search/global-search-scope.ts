@@ -77,7 +77,12 @@
  * A window is a partial set. `globalSearchScopeMessage` says so, and
  * `useGlobalSearch` marks any group that filled its window as truncated, so an
  * absent result never silently reads as "you do not have one" to somebody
- * about to create a duplicate. A group whose read FAILED says that too, rather
+ * about to create a duplicate. That promise was only half kept until AGL-2179
+ * was reverified against a real console: a group that matched NOTHING used to
+ * be dropped before it could render its caveat, so the one case where the
+ * caveat carried information was the one case that hid it. It is also why the
+ * window now escalates rather than merely apologising — see
+ * `SEARCH_ESCALATION_WINDOW`. A group whose read FAILED says that too, rather
  * than rendering as zero matches — a swallowed query that renders as a
  * measured zero is worse than an error, because nothing looks wrong.
  */
@@ -389,11 +394,19 @@ export function resolveGlobalSearchScope(
 
   // The placeholder names the first few rather than all twelve: a field whose
   // placeholder does not fit the field is not a promise anybody reads.
+  //
+  // `and more` REPLACES the list's own conjunction rather than following it.
+  // Measured on a real console, the two together read
+  // "Search sites, pages and emails and more…" — the one element of this
+  // feature everybody sees, stuttering.
   const named = entities.slice(0, 3)
-  const suffix = entities.length > named.length ? ' and more' : ''
+  const body =
+    entities.length > named.length
+      ? `${named.map((entity) => entity.noun).join(', ')} and more`
+      : describeEntities(named)
   return {
     entities,
-    placeholder: `Search ${describeEntities(named)}${suffix}…`,
+    placeholder: `Search ${body}…`,
     unavailable: false,
   }
 }
@@ -418,7 +431,7 @@ export function globalSearchScopeMessage(
 ): string {
   if (scope.unavailable) return ''
   return (
-    'Matches any part of a name. Looks at up to ' +
+    'Matches any part of a name. Searches up to ' +
     `${windowSize} items in each group, so a very large group may hold ` +
     'matches that are not shown.'
   )

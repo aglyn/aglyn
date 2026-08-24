@@ -49,6 +49,25 @@ export const COLLECTION_ENTRY_META_COMPONENT_ID = 'collectionEntryMeta'
 export const COLLECTION_CATEGORIES_COMPONENT_ID = 'collectionCategories'
 
 /**
+ * Persisted component id of the standalone "Collection Search" block
+ * (plugins-mui, AGL-1516).
+ *
+ * The Collection Entries block grew its own search box first, and it renders
+ * INSIDE that block — first child of the block's own stack. Figma 494:1220
+ * puts the field in the listing's toolbar row instead, beside the RSS button
+ * with the category pills opposite it, and no amount of authoring can lift a
+ * block's own child out of it. The pills cannot move the other way either:
+ * every child of an entries block is cloned once per entry.
+ *
+ * So the field became a block an author can put where the frame draws it.
+ * Suggestion-panel only, by construction rather than by omission — a
+ * standalone box has no clones to hide, so `filter` is a thing it genuinely
+ * cannot do, and the one behaviour it does have is the toolbar behaviour the
+ * frame asks for.
+ */
+export const COLLECTION_SEARCH_COMPONENT_ID = 'collectionSearch'
+
+/**
  * Reserved list sub-paths (AGL-620 `page`, AGL-1321 `category`). Both are
  * only reserved as the HEAD of a longer path, so an entry legitimately
  * slugged `page` or `category` keeps serving at `/{collection}/{entry}`.
@@ -61,6 +80,36 @@ export const COLLECTION_ENTRIES_NODE_ID_PREFIX = 'centry__'
 
 /** Hard bound on entries a single block renders, before `entriesLimit`. */
 export const COLLECTION_ENTRIES_MAX = 100
+
+/**
+ * Hard bound on the entries one READ of a collection returns (AGL-1516) — the
+ * `.limit()` the tenant's live-entries query carries.
+ *
+ * Named here, beside the render bound it has always silently matched, because
+ * a search index has to know the difference. The render bound is a choice
+ * about a block; this one is a choice about the DATA, and a set that reaches
+ * it is a set nobody has seen all of. Two 100s that happened to agree meant
+ * `entries.length === 100` could be read either as "this collection has 100
+ * entries" or "this read stopped at 100", and the honest empty state turns on
+ * exactly that distinction.
+ */
+export const COLLECTION_SOURCE_MAX = 100
+
+/**
+ * Whether a collection source is a COMPLETE read or a bounded one
+ * (AGL-1516) — true when the read came back holding its own limit, which is
+ * the only signal a limited query without a count leaves behind.
+ *
+ * Deliberately errs toward "bounded": a collection of exactly
+ * {@link COLLECTION_SOURCE_MAX} entries answers true and gets described one
+ * notch more cautiously than it needed. Overstating what a search covered is
+ * the failure that renders as a confident "nothing matched".
+ */
+export function collectionSourceReachedBound(
+  entries: readonly unknown[] | undefined,
+): boolean {
+  return (entries?.length ?? 0) >= COLLECTION_SOURCE_MAX
+}
 
 /** Default entries per page for a paginated collection list (AGL-620). */
 export const COLLECTION_LIST_PAGE_SIZE = 10
@@ -793,6 +842,46 @@ export function buildCollectionCategoryLinks(options: {
 }
 
 /**
+ * The matchable text a search box holds for a set of entries (AGL-1516),
+ * built ONCE for both blocks that carry one — the entries block's in-place
+ * filter and the standalone toolbar box (AGL-1516, Figma 494:1220).
+ *
+ * Shared rather than copied for the same reason
+ * {@link COLLECTION_SEARCH_FUSE_OPTIONS} is: the two boxes can sit on the
+ * same page, over the same collection, and a reader who sees a suggestion in
+ * one and a miss in the other has been told the site is broken. Two builders
+ * is how the row's date, chip and link drift apart.
+ *
+ * The row's link, date and category are resolved HERE, where the entry still
+ * exists — a component only holds rendered markup by the time it runs, and
+ * the suggestion panel draws its rows from this index rather than from the
+ * clones. Through the same three resolvers Related posts uses (AGL-1926 for
+ * the date especially): a suggestion for a post is the same post as the card
+ * below it and must not be able to disagree with it about its date.
+ */
+export function buildCollectionSearchIndex(
+  entries: readonly CollectionEntryRecord[],
+  collectionSlug: string,
+  categories?: readonly CollectionCategory[],
+): CollectionEntrySearchItem[] {
+  return entries.map((entry): CollectionEntrySearchItem => {
+    const categoryName = resolveEntryCategoryName(entry, categories)
+    return {
+      title: entry.title ?? '',
+      excerpt: entry.excerpt ?? '',
+      // Absent keys rather than empty strings, so the row asks one question
+      // per field instead of two — the shape Related posts settled on
+      // (AGL-1457).
+      ...(entry.slug ? { url: `/${collectionSlug}/${entry.slug}` } : {}),
+      ...(entry.publishedAt?.seconds
+        ? { date: formatCollectionEntryDate(entry.publishedAt) }
+        : {}),
+      ...(categoryName ? { category: categoryName } : {}),
+    }
+  })
+}
+
+/**
  * Collection entries blocks (AGL-551): a `collectionEntries` container
  * treats its children as the item template and renders them once per
  * published entry, with `{{entry.*}}` tokens in cloned string props replaced
@@ -915,6 +1004,11 @@ export function expandCollectionEntries<
             ),
           )
         : source.entries
+    // Whether the READ behind `source.entries` reached its own bound
+    // (AGL-1516). Taken off the raw set, never off `filtered`: a category
+    // filter legitimately narrows a complete read, and a narrowed set is not
+    // a bounded one.
+    const sourceCapped = collectionSourceReachedBound(source.entries)
 
     const windowed = suppressedBeyondFirstPage
       ? []
@@ -970,33 +1064,11 @@ export function expandCollectionEntries<
           ...container,
           props: {
             ...(container.props as any),
-            searchIndex: windowed.map((entry): CollectionEntrySearchItem => {
-              // The suggestion panel (AGL-1525) draws ROWS from the index
-              // rather than filtering clones, so the row's link, date and
-              // category chip have to be here — the component only holds
-              // rendered markup by then. Through the same three resolvers
-              // Related posts uses (AGL-1926 for the date especially): a
-              // suggestion for a post is the same post as the card below it
-              // and must not be able to disagree with it about its date.
-              const categoryName = resolveEntryCategoryName(
-                entry,
-                source.categories,
-              )
-              return {
-                title: entry.title ?? '',
-                excerpt: entry.excerpt ?? '',
-                // Absent keys rather than empty strings, so the row asks one
-                // question per field instead of two — the shape Related
-                // posts settled on (AGL-1457).
-                ...(entry.slug
-                  ? { url: `/${source.slug}/${entry.slug}` }
-                  : {}),
-                ...(entry.publishedAt?.seconds
-                  ? { date: formatCollectionEntryDate(entry.publishedAt) }
-                  : {}),
-                ...(categoryName ? { category: categoryName } : {}),
-              }
-            }),
+            searchIndex: buildCollectionSearchIndex(
+              windowed,
+              source.slug,
+              source.categories,
+            ),
             // How many entries the window above was drawn FROM (AGL-1516).
             //
             // The component has to tell the reader whether a miss means "not
@@ -1013,6 +1085,25 @@ export function expandCollectionEntries<
             // category, and "the rest of the collection" means the rest of
             // what this block would otherwise show.
             searchTotal: filtered.length,
+            // And whether `searchTotal` is itself a ceiling (AGL-1516).
+            //
+            // `source.entries` is a READ, and that read is bounded — the
+            // tenant fetches a collection's live entries with a hard
+            // `.limit(100)` and no `orderBy`. On a collection past that bound
+            // `filtered.length` reports the bound, not the collection, so
+            // `searchIndex.length === searchTotal` — the test the component
+            // reads as "this block holds the whole set" — is satisfied by a
+            // block that holds 100 of 400 posts. The completeness claim is
+            // the one thing a truncated read must never be allowed to make:
+            // "no matches" over a quarter of a collection is a confident lie
+            // about the other three quarters.
+            //
+            // A fact, like the count beside it: "the read that produced this
+            // index reached its bound". A collection of exactly 100 sets it
+            // too, and is described one notch more cautiously than it needed
+            // to be — which is the safe direction, and the only one available
+            // without a second count query.
+            ...(sourceCapped ? { searchCapped: true } : {}),
           },
           nodes: childIds,
         }
@@ -1071,6 +1162,72 @@ export function expandCollectionCategories<
     next[containerId] = {
       ...container,
       props: { ...(container.props as any), items },
+    }
+  }
+  return next
+}
+
+/**
+ * Collection Search blocks (AGL-1516): stamps each `collectionSearch` node
+ * with its collection's search index, the size of the set that index was
+ * drawn from, and whether that set was a bounded read — the same
+ * server-stamped shape Category Pills and Related posts use, and for the same
+ * reason: the block owns its markup, so there is no template to clone.
+ *
+ * Indexes the WHOLE source rather than a page window. The entries block's box
+ * searches the entries that block rendered because it filters them in place;
+ * a toolbar box filters nothing and suggests, so scoping it to one page of a
+ * listing would be an arbitrary cut nobody asked for. What it can honestly
+ * cover is the set the page's listing is drawn from — which on a category
+ * route is that category, because `source.entries` arrives filtered.
+ *
+ * Clones are SKIPPED by their `centry__` prefix: a search box inside an entry
+ * template would otherwise be stamped once per card. Nodes are never mutated,
+ * and a collection with no entries leaves its block untouched, so the
+ * component's besigner affordance and its empty site render both stand.
+ */
+export function expandCollectionSearch<
+  N extends AglynNodeSchema = AglynNodeSchema,
+>(
+  nodes: Record<NodeId, N>,
+  sourcesBySlug: Record<string, CollectionEntriesSource | undefined>,
+  defaultSlug?: string,
+): Record<NodeId, N> {
+  const containers = Object.entries(nodes).filter(
+    ([id, node]) =>
+      node?.componentId === COLLECTION_SEARCH_COMPONENT_ID &&
+      !id.startsWith(COLLECTION_ENTRIES_NODE_ID_PREFIX),
+  )
+  if (!containers.length) return nodes
+
+  const next: Record<NodeId, N> = { ...nodes }
+  for (const [containerId, container] of containers) {
+    const slug =
+      String((container.props as any)?.collectionSlug ?? '').trim() ||
+      defaultSlug
+    const source = slug ? sourcesBySlug[slug] : undefined
+    // An unknown collection leaves the node untouched — fail-open, exactly as
+    // the entries and pills blocks do, so a rename never takes a screen down.
+    if (!source) continue
+    // A collection with nothing published gets no box. A search field over an
+    // empty index can only ever answer "no matches", which reads as a fact
+    // about the reader's query rather than about the empty collection it
+    // really describes.
+    if (!source.entries.length) continue
+    next[containerId] = {
+      ...container,
+      props: {
+        ...(container.props as any),
+        searchIndex: buildCollectionSearchIndex(
+          source.entries,
+          source.slug,
+          source.categories,
+        ),
+        searchTotal: source.entries.length,
+        ...(collectionSourceReachedBound(source.entries)
+          ? { searchCapped: true }
+          : {}),
+      },
     }
   }
   return next

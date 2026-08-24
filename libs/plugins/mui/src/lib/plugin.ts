@@ -107,6 +107,9 @@ export const MUI_BUNDLE: Array<{
     { component: Collection.CollectionEntryMeta, schema: Collection.collectionEntryMetaSchema },
     // Category pills (AGL-1321): real anchors to /{collection}/category/{slug}.
     { component: Collection.CollectionCategories, schema: Collection.collectionCategoriesSchema },
+    // The toolbar search box (AGL-1516): the entries block's own field cannot
+    // leave it, so the frame's pills-left / search-right row needs a block.
+    { component: Collection.CollectionSearch, schema: Collection.collectionSearchSchema },
     { component: Image.default, schema: Image.schema, presets: Image.presets },
     { component: Video.default, schema: Video.schema, presets: Video.presets },
     { component: Icon.default, schema: Icon.schema, presets: Icon.presets },

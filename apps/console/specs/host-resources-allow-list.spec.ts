@@ -482,6 +482,79 @@ describe('/api/hosts/resources stores an allow-list (AGL-1377)', () => {
     // Derived server-side (AGL-835); the client's own value never lands.
     expect(stored['nameLower']).toBe('pricing')
   })
+
+  /**
+   * Redirects ask the PUBLISH question, not the write question (AGL-1881).
+   *
+   * This route's role gate is `hostRoleCanWrite`, which admits `author` — and
+   * for screens, layouts and components that is right: nothing they create is
+   * reachable until a publish act registers it. A redirect has no second step.
+   * It decides what the live site serves at every address the moment it
+   * exists, and its destination may be an absolute URL, so the front door had
+   * to be narrowed in the same pass as the database.
+   */
+  describe('a redirect requires a publishing role (AGL-1881)', () => {
+    const REDIRECT = {
+      source: '/old', destination: '/new', statusCode: 301,
+      kind: 'exact', priority: 100, enabled: true,
+    }
+
+    it('refuses an author, and says which role it wants', async () => {
+      state.memberRoles = { 'user-1': 'author' }
+      const response = await postResource('redirect', REDIRECT)
+      expect(response.status).toBe(403)
+      expect(await response.json()).toEqual({
+        error: 'Creating redirects requires a publishing role',
+      })
+      expect(mockWrite).not.toHaveBeenCalled()
+    })
+
+    it('CONTROL — the same author still creates a screen', async () => {
+      // Without this the test above passes against a route that refuses an
+      // author everything, which would break the role AGL-2334 shipped.
+      state.memberRoles = { 'user-1': 'author' }
+      const response = await postResource('screen', { displayName: 'Draft' })
+      expect(response.status).toBe(200)
+      expect(mockWrite).toHaveBeenCalledTimes(1)
+    })
+
+    it.each(['editor', 'admin'])('still admits an %s', async (role) => {
+      state.memberRoles = { 'user-1': role }
+      const response = await postResource('redirect', REDIRECT)
+      expect(response.status).toBe(200)
+    })
+
+    it('stamps the verified uid on an external destination', async () => {
+      state.memberRoles = { 'user-1': 'editor' }
+      await postResource('redirect', {
+        ...REDIRECT, destination: 'https://campaign.example/launch',
+      })
+      const stored = mockWrite.mock.calls[0][0] as Record<string, unknown>
+      // The serve path reads this to decide whether to send traffic off the
+      // platform, so it comes from the id token and nowhere else.
+      expect(stored['externalDestinationApprovedBy']).toBe('user-1')
+    })
+
+    it('leaves an internal destination unstamped', async () => {
+      state.memberRoles = { 'user-1': 'editor' }
+      await postResource('redirect', REDIRECT)
+      const stored = mockWrite.mock.calls[0][0] as Record<string, unknown>
+      expect(stored).not.toHaveProperty('externalDestinationApprovedBy')
+    })
+
+    it('never takes the stamp from the body', async () => {
+      // The field is off the allow-list precisely so a caller cannot supply
+      // its own provenance. An internal destination sent alongside a forged
+      // stamp must store neither the stamp nor a reason to trust it.
+      state.memberRoles = { 'user-1': 'editor' }
+      await postResource('redirect', {
+        ...REDIRECT,
+        externalDestinationApprovedBy: 'uid-someone-else',
+      })
+      const stored = mockWrite.mock.calls[0][0] as Record<string, unknown>
+      expect(stored).not.toHaveProperty('externalDestinationApprovedBy')
+    })
+  })
 })
 
 /**

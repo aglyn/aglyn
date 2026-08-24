@@ -92,26 +92,31 @@ export function mediaUsageAssurance(
  * once already (AGL-1413). `email` joined the list in AGL-1867.
  */
 export const SCANNED_SURFACES =
-  'page, layout, component, email, site setting, or content entry'
+  'page, layout, component, email, site setting, content entry, or plugin ' +
+  'content such as a product'
 
 /**
- * The part of a site this scan still cannot see (AGL-1867).
+ * What the scan still cannot promise (AGL-1867).
  *
- * Plugin-owned documents are ordinary host subcollections with nothing
- * declaring them, so they are outside the corpus and cannot be brought in by
- * a hand-written list — see the note on `SCANNED_HOST_COLLECTIONS` in
- * `scan-media-references.ts`, which also records why the registry that would
- * close this is a read-side one and not a plugin-manifest field. The gap is
- * not hypothetical: a commerce product carries `imageUrl` and `mediaUrls`, so
- * a product photo used nowhere else comes back with an empty result today.
+ * This constant used to say plugin content was outside the check, because it
+ * was: plugin-owned documents were not in the corpus, so a product photo used
+ * nowhere else came back as an empty result. That is fixed — the corpus now
+ * reads every host subcollection the repo defines except the ones written down
+ * with a reason, and a build guard holds the two in step.
  *
- * That makes this sentence load-bearing rather than decorative. `full`
- * coverage means every document the scan KNOWS ABOUT was read, and until the
- * corpus is complete the difference between that and "nothing uses it" has to
- * be said out loud — the same rule the coverage flag itself exists to keep.
+ * The sentence stays, narrowed to what is actually true, because deleting it
+ * outright would be the wrong lesson. The corpus is a per-SITE scan of the
+ * sites the caller can see: `full` coverage means every document the scan
+ * knows about was read, and the collections deliberately outside it —
+ * completed orders, form submissions, the activity log — are records OF a use
+ * rather than a use, but an author should still know the boundary exists.
+ * Stating it is also what keeps the difference between "we read everything"
+ * and "nothing uses this" from collapsing, which is the rule the coverage flag
+ * itself exists to keep.
  */
 export const PLUGIN_BLIND_SPOT =
-  'Plugin content, such as products, is outside this check.'
+  'Order history, form submissions and activity records are not checked — ' +
+  'they record a past use rather than a current one.'
 
 /** The drawer's "Used on" panel, when the scan found nothing. */
 export function usagePanelEmptyMessage(coverage: MediaScanCoverage): string {

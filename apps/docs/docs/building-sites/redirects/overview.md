@@ -22,6 +22,24 @@ rename screens or migrate a site.
   redirect can't send visitors in circles or shadow a real screen.
 - The published site enforces redirect rules during route resolution.
 
+:::info Who can manage redirects
+A redirect changes what the live site serves at an address, so it takes a
+**publishing role** — Editor or Admin. The **Author** role can see the redirects
+page but cannot add, change or remove a rule. See
+[Teams & roles](../../workspace-and-billing/teams-and-roles/overview.md).
+:::
+
+## Sending visitors to another site
+
+A destination can be an internal path (`/pricing`) or an absolute `https://` URL —
+useful for vanity domains and campaign links.
+
+Because an off-site destination sends your visitors somewhere you don't control,
+the published site only follows one after a publishing role has **saved the rule**.
+A rule with an external destination that nobody has confirmed shows a
+**not serving** badge on the redirects page and is skipped until an Editor or
+Admin opens it and saves. Internal destinations are never affected.
+
 ## Metrics
 
 Each rule tracks **hit metrics** (sampled), so you can see which redirects are actually

@@ -104,11 +104,14 @@ jest.mock('firebase/firestore', () => ({
   query: (name: string) => name,
   limit: () => undefined,
   doc: () => ({}),
-  onSnapshot: (
-    _query: unknown,
-    next: (snapshot: unknown) => void,
-    onError: (error: unknown) => void,
-  ) => {
+  // Mirrors the real SDK overload: (target, onNext, onError?) or
+  // (target, options, onNext, onError?). The listener hooks pass listen
+  // options now, so a positional double would capture them as `next`
+  // (AGL-2486).
+  onSnapshot: (_query: unknown, ...rest: unknown[]) => {
+    if (typeof rest[0] !== 'function') rest.shift()
+    const next = rest[0] as (snapshot: unknown) => void
+    const onError = rest[1] as (error: unknown) => void
     const snapshot = (fromCache: boolean) => ({
       docs: eventDocs.map((record) => ({
         id: record.$id,

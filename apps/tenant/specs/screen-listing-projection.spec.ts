@@ -69,7 +69,16 @@ const storedScreens: StoredScreen[] = [
       displayName: 'About',
       description: 'Who we are',
       order: 1,
-      seo: { title: 'About us', description: 'The team' },
+      seo: {
+        title: 'About us',
+        description: 'The team',
+        // The social card group (AGL-1337, AGL-2417) — carried here so the
+        // projection is asked about the alt too, which it used to drop.
+        image: 'media:host-demo/og-about',
+        imageWidth: 1200,
+        imageHeight: 630,
+        imageAlt: 'The About page card',
+      },
       // A public page can still carry a stale hash. See the note above.
       protection: { passwordHash: HASH_PUBLIC },
       localeVariants: { fr: 'screen-about-fr' },
@@ -240,6 +249,14 @@ describe('GET /api/screen response projection (AGL-2191)', () => {
     expect(about.displayName).toBe('About')
     expect(about.order).toBe(1)
     expect(about.seo.title).toBe('About us')
+    // The card group survives whole, alt included (AGL-2398). `imageAlt` was
+    // added to storage and to the resolver by AGL-2417 but never to this
+    // key-by-key mapper, so a listing handed back an image with no
+    // description — half a group, which is the shape this asserts against.
+    expect(about.seo.image).toBe('media:host-demo/og-about')
+    expect(about.seo.imageWidth).toBe(1200)
+    expect(about.seo.imageHeight).toBe(630)
+    expect(about.seo.imageAlt).toBe('The About page card')
   })
 
   it('omits gated and unpublished screens entirely', async () => {

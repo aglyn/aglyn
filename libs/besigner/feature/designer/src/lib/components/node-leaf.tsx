@@ -299,7 +299,23 @@ export const NodeLeaf = observer(
             nodes: [],
           } as any,
         },
-        { [props.refId as string]: definition } as any,
+        // The host's WHOLE definitions map, not just this instance's own
+        // (AGL-1898). A definition may contain instances of OTHER
+        // definitions, and `composeReusableComponentNodes` expands those —
+        // but only the ones it is handed. Preview, tenant SSR and the
+        // layout-chrome graft all pass the full map, so a one-entry map
+        // here made the canvas the only surface that left a nested
+        // component as an unexpanded placeholder.
+        //
+        // It also silently voided propagation for the inner component:
+        // publishing a shared button re-rendered every canvas showing it
+        // directly and none of the ones showing it through the nav that
+        // contains it — which is the case a shared component is usually in.
+        //
+        // Safe to widen because the `nodes` argument above is this ONE
+        // instance: the extra definitions can only be reached from inside
+        // the subtree being grafted, never applied to some other node.
+        definitions as any,
       )
       const graftedRootId = (composed[node.$id]?.nodes as string[])?.[0]
       return graftedRootId ? denormalizeTree(composed, graftedRootId) : undefined

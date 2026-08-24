@@ -41,6 +41,11 @@ import { getApp } from 'firebase-admin/app'
 // credential) exactly the way firebase-admin.ts does, so `getApp()` below
 // always finds it and its credential can mint the OAuth token.
 import '@aglyn/shared-util-fbserver'
+// The readable half of the server-error signal (AGL-1921) — see the block
+// comment in `reportServerError`.
+import { deploymentEnvironmentLabel } from '@aglyn/aglyn/server'
+
+import { recordServerError } from './rate-limit-store'
 
 const MAX_EVENTS_PER_REQUEST = 10
 const MAX_MESSAGE = 1_024
@@ -314,6 +319,30 @@ export async function reportServerError(
   const message = clampString(event.message, MAX_MESSAGE)
   if (!message) return 'dropped'
 
+  /*==========================================
+   * COUNT IT WHERE SOMETHING CAN READ THE COUNT (AGL-1921, second pass).
+   *
+   * FIRST, above every gate below, and that ordering is the whole point.
+   *
+   * The Logging entry this function goes on to write is the right record for
+   * triage and the wrong one for an alarm we can ship: measured 2026-08-24,
+   * the production credential is refused `entries:list` on that log with
+   * `403 Permission denied for all log views`, so nothing in this repo can
+   * read back what it wrote. The only reader the log can ever have is a GCP
+   * alert policy somebody creates by hand.
+   *
+   * The marker is readable today, and putting it above the budget gate, the
+   * credential check and the fetch means the count survives every way the
+   * Logging arm can fail. That is not tidiness — a beacon whose transport is
+   * dead reports ZERO errors, which is the measured-zero shape this repo keeps
+   * finding, and it would report it during exactly the incident that killed
+   * the transport.
+   *
+   * Never awaited: this runs inside `onRequestError`, and the marker coalesces
+   * in process anyway (at most one write per five seconds per instance).
+   *==========================================*/
+  recordServerError(options.service)
+
   const now = Date.now()
   if (now - serverErrorWindowStartedAt >= SERVER_ERROR_WINDOW_MS) {
     if (serverErrorsSuppressed > 0) {
@@ -495,7 +524,7 @@ export async function writeBeaconHeartbeat(options: {
               tag: 'AGL-1923:beacon-heartbeat',
               service: options.service,
               version: process.env['VERCEL_GIT_COMMIT_SHA']?.slice(0, 7) ?? null,
-              environment: process.env['VERCEL_ENV'] ?? 'development',
+              environment: deploymentEnvironmentLabel(),
             },
           },
         ],

@@ -80,6 +80,9 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     fromCache: false,
   }),
   useHostResourceApi: () => mockCreateResource,
+  // The signed-in publisher, whose uid becomes the external-destination stamp
+  // (AGL-1881). Shaped like the real hook, which returns `{ data }`.
+  useUser: () => ({ data: { uid: 'uid-editor' } }),
   // The REAL guard (AGL-1358). Every save here is a confirmed read, which is
   // exactly the case this bug fires on.
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
@@ -215,5 +218,66 @@ describe('RedirectsConsolePage enabled on save (AGL-1372)', () => {
     const [{ data }] = mockCreateResource.mock.calls[0]
     expect(data.enabled).toBe(true)
     expect(setDoc).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * The console's half of the serve-path gate (AGL-1881).
+ *
+ * `matchRedirect` will not send traffic to an absolute destination without
+ * `externalDestinationApprovedBy`, so a save that omitted the stamp would
+ * produce a rule the console shows as live and the site never serves. Only a
+ * publishing role can reach this write at all — the rules refuse everyone
+ * else — so writing it here IS the approval.
+ */
+describe('RedirectsConsolePage external destination stamp (AGL-1881)', () => {
+  // The shared fixture is mutable and the outer `beforeEach` only resets
+  // `enabled`; put back what these specs change so a later one cannot inherit
+  // a stamped external rule.
+  afterEach(() => {
+    storedRedirect.destination = '/campaigns/summer'
+    delete storedRedirect.externalDestinationApprovedBy
+  })
+
+  const retargetTo = (destination: string) => {
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    fireEvent.change(screen.getByLabelText('To'), {
+      target: { value: destination },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save redirect' }))
+  }
+
+  it('stamps the saving publisher on an external destination', async () => {
+    renderPage()
+
+    retargetTo('https://campaign.example/launch')
+
+    await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
+    expect(stored.destination).toBe('https://campaign.example/launch')
+    expect(stored.externalDestinationApprovedBy).toBe('uid-editor')
+  })
+
+  /**
+   * The clear leg, and it is not cosmetic. `merge: true` never removes a key,
+   * so an external rule edited back to an internal path would keep its stamp
+   * — and a LATER edit back out to another domain would inherit approval for
+   * a destination nobody approved. The payload therefore carries an explicit
+   * delete sentinel rather than nothing.
+   */
+  it('clears the stamp when the destination comes back internal', async () => {
+    storedRedirect.destination = 'https://campaign.example/launch'
+    storedRedirect.externalDestinationApprovedBy = 'uid-someone'
+    stored = { ...storedRedirect }
+    renderPage()
+
+    retargetTo('/pricing')
+
+    await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
+    const [, payload] = (setDoc as jest.Mock).mock.calls[0]
+    // A sentinel object, not `undefined` and not the old uid: assert on what
+    // was SENT, because the local merge in this spec's `setDoc` stub cannot
+    // model Firestore's field deletion.
+    expect(payload.externalDestinationApprovedBy).not.toBe('uid-someone')
+    expect(payload.externalDestinationApprovedBy).toBeDefined()
   })
 })

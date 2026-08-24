@@ -17,6 +17,37 @@
  */
 
 /* eslint-disable */
+
+// Pin the suite's timezone at PROCESS LAUNCH (AGL-1617). This file is
+// evaluated in the jest parent before any worker is forked, so workers
+// inherit TZ through their environment and start with the zone already
+// applied — which is the only moment it can be applied at all.
+//
+// Inside a test it CANNOT be. V8 realizes the zone when the vm context is
+// created, and `process.env.TZ = …` reassignment there does not move the
+// clock: measured under this very config, `new Date(Date.parse(
+// '2026-11-02T00:30:00Z')).getDate()` reads 2 both before and after the
+// assignment, under jsdom and under `@jest-environment node` alike, and
+// whether the assignment is made mid-test or at module top. Plain node
+// honours the same reassignment, which is why this reads as working
+// everywhere except here. `collection-entry-date-hydration.spec.ts` records
+// the same finding from the other direction.
+//
+// The consequence, before this line existed: a spec that set TZ itself
+// asserted against the MACHINE's zone, so it passed on a Chicago laptop and
+// failed on a UTC runner — `analytics-day-cache.spec.ts` › "counts back in
+// UTC days, not local ones" was red in CI for exactly that reason, and its
+// premise guard (which is why it was red rather than silently vacuous) is
+// what made the cause legible.
+//
+// America/Chicago because it observes DST, which is the condition the
+// UTC-day arithmetic has to survive; a UTC runner cannot exercise it at all,
+// since local and UTC arithmetic agree there. Verified load-bearing by
+// mutation: with local-calendar arithmetic substituted into `recentDayIds`,
+// the spec fails on its real assertion with the pin, and only on its premise
+// guard without it.
+process.env.TZ = 'America/Chicago'
+
 module.exports = {
   displayName: 'console',
   preset: '../../jest.preset.js',

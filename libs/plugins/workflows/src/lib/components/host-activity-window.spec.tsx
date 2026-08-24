@@ -1,0 +1,239 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * The Page Activity card must not report a confident zero it has not earned
+ * (AGL-2486).
+ *
+ * ## Why this spec EXECUTES the query instead of inspecting it
+ *
+ * The bug was invisible to any test that stubs `useFirestoreCollection` and
+ * hands the card a fixture array, because the card's own rendering was never
+ * wrong — the WINDOW it asked Firestore for was. `limit(200)` with no
+ * `orderBy` returns documents in DOCUMENT-ID order, and the ids are
+ * `addDoc()` auto-ids, so the card received a pseudo-random sample of the
+ * collection and truthfully reported that its target was not in it.
+ *
+ * So the double below is a miniature Firestore rather than a stub: it applies
+ * the `where` predicates, orders by the `orderBy` clause or, in its ABSENCE,
+ * by document id ascending exactly as the real engine does, and then applies
+ * the limit. That last detail is the whole point — a double that ignores
+ * ordering is a double in which the shipped bug passes.
+ *
+ * The fixture mirrors the production host that produced the report: a log
+ * far larger than the window, whose target's own entries all sort past the
+ * id boundary.
+ */
+
+import { render, screen } from '@testing-library/react'
+import type { ReactNode } from 'react'
+import HostActivityCard from './host-activity-card.component'
+
+const HOST_ID = 'DXnRbPH4CQ'
+/** The screen Zach opened: changed that morning, reported as having nothing. */
+const BUSY_SCREEN = 'coOm073Tai'
+/** A screen that genuinely has never been touched. */
+const UNTOUCHED_SCREEN = 'never-touched'
+
+interface FakeDoc {
+  id: string
+  data: Record<string, any>
+}
+
+/**
+ * 250 filler entries for OTHER targets, with ids that sort BELOW the target's
+ * — the shape of a real log, where a busy site's noise crowds out any one
+ * page. Any id-ordered window of 200 is entirely filler.
+ */
+const filler: FakeDoc[] = Array.from({ length: 250 }, (_, i) => ({
+  id: `A${String(i).padStart(4, '0')}`,
+  data: {
+    action: 'Saved the screen',
+    actorEmail: 'someone@example.com',
+    target: { type: 'screen', id: `other-screen-${i}`, name: `Other ${i}` },
+    createdAt: { seconds: 1_000 + i },
+  },
+}))
+
+/**
+ * The five real entries, with the production id prefixes (Y, h, j, k, t) —
+ * every one of them past the boundary an id-ordered 200-row window reaches.
+ */
+const busy: FakeDoc[] = [
+  ['YrLePecuBDjvYGqudofr', 'Updated SEO', 9_000],
+  ['he7IFXlahkDSFbbcJ17m', 'Created screen', 5_000],
+  ['jqoay5VdVYhiIlc29xE5', 'Saved the screen', 6_000],
+  ['k0bfJSV6iL53HsVksQ9Q', 'Saved the screen', 7_000],
+  ['tiqiMAtdTu8PdfOC70WX', 'Saved the screen', 8_000],
+].map(([id, action, seconds]) => ({
+  id: id as string,
+  data: {
+    action,
+    actorEmail: 'zach@aglyn.com',
+    target: { type: 'screen', id: BUSY_SCREEN, name: 'Press — Entry Template' },
+    createdAt: { seconds },
+  },
+}))
+
+const DOCS: FakeDoc[] = [...filler, ...busy]
+
+/** Reads a dotted field path the way Firestore does. */
+const readPath = (data: Record<string, any>, path: string) =>
+  path.split('.').reduce<any>((value, key) => value?.[key], data)
+
+interface Clause {
+  kind: 'where' | 'orderBy' | 'limit'
+  field?: string
+  value?: unknown
+  direction?: string
+  count?: number
+}
+
+/** The listener's verdict, chosen per spec. */
+const listener = { status: 'success' as 'success' | 'error' }
+
+/**
+ * Evaluate a query descriptor against `DOCS` with Firestore's semantics.
+ *
+ * The ordering branch is load-bearing: with no `orderBy`, Firestore orders by
+ * `__name__` ascending, and it is that default — not any bug in the card's
+ * rendering — that hid the entries.
+ */
+function runQuery(descriptor: { clauses: Clause[] }): Record<string, any>[] {
+  const { clauses } = descriptor
+  let rows = DOCS.filter((row) =>
+    clauses
+      .filter((c) => c.kind === 'where')
+      .every((c) => readPath(row.data, c.field as string) === c.value),
+  )
+  const order = clauses.find((c) => c.kind === 'orderBy')
+  rows = [...rows].sort((a, b) => {
+    if (!order) return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+    const av = readPath(a.data, order.field as string)?.seconds ?? 0
+    const bv = readPath(b.data, order.field as string)?.seconds ?? 0
+    return order.direction === 'desc' ? bv - av : av - bv
+  })
+  const cap = clauses.find((c) => c.kind === 'limit')?.count
+  if (cap != null) rows = rows.slice(0, cap)
+  return rows.map((row) => ({ ...row.data, $id: row.id }))
+}
+
+jest.mock('firebase/firestore', () => ({
+  collection: (_db: unknown, ...segments: string[]) => ({
+    path: segments.join('/'),
+  }),
+  where: (field: string, _op: string, value: unknown) => ({
+    kind: 'where',
+    field,
+    value,
+  }),
+  orderBy: (field: string, direction = 'asc') => ({
+    kind: 'orderBy',
+    field,
+    direction,
+  }),
+  limit: (count: number) => ({ kind: 'limit', count }),
+  query: (base: unknown, ...clauses: Clause[]) => ({ base, clauses }),
+}))
+
+jest.mock('@aglyn/tenant-feature-instance', () => ({
+  useFirestore: () => ({}),
+  useFirestoreCollection: (build: () => any) => {
+    const descriptor = build()
+    return {
+      data: descriptor && listener.status === 'success' ? runQuery(descriptor) : [],
+      status: descriptor ? listener.status : 'loading',
+      error: undefined,
+      fromCache: false,
+      serverDenied: false,
+    }
+  },
+}))
+
+jest.mock('next/navigation', () => ({
+  useParams: () => ({ orgSlug: 'aglyn', host: 'site' }),
+}))
+
+jest.mock('@aglyn/shared-ui-jsx', () => ({
+  AppLink: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+  CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+}))
+jest.mock('@aglyn/aglyn', () => ({ pluginDocsHelp: () => undefined }))
+
+const EMPTY = /No activity yet/
+const UNREADABLE = /Could not read the activity log/
+
+beforeEach(() => {
+  listener.status = 'success'
+})
+
+describe('Page Activity — the window it asks for', () => {
+  it('shows a screen its OWN entries, from a log far larger than the window', () => {
+    render(
+      <HostActivityCard
+        hostId={HOST_ID}
+        targetId={BUSY_SCREEN}
+        header="Page Activity"
+      />,
+    )
+    // The entry Zach made that morning, which the shipped card could not see.
+    expect(
+      screen.getByText('Updated SEO — Press — Entry Template'),
+    ).not.toBeNull()
+    // All five, newest first — proving the window is spent on the TARGET
+    // rather than on the host's other 250 rows.
+    const rendered = screen.getAllByText(/— Press — Entry Template$/)
+    expect(rendered).toHaveLength(5)
+    expect(rendered[0].textContent).toContain('Updated SEO')
+    expect(screen.queryByText(EMPTY)).toBeNull()
+  })
+
+  it('still says "No activity yet" for a screen that genuinely has none', () => {
+    render(<HostActivityCard hostId={HOST_ID} targetId={UNTOUCHED_SCREEN} />)
+    expect(screen.getByText(EMPTY)).not.toBeNull()
+    // A real empty must not be dressed up as a failure — that is the same
+    // dishonesty pointed the other way.
+    expect(screen.queryByText(UNREADABLE)).toBeNull()
+  })
+
+  it('orders the un-targeted feed newest-first, not by document id', () => {
+    render(<HostActivityCard hostId={HOST_ID} max={3} />)
+    // `YrLePecu…` is the newest row and one of the LAST by id: an id-ordered
+    // window of 200 over 255 rows never reaches it.
+    expect(
+      screen.getByText('Updated SEO — Press — Entry Template'),
+    ).not.toBeNull()
+  })
+})
+
+describe('Page Activity — "could not look" is not "found nothing"', () => {
+  it('renders the unreadable state, NOT the empty one, when the read fails', () => {
+    listener.status = 'error'
+    render(<HostActivityCard hostId={HOST_ID} targetId={BUSY_SCREEN} />)
+    expect(screen.getByText(UNREADABLE)).not.toBeNull()
+    expect(screen.queryByText(EMPTY)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Try again' })).not.toBeNull()
+  })
+
+  it('treats a missing hostId as unreadable rather than as an empty history', () => {
+    // `strictNullChecks` is off, so this is reachable: an absent id folds to
+    // falsy and a query built from it would match nothing.
+    render(<HostActivityCard hostId={undefined as never} targetId={BUSY_SCREEN} />)
+    expect(screen.getByText(UNREADABLE)).not.toBeNull()
+    expect(screen.queryByText(EMPTY)).toBeNull()
+  })
+})

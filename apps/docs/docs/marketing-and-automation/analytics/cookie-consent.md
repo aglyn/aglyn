@@ -43,7 +43,8 @@ to ask about without a tag.
 
 Turning it on **grants nothing by itself**. It adds a second question, with its
 own checkbox, to the banner and to the preferences panel, so that a visitor has
-somewhere to say yes. Until one does, nothing changes.
+somewhere to say yes. Until one does, nothing changes — in either consent mode,
+for visitors anywhere in the world.
 
 Built-in Aglyn analytics are unaffected by all of this: the pageview beacon is
 **cookieless** and stores no visitor identifier, so it needs no consent.
@@ -58,12 +59,19 @@ Built-in Aglyn analytics are unaffected by all of this: the pageview beacon is
   assignment is remembered only for the visit (sessionStorage) instead of across
   visits.
 - **Advertising storage** (`ad_storage`, `ad_user_data`, `ad_personalization`),
-  on sites that have turned the advertising question on. This one is **never
-  implied**. Analytics can be granted by implication where the law allows it —
-  advertising never is, and no amount of not-objecting adds up to a yes:
-  - Being defaulted into analytics in an opt-out region is not an answer to a
-    question about advertising, so an *implied* state grants analytics and
-    denies advertising.
+  on sites that have turned the advertising question on. **Every visitor needs
+  an explicit yes**, everywhere, in both consent modes. Analytics can be granted
+  by implication where the law allows it — advertising never is, and no amount
+  of not-objecting adds up to a yes:
+  - **Prior-consent regions.** The EU/EEA, the UK, and any visitor whose region
+    cannot be determined see the banner first, and advertising storage is denied
+    until they tick that specific box.
+  - **Everywhere else.** Being defaulted into analytics in an opt-out region is
+    not an answer to a question about advertising, so an *implied* state grants
+    analytics and denies advertising. Those visitors see no banner, so the way
+    they say yes is **Your Privacy Choices**, where the advertising checkbox is
+    offered whenever your site asks the question. Until one is ticked there,
+    advertising storage stays denied.
   - A visitor who clicked **Allow** on an analytics-only banner before you
     turned the question on reads as *never asked*, not as a yes. They see the
     new question the next time they are asked.

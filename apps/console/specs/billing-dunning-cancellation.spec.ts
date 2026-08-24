@@ -75,6 +75,10 @@ import {
   BILLING_LOCK_GRACE_DAYS,
   shouldAutoLockOrgForBilling,
 } from '../utils/billing-auto-lock'
+import {
+  LIVE_MODE_DUNNING_SCHEDULE,
+  TEST_MODE_DUNNING_SCHEDULE,
+} from '../utils/stripe-dunning-schedule'
 
 /** Env without a trace of the developer's own Stripe config (`nx test` leaks the root env). */
 const CLEAN_ENV = (() => {
@@ -450,10 +454,33 @@ describe('the billing auto-lock has a reachable true branch (AGL-1877)', () => {
    * only status set the predicate used to accept, the org has left that set
    * NINE DAYS before the clock it is waiting on runs out — for every org,
    * always. Arithmetic, not a fixture.
+   *
+   * The day count used to be a `21.08` literal written out here, which was a
+   * seventh copy of a number whose entire problem was being copied (AGL-2430).
+   * It now comes from the module that owns it, tagged with its mode — and
+   * from BOTH modes, because this console renders against the LIVE account
+   * while every number behind the drill above came off a TEST clock. If the
+   * two ever diverge, this is the assertion that has to be re-argued rather
+   * than the one that quietly keeps passing on the wrong mode's figure.
    */
   it('the dunning cancellation lands INSIDE the grace window it must survive', () => {
-    const STRIPE_CANCELS_AFTER_DAYS = 21.08
-    expect(STRIPE_CANCELS_AFTER_DAYS).toBeLessThan(BILLING_LOCK_GRACE_DAYS)
+    expect(TEST_MODE_DUNNING_SCHEDULE.cancelsAfterDays).toBeLessThan(
+      BILLING_LOCK_GRACE_DAYS,
+    )
+
+    // The mode that actually bills customers. Recorded from the live
+    // Dashboard on 2026-08-24; `null` would mean nobody has read it, which
+    // must fail loudly rather than skip.
+    expect(LIVE_MODE_DUNNING_SCHEDULE).not.toBeNull()
+    expect(LIVE_MODE_DUNNING_SCHEDULE?.cancelsAfterDays).toBeLessThan(
+      BILLING_LOCK_GRACE_DAYS,
+    )
+
+    // And the terminal state the auto-lock's reachable branch is predicated
+    // on. If live is ever reconfigured to *mark unpaid*, the `canceled` +
+    // `payment_failed` clause below becomes dead code and the `unpaid`
+    // branch becomes primary — so this is the tripwire for that swap.
+    expect(LIVE_MODE_DUNNING_SCHEDULE?.terminalStatus).toBe('canceled')
   })
 
   it('locks an org Stripe cancelled for non-payment, once the grace expires', () => {

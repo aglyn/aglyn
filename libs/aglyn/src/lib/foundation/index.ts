@@ -27,6 +27,11 @@ export * from './definitions/components.types'
 // org billing address and the Stripe customer (AGL-1133). The failure this
 // prevents is a phone number stored three ways in three collections.
 export * from './definitions/contact.types'
+// Which host subcollections the media usage scan reads, and which it skips
+// with a written reason (AGL-1867). A VALUE, and exported here rather than
+// kept in the console, because the guard that keeps it equal to a repo-wide
+// sweep lives beside the other derived host-subcollection guards.
+export * from './definitions/host-content-collections'
 export * from './definitions/organization.types'
 export * from './definitions/shared'
 // `HOST_UNPERSISTED_FIELDS` is a VALUE for the same reason its org twin below

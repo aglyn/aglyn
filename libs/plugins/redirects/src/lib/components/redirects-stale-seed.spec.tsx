@@ -74,6 +74,9 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     fromCache: false,
   }),
   useHostResourceApi: () => mockCreateResource,
+  // The signed-in publisher, whose uid becomes the external-destination stamp
+  // (AGL-1881). Shaped like the real hook, which returns `{ data }`.
+  useUser: () => ({ data: { uid: 'uid-editor' } }),
   // The REAL guard, not a stub. A stub would let the write through whatever
   // the page passed it, which is the one thing this spec disproves.
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')

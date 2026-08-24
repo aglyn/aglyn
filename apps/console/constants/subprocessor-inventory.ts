@@ -526,6 +526,36 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
       "A demo page visitor's IP and user-agent when their browser loads the placeholder. No customer data exists on those orgs to send.",
   },
 
+  // The two Google control-plane endpoints `check:app-check-debug-tokens`
+  // calls (AGL-2402). Google LLC is already an Annex III recipient and these
+  // add no new one — but the registry keys on the HOST and deliberately does
+  // not collapse a vendor into one entry (see the note above the Google
+  // block), so each is declared on its own terms.
+  //
+  // They are `not-a-subprocessor` on the FIRST admissible reason, not the
+  // second: no customer chose them, and nothing personal reaches them. This
+  // is Aglyn asking Google about Aglyn's own project, from an operator's
+  // shell. No tenant, member or site-visitor record is in scope of the
+  // process, so there is none to send.
+  //
+  // NOT `no-request`: both are really fetched. That disposition would be a
+  // lie, and the lie is the failure mode this registry exists to prevent.
+
+  'firebase.googleapis.com': {
+    disposition: 'not-a-subprocessor',
+    reason:
+      'Firebase Management `projects.searchApps`, called only by the operator CLI `npm run check:app-check-debug-tokens` to enumerate Aglyn\'s OWN Firebase apps so the next call can ask whether a debug token is still registered on each. It is never imported by the console or tenant runtime — no request-serving code path reaches it — and it authenticates as the operator running it, not as any customer.',
+    dataReceived:
+      "Aglyn's own project id and the operator's own Google ADC access token. No customer, member or visitor personal data exists anywhere in this path to send; what comes back is Aglyn's own app list.",
+  },
+  'firebaseappcheck.googleapis.com': {
+    disposition: 'not-a-subprocessor',
+    reason:
+      'App Check `debugTokens.list`, called by the same operator CLI to prove no standing attestation bypass is registered on a live app. Same shape as the Management call above: Aglyn interrogating Aglyn\'s own project configuration, outside any request-serving path.',
+    dataReceived:
+      "Aglyn's own project and app ids, plus the operator's own access token. No customer data is in scope; the response carries debug-token metadata (`name`, `displayName`, `updateTime`) and, by API design, never a token value.",
+  },
+
   // MARK – Literals that are never fetched
   //
   // Namespaces, contexts, link text, form placeholders, fixture values. Each
@@ -575,6 +605,12 @@ export const EGRESS_HOSTS: Record<string, EgressHost> = {
       'A staff deep link from the email-health admin screen, pointing at the Firebase console for the same project.',
     dataReceived:
       'Nothing from us. A staff member who clicks it authenticates to Google themselves.',
+  },
+  'groups.google.com': {
+    disposition: 'no-request',
+    reason:
+      'Printed in the contact-address checker\'s error text, telling an operator where to confirm a Google Group exists before adding it to PROVISIONED_CONTACT_ADDRESSES — an unprovisioned @aglyn.com address accepts mail and suppresses the bounce (AGL-1577), so it cannot be verified by sending to it. The operator opens the URL themselves; no code path fetches it.',
+    dataReceived: 'Nothing. It is a sentence in a diagnostic.',
   },
   'console.developers.google.com': {
     disposition: 'no-request',

@@ -37,6 +37,9 @@ import {
   SIGNUP_REFUSAL_WINDOW_MINUTES,
   signupRefusalsHealth,
   signupsHealth,
+  MAX_SERVER_ERRORS_PER_WINDOW,
+  SERVER_ERROR_WINDOW_MINUTES,
+  serverErrorsHealth,
 } from './health-report'
 
 const OK = { ok: true, ms: 12 }
@@ -1261,5 +1264,154 @@ describe('signupRefusalsHealth (AGL-1907)', () => {
       'threshold',
       'windowMinutes',
     ])
+  })
+})
+
+/**
+ * AGL-1921 — the server-error rate verdict.
+ *
+ * The three states are the point, and they are ordered here by how much damage
+ * getting them wrong does: an unmeasurable rate reported as ZERO is the worst
+ * outcome this feature can produce, a spike reported as calm is the second,
+ * and a recovered spike held red forever is the third (it gets the check
+ * muted, which produces the first two later).
+ */
+describe('serverErrorsHealth (AGL-1921)', () => {
+  const NOW = 1_755_100_800_000
+  const minutesAgo = (minutes: number) => NOW - minutes * 60_000
+
+  it('reports ok on a window with no errors', () => {
+    const check = serverErrorsHealth([], 9, NOW)
+    expect(check).toMatchObject({
+      ok: true,
+      ms: 9,
+      serverErrors: 0,
+      byService: {},
+      minutesSinceLast: null,
+      windowMinutes: SERVER_ERROR_WINDOW_MINUTES,
+      threshold: MAX_SERVER_ERRORS_PER_WINDOW,
+    })
+    expect(check.code).toBeUndefined()
+  })
+
+  /**
+   * ⚑ THE MEASURED ZERO.
+   *
+   * `null` is "we could not count", and it must never render as "0 errors".
+   * `strictNullChecks` is off repo-wide, so an absent count folds to falsy and
+   * a threshold comparison on it passes silently — this branch is what stops
+   * that becoming an all-clear during the outage that caused it.
+   */
+  it('an unreadable store is DEGRADED and reports null, never zero', () => {
+    const check = serverErrorsHealth(null, 40, NOW)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('errors-unavailable')
+    expect(check.serverErrors).toBeNull()
+    expect(check.byService).toBeNull()
+    expect(check.minutesSinceLast).toBeNull()
+    // Explicitly NOT the healthy reading, which is the assertion that would
+    // have caught the bug this whole check is built to avoid.
+    expect(check.serverErrors).not.toBe(0)
+  })
+
+  it('goes RED above the threshold and names the code', () => {
+    const check = serverErrorsHealth(
+      [
+        {
+          errors: MAX_SERVER_ERRORS_PER_WINDOW + 1,
+          byService: { 'console-web': MAX_SERVER_ERRORS_PER_WINDOW + 1 },
+          erroredAtMs: minutesAgo(1),
+        },
+      ],
+      11,
+      NOW,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('server-error-spike')
+    expect(check.serverErrors).toBe(MAX_SERVER_ERRORS_PER_WINDOW + 1)
+  })
+
+  it('is green exactly AT the threshold — the boundary, stated once', () => {
+    const check = serverErrorsHealth(
+      [{ errors: MAX_SERVER_ERRORS_PER_WINDOW, erroredAtMs: minutesAgo(1) }],
+      11,
+      NOW,
+    )
+    expect(check.ok).toBe(true)
+    expect(check.code).toBeUndefined()
+  })
+
+  it('sums across markers and merges the per-deployment split', () => {
+    const check = serverErrorsHealth(
+      [
+        { errors: 3, byService: { 'console-web': 3 }, erroredAtMs: minutesAgo(1) },
+        { errors: 4, byService: { 'tenant-web': 4 }, erroredAtMs: minutesAgo(20) },
+      ],
+      11,
+      NOW,
+    )
+    expect(check.serverErrors).toBe(7)
+    expect(check.byService).toEqual({ 'console-web': 3, 'tenant-web': 4 })
+    expect(check.ok).toBe(false)
+  })
+
+  it('drops markers outside the trailing window — a recovered spike goes GREEN', () => {
+    // Markers live seven days. Without the window, one bad minute holds this
+    // red for a week and the check gets muted (the AGL-1843 rule).
+    const check = serverErrorsHealth(
+      [{ errors: 9_000, erroredAtMs: minutesAgo(SERVER_ERROR_WINDOW_MINUTES + 1) }],
+      11,
+      NOW,
+    )
+    expect(check.ok).toBe(true)
+    expect(check.serverErrors).toBe(0)
+    expect(check.minutesSinceLast).toBeNull()
+  })
+
+  it('a marker with no timestamp is not counted as recent', () => {
+    // `strictNullChecks` is off: an absent `erroredAtMs` would compare as 0
+    // and a naive `>= cutoff` on it is false — but a naive `<= now` would be
+    // TRUE, and a corrupt marker would then count forever.
+    const check = serverErrorsHealth(
+      [{ errors: 500 } as { errors: number }],
+      11,
+      NOW,
+    )
+    expect(check.ok).toBe(true)
+    expect(check.serverErrors).toBe(0)
+  })
+
+  it('a corrupt count cannot NaN the total into a permanent all-clear', () => {
+    // `NaN > threshold` is false, so a single bad field would otherwise report
+    // calm no matter how many real errors sat beside it.
+    const check = serverErrorsHealth(
+      [
+        { errors: 'lots' as unknown as number, erroredAtMs: minutesAgo(1) },
+        { errors: 40, erroredAtMs: minutesAgo(1) },
+      ],
+      11,
+      NOW,
+    )
+    expect(check.serverErrors).toBe(40)
+    expect(check.ok).toBe(false)
+  })
+
+  it('dates itself from the newest error in the window', () => {
+    const check = serverErrorsHealth(
+      [
+        { errors: 1, erroredAtMs: minutesAgo(12) },
+        { errors: 1, erroredAtMs: minutesAgo(3) },
+      ],
+      11,
+      NOW,
+    )
+    expect(check.minutesSinceLast).toBe(3)
+  })
+
+  it('honours an explicit threshold — the ops and forced-failure knob', () => {
+    const forced = serverErrorsHealth([], 11, NOW, -1)
+    expect(forced.ok).toBe(false)
+    expect(forced.code).toBe('server-error-spike')
+    expect(forced.threshold).toBe(-1)
   })
 })

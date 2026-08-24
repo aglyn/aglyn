@@ -48,13 +48,93 @@ describe('orgMonthlyCogsUsd', () => {
     expect(result.basis).toBe('floor')
   })
 
-  it('the floor wins by five orders of magnitude on real data', () => {
+  it('the floor wins on every real org — but the gap is now ONE order of magnitude, not five', () => {
     // The point of the previous test, stated as the claim it supports: the
     // measured arm AGL-1120 wired in is inert on every real org today, so a
     // richer cost model changes no verdict until there is real traffic.
     const result = orgMonthlyCogsUsd({ storageGb: 0.00034, contactsCount: 5 }, 1)
     expect(result.measuredUsd).toBeLessThan(0.01)
     expect(result.cogsUsd).toBe(INFRA_COGS_PER_SITE_USD)
+
+    /*
+     * AGL-1930 re-measured this against production 2026-08-24 — 6 orgs, 14
+     * usage rollups, every one of them `basis: 'floor'`. The DISTRIBUTION is
+     * unchanged (100% floor, as when this test was written), but the MARGIN
+     * has closed by four orders of magnitude:
+     *
+     *   org           month    sites  measured   floor   floor/measured
+     *   jWmGooWE3L    2026-08    1    $0.21932   $2.00        9.1x
+     *   hz_KgetqSq    2026-08    1    $0.00761   $2.00      262.8x
+     *   alx59wnpi…    2026-08    2    $0.00211   $4.00     1900.2x
+     *   1aLoHY_10k    2026-08    1    $0        $2.00          inf
+     *   wgxBb4L4pC    2026-08    1    $0        $2.00          inf
+     *   DaJ5zn69Wx      —        1    (no rollup)
+     *
+     * The old headline ($0.0000054 vs $4.00) was read off the June rollups,
+     * before page views were metered at all. The test title said five orders
+     * of magnitude and the assertion below only ever checked one, so the claim
+     * could rot without anything going red. This is that claim, asserted:
+     * the busiest real org sits inside a single order of magnitude of its
+     * floor, and the floor still wins.
+     */
+    const busiestRealOrg = orgMonthlyCogsUsd(
+      // orgs/jWmGooWE3L/usage/2026-08, read from production 2026-08-24.
+      {
+        storageGb: 0.041155,
+        pageViews: 2169,
+        formSubmissions: 7,
+        contactsCount: 5,
+      },
+      1,
+    )
+    expect(busiestRealOrg.basis).toBe('floor')
+    expect(busiestRealOrg.measuredUsd).toBeCloseTo(0.2193, 3)
+    const gap = INFRA_COGS_PER_SITE_USD / busiestRealOrg.measuredUsd
+    expect(gap).toBeGreaterThan(1)
+    expect(gap).toBeLessThan(100)
+  })
+
+  it('names the traffic at which the floor stops deciding (AGL-1930)', () => {
+    // The re-tune trigger, as arithmetic rather than a note in a ticket.
+    // `NET_MARGIN_FLOOR_PCT` is a multiple applied to whatever COGS figure
+    // comes out of here, and that figure is the flat floor for 14 of 14 real
+    // rollups — so the thresholds cannot be calibrated against measurement
+    // until at least one org crosses this line.
+    //
+    // One site, page views alone: $2.00 / $0.0001 = 20,000 views/month. The
+    // busiest real org is at 2,169 — 11% of the way.
+    const breakEvenViews = INFRA_COGS_PER_SITE_USD / 0.0001
+    expect(breakEvenViews).toBe(20_000)
+    expect(orgMonthlyCogsUsd({ pageViews: 19_999 }, 1).basis).toBe('floor')
+    expect(orgMonthlyCogsUsd({ pageViews: 20_001 }, 1).basis).toBe('measured')
+    // Assist is the one input that can clear the floor without any traffic at
+    // all — it enters in dollars, so $2.01 of tokens on a single-site org
+    // flips the basis by itself (AGL-2280).
+    expect(orgMonthlyCogsUsd({ assistCostUsd: 2.01 }, 1).basis).toBe('measured')
+    expect(orgMonthlyCogsUsd({ assistCostUsd: 1.99 }, 1).basis).toBe('floor')
+  })
+
+  it('keeps absent, zero and garbage meters distinct from a real measurement', () => {
+    // `strictNullChecks` is OFF, so an absent meter folds to falsy and prices
+    // as zero — which is the direction that INFLATES margin. Three inputs that
+    // all read as "no cost": the guarantee is that none of them can ever
+    // produce a SMALLER charge than the floor, so a missing meter cannot buy
+    // a discount.
+    const absent = orgMonthlyCogsUsd({ pageViews: undefined }, 1)
+    const zero = orgMonthlyCogsUsd({ pageViews: 0 }, 1)
+    const garbage = orgMonthlyCogsUsd({ pageViews: Number.NaN }, 1)
+    for (const result of [absent, zero, garbage]) {
+      expect(result.measuredUsd).toBe(0)
+      expect(result.basis).toBe('floor')
+      expect(result.cogsUsd).toBe(INFRA_COGS_PER_SITE_USD)
+    }
+    // And `basis` alone must not be read as "this org has no usage": a
+    // measured-but-under-floor org reports the same `floor` basis with a
+    // non-zero `measuredUsd`. That distinction is what the staff card's copy
+    // now leans on.
+    const measuredButUnderFloor = orgMonthlyCogsUsd({ pageViews: 2169 }, 1)
+    expect(measuredButUnderFloor.basis).toBe('floor')
+    expect(measuredButUnderFloor.measuredUsd).toBeGreaterThan(0)
   })
 
   it('measured wins once usage is genuinely large', () => {

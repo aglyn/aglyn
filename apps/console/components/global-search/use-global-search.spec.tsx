@@ -44,6 +44,7 @@ jest.mock('firebase/firestore', () => ({
   documentId: () => ({ __fieldPath: '__name__' }),
   orderBy: (field: unknown) => ({ type: 'orderBy', field }),
   limit: (value: number) => ({ type: 'limit', value }),
+  startAfter: (cursor: unknown) => ({ type: 'startAfter', cursor }),
   where: (field: string, op: string, value: unknown) => ({
     type: 'where',
     field,
@@ -54,6 +55,12 @@ jest.mock('firebase/firestore', () => ({
     __path: reference.__path,
     constraints,
   }),
+  /*
+    Paginates for real, because the escalation is a SECOND page and a mock
+    that ignored `limit`/`startAfter` would hand the first read the whole
+    collection — making every escalation assertion pass for the wrong reason
+    and hiding a cursor that pointed nowhere.
+  */
   getDocs: async (builtQuery: any) => {
     mockReads.push({ path: builtQuery.__path, constraints: builtQuery.constraints })
     const name = String(builtQuery.__path).split('/').pop() as string
@@ -61,8 +68,14 @@ jest.mock('firebase/firestore', () => ({
       code: 'permission-denied',
     })
     const rows = mockRowsByCollection[name] ?? []
+    const cursor = builtQuery.constraints.find((c: any) => c.type === 'startAfter')
+    const cap = builtQuery.constraints.find((c: any) => c.type === 'limit')
+    const from = cursor
+      ? rows.findIndex((row) => row.$id === cursor.cursor?.id) + 1
+      : 0
+    const page = rows.slice(from, cap ? from + cap.value : undefined)
     return {
-      docs: rows.map((row) => ({ id: row.$id, data: () => row })),
+      docs: page.map((row) => ({ id: row.$id, data: () => row })),
     }
   },
 }))
@@ -70,7 +83,9 @@ jest.mock('firebase/firestore', () => ({
 import { act, renderHook, waitFor } from '@testing-library/react'
 import useGlobalSearch, {
   MAX_ROWS_PER_GROUP,
+  matchesIn,
   rowBelongsTo,
+  SEARCH_ESCALATION_WINDOW,
   SEARCH_WINDOW,
 } from './use-global-search'
 import {
@@ -409,6 +424,147 @@ describe('when the window was not big enough', () => {
       type: 'limit',
       value: SEARCH_WINDOW,
     })
+  })
+
+  /**
+   * The defect that reopened AGL-2179, at the size it was measured at.
+   *
+   * `aglyn-marketing` holds 54 screens. Typing `pric` returned "Nothing
+   * matched." — the site's own `/pricing` page was simply not among the first
+   * `SEARCH_WINDOW` documents in `documentId()` order, which is an arbitrary
+   * slice by construction. Here the shape is reproduced exactly: the wanted
+   * row sits past the window, so the first read cannot see it.
+   */
+  it('reads further when the window filled and matched NOTHING', async () => {
+    mockRowsByCollection.screens = [
+      ...Array.from({ length: SEARCH_WINDOW }, (_, i) => ({
+        $id: `s${String(i).padStart(3, '0')}`,
+        displayName: `Filler ${i}`,
+      })),
+      { $id: 's999', displayName: 'Pricing', versionId: 'v1' },
+    ]
+    const { result } = renderHook(() =>
+      useGlobalSearch({ ...base, entities: [entity('screens')], text: 'pric' }),
+    )
+    await waitFor(() => expect(result.current.groups).toHaveLength(1))
+    await waitFor(() =>
+      expect(result.current.groups[0].rows[0]?.$label).toBe('Pricing'),
+    )
+    expect(readsFor('screens')).toHaveLength(2)
+    // The second read starts where the first stopped rather than re-reading
+    // rows already paid for.
+    expect(readsFor('screens')[1].constraints).toContainEqual({
+      type: 'startAfter',
+      cursor: expect.objectContaining({ id: 's029' }),
+    })
+    expect(readsFor('screens')[1].constraints).toContainEqual({
+      type: 'limit',
+      value: SEARCH_ESCALATION_WINDOW,
+    })
+  })
+
+  /**
+   * The cost control. Zach's constraint was that a dozen groups not cost too
+   * many reads, and the escalation is only affordable because a group that
+   * already answered never pays for it.
+   */
+  it('does NOT read further when the window already matched', async () => {
+    mockRowsByCollection.screens = [
+      { $id: 's000', displayName: 'Pricing' },
+      ...Array.from({ length: SEARCH_WINDOW - 1 }, (_, i) => ({
+        $id: `s${String(i + 1).padStart(3, '0')}`,
+        displayName: `Filler ${i}`,
+      })),
+      { $id: 's999', displayName: 'Price list' },
+    ]
+    const { result } = renderHook(() =>
+      useGlobalSearch({ ...base, entities: [entity('screens')], text: 'pric' }),
+    )
+    await waitFor(() => expect(result.current.groups).toHaveLength(1))
+    expect(readsFor('screens')).toHaveLength(1)
+    // And it still says the set was partial, so the one row it found is not
+    // mistaken for the only one.
+    expect(result.current.groups[0].truncated).toBe(true)
+  })
+
+  it('does not read further when the collection ran out on its own', async () => {
+    const { result } = renderHook(() =>
+      useGlobalSearch({ ...base, entities: [entity('screens')], text: 'zzzz' }),
+    )
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(readsFor('screens')).toHaveLength(1)
+  })
+
+  /**
+   * The loop-stop. Escalation is triggered by a query matching nothing, and a
+   * query that matched nothing in the first window generally matches nothing
+   * in the second either — so without a spent-once flag this effect would
+   * re-fire on every render it caused.
+   */
+  it('escalates at most once per collection per mount', async () => {
+    mockRowsByCollection.screens = Array.from(
+      { length: SEARCH_WINDOW + SEARCH_ESCALATION_WINDOW },
+      (_, i) => ({ $id: `s${String(i).padStart(4, '0')}`, displayName: `F ${i}` }),
+    )
+    const { result, rerender } = renderHook(
+      (props: { text: string }) =>
+        useGlobalSearch({ ...base, entities: [entity('screens')], ...props }),
+      { initialProps: { text: 'zzzz' } },
+    )
+    await waitFor(() => expect(readsFor('screens')).toHaveLength(2))
+    for (const text of ['zzzzz', 'zzzzzz', 'zzzz']) {
+      rerender({ text })
+      await act(async () => undefined)
+    }
+    expect(readsFor('screens')).toHaveLength(2)
+    // The ceiling was reached and the collection is STILL not exhausted, so
+    // the group must keep saying so.
+    await waitFor(() => expect(result.current.groups).toHaveLength(1))
+    expect(result.current.groups[0].truncated).toBe(true)
+    expect(result.current.groups[0].rows).toHaveLength(0)
+  })
+
+  /**
+   * The caveat that used to be thrown away. A group with no matching rows was
+   * dropped before it could report that it had only been partly read, so the
+   * dialog rendered a bare "Nothing matched." over a collection nobody had
+   * finished looking at.
+   */
+  it('keeps a partly-read group even when nothing in it matched', async () => {
+    mockRowsByCollection.layouts = Array.from(
+      { length: SEARCH_WINDOW + SEARCH_ESCALATION_WINDOW },
+      (_, i) => ({ $id: `l${String(i).padStart(4, '0')}`, displayName: `F ${i}` }),
+    )
+    const { result } = renderHook(() =>
+      useGlobalSearch({ ...base, entities: [entity('layouts')], text: 'zzzz' }),
+    )
+    await waitFor(() => expect(result.current.groups).toHaveLength(1))
+    expect(result.current.groups[0].rows).toHaveLength(0)
+    expect(result.current.groups[0].truncated).toBe(true)
+    // The number the caption quotes has to be what was really looked at, not
+    // the first window's constant.
+    expect(result.current.groups[0].searched).toBe(
+      SEARCH_WINDOW + SEARCH_ESCALATION_WINDOW,
+    )
+  })
+
+  it('drops a fully-read group that matched nothing, as before', async () => {
+    const { result } = renderHook(() =>
+      useGlobalSearch({ ...base, entities: [entity('layouts')], text: 'zzzz' }),
+    )
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.groups).toHaveLength(0)
+  })
+
+  it('asks the same question of a window that the rendered group does', () => {
+    const screens = entity('screens')
+    expect(matchesIn(screens, [{ displayName: 'Pricing' }], 'pric')).toBe(true)
+    expect(matchesIn(screens, [{ displayName: 'Pricing' }], 'zzz')).toBe(false)
+    // An email-kind row is not a page, so it must not suppress the escalation
+    // the Pages group needs.
+    expect(
+      matchesIn(screens, [{ displayName: 'Pricing', kind: 'email' }], 'pric'),
+    ).toBe(false)
   })
 
   /**

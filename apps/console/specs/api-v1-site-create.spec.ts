@@ -76,6 +76,8 @@ let mockScopes: string[] = ['sites:write']
 let mockRateCalls: Array<{ key: string; limit?: number; windowMs?: number }> = []
 let mockRateRefuse = new Set<string>()
 let mockRegisterCalls: Array<[string, string, string]> = []
+/** Armed by the race tests; fires once, between the pre-check and the transaction. */
+let mockBeforeTransaction: (() => void) | null = null
 
 const docsUnder = (collection: string): Doc[] =>
   [...mockDocs.entries()]
@@ -152,8 +154,22 @@ const mockFirestore: any = {
   collection: (name: string) => mockCollectionRef(name),
   /** Resolves with the updateFunction's value, as the real one does. */
   runTransaction: async <T,>(work: (tx: any) => Promise<T>): Promise<T> => {
+    // The race window, staged: a one-shot hook that fires after the caller's
+    // out-of-transaction pre-check and before the transaction body, which is
+    // exactly where a competing create commits (AGL-2465). Nothing else in
+    // this file uses it, so it is inert unless a test arms it.
+    const arrive = mockBeforeTransaction
+    mockBeforeTransaction = null
+    if (arrive) arrive()
     const tx = {
-      get: async (ref: { path: string }) => snapshotFor(ref.path),
+      /**
+       * Overloaded exactly as the real `Transaction.get` is — a document
+       * reference or a QUERY. `claimHostForOrg` re-reads subdomain uniqueness
+       * inside the transaction (AGL-2465), so a doc-only double would throw
+       * and every create here would 500. A query has no `path`.
+       */
+      get: async (target: any) =>
+        target?.path ? snapshotFor(target.path) : await target.get(),
       set: (
         ref: { path: string },
         data: Record<string, unknown>,
@@ -275,7 +291,63 @@ beforeEach(() => {
   mockRateCalls = []
   mockRateRefuse = new Set()
   mockRegisterCalls = []
+  mockBeforeTransaction = null
   mockDocs.set('orgs/org-1', { plan: 'business', hosts: {} })
+})
+
+/** A competitor commits the same subdomain inside the race window. */
+const competitorTakes = (subdomain: string, id = 'rival-host') => {
+  mockBeforeTransaction = () => {
+    mockDocs.set(`hosts/${id}`, { subdomain, orgId: 'org-other', displayName: 'Rival' })
+  }
+}
+
+describe('losing the subdomain race is a 409, not a duplicate (AGL-2465)', () => {
+  /**
+   * The idempotency key closes the RETRY shape. It cannot close two DIFFERENT
+   * attempts racing — different keys, or the keyless console path — because
+   * they hash to different digests and neither is a replay of the other. What
+   * stops those is the uniqueness re-read inside `claimHostForOrg`'s
+   * transaction; these tests drive the handler's half of it.
+   */
+  it('answers 409 subdomain_taken when the name is taken mid-flight', async () => {
+    competitorTakes('demo-bakery')
+    const res = await create(good, 'key-a')
+    const body = await res.json()
+
+    expect(res.status).toBe(409)
+    expect(body.error.code).toBe('subdomain_taken')
+    // The verdict is the STORED state: the rival's document, and nothing else.
+    expect(hostDocs()).toHaveLength(1)
+    expect(hostDocs()[0].path).toBe('hosts/rival-host')
+    // No projection fan-out for a site that was never created.
+    expect(mockRegisterCalls).toEqual([])
+  })
+
+  it('is a 409, NOT the quota 403 — the org had room to spare', async () => {
+    competitorTakes('demo-bakery')
+    const body = await (await create(good, 'key-a')).json()
+    expect(body.error.code).not.toBe('site_quota')
+    expect(body.error.message).toContain('taken')
+  })
+
+  it('releases the key, so the retry under a NEW name still succeeds', async () => {
+    competitorTakes('demo-bakery')
+    expect((await create(good, 'key-a')).status).toBe(409)
+    // Same key, corrected name — a burnt key would replay the 409 forever.
+    const retry = await create(
+      { displayName: 'Demo Bakery', subdomain: 'demo-bakery-2' },
+      'key-a',
+    )
+    expect(retry.status).toBe(201)
+    expect((await retry.json()).subdomain).toBe('demo-bakery-2')
+  })
+
+  it('and the org directory never claimed a slot for the loser', async () => {
+    competitorTakes('demo-bakery')
+    await create(good, 'key-a')
+    expect(mockDocs.get('orgs/org-1')?.['hosts']).toEqual({})
+  })
 })
 
 describe('POST /v1/sites provisions a site (AGL-2465)', () => {

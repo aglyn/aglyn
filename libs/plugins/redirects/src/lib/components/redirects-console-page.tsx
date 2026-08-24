@@ -18,7 +18,7 @@
 
 import { checkQuota, pluginDocsHelp } from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
-import { isSelfRedirect, matchRedirect, normalizeRedirectDestination, normalizeRedirectSource, REDIRECT_DEFAULT_PRIORITY, validateRedirectRule, REDIRECT_STATUS_CODES } from '../model'
+import { isExternalRedirectDestination, isSelfRedirect, matchRedirect, normalizeRedirectDestination, normalizeRedirectSource, REDIRECT_DEFAULT_PRIORITY, validateRedirectRule, REDIRECT_STATUS_CODES } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -39,6 +39,7 @@ import {
 } from '@mui/material'
 import {
   collection,
+  deleteField,
   doc,
   getDoc,
   limit,
@@ -52,6 +53,7 @@ import {
   useFirestoreCollection,
   useFirestoreDoc,
   useHostResourceApi,
+  useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 
@@ -85,6 +87,7 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
   const { hostId, entitled, org } = props
   const firestore = useFirestore()
   const createHostResource = useHostResourceApi()
+  const { data: currentUser } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
 
@@ -290,6 +293,29 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
        */
       enabled: draft.enabled !== false,
     }
+    /**
+     * The publisher's stamp on an external destination (AGL-1881).
+     *
+     * `matchRedirect` will not send traffic off the platform without it, and
+     * `cloud/firebase-firestore.rules` admits no write to this collection from
+     * anyone but `canPublishHostContent` — so reaching this line at all is the
+     * approval, and saving is how a rule written before that fix starts firing
+     * again.
+     *
+     * Written on EDIT only. A create rides /api/hosts/resources, which stamps
+     * the same field from the id token's verified uid; sending it from here
+     * would be the client supplying its own provenance, and that route drops
+     * it for exactly that reason.
+     *
+     * Cleared with `deleteField()` when the destination is internal, rather
+     * than left standing. `merge: true` never removes a key, so an edit from
+     * `https://elsewhere.example` back to `/pricing` would otherwise leave a
+     * stamp behind that a LATER edit back to an external target would inherit
+     * — approval carried across a destination nobody approved.
+     */
+    const approval = isExternalRedirectDestination(destination)
+      ? { externalDestinationApprovedBy: currentUser?.uid ?? null }
+      : { externalDestinationApprovedBy: deleteField() }
     try {
       if (draft.id) {
         /**
@@ -316,7 +342,7 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
           async () => {
             await setDoc(
               doc(firestore, 'hosts', hostId, 'redirects', draft.id),
-              { ...fields, updatedAt: Timestamp.now() },
+              { ...fields, ...approval, updatedAt: Timestamp.now() },
               { merge: true },
             )
           },
@@ -354,19 +380,49 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
     firestore,
     hostId,
     createHostResource,
+    currentUser,
     enqueueSnackbar,
     redirectsStatus,
     redirectsFromCache,
   ])
 
-  const handleToggle = useCallback(
-    (redirect: any) => async (event: { target: { checked: boolean } }) => {
-      await updateDoc(
-        doc(firestore, 'hosts', hostId, 'redirects', redirect.$id),
-        { enabled: event.target.checked, updatedAt: Timestamp.now() },
+  /**
+   * A refusal has to be visible (AGL-1881).
+   *
+   * These two writes were bare `await`s. The rules now gate this collection on
+   * a publishing role, so an `author` reaching either gets a
+   * permission-denied — and an unhandled rejection renders as a control that
+   * flips back with no error, which is the worst way to say no. `handleSave`
+   * has always ended in a snackbar; these now match it.
+   *
+   * The card is not role-gated on purpose: it is entitlement-gated, and the
+   * rules leave READ to the catch-all so an author can still see the rules
+   * that affect the pages they write.
+   */
+  const reportWriteFailure = useCallback(
+    (error: any) => {
+      enqueueSnackbar(
+        error?.code === 'permission-denied'
+          ? 'Changing a redirect needs a publishing role — ask an editor or admin'
+          : (error?.message ?? 'An error has occurred'),
+        { variant: 'warning', persist: false },
       )
     },
-    [firestore, hostId],
+    [enqueueSnackbar],
+  )
+
+  const handleToggle = useCallback(
+    (redirect: any) => async (event: { target: { checked: boolean } }) => {
+      try {
+        await updateDoc(
+          doc(firestore, 'hosts', hostId, 'redirects', redirect.$id),
+          { enabled: event.target.checked, updatedAt: Timestamp.now() },
+        )
+      } catch (error: any) {
+        reportWriteFailure(error)
+      }
+    },
+    [firestore, hostId, reportWriteFailure],
   )
 
   const handleDelete = useCallback(
@@ -380,12 +436,16 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
         .then(() => true)
         .catch(() => false)
       if (!confirmed) return
-      await updateDoc(
-        doc(firestore, 'hosts', hostId, 'redirects', redirect.$id),
-        { deletedAt: Timestamp.now(), enabled: false },
-      )
+      try {
+        await updateDoc(
+          doc(firestore, 'hosts', hostId, 'redirects', redirect.$id),
+          { deletedAt: Timestamp.now(), enabled: false },
+        )
+      } catch (error: any) {
+        reportWriteFailure(error)
+      }
     },
-    [confirm, firestore, hostId],
+    [confirm, firestore, hostId, reportWriteFailure],
   )
 
   return (
@@ -432,6 +492,27 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
                   size="small"
                   variant="outlined"
                   label={redirect.kind}
+                />
+              ) : null}
+              {/* An external rule with no publisher stamp is not being served
+                  (AGL-1881) — `matchRedirect` skips it. Say so on the row
+                  rather than letting it read as live: a rule that silently
+                  stops firing is the failure mode a fail-closed gate owes an
+                  explanation for, and pressing Edit → Save is the whole fix.
+                  Shown for external destinations only, since that is the only
+                  case the gate applies to. */}
+              {isExternalRedirectDestination(redirect.destination) &&
+              !redirect.externalDestinationApprovedBy ? (
+                <Chip
+                  size="small"
+                  color="warning"
+                  variant="outlined"
+                  label="not serving"
+                  title={
+                    'This rule sends visitors to another site. Open it and ' +
+                    'save to confirm the destination — until then it is ' +
+                    'skipped.'
+                  }
                 />
               ) : null}
               <Stack sx={{ flex: 1, minWidth: 0 }}>

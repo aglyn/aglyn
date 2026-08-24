@@ -21,6 +21,7 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import {
   CHURN_SURVEY_DETAIL_COLLECTION,
   CHURN_SURVEY_REASONS,
@@ -301,6 +302,10 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json(report, { status: 200 })
   } catch (error) {
+    // An unverifiable credential is a 401, not a fault of ours
+    // (AGL-1993). Null for anything else, so a real failure keeps its 500.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Churn report failed' }, { status: 500 })
   }

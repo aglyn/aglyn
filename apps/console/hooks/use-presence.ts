@@ -694,6 +694,100 @@ export function projectRoom(
   return { entries, people: [...people.values()], ownOtherSessions }
 }
 
+/** What one projection commits into React state. */
+export type RoomProjection = ReturnType<typeof projectRoom>
+
+/**
+ * Commit a projection only when it DIFFERS from the one already on screen
+ * (AGL-2486).
+ *
+ * ## The runaway this exists to stop
+ *
+ * Zach, 2026-08-24, in the besigner on a marketing screen — not a warning, a
+ * React bail-out:
+ *
+ *   Maximum update depth exceeded.
+ *     at usePresence.useEffect.project      (use-presence.ts, setEntries)
+ *     at usePresence.useEffect.unsubscribe  (the room onValue callback)
+ *     at usePresence.useEffect.clearCursor  (the update() that withdraws a cursor)
+ *     at usePresence.useEffect.onMove       (a pointermove)
+ *
+ * Read that stack from the bottom: a pointer move called `clearCursor`, which
+ * called `update()`, and the room's `onValue` ran **inside that call** —
+ * `eventQueueRaiseQueuedEventsMatchingPredicate` in `@firebase/database`
+ * "synchronously raises all events" for a changed path, and a local write is
+ * applied optimistically before the server ever answers. So every write this
+ * tab makes re-enters its own room listener in the same stack frame.
+ *
+ * That alone would be survivable. What made it a loop is that `project()` then
+ * called three `setState`s with FRESHLY ALLOCATED arrays, unconditionally —
+ * so a write of our own re-rendered the entire besigner tree even though the
+ * projection could not possibly have changed. And it provably could not:
+ * `projectRoom` SKIPS this tab's own session — see the `TAB_SESSION_ID` guard
+ * in its second pass — so nothing this tab writes about itself, not a cursor
+ * position, not a cursor withdrawal, not a heartbeat's `lastSeenAt`, reaches
+ * the output at all.
+ *
+ * The pump ran at three rates at once: the cursor broadcast (up to ~16/s while
+ * the pointer moves), `clearCursor` (unthrottled — `onMove` only stamps its
+ * throttle on the path that WRITES a position), and the 20 s heartbeat. Dense
+ * enough, and React's nested-update counter passes 50 and gives up.
+ *
+ * ## Why a content key rather than dropping a dependency
+ *
+ * Removing the state from the effect, or silencing the lint rule, would trade
+ * a visible loop for a stale closure. The defect is one of IDENTITY: equal
+ * content arriving as a new array. So the bail-out is on content — React's own
+ * `Object.is` bail-out then does the rest, because an unchanged projection
+ * keeps the previous array instance.
+ *
+ * `JSON.stringify` over the whole projection rather than a hand-listed field
+ * set, deliberately. A list of "the fields the UI draws" goes blind the moment
+ * somebody draws one more, and the failure mode of THAT is an overlay that
+ * silently stops updating — far worse than the cost of stringifying a handful
+ * of small objects at most ~16 times a second. Every error here is a FALSE
+ * NEGATIVE: a spurious commit costs one render, never a missed one.
+ *
+ * A peer's own heartbeat still commits, because a peer's `lastSeenAt` really is
+ * part of the projection. That is one render per peer per 20 s, which is noise
+ * next to their cursor traffic and is not what any of this is about.
+ */
+export function createRoomProjector(
+  uid: string,
+  commit: (projected: RoomProjection) => void,
+): {
+  /** Returns whether this projection was committed. */
+  project: (
+    room: Record<string, Record<string, PresenceEntry> | PresenceEntry>,
+    now: number,
+  ) => boolean
+  /**
+   * Forget what is on screen.
+   *
+   * Called wherever something OTHER than a projection writes the presence
+   * state — the room refusal below blanks it — because the next projection
+   * would otherwise be compared against a screen that no longer shows it and
+   * skipped. `null` rather than `''`, since a real key is never empty and an
+   * empty room must still be able to commit.
+   */
+  reset: () => void
+} {
+  let committed: string | null = null
+  return {
+    project(room, now) {
+      const projected = projectRoom(room, uid, now)
+      const key = JSON.stringify(projected)
+      if (key === committed) return false
+      committed = key
+      commit(projected)
+      return true
+    },
+    reset() {
+      committed = null
+    },
+  }
+}
+
 /**
  * Pointer moves are cheap to generate and expensive to broadcast.
  *
@@ -722,6 +816,147 @@ export const CURSOR_THROTTLE_MS = 60
  * which nobody can see the cursor move anyway.
  */
 export const CURSOR_MIN_DELTA = 0.002
+
+/**
+ * What a pointer move should cause. Nothing here writes — the caller owns
+ * every RTDB call, so what lands in the presence store is unchanged and
+ * stays auditable in one place.
+ */
+export type CursorIntent = 'skip' | 'withdraw' | { x: number; y: number }
+
+/**
+ * Decide what one pointer move means, at most once per throttle interval
+ * (AGL-2486).
+ *
+ * ## The asymmetry this closes
+ *
+ * `onMove` used to stamp its throttle clock — `last = now` — on the ONE path
+ * that writes a position, and on no other. Every path that decides not to
+ * write left the clock untouched, so `now - last` stayed above the interval
+ * and the gate at the top opened for the very next `pointermove`.
+ *
+ * The gate was therefore only throttling the WRITE. Everything in front of
+ * the write ran at full pointer-event rate — `getCanvasRoot()`,
+ * `getBoundingClientRect()`, and, for a pointer inside the box but occluded
+ * by a panel, `document.elementFromPoint()` plus `pointerIsOnCanvas`. Two
+ * forced layouts per move, on the besigner's hottest path, for a decision
+ * that had already been made 8 ms earlier and could not have changed.
+ *
+ * It bit hardest exactly where you least want it: a hand resting still over
+ * the canvas (the `CURSOR_MIN_DELTA` bail-out), and a pointer parked off the
+ * canvas or over the Assist drawer — the states a pointer spends most of its
+ * time in. Stamping the clock once the gate has opened rate-limits the whole
+ * decision instead of just its last step.
+ *
+ * ## What this does and does not change for other clients
+ *
+ * Nothing about the payload, and nothing about the ceiling: a move that
+ * writes stamps the clock with the same `now` it always did, so the write
+ * rate is the same `CURSOR_THROTTLE_MS` contract peers already read.
+ *
+ * The one observable difference, stated rather than buried: a move that
+ * declines to write now also consumes the interval, so a genuine move
+ * arriving within `CURSOR_THROTTLE_MS` of a declined one waits out the
+ * remainder — at most 60 ms of latency on a signal that is 60 ms-granular by
+ * construction. The withdrawals that matter for correctness do not go
+ * through here at all: `blur`, `visibilitychange` and the `focusin` re-check
+ * call the caller's withdraw path directly and stay immediate, which is what
+ * keeps the AGL-2486 "cursor parked while typing in Assist" fix intact.
+ */
+export function createCursorTracker(options: {
+  getRoot: () => Element | null | undefined
+  /** `document.elementFromPoint`, injected so the hit test can be counted. */
+  elementAt: (clientX: number, clientY: number) => Element | null
+  throttleMs?: number
+  minDelta?: number
+}): {
+  /** What this pointer move means. Throttled — see above. */
+  move: (clientX: number, clientY: number, now: number) => CursorIntent
+  /**
+   * Re-decide at the last known viewport position, without a pointer move.
+   * Deliberately NOT throttled: it fires on focus changes, not on pointer
+   * traffic, and a stale cursor left on a colleague's screen is the bug it
+   * exists to prevent.
+   */
+  recheck: () => CursorIntent
+  /**
+   * Take the cursor down. Returns whether a write is actually owed — a
+   * cursor already withdrawn must not be withdrawn again.
+   */
+  withdraw: () => boolean
+} {
+  const {
+    getRoot,
+    elementAt,
+    throttleMs = CURSOR_THROTTLE_MS,
+    minDelta = CURSOR_MIN_DELTA,
+  } = options
+  let last = 0
+  let lastX = -1
+  let lastY = -1
+  /** The last VIEWPORT position, so a re-check can hit-test it again. */
+  let lastClientX = -1
+  let lastClientY = -1
+  /** 'withdraw' only when there is something on screen to take down. */
+  const withdrawIntent = (): CursorIntent =>
+    lastX < 0 && lastY < 0 ? 'skip' : 'withdraw'
+  const offCanvas = (root: Element, clientX: number, clientY: number) =>
+    // INSIDE the box is not the same as ON the canvas. A drawer, dialog,
+    // modal backdrop or side panel drawn over the canvas leaves the box
+    // exactly where it was, so the geometry still says "valid position"
+    // while the pointer is demonstrably somewhere else. See
+    // `pointerIsOnCanvas` — and note the caller withdraws the cursor rather
+    // than freezing it, because a cursor parked where somebody used to be
+    // reading is the same lie told more slowly.
+    !pointerIsOnCanvas(root, elementAt(clientX, clientY))
+  return {
+    move(clientX, clientY, now) {
+      if (now - last < throttleMs) return 'skip'
+      // THE STAMP, before any measuring — this is the fix. Everything below
+      // costs layout, and none of it may run more than once per interval.
+      last = now
+      const root = getRoot()
+      if (!root) return 'skip'
+      const box = root.getBoundingClientRect()
+      if (!box.width || !box.height) return 'skip'
+      const x = (clientX - box.left) / box.width
+      const y = (clientY - box.top) / box.height
+      // Outside the document is not a position worth sending — and if we
+      // were previously inside it, the stale one has to be withdrawn.
+      if (x < 0 || x > 1 || y < 0 || y > 1) return withdrawIntent()
+      lastClientX = clientX
+      lastClientY = clientY
+      if (offCanvas(root, clientX, clientY)) return withdrawIntent()
+      // A pointer that has not really moved costs a write for a position
+      // nobody's screen would change by. This is the guard that matters
+      // most: a hand resting on the mouse generates a steady trickle of
+      // sub-pixel moves, and the throttle alone happily forwards all of it.
+      if (
+        Math.abs(x - lastX) < minDelta &&
+        Math.abs(y - lastY) < minDelta
+      ) {
+        return 'skip'
+      }
+      lastX = x
+      lastY = y
+      return { x, y }
+    },
+    recheck() {
+      if (lastClientX < 0 && lastClientY < 0) return 'skip'
+      const root = getRoot()
+      if (!root) return 'skip'
+      return offCanvas(root, lastClientX, lastClientY)
+        ? withdrawIntent()
+        : 'skip'
+    },
+    withdraw() {
+      if (lastX < 0 && lastY < 0) return false
+      lastX = -1
+      lastY = -1
+      return true
+    },
+  }
+}
 
 /**
  * How often a tab re-stamps `lastSeenAt` while it just sits there.
@@ -1338,12 +1573,15 @@ export function usePresence(options: {
     // sitting in a room nobody is writing to produces no snapshot, so a
     // purely event-driven projection would leave it on screen forever.
     let lastRoom: Record<string, Record<string, PresenceEntry>> = {}
-    const project = () => {
-      const projected = projectRoom(lastRoom, uid, Date.now())
+    // Commits only what CHANGED — see `createRoomProjector` for the runaway
+    // this closes, and for why the bail-out is on content rather than on a
+    // dependency list.
+    const projector = createRoomProjector(uid, (projected) => {
       setEntries(projected.entries)
       setPeople(projected.people)
       setOwnOtherSessions(projected.ownOtherSessions)
-    }
+    })
+    const project = () => projector.project(lastRoom, Date.now())
 
     const unsubscribe = onValue(
       ref(database, roomPath),
@@ -1414,6 +1652,9 @@ export function usePresence(options: {
         setEntries([])
         setPeople([])
         setOwnOtherSessions(0)
+        // The screen no longer shows a projection, so the next one must
+        // commit even if it is identical to the last one that did.
+        projector.reset()
       },
     )
 
@@ -1520,18 +1761,18 @@ export function usePresence(options: {
   useEffect(() => {
     if (!broadcastCursor || !session) return undefined
     let frame: number | null = null
-    let last = 0
-    let lastX = -1
-    let lastY = -1
-    /** The last VIEWPORT position, so a re-check can hit-test it again. */
-    let lastClientX = -1
-    let lastClientY = -1
+    // Owns the throttle clock and the last position, and does every
+    // measurement — see `createCursorTracker` for why the clock has to be
+    // stamped by the decision rather than by the write.
+    const tracker = createCursorTracker({
+      getRoot: () => getCanvasRootRef.current?.(),
+      elementAt: (clientX, clientY) =>
+        document.elementFromPoint(clientX, clientY),
+    })
     const clearCursor = () => {
       const meRef = meRefHolder.current
       if (!meRef) return
-      if (lastX < 0 && lastY < 0) return
-      lastX = -1
-      lastY = -1
+      if (!tracker.withdraw()) return
       // RTDB has no "delete this field" in an update object; null is it. A
       // cursor left behind when the pointer leaves the canvas is a lie that
       // would sit on someone else's screen indefinitely.
@@ -1545,57 +1786,18 @@ export function usePresence(options: {
       // A hidden tab has no pointer worth broadcasting, and a background tab
       // that keeps writing is pure cost.
       if (typeof document !== 'undefined' && document.hidden) return
-      const now = Date.now()
-      if (now - last < CURSOR_THROTTLE_MS) return
-      const root = getCanvasRootRef.current?.()
-      if (!root) return
-      const box = root.getBoundingClientRect()
-      if (!box.width || !box.height) return
-      const x = (event.clientX - box.left) / box.width
-      const y = (event.clientY - box.top) / box.height
-      // Outside the document is not a position worth sending — and if we
-      // were previously inside it, the stale one has to be withdrawn.
-      if (x < 0 || x > 1 || y < 0 || y > 1) {
+      const intent = tracker.move(event.clientX, event.clientY, Date.now())
+      if (intent === 'skip') return
+      if (intent === 'withdraw') {
         clearCursor()
         return
       }
-      lastClientX = event.clientX
-      lastClientY = event.clientY
-      // INSIDE the box is not the same as ON the canvas. A drawer, dialog,
-      // modal backdrop or side panel drawn over the canvas leaves the box
-      // exactly where it was, so the geometry still says "valid position"
-      // while the pointer is demonstrably somewhere else. See
-      // `pointerIsOnCanvas` — and note it withdraws the cursor rather than
-      // freezing it, because a cursor parked where somebody used to be
-      // reading is the same lie told more slowly.
-      if (
-        !pointerIsOnCanvas(
-          root,
-          document.elementFromPoint(event.clientX, event.clientY),
-        )
-      ) {
-        clearCursor()
-        return
-      }
-      // A pointer that has not really moved costs a write for a position
-      // nobody's screen would change by. This is the guard that matters
-      // most: a hand resting on the mouse generates a steady trickle of
-      // sub-pixel moves, and the throttle alone happily forwards all of it.
-      if (
-        Math.abs(x - lastX) < CURSOR_MIN_DELTA &&
-        Math.abs(y - lastY) < CURSOR_MIN_DELTA
-      ) {
-        return
-      }
-      last = now
-      lastX = x
-      lastY = y
       if (frame) cancelAnimationFrame(frame)
       frame = requestAnimationFrame(() => {
         frame = null
         void update(meRef, {
-          cursorX: Math.round(x * 10_000) / 10_000,
-          cursorY: Math.round(y * 10_000) / 10_000,
+          cursorX: Math.round(intent.x * 10_000) / 10_000,
+          cursorY: Math.round(intent.y * 10_000) / 10_000,
           lastSeenAt: Date.now(),
         }).catch(() => undefined)
       })
@@ -1611,17 +1813,7 @@ export function usePresence(options: {
      * stays "what is under the pointer".
      */
     const recheck = () => {
-      if (lastClientX < 0 && lastClientY < 0) return
-      const root = getCanvasRootRef.current?.()
-      if (!root) return
-      if (
-        !pointerIsOnCanvas(
-          root,
-          document.elementFromPoint(lastClientX, lastClientY),
-        )
-      ) {
-        clearCursor()
-      }
+      if (tracker.recheck() === 'withdraw') clearCursor()
     }
     window.addEventListener('pointermove', onMove, { passive: true })
     window.addEventListener('blur', clearCursor)

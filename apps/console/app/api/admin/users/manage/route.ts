@@ -32,7 +32,12 @@ import {
   passwordResetThrottleMessage,
   setClaimsInOwningPool,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 import { FieldValue } from 'firebase-admin/firestore'
+import {
+  isValidDeviceId,
+  revokeDeviceSession,
+} from '../../../_lib/device-registry'
 import {
   originFromHeaders,
   sendAuthPasswordResetEmail,
@@ -49,6 +54,9 @@ const ACTIONS = [
   'updateProfile',
   'sendPasswordReset',
   'setPassword',
+  // AGL-1513 part 2. The narrowest session control staff have: end the
+  // sessions on ONE recorded device without disabling the account.
+  'signOutDevice',
   // Permanent, and the only action here that cannot be undone by another
   // action (AGL-1140). Everything else on this list is reversible.
   'erase',
@@ -323,6 +331,91 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ ok: true, notified }, { status: 200 })
     }
 
+    // "My laptop was stolen", answered without taking the account away
+    // (AGL-1513 part 2).
+    //
+    // ## Why this is not a lever staff already had
+    //
+    // The narrowest thing on this route until now was `disable`, which takes
+    // the ACCOUNT away — the person who just called about a stolen laptop
+    // cannot then sign in on their phone and carry on. `setPassword` revokes
+    // too, but only as a side effect of changing a credential they did not ask
+    // to change. Neither leaves any record of WHICH device was the problem,
+    // and neither refuses that device again afterwards.
+    //
+    // This does. The account stays enabled; everyone signs out once and the
+    // owner signs straight back in; and the `revokedAt` epoch on the device row
+    // keeps refusing the evicted browser at the session boundary for good,
+    // because the one thing a holder of stolen cookies cannot produce is a
+    // newer `auth_time`.
+    //
+    // ## What it does NOT do, stated here because the UI has to say it
+    //
+    // The refresh-token revocation is account-wide — Firebase offers nothing
+    // narrower — so every one of this person's devices signs out, not just the
+    // named one. `device-registry.ts` records why dropping that half was
+    // rejected rather than merely not built.
+    //
+    // ## Authorisation
+    //
+    // Super-only and `staff`-gated by the checks at the top of this handler,
+    // like every other action here, and audited below with the device id. The
+    // owner's own route (`/api/account/devices/revoke`) deliberately takes no
+    // uid at all; THIS is the door where a uid is the point, which is exactly
+    // why it is the audited, super-only one.
+    if (action === 'signOutDevice') {
+      const deviceId = String(body?.deviceId ?? '').trim()
+      if (!isValidDeviceId(deviceId)) {
+        return Response.json({ error: 'Invalid device' }, { status: 400 })
+      }
+      const outcome = await revokeDeviceSession({
+        firestore: firebaseAdmin.app().firestore(),
+        uid,
+        deviceId,
+        // The pool the TARGET lives in (AGL-2005), not the caller's.
+        tenantId: found.tenantId ?? null,
+        revokedBy: 'staff',
+        actorUid: decoded.uid,
+        nowMs: Date.now(),
+      })
+      if (!outcome.existed) {
+        return Response.json({ error: 'Unknown device' }, { status: 404 })
+      }
+      await firebaseAdmin
+        .app()
+        .firestore()
+        .collection('adminAudit')
+        .add({
+          actorUid: decoded.uid,
+          actorEmail: decoded.email ?? null,
+          action: 'user.signOutDevice',
+          target: `users/${uid}`,
+          targetTenantId: found.tenantId ?? null,
+          before: null,
+          // WHICH device, and the fact that the blast radius was the whole
+          // account. A row that recorded only "signed out a device" would not
+          // answer the question this audit exists for.
+          after: {
+            deviceId,
+            revokedAt: outcome.revokedAt,
+            signedOutEverywhere: true,
+          },
+          at: FieldValue.serverTimestamp(),
+        })
+        .catch(() => undefined)
+      return Response.json(
+        {
+          ok: true,
+          deviceId,
+          revokedAt: outcome.revokedAt,
+          // Named in the response and not only in the copy, so a caller cannot
+          // present this as a per-device sign-out by accident.
+          signedOutEverywhere: true,
+        },
+        { status: 200 },
+      )
+    }
+
     const requestedRole = String(body?.role ?? '')
     // Claim writes go through `setClaimsInOwningPool` (AGL-1993) rather than
     // the `targetAuth` resolved above. Same pool in the ordinary case, but it
@@ -416,6 +509,10 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json({ ok: true }, { status: 200 })
   } catch (error) {
+    // An unverifiable credential is a 401, not a fault of ours
+    // (AGL-1993). Null for anything else, so a real failure keeps its 500.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Action failed' }, { status: 500 })
   }

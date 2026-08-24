@@ -996,6 +996,22 @@ async function createSite(request: Request, ctx: ApiV1Context): Promise<Response
       subdomain,
       org: ctx.org as never,
     })
+    // Lost the subdomain to a concurrent create between the pre-check above
+    // and the transaction's commit (AGL-2465). Same 409 the pre-check answers,
+    // and the key is released for the same reason: the caller picks another
+    // name and retries, and a burnt key would replay the refusal forever.
+    // Suggestions are computed here rather than carried out of the transaction
+    // — the winner's name is now genuinely taken, so the ordinary lookup is
+    // correct and this path is rare enough that the extra reads do not matter.
+    if (!created.allowed && created.conflict === true) {
+      await claim.release()
+      const raced = await findSubdomainConflict(ctx.firestore, subdomain)
+      return ApiErrors.conflict({
+        message: `That subdomain is taken. Available alternatives: ${raced?.suggestions.join(', ') || 'none'}`,
+        code: 'subdomain_taken',
+        headers: ctx.headers,
+      })
+    }
     if (!created.allowed) {
       await claim.release()
       return ApiErrors.planRequired({

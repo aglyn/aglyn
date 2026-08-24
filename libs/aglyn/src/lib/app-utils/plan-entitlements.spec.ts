@@ -49,6 +49,8 @@ import {
   netOfProcessorFee,
   INFRA_COGS_PER_SITE_USD,
   NET_MARGIN_FLOOR_PCT,
+  NET_MARGIN_WARN_BAND_PCT,
+  netMarginRating,
   DISCOUNT_DEPTH_WARN_PCT,
   DISCOUNT_DEPTH_BLOCK_PCT,
   resolveBrandingProfile,
@@ -1600,6 +1602,104 @@ describe('plan entitlements', () => {
         { percentOff: 10 },
       )
       expect(withExisting.grossUsd).toBe(139)
+    })
+
+    /**
+     * What the two margin constants actually decide (AGL-1930).
+     *
+     * AGL-1930 asked whether `NET_MARGIN_FLOOR_PCT` / `NET_MARGIN_WARN_BAND_PCT`
+     * were fitted to the old flat-estimate formula and need re-tuning. These
+     * tests pin the answer to the prior question — what a change to either
+     * constant would MOVE — so a future re-tune is a decision with a stated
+     * effect rather than a nudged number.
+     *
+     * A percentage floor on `(net − COGS) / net` is scale-invariant, so it is
+     * not really a margin rule at all: it is `net ≥ COGS / (1 − floor)`, a
+     * MULTIPLE of the cost figure. Whatever COGS is, the guard line in dollars
+     * is that multiple of it — which is why the COGS input, not the
+     * percentage, is the knob with the calibration problem.
+     */
+    describe('the margin constants, restated in dollars (AGL-1930)', () => {
+      const netToBlockMultiple = 1 / (1 - NET_MARGIN_FLOOR_PCT)
+
+      it('is a multiple-of-COGS rule, not a margin rule', () => {
+        // 75% ⇒ net revenue must be at least 4× COGS.
+        expect(netToBlockMultiple).toBeCloseTo(4, 10)
+        // And the same multiple holds at ANY cost scale — the property that
+        // makes the percentage blind to whether COGS is $2 or $200.
+        for (const cogs of [2, 20, 200]) {
+          const net = cogs * netToBlockMultiple
+          expect((net - cogs) / net).toBeCloseTo(NET_MARGIN_FLOOR_PCT, 10)
+        }
+      })
+
+      it('puts the ok/warn/block lines at a fixed multiple of the cost input', () => {
+        // Derived from the constants, so re-tuning either moves these and this
+        // test fails — which is the point: the re-tune has to be seen.
+        const cogs = INFRA_COGS_PER_SITE_USD
+        const okAt = cogs / (1 - NET_MARGIN_FLOOR_PCT)
+        const blockBelow =
+          cogs / (1 - (NET_MARGIN_FLOOR_PCT - NET_MARGIN_WARN_BAND_PCT))
+        expect(okAt).toBeCloseTo(8, 10)
+        expect(blockBelow).toBeCloseTo(5.714285, 5)
+        // Just above the line is ok, just below it warns, and below the band
+        // it blocks — asserted through the shared helper the staff quote card
+        // now uses, so the card cannot drift from the guardrail.
+        expect(netMarginRating((okAt + 0.01 - cogs) / (okAt + 0.01))).toBe('ok')
+        expect(netMarginRating((okAt - 0.01 - cogs) / (okAt - 0.01))).toBe(
+          'warn',
+        )
+        expect(
+          netMarginRating((blockBelow - 0.01 - cogs) / (blockBelow - 0.01)),
+        ).toBe('block')
+      })
+
+      it('rates the cost-recovery arm through the same helper the UI calls', () => {
+        // The staff org page had `>= 0.75` / `>= 0.65` written into its JSX.
+        // If these two ever disagree, one screen is underwriting deals against
+        // a floor the guardrail has already moved off.
+        for (const percentOff of [0, 10, 40, 60, 80, 94, 97]) {
+          const result = checkDiscountMargin(businessMonthly, { percentOff })
+          if (result.reason === 'cogs' || result.rating === 'ok') {
+            expect(netMarginRating(result.marginPct)).toBe(
+              result.reason === 'cogs' ? result.rating : 'ok',
+            )
+          }
+        }
+      })
+
+      /**
+       * The measured production distribution, 2026-08-24: 14 of 14 usage
+       * rollups across all 6 orgs price UNDER the flat floor, so `infraCogsUsd`
+       * is `INFRA_COGS_PER_SITE_USD × sites` for every real org. The largest
+       * measured month was $0.22 against a $2.00 floor.
+       *
+       * That is what makes re-tuning the percentage the wrong knob today: the
+       * number it multiplies is a constant, not a measurement.
+       */
+      it('rates the largest REAL measured cost identically to no usage at all', () => {
+        const withRealUsage = checkDiscountMargin(
+          businessMonthly,
+          { percentOff: 60 },
+          { measuredCogsUsd: 0.22 },
+        )
+        const withNothing = checkDiscountMargin(businessMonthly, {
+          percentOff: 60,
+        })
+        expect(withRealUsage.infraCogsUsd).toBe(withNothing.infraCogsUsd)
+        expect(withRealUsage.marginPct).toBe(withNothing.marginPct)
+        expect(withRealUsage.cogsMeasured).toBe(false)
+        // The negative control: a measurement that DOES clear the floor moves
+        // the verdict, so the equality above is a fact about the size of real
+        // usage, not about the measured arm being disconnected.
+        const busy = checkDiscountMargin(
+          businessMonthly,
+          { percentOff: 60 },
+          { measuredCogsUsd: 30 },
+        )
+        expect(busy.cogsMeasured).toBe(true)
+        expect(busy.marginPct).toBeLessThan(withNothing.marginPct)
+      })
     })
   })
 

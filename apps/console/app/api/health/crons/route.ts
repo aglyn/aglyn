@@ -57,6 +57,7 @@ import {
   CRON_BEAT_WATCH_DOC,
   cronJobsHealth,
   deploymentCommitRef,
+  deploymentEnvironmentLabel,
   healthBody,
   healthHeadOf,
   healthHeaders,
@@ -147,7 +148,7 @@ export async function GET(): Promise<Response> {
       // from package.json by every build, so a self-hoster always has
       // something to quote in a bug report (AGL-2091).
       version: platformVersion(),
-      environment: process.env['VERCEL_ENV'] ?? 'development',
+      environment: deploymentEnvironmentLabel(),
       region: process.env['VERCEL_REGION'] ?? null,
     }),
     { status: healthHttpStatus(status), headers: healthHeaders(status) },

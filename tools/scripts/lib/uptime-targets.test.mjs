@@ -43,6 +43,8 @@ import {
   SUBSYSTEM_HEALTH,
   buildPlan,
   evaluateCanaryReaders,
+  evaluateSubsystemReaders,
+  markPendingDeployments,
 } from './uptime-targets.mjs'
 
 /**
@@ -82,6 +84,46 @@ function canaryRoutesOnDisk() {
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort()
+}
+
+/** Which app directory serves each probe target. */
+const HEALTH_ROOTS = {
+  console: join(REPO_ROOT, 'apps/console/app/api/health'),
+  tenant: join(REPO_ROOT, 'apps/tenant/app/api/health'),
+}
+
+/**
+ * Every subsystem health route an app actually ships, read from disk.
+ *
+ * A directory counts only when it directly contains a `route.ts` — so
+ * `apps/tenant/app/api/health/render`, which is a grouping directory with no
+ * handler of its own, contributes its CHILDREN and not itself. The root
+ * `/api/health` is excluded because `buildPlan` probes it unconditionally.
+ */
+function subsystemRoutesOnDisk(root, prefix = '/api/health') {
+  const routes = []
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const dir = join(root, entry.name)
+    const path = `${prefix}/${entry.name}`
+    const children = readdirSync(dir, { withFileTypes: true })
+    if (children.some((child) => child.isFile() && child.name === 'route.ts')) {
+      routes.push(path)
+    }
+    if (children.some((child) => child.isDirectory())) {
+      routes.push(...subsystemRoutesOnDisk(dir, path))
+    }
+  }
+  return routes.sort()
+}
+
+function allSubsystemRoutesOnDisk() {
+  return Object.fromEntries(
+    Object.entries(HEALTH_ROOTS).map(([target, root]) => [
+      target,
+      subsystemRoutesOnDisk(root),
+    ]),
+  )
 }
 
 describe('the tenant probe target', () => {
@@ -134,6 +176,137 @@ describe('every render canary has a reader', () => {
     const result = evaluateCanaryReaders([...canaryRoutesOnDisk(), 'checkout'])
     assert.equal(result.ok, false)
     assert.deepEqual(result.unread, ['/api/health/render/checkout'])
+  })
+})
+
+describe('every subsystem health endpoint has a reader (AGL-1921)', () => {
+  it('finds the endpoints on disk at all — the positive control', () => {
+    // Without this, a moved directory would empty the lists and the guard
+    // below would pass by reading nothing — the same false green the canary
+    // control guards against.
+    const routes = allSubsystemRoutesOnDisk()
+    assert.ok(
+      routes.console.length >= 7,
+      `only found ${routes.console.length} console health routes`,
+    )
+    assert.ok(routes.console.includes('/api/health/server-errors'))
+    assert.ok(routes.tenant.includes('/api/health/render/site'))
+    // The grouping directory is NOT a route: it ships no `route.ts`.
+    assert.equal(routes.tenant.includes('/api/health/render'), false)
+  })
+
+  it('the probe watches every one of them, and watches nothing that is gone', () => {
+    const result = evaluateSubsystemReaders(allSubsystemRoutesOnDisk())
+    assert.equal(
+      result.ok,
+      true,
+      `endpoints nothing reads: ${result.unread.join(', ')} · watched paths no app serves: ${result.missing.join(', ')}`,
+    )
+  })
+
+  it('names an endpoint that nothing reads — the red case', () => {
+    const routes = allSubsystemRoutesOnDisk()
+    routes.console = [...routes.console, '/api/health/checkout']
+    const result = evaluateSubsystemReaders(routes)
+    assert.equal(result.ok, false)
+    assert.deepEqual(result.unread, ['console/api/health/checkout'])
+  })
+
+  /**
+   * The inverse direction, and it is what lets the probe treat a subsystem
+   * 404 as PENDING instead of DOWN without opening a hole. A path that stays
+   * on the watch list after its route is deleted would report PENDING
+   * forever — silence wearing a monitor's clothes. This is the only thing
+   * that can catch that, and it catches it at review time.
+   */
+  it('names a watched path that no app serves — the deleted-route case', () => {
+    const result = evaluateSubsystemReaders(
+      { console: ['/api/health/crons'] },
+      { console: ['/api/health/crons', '/api/health/deleted'] },
+    )
+    assert.equal(result.ok, false)
+    assert.deepEqual(result.missing, ['console/api/health/deleted'])
+    assert.deepEqual(result.unread, [])
+  })
+
+  it('reports an unknown target as entirely unread rather than skipping it', () => {
+    // A new app whose name is not in `SUBSYSTEM_HEALTH` must fail loudly. An
+    // absent key folding to "nothing to check" is how a whole deployment
+    // would go dark silently.
+    const result = evaluateSubsystemReaders({ docs: ['/api/health/status'] })
+    assert.equal(result.ok, false)
+    assert.deepEqual(result.unread, ['docs/api/health/status'])
+  })
+})
+
+describe('a subsystem 404 pending promotion (AGL-1921)', () => {
+  const row = (name, status, ok) => ({ name, status, ok, detail: 'x' })
+
+  it('reclassifies a 404 subsystem row while the root is up', () => {
+    const [root, sub] = markPendingDeployments([
+      row('console', 200, true),
+      row('console/server-errors', 404, false),
+    ])
+    assert.equal(sub.pending, true)
+    assert.equal(sub.ok, true)
+    assert.match(sub.detail, /promote main/)
+    // The root is untouched, and never eligible itself.
+    assert.equal(root.pending, undefined)
+  })
+
+  /**
+   * THE NEGATIVE CONTROL, and the reason this is safe. A deployment that is
+   * genuinely down does not 404 selectively — it fails everything. If the root
+   * is down, nothing may be laundered into green.
+   */
+  it('leaves a 404 DOWN when the target root is also down', () => {
+    const [, sub] = markPendingDeployments([
+      row('console', 503, false),
+      row('console/server-errors', 404, false),
+    ])
+    assert.equal(sub.pending, undefined)
+    assert.equal(sub.ok, false)
+  })
+
+  it('never reclassifies the ROOT itself — a 404 base is a wrong base', () => {
+    // The AGL-786 defect: a base URL that does not serve the app. That must
+    // stay DOWN however the rest of the plan reads.
+    const [root] = markPendingDeployments([row('tenant', 404, false)])
+    assert.equal(root.pending, undefined)
+    assert.equal(root.ok, false)
+  })
+
+  /**
+   * The row above cannot fail the `name.includes('/')` clause on its own: a
+   * 404 root also fails the "root is up" clause, so the two are redundant for
+   * every result `probe()` can produce TODAY. This constructs the one shape
+   * that separates them — a root marked ok despite a 404 — so the clause is
+   * covered rather than merely present. `probe()` computes `ok` from
+   * `status === 200`; if that ever changes, this is what keeps a wrong base
+   * URL from being laundered into PENDING.
+   */
+  it('still refuses a root row even if it were somehow marked up', () => {
+    const [root] = markPendingDeployments([row('tenant', 404, true)])
+    assert.equal(root.pending, undefined)
+  })
+
+  it('leaves a 500 or a 503 DOWN — only a MISSING route is pending', () => {
+    const [, five, degraded] = markPendingDeployments([
+      row('console', 200, true),
+      row('console/crons', 500, false),
+      row('console/backups', 503, false),
+    ])
+    assert.equal(five.ok, false)
+    assert.equal(degraded.ok, false)
+  })
+
+  it('does not touch a healthy row', () => {
+    const [, sub] = markPendingDeployments([
+      row('console', 200, true),
+      row('console/crons', 200, true),
+    ])
+    assert.equal(sub.pending, undefined)
+    assert.equal(sub.detail, 'x')
   })
 })
 

@@ -22,7 +22,8 @@
  *
  * Until now the consent machinery could gate exactly one thing: Google. The
  * `advertising` category has existed since AGL-1649 and it is honest — only an
- * explicit accept can carry it, `implied` never does, GPC never does — but the
+ * explicit accept can carry it, the implied default never does, GPC never
+ * does — but the
  * only ENFORCEMENT it ever reached was {@link consentModeSignals}, four
  * strings handed to `gtag`. A non-Google tag could not be consent-gated at
  * all, because nothing in the repo knew how to gate one. Deciding to deploy a

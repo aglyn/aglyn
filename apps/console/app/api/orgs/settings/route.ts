@@ -19,6 +19,7 @@ import { after } from 'next/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import { stripeAddressDivergence } from '../../../../utils/stripe-address-divergence'
 import { isBrandingImageUrl, isBrandingLinkUrl } from '../../_lib/branding-url'
+import { assessOwnershipTransferLockout } from '../../_lib/sso-transfer-lockout'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import {
@@ -630,6 +631,13 @@ async function handler(request: Request): Promise<Response> {
 
     // Ownership transfer (AGL-232): owner-only; the target must already
     // be a member. The previous owner steps down to admin.
+    //
+    // …and an org has only ever ONE owner, which is what makes this an
+    // AGL-1888 surface: for an SSO-enforced org the entire break-glass
+    // guarantee is that single seat, so moving it into the identity pool
+    // strands the org after the enforcement pre-flight has already passed.
+    // `assessOwnershipTransferLockout` asks the pre-flight's own question
+    // about the post-transfer state.
     if (body?.action === 'transfer-ownership') {
       const isOwner = membership?.member.role === 'owner'
       if (decoded['staff'] !== true && !isOwner) {
@@ -645,6 +653,33 @@ async function handler(request: Request): Promise<Response> {
         .collection('orgs')
         .doc(orgId)
         .get()
+      // BEFORE the transfer, and before anything is written (AGL-1888).
+      // Applies to staff too: the branch above lets staff transfer any org
+      // without being a member of it, and stranding a customer is stranding a
+      // customer whoever clicked. The escape for a deliberate hand-over into
+      // the pool is `enforce-off` first, which the refusal names.
+      const lockout = await assessOwnershipTransferLockout(
+        orgId,
+        targetUid,
+        orgSnapshot.data(),
+      )
+      if (lockout.refused) {
+        // Recorded on the customer-visible log, not just refused. A security
+        // control that silently declines teaches the org nothing; this is the
+        // one place they can see that the transfer was attempted and why it
+        // did not happen.
+        void logOrgActivity(
+          orgId,
+          { uid: decoded.uid, email: decoded.email },
+          lockout.verdict === 'would-strand'
+            ? 'Refused an ownership transfer that would have left no way in ' +
+                'if single sign-on failed'
+            : 'Refused an ownership transfer — the single sign-on lockout ' +
+                'check did not complete',
+          { type: 'org', id: orgId },
+        )
+        return Response.json({ error: lockout.reason }, { status: 409 })
+      }
       try {
         await transferOrgOwnership(
           orgId,

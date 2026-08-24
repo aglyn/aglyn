@@ -35,26 +35,48 @@
 // writers of `sso.enforced` reads "no writer in the codebase" and files SSO
 // enforcement as an unbuilt feature. One did.
 //
-// What this script is FOR now: re-running the sweep over accounts that
-// arrived after the flip (the route sweeps once, at the moment of applying),
-// and rehearsing against a throwaway account with --force.
+// THIS SCRIPT NO LONGER WRITES ANYTHING (AGL-1888). It reports, and that is
+// all it can do.
 //
-// Mirrors libs/tenant/data/admin/src/lib/server/sso-enforcement.ts, which
-// holds the logic and the reasoning. Dry-run by default. Idempotent: a second
-// run reports 0 changed rather than revoking anyone's tokens a second time.
+// It used to take `--commit` and perform the sweep itself, mirroring
+// `libs/tenant/data/admin/src/lib/server/sso-enforcement.ts`. The mirror had
+// drifted into something dangerous, in two ways that compound:
+//
+//  1. **No lockout pre-flight, and never any.** `enforceSsoSignInMethods`
+//     refuses to strip a pool unless the org keeps a way in the IdP does not
+//     mediate. This script asked no such question, so `--commit` was a way to
+//     walk straight past the control the console cannot be made to skip — on
+//     an org the console would have refused.
+//  2. **It ignored `sso.breakGlassUids`.** The engine deliberately spares a
+//     DESIGNATED break-glass account. This script did not know the field
+//     existed, so a re-run would unlink the password off precisely the account
+//     the org had nominated as its spare key, and report it as ordinary
+//     convergence.
+//
+// The obvious repair — copy the pre-flight in here — is the wrong one. Two
+// copies of a security control diverge, and the laxer copy is the one that
+// decides. So the write path is gone instead, and the sweep has exactly one
+// implementation, behind the guard, at:
+//
+//   apps/console/app/api/orgs/sso/route.ts
+//     action 'enforce-preview' -> dry-run rehearsal (force: true)
+//     action 'enforce-apply'   -> pre-flight, then sso.enforced = true, then sweep
+//     action 'enforce-off'     -> sets sso.enforced = false
+//
+// Nothing is lost by this. `enforce-apply` is idempotent and re-sweeps an
+// already-enforced org, which is what the re-run was for; `enforce-preview` is
+// the rehearsal; both walk the same 1000-account page this did. What remains
+// here is the diagnostic that has no console equivalent: a per-account view of
+// the pool read straight from the Admin SDK, for when the question is "what is
+// actually in this tenant" rather than "make it so".
 //
 //   FIREBASE_PROJECT_ID=… FIREBASE_CLIENT_EMAIL=… FIREBASE_PRIVATE_KEY=… \
-//     node tools/scripts/enforce-sso-signin.mjs --org <orgId> [--commit] \
-//       [--actor <uid>] [--force]
-//
-// --force runs even when `sso.enforced` is false. ONLY for a rehearsal
-// against a throwaway account: the flag is the customer's instruction, and
-// acting without it removes sign-in methods nobody asked us to remove.
+//     node tools/scripts/enforce-sso-signin.mjs --org <orgId>
 
 import { existsSync, readFileSync } from 'node:fs'
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
-import { FieldValue, getFirestore } from 'firebase-admin/firestore'
+import { getFirestore } from 'firebase-admin/firestore'
 
 function loadLocalEnv() {
   const roots = ['.', 'apps/console', 'cloud']
@@ -100,13 +122,24 @@ const opt = (name, fallback) => {
 }
 
 const ORG_ID = opt('--org', '')
-const COMMIT = flag('--commit')
-const FORCE = flag('--force')
-const ACTOR = opt('--actor', 'system')
 
 if (!ORG_ID) {
-  console.error('Usage: node tools/scripts/enforce-sso-signin.mjs --org <orgId> [--commit] [--force]')
+  console.error('Usage: node tools/scripts/enforce-sso-signin.mjs --org <orgId>')
   process.exit(1)
+}
+// Refuse the removed flags rather than ignoring them. Somebody with the old
+// invocation in their shell history must not get a silent dry run they read as
+// a completed sweep — the failure mode of a no-op that looks like a success is
+// exactly what this script is being pulled back from.
+for (const removed of ['--commit', '--force', '--actor']) {
+  if (flag(removed)) {
+    console.error(
+      `${removed} no longer exists — this script cannot write (AGL-1888).\n` +
+        'Run enforcement from the organization\'s Single sign-on card, which\n' +
+        'carries the lockout pre-flight this script never had.',
+    )
+    process.exit(1)
+  }
 }
 
 const projectId = process.env.FIREBASE_PROJECT_ID
@@ -140,24 +173,27 @@ if (sso.status !== 'active') {
   console.error(`${ORG_ID} SSO status is "${sso.status ?? 'unset'}", not active`)
   process.exit(1)
 }
-if (!sso.enforced && !FORCE) {
-  console.error(
-    `${ORG_ID} has sso.enforced = false — nothing to enforce. ` +
-      'Pass --force only to rehearse against a throwaway account.',
-  )
-  process.exit(1)
-}
+
+// The org's DESIGNATED break-glass accounts (AGL-1888). Reported because the
+// engine spares them: a report that omitted them would describe a sweep the
+// console will not perform, which is how this script's output stopped matching
+// its behaviour in the first place.
+const breakGlass = new Set(
+  Array.isArray(sso.breakGlassUids) ? sso.breakGlassUids.map(String) : [],
+)
 
 console.log(
-  `\nSSO enforcement sweep — project=${projectId} org=${ORG_ID} ` +
+  `\nSSO pool report (READ-ONLY) — project=${projectId} org=${ORG_ID} ` +
     `tenant=${sso.tenantId} idp=${sso.providerId} ` +
-    `enforced=${Boolean(sso.enforced)}${FORCE ? ' (FORCED)' : ''} ` +
-    `mode=${COMMIT ? 'COMMIT' : 'dry-run'}\n`,
+    `enforced=${Boolean(sso.enforced)} ` +
+    `break-glass designations=${breakGlass.size}\n`,
 )
 
 const pool = auth.tenantManager().authForTenant(sso.tenantId)
 const page = await pool.listUsers(1000)
-const changed = []
+let wouldChange = 0
+/** Accounts holding a credential the org's IdP does not mediate. */
+let retainNonIdp = 0
 
 for (const record of page.users) {
   const providers = (record.providerData ?? [])
@@ -168,64 +204,43 @@ for (const record of page.users) {
   const label = `${record.uid} (${record.email ?? 'no email'})`
 
   if (!removable.length) {
-    console.log(`  ok      ${label} — [${providers.join(', ') || 'none'}]`)
+    console.log(`  ok         ${label} — [${providers.join(', ') || 'none'}]`)
+    continue
+  }
+  // A DESIGNATED break-glass account keeps everything. The engine skips it;
+  // this report used to say it would be stripped, which is the opposite of
+  // what happens and the more alarming of the two directions to be wrong in.
+  if (breakGlass.has(record.uid)) {
+    console.log(
+      `  BREAKGLASS ${label} — designated; keeps [${providers.join(', ')}]`,
+    )
+    retainNonIdp += 1
     continue
   }
   // Never unlink down to zero: an account with nothing but removable
   // providers is misconfigured, not a bypass, and stripping it orphans it.
   if (!kept.length) {
     console.log(
-      `  SKIP    ${label} — would orphan; its only providers are ` +
+      `  SKIP       ${label} — would orphan; its only providers are ` +
         `[${providers.join(', ')}] and none is ${sso.providerId}`,
     )
     continue
   }
   console.log(
-    `  ${COMMIT ? 'unlink' : 'would '}  ${label} — remove ` +
-      `[${removable.join(', ')}], keep [${kept.join(', ')}]`,
+    `  would      ${label} — remove [${removable.join(', ')}], ` +
+      `keep [${kept.join(', ')}]`,
   )
-  if (COMMIT) {
-    await pool.updateUser(record.uid, { providersToUnlink: removable })
-    await pool.revokeRefreshTokens(record.uid)
-    await firestore.collection('adminAudit').add({
-      actorUid: ACTOR,
-      action: 'org.sso.enforceSignInMethods',
-      target: `users/${record.uid}`,
-      before: { providers },
-      after: {
-        providers: kept,
-        orgId: ORG_ID,
-        tenantId: sso.tenantId,
-        unlinked: removable,
-        tokensRevoked: true,
-      },
-      at: FieldValue.serverTimestamp(),
-    })
-  }
-  changed.push(record.uid)
-}
-
-if (COMMIT && changed.length) {
-  const batch = firestore.batch()
-  for (const uid of changed) {
-    batch.set(firestore.collection('users').doc(uid).collection('notifications').doc(), {
-      type: 'system.signInMethodRemoved',
-      title: 'Your sign-in methods changed',
-      body:
-        'Your organization now requires single sign-on, so other sign-in ' +
-        'methods have been removed from your account. Sign in through your ' +
-        'organization instead.',
-      orgId: ORG_ID,
-      link: '/manage/user',
-      createdAt: FieldValue.serverTimestamp(),
-      readAt: null,
-    })
-  }
-  await batch.commit()
+  wouldChange += 1
 }
 
 console.log(
-  `\nScanned ${page.users.length} account(s); ${changed.length} changed.` +
-    `${page.pageToken ? '\nWARNING: more accounts remain — re-run.' : ''}` +
-    `${COMMIT ? '' : '\nDry run — nothing was written. Pass --commit to apply.'}\n`,
+  `\nScanned ${page.users.length} account(s); ${wouldChange} would change; ` +
+    `${retainNonIdp} designated account(s) would retain a non-IdP credential.` +
+    `${page.pageToken ? '\nWARNING: more accounts remain — the console sweeps the same 1000.' : ''}` +
+    '\n\nThis script cannot write. Enforcement runs from the organization\'s' +
+    '\nSingle sign-on card, which refuses to strip a pool that would leave the' +
+    '\norganization with no way in (AGL-1888). This report does NOT run that' +
+    '\npre-flight: it counts designations, it does not check for an org owner' +
+    '\noutside the pool, so it cannot tell you whether enforcement will be' +
+    '\nallowed. Use the card\'s rehearsal for that.\n',
 )

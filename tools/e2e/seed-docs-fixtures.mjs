@@ -308,4 +308,96 @@ await put(hostOrdersRef.doc('docs-order-fulfilled'), {
   ...orderAt(2),
 })
 
+// ── A14. An org on a plan WITHOUT commerce, whose site still sells ──────────
+// The exact state the overview's admonition describes, and the reason the shot
+// is worth taking: the plugin switchboard is an ORG field (`enabledPlugins`)
+// and the plan gate is a separate entitlement, so the two can disagree. An org
+// that drops to Free keeps `commerce` in `enabledPlugins` — the console page
+// still renders, the Draft order button is still there, and the refusal only
+// arrives when the draft is submitted.
+//
+// This is a SEPARATE org on purpose. Flipping the bakery's plan to `free`
+// would have been one line, but every other shot in this plan is taken on that
+// org and half of them read its plan (the retention funnel's over-Free-limits
+// warning, the billing cards, the seat line). A fixture that mutates a shared
+// org photographs the other shots as a side effect.
+//
+// Only `free` lacks `commerce` — every self-serve tier from Starter up carries
+// it (`plan-entitlements.ts`), so `free` is the only plan that produces this.
+console.log('\nFree-plan org that still has the commerce plugin on (A14):')
+const freeOrgId = 'docs-free-org'
+const freeOrgSlug = 'docs-free'
+const freeHostId = 'docs-free-site'
+const freeOrgName = 'Docs Downgraded Co'
+await put(firestore.collection('orgs').doc(freeOrgId), {
+  name: freeOrgName,
+  slug: freeOrgSlug,
+  ownerUid: 'e2e-owner',
+  // The whole fixture is this one word.
+  plan: 'free',
+  // …and this list still carrying `commerce`. Dropping a plan does not
+  // uninstall a plugin.
+  enabledPlugins: ['mui', 'commerce'],
+  subscription: { status: 'canceled' },
+  createdAt: daysAgo(60),
+})
+await put(
+  firestore.collection('orgs').doc(freeOrgId).collection('members').doc('e2e-owner'),
+  {
+    email: 'e2e@aglyn.test',
+    displayName: 'E2E Owner',
+    role: 'owner',
+    status: 'active',
+    createdAt: daysAgo(60),
+  },
+)
+await put(
+  firestore.collection('users').doc('e2e-owner').collection('orgs').doc(freeOrgId),
+  { orgName: freeOrgName, slug: freeOrgSlug, role: 'owner', createdAt: daysAgo(60) },
+)
+await put(firestore.collection('orgSlugs').doc(freeOrgSlug), {
+  orgId: freeOrgId,
+  createdAt: daysAgo(60),
+})
+await put(firestore.collection('hostIndex').doc(freeHostId), { orgId: freeOrgId })
+await put(firestore.collection('hosts').doc(freeHostId), {
+  subdomain: freeHostId,
+  displayName: 'Downgraded Bakery',
+  orgId: freeOrgId,
+  memberRoles: { 'e2e-owner': 'admin' },
+  screens: {},
+  createdAt: daysAgo(60),
+})
+await put(
+  firestore
+    .collection('users')
+    .doc('e2e-owner')
+    .collection('hostMemberships')
+    .doc(freeHostId),
+  {
+    orgId: freeOrgId,
+    subdomain: freeHostId,
+    displayName: 'Downgraded Bakery',
+    nameLower: 'downgraded bakery',
+    role: 'admin',
+    createdAt: daysAgo(60),
+  },
+)
+// One product, because the draft dialog cannot be filled in without one — the
+// refusal the shot is about sits BEHIND a valid draft, not in place of it.
+await put(
+  firestore.collection('hosts').doc(freeHostId).collection('products').doc('docs-free-loaf'),
+  {
+    name: 'Sourdough loaf',
+    slug: 'sourdough-loaf',
+    description: 'Naturally leavened, baked daily.',
+    type: 'physical',
+    status: 'active',
+    variants: [{ id: 'default', priceUsd: 9, inventory: 24 }],
+    priceUsd: 9,
+    inventory: 24,
+    createdAtMs: now.toMillis(),
+  },
+)
+
 console.log('\nDocs fixtures seeded.')

@@ -97,4 +97,57 @@ describe('AGL-2254 · the console owns SSO enforcement', () => {
     // — and so this assertion fails if the route is renamed out from under it.
     expect(SCRIPT).toContain('apps/console/app/api/orgs/sso/route.ts')
   })
+
+  /**
+   * AGL-1888. The script mirrored the sweep and asked none of the questions
+   * the engine asks: no lockout pre-flight, and no knowledge of
+   * `sso.breakGlassUids`, so `--commit` both walked past the control and
+   * stripped the very account an org had nominated as its spare key. Copying
+   * the pre-flight in would have made two copies of a security control; the
+   * write path was removed instead.
+   */
+  describe('and the script beside it cannot write', () => {
+    it('performs no mutation the engine guards', () => {
+      for (const mutation of [
+        'updateUser(',
+        'revokeRefreshTokens(',
+        'providersToUnlink',
+        'batch.commit(',
+      ]) {
+        expect(SCRIPT).not.toContain(mutation)
+      }
+    })
+
+    it('does not take a flag that would apply anything', () => {
+      // Asserted on the flag READER, not the prose: a header that says
+      // "read-only" over a live `--commit` is the exact shape of the false
+      // claim this suite already exists to prevent.
+      expect(SCRIPT).not.toContain(`flag('--commit')`)
+      expect(SCRIPT).not.toContain(`opt('--actor'`)
+    })
+
+    it('refuses the removed flags instead of silently ignoring them', () => {
+      // An old invocation must not produce a quiet no-op that reads as a
+      // completed sweep.
+      expect(SCRIPT).toContain(`for (const removed of ['--commit', '--force', '--actor'])`)
+    })
+
+    it('reports the break-glass designations the engine spares', () => {
+      // ADDED STRONGER AFTER A MUTATION SURVIVED. The first version of this
+      // asserted only `toContain('breakGlassUids')`, which the word in the
+      // comment above the code satisfies — deleting the field read entirely
+      // left it green. Both the read AND the branch it feeds are pinned now,
+      // because it is the branch that makes the report match the engine.
+      expect(SCRIPT).toContain('Array.isArray(sso.breakGlassUids)')
+      expect(SCRIPT).toContain('breakGlass.has(record.uid)')
+    })
+
+    it('says it does not run the pre-flight, rather than implying it does', () => {
+      // The report counts designations; it cannot see an org owner outside
+      // the pool, which is the half that actually satisfies enforcement for
+      // every pool we provision. Claiming otherwise would be worse than
+      // saying nothing.
+      expect(SCRIPT).toContain('does NOT run that')
+    })
+  })
 })

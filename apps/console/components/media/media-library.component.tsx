@@ -17,6 +17,10 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+import {
+  hostContentCollectionLabel,
+  PLUGIN_CONTENT_ROUTE_SLUG,
+} from '@aglyn/aglyn'
 import { hostDisplayDomain } from '../../constants/tenant-links'
 import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -47,7 +51,6 @@ import {
   DialogTitle,
   Drawer,
   FormControlLabel,
-  Grid,
   IconButton,
   LinearProgress,
   Link,
@@ -214,11 +217,38 @@ const MEDIA_SEARCH_MAX_DOCS = 1200
 const SCOPE_CHUNK_SIZE = 100
 
 /**
+ * The narrowest a media tile may be drawn before the grid drops a column
+ * instead (AGL-2486). Derived from what the card actually has to fit, not
+ * picked for a round number:
+ *
+ *   116px  the fixed thumbnail height both cards share (`THUMB_HEIGHT`).
+ *          160px wide keeps it slightly landscape rather than a letterbox
+ *          slot that crops every photo it is handed.
+ *    16px  the text row's horizontal padding (`px: 1` either side).
+ *   ~30px  the overflow-menu IconButton sitting beside the text.
+ *
+ * which leaves ~114px for the two `caption` lines. That is enough for the
+ * `PNG · 192 KB` meta row to render whole — it is the longer of the two in
+ * practice — and enough filename stem to tell two files apart, which is the
+ * job the label has. Below this the filename degrades to `og--workflo…` and
+ * the tile stops being scannable, so the grid gives up a column instead.
+ */
+const TILE_MIN_WIDTH = 160
+
+/**
  * One "Used on" reference (AGL-845) as returned by /api/media/references —
  * carries what the client needs to deep-link back to the resource.
  */
 interface MediaUsageRef {
-  kind: 'screen' | 'layout' | 'entry' | 'component' | 'site' | 'email'
+  kind:
+    | 'screen'
+    | 'layout'
+    | 'entry'
+    | 'component'
+    | 'site'
+    | 'email'
+    /** A plugin-owned document — `collectionId` says which kind (AGL-1867). */
+    | 'plugin'
   id: string
   name: string
   hostId: string
@@ -239,7 +269,24 @@ const REF_KIND_LABEL: Record<MediaUsageRef['kind'], string> = {
   component: 'Component',
   site: 'Site settings',
   email: 'Email',
+  // Overridden per row by the collection's own label — see `refKindLabel`.
+  // "Plugin" is only what an unlabelled row falls back to.
+  plugin: 'Plugin',
 }
+
+/**
+ * The chip on one reference row (AGL-1867).
+ *
+ * Plugin rows do not share a label: a product, an event and a bookable service
+ * are all `kind: 'plugin'`, and telling an author their photo is used by a
+ * "Plugin" is barely better than not telling them at all. The collection name
+ * is the label, humanised by the same helper the guard spec pins, so a newly
+ * scanned collection reads correctly without a second list to keep in step.
+ */
+const refKindLabel = (reference: MediaUsageRef): string =>
+  reference.kind === 'plugin' && reference.collectionId
+    ? hostContentCollectionLabel(reference.collectionId)
+    : REF_KIND_LABEL[reference.kind]
 
 
 const formatBytes = (bytes: number) =>
@@ -2556,6 +2603,26 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           versionId: reference.versionId,
         })
       }
+      // A plugin-owned document (AGL-1867) — a product, an event, a service.
+      // The destination is the plugin's own console page, which is where the
+      // author edits or removes the thing holding the asset. A collection with
+      // no declared slug renders as plain text rather than being dropped: the
+      // ROW is the safety answer, the link is a convenience, and making
+      // coverage wait on a route is how the collection ends up uncovered.
+      if (reference.kind === 'plugin') {
+        const slug = reference.collectionId
+          ? PLUGIN_CONTENT_ROUTE_SLUG[
+              reference.collectionId as keyof typeof PLUGIN_CONTENT_ROUTE_SLUG
+            ]
+          : undefined
+        return slug
+          ? buildRoute(Route.HOST_PLUGIN, {
+              orgSlug,
+              host: reference.hostSubdomain,
+              pluginSlug: slug,
+            })
+          : null
+      }
       if (reference.kind === 'entry') {
         const base = buildRoute(Route.HOST_CONTENT, {
           orgSlug,
@@ -3439,12 +3506,44 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             : 'No media here — upload images, video, PDFs and documents to use on your site.'}
         </Typography>
       ) : (
-        <Grid container spacing={2}>
+        /**
+         * An INTRINSIC grid, not a twelve-column split (AGL-2486).
+         *
+         * This was `<Grid container>` with `size={{ xs: 6, sm: 4, md: 3, lg: 2 }}`,
+         * and it had two separate faults that compounded:
+         *
+         * 1. A twelve-column split fixes the COLUMN COUNT — `lg: 2` is six
+         *    across, at every width in that band. Narrowing the container
+         *    could only squash the tiles, never drop a column, so thumbnails
+         *    compressed and filenames truncated to `og--workflo…`.
+         * 2. Those breakpoints read the VIEWPORT, not this container. Inside
+         *    the media picker dialog — a ~1200px box on a 2560px monitor —
+         *    `lg` was always what matched, so the grid packed six columns
+         *    into dialog-sized space no matter how narrow the dialog got.
+         *
+         * `auto-fill` + `minmax(TILE_MIN_WIDTH, 1fr)` inverts it: the tile
+         * declares the width it needs to stay legible and the column count
+         * falls out of the space actually available, which is the container's
+         * own width. Fewer, correctly-sized tiles instead of more, broken ones.
+         *
+         * `auto-fill` rather than `auto-fit` on purpose. `auto-fit` collapses
+         * the empty tracks and lets `1fr` stretch what is left, so a folder
+         * holding one file would draw a single card the full width of the
+         * dialog. `auto-fill` keeps the empty tracks, so the last row of a
+         * short folder lines up with every other row.
+         *
+         * Folders and files share the one grid and the one track definition,
+         * so a row of folders is sized exactly like a row of files.
+         */
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(auto-fill, minmax(${TILE_MIN_WIDTH}px, 1fr))`,
+            gap: 2,
+          }}
+        >
           {visibleFolders.map((folder) => (
-            <Grid
-              key={`folder-${folder.$id}`}
-              size={{ xs: 6, sm: 4, md: 3, lg: 2 }}
-            >
+            <Box key={`folder-${folder.$id}`} sx={{ minWidth: 0 }}>
               <MediaFolderCard
                 folder={folder}
                 count={folderCounts[folder.$id] ?? 0}
@@ -3477,10 +3576,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                     : undefined
                 }
               />
-            </Grid>
+            </Box>
           ))}
           {visibleItems.map((media: any) => (
-            <Grid key={media.$id} size={{ xs: 6, sm: 4, md: 3, lg: 2 }}>
+            <Box key={media.$id} sx={{ minWidth: 0 }}>
               <DraggableCard
                 mediaId={media.$id as string}
                 disabled={Boolean(onSelect)}
@@ -3568,9 +3667,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                   }
                 />
               </DraggableCard>
-            </Grid>
+            </Box>
           ))}
-        </Grid>
+        </Box>
       )}
       {hasMore ? (
         <Button
@@ -4198,7 +4297,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                         <Chip
                           size="small"
                           variant="outlined"
-                          label={REF_KIND_LABEL[reference.kind]}
+                          label={refKindLabel(reference)}
                         />
                       </Stack>
                     </Stack>

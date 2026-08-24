@@ -374,8 +374,10 @@ export const THIRD_PARTY_COOKIES: Record<string, ThirdPartyCookies> = {
    *
    * Both entries are reached only where a visitor has explicitly allowed
    * advertising on a site whose owner turned the question on. Nothing here is
-   * set under implied consent alone in a prior-consent region, and nothing is
-   * set at all on a site that never asked.
+   * set under implied consent alone in any region, and nothing is set at all
+   * on a site that never asked. That matches what the published Cookie Policy
+   * tells visitors about `_gac`, `_gcl_au`, `_fbp` and `_fbc` — "set only
+   * where you have allowed advertising cookies".
    */
   'Google advertising (ad_storage)': {
     // Set by gtag's conversion linker once `ad_storage` is granted. Distinct

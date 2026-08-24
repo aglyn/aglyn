@@ -40,11 +40,16 @@
  */
 
 /**
- * Reconciled against the live dunning schedule, or rather against the fact
- * that there isn't one to reconcile against yet (AGL-2430).
+ * Reconciled against the live dunning schedule, which has now been read
+ * (AGL-2430): live is Smart Retries, 4 retries within 3 weeks, then **cancel
+ * the subscription** — the same shape test mode measured. 30 sits nine days
+ * past that, so the sweep fires on `canceled` + `payment_failed` with slack
+ * in the customer's favour, and `check:stripe-dunning-drift` fails if the
+ * recorded window ever grows past this constant.
  *
- * 30 stands, and the reason is that it is safe under **every** configuration
- * Stripe's Dashboard can hold, not that it matches a number someone read:
+ * 30 stood before that read too, and the reason it stood is worth keeping:
+ * it is safe under **every** configuration Stripe's Dashboard can hold, not
+ * merely under the one someone happened to read.
  *
  * - If live cancels at ~21 days as test mode does, 30 sits nine days past the
  *   terminal state — the sweep fires on `canceled` + `payment_failed`, which

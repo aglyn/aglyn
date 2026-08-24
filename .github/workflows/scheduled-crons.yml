@@ -142,44 +142,30 @@ on:
     # blip. It needs three consecutive CONCLUSIVE failures over fourteen days
     # before it will even email anybody, and a human decides what to do.
     - cron: '30 7 * * 1' # reverify-sso-domains (report only) — Mondays 07:30 UTC
-    # Scheduled email campaigns (AGL-2134). `/product/marketing` sells
-    # "Schedule campaigns and overlays ahead of time", and the campaign
-    # composer really does write `status: 'scheduled'` with a `sendAtMs` —
-    # but NOTHING EVER CALLED the processor that claims those rows, so a
-    # scheduled campaign sat in the collection until someone opened the
-    # History list and cancelled it. The feature was advertised, sold and
-    # silently inert; the same shape as backfill-scope above.
     #
-    # Every 15 minutes rather than daily because the composer takes a
-    # `datetime-local` down to the minute: a daily sweep would turn "9:00 AM"
-    # into "some time in the next 24 hours". 15 minutes is the granularity
-    # the UI can honestly promise, and the composer's helper text says so.
+    # ⛔ NOTHING SUB-HOURLY BELONGS IN THIS FILE (AGL-1617).
     #
-    # The route claims at most 10 due campaigns per invocation (a
-    # transaction flips scheduled → sending, so overlapping runs cannot
-    # double-send). A backlog therefore drains at 40 campaigns/hour rather
-    # than stalling.
-    - cron: '*/15 * * * *' # campaigns/process-scheduled — every 15 minutes
-    # A custom domain's slow steps are not ours: a certificate issues over
-    # seconds to minutes, and an ownership challenge or a DNS correction
-    # happens in the customer's registrar on their own clock. Until AGL-2010
-    # nothing re-checked, so a domain that went healthy after the attach
-    # stayed dark until a human pressed Re-attach. Frequent because the
-    # customer is sitting there waiting for their site; cheap because a run
-    # with nothing pending is two Firestore reads and no Vercel calls.
+    # `campaigns/process-scheduled` (every 15 minutes) and
+    # `finish-domain-attachments` (every 20) used to be here and are now
+    # driven by `consoleFastCrons` in `cloud/functions/src/index.ts`, on
+    # Cloud Scheduler. They are still POSTable by hand from the
+    # `workflow_dispatch` list below — that is what it is for.
     #
-    # 20 minutes was re-examined when this cron turned CI red (AGL-2359) and
-    # KEPT. It is not over-frequent: an idle run is one `where
-    # cnameAttachmentPending == true` query — Firestore's minimum billing for
-    # an empty result is one read, so ~2.2k reads a month — and it makes no
-    # Vercel call at all until a host is actually pending. The pressure is the
-    # other way. AGL-2010 describes the customer as sitting in the window
-    # "after the record is added", and the sweep is what ends it; slowing it
-    # down means a correctly-configured domain stays dark for longer. It is
-    # the read cost per pending host (one Vercel status call each, MAX_HOSTS
-    # 200) that would argue for a longer interval, and that cost does not
-    # exist on an idle platform.
-    - cron: '*/20 * * * *' # finish-domain-attachments — every 20 minutes
+    # WHY. GitHub coalesces and silently DROPS scheduled triggers under load,
+    # per workflow, and this one carried fourteen `- cron:` entries with each
+    # run serving exactly one. Measured 2026-08-22..24 from `gh run list`:
+    # this workflow should have fired at least SEVEN times an hour from those
+    # two entries alone, and fired TWO TO FOUR — under 40% delivery. Because
+    # the surviving runs were split across both schedules, the campaign
+    # processor went 104 minutes without a beat on 2026-08-24 (on a
+    # fifteen-minute schedule) and the `scheduled-jobs` uptime monitor
+    # correctly 503ed. `/product/marketing` sells that feature.
+    #
+    # What is left here is daily and weekly work, where an hour of GitHub's
+    # drift costs nothing and the six/twenty-four hour graces in
+    # `SCHEDULED_JOBS` are honest. Adding a `*/n` entry here would be
+    # re-opening AGL-1617; `scheduled-crons-wiring.spec.ts` fails the build
+    # if you do.
   workflow_dispatch:
     inputs:
       path:
@@ -241,8 +227,9 @@ jobs:
             '0 6 * * 1') path=/api/admin/reverify-plugin-versions ;;
             '30 6 * * 1') path=/api/admin/backfill-scope ;;
             '30 7 * * 1') path=/api/admin/reverify-sso-domains ;;
-            '*/15 * * * *') path=/api/campaigns/process-scheduled ;;
-            '*/20 * * * *') path=/api/admin/finish-domain-attachments ;;
+            # No arm for the two frequent sweeps: they run on Cloud Scheduler
+            # since AGL-1617 and reach this job only via workflow_dispatch,
+            # which falls through to $DISPATCH_PATH below.
             *) path="$DISPATCH_PATH" ;;
           esac
           if [ -z "$path" ]; then

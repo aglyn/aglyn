@@ -50,17 +50,21 @@ rather than overwriting the earlier one, so the history of what a person agreed
 to, and when, stays intact.
 
 When we publish a new version, the next time that person opens the console they
-see a banner naming the Terms and the Privacy Policy, saying the documents have
-been updated, and telling them which version they last agreed to and which is
-current. **I agree** records the new acceptance and the banner goes. It appears
-on every console page until it is answered, and it does not lock anyone out of
-the product in the meantime.
+see a banner. It opens by acknowledging the acceptance we already hold and
+names the **date** they agreed, then says the documents have been updated and
+asks them to confirm. Where we can tell which of the two documents actually
+moved — by comparing the content hashes on their record against the ones
+published now — the banner names them; where that comparison cannot be made it
+says nothing rather than guessing. **I agree** records the new acceptance and
+the banner goes. It appears on every console page until it is answered, and it
+does not lock anyone out of the product in the meantime.
 
-The same banner appears for an account we hold **no** acceptance for at all —
+A banner also appears for an account we hold **no** acceptance for at all —
 accounts created before we captured acceptance, and people who arrived through
-SSO or an invite without passing a consent control. The wording is different
-there, because the fact is: it says we have no record of acceptance on this
-account, rather than that anything changed.
+SSO or an invite without passing a consent control. The wording there is
+deliberately different, because the fact is different: it says we have no
+record of acceptance on this account and gives the usual reason, which is a gap
+in our records rather than anything the person failed to do.
 
 Two consequences worth naming for a review:
 

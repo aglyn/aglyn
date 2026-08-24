@@ -20,9 +20,13 @@ import {
   consumeRateLimit,
   currentRateLimitDegradation,
   DEGRADATION_DOC_PREFIX,
+  pendingServerErrors,
   RATE_LIMIT_COLLECTION,
+  recordServerError,
   recordSignupRefusal,
   resetRateLimitDegradationForTests,
+  resetServerErrorsForTests,
+  SERVER_ERROR_DOC_PREFIX,
   SIGNUP_REFUSAL_DOC_PREFIX,
 } from './rate-limit-store'
 
@@ -65,12 +69,28 @@ function fakeFirestore() {
   /** One round trip. `setImmediate` so concurrent callers interleave. */
   const hop = () => new Promise((resolve) => setImmediate(resolve))
 
-  function applyWrite(
-    path: string,
+  /**
+   * A plain map value, as opposed to a sentinel or a `Date`.
+   *
+   * Firestore treats those three differently under `{ merge: true }` — a map
+   * merges field by field, a sentinel is applied to what is there, and a Date
+   * overwrites — so the double has to tell them apart or the AGL-1921
+   * `byService` counters (`{ 'console-web': increment(1) }`) would be stored
+   * as literal sentinel objects and every assertion about them would be
+   * meaningless.
+   */
+  const isPlainMap = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' &&
+    value !== null &&
+    !(value instanceof FieldValue) &&
+    !(value instanceof Date) &&
+    !Array.isArray(value)
+
+  function mergeFields(
+    prior: Record<string, unknown>,
     value: Record<string, unknown>,
     merge: boolean,
-  ) {
-    const prior = docs.get(path) ?? {}
+  ): Record<string, unknown> {
     const next: Record<string, unknown> = merge ? { ...prior } : {}
     for (const [field, raw] of Object.entries(value)) {
       if (raw instanceof FieldValue) {
@@ -79,11 +99,27 @@ function fakeFirestore() {
           throw new Error(`unsupported sentinel on ${field}`)
         }
         next[field] = (Number(prior[field]) || 0) + operand
+      } else if (isPlainMap(raw)) {
+        // Nested maps merge rather than replace, and their sentinels apply to
+        // the nested prior value — real `set(..., { merge: true })` semantics.
+        next[field] = mergeFields(
+          isPlainMap(prior[field]) ? (prior[field] as Record<string, unknown>) : {},
+          raw,
+          merge,
+        )
       } else {
         next[field] = raw
       }
     }
-    docs.set(path, next)
+    return next
+  }
+
+  function applyWrite(
+    path: string,
+    value: Record<string, unknown>,
+    merge: boolean,
+  ) {
+    docs.set(path, mergeFields(docs.get(path) ?? {}, value, merge))
     versions.set(path, (versions.get(path) ?? 0) + 1)
   }
 
@@ -473,6 +509,184 @@ describe('recordSignupRefusal (AGL-1907)', () => {
       'refusals',
       'refusedAtMs',
     ])
+  })
+})
+
+/**
+ * AGL-1921 — the count `/api/health/server-errors` reads.
+ *
+ * The Cloud Logging entry `reportServerError` writes is the record for triage
+ * and is unreadable from here (`403 Permission denied for all log views`,
+ * measured 2026-08-24 against the production credential), so this marker is
+ * the copy an alarm can actually be built on. Everything asserted below is
+ * about it being TRUSTWORTHY under the conditions it exists for: a spike is
+ * high volume during an incident, so the count must survive coalescing, must
+ * not smear across minute buckets, must never cost a write per error, and
+ * must never be the reason a failing request fails twice.
+ */
+describe('recordServerError (AGL-1921)', () => {
+  const settle = async () => {
+    for (let i = 0; i < 10; i += 1) {
+      await new Promise((resolve) => setImmediate(resolve))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    }
+  }
+  const errorDocs = (firestore: ReturnType<typeof fakeFirestore>) =>
+    [...firestore.docs.entries()].filter(([path]) =>
+      path.startsWith(`${RATE_LIMIT_COLLECTION}/${SERVER_ERROR_DOC_PREFIX}`),
+    )
+
+  beforeEach(() => {
+    resetServerErrorsForTests()
+  })
+
+  it('writes the FIRST error of a bucket immediately — a lone error is visible', async () => {
+    // The alarm must not need a second error to become readable. If the very
+    // first write waited for the coalescing interval, a single 500 on a quiet
+    // deployment could sit in an instance that then froze and never landed.
+    const firestore = fakeFirestore()
+    recordServerError('console-web', { firestore, now: 1_755_100_830_000 })
+    await settle()
+
+    const entries = errorDocs(firestore)
+    expect(entries).toHaveLength(1)
+    const [path, doc] = entries[0]
+    // Bucketed DOWN to the minute — 830_000ms lands in the 800_000 bucket.
+    expect(path).toBe(
+      `${RATE_LIMIT_COLLECTION}/${SERVER_ERROR_DOC_PREFIX}1755100800000`,
+    )
+    expect(doc['errors']).toBe(1)
+    expect(doc['byService']).toEqual({ 'console-web': 1 })
+    expect(doc['erroredAtMs']).toBe(1_755_100_830_000)
+  })
+
+  it('coalesces a burst into ONE write and loses none of the count', async () => {
+    // The cost bound, and the count's integrity, in one assertion. Fifty
+    // errors inside the five-second interval must not be fifty writes onto a
+    // single document — that is the hot-document contention AGL-2404 was —
+    // and the fiftieth must still be counted when the flush comes.
+    const firestore = fakeFirestore()
+    const base = 1_755_100_800_000
+    for (let i = 0; i < 50; i += 1) {
+      recordServerError('console-web', { firestore, now: base + i * 10 })
+    }
+    await settle()
+    const writesDuringBurst = firestore.counts.writes
+    expect(writesDuringBurst).toBe(1)
+    expect(pendingServerErrors()).toBe(49)
+
+    // Past the interval, the held 49 land together with the 51st error.
+    recordServerError('console-web', { firestore, now: base + 6_000 })
+    await settle()
+    expect(errorDocs(firestore)[0][1]['errors']).toBe(51)
+    expect(pendingServerErrors()).toBe(0)
+  })
+
+  it('a rollover flushes the OLD bucket before the new one starts', async () => {
+    // A minute's count smeared into the next would misdate an incident and,
+    // worse, could carry a spike past the trailing window's edge.
+    const firestore = fakeFirestore()
+    recordServerError('console-web', { firestore, now: 1_755_100_800_000 })
+    await settle()
+    recordServerError('console-web', { firestore, now: 1_755_100_801_000 })
+    recordServerError('console-web', { firestore, now: 1_755_100_802_000 })
+    // Next minute.
+    recordServerError('tenant-web', { firestore, now: 1_755_100_860_000 })
+    await settle()
+
+    const byPath = Object.fromEntries(errorDocs(firestore))
+    expect(
+      byPath[`${RATE_LIMIT_COLLECTION}/${SERVER_ERROR_DOC_PREFIX}1755100800000`][
+        'errors'
+      ],
+    ).toBe(3)
+    expect(
+      byPath[`${RATE_LIMIT_COLLECTION}/${SERVER_ERROR_DOC_PREFIX}1755100860000`][
+        'errors'
+      ],
+    ).toBe(1)
+  })
+
+  it('sums per deployment so an incident names which app is failing', async () => {
+    const firestore = fakeFirestore()
+    const base = 1_755_100_800_000
+    recordServerError('console-web', { firestore, now: base })
+    await settle()
+    recordServerError('tenant-web', { firestore, now: base + 6_000 })
+    await settle()
+    recordServerError('tenant-web', { firestore, now: base + 12_000 })
+    await settle()
+
+    expect(errorDocs(firestore)[0][1]['byService']).toEqual({
+      'console-web': 1,
+      'tenant-web': 2,
+    })
+  })
+
+  it('stamps erroredAtMs — NOT lastAtMs or refusedAtMs, which would blind two sibling probes', async () => {
+    // Three signals share the `rateLimits` collection and each health probe
+    // range-queries its OWN field. A shared field would let a server-error
+    // flood fill the limiter probe's read limit and silently blind it.
+    const firestore = fakeFirestore()
+    recordServerError('console-web', { firestore, now: 1_755_100_830_000 })
+    await settle()
+
+    const doc = errorDocs(firestore)[0][1]
+    expect(doc['erroredAtMs']).toBe(1_755_100_830_000)
+    expect(Object.keys(doc)).not.toContain('lastAtMs')
+    expect(Object.keys(doc)).not.toContain('refusedAtMs')
+  })
+
+  it('never throws when the store is down — the failing request still answers', async () => {
+    // This runs inside `onRequestError`, while a request is already failing.
+    // A throw here replaces the real error with this one.
+    const firestore = fakeFirestore()
+    firestore.failFrom()
+    expect(() =>
+      recordServerError('console-web', { firestore, now: 1_755_100_800_000 }),
+    ).not.toThrow()
+    await settle()
+    expect(errorDocs(firestore)).toHaveLength(0)
+  })
+
+  it('carries a TTL so markers do not accumulate forever', async () => {
+    const firestore = fakeFirestore()
+    recordServerError('console-web', { firestore, now: 1_755_100_800_000 })
+    await settle()
+    const expiresAt = errorDocs(firestore)[0][1]['expiresAt'] as Date
+    expect(expiresAt).toBeInstanceOf(Date)
+    expect(expiresAt.getTime()).toBe(1_755_100_800_000 + 7 * 24 * 60 * 60 * 1000)
+  })
+
+  it('stores no identifiers — no message, no stack, no route', async () => {
+    // The body this feeds is public. The message, stack and route pattern stay
+    // in the Cloud Logging entry, which is not.
+    const firestore = fakeFirestore()
+    recordServerError('console-web', { firestore, now: 1_755_100_800_000 })
+    await settle()
+    expect(Object.keys(errorDocs(firestore)[0][1]).sort()).toEqual([
+      'byService',
+      'erroredAtMs',
+      'errors',
+      'expiresAt',
+    ])
+  })
+
+  it('uses no transaction — increments commute, so instances never contend', async () => {
+    // The two sibling markers read-modify-write in a transaction. During a
+    // spike every instance would be writing this one document at once, which
+    // is precisely the optimistic-concurrency storm that turned AGL-2404 into
+    // 504s. `fakeFirestore` counts aborts, so this goes red if the production
+    // call ever grows a transaction.
+    const firestore = fakeFirestore()
+    const base = 1_755_100_800_000
+    for (let i = 0; i < 5; i += 1) {
+      recordServerError('console-web', { firestore, now: base + i * 6_000 })
+      await settle()
+    }
+    expect(firestore.counts.aborts).toBe(0)
+    expect(firestore.counts.reads).toBe(0)
+    expect(errorDocs(firestore)[0][1]['errors']).toBe(5)
   })
 })
 

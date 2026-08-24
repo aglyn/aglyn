@@ -292,6 +292,109 @@ describe('AGL-2316 · re-acceptance fires, and does not fire', () => {
   })
 })
 
+/**
+ * The two facts the banner needs to acknowledge an existing acceptance rather
+ * than read like a first-time ask (Zach, 2026-08-24: "don't phrase it that
+ * they havent agreed before it creates confusion and frustration").
+ *
+ * WHEN they last agreed, and WHAT moved since. Both are derived from records
+ * that already exist — no changelog mechanism is invented, and where the
+ * derivation cannot be made the answer is UNKNOWN rather than a confident
+ * "nothing changed".
+ */
+describe('AGL-2316 · when they last agreed, and what moved since', () => {
+  const PRIVACY = {
+    key: 'privacy',
+    url: 'https://aglyn.com/legal/privacy',
+    sha256: 'b'.repeat(64),
+    bytes: 15286,
+  }
+
+  it('reports the timestamp of the LATEST acceptance, not the current one', () => {
+    const status = evaluateLegalAcceptance({
+      acceptances: [
+        acceptance('v4', '2026-08-14T00:00:00.000Z'),
+        acceptance('v5', '2026-08-23T14:05:00.000Z'),
+      ],
+      currentVersion: 'v6',
+    })
+    expect(status.latestAcceptedAt).toBe('2026-08-23T14:05:00.000Z')
+    // The field that already existed cannot answer this: it is null in
+    // exactly the case the banner renders in.
+    expect(status.currentVersionAcceptedAt).toBeNull()
+  })
+
+  it('reports NULL when the record carries no timestamp', () => {
+    // Documented as "null only if the write was partial" — and
+    // `strictNullChecks` is off, so a surface that does not branch on this
+    // renders the epoch or the word "undefined" to a customer.
+    const status = evaluateLegalAcceptance({
+      acceptances: [acceptance('v5', null)],
+      currentVersion: 'v6',
+    })
+    expect(status.latestAcceptedAt).toBeNull()
+  })
+
+  it('names only the documents whose text actually MOVED', () => {
+    const status = evaluateLegalAcceptance({
+      acceptances: [
+        acceptance('v5', '2026-08-18T00:00:00.000Z', {
+          documents: [...DOCUMENTS, PRIVACY],
+        }),
+      ],
+      currentVersion: 'v6',
+      currentDocuments: [
+        // terms re-pinned, privacy untouched.
+        { ...DOCUMENTS[0], sha256: 'c'.repeat(64) },
+        PRIVACY,
+      ],
+    })
+    expect(status.changedDocumentKeys).toEqual(['terms'])
+  })
+
+  it('counts a document the old record never carried as a change', () => {
+    const status = evaluateLegalAcceptance({
+      acceptances: [acceptance('v5', '2026-08-18T00:00:00.000Z')],
+      currentVersion: 'v6',
+      currentDocuments: [...DOCUMENTS, PRIVACY],
+    })
+    expect(status.changedDocumentKeys).toEqual(['privacy'])
+  })
+
+  it('answers UNKNOWN — not "nothing changed" — when a hash is missing', () => {
+    // One unknowable key makes the whole list unknowable: a partial list
+    // reads as a complete one, which is the assertion this must not make.
+    const status = evaluateLegalAcceptance({
+      acceptances: [
+        acceptance('v5', '2026-08-18T00:00:00.000Z', {
+          documents: [{ key: 'terms', url: 'https://aglyn.com/legal/terms' }],
+        }),
+      ],
+      currentVersion: 'v6',
+      currentDocuments: DOCUMENTS,
+    })
+    expect(status.changedDocumentKeys).toBeNull()
+  })
+
+  it('answers UNKNOWN when no current manifest was supplied', () => {
+    const status = evaluateLegalAcceptance({
+      acceptances: [acceptance('v5', '2026-08-18T00:00:00.000Z')],
+      currentVersion: 'v6',
+    })
+    expect(status.changedDocumentKeys).toBeNull()
+  })
+
+  it('answers UNKNOWN when there is nothing accepted to compare against', () => {
+    const status = evaluateLegalAcceptance({
+      acceptances: [],
+      currentVersion: 'v6',
+      currentDocuments: DOCUMENTS,
+    })
+    expect(status.latestAcceptedAt).toBeNull()
+    expect(status.changedDocumentKeys).toBeNull()
+  })
+})
+
 describe('AGL-2316 · reading the stored records', () => {
   it('projects the fields a dispute is answered from, and the doc id as version', async () => {
     const firestore = fakeFirestore([

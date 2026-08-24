@@ -1983,4 +1983,66 @@ describe('Aglyn: Screen Manager', () => {
       expect(canvas.getNode('stack')!.nodes).toEqual(['img2', 'img1'])
     })
   })
+
+  /**
+   * An attribute edit reaches the canvas even when the caller is holding a
+   * node reference from BEFORE the map was replaced (AGL-2486).
+   *
+   * Reported as "the besigner's Text attribute field silently discards
+   * edits". The panel does not look the node up per keystroke — the besigner's
+   * focus store keeps the SELECTION as a node object — and `undo`, `redo`,
+   * `applyNodes` and a draft restore all rebuild the map from fresh
+   * instances. So after an undo the panel was writing `node.props` on an
+   * object the canvas no longer owned. Confirmed live: the commit fired with
+   * the right value, `canvas.getNode(id) !== node`, and the model never
+   * moved. Nothing threw, nothing went dirty, and the field went on showing
+   * the text — which is why it reads as the editor eating the edit.
+   *
+   * The write target is resolved by `$id`, so the reference the caller kept
+   * stops mattering.
+   */
+  describe('an attribute edit through a stale node reference (AGL-2486)', () => {
+    const makeCanvas = () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(nodes)
+      return canvas
+    }
+
+    it('lands on the canvas after an undo replaced the node map', () => {
+      const canvas = makeCanvas()
+      // Something to undo, so the restore rebuilds the map.
+      canvas.updateNodeProps(canvas.getNode('child1')!, { title: 'first' })
+      // What the panel is holding: the selection, captured before the undo.
+      const heldByThePanel = canvas.getNode('child1')!
+      canvas.undo()
+
+      // Guard on the guard: without a replaced map this test would pass on
+      // the old code too, and prove nothing.
+      expect(canvas.getNode('child1')).not.toBe(heldByThePanel)
+
+      canvas.updateNodeProps(heldByThePanel, { title: 'typed after undo' })
+      expect(canvas.getNode('child1')!.props).toEqual({
+        title: 'typed after undo',
+      })
+      // The serialized document is what a save writes — the edit has to be
+      // there too, not only on the live instance.
+      expect(
+        (canvas.toJSON().nodes as Record<string, any>)['child1'].props,
+      ).toEqual({ title: 'typed after undo' })
+    })
+
+    it('still writes a node the map never had, rather than dropping it', () => {
+      // Editor surfaces and specs alike hand `updateNodeProps` detached
+      // nodes; re-resolving must not turn those into silent no-ops.
+      const canvas = makeCanvas()
+      const detached = {
+        $id: 'not-in-the-map',
+        type: NodeType.NODE,
+        componentId: 'div',
+        props: {},
+      } as any
+      canvas.updateNodeProps(detached, { title: 'kept' })
+      expect(detached.props).toEqual({ title: 'kept' })
+    })
+  })
 })

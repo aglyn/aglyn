@@ -25,7 +25,6 @@
 // asserts it.
 import {
   hasGlobalPrivacyControl,
-  hostAsksAboutAdvertising,
   isExplicitConsentStatus,
   readStoredVisitorConsent,
   resolveConsentPosture,
@@ -172,20 +171,18 @@ export async function decideVisitorConsent(
     // paint, and the persistent "Your Privacy Choices" pill is the opt-out
     // surface. No banner, no notice: the Squarespace shape.
     return {
-      // The implied default now carries the ADVERTISING grant too (AGL-2402),
-      // not just analytics. Safe by geography rather than by judgement: this
-      // branch is only reached in the opt-out posture, and every
-      // prior-consent region — plus any visitor whose region is unknown — is
-      // resolved to opt-in above and never gets an implied record at all.
+      // ANALYTICS ONLY. The implied default carries no advertising grant, and
+      // the omission is the point: `advertising` absent means no, and a
+      // visitor defaulted in without being asked has answered no question
+      // about advertising. AGL-2402 briefly passed
+      // `advertising: hostAsksAboutAdvertising(host)` here; that was narrowed
+      // back on 2026-08-24 to agree with the published Cookie Policy.
       //
-      // Gated on the host having opted into ASKING. A site that never shows
-      // the advertising question must not have a grant recorded for it, or
-      // the record would claim a decision the visitor was never offered.
-      stored: storeVisitorConsent(hostId, {
-        status: 'implied',
-        country,
-        advertising: hostAsksAboutAdvertising(host),
-      }),
+      // Belt AND braces: even if this call were handed `advertising: true`,
+      // `storeVisitorConsent` re-derives the grant against the STATUS through
+      // `advertisingGrantedByStatus`, which refuses `implied`. Neither layer
+      // is load-bearing alone.
+      stored: storeVisitorConsent(hostId, { status: 'implied', country }),
       posture,
       country,
     }

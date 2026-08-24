@@ -256,6 +256,17 @@ describe('the sentence under the field', () => {
     expect(placeholder).toContain('and more')
     expect(placeholder.length).toBeLessThan(60)
   })
+
+  /**
+   * Read off a real console, where it is the single most visible string this
+   * feature owns: `Search sites, pages and emails and more…`. The truncated
+   * list kept its own conjunction and then had another appended.
+   */
+  it('does not stutter "and" when the list is shortened', () => {
+    const { placeholder } = scopeAt()
+    expect(placeholder).toBe('Search sites, pages, emails and more…')
+    expect(placeholder).not.toMatch(/and .* and more/)
+  })
 })
 
 describe('where a result row goes', () => {

@@ -176,7 +176,17 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
       // `logEvent`'s overloads type each reserved name individually, so the
       // shared taxonomy's union has to be widened past them here. The typing
       // that matters already happened at the call site, in `trackEvent`.
-      ;(logEvent as (...args: unknown[]) => void)(analytics, name, params)
+      //
+      // RETURNED, not discarded (AGL-1580). `logEvent` is async: it awaits the
+      // SDK's initialization promise before the hit reaches gtag, so while that
+      // promise is still pending the call site's `window.location.assign` tears
+      // the document down before gtag is ever called and the event is lost
+      // outright. Handing the promise back is what lets
+      // `trackEventBeforeNavigation` wait for it. Nothing else about delivery
+      // changes — `trackEvent` still ignores it and stays fire-and-forget.
+      return (
+        logEvent as (...args: unknown[]) => Promise<void>
+      )(analytics, name, params)
     })
     return () => configureAnalyticsTransport(null)
   }, [analytics])

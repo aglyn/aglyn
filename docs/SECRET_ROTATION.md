@@ -138,6 +138,13 @@ whole reason this document exists.
    anything starts reading them. **Revoke the debug tokens in the Firebase
    console *before* deleting the Vercel records** — deleting the variable
    removes our copy, not Firebase's acceptance of the token. (AGL-2402)
+   - Which tokens, and did the revoke land? `npm run check:app-check-debug-tokens`
+     lists every debug token registered on every app in the project and exits 1
+     while any remains (2 if it could not look — never 0). Measured 2026-08-24:
+     **2 registered on the single web app**, and the value held by these two
+     variables still exchanged for a live production attestation token, so this
+     is an active bypass rather than an inert record. Re-run it after revoking;
+     0 is the evidence the click worked.
 2. **Delete the inert shared `RESEND_API_KEY` record** (empty `projectId`).
    Confirm it is empty first; deleting a *linked* shared record breaks mail.
 3. **Split the preview-only three** — `MEMBER_SESSION_SECRET`,
@@ -161,9 +168,26 @@ whole reason this document exists.
    credentials on development and preview (AGL-2401). Production keeps the
    live values. This removes the `sk_live_` key from every laptop **and** stops
    `deploymentLivemode()` reading a preview build as the live deployment.
+   - ⚠️ **Splitting the record is not the same as fixing the mode, and the
+     sharing check cannot tell them apart.** A development record holding the
+     *live* key satisfies every rule in step 5 as written: production is on its
+     own record, nothing is shared, findings go to zero. It is also exactly the
+     defect AGL-2401 was filed for. This is the likely slip, because the value
+     already in the field you copied from is the live one.
+   - So `verify-env-isolation.mjs` asks the mode separately, from
+     `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` — public by construction (Next inlines
+     it into every browser bundle) and required to match the secret key's mode.
+     Set the **test** publishable key on development and preview in the same
+     pass, or the run stays red and correctly so.
+   - ⚠️ Store that publishable key as `encrypted`, **not** `sensitive` — see
+     "What not to do". `sensitive` is write-only, so the checker cannot read it
+     back and reports the environment's mode as **UNKNOWN**, which is a
+     finding, not a pass. `aglyn-tenant`'s development and preview copies were
+     added `encrypted`/`sensitive` on 2026-08-23 and are in that state now.
 
 Redeploy both projects, then re-run `npm run check:env-isolation`. Everything
-above should have dropped off the findings list.
+above should have dropped off the findings list, and the mode section should be
+empty too.
 
 ### Block B — rotations with a lockstep dependency
 
@@ -188,12 +212,26 @@ outage.
 2. Set the new `CRON_SECRET` on the shared record, **production only**.
 3. Add a dev/preview record with a throwaway value.
 4. `gh secret set CRON_SECRET` — the GitHub Actions crons in
-   `.github/workflows/scheduled-crons.yml` send it as `x-cron-secret` to 12
-   console routes. **Vercel and GitHub must move together**; whichever lags,
-   every cron 401s in the gap.
-5. Redeploy console **and** tenant (the plugin cron routes live on both).
-6. Verify: dispatch one cron manually and confirm 200; confirm an unsubscribe
-   link from an already-sent campaign still resolves.
+   `.github/workflows/scheduled-crons.yml` send it as `x-cron-secret` to the
+   daily and weekly console routes. **Vercel and GitHub must move together**;
+   whichever lags, every cron 401s in the gap.
+5. **THREE HOLDERS, NOT TWO (AGL-1617).** `firebase functions:secrets:set
+   CRON_SECRET --project aglyn-main`, then `firebase deploy --only
+   functions:consoleFastCrons` so the new version is bound. That Cloud
+   Scheduler job drives `campaigns/process-scheduled` and
+   `finish-domain-attachments` every fifteen minutes; miss this step and
+   those two — a feature `/product/marketing` sells, and every pending custom
+   domain — 401 silently while the eleven GitHub Actions jobs stay green.
+   `/api/health/crons` reds them within 45–60 minutes, which is the backstop,
+   not the plan.
+6. Redeploy console **and** tenant (the plugin cron routes live on both).
+7. Verify: dispatch one cron manually and confirm 200; confirm an unsubscribe
+   link from an already-sent campaign still resolves; and confirm the two
+   Cloud Scheduler rows on `/api/health/crons` show a fresh
+   `lastBeatAgeMinutes`. **Fire that check more than once** — the endpoint
+   memoises its Firestore read for five minutes *per lambda instance*, so a
+   single request can be answered by a memo written before the rotation and
+   prove nothing either way.
 
 There is **no grace period**. `isCronAuthorized` compares against exactly one
 value; there is no key list and no previous-secret fallback.

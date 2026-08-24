@@ -33,7 +33,9 @@
 import { render } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import CardColumns from '../components/card-columns.component'
+import CardColumns, {
+  type CardColumnsProps,
+} from '../components/card-columns.component'
 
 /** Every rule emotion emitted for the rendered tree, as text. */
 const stylesheet = () =>
@@ -52,7 +54,7 @@ const rulesFor = (className: string) =>
     .split('\n')
     .filter((line) => line.includes(className))
 
-function mount(props?: { columns?: number; spacing?: number }) {
+function mount(props?: Omit<CardColumnsProps, 'items'>) {
   const { container } = render(
     <CardColumns
       {...props}
@@ -124,6 +126,24 @@ describe('CardColumns', () => {
     expect(rules.find((rule) => rule.includes('min-width:900px'))).toContain(
       'column-count: 3',
     )
+  })
+
+  it('hides a wrapper whose card rendered NOTHING', () => {
+    // `PluginWidgetSlot` renders an empty fragment when no plugin is entitled
+    // for the slot. Its wrapper would then be an empty block carrying only
+    // `margin-bottom`, which multicol counts as content and balances the
+    // columns around — a hole reintroduced by the component that exists to
+    // close holes.
+    const { rules } = mount()
+    const empty = rules.find((rule) => rule.includes(':empty'))
+    expect(empty).toBeTruthy()
+    expect(empty).toContain('display: none')
+    // THE CONTROL: it must be the `:empty` rule that hides them, not a blanket
+    // one — the non-empty children are still `display: block`.
+    const child = rules.find(
+      (rule) => rule.includes('>*') && !rule.includes(':empty'),
+    )
+    expect(child).toContain('display: block')
   })
 
   it('renders every item it is handed, in order', () => {

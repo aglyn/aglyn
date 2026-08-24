@@ -347,7 +347,14 @@ const EDITOR_WRITABLE_HOST_SUBCOLLECTIONS: Record<string, string> = {
   overlays: 'Modal/drawer overlays, written by the interaction builder dialog.',
   experiments:
     'A/B variants, created and retired by the interactions provider.',
-  redirects: 'Redirect rules, authored in the redirects plugin console page.',
+  redirects:
+    'Redirect rules, managed in the redirects plugin console page. All three ' +
+    'lists exclude the name (AGL-1881) and the dedicated block re-grants ' +
+    'update and delete on `canPublishHostContent` — a redirect decides what ' +
+    'the LIVE site serves at every address at once, with no publish step in ' +
+    'front of it, so it is a publish act and an `author` is refused. Create ' +
+    'stays with /api/hosts/resources for the quota, which asks the same ' +
+    'publish-axis question.',
   webhooks:
     'Outbound webhook listeners, edited in the workflows console card; the ' +
     'per-host cap is enforced on create by /api/hosts/resources (AGL-1360).',
@@ -380,7 +387,17 @@ const EDITOR_WRITABLE_HOST_SUBCOLLECTIONS: Record<string, string> = {
   discounts: 'Automatic discounts, authored in the discounts card.',
   licenseKeys:
     'Digital-product license keys, issued and revoked from the products hub.',
-  memberPosts: 'Members-only posts, authored in the member posts card.',
+  memberPosts:
+    'Members-only posts. CREATE and UPDATE are denied outright (AGL-2372) — ' +
+    '/api/commerce/member-post is the only writer and it runs on the Admin ' +
+    'SDK, so the route fix that made it refuse an `author` (f78705249) was ' +
+    'bypassable with a client `addDoc` while this collection sat in none of ' +
+    'the three exclusion lists. DELETE stays client-side because the member ' +
+    'posts card really does remove a post that way, but it is excluded from ' +
+    'the catch-all and re-granted by a dedicated block on ' +
+    '`canPublishHostContent`: an author must not take down content paying ' +
+    'subscribers read, which is the AGL-2334 `components` decision one ' +
+    'collection over.',
   reviews: 'Product reviews, approved and hidden in the moderation card.',
   subscriptions:
     'Site membership subscriptions, adjusted from the site member drawer.',

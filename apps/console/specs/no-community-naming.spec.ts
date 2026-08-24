@@ -139,6 +139,14 @@ const ALLOWED = new Map<string, string>([
       'is that page’s own exempted filename.',
   ],
   [
+    'apps/docs/docs/workspace-and-billing/signing-in-and-sessions.md',
+    'One occurrence, and it is the LINK target support-and-community.md — ' +
+      'the sole route left for a member locked out of their own account ' +
+      '(AGL-1513). Same shape as report-an-issue.md above and unfixable in ' +
+      'place for the same reason: the string is that page’s own exempted ' +
+      'filename.',
+  ],
+  [
     'apps/docs/docs/workspace-and-billing/teams-and-roles/invite-teammates.md',
     'Points at the forum for help.',
   ],

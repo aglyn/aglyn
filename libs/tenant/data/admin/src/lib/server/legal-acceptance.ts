@@ -260,11 +260,73 @@ export interface LegalAcceptanceStatus {
   latestAcceptedVersion: string | null
   /** ISO of the acceptance of `currentVersion`, when there is one. */
   currentVersionAcceptedAt: string | null
+  /**
+   * ISO of the acceptance of `latestAcceptedVersion` — WHEN this person last
+   * agreed to anything (2026-08-24).
+   *
+   * `currentVersionAcceptedAt` beside it is null in exactly the case a
+   * re-acceptance banner renders, so it cannot answer "when did you last
+   * agree?" for the person being asked. Null when there is no acceptance, and
+   * ALSO null when the record's own `acceptedAt` never landed — a surface
+   * MUST branch on it rather than formatting it, or it prints a date that
+   * does not exist.
+   */
+  latestAcceptedAt: string | null
+  /**
+   * Which pinned documents actually MOVED between `latestAcceptedVersion` and
+   * the version published now — derived by comparing the `sha256` on the
+   * stored record against the current manifest, which is the only "what
+   * changed" signal that exists. There is no changelog mechanism, and none is
+   * invented here.
+   *
+   * NULL means UNKNOWN — no current manifest was supplied, there is nothing
+   * accepted to compare against, or a hash is missing on one of the two
+   * sides. That third state is deliberate: an empty array asserts "nothing
+   * changed", which is a claim, and a comparison that could not run must not
+   * make it.
+   */
+  changedDocumentKeys: string[] | null
   reacceptanceRequired: boolean
   reacceptanceReason: LegalReacceptanceReason
   arbitration: ArbitrationOptOutWindow
   /** The full history, oldest first — the evidence a dispute is answered from. */
   acceptances: StoredLegalAcceptance[]
+}
+
+/**
+ * Compare the documents pinned on a stored acceptance against the manifest
+ * published now, and return the keys whose text moved.
+ *
+ * Returns null — NOT `[]` — whenever the comparison cannot be made in full.
+ */
+function diffPinnedDocuments(
+  accepted: StoredLegalAcceptance | null,
+  current: LegalDocumentReference[] | null,
+): string[] | null {
+  if (!accepted || !current || current.length === 0) return null
+  const acceptedByKey = new Map<string, LegalDocumentReference>()
+  for (const doc of accepted.documents ?? []) {
+    if (doc?.key) acceptedByKey.set(doc.key, doc)
+  }
+  if (acceptedByKey.size === 0) return null
+
+  const changed: string[] = []
+  for (const doc of current) {
+    if (!doc?.key) continue
+    const was = acceptedByKey.get(doc.key)
+    // A document the old record never carried is new to the set, which IS a
+    // change to what is being agreed to.
+    if (!was) {
+      changed.push(doc.key)
+      continue
+    }
+    // Either side missing a hash makes THIS key unknowable, and one unknown
+    // key makes the whole answer unknown — a partial list would read as a
+    // complete one.
+    if (!was.sha256 || !doc.sha256) return null
+    if (was.sha256 !== doc.sha256) changed.push(doc.key)
+  }
+  return changed
 }
 
 function toIso(value: unknown): string | null {
@@ -335,6 +397,12 @@ export function evaluateLegalAcceptance(input: {
   /** Injectable for tests; defaults to now. */
   now?: Date
   optOutDays?: number
+  /**
+   * The manifest published NOW. Optional, and its absence is why
+   * `changedDocumentKeys` has an UNKNOWN state rather than defaulting to
+   * "nothing changed".
+   */
+  currentDocuments?: LegalDocumentReference[]
 }): LegalAcceptanceStatus {
   const currentVersion = String(input.currentVersion ?? '').trim()
   const acceptances = [...(input.acceptances ?? [])].sort((a, b) =>
@@ -351,6 +419,11 @@ export function evaluateLegalAcceptance(input: {
   const currentRecord = acceptances.find(
     (record) => record.version === currentVersion,
   )
+  // The record for `latestAcceptedVersion` — the LAST thing this person
+  // agreed to, which is what a banner has to acknowledge. `acceptances` is
+  // sorted by version rank above, so this is its tail.
+  const latestRecord =
+    acceptances.length > 0 ? acceptances[acceptances.length - 1] : null
 
   // FIRST acceptance by TIME, not by version rank. They usually agree, but a
   // backfill or an out-of-order repair would make the ranks lie, and §18.5's
@@ -396,6 +469,11 @@ export function evaluateLegalAcceptance(input: {
     acceptedVersions,
     latestAcceptedVersion,
     currentVersionAcceptedAt: currentRecord?.acceptedAt ?? null,
+    latestAcceptedAt: latestRecord?.acceptedAt ?? null,
+    changedDocumentKeys: diffPinnedDocuments(
+      latestRecord,
+      input.currentDocuments ?? null,
+    ),
     reacceptanceRequired: reacceptanceReason !== 'none',
     reacceptanceReason,
     arbitration,
@@ -406,7 +484,13 @@ export function evaluateLegalAcceptance(input: {
 /** Read + evaluate in one call — what every surface actually wants. */
 export async function getLegalAcceptanceStatus(
   uid: string,
-  options: { currentVersion: string; firestore?: any; now?: Date },
+  options: {
+    currentVersion: string
+    firestore?: any
+    now?: Date
+    /** See `evaluateLegalAcceptance`. Needed for `changedDocumentKeys`. */
+    currentDocuments?: LegalDocumentReference[]
+  },
 ): Promise<LegalAcceptanceStatus> {
   const acceptances = await readLegalAcceptances(uid, {
     firestore: options.firestore,
@@ -415,5 +499,6 @@ export async function getLegalAcceptanceStatus(
     acceptances,
     currentVersion: options.currentVersion,
     now: options.now,
+    currentDocuments: options.currentDocuments,
   })
 }

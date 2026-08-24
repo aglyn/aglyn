@@ -35,9 +35,9 @@
  *   `ad_user_data` and `ad_personalization`. OFF for every site unless the
  *   host turns the question on, and granted only by an explicit visitor yes
  *   to that specific category: never by the implied default, never by a
- *   record written before the category existed. A host who needs Ads storage
- *   previously had one workaround — switch the whole tool off and run their
- *   own CMP — which is why this exists.
+ *   record written before the category existed, never by any refusal status.
+ *   A host who needs Ads storage previously had one workaround — switch the
+ *   whole tool off and run their own CMP — which is why this exists.
  * - **Consent-gated: `analytics`.** Today that is the customer-configured
  *   Google Analytics tag — a third-party identifier-setting script — plus
  *   the CROSS-VISIT persistence of the `aglyn:visitor` experiment id (the id
@@ -172,35 +172,54 @@ export function analyticsGrantedByStatus(
 }
 
 /**
- * Whether a status can carry an advertising grant at all (AGL-1649, widened
- * AGL-2402).
+ * Whether a status can carry an advertising grant at all (AGL-1649; widened
+ * by AGL-2402 and NARROWED BACK by AGL-1649 on 2026-08-24).
  *
- * `implied` now qualifies, and the reason it is SAFE is geographic rather
- * than a judgement call: an `implied` record can only ever be written in the
- * OPT-OUT posture. `decideVisitorConsent` returns `stored: null` for opt-in
- * regions and never records a default there, and
- * {@link resolveConsentPosture} puts every prior-consent country — the EU 27,
- * the EEA/EFTA three, the UK and Gibraltar, the EU outermost regions, and any
- * visitor whose region cannot be determined — into opt-in. So an EU visitor
- * cannot reach this function with `implied`; there is no such record to reach
- * it with.
+ * NARROWER than {@link analyticsGrantedByStatus} by one status, and that one
+ * is the whole point: `implied` grants analytics (the opt-out posture
+ * defaults a visitor in) and must never grant advertising. Being defaulted
+ * into analytics in an opt-out region is not a visitor answering a question
+ * about advertising, so an implied state grants the first and denies the
+ * second.
  *
- * That leaves exactly the regions whose law regulates advertising on an
- * OPT-OUT basis (CCPA/CPRA "sharing", LGPD, PIPEDA), where a default-in plus a
- * always-present opt-out plus an honored GPC signal is what the law asks for.
- * The previous rule applied the prior-consent standard worldwide, which cost
- * the audience everywhere without protecting anyone the posture was not
- * already protecting.
+ * ## Why this was widened, and why it is narrow again
  *
- * What has NOT changed: `declined`, `opted-out` and `gpc-opt-out` still
- * return false, so every refusal path still refuses. And a `true` here is
- * necessary, never sufficient — the host must also have opted into asking
- * (see {@link hostAsksAboutAdvertising}), or nothing is stored as granted.
+ * AGL-2402 (`a410d8785`) made `implied` qualify, on the reasoning that the
+ * rule is safe by geography: an `implied` record can only ever be written in
+ * the OPT-OUT posture, because {@link resolveConsentPosture} puts the EU 27,
+ * the EEA/EFTA three, the UK, Gibraltar, the EU outermost regions AND any
+ * visitor whose region cannot be determined into opt-in, where
+ * `decideVisitorConsent` records no default at all. That geographic guarantee
+ * is real and is still asserted in `visitor-consent-advertising.spec.ts`.
+ *
+ * What did not hold was the second half of the argument. That commit's
+ * message stated the published Cookie Policy had been updated FIRST, so the
+ * wider behaviour would not outrun its disclosure. Read against the live page
+ * on 2026-08-24 the disclosure is SPLIT: the "Marketing / advertising"
+ * paragraph does describe the opt-out posture, but the per-cookie table says
+ * `_gac`, `_gcl_au`, `_fbp` and `_fbc` are "set only where you have allowed
+ * advertising cookies", and "Your choices" says advertising cookies "are set
+ * only where you have consented". A policy that says both cannot authorise
+ * the wider behaviour.
+ *
+ * So the behaviour is narrow again: it agrees with the strictest thing the
+ * published policy says, needs no republication, and is the conservative
+ * position for launch. If opt-out advertising is wanted later, the policy
+ * goes first and this function follows — not the other way round.
+ *
+ * A `true` here is necessary, never sufficient: the host must ALSO have
+ * opted into asking (see {@link hostAsksAboutAdvertising}), and the visitor
+ * must ALSO have answered yes to this specific category.
  */
 export function advertisingGrantedByStatus(
   status: VisitorConsentStatus,
 ): boolean {
-  return status === 'accepted' || status === 'implied'
+  // Fails CLOSED: an exact match against the single granting status, so any
+  // unknown, absent or future status answers `false`. `strictNullChecks` is
+  // off repo-wide, which means `status` can be `null`/`undefined` at runtime
+  // despite the type — an equality test denies those, an exclusion list
+  // (`status !== 'declined' && …`) would have granted them.
+  return status === 'accepted'
 }
 
 /**
@@ -346,9 +365,10 @@ export interface StoredVisitorConsent {
    * is not "said yes". Reading it the other way would hand Google a basis
    * for every visitor who ever clicked Allow on an analytics-only banner.
    *
-   * Only an EXPLICIT accept can carry one: an `implied` default never does,
-   * because being defaulted into analytics in an opt-out region is not a
-   * visitor answering a question about advertising.
+   * Only an EXPLICIT accept can carry one, on a site whose host turned the
+   * question on. An implied default never does, because being defaulted into
+   * analytics in an opt-out region is not a visitor answering a question
+   * about advertising. See {@link advertisingGrantedByStatus}.
    */
   advertising?: boolean
   /** ISO country at decision time, when known — the `implied,us` shape. */
@@ -687,10 +707,9 @@ export function consentModeSignals(grants: {
  * 1. The host asks about advertising at all. A record that says yes is
  *    ignored on a site that never turned the category on — which covers a
  *    host switching it back off, and covers a stale record generally.
- * 2. The record's status can carry a grant — an explicit accept, or an
- *    `implied` default, which AGL-2402 widened to qualify because such a
- *    record can only ever be written in the OPT-OUT posture (see
- *    {@link advertisingGrantedByStatus}). Every refusal status still refuses.
+ * 2. The record's status can carry a grant — an explicit accept, and nothing
+ *    else (see {@link advertisingGrantedByStatus}). An `implied` default
+ *    cannot, and every refusal status refuses.
  * 3. The record actually says yes to this category.
  *
  * Absent, unreadable or legacy records all answer `false`, which is the same
@@ -853,8 +872,11 @@ export function residentGaMeasurementIds(): string[] {
  * Symmetric on purpose: a visitor who opts out and changes their mind in the
  * same pageview would otherwise stay silently unmeasured until they navigated,
  * because the re-rendered `<Script>` cannot re-execute an already-loaded tag.
- * The re-grant restores ANALYTICS only — the tool never asked about
- * advertising, so the ad signals stay denied in both directions.
+ * The re-grant restores whatever the CALLER passes — analytics alone on a site
+ * that never asks the advertising question (`advertising` defaults to false),
+ * and both categories where the visitor's record grants both (AGL-1649). The
+ * clamp in {@link consentModeSignals} still makes ads-without-analytics
+ * unrepresentable, so a withdrawal can never restore advertising alone.
  */
 export function setResidentAnalyticsTags(
   granted: boolean,

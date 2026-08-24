@@ -167,6 +167,68 @@ describe('resolveSubjectCountry — best available, and it says which', () => {
       resolveSubjectCountry({ declaredCountry: 'Ireland', billingCountry: 'DE' }),
     ).toEqual({ country: 'DE', provenance: 'billing' })
   })
+
+  // AGL-2008 — a uid in several orgs. Not an edge case: an agency sits in
+  // 50+ workspaces (AGL-2336) and a contractor is added to ten client
+  // workspaces owning none of them. The route used to keep ONE org per uid,
+  // first-wins, from inside a `Promise.all` — so the answer depended on which
+  // Firestore read returned first.
+  it('refuses to pick when two orgs BILL to different countries', () => {
+    expect(
+      resolveSubjectCountry({ billingCountries: ['IE', 'US'] }),
+    ).toEqual({ country: null, provenance: 'ambiguous', candidates: ['IE', 'US'] })
+  })
+
+  it('refuses to pick when two orgs DECLARE different countries', () => {
+    expect(
+      resolveSubjectCountry({ declaredCountries: ['FR', 'DE'] }),
+    ).toEqual({ country: null, provenance: 'ambiguous', candidates: ['DE', 'FR'] })
+  })
+
+  it('accepts several orgs that agree, and does not call that ambiguous', () => {
+    expect(
+      resolveSubjectCountry({ billingCountries: ['IE', 'ie', 'IE'] }),
+    ).toEqual({ country: 'IE', provenance: 'billing' })
+  })
+
+  it('does not let disagreeing orgs fall THROUGH to the sign-in country', () => {
+    // The dangerous shape: refusing at the billing tier must not quietly
+    // promote the weakest signal into an answer the stronger tier declined
+    // to give. A contractor billed by a US and an IE client is ambiguous,
+    // not "German because they were in Berlin once".
+    expect(
+      resolveSubjectCountry({
+        billingCountries: ['US', 'IE'],
+        signInCountries: ['DE'],
+      }),
+    ).toEqual({ country: null, provenance: 'ambiguous', candidates: ['IE', 'US'] })
+  })
+
+  it('still lets a single org outrank the sign-in country', () => {
+    expect(
+      resolveSubjectCountry({
+        billingCountries: ['IE'],
+        signInCountries: ['DE'],
+      }),
+    ).toEqual({ country: 'IE', provenance: 'billing' })
+  })
+
+  it('keeps a multi-org person OUT of a filing rather than in a wrong one', () => {
+    const report = memberStateExposure([
+      { id: 'contractor', billingCountries: ['US', 'IE'], signInCountries: ['DE'] },
+      { id: 'owner', billingCountries: ['IE'] },
+    ])
+    expect(report.ambiguous).toBe(1)
+    expect(report.filings).toHaveLength(1)
+    expect(report.filings[0]).toMatchObject({ country: 'IE', subjects: 1 })
+    // The invariant still holds with the new outcome in play.
+    expect(
+      report.filings.reduce((n, f) => n + f.subjects, 0) +
+        report.ambiguous +
+        report.unknown +
+        report.outsideScope,
+    ).toBe(report.totalSubjects)
+  })
 })
 
 describe('memberStateExposure', () => {

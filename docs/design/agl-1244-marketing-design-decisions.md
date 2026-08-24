@@ -633,3 +633,124 @@ separately; it is outside the six items.
   moves to 16, or the site moves to 20/24).
 - **Execution, already decided:** the 131-node tint repoint, by clicking.
 - **Engineer, Figma-side:** the 4 renames above.
+
+---
+
+## Addendum 3 — Zach's ratifications, and state as of 2026-08-24
+
+Addendum 2 above is **stale from the moment it was written**: Zach answered
+1(d), 2 and 5 on the issue the next day (2026-08-12) and that never reached this
+file, so the repo has been telling every builder since that three decided items
+were still open. Recording them here is the point of this addendum.
+
+Everything else below was re-measured today against production, the live
+Firestore census, and the Figma file — not restated from the issue.
+
+### The three decisions Zach made on 2026-08-12
+
+- **1(d) — name them.** `#161C21` (the inverted surface) and the on-dark inks
+  become tokens. Reasoning was evidence, not preference: AGL-1431 showed a
+  completed colour migration being silently undone by a re-authoring pass, and
+  the elements that *survived* were the ones carrying a token, because a token
+  lives in one place and nothing has to re-type it.
+- **2 — yes, label sections by their heading**, via `aria-labelledby` pointing
+  at the heading rather than a duplicated `aria-label` string, so the label
+  cannot drift from the heading it describes.
+- **5 — the Figma frames move to 16; the site does not move.** Consistent with
+  AGL-1298 (*designs move to match code*), and the cost is asymmetric: changing
+  the site's gutter touches every page at every breakpoint.
+
+### State of each item, measured 2026-08-24
+
+| # | Decided | Built | Evidence gathered today |
+| - | ------- | ----- | ----------------------- |
+| 1(a) | yes | yes | closed |
+| 1(b) | yes (empty set) | n/a | closed |
+| 1(c) | yes (`palette.tint`) | code yes, **canvas no** | census re-run: **131 nodes / 18 documents** — `tint.primary` 71, `tint.tertiary` 29, `tint.secondary` 31 |
+| 1(d) | **yes, 2026-08-12** | **no** | `console.theme.ts` carries `tint` and nothing else; no inverted-surface or on-dark-ink key exists in either scheme |
+| 2 | **yes, 2026-08-12** | **no — and blocked** | see below |
+| 3 | yes | yes | closed |
+| 4 | yes | **yes, today** | 4 renames applied and verified |
+| 5 | **yes, 2026-08-12** | **no** | Figma still at 20/24 — measured today |
+| 6 | struck | done | AGL-1234 closed |
+
+### Item 2 is blocked on a besigner capability, not on a decision
+
+The decided mechanism cannot be authored by clicking. The Section element
+exposes **exactly two attributes** — `element` and `ariaLabel`
+(`libs/plugins/mui/src/lib/components/section.tsx`). There is no
+`aria-labelledby` field, and no way to put an `id` on a heading node for one to
+point at.
+
+Confirmed on the served pages rather than inferred: across `/product` and all
+nine `/product/*` pages, **0** sections carry `aria-labelledby` and **0**
+headings carry an `id`. Every section is named by a literal `aria-label`, and
+every one of those strings is a Figma layer name.
+
+`/press` (AGL-2395, closed 2026-08-24) shipped the corrected labels as literal
+`aria-label` strings — the fix that was available, not the one decided here.
+
+So decision 2 as written needs a `Gap ·`-shaped besigner change first. Until
+then the only executable form is a literal `aria-label`, which is the drift-prone
+form the decision was made to avoid.
+
+**The nine deep-dive labels are still wrong**, and each page's own `<h2>` is the
+label the decision points at:
+
+| page | `aria-label` today | its own `<h2>` | eyebrow |
+| - | - | - | - |
+| besigner | `Deep-dive · canvas` | Add motion and logic, no code. | INTERACTIONS |
+| console | `Deep-dive · canvas` | Manage every site, side by side. | ONE CONSOLE |
+| commerce | `Deep-dive · canvas` | Every order, online and in person. | ORDERS + CHANNELS |
+| forms | `Deep-dive · canvas` | Build any form right on the page. | BUILD ON THE CANVAS |
+| media | `Deep-dive · canvas` | Folders in the grid, drag to organize. | ONE LIBRARY |
+| workflows | `Deep-dive · canvas` | Connect your site's events to actions. | TRIGGER → ACTION |
+| plugins | `Deep-dive · canvas` | Add a head start in a click. | MARKETPLACE |
+| analytics | `Deep-dive · canvas` | Zoom into any screen. | PER-SCREEN |
+| marketing | `Deep-dive · canvas` | Announcement bars and popups, without code. | OVERLAYS |
+
+Note the audit's original framing — "accurate on `/product/besigner`" — is
+false on the measurement: besigner's deep-dive is the interactions inspector,
+not the canvas. The label is wrong on **nine** of nine, not eight.
+
+### Item 4 — done 2026-08-24
+
+The four residual renames are applied in Figma, each guarded on both the stale
+name and the text the node actually holds so a drifted node would have aborted
+the pass rather than been renamed blind:
+
+| Node | Was | Now |
+| - | - | - |
+| `637:1390` | `Link Plugins` | `Link Analytics` |
+| `112:123` | `Card Unified analytics` | `Card Built-in analytics` |
+| `121:2143` | `Card Drag-and-drop upload` | `Card Private & per-site sharing` |
+| `17:32` | `Besigner showcase` | `Console showcase` |
+
+Re-swept all **228** `Card *` / `Link *` frames on the Product Pages page
+afterwards: **0** content mismatches remain. The sweep does report 12 frames
+named `Link besigner` against the text `Besigner` — that is product-name casing,
+not staleness, and is deliberately left alone. (The sweep flagging them is the
+evidence that it can fail; a silent zero would have proved nothing.)
+
+### New: the design's Explore grids are now behind the site
+
+Renaming `637:1390` made a *structural* staleness legible that the old name was
+hiding. AGL-1432 took every built Explore grid to **8 tiles** (all non-self
+products) on 2026-08-23. The Figma frames were not moved with it:
+
+- All **8** detail page frames hold **7** tiles and omit **Marketing**.
+- `Product — Marketing`'s own grid holds 7 and omits **Plugins** — the very
+  defect AGL-1432 fixed on the built page, still present in the design.
+- The overview frames (desktop, tablet, mobile, widescreen) are correct at 9.
+
+A rename cannot fix this; it needs a tile added to nine frames, which is design
+work on the side Figma is authoritative for. Deliberately not done unilaterally.
+
+### Item 5 — the Figma side has not moved
+
+Measured today rather than assumed. `besigner — Mobile` (375 wide): minimum text
+inset **20**, the two commonest insets **24** (25 nodes) and **20** (24 nodes).
+`Footer/Mobile` (`200:93`): every child at x=**24**, width 327 of 375. So the
+frames still carry 20/24 and still disagree with each other. The live site
+remains uniformly 16. Nothing about the decision changed; the Figma edit is
+simply outstanding.

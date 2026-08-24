@@ -277,6 +277,13 @@ jobs:
       # and the two render canaries built to replace the dead GCP page checks
       # had no reader at all. The canary half is derived from the filesystem,
       # so a third canary fails this until a monitor points at it. Pure node.
+      #
+      # Widened to EVERY health endpoint either app ships (AGL-1921), in both
+      # directions: an endpoint on disk that nothing probes, and a watched path
+      # no app serves. The second one is what lets the probe report a
+      # not-yet-promoted route as PENDING instead of failing a run every
+      # fifteen minutes over the deploy queue, without that tolerance being a
+      # place a deleted route could hide.
       - run: npm run test:uptime-targets
 
       # test:week-one-preflight  The launch pre-flight's OWN self-test
@@ -298,6 +305,27 @@ jobs:
       # to. Secretless and offline-safe: a fetch that cannot reach the network
       # grades red, which is the direction the self-test wants anyway.
       - run: npm run test:week-one-preflight
+
+      # test:runbook-commands  The launch-day runbook's script references
+      # (AGL-1533). `LAUNCH_DAY_RUNBOOK.md` is executed once, by one person, at
+      # 6am, and it tells that person to run named scripts. Nothing checked
+      # that those scripts are where the document says they are — and the
+      # 2026-08-24 pass found one that was not: the runbook's companion prose
+      # said `tools/scripts/verify-production-aliases.mjs`, and the file is at
+      # `tools/deploy/verify-production-aliases.mjs`. That is not a soft
+      # failure; it is `Cannot find module` on the step that verifies a
+      # production alias before tagging.
+      #
+      # Same split as week-one-preflight above, for the same reason: this step
+      # runs `--self-test`, NOT the live check. The live run reads the
+      # "Platform Docs" shared drive, which CI does not mount, so there it can
+      # only ever exit 2 (INCONCLUSIVE) — a check that cannot pass is theatre.
+      # The self-test carries the proof instead: it drives the evaluator at a
+      # missing script, a missing npm target, a glob resolving to nothing, and
+      # an on-disk fixture, and FAILS IF ANY OF THEM STAYS GREEN — with a
+      # positive control so that a green run cannot be the extractor simply
+      # matching nothing. Secretless and offline.
+      - run: npm run test:runbook-commands
 
       # test:ci-test-digest  The CI test digest (AGL-1617). Main Gate run
       # 32685698590 and NX CI run 32687205268 both went red with nothing but
@@ -459,6 +487,28 @@ jobs:
 
       - run: npm run check:docs-self-host
 
+      # AGL-1950. Same two-step order. Docusaurus' `onBrokenLinks: 'throw'`
+      # does NOT cover static assets — an asset under `static/` is copied, not
+      # resolved — so a page pointing at a screenshot that was never captured
+      # builds green and ships a broken-image icon. Worse, a capture harness
+      # that fails mid-shot writes a VALID PNG of empty backdrop, which passes
+      # any check that only asks whether the path resolves. The unit test is
+      # what proves the scanner reds on both, and on the 0-byte case, before
+      # the repo scan's green means anything.
+      - run: npm run test:docs-screenshots
+
+      - run: npm run check:docs-screenshots
+
+      # AGL-2400. Same two-step order, and the unit test carries the whole
+      # burden of proof here: a `@aglyn.com` address that was never created
+      # ACCEPTS mail and suppresses the bounce (AGL-1577), so the corpus scan
+      # going green is not evidence the addresses in it are real — only that
+      # they are all in the registry. The test is what proves the scan can
+      # still fail, by pointing it at an address the registry does not hold.
+      - run: npm run test:contact-addresses
+
+      - run: npm run check:contact-addresses
+
       # AGL-2300. Same two-step order. Four DOMPurify Dependabot alerts are
       # DISMISSED on the claim that monaco never turns on the config surfaces
       # those advisories need — not on the vendored copy being unused, which it
@@ -483,6 +533,88 @@ jobs:
       - run: npm run test:no-tax-identifiers
 
       - run: npm run check:no-tax-identifiers
+
+      # AGL-1491. Same two-step order, same reason, a different needle: the
+      # pre-move residential address. On 2026-08-24 four tracked spec files
+      # were found publishing it — three of them in one sweep, all of them
+      # `platformRevenue` fixtures pasted from a live Stripe invoice — and
+      # nothing was watching, because check:no-tax-identifiers guards the
+      # Comptroller identifiers and check:contact-addresses guards mailboxes.
+      #
+      # The unit test carries the burden of proof and drives the whole
+      # red/green matrix through SYNTHETIC needles, so neither it nor the
+      # guard ever holds the real value. It also pins the one false green this
+      # design is exposed to: each needle stores a cheap prefilter beside its
+      # digest, and a prefilter that disagrees with its digest would filter
+      # every window out before hashing and go permanently, silently green.
+      #
+      # Note this scans file CONTENT only. A commit MESSAGE carrying the
+      # address is just as public and is not covered here or anywhere.
+      - run: npm run test:residential-address
+
+      - run: npm run check:residential-address
+
+      # AGL-1956. On 2026-08-24 Aglyn accepted marketplace-facilitator status
+      # and published ToS §10.7, which tells every merchant that on a
+      # storefront sale the tax "is collected into Aglyn's processor account,
+      # is not transferred to your connected payment account, and is remitted
+      # by Aglyn to the taxing authority." That is not a policy sentence — it
+      # is a description of four Stripe parameters, and nothing checked them.
+      #
+      # The defect that issue closed was ONE wrong parameter pairing:
+      # `application_fee_amount` beside `automatic_tax[enabled]` on a
+      # destination charge, which transfers `amount_total − fee` to the
+      # merchant while `amount_total` has Aglyn's sales tax inside it. Both
+      # keys are individually correct, the session is created, the shopper is
+      # charged the right total, and every downstream number stays plausible.
+      # No unit test on a single call site can see it, because the defect is a
+      # RELATIONSHIP between two keys in one request.
+      #
+      # The AGL-1956 close-out recorded that five charge sites hand-roll their
+      # Connect parameters rather than calling the one emitter, so that
+      # module's claim to be the single emitter "is not true of the codebase",
+      # and that a guard was warranted but was not built inside the freeze.
+      # This is that guard: the note as an exit code.
+      #
+      # Self-test first, as everywhere else here — and it earns the order.
+      # This guard's scanner has to tell a Stripe parameter from a COMMENT
+      # about a Stripe parameter, in a repository whose comments discuss
+      # `on_behalf_of` and `Stripe-Account` at length precisely because they
+      # must never be sent. A scanner that could not draw that line would
+      # either fire on every explanatory comment or be silenced into
+      # uselessness, so the self-test pins both directions before the sweep's
+      # green is worth anything.
+      - run: npm run test:facilitator-charge-shape
+
+      - run: npm run check:facilitator-charge-shape
+
+      # AGL-1908. The Pricing Source of Truth's change-control rule requires a
+      # price or entitlement change to move together across six places, the
+      # last being the Decision Log. Five of the six are outside the repo and
+      # cannot be checked from here — Stripe, Figma, the hand-authored
+      # `aglyn.com/pricing` besigner content, `setup-stripe.mjs`'s
+      # hand-maintained copy, and the Drive Source of Truth. The sixth can be,
+      # and for nine days nothing did: the log went 2026-08-09 → 2026-08-18
+      # while the entire retention/packaging arc landed in between.
+      #
+      # The rule then started costing more than it collected. On 2026-08-24 an
+      # agent found a live entitlement leak, and one of its three reasons for
+      # declining to close it was that doing so is an entitlement change and
+      # "AGL-1908's change-control rule requires publication legs I cannot
+      # do". An unenforced rule that blocks a real fix is the worst of both, so
+      # the rule is now an exit code and the log is a file in this repo.
+      #
+      # Self-test first, and it earns the order here for a specific reason:
+      # this guard compares PARSED VALUES between refs, not changed paths. A
+      # path-level version would have demanded a pricing decision for
+      # `d393d34a9` — a docblock — and a guard people learn to route around is
+      # worse than none. The self-test pins that a comment-only change stays
+      # green while a moved price, a moved entitlement and a moved COGS rate
+      # each go red, so the sweep's green means the thing it claims.
+      - run: npm run test:decision-log
+
+      - run: npm run check:decision-log
+
       # AGL-2025. Unlike every step above, these two are about the CONTENT of
       # apps/ and libs/, not about tools/ — which is why the `paths:` filter
       # gained those two roots. A colour pinned into `libs/plugins` cannot

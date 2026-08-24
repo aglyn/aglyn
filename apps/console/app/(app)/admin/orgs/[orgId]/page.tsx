@@ -18,8 +18,11 @@
 
 import {
   checkDiscountMargin,
+  MARGIN_SCOPE_NOTE,
+  netMarginRating,
   ORG_BILLING_DOC_ID,
   ORG_BILLING_SUBCOLLECTION,
+  orgCogsBasisSummary,
   orgCogsPreview,
   netOfProcessorFee,
   orgOverrideReasonSummary,
@@ -894,6 +897,11 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       infra,
       marginPct,
       basis: preview.cogs.basis,
+      // The sentence naming which arm produced `infra` (AGL-1930). Built in
+      // the library, not here, because "floor" does not mean "no usage" —
+      // every real org's usage prices UNDER the floor today, and the card
+      // used to report all of them as unmeasured.
+      basisNote: orgCogsBasisSummary(preview.cogs, usageLatest?.month ?? null),
       month: usageLatest?.month ?? null,
     } as const
   }, [entAmount, entInterval, org, cogsReady, usageLatest])
@@ -1716,16 +1724,28 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 (AGL-1134), so this badge and that route now
                                 reach the same verdict rather than this one
                                 approving what the route refuses. */}
-                            {`Rating ${discountRating.rating.toUpperCase()} — ` +
-                              (discountRating.reason === 'depth'
-                                ? `${(discountRating.depthPct * 100).toFixed(0)}% off list price. `
-                                : discountRating.reason === 'underwater'
-                                  ? 'nothing left after fees. '
-                                  : `net margin ${(discountRating.marginPct * 100).toFixed(1)}% vs a ` +
-                                    `${(discountRating.floorPct * 100).toFixed(0)}% floor. `) +
-                              `$${discountRating.grossUsd}/mo list → keeps ` +
-                              `$${discountRating.netUsd} net, less ` +
-                              `$${discountRating.infraCogsUsd} infra.`}
+                            <Stack spacing={0.5}>
+                              <Typography variant="body2">
+                                {`Rating ${discountRating.rating.toUpperCase()} — ` +
+                                  (discountRating.reason === 'depth'
+                                    ? `${(discountRating.depthPct * 100).toFixed(0)}% off list price. `
+                                    : discountRating.reason === 'underwater'
+                                      ? 'nothing left after fees. '
+                                      : `net margin ${(discountRating.marginPct * 100).toFixed(1)}% vs a ` +
+                                        `${(discountRating.floorPct * 100).toFixed(0)}% floor. `) +
+                                  `$${discountRating.grossUsd}/mo list → keeps ` +
+                                  `$${discountRating.netUsd} net, less ` +
+                                  `$${discountRating.infraCogsUsd} infra.`}
+                              </Typography>
+                              {/* AGL-1930 — the floor this is rated against
+                                  covers infrastructure and nothing else. */}
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                {MARGIN_SCOPE_NOTE}
+                              </Typography>
+                            </Stack>
                           </Alert>
                         ) : null}
                         {discountRating?.rating === 'block' ? (
@@ -1860,36 +1880,51 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                           </Alert>
                         ) : entMargin && entMargin.marginPct != null ? (
                           <Alert
+                            // The guardrail's own bands (AGL-1930). These were
+                            // `0.75` / `0.65` written out here, so re-tuning
+                            // `NET_MARGIN_FLOOR_PCT` would have moved the
+                            // discount guardrail and left this card rating
+                            // enterprise quotes against the old floor.
                             severity={
-                              entMargin.marginPct >= 0.75
+                              netMarginRating(entMargin.marginPct) === 'ok'
                                 ? 'success'
-                                : entMargin.marginPct >= 0.65
+                                : netMarginRating(entMargin.marginPct) === 'warn'
                                   ? 'warning'
                                   : 'error'
                             }
                           >
-                            {`Net margin ${(entMargin.marginPct * 100).toFixed(1)}% — ` +
-                              `$${entMargin.amount}/mo` +
-                              `${
-                                entInterval === 'year'
-                                  ? ` ($${entMargin.amount * 12}/yr)`
-                                  : ''
-                              } keeps $${entMargin.net} net of processor fees, ` +
-                              // Name which cost model produced the figure
-                              // (AGL-1134). "$2 infra" and "$2 measured
-                              // across storage, requests and contacts" are
-                              // very different grounds for signing a deal,
-                              // and they can print the same number.
-                              `less $${(entMargin.infra ?? 0).toFixed(2)} cost ` +
-                              `(${
-                                entMargin.basis === 'measured'
-                                  ? // Name the MONTH. The rollup is the
-                                    // closed month, not "this month" — the
-                                    // old copy said this month about a
-                                    // figure that is never from it.
-                                    `measured from ${entMargin.month ?? 'the latest'} usage`
-                                  : 'per-site floor — no usage recorded yet'
-                              }).`}
+                            <Stack spacing={0.5}>
+                              <Typography variant="body2">
+                                {`Net margin ${(entMargin.marginPct * 100).toFixed(1)}% — ` +
+                                  `$${entMargin.amount}/mo` +
+                                  `${
+                                    entInterval === 'year'
+                                      ? ` ($${entMargin.amount * 12}/yr)`
+                                      : ''
+                                  } keeps $${entMargin.net} net of processor fees, ` +
+                                  // Name which cost model produced the figure
+                                  // (AGL-1134). "$2 infra" and "$2 measured
+                                  // across storage, requests and contacts" are
+                                  // very different grounds for signing a deal,
+                                  // and they can print the same number. The
+                                  // month, and whether the meters found
+                                  // anything at all, come from
+                                  // `orgCogsBasisSummary` (AGL-1930).
+                                  `less $${(entMargin.infra ?? 0).toFixed(2)} cost ` +
+                                  `(${entMargin.basisNote}).`}
+                              </Typography>
+                              {/* What the percentage above leaves out
+                                  (AGL-1930). Nothing in this app has ever
+                                  costed support, acquisition or overhead, so
+                                  a staff member signing an enterprise deal on
+                                  "net margin 78%" is reading a ceiling. */}
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                {MARGIN_SCOPE_NOTE}
+                              </Typography>
+                            </Stack>
                           </Alert>
                         ) : null}
                         {entResult?.checkoutUrl ? (

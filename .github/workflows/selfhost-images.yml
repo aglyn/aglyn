@@ -49,10 +49,20 @@ on:
       # to `production`. With many agents landing on `main` continuously this
       # workflow was running dozens of times an hour and every red notified
       # him, so CI became noise rather than signal. It is a RELEASE gate until
-      # launch: `main` is verified before promotion by `tools/gate.sh`
-      # (AGL-2090), and the promotion PR still runs `pull_request` below.
+      # launch, and the promotion PR still runs `pull_request` below.
+      #
+      # ⚠️ `tools/gate.sh` DOES NOT COVER THIS (AGL-2014). Its phases are
+      # `typecheck,lint,guards,test,build`, and `build` is `nx build --prod`,
+      # not `docker compose build`; `grep -in docker tools/gate.sh` returns
+      # nothing. AGL-2423 was a Dockerfile-only break that `nx build` cannot
+      # see, so the gate is not a substitute for this job.
+      #
+      # The residual gap the path filters leave: the images build the WHOLE
+      # app, but `apps/**` (bar one next.config.js) and `libs/**` are not
+      # trigger paths. A source change there can break the image build and
+      # neither the `production` push nor the promotion PR will fire this job.
       # RESTORE `main` AFTER LAUNCH — until then a break can sit on `main`
-      # unnoticed until someone runs the gate.
+      # unnoticed until someone dispatches this workflow by hand.
     branches: [production]
     paths:
       - 'docker/**'

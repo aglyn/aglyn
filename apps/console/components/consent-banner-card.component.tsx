@@ -110,7 +110,16 @@ export function ConsentBannerCard(props: ConsentBannerCardProps) {
    * Turning it ON grants NOTHING. It adds a second question to the banner and
    * the privacy-choices panel, so a visitor has somewhere to say yes; until
    * one does, `ad_storage` and its two siblings stay denied exactly as they
-   * are today. Off is written as a field DELETE rather than `false`, matching
+   * are today. That holds in BOTH postures, which is why this copy is not
+   * mode-dependent.
+   *
+   * It was mode-dependent for one day. AGL-2402 widened the rule so the
+   * opt-out posture's implied default carried advertising, and this card was
+   * rewritten to disclose it. The behaviour was narrowed back on 2026-08-24
+   * to agree with the published Cookie Policy, so the original sentence — the
+   * true one again — is restored here.
+   *
+   * Off is written as a field DELETE rather than `false`, matching
    * `consent.disabled`, so an untouched host document carries no consent keys
    * at all.
    */
@@ -278,10 +287,15 @@ export function ConsentBannerCard(props: ConsentBannerCardProps) {
         ) : null}
         {asksAds && machineryLive ? (
           <Alert severity="info">
-            {'Advertising is a second, separate question. Visitors who ' +
-              'allow only analytics keep advertising storage denied, and a ' +
-              'visitor tracked under implied consent is never treated as ' +
-              'having allowed advertising — that needs an explicit yes.'}
+            {'Advertising is a second, separate question, and it always ' +
+              'needs an explicit yes — in both consent modes, everywhere in ' +
+              'the world. Visitors who allow only analytics keep ' +
+              'advertising storage denied, and a visitor tracked under the ' +
+              'implied default is never treated as having allowed ' +
+              'advertising. Advertising never outlives analytics either: ' +
+              'every refusal — Decline, an opt-out, or a Global Privacy ' +
+              'Control signal — withdraws both. Visitors change their mind ' +
+              'either way through "Your Privacy Choices".'}
           </Alert>
         ) : null}
         {!hasGa && !disabled ? (

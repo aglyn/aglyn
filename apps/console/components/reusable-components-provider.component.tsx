@@ -275,8 +275,20 @@ export function ReusableComponentsProvider(
    * "Edit component" on a selected instance (AGL-1303 phase 1): opens the
    * component's own besigner in a NEW TAB, same as the Preview button's
    * window.open idiom — the author keeps their place on the page that
-   * uses it, and with AGL-1301's co-editing on component documents a save
-   * over there propagates live without extra plumbing here.
+   * uses it.
+   *
+   * What propagates back, precisely (AGL-1898). This comment used to say a
+   * SAVE over there rides AGL-1301's co-editing, and both halves are wrong
+   * — the same correction `38b19d5fc` made in `useHostComponentDefinitions`
+   * and missed here, leaving the false version at the feature's own entry
+   * point. AGL-1301's co-editing did land for component documents, but its
+   * RTDB room is keyed by document and a screen besigner never subscribes
+   * to a component's. What actually carries the change is
+   * `useHostComponentDefinitions` — a live `onSnapshot` over the host's
+   * `components` collection, whose new map re-grafts every open instance
+   * preview. That watches the PARENT doc, which only PUBLISH writes; the
+   * component editor's Save writes the version doc and is invisible here.
+   * So the loop today is edit → Save → Publish → other tabs update.
    *
    * The version to open follows the component detail page's own default:
    * the working `versionId` pointer. A component that predates versioning

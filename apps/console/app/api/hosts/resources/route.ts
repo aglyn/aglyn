@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { hostRoleCanWrite, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { hostRoleCanPublish, hostRoleCanWrite, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   ACTIONS_MAX_PER_HOST,
   AUTHORS_MAX_PER_HOST,
@@ -46,6 +46,25 @@ import {
   nonPageScreenIds,
   readScreenSources,
 } from './count-billable-screens'
+
+/**
+ * Is a redirect destination an INTERNAL path? (AGL-1881.)
+ *
+ * The negation of `isExternalRedirectDestination` in the redirects model, and
+ * that file is the definition of record — restated here only because
+ * `@nx/enforce-module-boundaries` forbids an app from statically importing an
+ * `aglyn:addons` library.
+ *
+ * Written to answer FALSE for anything that is not plainly a path, including
+ * `undefined`, so a create that omits `destination` is treated as external and
+ * takes the stamp rather than skipping it. `strictNullChecks` is off, so the
+ * `typeof` test is what keeps a missing value out of `.startsWith`.
+ */
+function isInternalRedirectDestination(destination: unknown): boolean {
+  if (typeof destination !== 'string') return false
+  const value = destination.trim()
+  return value.startsWith('/') && !value.startsWith('//')
+}
 
 /**
  * Quota-governed host subcollections (AGL-473): each entry maps a create
@@ -100,6 +119,17 @@ const RESOURCES: Record<string, {
    */
   softDeletes?: boolean
   entitlement?: keyof OrgFeatureFlags
+  /**
+   * Require the PUBLISH role rather than the write role (AGL-1881).
+   *
+   * The default below is `hostRoleCanWrite`, which admits `author`, and for
+   * every other resource here that is correct: creating a screen, layout or
+   * component is authoring, and nothing it creates is reachable until a
+   * publish act registers it. A redirect has no such second step — it decides
+   * what the live site serves the moment it exists — so it asks the narrower
+   * question, and asks it on the same axis the rules do.
+   */
+  requiresPublishRole?: boolean
   /** Human label for quota error messages. */
   label: string
   /**
@@ -187,10 +217,20 @@ const RESOURCES: Record<string, {
       'windows',
     ],
   },
+  // A redirect is a ROUTING statement over the whole live site, not a draft
+  // (AGL-1881) — hence `requiresPublishRole`, matching the redirects block in
+  // `cloud/firebase-firestore.rules` that now owns update and delete.
+  //
+  // `externalDestinationApprovedBy` is NOT on this list and must not be: it is
+  // the serve path's evidence that a publisher chose to send traffic off the
+  // platform, so it is stamped below from the VERIFIED uid. A client able to
+  // send it would be supplying its own provenance, which is the failure mode
+  // the allow-list note above is about.
   redirect: {
     collection: 'redirects',
     quotaKey: 'redirectsPerHost',
     entitlement: 'redirects',
+    requiresPublishRole: true,
     label: 'redirects',
     fields: [
       'source',
@@ -473,8 +513,22 @@ async function handler(request: Request): Promise<Response> {
     // `author` (AGL-2334): creating a screen, layout or component is
     // AUTHORING — the document is not reachable by anyone until a route is
     // registered for it, and registering a route is refused in the rules.
-    if (!hostRoleCanWrite(memberRole)) {
-      return Response.json({ error: 'Editing requires the editor role' }, { status: 403 })
+    //
+    // Except where the resource says otherwise (AGL-1881). Both predicates
+    // take `unknown` and answer by set membership, so an absent `memberRoles`
+    // entry arrives as `undefined`, is in neither set, and fails CLOSED —
+    // which matters here because `strictNullChecks` is off and the missing
+    // role would otherwise just be falsy in whichever direction the
+    // expression happened to lean.
+    const roleOk = resource.requiresPublishRole
+      ? hostRoleCanPublish(memberRole)
+      : hostRoleCanWrite(memberRole)
+    if (!roleOk) {
+      return Response.json({
+        error: resource.requiresPublishRole
+          ? `Creating ${resource.label} requires a publishing role`
+          : 'Editing requires the editor role',
+      }, { status: 403 })
     }
 
     // Quota/entitlements ride the owning org's doc (AGL-238); suspension
@@ -714,6 +768,29 @@ async function handler(request: Request): Promise<Response> {
         ...doc,
         ...nameLower,
         ...(resourceKey === 'template' ? { source: { type: 'authored' } } : {}),
+        // A redirect that leaves the platform carries the uid of the publisher
+        // who chose that (AGL-1881). `matchRedirect` refuses to serve an
+        // absolute destination without this stamp, which is what makes a rule
+        // written before that issue — by a role the rules have since refused —
+        // stop firing instead of being trusted.
+        //
+        // Stamped from `decoded.uid`, never from `data`: the field is off the
+        // allow-list above precisely so a caller cannot supply its own
+        // provenance. The role check has already run, so reaching this line
+        // IS the approval.
+        //
+        // The predicate is "not an internal path" and is the same one
+        // `isExternalRedirectDestination` states in
+        // `libs/plugins/redirects/src/lib/model/redirects.ts`, which is the
+        // definition of record. It is restated rather than imported because
+        // `@nx/enforce-module-boundaries` forbids an app from depending on an
+        // `aglyn:addons` library; the two must agree, and the direction of any
+        // disagreement is a rule that does not fire, never one that fires
+        // unapproved.
+        ...(resourceKey === 'redirect' &&
+        !isInternalRedirectDestination(doc['destination'])
+          ? { externalDestinationApprovedBy: decoded.uid }
+          : {}),
         // An entry is born a DRAFT, decided here rather than sent (AGL-2266).
         // The rules admit an author's client create only when it is a draft;
         // routing the create through this server does not get to be the way

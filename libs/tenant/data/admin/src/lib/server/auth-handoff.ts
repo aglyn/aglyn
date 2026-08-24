@@ -337,6 +337,8 @@ export type RedeemRefusal =
   | 'host-mismatch'
   | 'bad-secret'
   | 'bad-verifier'
+  | 'domain-inactive'
+  | 'revoked'
 
 export type RedeemResult =
   | { ok: true; uid: string; tenantId: string | null; continuePath: string }
@@ -371,6 +373,27 @@ export async function redeemConsoleHandoff(options: {
   }
   const requestHost = normalizeConsoleDomain(options.requestHost)
   if (!requestHost) return { ok: false, reason: 'host-mismatch' }
+
+  // Liveness and revocation, both of which need an AWAIT and so cannot live
+  // inside the transaction. D6 requires BOTH legs of the session to honour the
+  // epoch — "the redemption endpoint and the `GET` exchange" — and this leg is
+  // the one that had neither check.
+  //
+  // It matters because `/api/*` sits OUTSIDE the middleware matcher, so
+  // `serveConsoleDomain` never sees this route: a suspended or detached domain
+  // is refused a console to render and was still handed a working redemption.
+  // And the `GET` exchange cannot cover for it, because the credential a
+  // redemption mints is NEWER than the bump that was supposed to kill it — an
+  // epoch can only refuse a cookie it predates.
+  const verdict = await resolveConsoleDomain(requestHost)
+  // `degraded` refuses here, for `authorize`'s reason: routing fails OPEN
+  // because a console going dark on a timeout is worse than the residual
+  // exposure, but MINTING a session on a domain we could not confirm is live is
+  // the opposite trade, and the user still has `{slug}.aglyn.com` to fall back
+  // to.
+  if (!verdict.servable) return { ok: false, reason: 'domain-inactive' }
+  const epoch = await readConsoleSessionEpoch(requestHost)
+
   const ref = firestore().collection(AUTH_HANDOFFS_COLLECTION).doc(requestId)
 
   const consumed = await consumeOnce<{
@@ -396,6 +419,15 @@ export async function redeemConsoleHandoff(options: {
     const authorizedAt = Number(data['authorizedAt'] ?? 0)
     if (!authorizedAt || nowMs - authorizedAt > HANDOFF_AUTHORIZED_TTL_MS) {
       return { accept: false, reason: 'expired' }
+    }
+    // D7 orders a detach `sessionEpoch = now` FIRST, then the Vercel delete,
+    // precisely so sessions die while we still control the host. An
+    // authorization that predates the bump is one of those sessions, and it is
+    // refused WITHOUT a write: `consumeOnce` does not destroy a refused record
+    // by default, so this cannot be used to knock out a concurrent legitimate
+    // redemption.
+    if (epoch > 0 && authorizedAt < epoch) {
+      return { accept: false, reason: 'revoked' }
     }
     if (!safeEqual(hashHandoffSecret(options.secret), String(data['secretHash'] ?? ''))) {
       return { accept: false, reason: 'bad-secret' }
@@ -441,6 +473,38 @@ export async function redeemConsoleHandoff(options: {
 }
 
 /**
+ * `consoleDomains/{host}.sessionEpoch`, or `0` when there is no usable one.
+ *
+ * `0` is returned for every unreadable shape — an unnormalizable host, an
+ * absent document, a Firestore error, a non-finite or non-positive value — and
+ * every caller reads `0` as "this control has nothing to say", i.e. FAILS OPEN.
+ * That is deliberate and matches every other console-domain lookup: the Vercel
+ * allowlist is the boundary and this is defence in depth, so a Firestore blip
+ * must not lock every custom domain out of its own session.
+ *
+ * Note the split with {@link consoleSessionEpochRefuses}: failing open on a
+ * missing EPOCH is not the same as failing open on a missing CREDENTIAL DATE.
+ * A cookie whose `iat` cannot be read is refused, because an undateable
+ * credential cannot be shown to postdate a revocation.
+ */
+export async function readConsoleSessionEpoch(host: string): Promise<number> {
+  const domain = normalizeConsoleDomain(host)
+  if (!domain) return 0
+  let snapshot: FirebaseFirestore.DocumentSnapshot
+  try {
+    snapshot = await firestore()
+      .collection(CONSOLE_DOMAINS_COLLECTION)
+      .doc(domain)
+      .get()
+  } catch {
+    return 0
+  }
+  if (!snapshot.exists) return 0
+  const epoch = Number(snapshot.get('sessionEpoch') ?? 0)
+  return Number.isFinite(epoch) && epoch > 0 ? epoch : 0
+}
+
+/**
  * The revocation epoch on a console domain (AGL-1353 D6).
  *
  * A session cookie minted before the epoch is dead. Bumping `sessionEpoch` —
@@ -456,20 +520,8 @@ export async function consoleSessionEpochRefuses(options: {
   host: string
   cookieIssuedAtMs: number | null
 }): Promise<boolean> {
-  const domain = normalizeConsoleDomain(options.host)
-  if (!domain) return false
-  let snapshot: FirebaseFirestore.DocumentSnapshot
-  try {
-    snapshot = await firestore()
-      .collection(CONSOLE_DOMAINS_COLLECTION)
-      .doc(domain)
-      .get()
-  } catch {
-    return false
-  }
-  if (!snapshot.exists) return false
-  const epoch = Number(snapshot.get('sessionEpoch') ?? 0)
-  if (!Number.isFinite(epoch) || epoch <= 0) return false
+  const epoch = await readConsoleSessionEpoch(options.host)
+  if (epoch <= 0) return false
   const issuedAt = Number(options.cookieIssuedAtMs ?? 0)
   // An undateable cookie cannot be shown to postdate the epoch, and the safe
   // direction for a revocation control is to refuse it.

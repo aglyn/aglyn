@@ -42,7 +42,6 @@
   "libs/plugins/mui/src/lib/components/breadcrumbs.tsx": 1,
   "libs/plugins/mui/src/lib/components/button.tsx": 2,
   "libs/plugins/mui/src/lib/components/card.tsx": 4,
-  "libs/plugins/mui/src/lib/components/collection.tsx": 12,
   "libs/plugins/mui/src/lib/components/container.ts": 3,
   "libs/plugins/mui/src/lib/components/custom-html.tsx": 2,
   "libs/plugins/mui/src/lib/components/drawer.tsx": 3,

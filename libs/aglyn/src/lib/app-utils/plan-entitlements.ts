@@ -1251,6 +1251,21 @@ export function orgNetMonthlyRevenueUsd(
  * subscription should still keep ≥75% of its net (post-processor-fee) revenue
  * after infrastructure COGS. Below the floor a discount is warned; well below
  * it is blocked without explicit sign-off.
+ *
+ * WHAT THIS IS A FLOOR ON (AGL-1930): net revenue less INFRASTRUCTURE COGS,
+ * and nothing else. It is a contribution margin — see `MARGIN_SCOPE_NOTE`,
+ * which is the sentence every staff surface quoting this number has to print
+ * beside it.
+ *
+ * Read as a dollar guard it says: net revenue must be at least
+ * `cogs / (1 − floor)` = **4 × COGS**, and blocks below
+ * `cogs / (1 − floor + band)` ≈ **2.86 × COGS**. That restatement is the point
+ * of AGL-1930 — the percentage is scale-invariant, so the only thing that
+ * moves the real guard line in dollars is the COGS figure fed into it, and on
+ * production today that figure is `INFRA_COGS_PER_SITE_USD × sites` for
+ * **every** org (14 of 14 usage rollups across all 6 orgs, measured
+ * 2026-08-24). Re-tuning this constant therefore re-tunes a multiplier on the
+ * flat floor, not on anything measured. Calibrate the floor first.
  */
 export const NET_MARGIN_FLOOR_PCT = 0.75
 
@@ -1261,6 +1276,43 @@ export const NET_MARGIN_FLOOR_PCT = 0.75
  * calculator's soft/hard split.
  */
 export const NET_MARGIN_WARN_BAND_PCT = 0.1
+
+/**
+ * What every "net margin" figure in the staff console actually measures
+ * (AGL-1930).
+ *
+ * `checkDiscountMargin`, the enterprise quote card and the coupon badge all
+ * compute `(net revenue − infrastructure COGS) / net revenue`. Support,
+ * acquisition and overhead are not in the model anywhere — no meter records
+ * them and no constant estimates them — so "net margin 78%" is a CONTRIBUTION
+ * margin, and a staff member signing a deal on it is reading a ceiling, not a
+ * profit.
+ *
+ * One exported string rather than three literals: the three surfaces that
+ * print a margin already drifted apart once (AGL-1134), and a caveat that is
+ * true on one screen and absent on the next is worse than none.
+ */
+export const MARGIN_SCOPE_NOTE =
+  'Contribution margin: net revenue less infrastructure COGS only. ' +
+  'Support, customer acquisition (CAC) and overhead are not in this figure.'
+
+/**
+ * The `ok` / `warn` / `block` band a cost-recovery margin falls in (AGL-1930).
+ *
+ * Extracted so `NET_MARGIN_FLOOR_PCT` and `NET_MARGIN_WARN_BAND_PCT` have ONE
+ * reader. The staff org page's enterprise quote card had `>= 0.75` and
+ * `>= 0.65` written into its JSX, so re-tuning either constant — the whole
+ * subject of AGL-1930 — would have moved the discount guardrail and left that
+ * card rating deals against the old numbers, silently and with money on the
+ * line.
+ */
+export function netMarginRating(marginPct: number): DiscountMarginRating {
+  return marginPct >= NET_MARGIN_FLOOR_PCT
+    ? 'ok'
+    : marginPct >= NET_MARGIN_FLOOR_PCT - NET_MARGIN_WARN_BAND_PCT
+      ? 'warn'
+      : 'block'
+}
 
 /**
  * Per-site monthly infrastructure COGS in USD (AGL-1105). The
@@ -1509,6 +1561,47 @@ export function orgCogsPreview(
 }
 
 /**
+ * Where a cost figure came from, in a sentence a staff member can act on
+ * (AGL-1930).
+ *
+ * The staff quote card said `per-site floor — no usage recorded yet` for
+ * EVERY `basis: 'floor'` org. Measured against production 2026-08-24 that
+ * sentence is false on most of them: all 14 usage rollups across all 6 orgs
+ * price under the floor, and 9 of the 14 carry genuinely non-zero usage — the
+ * largest real org measured **$0.22** against its $2.00 floor. "No usage
+ * recorded" and "usage recorded, and it came in under the floor" are opposite
+ * facts about the cost model, and only the second one is evidence the meters
+ * are working at all.
+ *
+ * Same failure family as AGL-1380 / AGL-1422 — a measurement-shaped sentence
+ * printed over a measurement that was never consulted — one layer further in:
+ * here the measurement exists and the copy denies it.
+ */
+export function orgCogsBasisSummary(
+  cogs: OrgCogsResult,
+  month?: string | null,
+): string {
+  const when = month ?? 'the latest'
+  if (cogs.basis === 'measured') return `measured from ${when} usage`
+  // Absent and zero are NOT the same claim, and with `strictNullChecks` off an
+  // absent meter reads as 0 all the way down — so this leans on the caller's
+  // `orgCogsPreview` readiness gate for "has a rollup arrived", and reports
+  // only what the priced total says.
+  if (!(cogs.measuredUsd > 0)) return 'per-site floor — no usage recorded yet'
+  // Cents are the wrong precision for these figures and rounding to them
+  // prints `$0.00`, which reads as the "no usage" claim this function exists
+  // to stop making. Every real org's measured month is under a cent.
+  const measured =
+    cogs.measuredUsd < 0.01
+      ? cogs.measuredUsd.toFixed(4)
+      : cogs.measuredUsd.toFixed(2)
+  return (
+    `per-site floor — ${when} usage measured ` +
+    `$${measured}, under the $${cogs.floorUsd.toFixed(2)} floor`
+  )
+}
+
+/**
  * Percent-off at or above which creating a coupon needs explicit staff
  * sign-off (AGL-1105). A ≥40%-off coupon is a real revenue commitment, so the
  * creation route rejects it unless the caller passes a confirm flag; the UI
@@ -1664,12 +1757,10 @@ export function checkDiscountMargin(
       : depthPct * 100 >= DISCOUNT_DEPTH_WARN_PCT
         ? 'warn'
         : 'ok'
-  const cogsRating: DiscountMarginRating =
-    marginPct >= floorPct
-      ? 'ok'
-      : marginPct >= floorPct - NET_MARGIN_WARN_BAND_PCT
-        ? 'warn'
-        : 'block'
+  // Same bands the staff quote card renders — one reader for the two
+  // constants (AGL-1930), so a re-tune cannot reach the guardrail and miss
+  // the UI.
+  const cogsRating: DiscountMarginRating = netMarginRating(marginPct)
 
   const severity = { ok: 0, warn: 1, block: 2 } as const
   const rating =

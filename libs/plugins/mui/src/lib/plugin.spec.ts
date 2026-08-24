@@ -138,6 +138,18 @@ describe('plugins-mui', () => {
     expect(new Set(ids).size).toBe(ids.length)
   })
 
+  it('ships the toolbar search block in the drawer (AGL-1516)', () => {
+    // The element exists to make Figma 494:1220 authorable — pills left,
+    // search and RSS right. An unregistered schema is a capability that
+    // exists only in code, which is the exact state this issue spent three
+    // passes stuck in.
+    const entry = MUI_BUNDLE.find(
+      (item) => item.schema.$id === Aglyn.COLLECTION_SEARCH_COMPONENT_ID,
+    )
+    expect(entry?.component).toBeTruthy()
+    expect(entry?.schema.displayName).toBe('Collection Search')
+  })
+
   it('gives every preset a distinct id (AGL-1201)', () => {
     // Same collapse, and here it also breaks unregistration: destroy()
     // removes the shared id once and leaves a ghost in the drawer.

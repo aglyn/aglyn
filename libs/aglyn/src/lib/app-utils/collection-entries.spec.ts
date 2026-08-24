@@ -23,10 +23,14 @@ import {
   COLLECTION_ALL_PILL_DEFAULT,
   COLLECTION_ALL_PILL_NONE,
   COLLECTION_ENTRIES_MAX,
+  COLLECTION_ENTRIES_NODE_ID_PREFIX,
   COLLECTION_ENTRY_DATE_FORMAT_DEFAULT,
   COLLECTION_ENTRY_DATE_FORMAT_OPTIONS,
+  COLLECTION_SEARCH_COMPONENT_ID,
+  COLLECTION_SOURCE_MAX,
   buildCollectionCategoryLinks,
   collectionCategorySlug,
+  collectionSourceReachedBound,
   collectionEntryMetaValues,
   collectionEntryTokens,
   collectionListUrl,
@@ -38,6 +42,7 @@ import {
   expandCollectionEntries,
   expandCollectionEntryMeta,
   expandCollectionRelated,
+  expandCollectionSearch,
   formatCollectionEntryDate,
   parseCollectionRoute,
   resolveCollectionAllLabel,
@@ -1320,6 +1325,232 @@ describe('expandCollectionEntries search index (AGL-1516)', () => {
     nodes['list'].props.search = true
     const untouched = JSON.parse(JSON.stringify(nodes))
     expect(expandCollectionEntries(nodes, {}, 'blog')).toEqual(untouched)
+  })
+
+  // ── searchCapped: whether `searchTotal` is a total or a ceiling ────────
+  //
+  // `searchTotal` counts the entries the SERVER saw, and the read behind it
+  // stops at COLLECTION_SOURCE_MAX. Past that bound `index.length ===
+  // searchTotal` — the component's test for "this block holds everything" —
+  // is satisfied by a block holding 100 of 400 posts, and the bare
+  // "No matches." is the branch it takes. The count alone cannot see this.
+
+  it('marks a search over a BOUNDED read as capped', () => {
+    const atBound = {
+      slug: 'blog',
+      entries: Array.from({ length: COLLECTION_SOURCE_MAX }, (_, i) => ({
+        $id: `e${i}`,
+        title: `Post ${i}`,
+        slug: `post-${i}`,
+      })),
+    }
+    const nodes = baseNodes()
+    nodes['list'].props.search = true
+    const expanded = expandCollectionEntries(nodes, { blog: atBound }, 'blog')
+    expect(expanded['list'].props.searchCapped).toBe(true)
+  })
+
+  it('leaves the flag OFF for a read that came back short of its bound', () => {
+    // Absent, not `false` — the same absent-key discipline the index rows
+    // use, and what keeps an uncapped block's payload as small as it was.
+    const nodes = baseNodes()
+    nodes['list'].props.search = true
+    const expanded = expandCollectionEntries(nodes, { blog }, 'blog')
+    expect('searchCapped' in expanded['list'].props).toBe(false)
+  })
+
+  it('reads the cap off the RAW set, never off the filtered one', () => {
+    // A category filter narrows a COMPLETE read; the narrowed set is not a
+    // bounded one. Keying the flag off `filtered` would clear it on exactly
+    // the blocks that most need it — a filtered view of a collection nobody
+    // read all of.
+    const atBound = {
+      slug: 'blog',
+      entries: Array.from({ length: COLLECTION_SOURCE_MAX }, (_, i) => ({
+        $id: `e${i}`,
+        title: `Post ${i}`,
+        slug: `post-${i}`,
+        category: i === 0 ? 'Guides' : 'News',
+      })),
+    }
+    const nodes = baseNodes()
+    nodes['list'].props.search = true
+    nodes['list'].props.filterCategory = 'guides'
+    const expanded = expandCollectionEntries(nodes, { blog: atBound }, 'blog')
+    expect(expanded['list'].props.searchTotal).toBe(1)
+    expect(expanded['list'].props.searchCapped).toBe(true)
+  })
+
+  it('never stamps the flag on a block without search', () => {
+    const atBound = {
+      slug: 'blog',
+      entries: Array.from({ length: COLLECTION_SOURCE_MAX }, (_, i) => ({
+        $id: `e${i}`,
+        title: `Post ${i}`,
+        slug: `post-${i}`,
+      })),
+    }
+    const nodes = baseNodes()
+    const expanded = expandCollectionEntries(nodes, { blog: atBound }, 'blog')
+    expect(expanded['list'].props).toBe(nodes['list'].props)
+    expect('searchCapped' in expanded['list'].props).toBe(false)
+  })
+})
+
+describe('expandCollectionSearch (AGL-1516, Figma 494:1220)', () => {
+  const searchNodes = () =>
+    ({
+      root: { $id: 'root', componentId: 'div', nodes: ['box'] },
+      box: {
+        $id: 'box',
+        componentId: COLLECTION_SEARCH_COMPONENT_ID,
+        parentId: 'root',
+        props: {},
+      },
+    }) as any
+
+  it('stamps the index, the total and the entry rows', () => {
+    const expanded = expandCollectionSearch(
+      searchNodes(),
+      { blog },
+      'blog',
+    ) as any
+    expect(expanded['box'].props.searchIndex).toEqual([
+      {
+        title: 'Hello world',
+        excerpt: 'First post',
+        url: '/blog/hello-world',
+        date: formatCollectionEntryDate({ seconds: 1_700_000_000 }),
+      },
+      { title: 'Second', excerpt: '', url: '/blog/second' },
+    ])
+    expect(expanded['box'].props.searchTotal).toBe(2)
+    expect('searchCapped' in expanded['box'].props).toBe(false)
+  })
+
+  it('indexes the WHOLE source, not one page window', () => {
+    // The entries block scopes its box to the entries it rendered because it
+    // filters them in place. A toolbar box hides nothing, so cutting it to a
+    // page would be an arbitrary limit nobody asked for — and one the reader
+    // could not see.
+    const many = {
+      slug: 'blog',
+      entries: Array.from({ length: 25 }, (_, i) => ({
+        $id: `e${i}`,
+        title: `Post ${i}`,
+        slug: `post-${i}`,
+      })),
+      page: 2,
+    }
+    const expanded = expandCollectionSearch(
+      searchNodes(),
+      { blog: many },
+      'blog',
+    ) as any
+    expect(expanded['box'].props.searchIndex).toHaveLength(25)
+    expect(expanded['box'].props.searchTotal).toBe(25)
+  })
+
+  it('marks a bounded read as capped', () => {
+    const atBound = {
+      slug: 'blog',
+      entries: Array.from({ length: COLLECTION_SOURCE_MAX }, (_, i) => ({
+        $id: `e${i}`,
+        title: `Post ${i}`,
+        slug: `post-${i}`,
+      })),
+    }
+    const expanded = expandCollectionSearch(
+      searchNodes(),
+      { blog: atBound },
+      'blog',
+    ) as any
+    expect(expanded['box'].props.searchCapped).toBe(true)
+  })
+
+  it('fails open on an UNKNOWN collection', () => {
+    const nodes = searchNodes()
+    const untouched = JSON.parse(JSON.stringify(nodes))
+    expect(expandCollectionSearch(nodes, {}, 'blog')).toEqual(untouched)
+  })
+
+  it('gives an EMPTY collection no box at all', () => {
+    // A field over an empty index can only ever answer "no matches", which
+    // reads as a fact about the reader's query rather than about the
+    // collection with nothing in it.
+    const nodes = searchNodes()
+    const untouched = JSON.parse(JSON.stringify(nodes))
+    expect(
+      expandCollectionSearch(nodes, { blog: { slug: 'blog', entries: [] } }, 'blog'),
+    ).toEqual(untouched)
+  })
+
+  it('skips a box CLONED into an entry template', () => {
+    // Every child of an entries block is cloned per entry. A search box that
+    // ended up inside one would otherwise be stamped once per card.
+    const nodes = searchNodes()
+    nodes[`${COLLECTION_ENTRIES_NODE_ID_PREFIX}list__0__box`] = {
+      $id: `${COLLECTION_ENTRIES_NODE_ID_PREFIX}list__0__box`,
+      componentId: COLLECTION_SEARCH_COMPONENT_ID,
+      props: {},
+    }
+    const expanded = expandCollectionSearch(nodes, { blog }, 'blog') as any
+    expect(
+      'searchIndex' in
+        expanded[`${COLLECTION_ENTRIES_NODE_ID_PREFIX}list__0__box`].props,
+    ).toBe(false)
+    // …while the real one is still stamped.
+    expect(expanded['box'].props.searchIndex).toHaveLength(2)
+  })
+
+  it('honours the block’s own collection slug over the routed one', () => {
+    const nodes = searchNodes()
+    nodes['box'].props.collectionSlug = 'changelog'
+    const expanded = expandCollectionSearch(
+      nodes,
+      {
+        blog,
+        changelog: {
+          slug: 'changelog',
+          entries: [{ $id: 'c1', title: 'Shipped', slug: 'shipped' }],
+        },
+      },
+      'blog',
+    ) as any
+    expect(expanded['box'].props.searchIndex).toEqual([
+      { title: 'Shipped', excerpt: '', url: '/changelog/shipped' },
+    ])
+  })
+
+  it('never mutates its inputs', () => {
+    const nodes = searchNodes()
+    const before = JSON.parse(JSON.stringify(nodes))
+    expandCollectionSearch(nodes, { blog }, 'blog')
+    expect(nodes).toEqual(before)
+  })
+})
+
+describe('collectionSourceReachedBound (AGL-1516)', () => {
+  it('is true only once a read comes back holding its own limit', () => {
+    expect(collectionSourceReachedBound([])).toBe(false)
+    expect(
+      collectionSourceReachedBound(Array(COLLECTION_SOURCE_MAX - 1).fill(0)),
+    ).toBe(false)
+    expect(
+      collectionSourceReachedBound(Array(COLLECTION_SOURCE_MAX).fill(0)),
+    ).toBe(true)
+  })
+
+  it('reads an absent set as unbounded rather than throwing', () => {
+    expect(collectionSourceReachedBound(undefined)).toBe(false)
+  })
+
+  it('shares its bound with the query that produces the read', () => {
+    // Two independent 100s is how this silently stops working: the fetch
+    // limit moves, the flag keeps testing the old number, and a capped read
+    // stops declaring itself. `get-collection-content.ts` passes this exact
+    // constant to `.limit()`.
+    expect(COLLECTION_SOURCE_MAX).toBe(100)
   })
 })
 

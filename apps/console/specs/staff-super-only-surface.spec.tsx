@@ -213,8 +213,15 @@ const GATED_SURFACES: Record<string, { ui: string[]; via: RegExp }> = {
     via: /useStaffRole/,
   },
   'users/manage/route.ts': {
-    ui: ['app/(app)/admin/users/page.tsx'],
-    via: /useSuperStaffGate/,
+    ui: [
+      'app/(app)/admin/users/page.tsx',
+      // `signOutDevice` (AGL-1513), the same shape as the `host/route.ts`
+      // note above: this action's control lives in a card on the user DETAIL
+      // page, so listing only the users list would have left it covered by a
+      // gate on an entirely different button.
+      'components/staff-user-device-sessions-card.component.tsx',
+    ],
+    via: /useSuperStaffGate|useStaffRole/,
   },
   // Both of these gate a REDACTION rather than an action — the response omits
   // reporter identity for `support` — and both already say so in the UI, so

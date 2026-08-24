@@ -647,10 +647,17 @@ describe('InlineTextEditorComponent: clicking away commits (AGL-2486)', () => {
     const node = plainNode('Be first through the door')
     render(<InlineTextEditorComponent />)
     act(() => inlineTextEdit.open(node, rect))
-    // Deliberately NOT awaiting the seeding frame.
-    expect(
-      (await screen.findByRole('textbox', { name: 'Edit text' })).textContent,
-    ).toBe('')
+    // Deliberately NOT awaiting the seeding frame — and deliberately a
+    // SYNCHRONOUS query (AGL-1617). `await findByRole` is itself a yield:
+    // it polls, so the seeding `requestAnimationFrame` gets a turn before
+    // the assertion reads the box, and on a loaded runner it takes it. That
+    // is the whole failure — CI read back "Be first through the door" for a
+    // box this test requires to still be empty. The sync `act` above has
+    // already rendered the textbox; only its CONTENT waits on the frame, so
+    // querying without yielding is what "has not been built yet" means.
+    expect(screen.getByRole('textbox', { name: 'Edit text' }).textContent).toBe(
+      '',
+    )
 
     fireEvent.pointerDown(canvasStandIn)
 

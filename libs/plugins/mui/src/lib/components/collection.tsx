@@ -62,6 +62,8 @@ export const ENTRY_META_ID: Aglyn.ComponentId =
   Aglyn.COLLECTION_ENTRY_META_COMPONENT_ID
 export const CATEGORIES_ID: Aglyn.ComponentId =
   Aglyn.COLLECTION_CATEGORIES_COMPONENT_ID
+export const SEARCH_ID: Aglyn.ComponentId =
+  Aglyn.COLLECTION_SEARCH_COMPONENT_ID
 
 /* ── Collection entries (repeater) ──────────────────────────────────────── */
 
@@ -136,6 +138,16 @@ export interface CollectionEntriesProps extends StackProps {
    * `entriesLimit` and the 100-entry cap truncate too.
    */
   searchTotal?: number
+  /**
+   * Whether the read behind `searchTotal` reached its own bound — server-
+   * stamped beside it (AGL-1516), never set by hand.
+   *
+   * `searchTotal` is a count of what the server SAW, and the collection read
+   * is limited. Without this flag a block holding 100 of 400 posts satisfies
+   * `searchIndex.length === searchTotal` and renders the one empty state that
+   * claims to have looked everywhere.
+   */
+  searchCapped?: boolean
 }
 
 /** The two things the toolbar search box can do (AGL-1516/AGL-1525). */
@@ -249,6 +261,229 @@ const suggestionFooterSx = {
   fontWeight: 500,
 }
 
+/** What a built index can be searched by — Fuse over the stamped rows. */
+type EntryFuse = InstanceType<typeof Fuse<Aglyn.CollectionEntrySearchItem>>
+
+/**
+ * The frame's search input (Figma 494:1220) — the magnify glyph and a bare
+ * `InputBase` on the quiet surface token.
+ *
+ * Presentational and stateless, so the entries block's in-place filter and
+ * the standalone toolbar box (AGL-1516) are the SAME field rather than two
+ * that merely look alike. `inert` is the editing-surface rendering: read-only
+ * and handler-free, so a click or stray keystroke in the besigner never edits
+ * state the canvas cannot use — how Category Pills go inert there too.
+ */
+const SearchField = ({
+  value,
+  placeholder,
+  inert,
+  landmark,
+  onQuery,
+  onEscape,
+}: {
+  value: string
+  placeholder?: string
+  inert?: boolean
+  /**
+   * Put `role="search"` on the FIELD. False when a wrapping form carries it
+   * instead — one search landmark per box, or a screen reader announces the
+   * same field twice.
+   */
+  landmark?: boolean
+  onQuery?: (next: string) => void
+  onEscape?: () => void
+}) => (
+  <Box {...(landmark ? { role: 'search' } : {})} sx={searchFieldSx}>
+    <MdiIcon path={mdiMagnify.path} />
+    <InputBase
+      value={value}
+      name="q"
+      placeholder={(placeholder ?? '').trim() || 'Search posts…'}
+      inputProps={{ 'aria-label': 'Search entries' }}
+      sx={{ flex: 1, fontSize: 14, color: 'text.primary' }}
+      {...(inert
+        ? { readOnly: true }
+        : {
+            onChange: (event) => onQuery?.(event.target.value),
+            onKeyDown: (event) => {
+              if (event.key === 'Escape') onEscape?.()
+            },
+          })}
+    />
+  </Box>
+)
+
+/**
+ * The floating suggestion panel (AGL-1525, Figma 496:1218) — rows straight
+ * off the server-stamped index, and a "View all results" link that is there
+ * hits or no hits.
+ *
+ * `emptyText` is the caller's, not this component's, and that is the whole
+ * point of it being a parameter: a page-windowed entries block and a
+ * whole-collection toolbar box searched different sets, and a miss has to say
+ * WHICH set came back empty. A shared "No matches." would let one of them
+ * claim a reach it never had.
+ */
+const SuggestionPanel = ({
+  suggestions,
+  trimmed,
+  emptyText,
+}: {
+  suggestions: readonly Aglyn.CollectionEntrySearchItem[]
+  trimmed: string
+  emptyText: string
+}) => (
+  <Box sx={suggestionPanelSx}>
+    {suggestions.length ? (
+      suggestions.map((item, index) => {
+        const row = (
+          <MuiStack spacing={0.5} sx={{ px: 2, py: 1.25 }}>
+            <MuiStack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              <Typography variant="subtitle2" sx={{ color: 'text.primary' }}>
+                {item.title}
+              </Typography>
+              {item.category ? (
+                <Chip label={item.category} size="small" />
+              ) : null}
+              {item.date ? (
+                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                  {item.date}
+                </Typography>
+              ) : null}
+            </MuiStack>
+            {item.excerpt ? (
+              <Typography
+                variant="body2"
+                sx={{
+                  color: 'text.secondary',
+                  // One line of excerpt, as the frame draws it. A row that
+                  // grows with the prose turns the panel into a page.
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {item.excerpt}
+              </Typography>
+            ) : null}
+          </MuiStack>
+        )
+        // A row without a `url` is a page cached before AGL-1525 stamped one,
+        // or a slugless entry. It renders as TEXT rather than as a link to
+        // nowhere: a suggestion that navigates to the wrong page is worse
+        // than one the reader has to read.
+        return item.url ? (
+          <AppLink
+            key={index}
+            href={item.url}
+            sx={suggestionRowLinkSx}
+            underline="none"
+          >
+            {row}
+          </AppLink>
+        ) : (
+          <Box key={index}>{row}</Box>
+        )
+      })
+    ) : (
+      <Typography
+        variant="body2"
+        sx={{ color: 'text.secondary', px: 2, py: 1.25 }}
+      >
+        {emptyText}
+      </Typography>
+    )}
+    {/*
+      Always present, hits or no hits (Figma 496:1218). A box that searches
+      one page, or one bounded read of a collection, cannot answer "then
+      where is it?" on its own — the site-wide results page is the only
+      honest answer, and it matters most in exactly the case where the panel
+      came back empty.
+    */}
+    <AppLink
+      href={searchResultsHref(trimmed)}
+      sx={suggestionFooterSx}
+      underline="none"
+    >
+      {`View all results for “${trimmed}” →`}
+    </AppLink>
+  </Box>
+)
+
+/**
+ * Field plus dropdown, in a REAL form (AGL-1525) — so Enter reaches the
+ * results page and the box still works with the panel's JS doing nothing at
+ * all. The panel is an enhancement over a working search box, not the search
+ * box.
+ *
+ * Owns the query, because nothing outside it needs one: `suggest` never
+ * touches the cards underneath. That is what lets the standalone toolbar
+ * block exist at all (AGL-1516) — a box with no clones to hide is a complete
+ * feature, not a crippled one.
+ */
+const SuggestSearchBox = ({
+  fuzzy,
+  items,
+  placeholder,
+  inert,
+  emptyText,
+}: {
+  fuzzy: EntryFuse | null
+  items?: readonly Aglyn.CollectionEntrySearchItem[]
+  placeholder?: string
+  inert?: boolean
+  /** The honest miss for the set THIS box searched. */
+  emptyText: (query: string) => string
+}) => {
+  const [query, setQuery] = useState('')
+  /** Escape dismissed THIS answer (AGL-1525); typing brings it back. */
+  const [closed, setClosed] = useState(false)
+  const trimmed = query.trim()
+  const suggestions =
+    !inert && trimmed && fuzzy && items
+      ? fuzzy
+          .search(trimmed)
+          .slice(0, SUGGESTION_LIMIT)
+          .map((result) => items[result.refIndex])
+          .filter(Boolean)
+      : []
+  const field = (
+    <SearchField
+      value={query}
+      {...(placeholder === undefined ? {} : { placeholder })}
+      // No form wraps the inert field, so the landmark belongs on it.
+      {...(inert ? { inert: true, landmark: true } : {})}
+      onQuery={(next) => {
+        setQuery(next)
+        // A new query reopens a panel the reader dismissed — Escape closes
+        // THIS answer, it does not turn the feature off for the visit.
+        setClosed(false)
+      }}
+      onEscape={() => setClosed(true)}
+    />
+  )
+  if (inert) return field
+  return (
+    <Box
+      component="form"
+      role="search"
+      action="/search"
+      method="get"
+      sx={suggestionAnchorSx}
+    >
+      {field}
+      {trimmed && !closed ? (
+        <SuggestionPanel
+          suggestions={suggestions}
+          trimmed={trimmed}
+          emptyText={emptyText(trimmed)}
+        />
+      ) : null}
+    </Box>
+  )
+}
+
 /**
  * Repeats its children once per published entry of a content collection
  * (AGL-551) — the collections sibling of the dataset repeatable. The tenant
@@ -283,15 +518,15 @@ const CollectionEntries = forwardRef<HTMLDivElement, CollectionEntriesProps>(
       searchPlaceholder,
       searchIndex,
       searchTotal,
+      searchCapped,
       children,
       ...props
     },
     ref,
   ) => {
     const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
+    /** `filter` mode only — `suggest` owns its own query (AGL-1516). */
     const [query, setQuery] = useState('')
-    /** Escape dismissed THIS answer (AGL-1525); typing brings it back. */
-    const [closed, setClosed] = useState(false)
     const items = search ? searchIndex : undefined
     const fuzzy = useMemo(
       () =>
@@ -361,11 +596,19 @@ const CollectionEntries = forwardRef<HTMLDivElement, CollectionEntriesProps>(
         // Absent — a page cached before this shipped — falls back to the old
         // `perPage` reading rather than guessing "complete": understating
         // the scope of a search is the safe direction to be wrong in.
+        //
+        // `searchCapped` is the second way this block can fail to hold the
+        // set, and the invisible one: `searchTotal` counts the entries the
+        // server READ, and that read is bounded. Past the bound
+        // `searchIndex.length === searchTotal` is satisfied by a block
+        // holding 100 of 400 posts, and the bare `No matches.` — the one
+        // wording that claims to have looked everywhere — is exactly the
+        // branch it would take.
         const paginated = (toCount(perPage, 0) ?? 0) > 0
         const truncated =
           typeof searchTotal === 'number'
-            ? (items?.length ?? 0) < searchTotal
-            : paginated
+            ? (items?.length ?? 0) < searchTotal || Boolean(searchCapped)
+            : paginated || Boolean(searchCapped)
         const shown = items?.length ?? 0
         emptyState = (
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
@@ -380,168 +623,37 @@ const CollectionEntries = forwardRef<HTMLDivElement, CollectionEntriesProps>(
         )
       }
     }
-    /**
-     * The suggestion panel (AGL-1525, Figma 496:1218) — rows straight off
-     * the index, in Fuse's SCORE order rather than the list's own order.
-     *
-     * The opposite of what `filter` does, and deliberately: filtering
-     * narrows a chronological feed, so reshuffling it would be a second,
-     * unasked-for change to what the reader is looking at. A suggestion list
-     * is not a feed — it is an answer to a question, and the best answer
-     * belongs first.
-     */
-    const suggestions =
-      mode === 'suggest' && live && trimmed && fuzzy && items
-        ? fuzzy
-            .search(trimmed)
-            .slice(0, SUGGESTION_LIMIT)
-            .map((result) => items[result.refIndex])
-            .filter(Boolean)
-        : []
-    const panelOpen = mode === 'suggest' && live && Boolean(trimmed) && !closed
-    const panel = panelOpen ? (
-      <Box sx={suggestionPanelSx}>
-        {suggestions.length ? (
-          suggestions.map((item, index) => {
-            const row = (
-              <MuiStack spacing={0.5} sx={{ px: 2, py: 1.25 }}>
-                <MuiStack
-                  direction="row"
-                  spacing={1}
-                  sx={{ alignItems: 'center' }}
-                >
-                  <Typography
-                    variant="subtitle2"
-                    sx={{ color: 'text.primary' }}
-                  >
-                    {item.title}
-                  </Typography>
-                  {item.category ? (
-                    <Chip label={item.category} size="small" />
-                  ) : null}
-                  {item.date ? (
-                    <Typography
-                      variant="caption"
-                      sx={{ color: 'text.secondary' }}
-                    >
-                      {item.date}
-                    </Typography>
-                  ) : null}
-                </MuiStack>
-                {item.excerpt ? (
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      color: 'text.secondary',
-                      // One line of excerpt, as the frame draws it. A row
-                      // that grows with the prose turns the panel into a
-                      // page.
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {item.excerpt}
-                  </Typography>
-                ) : null}
-              </MuiStack>
-            )
-            // A row without a `url` is a page cached before AGL-1525 stamped
-            // one, or a slugless entry. It renders as TEXT rather than as a
-            // link to nowhere: a suggestion that navigates to the wrong page
-            // is worse than one the reader has to read.
-            return item.url ? (
-              <AppLink
-                key={index}
-                href={item.url}
-                sx={suggestionRowLinkSx}
-                underline="none"
-              >
-                {row}
-              </AppLink>
-            ) : (
-              <Box key={index}>{row}</Box>
-            )
-          })
-        ) : (
-          <Typography
-            variant="body2"
-            sx={{ color: 'text.secondary', px: 2, py: 1.25 }}
-          >
-            {`No matches for “${trimmed}” on this page.`}
-          </Typography>
-        )}
-        {/*
-          Always present, hits or no hits (Figma 496:1218). This block
-          searches the entries it rendered and nothing else — the site-wide
-          results page is the ONLY honest answer to "then where is it?", and
-          it matters most in exactly the case where the panel is empty.
-        */}
-        <AppLink
-          href={searchResultsHref(trimmed)}
-          sx={suggestionFooterSx}
-          underline="none"
-        >
-          {`View all results for “${trimmed}” →`}
-        </AppLink>
-      </Box>
-    ) : null
     // The field renders when there is something to search, and as an inert
     // affordance on editing surfaces so the author sees what they enabled.
     // A live surface with nothing stamped (unknown collection, zero entries)
     // renders no field at all — a search box over nothing is a lie.
-    // `role="search"` moves to the FORM in suggest mode — one search
-    // landmark per box, or a screen reader reads the same field twice.
-    const suggestForm = mode === 'suggest' && !suppressNavigation
-    const input =
-      suppressNavigation || live ? (
-        <Box {...(suggestForm ? {} : { role: 'search' })} sx={searchFieldSx}>
-          <MdiIcon path={mdiMagnify.path} />
-          <InputBase
-            value={query}
-            name="q"
-            placeholder={
-              (searchPlaceholder ?? '').trim() || 'Search posts…'
-            }
-            inputProps={{ 'aria-label': 'Search entries' }}
-            sx={{ flex: 1, fontSize: 14, color: 'text.primary' }}
-            // Inert in the canvas, like the pills: no onChange, so a click
-            // or stray keystroke never edits state the surface cannot use.
-            {...(suppressNavigation
-              ? { readOnly: true }
-              : {
-                  onChange: (event) => {
-                    setQuery(event.target.value)
-                    // A new query reopens a panel the reader dismissed —
-                    // Escape closes THIS answer, it does not turn the
-                    // feature off for the rest of the visit.
-                    setClosed(false)
-                  },
-                  onKeyDown: (event) => {
-                    if (event.key === 'Escape') setClosed(true)
-                  },
-                })}
-          />
-        </Box>
-      ) : null
-    const field =
-      input && suggestForm ? (
-        // A REAL form, so Enter reaches the results page and so the field
-        // still works with the panel's JS doing nothing at all — the panel
-        // is an enhancement over a working search box, not the search box.
-        <Box
-          component="form"
-          role="search"
-          action="/search"
-          method="get"
-          sx={suggestionAnchorSx}
-        >
-          {input}
-          {panel}
-        </Box>
-      ) : (
-        input
-      )
+    const showField = suppressNavigation || live
+    const field = !showField ? null : mode === 'suggest' ? (
+      // Rows in Fuse's SCORE order, the opposite of what `filter` does and
+      // deliberately: filtering narrows a chronological feed, so reshuffling
+      // it would be a second, unasked-for change to what the reader is
+      // looking at. A suggestion list is not a feed — it is an answer to a
+      // question, and the best answer belongs first.
+      <SuggestSearchBox
+        fuzzy={fuzzy}
+        {...(items ? { items } : {})}
+        {...(searchPlaceholder === undefined
+          ? {}
+          : { placeholder: searchPlaceholder })}
+        {...(suppressNavigation ? { inert: true } : {})}
+        // This block searched the entries IT rendered — a page window, an
+        // `entriesLimit` slice, or a bounded read. Never "this collection".
+        emptyText={(text) => `No matches for “${text}” on this page.`}
+      />
+    ) : (
+      <SearchField
+        value={query}
+        landmark
+        {...(searchPlaceholder === undefined ? {} : { placeholder: searchPlaceholder })}
+        {...(suppressNavigation ? { inert: true } : {})}
+        onQuery={setQuery}
+      />
+    )
     return (
       <MuiStack ref={ref} spacing={4} {...props}>
         {field}
@@ -560,7 +672,7 @@ export const collectionEntriesSchema: Aglyn.ComponentSchema<CollectionEntriesPro
     displayName: 'Collection Entries',
     description: 'Repeats its children once per entry in a content collection.',
     category: Aglyn.ComponentCategory.DATA_DISPLAY,
-    icon: { path: mdiPostOutline.path, sx: { color: '#00796b' } },
+    icon: { path: mdiPostOutline.path, sx: { color: 'secondary.main' } },
     attributes: [
       {
         name: 'collectionSlug',
@@ -949,7 +1061,7 @@ export const collectionEntryBodySchema: Aglyn.ComponentSchema<CollectionEntryBod
     displayName: 'Entry Body',
     description: "The current entry's markdown body, on an entry template.",
     category: Aglyn.ComponentCategory.TEXT,
-    icon: { path: mdiTextLong.path, sx: { color: '#00796b' } },
+    icon: { path: mdiTextLong.path, sx: { color: 'secondary.main' } },
     flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
     attributes: [
       {
@@ -1194,7 +1306,7 @@ export const collectionRelatedSchema: Aglyn.ComponentSchema<CollectionRelatedPro
     displayName: 'Related Posts',
     description: "Other entries sharing this one's category or tags.",
     category: Aglyn.ComponentCategory.DATA_DISPLAY,
-    icon: { path: mdiNewspaperVariantOutline.path, sx: { color: '#00796b' } },
+    icon: { path: mdiNewspaperVariantOutline.path, sx: { color: 'secondary.main' } },
     flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
     attributes: [
       {
@@ -1351,7 +1463,7 @@ export const collectionShareSchema: Aglyn.ComponentSchema<CollectionShareProps> 
     displayName: 'Share Bar',
     description: 'Share buttons for the current page, plus a copy link.',
     category: Aglyn.ComponentCategory.NAVIGATION,
-    icon: { path: mdiShareVariant.path, sx: { color: '#00796b' } },
+    icon: { path: mdiShareVariant.path, sx: { color: 'secondary.main' } },
     flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
     attributes: [
       {
@@ -1563,7 +1675,7 @@ export const collectionEntryMetaSchema: Aglyn.ComponentSchema<CollectionEntryMet
     description:
       'The byline row for an entry — author, date, category and tags.',
     category: Aglyn.ComponentCategory.TEXT,
-    icon: { path: mdiTagOutline.path, sx: { color: '#00796b' } },
+    icon: { path: mdiTagOutline.path, sx: { color: 'secondary.main' } },
     flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
     attributes: [
       {
@@ -1771,7 +1883,7 @@ export const collectionCategoriesSchema: Aglyn.ComponentSchema<CollectionCategor
     displayName: 'Category Pills',
     description: 'A pill per collection category, each filtering the listing.',
     category: Aglyn.ComponentCategory.NAVIGATION,
-    icon: { path: mdiTagMultipleOutline.path, sx: { color: '#00796b' } },
+    icon: { path: mdiTagMultipleOutline.path, sx: { color: 'secondary.main' } },
     flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
     attributes: [
       {
@@ -1809,6 +1921,141 @@ export const collectionCategoriesSchema: Aglyn.ComponentSchema<CollectionCategor
     ],
   }
 
+/* ── Collection Search (AGL-1516, Figma 494:1220) ───────────────────────── */
+
+export interface CollectionSearchProps extends StackProps {
+  /**
+   * Collection whose entries this box searches (compose-time). Blank = the
+   * collection routed by the current URL on list-template screens.
+   */
+  collectionSlug?: string
+  /** Hint text inside the box (blank = "Search posts…"). */
+  searchPlaceholder?: string
+  /**
+   * Server-stamped matchable text per entry (`expandCollectionSearch`);
+   * never set by hand.
+   */
+  searchIndex?: Aglyn.CollectionEntrySearchItem[]
+  /** How many entries the index was drawn from; never set by hand. */
+  searchTotal?: number
+  /** Whether that read reached its bound; never set by hand. */
+  searchCapped?: boolean
+}
+
+/**
+ * A search box for a collection that lives where the author puts it
+ * (AGL-1516, Figma 494:1220).
+ *
+ * The entries block has had a search box since AGL-1516's first half, and it
+ * renders inside that block — first child of its own stack. The frame puts
+ * the field in the listing's TOOLBAR: category pills on the left, search and
+ * RSS on the right, one row. That was unbuildable, and unbuildable in both
+ * directions — a block's own child cannot be lifted out of it, and the pills
+ * cannot be moved in, because every child of an entries block is cloned once
+ * per entry. Three passes of authoring hit the same wall.
+ *
+ * So the field became its own block. It searches the collection the listing
+ * beside it is drawn from, and answers with the suggestion panel (496:1218)
+ * — the only behaviour a standalone box can honestly have, since it owns no
+ * cards to hide. Enter submits to the site-wide results page, so the box
+ * works with no JavaScript at all.
+ *
+ * Inert on editing surfaces, like Category Pills: the besigner has no index
+ * to search, and a field that answered there would be answering about
+ * nothing.
+ */
+const CollectionSearch = forwardRef<HTMLDivElement, CollectionSearchProps>(
+  (props, ref) => {
+    // Compose-time and search-only attributes: strip so they never hit the
+    // DOM.
+    const {
+      collectionSlug,
+      searchPlaceholder,
+      searchIndex,
+      searchTotal,
+      searchCapped,
+      ...rest
+    } = props
+    // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
+    const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
+    const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
+    const fuzzy = useMemo(
+      () =>
+        searchIndex?.length
+          ? new Fuse(searchIndex, { ...Aglyn.COLLECTION_SEARCH_FUSE_OPTIONS })
+          : null,
+      [searchIndex],
+    )
+    if (!suppressNavigation && !fuzzy) {
+      // Nothing stamped on a live surface: an unknown collection, an empty
+      // one, or a page composed before this block existed. Renders NOTHING
+      // rather than a field that can only ever answer "no matches" — that
+      // answer would read as a fact about the reader's query instead of
+      // about the absent index behind it.
+      return <Box ref={ref} {...rest} />
+    }
+    return (
+      <MuiStack ref={ref} {...rest} sx={[{ alignItems: 'flex-end' }, ...nodeSx]}>
+        <SuggestSearchBox
+          fuzzy={fuzzy}
+          {...(searchIndex ? { items: searchIndex } : {})}
+          {...(searchPlaceholder === undefined
+            ? {}
+            : { placeholder: searchPlaceholder })}
+          {...(suppressNavigation ? { inert: true } : {})}
+          // The honest miss for THIS box. It searched one bounded read of the
+          // collection — never "the collection", and on a category route not
+          // even the whole of it, because the source arrives filtered. So it
+          // reports the number it actually looked through, and says plainly
+          // when that number was a ceiling rather than a total.
+          emptyText={(text) =>
+            searchCapped
+              ? `No matches for “${text}” in the ${searchIndex?.length ?? 0} ` +
+                'entries searched here — the collection holds more, which ' +
+                'this box has not read.'
+              : `No matches for “${text}” in the ${searchIndex?.length ?? 0} ` +
+                'entries searched here.'
+          }
+        />
+      </MuiStack>
+    )
+  },
+)
+CollectionSearch.displayName = 'AglynCollectionSearch'
+
+export const collectionSearchSchema: Aglyn.ComponentSchema<CollectionSearchProps> =
+  {
+    $id: SEARCH_ID,
+    pluginId: BUNDLE_ID,
+    displayName: 'Collection Search',
+    description:
+      'A search box for a content collection, with a suggestions dropdown.',
+    category: Aglyn.ComponentCategory.NAVIGATION,
+    icon: { path: mdiMagnify.path, sx: { color: 'secondary.main' } },
+    flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
+    attributes: [
+      {
+        name: 'collectionSlug',
+        label: 'Collection slug',
+        description:
+          'Content collection this box searches (e.g. "blog"). Leave blank ' +
+          'on a list-template screen to use the collection from the URL.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
+        name: 'searchPlaceholder',
+        label: 'Search placeholder',
+        description:
+          'Hint text inside the search box (blank = "Search posts…").',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      // `searchIndex`, `searchTotal` and `searchCapped` are deliberately NOT
+      // attributes: all three are server-stamped facts about a read, and an
+      // author who could edit them could make the box lie about its own
+      // reach.
+    ],
+  }
+
 /* ── Presets ────────────────────────────────────────────────────────────── */
 
 /**
@@ -1837,7 +2084,7 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
       'Repeats a card (title, date, excerpt, Read more) per published ' +
       'entry of a content collection',
     category: Aglyn.ComponentCategory.BLOCKS,
-    icon: { path: mdiPostOutline.path, sx: { color: '#00796b' } },
+    icon: { path: mdiPostOutline.path, sx: { color: 'secondary.main' } },
     data: {
       $id: null,
       componentId: ENTRIES_ID,
@@ -1878,7 +2125,7 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
     pluginId: BUNDLE_ID,
     description: "Renders the current entry's markdown body, themed",
     category: Aglyn.ComponentCategory.TEXT,
-    icon: { path: mdiTextLong.path, sx: { color: '#00796b' } },
+    icon: { path: mdiTextLong.path, sx: { color: 'secondary.main' } },
     data: {
       $id: null,
       componentId: ENTRY_BODY_ID,
@@ -1894,7 +2141,7 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
     description:
       "Other entries sharing the current entry's category or tags",
     category: Aglyn.ComponentCategory.DATA_DISPLAY,
-    icon: { path: mdiNewspaperVariantOutline.path, sx: { color: '#00796b' } },
+    icon: { path: mdiNewspaperVariantOutline.path, sx: { color: 'secondary.main' } },
     data: {
       $id: null,
       componentId: RELATED_ID,
@@ -1913,7 +2160,7 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
     pluginId: BUNDLE_ID,
     description: 'X, LinkedIn, Facebook, and copy-link buttons for the page',
     category: Aglyn.ComponentCategory.NAVIGATION,
-    icon: { path: mdiShareVariant.path, sx: { color: '#00796b' } },
+    icon: { path: mdiShareVariant.path, sx: { color: 'secondary.main' } },
     data: {
       $id: null,
       componentId: SHARE_ID,
@@ -1929,7 +2176,7 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
     description:
       "Links to each of the collection's categories, filtering the listing",
     category: Aglyn.ComponentCategory.NAVIGATION,
-    icon: { path: mdiTagMultipleOutline.path, sx: { color: '#00796b' } },
+    icon: { path: mdiTagMultipleOutline.path, sx: { color: 'secondary.main' } },
     data: {
       $id: null,
       componentId: CATEGORIES_ID,
@@ -1947,7 +2194,7 @@ export const collectionPresets: Aglyn.PresetSchema[] = [
     pluginId: BUNDLE_ID,
     description: 'Author · date · category line with tag chips for the entry',
     category: Aglyn.ComponentCategory.TEXT,
-    icon: { path: mdiTagOutline.path, sx: { color: '#00796b' } },
+    icon: { path: mdiTagOutline.path, sx: { color: 'secondary.main' } },
     data: {
       $id: null,
       componentId: ENTRY_META_ID,
@@ -1973,6 +2220,7 @@ export {
   CollectionEntryBody,
   CollectionEntryMeta,
   CollectionRelated,
+  CollectionSearch,
   CollectionShare,
 }
 export default CollectionEntries

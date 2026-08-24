@@ -472,7 +472,7 @@ export type AnalyticsEventName = keyof AnalyticsEventParams
 export type AnalyticsTransport = (
   name: AnalyticsEventName,
   params: Record<string, unknown>,
-) => void
+) => void | Promise<void>
 
 let configuredTransport: AnalyticsTransport | null = null
 
@@ -616,6 +616,71 @@ export function trackEvent<K extends AnalyticsEventName>(
 }
 
 /**
+ * How long a navigation may be held waiting for a hit to reach gtag. Short
+ * enough to be invisible next to a Stripe redirect, long enough to cover a
+ * Firebase Analytics init that has not settled yet.
+ */
+const NAVIGATION_FLUSH_TIMEOUT_MS = 300
+
+/**
+ * Fire a GA4 event and resolve once it has been HANDED TO gtag — for the call
+ * sites that navigate away in the same tick (AGL-1580).
+ *
+ * ## What was actually losing the event
+ *
+ * Not the transport, which was the obvious suspect and the wrong one. Measured
+ * against real gtag.js with every transport interposed: gtag flushes its queue
+ * on pagehide through `fetch(..., { keepalive: true })`, which is precisely the
+ * mechanism that survives a document teardown. Once a hit reaches gtag, a
+ * navigation does not destroy it — and `transport_type: 'beacon'`, the standard
+ * answer, therefore fixes nothing here.
+ *
+ * What is lost is the hit that never REACHES gtag. Firebase's `logEvent` is
+ * `async` and awaits the SDK's initialization promise before calling gtag
+ * (`@firebase/analytics/dist/index.cjs.js`, `logEvent$1`). While that promise is
+ * already settled the continuation is a microtask, microtasks drain before the
+ * queued navigation task, and the hit gets out. While it is still PENDING — the
+ * first checkout of a fresh session, exactly the case that has never yet been
+ * seen in the property — the continuation is scheduled behind the navigation
+ * and never runs at all. Measured both ways: pending init loses the event,
+ * awaiting it delivers it, nothing else changed.
+ *
+ * ## Why a timeout rather than a bare await
+ *
+ * A bare `await` on `logEvent` hands the user's redirect to the analytics
+ * stack. When the analytics host is blocked — an ad blocker, a corporate proxy,
+ * a consent tool that never loads — Firebase's initialization promise can stay
+ * pending indefinitely, and the checkout would hang on a metric. So the wait is
+ * RACED against {@link NAVIGATION_FLUSH_TIMEOUT_MS}: a blocked analytics stack
+ * costs the redirect 300ms once and then it proceeds, which is the same outcome
+ * the caller had before this existed. Never rejects, for the same reason
+ * {@link trackEvent} never throws.
+ *
+ * On a surface with no registered transport — the tenant runtime and the plugin
+ * bundles, which go straight to `window.gtag` — delivery is synchronous, so
+ * this resolves immediately and costs the storefront checkout nothing at all.
+ */
+export async function trackEventBeforeNavigation<K extends AnalyticsEventName>(
+  name: K,
+  params: AnalyticsEventParams[K],
+): Promise<void> {
+  const delivered = deliver(
+    name,
+    sanitizeEventParams(params as Record<string, unknown>),
+  )
+  // Synchronous transport (or none): already handed over, nothing to wait for.
+  if (!delivered || typeof delivered.then !== 'function') return
+  await Promise.race([
+    // A transport that REJECTS must not become an unhandled rejection, and
+    // must not hold the navigation either — it has already failed.
+    Promise.resolve(delivered).catch((): void => undefined),
+    new Promise<void>((resolve) =>
+      setTimeout(resolve, NAVIGATION_FLUSH_TIMEOUT_MS),
+    ),
+  ])
+}
+
+/**
  * Build the ONE `begin_checkout` payload, for every surface that starts a
  * checkout (AGL-1591).
  *
@@ -714,7 +779,10 @@ export function isFirstPublishedRoute(
  * caller sanitizes first, which is what keeps "a new call site cannot forget"
  * true of the authored path too.
  */
-function deliver(name: string, safe: Record<string, unknown>): void {
+function deliver(
+  name: string,
+  safe: Record<string, unknown>,
+): void | Promise<void> {
   try {
     if (configuredTransport) {
       // The transport's name parameter is the taxonomy union, which an
@@ -722,12 +790,17 @@ function deliver(name: string, safe: Record<string, unknown>): void {
       // the sole surface that registers one and it has no authored events
       // (the interaction runtime is tenant-side), and Firebase `logEvent`
       // takes an arbitrary string regardless.
-      configuredTransport(name as AnalyticsEventName, safe)
-      return
+      // Returned, not discarded (AGL-1580). A transport may be ASYNC —
+      // Firebase's `logEvent` awaits the SDK's initialization promise before it
+      // reaches gtag at all — and a caller that is about to navigate has to be
+      // able to wait for it. See `trackEventBeforeNavigation`.
+      return configuredTransport(name as AnalyticsEventName, safe)
     }
     if (typeof window === 'undefined') return
     const gtag = (window as unknown as { gtag?: unknown }).gtag
     if (typeof gtag !== 'function') return
+    // Synchronous, so nothing is returned and nothing needs awaiting: by the
+    // time this call has returned, gtag.js already holds the hit.
     ;(gtag as (...args: unknown[]) => void)('event', name, safe)
   } catch {
     // Analytics never breaks the page — the same posture as the error beacon

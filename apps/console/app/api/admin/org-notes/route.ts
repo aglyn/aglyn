@@ -21,6 +21,7 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Staff notes on organizations (wave v5): support/billing context that
@@ -96,6 +97,10 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
   } catch (error) {
+    // An unverifiable credential is a 401, not a fault of ours
+    // (AGL-1993). Null for anything else, so a real failure keeps its 500.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     return Response.json({ error: 'Notes request failed' }, { status: 500 })
   }

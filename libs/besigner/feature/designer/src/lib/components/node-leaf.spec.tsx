@@ -593,6 +593,132 @@ describe('component instance preview (AGL-1251)', () => {
     expect(leafText(baseElement)).toContain('Now with a kicker')
     expect(leafText(baseElement)).toContain('Ship faster')
   })
+
+  /**
+   * A component that CONTAINS another component (AGL-1898 phase 2).
+   *
+   * `composeReusableComponentNodes` expands nested instances — but only
+   * those whose definition is in the map it is handed. Preview
+   * (`document-preview.component.tsx`), tenant SSR (`compose-screen-nodes`)
+   * and the layout-chrome graft all hand it the host's WHOLE definitions
+   * map, so all three expand the inner component. The canvas handed it a
+   * one-entry map built from this instance's own `refId` alone, so the
+   * inner instance had no definition to resolve and stayed an unexpanded
+   * placeholder — the canvas drawing something neither Preview nor the live
+   * site would.
+   *
+   * Same failure shape as AGL-1899's `12fa5e8b1`: invisible rather than
+   * broken, because the disagreement is only ever visible by putting the
+   * canvas and Preview side by side.
+   *
+   * It also silently voided propagation for the inner component. Publishing
+   * `badge` re-renders every canvas showing it directly, and never the ones
+   * showing it through `hero` — the case a shared button or logo inside a
+   * shared nav is in.
+   */
+  const badgeDefinition = {
+    rootId: 'broot',
+    nodes: {
+      broot: {
+        $id: 'broot',
+        componentId: 'div',
+        props: { children: 'BETA' },
+      },
+    },
+  } as any
+
+  /** `hero`, but with an instance of `badge` nested inside it. */
+  const nestingDefinition = {
+    rootId: 'root',
+    nodes: {
+      root: { $id: 'root', componentId: 'div', nodes: ['h', 'inner'] },
+      h: {
+        $id: 'h',
+        componentId: 'div',
+        parentId: 'root',
+        props: { children: '{{prop.headline}}' },
+      },
+      inner: {
+        $id: 'inner',
+        componentId: Aglyn.REUSABLE_INSTANCE_COMPONENT_ID,
+        parentId: 'root',
+        props: { refId: 'badge' },
+        nodes: [],
+      },
+    },
+    props: [{ name: 'headline', type: 'text', defaultValue: 'Default copy' }],
+  } as any
+
+  it('expands a component nested inside the one it renders', () => {
+    const { baseElement } = renderInstance(
+      instanceNode({ headline: 'Ship faster' }),
+      { hero: nestingDefinition, badge: badgeDefinition },
+    )
+    // The outer component still renders this placement's own prop value.
+    expect(leafText(baseElement)).toContain('Ship faster')
+    // ...and the INNER component renders its content, as Preview and the
+    // live site both already do.
+    expect(leafText(baseElement)).toContain('BETA')
+    // Namespaced through BOTH grafts, so two heroes on one screen cannot
+    // collide on the badge inside them. The inner graft's prefix is keyed
+    // by the ALREADY-PREFIXED instance id (`cmp__inst1__inner`), which is
+    // what keeps the nesting unambiguous rather than flattening.
+    expect(
+      baseElement.querySelector(
+        '[data-aglyn="leaf:cmp__cmp__inst1__inner__broot"]',
+      ),
+    ).toBeTruthy()
+  })
+
+  it('negative control: the inner component alone is not enough', () => {
+    // Without `badge` in the map there is nothing to expand, and the outer
+    // component must still render normally rather than failing the graft.
+    const { baseElement } = renderInstance(
+      instanceNode({ headline: 'Ship faster' }),
+      { hero: nestingDefinition },
+    )
+    expect(leafText(baseElement)).toContain('Ship faster')
+    expect(leafText(baseElement)).not.toContain('BETA')
+  })
+
+  it('propagates a change to the INNER component (AGL-1898 phase 2)', () => {
+    // One node object across the rerender, for the reason the case above
+    // spells out: a new one would recompute the graft on its own.
+    const stable = instanceNode({ headline: 'Ship faster' })
+    const definitions = { hero: nestingDefinition, badge: badgeDefinition }
+    const { baseElement, rerender } = renderInstance(stable, definitions)
+    expect(leafText(baseElement)).toContain('BETA')
+    expect(leafText(baseElement)).not.toContain('GA')
+
+    // Only the INNER component is republished; the outer one is the SAME
+    // object, so nothing about `hero` can be what re-renders this.
+    rerender(
+      <ComponentPromotionContext.Provider
+        value={{
+          definitions: {
+            hero: nestingDefinition,
+            badge: {
+              rootId: 'broot',
+              nodes: {
+                broot: {
+                  $id: 'broot',
+                  componentId: 'div',
+                  props: { children: 'GA' },
+                },
+              },
+            } as any,
+          },
+        }}
+      >
+        <ElementLeafComponent node={stable} />
+      </ComponentPromotionContext.Provider>,
+    )
+
+    expect(leafText(baseElement)).toContain('GA')
+    expect(leafText(baseElement)).not.toContain('BETA')
+    // The outer placement's own prop value survives the inner update.
+    expect(leafText(baseElement)).toContain('Ship faster')
+  })
 })
 
 describe('denormalizeTree', () => {

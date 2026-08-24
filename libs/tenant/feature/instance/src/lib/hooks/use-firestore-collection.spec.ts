@@ -40,12 +40,16 @@ const mockGetDocsFromServer = jest.fn()
 // reaches `Timestamp`, which still `extends` the Firestore class, so the
 // import itself throws unless the real module is spread in first (AGL-1207).
 jest.mock('firebase/firestore', () => ({
-  onSnapshot: (
-    _q: unknown,
-    onNext: (snap: unknown) => void,
-    onError: () => void,
-  ) => {
-    mockHandlers.push({ onNext, onError })
+  onSnapshot: (_q: unknown, ...rest: unknown[]) => {
+    // Mirrors the real SDK overload: (target, onNext, onError?) or
+    // (target, options, onNext, onError?). The listener hooks pass listen
+    // options now, so a positional double would capture them as `onNext`
+    // (AGL-2486).
+    if (typeof rest[0] !== 'function') rest.shift()
+    mockHandlers.push({
+      onNext: rest[0] as (snap: unknown) => void,
+      onError: rest[1] as () => void,
+    })
     return jest.fn()
   },
   getDocsFromServer: (q: unknown) => mockGetDocsFromServer(q),

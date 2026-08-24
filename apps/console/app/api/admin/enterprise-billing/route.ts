@@ -25,6 +25,7 @@ import {
   readOrgBilling,
   writeOrgBilling,
 } from '@aglyn/tenant-data-admin'
+import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
  * Enterprise custom-billing provisioning (AGL-1110) — the staff door that
@@ -491,6 +492,12 @@ async function handler(request: Request): Promise<Response> {
     await claim.record(200, payload)
     return Response.json(payload, { status: 200 })
   } catch (error) {
+    // An unverifiable credential is a 401, not a fault of ours (AGL-1993).
+    // Null for anything else, so a real failure keeps its 500. Safe ahead of
+    // the claim reasoning below: `verifyIdToken` runs before `claimAttempt`,
+    // so there is no key to strand when this is the branch that fires.
+    const unauthenticated = invalidIdTokenResponse(error)
+    if (unauthenticated) return unauthenticated
     console.error(error)
     // Deliberately NOT released (AGL-1714), which is where this diverges from
     // the POS sale and marketplace checkout paths and follows the refund one

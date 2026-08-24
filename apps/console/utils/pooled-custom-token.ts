@@ -55,8 +55,49 @@ export function signInWithPooledCustomToken(
   token: string,
   tenantId: string | null | undefined,
 ): Promise<UserCredential> {
-  auth.tenantId = tenantId ?? null
+  aimAuthAtPool(auth, tenantId)
   return signInWithCustomToken(auth, token)
+}
+
+/**
+ * Point the shared instance at the pool the NEXT credential call belongs to
+ * (AGL-1993).
+ *
+ * `signInWithPooledCustomToken` binds the pool for a custom-token exchange,
+ * which is the path this issue was reported on. It is not the only path that
+ * reads `auth.tenantId`: every `signInWith…` reads it, and the docblock above
+ * describes the reverse failure — a stale tenant aiming the project-pool
+ * account that signs in next — as the reason the assignment is unconditional.
+ * Nothing enforced that outside the exchange, and the reverse case is
+ * REACHABLE, by four steps each verified in the source:
+ *
+ * 1. `/sso` sets `firebaseAuth.tenantId = payload.tenantId` as soon as the
+ *    domain lookup resolves, BEFORE the popup — so a cancelled or refused
+ *    SSO attempt leaves it set.
+ * 2. Nothing clears it. `/signin` and `/signup` never mention `tenantId`.
+ * 3. `signOut()` does not clear it either (verified in `@firebase/auth`
+ *    1.13.4: it clears `currentUser` and the redirect user, and never
+ *    touches the instance's pool).
+ * 4. The `← Back to sign in` escape hatch on `/sso` is an `AppLink`, i.e. a
+ *    Next `<Link>` — a CLIENT-side navigation, so the same `Auth` instance
+ *    carries the tenant onto the sign-in page.
+ *
+ * The result is a sign-in aimed at a GCIP tenant that never held the account:
+ * a password sign-in fails for a user who exists, and `/signup` is worse than
+ * a refusal — `createUserWithEmailAndPassword` on a tenanted instance
+ * PROVISIONS the account inside that tenant, where project-level
+ * `listUsers()` cannot see it. That is the AGL-1962 phantom shape, created by
+ * an ordinary self-signup.
+ *
+ * `null` means the project pool, exactly as it does above. This never chooses
+ * a pool on a caller's behalf — the caller states the pool its credential
+ * belongs to, and this makes the instance agree.
+ */
+export function aimAuthAtPool(
+  auth: Pick<Auth, 'tenantId'>,
+  tenantId: string | null | undefined,
+): void {
+  auth.tenantId = tenantId ?? null
 }
 
 /**

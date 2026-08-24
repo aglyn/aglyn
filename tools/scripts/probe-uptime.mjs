@@ -42,7 +42,11 @@
 import { withProbeHeaders } from './lib/probe-headers.mjs'
 // WHAT is probed lives in a module of its own so a test can assert it without
 // importing this file, which probes at load and exits (AGL-1617).
-import { DEFAULT_TARGETS, buildPlan } from './lib/uptime-targets.mjs'
+import {
+  DEFAULT_TARGETS,
+  buildPlan,
+  markPendingDeployments,
+} from './lib/uptime-targets.mjs'
 
 const TIMEOUT_MS = 15_000
 
@@ -122,6 +126,7 @@ async function probe(name, base, path = '/api/health') {
 
     return {
       name, url, ms, ok,
+      status: response.status,
       commit: body?.commit ?? null,
       region: body?.region ?? null,
       detail: notes.join(' · ') || 'healthy',
@@ -141,18 +146,31 @@ const plan = buildPlan(targets)
 
 const results = await Promise.all(plan.map(([name, base, path]) => probe(name, base, path)))
 
+// A subsystem path that 404s while its target's root is UP is a fact about the
+// deploy queue, not an outage — `main` names endpoints before production is
+// promoted to serve them. The rule, and the review-time guard that keeps it
+// from hiding a deleted route, live in `lib/uptime-targets.mjs`.
+markPendingDeployments(results)
+
 console.log(`uptime probe · ${new Date().toISOString()}`)
 for (const r of results) {
   const build = r.commit ? ` build=${r.commit}` : ''
   const region = r.region ? ` region=${r.region}` : ''
+  const state = r.pending ? 'PEND' : r.ok ? 'UP  ' : 'DOWN'
   console.log(
-    `  ${r.ok ? 'UP  ' : 'DOWN'} ${r.name.padEnd(22)} ${String(r.ms).padStart(5)}ms  ${r.detail}${build}${region}`,
+    `  ${state} ${r.name.padEnd(22)} ${String(r.ms).padStart(5)}ms  ${r.detail}${build}${region}`,
   )
   console.log(`       ${r.url}`)
 }
 
 const down = results.filter((r) => !r.ok)
-console.log(`\n${results.length - down.length}/${results.length} up`)
+const pending = results.filter((r) => r.pending)
+console.log(`\n${results.length - down.length - pending.length}/${results.length} up`)
+if (pending.length) {
+  console.log(
+    `${pending.length} pending promotion: ${pending.map((r) => r.name).join(', ')}`,
+  )
+}
 // Non-zero so the workflow run itself is the record. A passing history is the
 // uptime series; a failed run is where an incident starts.
 process.exit(down.length ? 1 : 0)

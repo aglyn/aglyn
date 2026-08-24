@@ -59,6 +59,7 @@ on the platform card and the workspace/site card.
 | --- | --- | --- |
 | Customer sites | 503 notice, cached pages evicted | **keep serving normally** |
 | Visitor forms, cart, checkout | refused | refused, with an inline "temporarily paused" |
+| Visitor analytics beacon | frozen entirely | **page views still count**, host automations do not fire ([why](#analytics-beacon)) |
 | Console reads (sign-in, viewing) | refused | **work** |
 | Console/API writes | refused | refused with 423 |
 | Member sessions | revoked (`security`/`manual`) | **never revoked** |
@@ -500,6 +501,51 @@ nothing. To take a platform subdomain down, use the **Site (host)** scope.
 **Expiry and modes** work as everywhere else. Read-only is accepted but rarely
 what you want here: a name dispute is a full refusal or nothing.
 
+## One device, not the account {#device-scope}
+
+The narrowest thing on this page, and the only one that is **not** a lockdown
+scope. It lives on the user's detail page in Users admin rather than on the
+lockdown route, and it is here because it is what you reach for instead of the
+user scope when the incident is *"someone stole my laptop"*.
+
+The **user scope** disables the account. That is right for a compromised or
+abusive *account*, and wrong for a compromised *device*: the person calling has
+done nothing wrong and still needs to work. **Sign-in history → Sign out** ends
+the sessions without disabling anything — see
+[Sign one device out](overview.md#sign-one-device-out) for how to operate it and
+what to say.
+
+**What it actually guarantees, because it is easy to overstate in both
+directions.** The refresh-token revocation underneath is account-wide — Firebase
+offers nothing narrower — so every device signs out once. The *per-device* part
+is the refusal afterwards: the signed-out device carries a revocation stamp and
+is refused at the session boundary every time it comes back, because it cannot
+produce a fresh authentication. The account holder signs in again and keeps
+working. So: **everyone signs out once, they sign back in, that device does
+not.**
+
+**Why it is not true single-session revocation, decided rather than skipped
+(AGL-1513).** Dropping the account-wide revocation would leave the other
+sessions untouched, which sounds like the better product. It was measured and
+rejected: the per-device stamp is enforced at the session **mint** and the
+cross-subdomain **exchange**, and a browser that is *already signed in* passes
+through neither. Without the account-wide revoke it would keep minting fresh ID
+tokens from its own refresh token and keep opening every Bearer-token console
+API route — not for an hour, indefinitely. That is not a narrower control, it is
+no control. Making it real would mean carrying the device identity into the
+server-wide revocation check that every API door already runs, which is a
+change worth its own issue and is not this one.
+
+**The residual, stated plainly.** Anything that goes through our servers stops
+within about fifteen seconds (the cached revocation epoch). A tab already open
+on the signed-out device can keep reaching the database directly until its ID
+token expires, up to an hour, because security rules key on that token and not
+on our cookie. That residual is **not read-only**: the rules carry no assertion
+about revocation, so the tab keeps every client write the account already had —
+publishing, content edits, media metadata, presence and co-editing. Object
+storage is the one exception, because it denies the client outright. The tab
+cannot obtain another token.
+
 ## Asset quarantine — one file, not the site that serves it
 
 When the problem is **one uploaded file** — malware in a PDF, an abusive image,
@@ -879,6 +925,43 @@ that line ever leaves. Six plugin jobs (four in commerce, two in bookings) are
 recorded as still ungated — the runner, not the call site, is where that should
 be fixed.
 
+### The analytics beacon, which a read-only lock splits in half {#analytics-beacon}
+
+`POST /api/analytics/collect` is the one route where "read-only refuses every
+write" is deliberately not the whole answer, so it is worth reading before you
+arm a maintenance window and wonder why the dashboard kept moving.
+
+**Under a full lock it is frozen completely** (AGL-1627). The middleware does
+not match `/api`, so a page already sitting in a visitor's browser keeps
+beaconing long after the site went dark — and these are not private counters.
+`/api/billing/report-usage` meters the **same** `hosts/{id}/analytics/{day}`
+documents the beacon increments, deliberately, so that the bandwidth ceiling and
+the invoice can never disagree. A page view recorded against a site we switched
+off therefore reaches an invoice. It now refuses, silently, keeping the `204`
+the beacon always returns: nothing renders that response, so a 423 would buy the
+browser a retry and tell nobody anything.
+
+**Under a read-only lock the counters keep counting.** The site is still serving
+— that is the entire point of the mode — so we are still paying the egress, and
+those same counters are the meter that the free plan's bandwidth band and the
+abuse ceiling are computed from. Freezing them would turn a read-only lock into
+a window where a site serves traffic that is unmetered, unbilled and outside the
+abuse ceiling, and `billing` and `security` are two of the four reasons a lock
+gets armed. So the counter stays honest about what we served.
+
+**Under a read-only lock the host automations do not fire.** The last thing the
+beacon does is emit a `pageView` host event, and that is not telemetry: the
+workflow and action runners behind it create records, merge values onto
+contacts, add people to campaigns, send email and call outbound webhooks. Those
+are visitor-triggered content writes — exactly what every sibling route already
+refuses under read-only — and they only escaped the gate because they ride
+inside a route named "analytics". A migration or repair now has nothing racing
+it here except a commutative counter increment.
+
+If you need the counters frozen as well — a reconciliation of the analytics
+documents themselves — use a **full** lock on that site. "Read-only, but also
+stop the meter" is not a mode we offer.
+
 ## Operating it
 
 1. Open **Staff → Lockdown** (or suspend a workspace from its org detail page —
@@ -1087,7 +1170,7 @@ predicate had no reachable true branch at all until it also accepted a
 only on the literal `'payment_failed'` — a workspace that cancelled on purpose, and
 every cancellation recorded before this shipped, fail closed and are never locked.
 
-### The LIVE dunning schedule has not been read (AGL-2430)
+### The LIVE dunning schedule — read from the Dashboard, unreadable by API (AGL-2430) {#the-live-dunning-schedule-has-not-been-read-agl-2430}
 
 Every number in the paragraph above is a **test-mode** measurement. Stripe's
 retry schedule, the Smart Retries flag, the after-the-final-retry behaviour and
@@ -1097,8 +1180,8 @@ and this account has already been shown to diverge between modes on a
 neighbouring setting — product tax codes were live-only until AGL-1877
 reconciled them.
 
-**What was measured in LIVE, read-only, on 2026-08-20** (account
-`acct_1IzHQTDYHP4psn7h`, `GET` requests only — no Dashboard setting was
+**What was measured in LIVE, read-only, on 2026-08-20** (live account,
+`GET` requests only — no Dashboard setting was
 changed):
 
 | Question | Live answer |
@@ -1108,7 +1191,7 @@ changed):
 | `/v1/billing/settings`, `/v1/subscription_settings`, `/v1/billing/dunning`, `/v1/billing/retry_settings`, `/v1/account/settings` | All `404 Unrecognized request URL` |
 | `/v1/billing_portal/configurations` | `200` — but it is the customer portal, not dunning |
 | Live invoices | 3, all `paid` |
-| Live `subscription_cycle` invoices | 1 — `in_1U5qemDYHP4psn7hLzqzXuYc`, **amount 0, `attempt_count: 0`** |
+| Live `subscription_cycle` invoices | 1 — **amount 0, `attempt_count: 0`** |
 | Live charges / failed | 1 / **0** |
 | Live subscriptions | 2, both `canceled`, both `cancellation_details.reason: 'cancellation_requested'` |
 
@@ -1120,30 +1203,82 @@ AGL-1877's audit note said the account had produced *zero* `subscription_cycle`
 invoices; that is now stale in letter — there is one — but correct in
 substance, because a zero-amount renewal produces no dunning evidence.
 
-**Reading it requires a human** opening the **live** Dashboard at Settings →
-Subscriptions and emails and recording: the number of retries, the interval
-schedule, what happens after the final retry, and whether the failed-payment,
-card-expiring and receipt emails are ON. Until then:
+**Reading it required a human**, and on **2026-08-24** one did. Live Dashboard
+→ Settings → Billing → Subscriptions and emails → Manage failed payments →
+Card payments → Cards → Manage:
 
-- **Nothing in the product may state a live retry count, window length or
-  terminal state as fact.** The console banner and the customer-facing billing
-  docs have both been changed to describe only the shape — access continues
-  while Stripe retries, and the plan stops if the retries run out. A spec in
-  `apps/console/specs/billing-dunning-banner.spec.tsx` fails if a count, a
+| Live setting | Value |
+| -- | -- |
+| Retry strategy | **Smart Retries** — "Retry up to 4 times within 3 weeks" |
+| Attempts | 1 initial + 4 retries = **5** |
+| Window | **3 weeks / 21 days** |
+| If all retries fail | **Cancel the subscription** (NOT *mark unpaid*) |
+| Invoice after the final retry | Leave the invoice **past-due** — the debt survives the cancellation |
+| If a dispute is opened | Leave the subscription **past-due** — a chargeback does not cancel |
+| Upcoming renewal events | 15 days before renewal |
+
+**Live and test agree.** The divergence this issue was opened to catch did not
+happen: 5 attempts, ~21 days, terminal `canceled` with reason `payment_failed`
+in both modes. Everything AGL-1877 pinned from a test-clock drill does describe
+live behaviour.
+
+What that read is, and is not:
+
+- **It is a transcription of a human reading a screen on one day.** There is no
+  API behind it (see the table above — the endpoints 404, and they 404 in test
+  mode too, because the endpoint list is a property of the API and not of the
+  mode). If somebody edits that Dashboard screen tomorrow, no constant, spec or
+  build in this repository changes.
+- **Nothing customer-facing may quote the number anyway.** That is
+  `MAY_QUOTE_RETRY_WINDOW_IN_COPY`, which stays `false` and is a separate
+  constant from `LIVE_RETRY_WINDOW_IS_KNOWN` on purpose: knowing a number today
+  does not make it safe to print one that can go stale silently. The console
+  banner and the customer billing docs describe only the shape — access
+  continues while Stripe retries, and the plan stops if the retries run out —
+  and `apps/console/specs/billing-dunning-banner.spec.tsx` fails if a count, a
   duration or the phrase "retry window" returns to that copy.
-- **`BILLING_LOCK_GRACE_DAYS = 30` stands** and is not blocked on the read. It
-  is reachable under all three possible terminal settings — *cancel* (fires on
-  the `canceled` + `payment_failed` branch at ~21 days, with nine days' slack),
-  *mark unpaid* and *leave past_due* (both fire at day 30 on their own
+- **`BILLING_LOCK_GRACE_DAYS = 30` is reconciled.** Stripe gives up at 21 days
+  and cancels, so 30 sits nine days past the terminal state with the slack in
+  the customer's favour. It also stood *before* the read, and that reasoning is
+  worth keeping: it is reachable under all three terminal settings the
+  Dashboard can hold — *cancel* (the `canceled` + `payment_failed` branch at
+  ~21 days), *mark unpaid* and *leave past_due* (both at day 30 on their own
   branches). No live value can make it unsafe, only more or less generous.
-- **Whether Stripe emails the customer on a failed payment is also unread.**
+- **Stripe does email the customer on a failed payment.** That toggle is ON,
+  along with trial-ending, upcoming-renewal, expiring-card and bank-debit
+  failure notices (the last was turned ON on 2026-08-24). This matters because
   `system-email-catalog.ts` catalogues `stripe-payment-failed` as
-  `deliveredBy: 'stripe'` precisely because the code cannot see the toggle.
+  `deliveredBy: 'stripe'` precisely because the code cannot see the toggle;
   Aglyn composes no failed-payment email of its own, and the in-app
   notification it does send is suppressed entirely by a muted `billing`
-  category — so if that toggle is off in live, a failed renewal has **no
-  customer-reachable signal beyond the console banner**. That is the item on
-  this list with a real customer consequence, and it is worth reading first.
+  category. Had that toggle been off, a failed renewal would have had **no
+  customer-reachable signal beyond the console banner**.
+
+**The only thing watching the setting: `npm run check:stripe-dunning-drift`.**
+Because the setting cannot be read back, `tools/scripts/check-stripe-dunning-drift.mjs`
+watches for drift the long way round. It is GET-only and safe against a live
+key — which is the point, since live is the mode that matters.
+
+1. **Re-probes** whether Stripe has shipped an endpoint that exposes the
+   schedule. If one appears, the "unreadable" premise recorded above is stale
+   and the checker exits 1 so it gets replaced by a real one.
+2. **Watches the account's behaviour** for anything the record forbids — an
+   `unpaid` subscription when the terminal state is recorded as `canceled`, an
+   invoice past the recorded attempt count, a retry scheduled beyond the
+   recorded window. Behaviour is downstream of the setting, so a changed
+   setting eventually surfaces here.
+3. **Checks the record against the code** that depends on it, chiefly
+   `BILLING_LOCK_GRACE_DAYS`.
+
+Exit codes are `0` in sync, `1` differs, `2` could not check — and it reaches 2
+readily and on purpose: no key, an unreadable key, a key whose prefix does not
+name a mode, an API failure, a schedule recorded as `null`, or constants it
+cannot parse out of the source. **Step 2 is vacuous until a real renewal
+fails**, so the report separates CHECKED claims from UNVERIFIED ones and prints
+the observation count it worked from; `--require-observed` turns "nothing to
+look at" into exit 2, which is the flag the launch-day runbook should use once
+live subscriptions exist. Every run names the mode it read, because a green run
+against a test key says nothing whatsoever about live.
 
 The mode-tagged constants, and the probe evidence above, live in one place:
 `apps/console/utils/stripe-dunning-schedule.ts`.
@@ -1151,8 +1286,9 @@ The mode-tagged constants, and the probe evidence above, live in one place:
 ### What the live Dashboard did say, once someone opened it (AGL-2430)
 
 Zach read Settings → Billing → **Subscriptions and emails** on the live account
-on 2026-08-23. The retry schedule itself is still owed; what was read was the
-**email** half, and it found a defect worse than an unknown number.
+on 2026-08-23, a day before the retry schedule above was read. What that first
+pass read was the **email** half, and it found a defect worse than an unknown
+number — one that is still open, because its fix is gated on a deploy.
 
 | Setting | Live value | Verdict |
 | -- | -- | -- |

@@ -73,6 +73,8 @@ being able to put it in front of visitors. Concretely, an Author *cannot*:
 - ring a sale at the register, or build a draft order
 - issue or void a gift card
 - publish a members-only post, or email it to subscribers
+- create, change or delete a **redirect** — a redirect decides what every
+  address on the live site serves, with no publish step in front of it
 
 Everything else is open to them: writing and designing pages, editing layouts and
 components, uploading media, drafting and editing entries, and saving as many versions

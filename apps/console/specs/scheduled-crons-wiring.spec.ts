@@ -112,25 +112,23 @@ describe('scheduled-crons.yml wiring', () => {
     expect(orphaned).toEqual([])
   })
 
-  it('drives the scheduled-campaign processor', () => {
-    // The specific regression: the feature `/product/marketing` sells.
-    expect(caseArms.get('*/15 * * * *')).toBe(
-      '/api/campaigns/process-scheduled',
-    )
-  })
-
-  it('runs the campaign processor often enough to honour a clock time', () => {
-    // The composer takes a `datetime-local` down to the minute. A daily
-    // sweep would satisfy every assertion above while turning "9:00 AM"
-    // into "some time today" — correct wiring, false promise.
-    const cron = [...caseArms.entries()].find(
-      ([, route]) => route === '/api/campaigns/process-scheduled',
-    )?.[0]
-    expect(cron).toBeDefined()
-    const minuteField = (cron as string).split(' ')[0]
-    const everyNMinutes = /^\*\/(\d+)$/.exec(minuteField)
-    expect(everyNMinutes).not.toBeNull()
-    expect(Number(everyNMinutes?.[1])).toBeLessThanOrEqual(15)
+  it('keeps nothing sub-hourly on GitHub Actions (AGL-1617)', () => {
+    // The measurement that moved the frequent sweeps off this runner:
+    // `gh run list` over 2026-08-22..24 shows this workflow firing two to
+    // four times an hour when the `*/15` and `*/20` entries alone demanded
+    // seven — under 40% delivery, because GitHub coalesces and drops
+    // scheduled triggers under load and does it per workflow. The daily and
+    // weekly jobs absorb that; a fifteen-minute one cannot, and the campaign
+    // processor went 104 minutes without a beat.
+    //
+    // So this is not "campaigns moved". It is the invariant that fails on the
+    // NEXT frequent cron somebody adds here, which would re-open AGL-1617
+    // without anybody noticing until a customer's campaign was late.
+    const subHourly = scheduled.filter((cron) => {
+      const minuteField = cron.split(/\s+/)[0]
+      return minuteField.includes('/') || minuteField.includes(',')
+    })
+    expect(subHourly).toEqual([])
   })
 
   /**
@@ -177,15 +175,6 @@ describe('scheduled-crons.yml wiring', () => {
       expect(orphaned).toEqual([])
     })
 
-    it('watches the Cloud Scheduler beat, which is in no workflow at all', () => {
-      // `firebase-schedule-pluginJobsBeat-us-central1` — the project's only
-      // real Cloud Scheduler job, deployed from `cloud/functions` and
-      // invisible to every assertion above.
-      const beat = SCHEDULED_JOBS.find((job) => job.id === 'plugin-jobs-beat')
-      expect(beat?.runner).toBe('cloud-scheduler')
-      expect(scheduled).not.toContain(beat?.cron)
-    })
-
     it('gives every job a stable id, a grace and a consequence', () => {
       for (const job of SCHEDULED_JOBS) {
         expect(job.id).toMatch(/^[a-z][a-z0-9-]*$/)
@@ -197,6 +186,127 @@ describe('scheduled-crons.yml wiring', () => {
       expect(new Set(SCHEDULED_JOBS.map((job) => job.id)).size).toBe(
         SCHEDULED_JOBS.length,
       )
+    })
+  })
+
+  /**
+   * AGL-1617 — the OTHER runner, held to the same standard.
+   *
+   * The block above proves every `github-actions` row against the workflow in
+   * both directions. Until now the `cloud-scheduler` rows had no such proof at
+   * all: `plugin-jobs-beat` was asserted to merely *not* be in the workflow,
+   * which is a test that passes for a job nobody schedules anywhere. That was
+   * tolerable while there was one of them. There are now three, two of which
+   * drive a feature `/product/marketing` sells, so the same both-directions
+   * invariant has to hold against `cloud/functions/src/index.ts`.
+   *
+   * Read as TEXT, not imported: `cloud/functions` is a standalone npm package
+   * outside the nx workspace (firebase-admin and firebase-functions only), so
+   * this suite cannot import from it. Same reason the workflow above is
+   * regex-parsed rather than YAML-loaded, and the same mitigation — the first
+   * test refuses to let a regex that matched nothing make the rest vacuous.
+   */
+  describe('the Cloud Scheduler inventory (AGL-1617)', () => {
+    const functions = readFileSync(
+      join(repoRoot, 'cloud', 'functions', 'src', 'index.ts'),
+      'utf8',
+    )
+
+    const fastSchedule = /^const CONSOLE_FAST_CRON_SCHEDULE = '([^']+)'$/m.exec(
+      functions,
+    )?.[1]
+    const fastRoutesBlock = /const CONSOLE_FAST_CRON_ROUTES[^=]*=\s*\[([^\]]*)\]/.exec(
+      functions,
+    )?.[1]
+    const fastRoutes = [
+      ...(fastRoutesBlock ?? '').matchAll(/'(\/api\/[^']+)'/g),
+    ].map((match) => match[1])
+
+    /** Inventory rows driven by `consoleFastCrons`, keyed by the route. */
+    const fastJobs = SCHEDULED_JOBS.filter(
+      (job) => job.runner === 'cloud-scheduler' && job.id !== 'plugin-jobs-beat',
+    )
+
+    it('parses the functions file at all', () => {
+      expect(fastSchedule).toBeDefined()
+      expect(fastRoutes.length).toBeGreaterThanOrEqual(2)
+      // And the constant is not decorative. A schedule pinned in a named
+      // const that the `onSchedule` options do not actually use would pass
+      // every assertion below while the deployed job ran on something else.
+      expect(functions).toContain('schedule: CONSOLE_FAST_CRON_SCHEDULE')
+      expect(functions).toContain(
+        'CONSOLE_FAST_CRON_ROUTES.map((route) => postConsoleCron(route))',
+      )
+    })
+
+    it('runs the campaign processor often enough to honour a clock time', () => {
+      // Moved here from the workflow block, unchanged in substance: the
+      // composer takes a `datetime-local` down to the minute, so a sweep
+      // slower than every fifteen turns "9:00 AM" into "some time today" —
+      // correct wiring, false promise. The runner changed; the promise did
+      // not.
+      expect(fastRoutes).toContain('/api/campaigns/process-scheduled')
+      const everyNMinutes = /^\*\/(\d+)$/.exec(
+        (fastSchedule as string).split(/\s+/)[0],
+      )
+      expect(everyNMinutes).not.toBeNull()
+      expect(Number(everyNMinutes?.[1])).toBeLessThanOrEqual(15)
+    })
+
+    it('watches every route the scheduled function drives', () => {
+      // A route added to `consoleFastCrons` with no inventory row is a job
+      // nobody watches — AGL-1955's whole shape, on the new runner.
+      const unwatched = fastRoutes.filter(
+        (route) => !fastJobs.some((job) => job.target.includes(route)),
+      )
+      expect(unwatched).toEqual([])
+    })
+
+    it('has no inventory row for a route the function no longer drives', () => {
+      // The direction that FAILS THE BUILD on a deletion. Take a route out of
+      // `CONSOLE_FAST_CRON_ROUTES` and the health check would go red in
+      // production forty-five minutes later; this makes it red at the commit.
+      const orphaned = fastJobs.filter(
+        (job) => !fastRoutes.some((route) => job.target.includes(route)),
+      )
+      expect(orphaned.map((job) => job.id)).toEqual([])
+    })
+
+    it('judges them against the schedule the function actually declares', () => {
+      // The AGL-1617 failure in miniature: an inventory cron that disagrees
+      // with the scheduler is a check that has quietly redefined "on time".
+      for (const job of fastJobs) expect(job.cron).toBe(fastSchedule)
+    })
+
+    it('holds these to a TIGHTER grace than the GitHub Actions jobs', () => {
+      // The point of the move, and the thing a future edit could silently
+      // undo. Ninety minutes on a fifteen-minute schedule is six missed
+      // fires before anyone is told; that number was GitHub's drift budget
+      // and there is no longer any reason to pay it. Widening it back is
+      // exactly the "make the monitor agree with reality by lowering the bar"
+      // option AGL-1617 rejected.
+      for (const job of fastJobs) {
+        expect(job.graceMinutes).toBeLessThanOrEqual(45)
+        // …and not so tight that one cold start or one retry reds the board.
+        expect(job.graceMinutes).toBeGreaterThanOrEqual(30)
+      }
+      const githubGraces = SCHEDULED_JOBS.filter(
+        (job) => job.runner === 'github-actions',
+      ).map((job) => job.graceMinutes)
+      expect(Math.min(...githubGraces)).toBeGreaterThan(45)
+    })
+
+    it('still watches the every-minute beat, which is in neither list', () => {
+      // `firebase-schedule-pluginJobsBeat-us-central1`. Cloud Scheduler
+      // spells its schedule `every 1 minutes`; the inventory holds the
+      // equivalent five-field expression, so this pins BOTH spellings rather
+      // than asserting the row merely isn't in the workflow.
+      const beat = SCHEDULED_JOBS.find((job) => job.id === 'plugin-jobs-beat')
+      expect(beat?.runner).toBe('cloud-scheduler')
+      expect(beat?.cron).toBe('* * * * *')
+      expect(scheduled).not.toContain(beat?.cron)
+      expect(functions).toContain('export const pluginJobsBeat = onSchedule(')
+      expect(functions).toContain("schedule: 'every 1 minutes'")
     })
   })
 

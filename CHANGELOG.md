@@ -9,6 +9,185 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.13 — 2026-08-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.12...v1.0.0-beta.13)
+
+### Added
+
+- **besigner:** an instance can override one inner element's attributes ([AGL-1899](https://linear.app/aglyn/issue/AGL-1899), [AGL-1332](https://linear.app/aglyn/issue/AGL-1332), [AGL-1304](https://linear.app/aglyn/issue/AGL-1304), [AGL-584](https://linear.app/aglyn/issue/AGL-584))
+- **tools,docs:** a price cannot move without a recorded decision ([AGL-1908](https://linear.app/aglyn/issue/AGL-1908))
+- **guards:** the residential address gets the guard it never had ([AGL-1491](https://linear.app/aglyn/issue/AGL-1491), [AGL-1963](https://linear.app/aglyn/issue/AGL-1963), [AGL-2021](https://linear.app/aglyn/issue/AGL-2021))
+- **tools:** the launch runbook cannot name a script that is not there ([AGL-1533](https://linear.app/aglyn/issue/AGL-1533))
+- **security:** staff can end one stolen device's sessions without taking the account ([AGL-1513](https://linear.app/aglyn/issue/AGL-1513), [AGL-1959](https://linear.app/aglyn/issue/AGL-1959), [AGL-1881](https://linear.app/aglyn/issue/AGL-1881), [AGL-2005](https://linear.app/aglyn/issue/AGL-2005), [AGL-2190](https://linear.app/aglyn/issue/AGL-2190))
+- **billing:** the live dunning schedule is recorded, and something finally watches it ([AGL-2430](https://linear.app/aglyn/issue/AGL-2430))
+- **analytics:** the campaign survives the hop to the console ([AGL-1731](https://linear.app/aglyn/issue/AGL-1731), [AGL-1562](https://linear.app/aglyn/issue/AGL-1562))
+- **monitoring:** the server-error rate gets a reader that can go red ([AGL-1921](https://linear.app/aglyn/issue/AGL-1921))
+- **plugins-mui,aglyn,tenant:** a collection search box the toolbar row can hold ([AGL-1516](https://linear.app/aglyn/issue/AGL-1516))
+
+### Fixed
+
+- **analytics:** the transport spec compiles against the widened return type ([AGL-1580](https://linear.app/aglyn/issue/AGL-1580))
+- **content:** an unresolvable org withholds a schedule, it does not burn it ([AGL-471](https://linear.app/aglyn/issue/AGL-471), [AGL-247](https://linear.app/aglyn/issue/AGL-247))
+- **content:** entry scheduling is gated on the plan that sells it ([AGL-471](https://linear.app/aglyn/issue/AGL-471), [AGL-1185](https://linear.app/aglyn/issue/AGL-1185), [AGL-1380](https://linear.app/aglyn/issue/AGL-1380))
+- **health:** every health body labels its environment the same way ([AGL-2014](https://linear.app/aglyn/issue/AGL-2014), [AGL-2436](https://linear.app/aglyn/issue/AGL-2436), [AGL-1923](https://linear.app/aglyn/issue/AGL-1923))
+- **analytics:** begin_checkout waits for gtag instead of racing the redirect ([AGL-1580](https://linear.app/aglyn/issue/AGL-1580))
+- **ci:** console:test names its five real failures instead of dying mute ([AGL-1617](https://linear.app/aglyn/issue/AGL-1617), [AGL-975](https://linear.app/aglyn/issue/AGL-975))
+- **selfhost:** two ops guards are allowlisted, and a red now prints its row ([AGL-1533](https://linear.app/aglyn/issue/AGL-1533), [AGL-1908](https://linear.app/aglyn/issue/AGL-1908), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **seo:** a host and screen listing publish the card alt they were given ([AGL-2398](https://linear.app/aglyn/issue/AGL-2398), [AGL-2417](https://linear.app/aglyn/issue/AGL-2417), [AGL-2204](https://linear.app/aglyn/issue/AGL-2204))
+- **seo:** a host and screen listing publish the card alt they were given ([AGL-2398](https://linear.app/aglyn/issue/AGL-2398), [AGL-2417](https://linear.app/aglyn/issue/AGL-2417), [AGL-2204](https://linear.app/aglyn/issue/AGL-2204))
+- **besigner:** the canvas expands a component nested inside a component ([AGL-1898](https://linear.app/aglyn/issue/AGL-1898), [AGL-1899](https://linear.app/aglyn/issue/AGL-1899), [AGL-1301](https://linear.app/aglyn/issue/AGL-1301))
+- **crons:** the two frequent sweeps move to the punctual runner ([AGL-1617](https://linear.app/aglyn/issue/AGL-1617), [AGL-2010](https://linear.app/aglyn/issue/AGL-2010), [AGL-2176](https://linear.app/aglyn/issue/AGL-2176), [AGL-786](https://linear.app/aglyn/issue/AGL-786), [AGL-1955](https://linear.app/aglyn/issue/AGL-1955))
+- **redirects:** only a publisher may route a live site off-platform ([AGL-1881](https://linear.app/aglyn/issue/AGL-1881), [AGL-2334](https://linear.app/aglyn/issue/AGL-2334), [AGL-2372](https://linear.app/aglyn/issue/AGL-2372))
+- **guards:** the facilitator charge shape is an exit code, not a comment ([AGL-1956](https://linear.app/aglyn/issue/AGL-1956))
+- **console:** the screen version view takes Zach's card spans, and Raw JSON collapses ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **console:** the page activity card asks for the newest entries, not a random 200 ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486), [AGL-2292](https://linear.app/aglyn/issue/AGL-2292))
+- **docs:** a bare {date} placeholder is MDX, and it broke the whole docs build ([AGL-2498](https://linear.app/aglyn/issue/AGL-2498))
+- **guards:** a ratchet's own output names the row that clears it ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **guards:** the brand ratchet sees the two new subprocessor rows ([AGL-2402](https://linear.app/aglyn/issue/AGL-2402))
+- **selfhost:** the contact-address guard's own literals are allowlisted ([AGL-2400](https://linear.app/aglyn/issue/AGL-2400), [AGL-2124](https://linear.app/aglyn/issue/AGL-2124))
+- **selfhost:** the campaign hop's console origin is an allowlisted reader ([AGL-1731](https://linear.app/aglyn/issue/AGL-1731))
+- **console:** the DAM dialog fills the screen, and its tiles reflow ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **tenant:** restore the AGL-2204 manifest work my previous commit reverted ([AGL-2204](https://linear.app/aglyn/issue/AGL-2204), [AGL-1881](https://linear.app/aglyn/issue/AGL-1881))
+- **security:** a revoked device's open tab can still write, and we said it could not ([AGL-1881](https://linear.app/aglyn/issue/AGL-1881), [AGL-1513](https://linear.app/aglyn/issue/AGL-1513))
+- **tenant:** the PWA manifest stops declaring a size it never measured ([AGL-2204](https://linear.app/aglyn/issue/AGL-2204), [AGL-1252](https://linear.app/aglyn/issue/AGL-1252))
+- **consent:** advertising needs an explicit yes again, as the policy says ([AGL-1649](https://linear.app/aglyn/issue/AGL-1649), [AGL-2402](https://linear.app/aglyn/issue/AGL-2402))
+- **console:** the staff sign-out dialog admits the revoked tab can still write ([AGL-1513](https://linear.app/aglyn/issue/AGL-1513))
+- **plugins-mui:** the collection picker icons take their accent from the theme ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486), [AGL-1516](https://linear.app/aglyn/issue/AGL-1516))
+- **console:** the screen version view cards span 2 and 1 of three columns ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **privacy:** the breach report's billing country is the newest one, not the last row ([AGL-2008](https://linear.app/aglyn/issue/AGL-2008))
+- **privacy:** the breach report counted one account holder in three ([AGL-2008](https://linear.app/aglyn/issue/AGL-2008))
+- **auth:** the handoff redemption honours the revocation epoch too ([AGL-1902](https://linear.app/aglyn/issue/AGL-1902))
+- **privacy:** the copy-drift spec names the tag module as data, and says so ([AGL-1649](https://linear.app/aglyn/issue/AGL-1649))
+- **auth:** an unverifiable admin token is refused with 401, not reported as 500 ([AGL-1993](https://linear.app/aglyn/issue/AGL-1993), [AGL-1921](https://linear.app/aglyn/issue/AGL-1921))
+- **sso:** the one owner seat cannot be moved into the pool it protects ([AGL-1888](https://linear.app/aglyn/issue/AGL-1888), [AGL-1375](https://linear.app/aglyn/issue/AGL-1375), [AGL-1122](https://linear.app/aglyn/issue/AGL-1122))
+- **privacy:** the two App Check control-plane hosts are declared, not published ([AGL-2402](https://linear.app/aglyn/issue/AGL-2402), [AGL-1648](https://linear.app/aglyn/issue/AGL-1648))
+- **besigner:** an attribute edit after an undo stops vanishing ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **auth:** a project-pool sign-in stops inheriting an abandoned SSO attempt's tenant ([AGL-1993](https://linear.app/aglyn/issue/AGL-1993), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486), [AGL-1962](https://linear.app/aglyn/issue/AGL-1962))
+- **consent:** the advertising switch stops describing a rule it no longer follows ([AGL-1649](https://linear.app/aglyn/issue/AGL-1649), [AGL-2402](https://linear.app/aglyn/issue/AGL-2402))
+- **presence:** a write of our own no longer re-renders the whole besigner ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **ops:** splitting the Stripe record is not the same as fixing its mode ([AGL-2401](https://linear.app/aglyn/issue/AGL-2401))
+- **security:** a revoked App Check debug token can now be proven revoked ([AGL-2402](https://linear.app/aglyn/issue/AGL-2402))
+- **legal:** a re-acceptance banner thanks you for the acceptance it already holds ([AGL-2316](https://linear.app/aglyn/issue/AGL-2316))
+- **console:** a warm cache the server agrees with stops refusing every save ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **console:** a warm cache that the server agrees with stops refusing every save ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **console:** a photo used only on a product stops reporting as unused ([AGL-1867](https://linear.app/aglyn/issue/AGL-1867))
+- **console:** search finds the page it could not find, and names a partial read ([AGL-2179](https://linear.app/aglyn/issue/AGL-2179), [AGL-1414](https://linear.app/aglyn/issue/AGL-1414))
+- **tenant:** a read-only lock stops the beacon firing host automations ([AGL-1627](https://linear.app/aglyn/issue/AGL-1627), [AGL-2413](https://linear.app/aglyn/issue/AGL-2413), [AGL-2155](https://linear.app/aglyn/issue/AGL-2155), [AGL-2495](https://linear.app/aglyn/issue/AGL-2495))
+- **console:** the screen version view packs its cards instead of stretching them ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **api,console:** two concurrent site creates can no longer claim one subdomain ([AGL-2465](https://linear.app/aglyn/issue/AGL-2465), [AGL-1848](https://linear.app/aglyn/issue/AGL-1848), [AGL-2063](https://linear.app/aglyn/issue/AGL-2063))
+- **privacy:** a person in several orgs stops being filed in a coin-flipped one ([AGL-2008](https://linear.app/aglyn/issue/AGL-2008), [AGL-2336](https://linear.app/aglyn/issue/AGL-2336))
+- **console,analytics:** the campaign survives the consent bounce, and the gap is named ([AGL-1731](https://linear.app/aglyn/issue/AGL-1731))
+- **billing:** the staff margin figure says what it excludes ([AGL-1930](https://linear.app/aglyn/issue/AGL-1930))
+- **selfhost,commerce:** a blank MEMBER_SESSION_SECRET signed cookies with an empty key ([AGL-2014](https://linear.app/aglyn/issue/AGL-2014), [AGL-2221](https://linear.app/aglyn/issue/AGL-2221))
+- **rules:** an author refused by member-post.ts cannot addDoc the post either ([AGL-2372](https://linear.app/aglyn/issue/AGL-2372), [AGL-2334](https://linear.app/aglyn/issue/AGL-2334))
+
+### Performance
+
+- **presence:** the cursor hit test is throttled, not just the cursor write ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+
+### Reverted
+
+- restore the screen-version card grid a second time ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486), [AGL-1513](https://linear.app/aglyn/issue/AGL-1513))
+- restore the screen-version card grid my last commit reverted ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **privacy:** restore the copy-drift spec's data-mention exemption ([AGL-1649](https://linear.app/aglyn/issue/AGL-1649), [AGL-1902](https://linear.app/aglyn/issue/AGL-1902))
+
+### Documentation
+
+- **email:** the DMARC section stops claiming p=quarantine ([AGL-1876](https://linear.app/aglyn/issue/AGL-1876))
+- **analytics:** the RUM section stops claiming we have no RUM ([AGL-1856](https://linear.app/aglyn/issue/AGL-1856), [AGL-1642](https://linear.app/aglyn/issue/AGL-1642))
+- **trust:** a publisher can install their OWN unreviewed build ([AGL-1736](https://linear.app/aglyn/issue/AGL-1736), [AGL-1083](https://linear.app/aglyn/issue/AGL-1083))
+- **trust:** a plugin publisher, not only a site owner, can name the host ([AGL-1736](https://linear.app/aglyn/issue/AGL-1736))
+- **marketing:** record the ratified AGL-1244 decisions, and what still blocks two ([AGL-1244](https://linear.app/aglyn/issue/AGL-1244))
+- **analytics:** the registration half is finished, the filter is ACTIVE ([AGL-1637](https://linear.app/aglyn/issue/AGL-1637))
+- **release:** the last two automatable screenshots, and a guard that sees a blank one ([AGL-1950](https://linear.app/aglyn/issue/AGL-1950))
+- **analytics:** the internal-traffic stamp lands AFTER the boot burst, measured ([AGL-1582](https://linear.app/aglyn/issue/AGL-1582), [AGL-2067](https://linear.app/aglyn/issue/AGL-2067))
+- **legal:** support@ lost its DPA clause the same week it gained one ([AGL-2400](https://linear.app/aglyn/issue/AGL-2400), [AGL-1648](https://linear.app/aglyn/issue/AGL-1648))
+- **release:** backfill the beta.11 and beta.12 changelog entries ([AGL-1617](https://linear.app/aglyn/issue/AGL-1617))
+- **selfhost:** two self-host claims that the code does not support ([AGL-2014](https://linear.app/aglyn/issue/AGL-2014), [AGL-2423](https://linear.app/aglyn/issue/AGL-2423), [AGL-1660](https://linear.app/aglyn/issue/AGL-1660))
+
+<details>
+<summary>Also in this release: 16 test, 1 ci, 1 style</summary>
+
+- **selfhost:** the hardcoded-host ratchet admits a sentence about aglyn.com ([AGL-1577](https://linear.app/aglyn/issue/AGL-1577))
+- **content:** the entry-scheduling specs admit the gate they now run into ([AGL-471](https://linear.app/aglyn/issue/AGL-471), [AGL-2498](https://linear.app/aglyn/issue/AGL-2498), [AGL-123](https://linear.app/aglyn/issue/AGL-123))
+- **billing:** three revenue fixtures stop publishing a real home address ([AGL-1491](https://linear.app/aglyn/issue/AGL-1491), [AGL-1963](https://linear.app/aglyn/issue/AGL-1963))
+- **content:** the entry publish gate is proven from both sides of its instant ([AGL-2498](https://linear.app/aglyn/issue/AGL-2498), [AGL-2497](https://linear.app/aglyn/issue/AGL-2497), [AGL-1250](https://linear.app/aglyn/issue/AGL-1250))
+- **security:** the revoked-residual guard could not see the surface it had just gained ([AGL-1881](https://linear.app/aglyn/issue/AGL-1881))
+- **legal:** a published contact address must be one that exists ([AGL-2400](https://linear.app/aglyn/issue/AGL-2400), [AGL-1577](https://linear.app/aglyn/issue/AGL-1577))
+- **besigner:** one attribute edit is one commit, and stays one ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **tenant:** the image-sink inventory is derived from the source, not remembered ([AGL-1725](https://linear.app/aglyn/issue/AGL-1725))
+- **sso:** the publish gate's attested branch is proven against Firestore ([AGL-1887](https://linear.app/aglyn/issue/AGL-1887))
+- **besigner:** a co-editor undo is proven to move in BOTH directions ([AGL-1958](https://linear.app/aglyn/issue/AGL-1958))
+- **analytics:** two campaign guards that were never executed ([AGL-1731](https://linear.app/aglyn/issue/AGL-1731))
+- **auth:** the address-prefill fixtures stop publishing a real home address ([AGL-1963](https://linear.app/aglyn/issue/AGL-1963), [AGL-1491](https://linear.app/aglyn/issue/AGL-1491))
+- **besigner:** drop the unrelated reformatting from d17dc873f ([AGL-1617](https://linear.app/aglyn/issue/AGL-1617))
+- **besigner:** the pre-frame assertion stops racing the seeding frame ([AGL-1617](https://linear.app/aglyn/issue/AGL-1617))
+- **nx:** the test log is redirected, not piped, so a failed task's output survives ([AGL-1617](https://linear.app/aglyn/issue/AGL-1617))
+- **analytics:** an undefined campaign param can no longer pass as no param ([AGL-1731](https://linear.app/aglyn/issue/AGL-1731))
+- **analytics:** the GA4 hit is proven ADDRESSED, not merely well-shaped ([AGL-2327](https://linear.app/aglyn/issue/AGL-2327))
+- **rules:** the screen kind AGL-1400 added is proven denied to the client ([AGL-1400](https://linear.app/aglyn/issue/AGL-1400), [AGL-1383](https://linear.app/aglyn/issue/AGL-1383), [AGL-2092](https://linear.app/aglyn/issue/AGL-2092))
+
+</details>
+
+## v1.0.0-beta.12 — 2026-08-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.11...v1.0.0-beta.12)
+
+### Fixed
+
+- **commerce:** a product image on a white-label storefront stops naming aglyn.app ([AGL-1726](https://linear.app/aglyn/issue/AGL-1726))
+- **domains:** a platform-reserved name cannot be claimed as a site domain ([AGL-1430](https://linear.app/aglyn/issue/AGL-1430))
+- **billing,console:** a delivery that only landed on a RETRY stops being invisible ([AGL-1948](https://linear.app/aglyn/issue/AGL-1948))
+- **selfhost,ops:** the upload-CORS allowlist is derived, audited and reclaimed ([AGL-1452](https://linear.app/aglyn/issue/AGL-1452))
+- **commerce:** a site collaborator is no longer an admin at the refund gate ([AGL-2372](https://linear.app/aglyn/issue/AGL-2372))
+- **commerce:** a reconstructed subscription states its tax regime ([AGL-2323](https://linear.app/aglyn/issue/AGL-2323))
+
+### Documentation
+
+- **trust:** the Google Ads row argued from a policy premise that is now false ([AGL-1736](https://linear.app/aglyn/issue/AGL-1736))
+- **trust:** author-chosen image and CSS hosts are disclosed, and not proxied ([AGL-1736](https://linear.app/aglyn/issue/AGL-1736))
+- **security:** the tenant img-src reports came back, and they refuse the flip ([AGL-1726](https://linear.app/aglyn/issue/AGL-1726))
+
+<details>
+<summary>Also in this release: 1 chore, 1 ci, 2 test</summary>
+
+- **release:** package.json catches up to the tags, at beta.12 ([AGL-1617](https://linear.app/aglyn/issue/AGL-1617))
+- **ops:** the upload-CORS allowlist gets a scheduled drift check ([AGL-1452](https://linear.app/aglyn/issue/AGL-1452))
+- **aglyn:** health-report fixtures carry the required retried field ([AGL-1948](https://linear.app/aglyn/issue/AGL-1948))
+- **commerce:** the register allowlist is proven to refuse an author ([AGL-2372](https://linear.app/aglyn/issue/AGL-2372))
+
+</details>
+
+## v1.0.0-beta.11 — 2026-08-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.10...v1.0.0-beta.11)
+
+### Added
+
+- **console:** the entry editor carries the publication controls ([AGL-2498](https://linear.app/aglyn/issue/AGL-2498))
+- **console:** a content entry publish date is settable, and can be backdated ([AGL-2497](https://linear.app/aglyn/issue/AGL-2497))
+- **docs:** status.aglyn.com lands on the status page, not the docs home ([AGL-2496](https://linear.app/aglyn/issue/AGL-2496))
+- **legal:** Aglyn is the marketplace facilitator, and the Terms now say so ([AGL-1956](https://linear.app/aglyn/issue/AGL-1956))
+- **legal:** a third-party host cannot receive data undeclared ([AGL-1648](https://linear.app/aglyn/issue/AGL-1648))
+
+### Fixed
+
+- **ops:** an unreadable backup listing is "unknown", not "backup failed" ([AGL-1843](https://linear.app/aglyn/issue/AGL-1843))
+- **docs:** the status page shows billing and scheduled jobs, and its own copy says so ([AGL-2496](https://linear.app/aglyn/issue/AGL-2496))
+- **commerce:** the merchant-facing tax copy stops contradicting the Terms ([AGL-1956](https://linear.app/aglyn/issue/AGL-1956))
+- **docs:** the status page monitored nothing, and had nowhere to send you ([AGL-2496](https://linear.app/aglyn/issue/AGL-2496))
+- **rules:** a revoked billing.view stops Firestore delivering the subscription doc ([AGL-243](https://linear.app/aglyn/issue/AGL-243))
+- **console:** a failed permission read denies instead of answering "owner" ([AGL-243](https://linear.app/aglyn/issue/AGL-243))
+- **console:** a permission gate holds instead of painting the ledger it is about to refuse ([AGL-243](https://linear.app/aglyn/issue/AGL-243))
+
+<details>
+<summary>Also in this release: 1 test</summary>
+
+- **guards:** a disclosure registry may name what it discloses ([AGL-1648](https://linear.app/aglyn/issue/AGL-1648))
+
+</details>
+
 ## v1.0.0-beta.10 — 2026-08-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.9...v1.0.0-beta.10)

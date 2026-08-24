@@ -533,6 +533,55 @@ describe('undo against a co-editor (AGL-1958)', () => {
     expect(children('theirs')).toBe('theirs v1')
   })
 
+  it('walks back SEVERAL of my own edits to a node the peer touched before them', () => {
+    // Hardens the case above, which was the only assertion standing between
+    // an over-protective overlay and an undo that silently stops working.
+    // One step proves undo moves; it does not prove undo keeps moving. If the
+    // overlay ever pins a peer-touched node to its LIVE value regardless of
+    // epoch, the first undo still appears to work and every later one is a
+    // no-op on that node.
+    remote('theirs', {
+      $id: 'theirs',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'theirs v1' },
+    })
+    flushRemoteReconcile()
+
+    // Both snapshots are taken after their edit, so both already contain it.
+    localEdit('theirs', 'my first')
+    localEdit('theirs', 'my second')
+
+    Aglyn.canvas.undo()
+    expect(children('theirs')).toBe('my first')
+
+    Aglyn.canvas.undo()
+    expect(children('theirs')).toBe('theirs v1')
+  })
+
+  it('a peer edit elsewhere does not stall undo through my own history', () => {
+    // The two-session proof in both directions at once, across more than one
+    // step: their node survives every undo, mine rewinds on every undo.
+    localEdit('mine', 'mine v1')
+    localEdit('mine', 'mine v2')
+
+    remote('theirs', {
+      $id: 'theirs',
+      componentId: 'muiTypography',
+      parentId: ROOT,
+      props: { children: 'theirs v1' },
+    })
+    flushRemoteReconcile()
+
+    Aglyn.canvas.undo()
+    expect(children('mine')).toBe('mine v1')
+    expect(children('theirs')).toBe('theirs v1')
+
+    Aglyn.canvas.undo()
+    expect(children('mine')).toBe('mine v0')
+    expect(children('theirs')).toBe('theirs v1')
+  })
+
   it('resolves a node we both changed to the peer, per-node last-writer-wins', () => {
     localEdit('theirs', 'my take')
 

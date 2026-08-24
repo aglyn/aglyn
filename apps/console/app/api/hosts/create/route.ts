@@ -19,7 +19,11 @@ import {
   pluginRequestFromWeb,
   resolveIdpDisplayName,
 } from '@aglyn/aglyn/server'
-import { isBlockedSubdomain, SUBDOMAIN_PATTERN } from '@aglyn/aglyn/server'
+import {
+  isBlockedSubdomain,
+  SUBDOMAIN_PATTERN,
+  suggestSubdomains,
+} from '@aglyn/aglyn/server'
 import {
   consumeRateLimit,
   emailUnverifiedResponse,
@@ -200,6 +204,20 @@ async function handler(request: Request): Promise<Response> {
       subdomain,
       org,
     })
+    // Lost the subdomain to a concurrent create between the pre-check above
+    // and the transaction's commit (AGL-2465). The console has no idempotency
+    // key, so this is the only thing standing between a double-submit and two
+    // sites on one address. Same 409 body the pre-check returns, so the Setup
+    // page's existing handling covers it with no client change.
+    if (!claim.allowed && claim.conflict === true) {
+      return Response.json(
+        {
+          error: 'That subdomain is taken',
+          suggestions: suggestSubdomains(subdomain),
+        },
+        { status: 409 },
+      )
+    }
     if (!claim.allowed) {
       return Response.json({
         error:

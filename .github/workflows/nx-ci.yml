@@ -283,17 +283,27 @@ jobs:
       # package reaching it lands on every published customer page. ~1s.
       - run: npm run check:aglyn-barrel
 
-      # The affected run, TEE'd (AGL-1617). Run 32687205268 failed here with
-      # the whole of its diagnosis being "Failed tasks: - console:test":
-      # GitHub truncates the MIDDLE of a long ##[group] and jest prints its
-      # failure block in the middle, so the job log carried zero FAIL markers
-      # and zero failed-test summaries. The tee keeps the untruncated bytes as
-      # an artifact; the digest prints a summary too small to be cut.
+      # The affected run, REDIRECTED to a file (AGL-1617). It used to be
+      # `| tee`, and the tee was the reason the artifact was useless: a pipe
+      # makes nx's stdout ASYNCHRONOUS, and nx ends a failed run with
+      # process.exit(), which discards whatever is still in the pipe buffer.
+      # Measured both ways on this machine:
       #
-      # set -o pipefail is NOT optional. GitHub's default shell is
-      # `bash -e {0}` and -e does NOT imply pipefail, so `nx ... | tee f`
-      # would exit with TEE's status — zero, always — and every red test run
-      # in this job would report green.
+      #   node -e 'process.stdout.write("x".repeat(5e6)); process.exit(1)'
+      #     | wc -c   ->      65,550   (one pipe buffer, the rest dropped)
+      #     > file    ->   5,000,009   (a regular file is synchronous)
+      #
+      # nx prints FAILED tasks last, so the dropped tail was always the
+      # failing task's output. That is why `console:test` went five runs
+      # across both workflows with zero ` FAIL ` markers and zero
+      # `Tests: … failed` summaries reaching the log OR the artifact, and why
+      # the digest — which reads this same file — reported a clean-looking
+      # "1 failed suite" while nx named three failed projects. The bytes were
+      # never written, so no reader downstream could have recovered them.
+      #
+      # The cost of the redirect is that the step no longer streams live into
+      # the job log; it is `cat` at the end instead. The artifact is the
+      # diagnostic path and it is now complete, which it never was.
       # Split out of the single `nx affected -t lint test build` this used to
       # be (AGL-1617). Both halves of the split serve the SAME hypothesis, and
       # it is a hypothesis, not a proven cause — read this before changing it.
@@ -329,6 +339,40 @@ jobs:
       # absence is not evidence against the theory. Hence: leading hypothesis,
       # and the digest step below is what will settle it next time.
       #
+      # ── SETTLED 2026-08-24. Both hypotheses above are WRONG. ──────────────
+      # The digest did its job. The first red run carrying real bytes (Main
+      # Gate `full`, job 97477291374, 30,855,416 bytes against the 65,550 the
+      # pipe used to deliver) named five ordinary failing specs. `console:test`
+      # was never a resource failure and never an invocation artifact — it was
+      # four deterministic guard reds plus one that only a UTC runner can see:
+      #
+      #   · icon-button-accessible-name — the guard's own parser. It read an
+      #     opening tag to the first `>`, and `onClick={() => …}` has one, so
+      #     every prop after an arrow function was invisible. It reported a
+      #     button whose `aria-label` sat two lines lower. A FALSE red.
+      #   · the AGL-975 marketplace-naming guard — a real new doc link to the
+      #     forum page, needing an allowlist entry. (Named obliquely on
+      #     purpose: that guard scans every tracked file, this one included,
+      #     so spelling its filename here would itself be a stray hit.)
+      #   · subprocessor-inventory — `groups.google.com`, newly named in a
+      #     diagnostic string, needing a declaration.
+      #   · selfhost-hardcoded-hosts (aglyn:test) — fixed separately by
+      #     a9f51bc86.
+      #   · analytics-day-cache — green on a Chicago laptop and red on a UTC
+      #     runner, because a spec cannot change its own timezone under jest.
+      #     Pinned at process launch in `apps/console/jest.config.ts`.
+      #
+      # Why it read as unreproducible: three of the five are repo-SCANNING
+      # guards, so they went red the moment the offending content landed, on
+      # whatever tree was current — while the "green locally" runs were on an
+      # older tree. Nothing was ever flaky. With all five fixed, the whole
+      # console suite is green under ambient UTC at `--maxWorkers=2`: 619
+      # suites, 7,385 tests, exit 0 — which also retires the OOM theory, since
+      # that is the same invocation that was supposed to be starving.
+      #
+      # Keep the split and `--maxWorkers=2` anyway: they are good hygiene and
+      # cost nothing. Just do not read them as the fix for this.
+      #
       # Do NOT quietly drop `--maxWorkers=2` to make CI faster. It is the one
       # difference between the invocation measured green on this tree and the
       # one measured red on it. The flag DOES reach jest rather than being
@@ -352,8 +396,11 @@ jobs:
 
       - name: test
         run: |
-          set -o pipefail
-          npx nx affected -t test --parallel=3 --maxWorkers=2 2>&1 | tee "$RUNNER_TEMP/nx-test.log"
+          status=0
+          npx nx affected -t test --parallel=3 --maxWorkers=2 \
+            > "$RUNNER_TEMP/nx-test.log" 2>&1 || status=$?
+          cat "$RUNNER_TEMP/nx-test.log"
+          exit "$status"
 
       # --task-failed: this step only runs because the job is already red, so
       # the premise comes from the workflow rather than from a log that may

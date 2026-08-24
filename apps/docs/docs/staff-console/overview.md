@@ -173,6 +173,46 @@ and emails the holder that an admin changed it. Both actions need the **super** 
 role and are audited; the password itself is never recorded. An account with no email
 address supports neither.
 
+### Sign one device out {#sign-one-device-out}
+
+A **Sign-in history** card on the same detail page lists every device that has signed
+in to the account — browser and system, location, IP, first and last seen — and can
+end the sessions on one of them. It is the answer to *"someone stole my laptop"* when
+the person cannot reach their own Security tab, which is most of those calls.
+
+Use it instead of **Disable**. Disabling takes the account away: they cannot then sign
+in on their phone and carry on working. This does not touch the account or the
+password.
+
+**Read the confirmation out loud before you click it.** Two things are true and both
+surprise people:
+
+- **Every device signs out, not just the named one.** Firebase has no per-device
+  refresh-token revocation, so the only lever that reaches the stored credential in
+  another browser is account-wide. What *is* per-device is what happens next: the
+  signed-out device is refused every time it tries to come back, because it cannot
+  produce a fresh authentication, while the account holder signs in again normally and
+  keeps working. The honest sentence is **"everyone signs out once, you sign back in,
+  that device does not."**
+- **A page already open on the signed-out device may keep reading *and writing* data
+  for up to an hour.** Anything that goes through our servers stops within about
+  fifteen seconds. Direct database access from a tab that is already open survives
+  until its token expires — security rules key on that token, and they do not ask
+  whether the session was revoked, so the tab keeps whatever write access the account
+  had. It cannot get another token. Uploaded files are the exception: storage is
+  closed to the client entirely, so those stop at once. Say this plainly to the
+  account holder rather than implying the residual is read-only.
+
+If the account holder may still have working sessions they do not recognise — or the
+device is one you cannot see in the list — **change the password too**, which revokes
+on the same terms and additionally takes back the credential.
+
+Super staff only, and audited with the device id and the account. The account holder
+has the same control themselves under **Manage account → Security → Recent sign-ins**.
+
+If the card says the registry **could not be read**, that is not the same as "no other
+devices": do not tell anyone their account is clean from that screen until it loads.
+
 ### Staff notes {#staff-notes}
 
 Free-text support/billing context on each organization's detail
@@ -295,6 +335,12 @@ Before you commit, the form shows a **net-margin rating** for the discount — w
 left after Stripe's fees and the plan's own cost. It is illustrative only: the binding
 check runs on the server when the discount is actually applied, so a rating that looks
 survivable is not permission.
+
+That percentage is a **contribution margin**: net revenue less infrastructure COGS, and
+nothing else. Support, customer acquisition and overhead are not in the figure anywhere,
+so treat it as a ceiling rather than a profit. The infrastructure number behind it is a
+per-site floor for almost every organization — measured usage only replaces it once it
+costs more than the floor, which no organization's usage does yet.
 
 **Existing coupons** lists every Stripe coupon with its promotion codes, redemption
 count, and a **valid** or **expired** state.

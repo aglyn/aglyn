@@ -969,6 +969,33 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
 
   const handleScheduleEntry = useCallback(async () => {
     if (!scheduler || !selected) return
+
+    // Plan gate (AGL-471). `scheduledPublishing` is a Business entitlement and
+    // the screens path has enforced it since AGL-471, but entries were never
+    // wired to it on either side: this handler wrote `status: 'scheduled'` for
+    // any plan, and the tenant render path published it. The renderer is the
+    // authority — see `get-collection-content.ts` — and this is the half that
+    // makes the refusal legible instead of letting someone schedule a post
+    // that silently never goes out.
+    //
+    // `orgReady` FIRST, for the AGL-1380 reason the AI-assist gate below
+    // documents: `org` is undefined both in flight and on a failed read, and
+    // `hasEntitlement` on an undefined org answers NO — so gating without it
+    // tells a Business org, during its own loading window, that it does not
+    // have the feature it pays for.
+    if (!orgReady) {
+      return enqueueSnackbar('Checking your plan — try again in a moment', {
+        variant: 'info',
+        persist: false,
+      })
+    }
+    if (!hasEntitlement('scheduledPublishing', org)) {
+      return enqueueSnackbar(
+        'Scheduled publishing requires a Business plan — see Billing to upgrade',
+        { variant: 'warning', persist: false },
+      )
+    }
+
     const publishAt = new Date(scheduler.at)
     if (Number.isNaN(publishAt.getTime()) || publishAt <= new Date()) {
       return enqueueSnackbar('Pick a future date/time', {
@@ -1001,7 +1028,16 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
       name: scheduler.entry.title,
     })
     setScheduler(null)
-  }, [scheduler, selected, firestore, hostId, enqueueSnackbar, logActivity])
+  }, [
+    scheduler,
+    selected,
+    firestore,
+    hostId,
+    org,
+    orgReady,
+    enqueueSnackbar,
+    logActivity,
+  ])
 
   /**
    * Setting an entry's publish date, in the PAST (AGL-2497).

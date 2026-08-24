@@ -19,6 +19,8 @@ import {
   AUTHORS_MAX_PER_HOST,
   type CollectionCategory,
   collectionCategorySlug,
+  checkEntitlement,
+  COLLECTION_SOURCE_MAX,
   collectionTotalPages,
   type ContentAuthorRecord,
   entryMatchesCategoryRoute,
@@ -27,7 +29,7 @@ import {
   resolveCollectionCategoryBySlug,
   resolveEntryAuthor,
 } from '@aglyn/aglyn/server'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import {
   tenantDataTag,
   withRenderCache,
@@ -227,24 +229,135 @@ async function attachEntryAuthors(
 }
 
 /**
- * Scheduled entries (AGL-123) go live lazily like AGL-61: a due
- * `publishAt` counts as published for this render, and the doc is flipped
- * to `published` fail-open so the state becomes durable.
+ * Terminal refusal marker for an entry schedule, the flat-status twin of
+ * `publishSchedule.status: 'skipped-unentitled'` on screens (AGL-1185).
+ *
+ * A field rather than a new `status` value on purpose. `status` is queried
+ * (`where('status', 'in', [...])`), rendered by the console, and sorted on by
+ * `bundle-timestamps.ts`; adding a member would have meant auditing every one
+ * of those readers. A sibling field is invisible to all of them and is read
+ * only here.
  */
-function isLive(value: FirebaseFirestore.DocumentData): boolean {
-  if (value['status'] === 'published') return true
+const ENTRY_SCHEDULE_SKIPPED = 'skipped-unentitled'
+
+/** A schedule this entry already had declined, and will not have reconsidered. */
+function scheduleAlreadyRefused(
+  value: FirebaseFirestore.DocumentData,
+): boolean {
+  return value['scheduleStatus'] === ENTRY_SCHEDULE_SKIPPED
+}
+
+/** A scheduled entry whose time has come — before any plan question. */
+function isDueScheduled(value: FirebaseFirestore.DocumentData): boolean {
   return (
     value['status'] === 'scheduled' &&
+    !scheduleAlreadyRefused(value) &&
     (value['publishAt']?.seconds ?? Number.POSITIVE_INFINITY) * 1000 <=
       Date.now()
   )
 }
 
+/**
+ * Is this host's plan allowed to publish on a schedule? (AGL-471 shape.)
+ *
+ * `React.cache`-deduped per request via `getOrgForHost`, and — this is the
+ * part that keeps it off the hot path — every caller below only asks once it
+ * has already found a due scheduled entry. A collection with nothing due pays
+ * nothing, which is almost every render.
+ *
+ * THREE answers, not two, and the third is the point. `refused` means we read
+ * the plan and it does not carry the entitlement. `unresolved` means we could
+ * not find out. Both withhold the entry, but only `refused` may write the
+ * terminal marker — burning a schedule permanently on the strength of a
+ * hostIndex miss or a transient rejection would destroy a customer's post for
+ * a reason that may not be true a second later.
+ *
+ * Withholding on `unresolved` rather than publishing is what every other
+ * entitlement caller in this library already does: `run-event-actions`,
+ * `run-event-workflows` and `apply-publish-schedule` all pass a possibly
+ * undefined org straight into `checkEntitlement`, which resolves a missing
+ * plan as free and denies (AGL-247). Opening here instead would make this the
+ * one gate in the lib that admits when it cannot see — the exact shape of the
+ * free-tier leak `no-plan-gated-entitlement` exists to forbid.
+ *
+ * The blast radius of withholding is deliberately small: `isLive` answers true
+ * for `status: 'published'` before it ever consults this, so an unresolved
+ * read hides only the due-scheduled entry, never the published ones, and the
+ * next render retries.
+ */
+type SchedulePermission = 'allowed' | 'refused' | 'unresolved'
+
+async function scheduledPublishingPermission(
+  hostId: string,
+): Promise<SchedulePermission> {
+  try {
+    const org = (await getOrgForHost(hostId))?.org
+    if (!org) return 'unresolved'
+    return checkEntitlement(org, 'scheduledPublishing') ? 'allowed' : 'refused'
+  } catch (error) {
+    // Caught rather than thrown: the only caller sits inside
+    // `getCollectionContent`'s try/catch, which returns an EMPTY collection —
+    // so an unhandled rejection here would blank every published entry on the
+    // page, not just the scheduled one.
+    console.error(error)
+    return 'unresolved'
+  }
+}
+
+/**
+ * Scheduled entries (AGL-123) go live lazily like AGL-61: a due
+ * `publishAt` counts as published for this render, and the doc is flipped
+ * to `published` fail-open so the state becomes durable.
+ *
+ * PLAN GATE (AGL-471). `scheduledPublishing` is a Business entitlement, and
+ * until now nothing on the entry path checked it: the console let any plan
+ * write `status: 'scheduled'`, and this render path published it. Scheduling
+ * worked end to end on Free. The screens path has gated this since AGL-471
+ * and records its refusal since AGL-1185 — entries were simply never wired
+ * to either, which is why the leak was invisible from the screens side.
+ *
+ * The permission is threaded in rather than resolved here so the org read
+ * happens once per call site instead of once per entry.
+ */
+function isLive(
+  value: FirebaseFirestore.DocumentData,
+  permission: SchedulePermission,
+): boolean {
+  if (value['status'] === 'published') return true
+  return permission === 'allowed' && isDueScheduled(value)
+}
+
+/**
+ * Make the due state durable — or record that it was refused.
+ *
+ * The refusal is TERMINAL, for the AGL-1185 reason: left as a bare pending
+ * `scheduled`, the entry stays permanently due, so the day the org upgrades
+ * to Business the next render publishes it. Content scheduled on a plan that
+ * could not honour it, and forgotten, surfacing during an upgrade — exactly
+ * when nobody is looking for it. Recording the refusal is what makes it stop
+ * being due, and it also stops this path re-reading the org on every
+ * subsequent render.
+ *
+ * Both writes fail open: an error leaves today's state, and the next render
+ * retries.
+ */
 function flipDueEntry(
   docRef: FirebaseFirestore.DocumentReference,
   value: FirebaseFirestore.DocumentData,
+  permission: SchedulePermission,
 ): void {
   if (value['status'] !== 'scheduled') return
+  if (scheduleAlreadyRefused(value)) return
+  // `unresolved` writes NOTHING. It withholds this render and leaves the
+  // schedule exactly as it found it, so a later render can still publish it.
+  if (permission === 'unresolved') return
+  if (permission === 'refused') {
+    if (!isDueScheduled(value)) return
+    docRef
+      .update({ scheduleStatus: ENTRY_SCHEDULE_SKIPPED })
+      .catch((error) => console.error(error))
+    return
+  }
   docRef
     .update({ status: 'published', publishedAt: value['publishAt'] })
     .catch((error) => console.error(error))
@@ -315,18 +428,44 @@ export interface CollectionPagination {
  */
 async function listLiveEntries(
   entriesRef: FirebaseFirestore.CollectionReference,
+  hostId: string,
 ): Promise<CollectionEntrySummary[]> {
   // No orderBy: entries missing publishedAt would be dropped by Firestore;
   // sort client-side like the version lists.
   const entriesQuery = await entriesRef
     .where('status', 'in', ['published', 'scheduled'])
-    .limit(100)
+    // Named rather than literal (AGL-1516): a search index has to be able to
+    // say "this read reached its bound", and it can only do that against a
+    // bound it shares with the query. `collectionSourceReachedBound` reads
+    // the same constant.
+    .limit(COLLECTION_SOURCE_MAX)
     .get()
+
+  // Ask the plan question ONLY if something is actually due (AGL-471). A
+  // collection with no due schedule — almost every render — never reads the
+  // org at all.
+  const due = entriesQuery.docs.filter((entryDoc) =>
+    isDueScheduled(entryDoc.data()),
+  )
+  const permission: SchedulePermission = due.length
+    ? await scheduledPublishingPermission(hostId)
+    : 'allowed'
+
+  // Record the terminal refusal on its own pass, because a refused entry is
+  // NOT live and so never reaches the `flipDueEntry` inside the map below.
+  // Without this the entry stays due forever: excluded from every render, and
+  // re-reading the org on each one.
+  if (permission !== 'allowed') {
+    for (const entryDoc of due) {
+      flipDueEntry(entryDoc.ref, entryDoc.data(), permission)
+    }
+  }
+
   return entriesQuery.docs
-    .filter((entryDoc) => isLive(entryDoc.data()))
+    .filter((entryDoc) => isLive(entryDoc.data(), permission))
     .map((entryDoc) => {
       const value = entryDoc.data()
-      flipDueEntry(entryDoc.ref, value)
+      flipDueEntry(entryDoc.ref, value, permission)
       return {
         $id: entryDoc.id,
         title: value['title'] ?? entryDoc.id,
@@ -389,6 +528,7 @@ async function readPublishedCollectionSource(options: {
     if (!collectionDoc) return { entries: [], categories: [] }
     const entries = await listLiveEntries(
       collectionDoc.ref.collection('entries'),
+      options.hostId,
     )
     // The compose-time source feeds the Collection entries block, whose byline
     // reads `authorName` — so a record-backed author has to be resolved here
@@ -463,12 +603,26 @@ export async function getCollectionContent(options: {
         .where('slug', '==', entrySlug)
         .limit(5)
         .get()
+      // Same two-step as `listLiveEntries`: only pay for the org read when
+      // something is due, and record the refusal on its own pass because a
+      // refused entry never becomes the `entryDoc` below (AGL-471).
+      const dueHere = entryQuery.docs.filter((docSnapshot) =>
+        isDueScheduled(docSnapshot.data()),
+      )
+      const permission: SchedulePermission = dueHere.length
+        ? await scheduledPublishingPermission(hostId)
+        : 'allowed'
+      if (permission !== 'allowed') {
+        for (const docSnapshot of dueHere) {
+          flipDueEntry(docSnapshot.ref, docSnapshot.data(), permission)
+        }
+      }
       const entryDoc = entryQuery.docs.find((docSnapshot) =>
-        isLive(docSnapshot.data()),
+        isLive(docSnapshot.data(), permission),
       )
       if (entryDoc) {
         const value = entryDoc.data()
-        flipDueEntry(entryDoc.ref, value)
+        flipDueEntry(entryDoc.ref, value, permission)
         data.entry = {
           $id: entryDoc.id,
           title: value['title'] ?? entrySlug,
@@ -486,7 +640,7 @@ export async function getCollectionContent(options: {
       return data
     }
 
-    data.entries = await listLiveEntries(entriesRef)
+    data.entries = await listLiveEntries(entriesRef, hostId)
     await attachEntryAuthors(hostId, data.entries)
 
     // Category filter (AGL-1321). Applied HERE, before pagination, because
