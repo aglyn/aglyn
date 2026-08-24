@@ -567,12 +567,77 @@ export async function activateConsoleDomain(options: {
 }
 
 /**
- * Detach every name and drop the claim, in that order.
+ * `sessionEpoch = now` across every name a claim covers.
  *
- * Vercel first: a claim released while the name is still on the project is the
- * unindexed-name hole in the header, opened deliberately. If a detach fails the
- * claim is kept and the caller is told, so the name stays reserved to the org
- * that still holds it in Vercel.
+ * The revocation lever of AGL-1353 D6, factored out because D7 pulls it twice:
+ * `suspendOnDowngrade` writes it alongside the suspension, and a release writes
+ * it alone, before anything else happens. Epoch-ms via `Date.now()`, never
+ * `serverTimestamp()` — the value is compared against a cookie's `iat` and an
+ * `authorizedAt`, both plain numbers, and a sentinel that resolves later would
+ * read as `NaN` at exactly the moment it is supposed to refuse.
+ *
+ * Never throws, for `suspendOnDowngrade`'s reason: this is defence in depth
+ * behind the Vercel domain allowlist, and a caller that cannot persist the bump
+ * still has work to do that is more important than the bump.
+ */
+async function bumpConsoleSessionEpoch(names: string[]): Promise<void> {
+  if (!Array.isArray(names) || names.length === 0) return
+  try {
+    const batch = firestore().batch()
+    for (const name of names) {
+      batch.set(
+        firestore().collection(CONSOLE_DOMAINS_COLLECTION).doc(name),
+        {
+          sessionEpoch: Date.now(),
+          updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      )
+    }
+    await batch.commit()
+  } catch (error) {
+    console.error('[console-domains] session epoch bump failed', error)
+  }
+}
+
+/**
+ * Kill the sessions, detach every name, then drop the claim — in that order.
+ *
+ * **The epoch bump comes first, and that is D7's own ordering**: *"`sessionEpoch
+ * = now` first, then Vercel `DELETE`, then delete the doc. Order matters: kill
+ * the sessions while we still control the host."* It was the one step of that
+ * sentence this function never performed, while
+ * {@link consoleSessionEpochRefuses} documented it as something release
+ * already did.
+ *
+ * Two things went wrong without it, and neither is covered by the Vercel
+ * detach:
+ *
+ * - **The in-flight window.** Vercel's `DELETE` and the allowlist reclaim are
+ *   network round trips. Across all of them the claim still reads `active`, so
+ *   `resolveConsoleDomain` says `servable` and `redeemConsoleHandoff` — which
+ *   sits on `/api/*`, outside the middleware matcher — happily cashes an
+ *   authorized handoff into a brand-new session on a domain we are in the
+ *   middle of giving up.
+ * - **And that session then outlives the release entirely**, because the
+ *   document carrying the epoch is deleted a moment later and
+ *   `readConsoleSessionEpoch` reads a missing document as `0`, which every
+ *   caller treats as "this control has nothing to say" and FAILS OPEN. The
+ *   effect was that `suspendOnDowngrade` — the *lesser* action — revoked
+ *   sessions properly while an explicit release did not revoke them at all.
+ *
+ * Bumping first inverts that: an authorization that predates the bump is
+ * refused `revoked` at redemption, so the window closes rather than merely
+ * being short. What survives the release is still only Vercel's allowlist,
+ * which is the boundary; this is the defence in depth behind it that D7 asked
+ * for and the code had stopped providing.
+ *
+ * Vercel before the documents, though, for the reason the header gives: a claim
+ * released while the name is still on the project is the unindexed-name hole,
+ * opened deliberately. If a detach fails the claim is kept and the caller is
+ * told, so the name stays reserved to the org that still holds it in Vercel —
+ * and the epoch bump is exactly the right residue on that path too, since
+ * sessions on a domain we just tried to release should not survive the attempt.
  */
 export async function releaseConsoleDomain(options: {
   orgId: string
@@ -594,6 +659,13 @@ export async function releaseConsoleDomain(options: {
   const names: string[] = Array.isArray(snapshot.get('names'))
     ? snapshot.get('names')
     : [domain]
+
+  // D7, step one. Across EVERY name, so a twin cannot outlive its primary —
+  // the same reasoning `suspendOnDowngrade` uses, and the same failure posture:
+  // never throw. A bump that does not persist still leaves the detach below to
+  // run, and refusing to release over a transient Firestore error would leave
+  // the domain both attached AND serving, which is the worse of the two.
+  await bumpConsoleSessionEpoch(names)
 
   const results: WorkspaceDomainResult[] = []
   for (const name of names) results.push(await detachProjectDomain(name))

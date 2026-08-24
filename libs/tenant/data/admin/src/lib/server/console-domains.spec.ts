@@ -854,6 +854,97 @@ describe('releaseConsoleDomain', () => {
     expect(result.released).toBe(false)
     expect(fetchMock).not.toHaveBeenCalled()
   })
+
+  // AGL-1353 D7: "`sessionEpoch = now` FIRST, then Vercel `DELETE`, then delete
+  // the doc. Order matters: kill the sessions while we still control the host."
+  // Release performed the second and third steps and never the first, while
+  // `auth-handoff.ts` documented the bump as something release already did.
+  it('bumps sessionEpoch on EVERY name BEFORE the first Vercel call', async () => {
+    await claimConsoleDomain(ORG, 'acme.com')
+    const before = Date.now()
+    // What the claim looked like at the instant Vercel was asked to let go.
+    // Asserting the stored value afterwards would pass just as happily if the
+    // bump ran last, which is the ordering the design rules out.
+    const epochsAtDetach: Array<unknown> = []
+    fetchMock.mockImplementation(async (url: string, init: any) => {
+      if (init?.method === 'DELETE') {
+        epochsAtDetach.push(store.get('consoleDomains/acme.com')?.sessionEpoch)
+      }
+      return respond(200)
+    })
+
+    const result = await releaseConsoleDomain({ orgId: ORG, domain: 'acme.com' })
+    expect(result.released).toBe(true)
+
+    // Two names detached, and the epoch was already standing for both.
+    expect(epochsAtDetach).toHaveLength(2)
+    for (const epoch of epochsAtDetach) {
+      expect(typeof epoch).toBe('number')
+      expect(epoch as number).toBeGreaterThanOrEqual(before)
+    }
+  })
+
+  it('bumps the TWIN too, so it cannot outlive its primary', async () => {
+    await claimConsoleDomain(ORG, 'acme.com')
+    const before = Date.now()
+    const seen: Record<string, unknown> = {}
+    fetchMock.mockImplementation(async (url: string, init: any) => {
+      if (init?.method === 'DELETE') {
+        seen['acme.com'] = store.get('consoleDomains/acme.com')?.sessionEpoch
+        seen['www.acme.com'] = store.get('consoleDomains/www.acme.com')?.sessionEpoch
+      }
+      return respond(200)
+    })
+    await releaseConsoleDomain({ orgId: ORG, domain: 'acme.com' })
+    expect(seen['acme.com']).toBeGreaterThanOrEqual(before)
+    expect(seen['www.acme.com']).toBeGreaterThanOrEqual(before)
+  })
+
+  it('REFUSES a handoff authorized before the release, by the comparison redeem makes', async () => {
+    // `redeemConsoleHandoff` refuses `revoked` when `authorizedAt < epoch`.
+    // This is that comparison against the epoch release actually writes — an
+    // in-flight authorization, 120 s of window left, cashed out mid-release.
+    await claimConsoleDomain(ORG, 'acme.com')
+    // A handoff authorized one second ago — 119 s of its 120 s window still to
+    // run, which is precisely the record that used to cash out mid-release.
+    const authorizedAt = Date.now() - 1000
+    let epochAtDetach = 0
+    fetchMock.mockImplementation(async (url: string, init: any) => {
+      if (init?.method === 'DELETE') {
+        epochAtDetach = Number(store.get('consoleDomains/acme.com')?.sessionEpoch ?? 0)
+      }
+      return respond(200)
+    })
+    await releaseConsoleDomain({ orgId: ORG, domain: 'acme.com' })
+
+    expect(epochAtDetach).toBeGreaterThan(0)
+    // The exact predicate `redeemConsoleHandoff` evaluates.
+    expect(authorizedAt < epochAtDetach).toBe(true)
+    // And the boundary, stated rather than asserted away: the comparison is
+    // STRICT, so an authorization minted in the SAME millisecond as the bump
+    // is not refused. Written with `Date.now()` on both sides that is a real
+    // 1 ms hole — it just is not one an attacker can aim at, since they
+    // control neither clock. Recorded here because the first draft of this
+    // test asserted `authorizedAt < epoch` on two same-tick `Date.now()` calls
+    // and failed, which is the honest way to learn the predicate is strict.
+    expect(authorizedAt < authorizedAt).toBe(false)
+  })
+
+  it('leaves the epoch standing when the detach FAILS and the claim is kept', async () => {
+    // The claim survives on purpose (the unindexed-name hole), and so must the
+    // revocation: sessions on a domain we just tried to give up should not
+    // outlive the attempt merely because Vercel was down.
+    await claimConsoleDomain(ORG, 'console.acme.com')
+    const before = Date.now()
+    fetchMock.mockResolvedValue(respond(500))
+    const result = await releaseConsoleDomain({ orgId: ORG, domain: 'console.acme.com' })
+
+    expect(result.released).toBe(false)
+    expect(store.has('consoleDomains/console.acme.com')).toBe(true)
+    expect(
+      store.get('consoleDomains/console.acme.com')?.sessionEpoch as number,
+    ).toBeGreaterThanOrEqual(before)
+  })
 })
 
 describe('releasePendingConsoleDomain — the branding form’s counterpart', () => {

@@ -1472,9 +1472,35 @@ is `activateConsoleDomain`, which still has no caller while AGL-1378 is open.
   > The refusal takes `consumeOnce`'s default and does **not** write, so an
   > epoch read racing a legitimate redemption cannot destroy the record it is
   > about to accept.
-- `authHandoffs` is `allow read, write: if false` in the rules, and its TTL
-  policy is filed in `docs/FIRESTORE_MANUAL_CONFIG.md` as **owed** — a gcloud
-  action, not a deploy.
+- `authHandoffs` is `allow read, write: if false` in the rules. Its TTL policy
+  is **no longer owed**: `docs/FIRESTORE_MANUAL_CONFIG.md` records it `ACTIVE`,
+  enabled and verified 2026-08-20. The **rules deploy** is a separate and still
+  outstanding action — the deny-all block is committed, and a deploy runs from a
+  worktree pinned at the promoted commit.
+
+  > **⚑ Corrected 2026-08-24 (AGL-1099).** D7's detach ordering —
+  > *"`sessionEpoch = now` **first**, then Vercel `DELETE`, then delete the
+  > doc"* — was the one step of that sentence `releaseConsoleDomain` never
+  > performed. It detached and deleted and never bumped, while
+  > `auth-handoff.ts` documented the bump as something release already did.
+  >
+  > Two consequences, neither covered by the detach. Across the Vercel `DELETE`
+  > and the allowlist reclaim — both network round trips — the claim still read
+  > `active`, so a redemption arriving mid-release was handed a brand-new
+  > session on a domain we were giving up; `/api/*` is outside the middleware
+  > matcher, so nothing else saw it. And that session then **outlived the
+  > release**, because the document carrying the epoch was deleted a moment
+  > later and `readConsoleSessionEpoch` reads a missing document as `0`, which
+  > every caller treats as "nothing to say" and fails OPEN. The net effect was
+  > that `suspendOnDowngrade`, the *lesser* action, revoked sessions properly
+  > while an explicit release revoked nothing.
+  >
+  > The bump now runs first, across every name so a twin cannot outlive its
+  > primary, and it is kept when a detach fails and the claim is retained.
+  > Note the predicate is **strict** (`authorizedAt < epoch`), so an
+  > authorization minted in the same millisecond as the bump is not refused —
+  > a real 1 ms boundary, recorded rather than papered over, and not one an
+  > attacker can aim at since they control neither clock.
 
 **Departure worth naming: the cookie is still `__session`, not
 `__console_session`.** D6 item 1 asked for a distinct name because "sharing the
