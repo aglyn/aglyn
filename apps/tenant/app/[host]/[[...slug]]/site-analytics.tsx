@@ -19,6 +19,10 @@
 
 import ConsentBannerUi from '@aglyn/aglyn/app-utils/consent-banner-ui'
 import { installLinkClickTracking } from '@aglyn/aglyn/app-utils/analytics-link-clicks'
+import {
+  installCampaignForwarding,
+  setCampaignForwardingConsent,
+} from '@aglyn/aglyn/app-utils/campaign-forwarding'
 import { installWebVitalsReporting } from '@aglyn/aglyn/app-utils/web-vitals-rum'
 import {
   INTERNAL_TRAFFIC_FORCED_SNIPPET,
@@ -61,6 +65,15 @@ import { claimDailyVisit } from './visit-claim'
  */
 const beaconed = new Set<string>()
 
+/**
+ * Where the console lives, for the AGL-1731 campaign hop. Configured rather
+ * than written, because a self-host install points this somewhere else
+ * entirely — and because it is the allowlist: it is the ONLY origin whose
+ * links get a campaign put on them, so a third-party link can never be handed
+ * our marketing labels.
+ */
+const CONSOLE_ORIGIN =
+  process.env.NEXT_PUBLIC_CONSOLE_URL ?? 'https://app.aglyn.com'
 
 /**
  * Send the pageview beacon (AGL-82), NOT from an effect (AGL-1550).
@@ -317,6 +330,32 @@ export default function SiteAnalytics({
   // the ISR-cached HTML carries neither snippet.
   const advertisingAllowed =
     consentRequired && advertisingGrantedByRecord(host, consent.stored)
+
+  // Carry the campaign across the domain hop (AGL-1731). The capture on
+  // `app.aglyn.com` shipped correct and was fed nothing: no code anywhere put
+  // a `utm_*` parameter on a console-bound link, so every signup arrived
+  // indistinguishable and every ad would have been unmeasurable.
+  //
+  // Installed during render for the same AGL-1550 reason as the two calls
+  // above. Installed UNCONDITIONALLY, and gated separately, because the two
+  // tiers have different consent answers: reading the campaign off the live
+  // URL at click time writes nothing to the visitor's device and so needs no
+  // grant, while remembering the FIRST touch across a walk to `/pricing` is
+  // `analytics_storage` and waits for one.
+  //
+  // The gate is the boolean the tag itself uses, handed down rather than
+  // recomputed, so there is one consent gate and it cannot drift from itself.
+  // `null` is passed deliberately while `consent.ready` is false: unresolved
+  // is not denied, and `analyticsAllowed` above flattens the two into one
+  // `false` because that is all the tag needs to know. This does need to know.
+  setCampaignForwardingConsent(
+    consentRequired
+      ? consent.ready
+        ? isAnalyticsAllowed(host, consent.stored)
+        : null
+      : true,
+  )
+  installCampaignForwarding({ consoleOrigin: CONSOLE_ORIGIN })
 
   return (
     <>

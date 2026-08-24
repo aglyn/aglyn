@@ -1552,38 +1552,84 @@ is gone by the time the redirect lands. `login` never carries them: a
 returning user's session was not produced by today's campaign, and stamping
 one on it would credit the ad for revenue it did not cause.
 
-#### 12a. The capture is correct and, today, it is fed nothing (AGL-1731)
+#### 12a. Feeding the capture — the domain hop (AGL-1731)
 
-The parser, the four doors and the durable write all work. **No visitor
-currently reaches them carrying a campaign**, and that is a separate defect
-from the one §12 fixed.
+The parser, the four doors and the durable write all worked from the day §12
+landed, and **nothing reached them**. That was a second defect, not the same
+one, and it is what this section is about.
 
 `aglyn.com` is a tenant site and `app.aglyn.com` is the console — a real
-cross-origin hop. Nothing in this repository forwards a query parameter across
-it. `onboardingSignupHref`
+cross-origin hop, and until this section's fix nothing in this repository
+forwarded a query parameter across it. `onboardingSignupHref`
 (`libs/aglyn/src/lib/app-utils/onboarding-deep-link.ts`) builds a **fresh**
 `?plan=…&interval=…` URL, has no parameter through which a caller could pass
 anything else, and has **zero production callers** — by design, because the
 pricing CTAs are authored besigner content on `aglyn.com`, not repo files.
 
-So `utm_*` reaches `/signup` only if a human typed it into the CTA href. That
-is worse than nothing: a hardcoded `utm_source=google` is **static**, so every
-visitor who clicks that button is attributed to Google whether they came from
-Google, Hacker News or a bookmark. Confidently wrong attribution is harder to
-detect than absent attribution and reaches the same spend decisions.
+So `utm_*` reached `/signup` only if a human had typed it into the CTA href.
+That is worse than nothing: a hardcoded `utm_source=google` is **static**, so
+every visitor who clicks that button is attributed to Google whether they came
+from Google, Hacker News or a bookmark. Confidently wrong attribution is harder
+to detect than absent attribution and reaches the same spend decisions — which
+is why a campaign the visitor actually arrived with now REPLACES an authored
+one rather than deferring to it.
 
-**What is actually needed** is per-visitor forwarding: the landing page must
-copy the campaign off its OWN inbound URL onto the console-bound href at click
-time. The only seam that sees every authored link is `AppLink`
-(`libs/shared/ui/jsx`), and decorating there means calling `useSearchParams` in
-a component the console renders on every page — a dynamic-rendering hazard on
-surfaces that are statically generated today. It was **not** attempted a day
-before freeze and is not attributable to guesswork: it needs measuring.
+**What was actually needed** is per-visitor forwarding: the landing page copies
+the campaign off its OWN inbound URL onto the console-bound href at click time.
 
-Until then GA4's `_gl` linker is the only cross-origin path that carries
-anything, it carries the **session** rather than `utm_*` into `users/{uid}`,
-and §"One property, one stream, three domains" above records why it is
-best-effort rather than certain.
+**That is what `campaign-forwarding.ts` now does** (`libs/aglyn/src/lib/app-utils/`),
+installed by `site-analytics.tsx` beside the click and web-vitals listeners.
+`AppLink` (`libs/shared/ui/jsx`) was the obvious seam and is the wrong one
+twice over: it would need `useSearchParams` in a component the console renders
+on every page — a dynamic-rendering hazard on statically generated surfaces,
+paid on every route to fix a link on one — and it would still miss the links
+that matter, because besigner rich-text and Custom HTML anchors are written
+with `dangerouslySetInnerHTML` and have no React handler at all. A
+capture-phase listener on `document` sees every one of them, costs one
+listener, and renders nothing. It is the same seam, and the same argument, as
+the AGL-1562 click listener beside it.
+
+Two tiers, because nobody signs up from the page the ad landed on:
+
+| Tier | Source | Storage | Consent |
+| --- | --- | --- | --- |
+| 1 | `window.location.search` at click time | none | none needed — nothing is written to the device |
+| 2 | first touch of the visit, `sessionStorage` under `aglyn:campaign` | session-scoped, dies with the tab | `analytics_storage`, the same grant the tag waits for |
+
+Tier 2 wins when both exist: first touch is the question being asked, and last
+touch would disagree with GA4's own session attribution. Tier 1 is what still
+works for a visitor who declined analytics and converts from the landing page.
+A `sessionStorage` that throws reports **`unreadable`**, a third state distinct
+from "no campaign", and falls through to tier 1 rather than to silence — a
+`catch` returning null there is exactly how an unreadable source becomes a
+measured zero.
+
+Never gated on advertising storage: nothing here reads or writes an
+advertising identifier or sets a cookie, and AGL-1649 has advertising denied
+with no route for a host to grant it, so that gate would make the feature dead
+by construction rather than off.
+
+The three `utm_*` keys are replaced **wholesale**, never merged key by key, so
+a visitor's `utm_source` cannot be married to an author's `utm_campaign` and
+describe a campaign nobody ran. Everything else on the href — `plan`,
+`interval`, the AGL-1535 intent — is preserved. Only links to the configured
+`NEXT_PUBLIC_CONSOLE_URL` origin are touched; a third-party link never gets our
+campaign labels.
+
+**Accepted consequence:** the tenant runtime serves every customer site too, so
+a customer linking to our signup forwards their own inbound campaign into our
+acquisition report. Gating on "is this the operator's marketing host" needs a
+second configured origin, and a deployment that forgot to set it would forward
+nothing while looking healthy — a silent zero is the failure this issue is
+about, and it is worse than a few rows GA's Hostname dimension can separate.
+
+A side effect worth knowing: because real `utm_*` now arrives on
+`app.aglyn.com`, GA4's own **automatic** campaign collection reads them on the
+console landing pageview. The custom dimensions below are what joins a campaign
+to revenue; GA's session source/medium is fixed by the same forwarding for
+free. GA4's `_gl` linker still carries the **session** rather than `utm_*` into
+`users/{uid}`, and §"One property, one stream, three domains" above records why
+it is best-effort rather than certain.
 
 The one hop this repo *does* own was dropping the campaign and now does not:
 `sendToConsentGate` (`apps/console/utils/legal-consent.ts`) bounces the fourth
