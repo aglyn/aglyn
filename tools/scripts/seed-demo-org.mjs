@@ -80,7 +80,21 @@ const DEMO_ORG_NAME = 'Beacon Studio'
  * client, and four collaborators who each reach exactly one.
  */
 const DEMO_TEAMMATE_UID = 'demo-teammate'
-const DEMO_TEAMMATE_EMAIL = 'teammate@aglyn.test'
+/**
+ * DERIVED FROM THE UID, never spelled out (AGL-1617). This seeder and
+ * `seed-e2e.mjs` both wanted "the teammate" and both literally wrote
+ * `teammate@aglyn.test`, while their converge is keyed on uid — so whichever
+ * ran second found nothing at its own uid, fell through to `createUser`, and
+ * Firebase rejected it with `auth/email-already-exists`. Here that throw
+ * lands inside `createEmulatorOrg` BEFORE the org doc, the slug reservation
+ * and the member roster are written, leaving an owner account with no org for
+ * the next run to converge onto.
+ *
+ * Deriving the address from the uid makes email uniqueness a consequence of
+ * uid uniqueness, which the two seeders already have by prefix (`demo-` vs
+ * `e2e-`) and which Firebase enforces anyway.
+ */
+const DEMO_TEAMMATE_EMAIL = `${DEMO_TEAMMATE_UID}@aglyn.test`
 
 const brandIds = argValue('--brands', AGENCY_DEMO_BRANDS.join(','))
   .split(',')
@@ -242,7 +256,10 @@ async function createEmulatorOrg() {
   ]) {
     try {
       await auth.getUser(uid)
-      await auth.updateUser(uid, { password, emailVerified: true })
+      // `email` converges too: an emulator seeded before AGL-1617 holds
+      // `demo-teammate` at the old shared `teammate@aglyn.test`, while the
+      // roster written below now carries the derived address.
+      await auth.updateUser(uid, { email, password, emailVerified: true })
     } catch {
       await auth.createUser({
         uid,
