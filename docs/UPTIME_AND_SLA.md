@@ -198,23 +198,60 @@ carrying **zero** `data-status-target` nodes is the unconfigured failure above.
 
 ### The external monitors (UptimeRobot, free tier)
 
-Five **keyword** monitors, keyword `"status":"ok"`, `ALERT_NOT_EXISTS`, 5-minute
-interval, email to zach@aglyn.com — Console, Published sites, Marketing site,
-Billing and Scheduled jobs.
+**Ten** keyword monitors, keyword `"status":"ok"`, `ALERT_NOT_EXISTS`, 5-minute
+interval, email to zach@aglyn.com. Read from the status page's own monitor-list
+API on 2026-08-24 rather than transcribed from memory — this list said *five*
+for most of that day, because five more were created after it was written:
 
-⚠️ **The monitor set and the card set are no longer identical.** The sixth card,
-`Site delivery` (`aglyn.com/api/health`), has **no** external monitor: the docs
-page probes it, and nothing pages on it. 45 free slots remain, so closing that
-is a monitor creation and nothing else. Do not close it the other way by
-dropping the card — the card is what tells a reader that a red `Published sites`
-is our sample workspace rather than their site.
+| Monitor | Created (UTC) |
+| --- | --- |
+| Console | 08:10 |
+| Marketing site | 08:11 |
+| Published sites | 08:13 |
+| Billing | 08:14 |
+| Scheduled jobs | 08:16 |
+| Tenant runtime | 09:10 |
+| Backups | 09:12 |
+| Signups | 09:31 |
+| Rate limiting | 09:32 |
+| Error beacon (console) | 09:33 |
+
+```bash
+# The count and the names, unauthenticated. `url` is null in this payload —
+# the public API exposes the NAME and not the target, so a name is the only
+# thing anything can assert on. Name new monitors accordingly.
+curl -s https://stats.uptimerobot.com/api/getMonitorList/7NGEl81zvD |
+  node -e 'const j=JSON.parse(require("fs").readFileSync(0));
+    console.log(j.psp.totalMonitors); for (const m of j.psp.monitors) console.log(m.name)'
+```
+
+🔴 **`server-errors` has no monitor, and it is the one gap that matters
+(AGL-1921).** Measured by the command above, not assumed: the endpoint has been
+live and green since this morning's promotion, the 15-minute GitHub probe reads
+it, and **nothing emails anyone when it goes red**. The GitHub probe only
+records. Runbook step 1 below is the whole fix and it is two minutes.
+
+⚠️ **The monitor set and the card set are still not identical**, in both
+directions now. `Site delivery` (`aglyn.com/api/health`) is a card with no
+monitor — though `Tenant runtime` may already be it, and the public API cannot
+say, because it returns `url: null`. Confirm from the UptimeRobot dashboard
+before creating a duplicate. 40 free slots remain either way. Do not close the
+gap the other way by dropping the card — the card is what tells a reader that a
+red `Published sites` is our sample workspace rather than their site.
+
+⚠️ **`Backups` will page for days at a time, by design.** That check LATCHES —
+degraded until a bad restore point ages out — and it has already sat red for
+four and a half days while backups were healthy (AGL-1843, still open). It is
+correctly *not* a status-page card for that reason; it is now an emailing
+monitor, which is the same fatigue risk pointed at whoever is on call. Tune or
+mute it there, not by weakening the check.
 
 **Keyword and not plain HTTP, deliberately.** A plain HTTP monitor passes a 200
 whose body says `"status":"degraded"`, which is precisely the shape of the
 fifty-one-hour false green this file records further down. Do not "simplify" one
 of these back to an HTTP check.
 
-Free-tier facts, so nobody re-litigates them: **50 monitors** (five used),
+Free-tier facts, so nobody re-litigates them: **50 monitors** (ten used),
 5-minute floor, keyword/ping/port/DNS/heartbeat all free, **one public status
 page free** at `stats.uptimerobot.com/<id>`. Paid: custom domain (Solo,
 $144/yr — this is what `status.aglyn.com` on UptimeRobot would cost), branding
@@ -1068,8 +1105,17 @@ is the platform demonstration site the middleware falls back to for
   This line used to say the whole server error rate was unwatched. It no longer
   is: since 2026-08-24 `/api/health/server-errors` reports the count of uncaught
   render/route-handler errors across BOTH deployments in a trailing 30-minute
-  window, and every reader on this page watches it. What remains unwatched is
-  precisely the set that never reaches our code:
+  window.
+
+  ⚠️ **One reader watches it, and it is the one that cannot email you.** The
+  15-minute GitHub probe reads the endpoint and fails its run; the UptimeRobot
+  monitor that would mail zach@aglyn.com **does not exist yet** (measured
+  2026-08-24 — ten monitors, none of them this one), and it is deliberately not
+  a status-page card. So a spike today reddens a workflow and pages nobody.
+  Runbook step 1 below closes it in two minutes.
+
+  What remains unwatched even after that is precisely the set that never
+  reaches our code:
 
   - an error that kills the process before `onRequestError` runs;
   - a platform-level 5xx — a Vercel function timeout, an OOM, a cold-start 502;
@@ -1204,7 +1250,19 @@ step 5 onward costs money and is a decision, not a task.
    UptimeRobot add a **keyword** monitor (never plain HTTP) on
    `https://app.aglyn.com/api/health/server-errors`, keyword `"status":"ok"`,
    alert when **not** found, 5-minute interval — the same shape as the other
-   nine. This is the arm that emails you; the GitHub probe only records.
+   ten. This is the arm that emails you; the GitHub probe only records.
+
+   **Name it exactly `Server errors`, and leave it on the public status page.**
+   Both halves are load-bearing rather than cosmetic. The status page's monitor
+   API returns `url: null`, so a NAME is the only thing any checker can key on,
+   and AGL-1921 now carries an `aglyn-check` block asserting that this name
+   appears — so `check:external-facts` notices the moment this step is done and
+   says so on the issue. A different name reads as *still not created*; a
+   monitor kept off the status page is invisible to it entirely.
+
+   Verify with the `getMonitorList` command above: **ten** names today, eleven
+   after, and `Server errors` among them. Confirmed absent 2026-08-24 — this
+   step has not been done.
 2. **Free, 1 minute, and YOUR call: a status-page card?** Appending the same URL
    to `DOCS_STATUS_TARGETS` on the `aglyn-docs` Vercel project renders a card on
    `docs.aglyn.com/status`. It is the one arguable case in the card policy above
