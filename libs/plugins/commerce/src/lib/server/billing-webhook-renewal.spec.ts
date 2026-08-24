@@ -1201,6 +1201,81 @@ describe('a renewal whose subscription was never recorded (AGL-1763)', () => {
     expect(stored.checkoutSessionId).toBeUndefined()
   })
 
+  /**
+   * A reconstruction states its tax regime, exactly as the order for the same
+   * invoice does (AGL-2323).
+   *
+   * AGL-2323 stamped `taxMode` onto the subscription record at the SALE, on the
+   * principle its commit states in as many words: "`none` is an answer; absent
+   * is not." A record that omits the field is indistinguishable from one sold
+   * before that shipped, and `strictNullChecks` is OFF repo-wide, so an absent
+   * `taxMode` folds to falsy and reads to every downstream caller as "no tax
+   * due" — which is this issue's own bug shape.
+   *
+   * This branch reconstructs a subscription from an invoice, and it filled
+   * every other field the invoice can honestly supply while leaving the tax
+   * regime out. The order minted from the SAME invoice, fifteen lines below,
+   * has stamped `taxMode` since AGL-2451. So one `invoice.paid` wrote two
+   * documents that disagreed: the order named the regime and the subscription
+   * said nothing — the precise divergence the AGL-2323 commit set out to make
+   * impossible ("cannot state three different regimes").
+   *
+   * Same one-argument derivation as that order, so the two agree BY
+   * CONSTRUCTION rather than by two authors reaching the same conclusion. The
+   * flag, never the tax lines: a manual-mode subscription carries a real Tax
+   * Rate (AGL-1751), so its renewal invoices arrive with a populated
+   * `total_taxes[]` indistinguishable from a Stripe Tax one by amount alone.
+   *
+   * `taxRateId`/`taxRatePct` stay ABSENT here on purpose. They name WHICH
+   * merchant rate, and that lives on the subscription object's metadata, which
+   * an invoice does not restate — a reconstruction genuinely does not know it,
+   * and `reconstructedFromInvoiceId` is already on the record to say the rate
+   * identity was never observed. Inventing one would be the plausible zero the
+   * sale-side comment refuses.
+   */
+  it('states the tax regime, from the flag, exactly as the order does', async () => {
+    const taxed = {
+      ...RENEWAL_INVOICE,
+      amount_paid: 9743,
+      total: 9743,
+      tax: 743,
+      total_taxes: [
+        {
+          amount: 743,
+          taxable_amount: 9000,
+          tax_rate_details: {
+            tax_rate: { id: 'txr_1', percentage: 8.25, jurisdiction: 'Texas' },
+          },
+        },
+      ],
+    }
+
+    await deliver({ ...taxed, automatic_tax: { enabled: false } })
+    expect(storedSubscription().taxMode).toBe('manual')
+    // The order for the same invoice, from the same event, must agree.
+    expect((docs.get('hosts/host-1/orders/in_2') as any).taxMode).toBe('manual')
+
+    docs.delete('hosts/host-1/subscriptions/sub_1')
+    docs.delete('hosts/host-1/orders/in_2')
+    docs.delete('hosts/host-1/subscriptions/sub_1/invoices/in_2')
+    await deliver({
+      ...taxed,
+      automatic_tax: { enabled: true, liability: { type: 'self' } },
+    })
+    expect(storedSubscription().taxMode).toBe('stripe-automatic')
+
+    // And an untaxed cycle says `none`, rather than saying nothing.
+    docs.delete('hosts/host-1/subscriptions/sub_1')
+    docs.delete('hosts/host-1/orders/in_2')
+    docs.delete('hosts/host-1/subscriptions/sub_1/invoices/in_2')
+    await deliver(RENEWAL_INVOICE)
+    expect(storedSubscription().taxMode).toBe('none')
+
+    // The rate identity is genuinely unknown here, never a plausible zero.
+    expect(storedSubscription().taxRateId).toBeUndefined()
+    expect(storedSubscription().taxRatePct).toBeUndefined()
+  })
+
   it('still rolls the money up, and still accumulates on the next cycle', async () => {
     await deliver(RENEWAL_INVOICE)
 

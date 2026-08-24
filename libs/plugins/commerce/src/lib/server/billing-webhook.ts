@@ -2601,6 +2601,33 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                   // start of THIS cycle is the earliest moment the invoice
                   // actually proves.
                   createdAtMs: periodStartMs ?? paidAtMs,
+                  // WHICH TAX this cycle carried, on the subscription too
+                  // (AGL-2323). The sale-side record has stamped `taxMode`
+                  // since AGL-2323 on the principle that `none` is an answer
+                  // and absent is not — and `strictNullChecks` is OFF
+                  // repo-wide, so an omitted field folds to falsy and reads
+                  // downstream as "no tax due", which is that issue's own bug
+                  // shape. Reconstructing every other field the invoice can
+                  // honestly supply and leaving this one out made a
+                  // reconstruction indistinguishable from a pre-AGL-2323 sale.
+                  //
+                  // The SAME one-argument derivation as the order minted from
+                  // this very invoice below, so the two documents one
+                  // `invoice.paid` writes agree by construction rather than by
+                  // two authors reaching the same conclusion — the invariant
+                  // AGL-2323 set out to hold ("cannot state three different
+                  // regimes"). The flag, never the tax lines: a manual-mode
+                  // subscription carries a real Tax Rate (AGL-1751), so its
+                  // renewal invoices arrive with a populated `total_taxes[]`
+                  // indistinguishable from a Stripe Tax one by amount alone.
+                  //
+                  // NO `taxRateId`/`taxRatePct`: those name WHICH merchant rate
+                  // and live on the subscription's own metadata, which an
+                  // invoice does not restate. A reconstruction genuinely does
+                  // not know them, `reconstructedFromInvoiceId` already says
+                  // the rate identity was never observed, and inventing one
+                  // would be the plausible zero the sale-side refuses.
+                  taxMode: storefrontTaxModeOf(object),
                   // Provenance, so nothing downstream mistakes a reconstruction
                   // for a recorded sale — and deliberately NO
                   // `checkoutSessionId`: that field is AGL-1732's redelivery key

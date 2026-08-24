@@ -498,6 +498,45 @@ describe('a subscription records the tax regime it bills (AGL-2323)', () => {
   })
 
   /**
+   * A zero percentage is NOT a rate, and must not be stored as one.
+   *
+   * `taxRatePct` is guarded by `Number(metadata.taxPct) > 0`, and the boundary
+   * is load-bearing rather than incidental: `strictNullChecks` is OFF
+   * repo-wide, so a stored `0` and an absent field both fold to falsy at every
+   * reader, while meaning opposite things — "the merchant's rate is zero" is a
+   * measurement, "we have no rate for this subscription" is an absence. The
+   * back-book drift check in `tools/scripts/lib/money-back-book.mjs` exists
+   * precisely because those two were once the same value.
+   *
+   * Relaxing the guard to `>= 0` was previously invisible to this suite: it
+   * survives every other case here, because `Number(undefined)` is `NaN` and
+   * `NaN >= 0` is false, so only an explicit `'0'` separates the two. Our own
+   * checkout door cannot emit that today — `resolveManualTaxRateId` returns
+   * `null` unless `taxPct > 0`, so no rate id is minted and neither field is
+   * sent — but the webhook reads whatever metadata a session arrives with, and
+   * the guard should hold on its own terms rather than on that reachability
+   * argument holding forever.
+   */
+  it('stores no rate percentage for an explicit zero, rather than a zero', async () => {
+    await deliver({
+      ...SUBSCRIPTION_SESSION,
+      total_details: { ...SUBSCRIPTION_SESSION.total_details, amount_tax: 825 },
+      metadata: {
+        ...SUBSCRIPTION_SESSION.metadata,
+        taxCents: '0',
+        taxRateId: 'txr_live_1',
+        taxPct: '0',
+      },
+    })
+    const stored = subscriptionDocs()[0] as any
+    // The id is still named — that is a real fact the session carried.
+    expect(stored.taxRateId).toBe('txr_live_1')
+    // The percentage is not. Absent, never 0.
+    expect(stored.taxRatePct).toBeUndefined()
+    expect('taxRatePct' in stored).toBe(false)
+  })
+
+  /**
    * `none` is an ANSWER and absent is not (the `StorefrontTaxMode` docblock).
    * A store that decided not to collect must read as having decided, or the
    * back-book question cannot separate it from a record written before this
