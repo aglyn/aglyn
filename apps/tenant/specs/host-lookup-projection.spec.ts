@@ -57,7 +57,19 @@ const mockHostDoc = {
   cname: 'demo.example.com',
   locales: ['en', 'fr'],
   defaultLocale: 'en',
-  seo: { title: 'Demo Co', description: 'We demo things', favicon: 'f.ico' },
+  seo: {
+    title: 'Demo Co',
+    description: 'We demo things',
+    favicon: 'f.ico',
+    // The social card travels as ONE group (AGL-1337, AGL-2417). The fixture
+    // carries all four so the projection is asked about each of them; without
+    // them here the `seo` assertions below pass against a route that publishes
+    // none.
+    image: 'media:host-demo/og-default',
+    imageWidth: 1200,
+    imageHeight: 630,
+    imageAlt: 'The Demo Co logo on a navy field',
+  },
   // Everything below is what the route used to publish.
   memberRoles: { 'uid-alice': 'admin', 'uid-bob': 'editor' },
   orgId: 'org-demo',
@@ -151,5 +163,31 @@ describe('GET /api/host response projection (AGL-2192)', () => {
     expect(body.data.host.locales).toEqual(['en', 'fr'])
     expect(body.data.host.seo.title).toBe('Demo Co')
     expect(body.data.host.seo.favicon).toBe('f.ico')
+  })
+
+  /**
+   * The alt was the field this projection actually dropped (AGL-2398).
+   *
+   * AGL-2417 added `imageAlt` to all three storage sites and to
+   * `resolveSocialImage`, but `toPublicHost` copies `seo` KEY BY KEY — and the
+   * file says out loud that it does so "for the same reason the outer object
+   * is: the next field added to it inherits the safe default". The next field
+   * added to it inherited the safe default, which for a public description is
+   * the wrong one: a consumer of this route got the host card with no alt, so
+   * the card announced itself to a screen reader as an undescribed image.
+   *
+   * Asserted as the whole GROUP rather than the alt alone, because the group
+   * is the unit that must not be split — a dimension without its image, or an
+   * image without its description, is the same class of bug.
+   */
+  it('publishes the social card as a whole group, alt included', async () => {
+    const { body } = await callRoute()
+
+    expect(body.data.host.seo.image).toBe('media:host-demo/og-default')
+    expect(body.data.host.seo.imageWidth).toBe(1200)
+    expect(body.data.host.seo.imageHeight).toBe(630)
+    expect(body.data.host.seo.imageAlt).toBe(
+      'The Demo Co logo on a navy field',
+    )
   })
 })

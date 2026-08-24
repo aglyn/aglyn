@@ -86,6 +86,8 @@ export interface PublicScreen {
     image?: string
     imageWidth?: number
     imageHeight?: number
+    /** `og:image:alt` (AGL-2417): carried with the reference, never apart. */
+    imageAlt?: string
   }
 }
 
@@ -109,6 +111,7 @@ function toPublicScreen(id: string, doc: Record<string, unknown>): PublicScreen 
           image: seo.image as string | undefined,
           imageWidth: seo.imageWidth as number | undefined,
           imageHeight: seo.imageHeight as number | undefined,
+          imageAlt: seo.imageAlt as string | undefined,
         }
       : undefined,
   }

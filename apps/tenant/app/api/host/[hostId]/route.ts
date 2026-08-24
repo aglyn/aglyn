@@ -41,6 +41,15 @@ export interface PublicHost {
     image?: string
     imageWidth?: number
     imageHeight?: number
+    /**
+     * `og:image:alt` (AGL-2417), which travels with the reference and must be
+     * published beside it. Adding the alt to the three storage sites and to
+     * `resolveSocialImage` was not enough: this projection is key-by-key, so a
+     * field nobody adds here is silently dropped at the boundary and a
+     * host-level card reaches a consumer of this route as an undescribed
+     * image — the exact defect AGL-2417 set out to end, one hop further out.
+     */
+    imageAlt?: string
   }
 }
 
@@ -76,6 +85,7 @@ function toPublicHost(host: AglynHost | null | undefined): PublicHost | null {
           image: seo.image,
           imageWidth: seo.imageWidth,
           imageHeight: seo.imageHeight,
+          imageAlt: seo.imageAlt,
         }
       : undefined,
   }
