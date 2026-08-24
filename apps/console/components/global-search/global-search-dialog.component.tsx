@@ -44,7 +44,7 @@ import {
   globalSearchScopeMessage,
   resolveGlobalSearchScope,
 } from './global-search-scope'
-import useGlobalSearch, { SEARCH_WINDOW } from './use-global-search'
+import useGlobalSearch, { SEARCH_MAX_ITEMS } from './use-global-search'
 import { MIN_QUERY_LENGTH } from '@aglyn/aglyn'
 
 export interface GlobalSearchDialogProps {
@@ -166,9 +166,19 @@ export function GlobalSearchDialogComponent(props: GlobalSearchDialogProps) {
     [groups, orgSlug, hostSubdomain],
   )
 
-  const scopeMessage = globalSearchScopeMessage(scope, SEARCH_WINDOW)
+  const scopeMessage = globalSearchScopeMessage(scope, SEARCH_MAX_ITEMS)
   const shown = rows.reduce((sum, group) => sum + group.items.length, 0)
   const anyFailed = rows.some((group) => group.failed)
+  /*
+    A group that was only partly read has something to say even with no rows,
+    and "Nothing matched." would contradict it (AGL-2179). Measured on
+    `aglyn-marketing`: 54 screens, `pric` matched none of the 30 that had been
+    read, and the reader was told nothing matched — over a site whose /pricing
+    page is one of its most visited. The read escalates now, so this is the
+    residue: a collection bigger than the ceiling, which still must not be
+    reported as an empty one.
+  */
+  const anyIncomplete = rows.some((group) => group.truncated && !group.failed)
 
   return (
     <Dialog
@@ -210,7 +220,7 @@ export function GlobalSearchDialogComponent(props: GlobalSearchDialogProps) {
           >
             {`Type at least ${MIN_QUERY_LENGTH} characters to search.`}
           </Typography>
-        ) : shown === 0 && !loading && !anyFailed ? (
+        ) : shown === 0 && !loading && !anyFailed && !anyIncomplete ? (
           <Typography
             variant="body2"
             color="text.secondary"
@@ -222,7 +232,9 @@ export function GlobalSearchDialogComponent(props: GlobalSearchDialogProps) {
           <List dense disablePadding>
             {rows.map((group) => (
               <Box key={group.definition.id}>
-                {group.items.length === 0 && !group.failed ? null : (
+                {group.items.length === 0 &&
+                !group.failed &&
+                !group.truncated ? null : (
                   <Typography
                     variant="overline"
                     color="text.secondary"
@@ -263,7 +275,14 @@ export function GlobalSearchDialogComponent(props: GlobalSearchDialogProps) {
                 {/*
                   The window filled, so this group may hold matches that were
                   never read. Saying so is what stops a partial set from
-                  reading as a complete one.
+                  reading as a complete one — and the ZERO-row wording is the
+                  one that matters, because that is the case a bare
+                  "Nothing matched." would have misreported as an answer.
+
+                  The count comes from the group rather than from a constant:
+                  after an escalation the number actually searched is not
+                  `SEARCH_WINDOW`, and quoting the constant would understate
+                  what was looked at by an order of magnitude.
                 */}
                 {group.truncated && !group.failed ? (
                   <Typography
@@ -271,7 +290,9 @@ export function GlobalSearchDialogComponent(props: GlobalSearchDialogProps) {
                     color="text.secondary"
                     sx={{ display: 'block', px: 2, pb: 1 }}
                   >
-                    {`Only the first ${SEARCH_WINDOW} ${group.definition.noun} were searched.`}
+                    {group.items.length === 0
+                      ? `No match among the ${group.searched} ${group.definition.noun} searched — this site has more that were not read, so this is not "none".`
+                      : `Only the first ${group.searched} ${group.definition.noun} were searched.`}
                   </Typography>
                 ) : null}
               </Box>

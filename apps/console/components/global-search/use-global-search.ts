@@ -23,6 +23,7 @@ import {
   limit,
   orderBy,
   query,
+  startAfter,
   where,
   type Firestore,
 } from 'firebase/firestore'
@@ -49,12 +50,14 @@ import type {
  *    costs zero. The previous implementation spent a read per group on open,
  *    to populate a recently-updated list that answered a question nobody had
  *    asked, on a control mounted in the top bar of every console page.
- * 2. **One fetch per collection per page mount.** The window is cached in a
- *    ref for the life of the mount, so the second character, the tenth, and
- *    reopening the palette entirely are all free. This is sound rather than
- *    merely cheap: matching happens client-side over the whole window, so a
- *    different query is a different filter over the same rows, not a
- *    different question for the database.
+ * 2. **At most two fetches per collection per page mount.** The window is
+ *    cached in a ref for the life of the mount, so the second character, the
+ *    tenth, and reopening the palette entirely are all free. This is sound
+ *    rather than merely cheap: matching happens client-side over the whole
+ *    window, so a different query is a different filter over the same rows,
+ *    not a different question for the database. The second fetch is the
+ *    escalation — see `SEARCH_ESCALATION_WINDOW` — and it is spent only on a
+ *    collection that filled its window and still matched nothing.
  * 3. **Two entities that share a collection share its read.** `screens` and
  *    `emails` are the same Firestore collection partitioned by `kind`, so
  *    they are fetched once and split here. Fetching per ENTITY instead would
@@ -71,7 +74,9 @@ import type {
  * equality plus `orderBy(documentId())`. Firestore's automatic single-field
  * indexes cover both at COLLECTION scope, which is why this adds nothing to
  * `cloud/firebase-firestore.indexes.json`. Nothing here is a collection-GROUP
- * query, which would get no free index at all.
+ * query, which would get no free index at all. The escalation adds a
+ * `startAfter` cursor and nothing else — a cursor is a position within an
+ * ordering that already exists, so it needs no index the ordering did not.
  *
  * ## Why `documentId()` and not `updatedAt`
  *
@@ -103,6 +108,48 @@ import type {
  */
 export const SEARCH_WINDOW = 30
 
+/**
+ * How many MORE documents one collection may be read for, once — and why a
+ * second read exists at all (AGL-2179).
+ *
+ * ## The measurement that put this here
+ *
+ * Driven against a real signed-in console on `aglyn-marketing`, a site with 54
+ * screens: typing `pric` returned **"Nothing matched."** The site's own
+ * `/pricing` page exists, is published, and is named "Pricing". It was simply
+ * not among the first `SEARCH_WINDOW` documents in `documentId()` order, and
+ * the window is an arbitrary slice rather than a relevant one — that is stated
+ * plainly in the ordering note above and is the price paid for an ordering no
+ * document can be missing.
+ *
+ * A caption saying so would have been honest, and was not even shown (see
+ * `groups` below, which used to DROP a zero-match group and take its caveat
+ * with it). But honest is not the bar here. A console search that cannot find
+ * the pricing page of the flagship site is the same defect this issue opened
+ * with, one layer down: an affordance that promises more than it answers.
+ *
+ * ## Why escalate rather than just raise the window
+ *
+ * Zach's constraint on this feature was that it not cost too many reads, and a
+ * flat window is charged to EVERY entitled group on every mount where somebody
+ * types. Raising it from 30 to 300 multiplies the common case by ten to fix an
+ * uncommon one.
+ *
+ * Escalation charges the extra reads only where the cheap answer was proven
+ * inadequate — a group that BOTH filled its window and matched nothing in it.
+ * A site with eight screens never escalates. `aglyn-marketing` escalates once,
+ * on `screens`, for 24 more reads, and finds Pricing. And because the widened
+ * window is cached like the first one, it is paid at most once per collection
+ * per mount however much more is typed.
+ *
+ * The ceiling is real: a collection larger than `SEARCH_MAX_ITEMS` is still
+ * only partly searched, and `truncated` survives to say so.
+ */
+export const SEARCH_ESCALATION_WINDOW = 270
+
+/** The most documents one collection can cost in a single mount. */
+export const SEARCH_MAX_ITEMS = SEARCH_WINDOW + SEARCH_ESCALATION_WINDOW
+
 /** How many rows of one kind are shown. Display only — costs no reads. */
 export const MAX_ROWS_PER_GROUP = 5
 
@@ -113,6 +160,22 @@ interface WindowState {
   failed: boolean
   /** The window filled, so the collection may hold matches that were not read. */
   truncated: boolean
+  /**
+   * The escalation read has been spent on this collection for this mount.
+   *
+   * The loop-stop as well as the cost cap: escalation is triggered by a query
+   * matching nothing, and a query that matches nothing in the widened window
+   * still matches nothing, so without this the effect would re-fire forever.
+   */
+  escalated: boolean
+  /**
+   * The last document of the window, for `startAfter`.
+   *
+   * The snapshot rather than its id: with `orderBy(documentId())` a cursor
+   * must be a document reference or an id, and passing the snapshot is the one
+   * form that cannot be misread as a field value.
+   */
+  lastDoc: any | null
 }
 
 export interface GlobalSearchGroup {
@@ -122,6 +185,13 @@ export interface GlobalSearchGroup {
   failed: boolean
   /** Matching was over a partial window, so absence is not proof of absence. */
   truncated: boolean
+  /**
+   * How many documents were actually matched against.
+   *
+   * Rendered in the caveat rather than `SEARCH_WINDOW`, because after an
+   * escalation those two numbers differ and the reader is owed the real one.
+   */
+  searched: number
 }
 
 export interface UseGlobalSearchResult {
@@ -152,6 +222,42 @@ export function rowBelongsTo(
   if (entity === 'screens') return row?.kind !== 'email'
   if (entity === 'emails') return row?.kind === 'email'
   return true
+}
+
+/** Score one row the way the group would, so the two can never disagree. */
+function scoreRow(
+  definition: GlobalSearchEntityDef,
+  row: Record<string, any>,
+  text: string,
+): { score: number; label: string } | null {
+  const label = String(row[definition.nameField] ?? '').trim()
+  const score = scoreMatch(
+    {
+      name: label,
+      extra: (definition.extraFields ?? []).map((field) => row[field]),
+    },
+    text,
+  )
+  return score === null ? null : { score, label }
+}
+
+/**
+ * Did anything in this window match?
+ *
+ * The escalation predicate. Written against the same `scoreRow` the rendered
+ * group uses, because an escalation triggered by a DIFFERENT notion of
+ * "matched" than the one the reader sees would either spend reads on a group
+ * that already had an answer or withhold them from one that did not.
+ */
+export function matchesIn(
+  definition: GlobalSearchEntityDef,
+  rows: Array<Record<string, any>>,
+  text: string,
+): boolean {
+  return rows.some(
+    (row) =>
+      rowBelongsTo(definition.id, row) && scoreRow(definition, row, text) !== null,
+  )
 }
 
 /** The cache key for one collection read. */
@@ -202,9 +308,19 @@ export function useGlobalSearch(
   }
 
   const fetchWindow = useCallback(
-    async (definition: GlobalSearchEntityDef) => {
+    async (
+      definition: GlobalSearchEntityDef,
+      /**
+       * The window already held for this collection, when this is the
+       * escalation read. `null` for the first read of a mount.
+       */
+      previous: WindowState | null,
+    ) => {
       const key = windowKey(definition, orgId, hostId)
-      if (cacheRef.current.has(key) || inFlightRef.current.has(key)) return
+      if (inFlightRef.current.has(key)) return
+      if (!previous && cacheRef.current.has(key)) return
+      // Escalating twice would spend the ceiling repeatedly for one query.
+      if (previous && (previous.escalated || !previous.truncated)) return
       const path =
         definition.scopeKind === 'org'
           ? ['users', uid ?? '', definition.collection]
@@ -224,23 +340,33 @@ export function useGlobalSearch(
         // names in another's search results. The scope resolver already
         // refuses to offer this entity without an org; this is the second
         // layer, and it is deliberate duplication.
-        const constraints =
+        const size = previous ? SEARCH_ESCALATION_WINDOW : SEARCH_WINDOW
+        const constraints: any[] =
           definition.scopeKind === 'org'
-            ? [where('orgId', '==', orgId), orderBy(documentId()), limit(SEARCH_WINDOW)]
-            : [orderBy(documentId()), limit(SEARCH_WINDOW)]
+            ? [where('orgId', '==', orgId), orderBy(documentId())]
+            : [orderBy(documentId())]
+        // The cursor goes between the ordering and the limit, which is the
+        // only position Firestore accepts it in.
+        if (previous?.lastDoc) constraints.push(startAfter(previous.lastDoc))
+        constraints.push(limit(size))
         if (definition.scopeKind === 'org' && !orgId) {
           throw new Error('refusing an unscoped site read')
         }
         const snapshot = await getDocs(query(reference, ...constraints))
         readCountRef.current += Math.max(snapshot.docs.length, 1)
-        const rows = snapshot.docs.map((document) => ({
+        const fetched = snapshot.docs.map((document) => ({
           ...document.data(),
           $id: document.id,
         }))
+        const rows = previous ? [...previous.rows, ...fetched] : fetched
         cacheRef.current.set(key, {
           rows,
           failed: false,
-          truncated: rows.length >= SEARCH_WINDOW,
+          // The bound is whether THIS page filled: a short final page proves
+          // the collection ran out, however much came before it.
+          truncated: fetched.length >= size,
+          escalated: Boolean(previous),
+          lastDoc: snapshot.docs[snapshot.docs.length - 1] ?? previous?.lastDoc ?? null,
         })
       } catch {
         // Recorded as a FAILURE, never folded into an empty result. A
@@ -251,7 +377,13 @@ export function useGlobalSearch(
         // Not cached as a permanent verdict either: the entry is dropped on
         // the next scope change, and `failed` is what the UI renders.
         readCountRef.current += 1
-        cacheRef.current.set(key, { rows: [], failed: true, truncated: false })
+        cacheRef.current.set(key, {
+          rows: previous?.rows ?? [],
+          failed: true,
+          truncated: false,
+          escalated: true,
+          lastDoc: previous?.lastDoc ?? null,
+        })
       } finally {
         inFlightRef.current.delete(key)
         setVersion((previous) => previous + 1)
@@ -264,10 +396,26 @@ export function useGlobalSearch(
   // Reads are triggered by the query becoming worth running, not by opening
   // the palette and not by every keystroke: once a collection is cached the
   // effect finds it and issues nothing.
+  //
+  // The one exception is the escalation, and it is deliberately conditioned on
+  // the OUTCOME rather than on the size of the collection: a group that filled
+  // its window AND matched nothing has proved the cheap read insufficient for
+  // this query, and only then is the wider read worth its cost.
   useEffect(() => {
     if (!active) return
-    for (const definition of entities) void fetchWindow(definition)
-  }, [active, entities, fetchWindow])
+    for (const definition of entities) {
+      const state = cacheRef.current.get(windowKey(definition, orgId, hostId))
+      if (!state) {
+        void fetchWindow(definition, null)
+        continue
+      }
+      if (state.failed || state.escalated || !state.truncated) continue
+      if (matchesIn(definition, state.rows, text)) continue
+      void fetchWindow(definition, state)
+    }
+    // `version` is a dependency because escalation is decided from the CACHE,
+    // which a landed read mutates without re-rendering on its own.
+  }, [active, entities, fetchWindow, orgId, hostId, text, version])
 
   const groups = useMemo<GlobalSearchGroup[]>(() => {
     if (!active) return []
@@ -281,15 +429,10 @@ export function useGlobalSearch(
       const scored = state.rows
         .filter((row) => rowBelongsTo(definition.id, row))
         .map((row) => {
-          const label = String(row[definition.nameField] ?? '').trim()
-          const score = scoreMatch(
-            {
-              name: label,
-              extra: (definition.extraFields ?? []).map((field) => row[field]),
-            },
-            text,
-          )
-          return score === null ? null : { ...row, $score: score, $label: label }
+          const hit = scoreRow(definition, row, text)
+          return hit === null
+            ? null
+            : { ...row, $score: hit.score, $label: hit.label }
         })
         .filter(Boolean) as GlobalSearchGroup['rows']
       scored.sort((a, b) =>
@@ -299,13 +442,22 @@ export function useGlobalSearch(
         ),
       )
       // A failed group is emitted even with no rows, because its whole job is
-      // to say it failed. An empty successful group is dropped.
-      if (scored.length === 0 && !state.failed) continue
+      // to say it failed. So is a TRUNCATED one (AGL-2179): this used to drop
+      // any group with no matches, which threw away the truncation caveat at
+      // exactly the moment it carried information — the reader saw a bare
+      // "Nothing matched." over a collection that had only been partly read,
+      // which is the measured zero this feature is not allowed to render.
+      // A group that was fully read and matched nothing is still dropped;
+      // there is nothing to say about it.
+      const incomplete = state.truncated && !state.failed
+      if (scored.length === 0 && !state.failed && !incomplete) continue
       out.push({
         definition,
         rows: scored.slice(0, MAX_ROWS_PER_GROUP),
         failed: state.failed,
         truncated: state.truncated,
+        searched: state.rows.filter((row) => rowBelongsTo(definition.id, row))
+          .length,
       })
     }
     return out

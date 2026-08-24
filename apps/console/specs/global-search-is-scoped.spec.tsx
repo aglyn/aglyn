@@ -53,6 +53,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 jest.mock('../components/global-search/use-global-search', () => ({
   __esModule: true,
   SEARCH_WINDOW: 30,
+  SEARCH_MAX_ITEMS: 300,
   default: () => ({
     groups: mockGroups,
     loading: false,
@@ -91,6 +92,7 @@ const group = (id: string, rows: any[], extra: Record<string, any> = {}) => ({
   rows,
   failed: false,
   truncated: false,
+  searched: 30,
   ...extra,
 })
 
@@ -223,6 +225,37 @@ describe('a group whose window filled', () => {
     open()
     expect(screen.queryByText(/Only the first/)).toBeNull()
   })
+
+  /**
+   * The regression that reopened AGL-2179, reproduced at the size it was
+   * measured at.
+   *
+   * Driven against a real signed-in console on `aglyn-marketing` — 54 screens
+   * — typing `pric` rendered a bare **"Nothing matched."** while only 30 of
+   * them had been read. The site's `/pricing` page exists and is one of its
+   * most visited. The caveat that would have corrected the impression was
+   * suppressed by the very condition it needed to survive: a group with no
+   * matching rows was dropped before it could render.
+   *
+   * The read escalates now, so a 54-screen site is fully searched. This is the
+   * residue above the ceiling, and it is the assertion that matters most,
+   * because it is the one where the reader would otherwise be told a falsehood
+   * rather than an incomplete truth.
+   */
+  it('does not report a partly-read group as "nothing matched"', () => {
+    mockGroups.push(group('screens', [], { truncated: true, searched: 300 }))
+    open()
+    expect(screen.queryByText('Nothing matched.')).toBeNull()
+    const caveat = screen.getByText(/No match among the 300 pages searched/)
+    // The words have to close the inference, not merely avoid making it.
+    expect(caveat.textContent).toContain('not read')
+  })
+
+  it('still says nothing matched when the group was read to the end', () => {
+    mockGroups.push(group('screens', [], { truncated: false }))
+    open()
+    expect(screen.getByText('Nothing matched.')).toBeTruthy()
+  })
 })
 
 describe('what the reader is told', () => {
@@ -235,7 +268,9 @@ describe('what the reader is told', () => {
   it('promises a match on any part of a name, and states the window', () => {
     open()
     const note = screen.getByText(/any part of a name/)
-    expect(note.textContent).toContain('30')
+    // The CEILING, not the first window: after an escalation the palette has
+    // searched far more than 30, and quoting 30 would understate it.
+    expect(note.textContent).toContain('300')
     // The old copy's promise, which the mechanism no longer has to make.
     expect(note.textContent).not.toContain('STARTS')
   })
