@@ -36,6 +36,7 @@ import {
 } from 'firebase/analytics'
 import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
+import { currentOriginPersistenceClass } from '../../constants/workspace-domain'
 import { OrgScopeProvider } from '../../hooks/use-org-scope'
 import { useUrlNamedOrg } from '../../hooks/use-url-names-org'
 import { useOrgPlans } from '../../hooks/use-org-plans'
@@ -453,6 +454,13 @@ function FirebaseAppLayout(props: FirebaseAppLayoutProps) {
       <FirebaseServicesProvider
         firebaseConfig={fbClientAppOptions}
         appName={FIREBASE_CLIENT_APP_NAME}
+        // The origin decides, and it decides HERE (AGL-1099c). The class has
+        // to be settled before `initializeAuth` runs, which rules out asking
+        // `resolveConsoleDomain` — that is a Firestore read, and this is a
+        // constructor argument. `NoSsr` above means this subtree only ever
+        // renders in a browser; off-browser resolves to `ephemeral`, the safe
+        // answer to "I do not know which origin this is".
+        authPersistence={currentOriginPersistenceClass()}
       >
         {/* The org scope wraps the flags provider, not the other way round
             (AGL-1935). `ReleaseFlagsProvider` reads `useCurrentOrg()` for the

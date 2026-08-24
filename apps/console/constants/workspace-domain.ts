@@ -15,6 +15,13 @@
  * limitations under the License.
  */
 
+// `import type`, deliberately: this module is imported by `middleware.ts`,
+// which is bundled for the edge runtime. A value import of
+// `@aglyn/tenant-feature-instance` would drag the Firebase client SDK in
+// behind it. A type-only import is erased at compile time, so the edge
+// bundle is unchanged and the two files still agree on the union.
+import type { AuthPersistenceClass } from '@aglyn/tenant-feature-instance'
+
 /**
  * The workspace apex domain, in ONE place.
  *
@@ -109,4 +116,97 @@ export function isServableWorkspaceHost(
   // The apex and the reserved labels serve the console by design.
   if (slug === null) return true
   return isKnownSlug(slug)
+}
+
+/**
+ * Hostnames that are this deployment's own, and are not reachable from
+ * anyone else's DNS.
+ *
+ * Not the workspace domain — that is `isWorkspaceDomainHost`'s job and it is
+ * env-derived. These are the two families that serve the console *outside*
+ * the workspace domain and are still ours: the developer's own machine, and
+ * Vercel preview deployments. Neither can be re-pointed by a customer, so
+ * neither needs the treatment a custom console domain gets.
+ */
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '[::1]'])
+const PREVIEW_HOST_SUFFIX = '.vercel.app'
+
+/**
+ * How much this origin may keep on disk (AGL-1099c, closing the declaration
+ * AGL-1379 and AGL-1456 were built to receive).
+ *
+ * `FirebaseServicesProvider` takes an `authPersistence` prop that selects the
+ * `Auth` persistence class **and** the Firestore `localCache`. Both halves
+ * were built; both defaulted to `durable`; **nobody ever passed the prop**.
+ * So a custom console domain — the one origin the whole mechanism exists to
+ * protect — would have left a Firebase refresh token in plaintext in
+ * IndexedDB, plus cached document bodies beside it, on a hostname whose DNS
+ * the customer can re-point at their own server after a detach. That is the
+ * durable account-takeover primitive `docs/design/agl-1099a-cross-domain-session-handoff.md`
+ * §9.3 is about, and no cookie TTL, `sessionEpoch` bump or 421 reaches it:
+ * `securetoken.googleapis.com` is **not** App Check enforced, so a refresh
+ * token off that origin is exchangeable for ID tokens from anywhere, forever,
+ * until someone calls `revokeRefreshTokens` by hand.
+ *
+ * ## Why this is a host test and not a lookup
+ *
+ * The class has to be decided **before** the first network call — it is an
+ * argument to `initializeAuth`, which happens while the provider is being
+ * constructed. `resolveConsoleDomain` is a Firestore read and cannot be
+ * awaited there. A pattern is the wrong tool for *routing* (which is why the
+ * middleware asks the verdict route instead), but it is the right tool here,
+ * because the two questions are not the same question:
+ *
+ * - *"Which org does this host serve?"* — must be a lookup. Guessing invents
+ *   an answer, and AGL-1135 is what that costs.
+ * - *"Is this host one whose disk we control?"* — is knowable from the name
+ *   alone, and the honest default for a name we do not recognise is **no**.
+ *
+ * ## The polarity is the load-bearing part
+ *
+ * `durable` is an allowlist and everything else is `ephemeral`, never the
+ * inverse. The two failure modes are not symmetric:
+ *
+ * - A host wrongly called `ephemeral` costs a re-authentication.
+ * - A host wrongly called `durable` writes a refresh token to an origin
+ *   someone else can take over.
+ *
+ * So an unrecognised host — including a missing `Host` — resolves to
+ * `ephemeral`. A self-hosted install that never sets
+ * `NEXT_PUBLIC_WORKSPACE_DOMAIN` therefore lands on `ephemeral` and asks its
+ * operators to sign in more often; that is the safe direction of a
+ * misconfiguration, and setting the variable (which
+ * `.env.selfhost.example` already documents) restores `durable`.
+ */
+export function originPersistenceClass(
+  host: string | null | undefined,
+): AuthPersistenceClass {
+  const hostname = hostnameOf(host)
+  if (!hostname) return 'ephemeral'
+  if (isWorkspaceDomainHost(hostname)) return 'durable'
+  if (LOCAL_HOSTNAMES.has(hostname)) return 'durable'
+  if (hostname.endsWith(PREVIEW_HOST_SUFFIX)) return 'durable'
+  return 'ephemeral'
+}
+
+/**
+ * {@link originPersistenceClass} for the origin this browser is actually on.
+ *
+ * A named seam rather than an inline `window.location.host` at the call site,
+ * for one reason worth stating: `window.location` is not redefinable under
+ * this repo's jsdom — neither `defineProperty` nor delete-and-assign takes,
+ * and the latter fails **silently**, leaving the host as `localhost`. A test
+ * that tried to drive the layout by faking the location would therefore have
+ * asserted `durable` on every host and passed while proving nothing. With the
+ * read named here, the origin mapping is proved by
+ * `originPersistenceClass`'s own cases, the browser read is proved by running
+ * this function under a jsdom whose URL really is a custom domain, and the
+ * layout's job shrinks to forwarding one value.
+ *
+ * Returns `ephemeral` off-browser: see the polarity note above.
+ */
+export function currentOriginPersistenceClass(): AuthPersistenceClass {
+  return originPersistenceClass(
+    typeof window === 'undefined' ? null : window.location.host,
+  )
 }

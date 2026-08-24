@@ -756,9 +756,50 @@ the project."* That matches what we observed — the admin-console UI still edit
 the key (a `vercel.app` entry was removed on 2026-08-09 and sign-in broke on
 those hosts as intended), while no API path exists.
 
-**So the per-customer allowlist entry is a manual console click, and that is a
-commercial fact, not a scheduling one.** It gates the feature per customer, on
-top of the 250 ceiling.
+> ## ⚑ CORRECTED 2026-08-23 — the paragraph above is WRONG, and it was the
+> ## stated blocker for 1099d for two weeks
+>
+> The premise was never re-probed after 2026-08-09. It is false. Measured
+> today, read-only, from this machine as `zach@aglyn.com`:
+>
+> ```
+> gcloud projects list
+>   → recaptcha-migrated-6c9712c2f71   "reCAPTCHA Migrated"      ← visible to us
+>
+> gcloud recaptcha keys list --project recaptcha-migrated-6c9712c2f71
+>   → 6LfnSnAbAAAAAG2PGTSOXQKQwv2snLGzMzuF1TWT   Aglyn          ← the live key
+>
+> gcloud projects get-iam-policy recaptcha-migrated-6c9712c2f71
+>   roles/owner:
+>     - user:zach@aglyn.com                                     ← already owner
+>     - user:zachary.w.gover@gmail.com                          ← already owner
+>     - serviceAccount:recaptcha-gcp-project-provisioner@system.gserviceaccount.com
+>   roles/resourcemanager.projectOwnerInvitee:
+>     - user:zachary1748@gmail.com          ← the pending invite, a THIRD account
+> ```
+>
+> **`gcloud recaptcha keys list` returns the key from a project we own.** That
+> is verbatim the "done when" §10 sets for 1099d, and it is already true. The
+> reCAPTCHA Enterprise API is enabled on the migration project (it is disabled
+> only on `aglyn-main`, which is why the `aglyn-main` probe above misled), and
+> two accounts we control hold `roles/owner` there.
+>
+> The unaccepted invitation is real but **irrelevant**: it belongs to
+> `zachary1748@gmail.com`, an account nobody needs. Reading its "Action
+> required" banner as *our* blocker is what produced this paragraph.
+>
+> The key's `webSettings` are readable, and they settle the ceiling question
+> too — see the box in the next section.
+>
+> **What this changes.** `projects.keys.patch` on `webSettings.allowedDomains`
+> is available now, so the per-customer allowlist entry **can** be automated,
+> and the add-on-attach / reclaim-on-detach mechanism driven off the stored
+> `consoleDomains` claim is the *correct* mechanism rather than a premature
+> one. What it does **not** change is the launch answer: that mechanism is
+> unbuilt, it writes to a live production key that every Aglyn origin depends
+> on for App Check, and it has no caller because `activateConsoleDomain` has
+> none either. Route 2 below (`projects.keys.migrate` into `aglyn-main`) is
+> now optional tidying, not a prerequisite.
 
 Two routes unblock it, and **both are account actions belonging to the project
 owner, not to this codebase**:
@@ -781,6 +822,41 @@ before the feature is sold** — that instinct in AGL-1099 is right; it just
 pointed at the wrong list. The documented 250 applies to Cloud-managed keys; no
 figure is published for classic v3 keys, so the ceiling is unknown for the key we
 actually run.
+
+> ## ⚑ The ceiling, settled 2026-08-23 — and the "9-domain limit" was never one
+>
+> `gcloud recaptcha keys describe 6LfnSnAb… --project recaptcha-migrated-6c9712c2f71`
+> returns the key's own `webSettings`:
+>
+> ```yaml
+> webSettings:
+>   allowAllDomains: false
+>   integrationType: SCORE
+>   allowedDomains: [aglyn.com, localhost, aglyn.app, auth.aglyn.com, app.aglyn.com]
+> ```
+>
+> Three things follow, and the first is the one that keeps being got wrong.
+>
+> 1. **The recurring "9-domain allowlist" is an OCCUPANCY SNAPSHOT, not a
+>    limit.** It was 9 entries on 2026-08-03, 10 after AGL-1404, and **5
+>    today** — `vercel.app`, `aglyn.io`, `tenant.aglyn.app`, `console.aglyn.io`,
+>    `app.aglyn.io` and `admin.aglyn.io` are all gone, and `aglyn.app` is
+>    present. Nothing in the key expresses a limit of nine. Quoting nine as a
+>    commercial ceiling would have understated the real one by a factor of ~28.
+> 2. **The real ceiling is the documented 250 `allowedDomains`**, and it now
+>    applies to *this* key rather than being a figure for a key shape we do not
+>    run: the key is addressable as an Enterprise resource. 5 of 250 are used.
+> 3. **It is 250 distinct customer APEX domains, not 250 customers' hostnames.**
+>    The matching rule was proved on 2026-08-10 — a listed entry covers its
+>    whole subtree but never its parents — so one entry serves a customer
+>    however many console hostnames they run under it. `auth.aglyn.com` and
+>    `app.aglyn.com` above are redundant with `aglyn.com` for exactly that
+>    reason.
+>
+> So the allowlist is **not** the commercial ceiling this document feared, and
+> 250 white-label customers is a bridge to cross long after Series A. The
+> per-customer *step* was the real cost, and per the correction above it is now
+> automatable.
 
 ### A third allowlist nobody has named: GCP API-key referrer restrictions
 
@@ -1239,6 +1315,18 @@ the wrong one.
 `gcloud recaptcha keys list` returning the key. Until that command works, 1099d
 has nothing to build, and it still blocks 1099c.
 
+> **⚑ Met, 2026-08-23.** That command returns the key from
+> `recaptcha-migrated-6c9712c2f71`, where `zach@aglyn.com` is already
+> `roles/owner`. See the correction box in §5. **1099d is unblocked and has
+> something to build** — `projects.keys.patch` on `webSettings.allowedDomains`,
+> add-on-attach and reclaim-on-detach, driven off the stored `consoleDomains`
+> claim and never re-derived.
+>
+> Unblocked is not the same as done, and the ordering it dictated still holds:
+> nothing may attach a domain until that automation exists and has been
+> exercised, because a domain that routes but cannot attest renders a console
+> that can never sign anyone in.
+
 ### 1099c, as built (AGL-1099)
 
 Host → org resolution and entitlement enforcement. Lands **dark for the same
@@ -1377,6 +1465,41 @@ bodies in IndexedDB on an origin whose DNS the customer can re-point at
 themselves — the durable account-takeover primitive §9.3 is about. That
 declaration is 1099c's per this same split, and it is a second reason no domain
 may be activated yet, alongside AGL-1378.
+
+> **⚑ Built 2026-08-23 (AGL-1099).** `originPersistenceClass` and
+> `currentOriginPersistenceClass` in
+> `apps/console/constants/workspace-domain.ts`, passed at the console's one
+> `FirebaseServicesProvider` mount in
+> `apps/console/components/layouts/firebase-app.layout.tsx`.
+>
+> `durable` is an **allowlist** — the workspace domain and its subtree,
+> `localhost`/`127.0.0.1`, and `*.vercel.app` previews — and every other host,
+> including a missing one, is `ephemeral`. The polarity is the design: a host
+> wrongly called `ephemeral` costs a re-authentication, while a host wrongly
+> called `durable` writes a refresh token to an origin someone else can take
+> over. A self-hosted install that never sets `NEXT_PUBLIC_WORKSPACE_DOMAIN`
+> therefore lands on `ephemeral`, which is the safe direction of that
+> misconfiguration.
+>
+> It is a host test rather than a `resolveConsoleDomain` lookup because the
+> class is an argument to `initializeAuth` and must be settled before any
+> network call. The two questions are not the same: *"which org does this host
+> serve?"* must be a lookup (guessing is AGL-1135), while *"is this a host
+> whose disk we control?"* is answerable from the name, and the honest default
+> for an unrecognised name is **no**.
+>
+> Tested in `apps/console/constants/workspace-domain.spec.ts` (the mapping,
+> including the `aglyn.com.evil.example` and `evil-vercel.app` suffix
+> confusions) and `apps/console/specs/console-domain-auth-persistence.spec.tsx`
+> (the layout forwards it, in **both** directions, and never leaves the
+> optional prop `undefined`). The browser read itself needs a jsdom booted on a
+> custom origin — `window.location` is not redefinable here, and
+> delete-then-assign fails *silently* back to `localhost` — so it has its own
+> file, `console-domain-auth-persistence-custom-host.spec.ts`, which asserts
+> its own origin first so the pragma cannot quietly stop applying.
+>
+> **This removes the second reason. AGL-1378 remains, and so does the absence
+> of any caller for `activateConsoleDomain`.**
 
 **Test evidence.** §7 items 2–7 and 10 are unit tests. Item 1's concurrent half
 runs against the Firestore emulator, and the negative control is the useful
