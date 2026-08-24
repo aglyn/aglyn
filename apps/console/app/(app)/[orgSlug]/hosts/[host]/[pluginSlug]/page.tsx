@@ -59,7 +59,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   const hostId = useHostId()
   const pluginSlug = params?.pluginSlug ?? ''
   const { org, ready: orgReady } = useCurrentOrg()
-  const { permissions } = useOrgPermissions()
+  const { permissions, loaded: permissionsLoaded } = useOrgPermissions()
 
   // Scoped to this workspace's plugins (AGL-758): the registry is a
   // session-wide union, so an unscoped lookup would serve a page from a
@@ -133,7 +133,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
       {"This page isn't available. It may have moved or the feature that " +
         'provided it is not installed.'}
     </Alert>
-  ) : !orgReady ? (
+  ) : !orgReady || !permissionsLoaded ? (
     // The choke point for every plugin console page (AGL-1380). `org` is
     // undefined both while the billing doc is in flight and while the read is
     // failing, and `checkEntitlement(undefined)` answers NO — so this route
@@ -141,6 +141,19 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     // raw `org` besides, which each card re-checks the same way. Twelve
     // surfaces then told a paying org the feature it bought is not on its
     // plan. Nothing renders a plan claim until there is a plan to claim from.
+    //
+    // `permissionsLoaded` joins it for the same reason, in the other
+    // direction. The `permissions` prop below is `useOrgPermissions`'
+    // fail-open map — an ADMIN's, with every plugin-declared key true — until
+    // the member read lands, and a plugin page cannot tell that from a real
+    // grant. The commerce POS reads `permissions?.managePos !== false` and so
+    // painted the whole register for a member about to be refused it: the
+    // site's product catalog with prices, the cart, the tender buttons, and a
+    // room-charge dialog listing checked-in GUESTS BY NAME. Held here rather
+    // than patched in the POS page, because this is the one place that knows
+    // whether the map is an answer, and every plugin page is handed the same
+    // map. A guess about who is reading is no more renderable than a guess
+    // about what they bought.
     <Box sx={{ p: 2 }}>
       <CircularProgress size={24} />
     </Box>

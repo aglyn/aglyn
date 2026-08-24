@@ -51,7 +51,7 @@ const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
   const { currentOrg, loading } = useOrgScope()
   const { data: user } = useUser()
   const firestore = useFirestore()
-  const { permissions } = useOrgPermissions()
+  const { permissions, loaded: permissionsLoaded } = useOrgPermissions()
 
   const { hosts } = useOrgHosts(
     firestore,
@@ -247,7 +247,15 @@ const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
                 // listings, payouts and sales — folded in from the retired
                 // Marketplace page. Gated on the publish permission; the server
                 // enforces it too.
-                ...(permissions.publishToMarketplace && currentOrg?.$id
+                // `permissionsLoaded &&` is load-bearing, not defensive. This
+                // file read only `{ permissions }`, and that map is
+                // `allTrueWhileLoading()` — an ADMIN's — until the member read
+                // lands, so every member got the seller area for the length of
+                // that read. Payouts and Sales are the sharp ones: they mount
+                // `OrgSellerPanel`, which fetches and renders the org's revenue.
+                ...(permissionsLoaded &&
+                permissions.publishToMarketplace &&
+                currentOrg?.$id
                   ? [
                       {
                         id: 'publish',
