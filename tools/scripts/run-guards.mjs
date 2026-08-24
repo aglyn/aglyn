@@ -123,6 +123,7 @@ const REPO_WIDE = new Set([
   'check:no-tax-identifiers',
   'check:provider-key-exposure',
   'check:next-public-access',
+  'check:contact-addresses',
   // Compare a GENERATED artifact against a source that is no project's file.
   'check:pricing-tables',
   'generate:docs-help:check',

@@ -466,6 +466,16 @@ jobs:
 
       - run: npm run check:docs-self-host
 
+      # AGL-2400. Same two-step order, and the unit test carries the whole
+      # burden of proof here: a `@aglyn.com` address that was never created
+      # ACCEPTS mail and suppresses the bounce (AGL-1577), so the corpus scan
+      # going green is not evidence the addresses in it are real — only that
+      # they are all in the registry. The test is what proves the scan can
+      # still fail, by pointing it at an address the registry does not hold.
+      - run: npm run test:contact-addresses
+
+      - run: npm run check:contact-addresses
+
       # AGL-2300. Same two-step order. Four DOMPurify Dependabot alerts are
       # DISMISSED on the claim that monaco never turns on the config surfaces
       # those advisories need — not on the vendored copy being unused, which it
