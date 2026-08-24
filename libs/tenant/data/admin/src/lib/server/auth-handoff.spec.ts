@@ -97,6 +97,7 @@ jest.mock('./firebase-admin', () => {
 
 import {
   authorizeConsoleHandoff,
+  consoleSessionEpochRefuses,
   hashHandoffSecret,
   HANDOFF_AUTHORIZED_TTL_MS,
   HANDOFF_PENDING_TTL_MS,
@@ -578,5 +579,203 @@ describe('continuePath cannot leave the origin', () => {
     })
 
     expect(store[started!.requestId]['continuePath']).toBe('/')
+  })
+})
+
+/**
+ * §7.8 — bumping `sessionEpoch` invalidates an outstanding session.
+ *
+ * This item had NO test. `suspendOnDowngrade` and `releaseConsoleDomain` were
+ * proven to WRITE the epoch (`console-domains.spec.ts`), and the only other
+ * mention of it in a spec was a stub returning `false`. Nothing anywhere
+ * exercised the READER — so the one lever that reaches an already-minted
+ * credential was asserted by argument.
+ *
+ * The redemption half is the part D6 asked for and the build did not have:
+ * "both the redemption endpoint and the `GET` exchange". `/api/*` sits outside
+ * the middleware matcher, and the `GET` exchange structurally cannot cover for
+ * a missing check here — a credential minted AFTER the bump postdates it, so
+ * no epoch will ever refuse it.
+ */
+describe('§7.8 — the revocation epoch', () => {
+  const EPOCH = NOW - 60_000
+
+  /** `consoleDomains/{host}` shares the double's one keyspace with the handoffs. */
+  const withEpoch = (value: unknown) => {
+    store[HOST] = { sessionEpoch: value }
+  }
+
+  describe('consoleSessionEpochRefuses', () => {
+    it('refuses a cookie minted BEFORE the bump', async () => {
+      withEpoch(EPOCH)
+      expect(
+        await consoleSessionEpochRefuses({
+          host: HOST,
+          cookieIssuedAtMs: EPOCH - 1,
+        }),
+      ).toBe(true)
+    })
+
+    it('admits a cookie minted AFTER it — the positive control', async () => {
+      // Without this the refusal above would pass just as well if the function
+      // refused everything, which is the shape a revocation control fails in.
+      withEpoch(EPOCH)
+      expect(
+        await consoleSessionEpochRefuses({
+          host: HOST,
+          cookieIssuedAtMs: EPOCH + 1,
+        }),
+      ).toBe(false)
+    })
+
+    it('refuses an UNDATEABLE cookie, because absent must not read as fresh', async () => {
+      // `strictNullChecks` is off repo-wide, so a missing `iat` folds to a
+      // falsy 0 and would otherwise satisfy any `>=` written the obvious way.
+      // A credential that cannot be shown to postdate a revocation is refused.
+      withEpoch(EPOCH)
+      for (const issued of [null, 0, Number.NaN]) {
+        expect(
+          await consoleSessionEpochRefuses({
+            host: HOST,
+            cookieIssuedAtMs: issued,
+          }),
+        ).toBe(true)
+      }
+    })
+
+    it('fails OPEN when there is no epoch to enforce', async () => {
+      // The Vercel allowlist is the boundary and this is defence in depth, so
+      // an unreadable epoch must not lock a live domain out of its own session
+      // route. Note the asymmetry with the case above: a missing EPOCH fails
+      // open, a missing CREDENTIAL DATE fails closed.
+      for (const value of [undefined, 0, -1, 'yesterday', Number.NaN]) {
+        withEpoch(value)
+        expect(
+          await consoleSessionEpochRefuses({
+            host: HOST,
+            cookieIssuedAtMs: null,
+          }),
+        ).toBe(false)
+      }
+      delete store[HOST]
+      expect(
+        await consoleSessionEpochRefuses({ host: HOST, cookieIssuedAtMs: null }),
+      ).toBe(false)
+      expect(
+        await consoleSessionEpochRefuses({ host: '', cookieIssuedAtMs: null }),
+      ).toBe(false)
+    })
+  })
+
+  describe('the redemption leg', () => {
+    it('refuses a handoff authorized before the bump', async () => {
+      const { started, secret } = await authorized()
+      // Suspension or detach lands between authorize and redeem — a 120-second
+      // window that D7 walks through deliberately: it bumps the epoch FIRST,
+      // then deletes the Vercel domain, so sessions die while we still control
+      // the host.
+      withEpoch(NOW + 1)
+
+      expect(
+        await redeemConsoleHandoff({
+          requestId: started.requestId,
+          secret,
+          verifiers: [started.verifier],
+          requestHost: HOST,
+          nowMs: NOW,
+        }),
+      ).toEqual({ ok: false, reason: 'revoked' })
+    })
+
+    it('leaves the record CONSUMABLE, so a refusal is not a denial of service', async () => {
+      // `consumeOnce` does not write on a refusal, and this is the reason that
+      // default matters here: an epoch read racing a legitimate redemption must
+      // not destroy the record it is about to accept.
+      const { started, secret } = await authorized()
+      withEpoch(NOW + 1)
+      await redeemConsoleHandoff({
+        requestId: started.requestId,
+        secret,
+        verifiers: [started.verifier],
+        requestHost: HOST,
+        nowMs: NOW,
+      })
+
+      expect(store[started.requestId]['status']).toBe('authorized')
+      expect(store[started.requestId]['secretHash']).toEqual(expect.any(String))
+    })
+
+    it('admits a handoff authorized after it — the positive control', async () => {
+      const { started, secret } = await authorized()
+      withEpoch(NOW - 1)
+
+      expect(
+        await redeemConsoleHandoff({
+          requestId: started.requestId,
+          secret,
+          verifiers: [started.verifier],
+          requestHost: HOST,
+          nowMs: NOW,
+        }),
+      ).toMatchObject({ ok: true, uid: 'u1' })
+    })
+  })
+})
+
+/**
+ * The redemption leg's liveness check, which it did not have.
+ *
+ * `authorize` refused a non-servable domain from the day it was built; redeem
+ * did not, and `/api/*` is outside the middleware matcher, so nothing else was
+ * asking. A handoff authorized moments before a suspension still cashed out.
+ */
+describe('redeem refuses a domain that is not servable', () => {
+  const notServable = (reason: string, degraded: boolean) => ({
+    known: !degraded,
+    servable: false,
+    orgSlug: degraded ? null : 'acme',
+    reason,
+    degraded,
+  })
+
+  it.each([
+    ['suspended or unentitled', notServable('not-entitled', false)],
+    ['never activated', notServable('not-active', false)],
+    // Minting is the opposite trade from routing: routing fails OPEN because a
+    // dark console is worse than the residual exposure, but a session minted on
+    // a domain we could not confirm is live is a credential we cannot take back.
+    ['DEGRADED, unlike the routing gate', notServable('degraded', true)],
+  ])('refuses a %s domain', async (_label, verdict) => {
+    const { started, secret } = await authorized()
+    mockResolve.mockResolvedValue(verdict)
+
+    expect(
+      await redeemConsoleHandoff({
+        requestId: started.requestId,
+        secret,
+        verifiers: [started.verifier],
+        requestHost: HOST,
+        nowMs: NOW,
+      }),
+    ).toEqual({ ok: false, reason: 'domain-inactive' })
+    // Refused without a write, for the reason above.
+    expect(store[started.requestId]['status']).toBe('authorized')
+  })
+
+  it('asks about the REQUEST’s own host, never the record’s', async () => {
+    // The record's `targetHost` is attacker-influenced only through a flow they
+    // cannot complete, but the liveness question is about the origin actually
+    // serving this POST — so it must be keyed on the request.
+    const { started, secret } = await authorized()
+    mockResolve.mockClear()
+    await redeemConsoleHandoff({
+      requestId: started.requestId,
+      secret,
+      verifiers: [started.verifier],
+      requestHost: HOST,
+      nowMs: NOW,
+    })
+
+    expect(mockResolve).toHaveBeenCalledWith(HOST)
   })
 })

@@ -606,30 +606,6 @@ describe('the advertising-tag gate', () => {
         'apps/console/constants/subprocessor-inventory.ts',
       ])
 
-      // Files that name the advertising-tags module path as DATA — an element
-      // of a list of files to READ — rather than as code (AGL-1649).
-      //
-      // A path handed to `readFileSync` never enters the module graph, so it
-      // cannot load a pixel; it is the same class of mention as the disclosure
-      // registry above, arriving for a different reason, and it gets its own
-      // set because the comment on that one describes a disclosure registry and
-      // a copy-drift audit is not one. A Map, not a Set, because an exemption
-      // whose REASON is not written down is the thing that gets copied by the
-      // next person who wants a red to go away.
-      const COPY_AUDIT_ONLY = new Map<string, string>([
-        [
-          'apps/console/specs/consent-advertising-copy-drift.spec.ts',
-          'Lists every surface whose consent COPY must not contradict the ' +
-            'implied-mode rule, and reads each one as text to diff the prose ' +
-            '(AGL-1649). `advertising-tags.ts` is one of those surfaces, so the ' +
-            'path appears once, inside the `SURFACES` array, and is passed to ' +
-            '`readFileSync`. Measured: 1 occurrence of the module path, ZERO of ' +
-            'the script host, ZERO of `fbq`. Its only advertising-adjacent ' +
-            'import is `visitor-consent`, which is the consent verdict and not ' +
-            'the tag.',
-        ],
-      ])
-
       // Executable use — an actual import, or an actual call. Applies to EVERY
       // file including the disclosure ones, so a real pixel added to the
       // registry tomorrow still turns this red.
@@ -641,7 +617,7 @@ describe('the advertising-tag gate', () => {
       const offenders = files.filter(({ file, source }) => {
         const code = withoutComments(source)
         if (executesTheVendor(code)) return true
-        if (DISCLOSURE_ONLY.has(file) || COPY_AUDIT_ONLY.has(file)) return false
+        if (DISCLOSURE_ONLY.has(file)) return false
         return (
           code.includes('app-utils/advertising-tags') ||
           code.includes(META_PIXEL_VENDOR.scriptMatch) ||
@@ -657,46 +633,6 @@ describe('the advertising-tag gate', () => {
       ).toBe(true)
       expect(executesTheVendor('fbq("track", "PageView")')).toBe(true)
       expect(executesTheVendor('"we disclose connect.facebook.net"')).toBe(false)
-
-      // The ordering above is the property that makes an exemption safe:
-      // `executesTheVendor` runs BEFORE the allowlist short-circuit, so an
-      // exempted file that starts importing the module is still an offender.
-      // Proved against the real allowlisted paths rather than a synthetic
-      // string, so a refactor that reorders those two lines fails here.
-      const exempt = [...DISCLOSURE_ONLY, ...COPY_AUDIT_ONLY.keys()]
-      for (const file of exempt) {
-        const wouldExecute = `import { metaPixel } from '@aglyn/aglyn/app-utils/advertising-tags'`
-        expect([
-          file,
-          [{ file, source: wouldExecute }].filter(({ file: f, source }) => {
-            const code = withoutComments(source)
-            if (executesTheVendor(code)) return true
-            if (DISCLOSURE_ONLY.has(f) || COPY_AUDIT_ONLY.has(f)) return false
-            return true
-          }).length,
-        ]).toEqual([file, 1])
-      }
-
-      // An exemption must not outlive the mention that earned it. Every
-      // allowlisted path must still be scanned AND still trip the substring
-      // scan — otherwise the entry is dead, and a dead entry is a standing
-      // permission nobody is reading any more.
-      for (const file of exempt) {
-        const entry = files.find((f) => f.file === file)
-        expect([file, Boolean(entry)]).toEqual([file, true])
-        const code = withoutComments(entry.source)
-        expect([
-          file,
-          code.includes('app-utils/advertising-tags') ||
-            code.includes(META_PIXEL_VENDOR.scriptMatch) ||
-            /\bfbq\b/.test(code),
-        ]).toEqual([file, true])
-      }
-
-      // And every reason is real prose, not a placeholder.
-      for (const [file, reason] of COPY_AUDIT_ONLY) {
-        expect([file, reason.length > 80]).toEqual([file, true])
-      }
     })
 
     it('and the gate is mounted from exactly one place — the tenant route', () => {

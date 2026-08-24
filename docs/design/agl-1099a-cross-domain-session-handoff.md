@@ -1043,7 +1043,16 @@ once at connect time and never re-checked.
    redemption (the all-values hash check) — the AGL-1259 regression.
 6. `authorize` refuses when the signed-in user is not a member of the owning org.
 7. `authorize` refuses when the org fails `checkEntitlement(org, 'whiteLabel')`.
-8. Bumping `sessionEpoch` invalidates an outstanding `__console_session`.
+8. Bumping `sessionEpoch` invalidates an outstanding session cookie — on
+   **both** legs. The verdict itself and the redemption refusal are in
+   `auth-handoff.spec.ts` (`§7.8 — the revocation epoch`); the `GET` exchange's
+   wiring is in `apps/console/specs/console-domain-session-epoch.spec.ts`, and
+   it needs its own file because the assertion is that the route *asks* — the
+   only other spec that named `consoleSessionEpochRefuses` stubbed it to
+   `false`, and **a stub is not a caller**. Each half carries a positive
+   control, or "refuses" and "refuses everything" share one green.
+   (The cookie is `__session`, not `__console_session` — see the departure
+   recorded in §10.)
 9. `cookieAttributes` emits `Secure` on a custom domain and no `Domain`
    attribute — the regression test for the bug in D6.
 10. A cross-site POST to `/redeem` is rejected on `Origin` alone.
@@ -1440,6 +1449,29 @@ is `activateConsoleDomain`, which still has no caller while AGL-1378 is open.
 - The D6 **session epoch** is now checked on the `GET /api/auth/session`
   exchange for a non-workspace host. 1099c wrote `sessionEpoch` correctly and
   recorded that it had nothing to check; it does now.
+
+  > **⚑ Corrected 2026-08-24 (AGL-1902).** D6 says *"both the redemption
+  > endpoint and the `GET` exchange"*, and the first build had only the
+  > exchange. The redemption leg now refuses two more things, both before the
+  > transaction: a `resolveConsoleDomain` verdict that is not `servable`
+  > (`domain-inactive`, and `degraded` refuses here for `authorize`'s reason —
+  > minting is the opposite trade from routing), and a record whose
+  > `authorizedAt` predates `sessionEpoch` (`revoked`).
+  >
+  > Neither was covered by anything else, and the exchange structurally could
+  > not cover for them. `/api/*` sits **outside the middleware matcher**, so
+  > `serveConsoleDomain` never sees `/api/auth/handoff/redeem` — a suspended
+  > domain was refused a console to render and still handed a working
+  > redemption. And an epoch can only refuse a credential it *predates*: a
+  > custom token minted after the bump is newer than it, so no later exchange
+  > would ever have caught it. D7 bumps the epoch **first** and deletes the
+  > Vercel domain second precisely so sessions die while we still control the
+  > host; without this check that ordering bought a 120-second window in which
+  > an in-flight handoff still cashed out.
+  >
+  > The refusal takes `consumeOnce`'s default and does **not** write, so an
+  > epoch read racing a legitimate redemption cannot destroy the record it is
+  > about to accept.
 - `authHandoffs` is `allow read, write: if false` in the rules, and its TTL
   policy is filed in `docs/FIRESTORE_MANUAL_CONFIG.md` as **owed** — a gcloud
   action, not a deploy.
@@ -1501,7 +1533,7 @@ may be activated yet, alongside AGL-1378.
 > **This removes the second reason. AGL-1378 remains, and so does the absence
 > of any caller for `activateConsoleDomain`.**
 
-**Test evidence.** §7 items 2–7 and 10 are unit tests. Item 1's concurrent half
+**Test evidence.** §7 items 2–8 and 10 are unit tests. Item 1's concurrent half
 runs against the Firestore emulator, and the negative control is the useful
 part: with a read-then-write consume outside a transaction, **8 of 8**
 simultaneous redemptions succeed; with the transaction, exactly one does. Items
