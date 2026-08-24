@@ -137,13 +137,42 @@ describeEmulated('the beacon against a real Firestore (AGL-1627)', () => {
       { merge: true },
     )
 
+  /**
+   * WHY THIS `beforeAll` IMPORTS THE ROUTE AND THROWS THE RESULT AWAY.
+   *
+   * `fire()` runs inside `jest.isolateModulesAsync`, and the FIRST call pays
+   * for compiling the route's entire transitive module graph — the tenant
+   * runtime, the admin SDK, the plugin surface. On a warm transform cache that
+   * is a second or two; on a cold CI runner it exceeded the 30 s
+   * `testTimeout` in `jest.preset.js` and the CONTROL case failed with
+   * `Exceeded timeout of 30000 ms` while every later case passed, the
+   * transform cache being warm by then. That asymmetry is why this suite was
+   * green locally and red in CI (AGL-1627).
+   *
+   * Warming it here moves the compile OUT of a timed test. `isolateModules`
+   * resets the module REGISTRY, not jest's transform cache, so this one import
+   * pays the cost once and every `fire()` still gets its own fresh registry —
+   * which the memoized lockdown verdict requires.
+   *
+   * AND IT REMOVES A CASCADE, which is the part worth keeping. When the
+   * CONTROL case timed out it did so *inside* `isolateModulesAsync`, leaving
+   * that scope open, so the very next case died with
+   * `isolateModulesAsync cannot be nested inside another isolateModulesAsync`
+   * — an error naming nothing that was actually wrong. One slow compile
+   * therefore reported as two unrelated failures.
+   *
+   * The explicit timeout is on this hook rather than raised suite-wide: the
+   * tests themselves should stay on the standard budget, because a beacon that
+   * genuinely takes 30 s IS a failure.
+   */
   beforeAll(async () => {
     db = getFirestore()
     // The spoof gate refuses a host that does not exist, so the fixture host
     // is a real document — as it is in production.
     await clearLock()
     await dayRef().delete()
-  })
+    await import('../app/api/analytics/collect/route')
+  }, 180_000)
 
   afterAll(async () => {
     await dayRef().delete()
