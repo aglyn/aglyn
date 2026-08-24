@@ -93,6 +93,23 @@ interface EnforcementPreview {
   scanned: number
   changed: number
   accounts: EnforcementAccount[]
+  /** The rehearsal carries the assessment too — that is what it is for. */
+  lockout?: LockoutAssessment
+}
+
+/**
+ * An org owner who signs in OUTSIDE the identity pool (AGL-1888 option (a)).
+ *
+ * The enforcement sweep lists the org's GCIP tenant and nothing else, so
+ * these accounts are not merely spared — they are invisible to it. That is
+ * what makes them a way back in when the identity provider is the thing that
+ * failed, and it is why they need no designation: nobody has to be told to
+ * keep a key they already hold.
+ */
+interface OutsidePoolOwner {
+  uid: string
+  email: string | null
+  providers: string[]
 }
 
 /** The refusal body `enforce-apply` answers 400 with (AGL-1888). */
@@ -102,6 +119,14 @@ interface LockoutAssessment {
   retainedBy: string[]
   /** Designated uids that protect nothing — the ones to replace. */
   ineffective: string[]
+  /** Org owners the sweep cannot reach, because they are not in the pool. */
+  ownersOutsidePool?: OutsidePoolOwner[]
+  /**
+   * The owner lookup did not complete. The list above is then INCOMPLETE, not
+   * empty — telling an admin "you have nobody" on the strength of a failed
+   * check is the shape where a swallowed error renders as a measured zero.
+   */
+  ownerLookupFailed?: boolean
 }
 
 /**
@@ -453,6 +478,21 @@ export function OrgSsoCard() {
    * rendered with its list.
    */
   const hasBreakGlass = savedBreakGlass.length > 0
+  /**
+   * The other way the org can be safe (AGL-1888 option (a)) — and for a pool
+   * we provisioned, the only one available: nothing inside it can hold a
+   * password, so no tick in the table below can ever be effective.
+   *
+   * Read from the SERVER's assessment, never inferred here. Whether an owner
+   * qualifies depends on which Auth pool their uid lives in, whether their
+   * address is verified, and whether the operator requires SSO for their
+   * domain — none of which this component can see. Guessing would put the
+   * Enforce button on the wrong side of a one-way door.
+   */
+  const ownersOutsidePool = lockout?.ownersOutsidePool ?? []
+  const hasOutsideOwner = ownersOutsidePool.length > 0
+  /** The check itself failed — distinct from "your org has nobody". */
+  const ownerCheckFailed = lockout?.ownerLookupFailed === true
   const emailForUid = (uid: string) =>
     preview?.accounts.find((account) => account.uid === uid)?.email ?? null
   /** Pool accounts a designation would actually protect the org with. */
@@ -461,8 +501,8 @@ export function OrgSsoCard() {
   )
   /** Designations that have not been saved yet — the Save button's whole job. */
   const breakGlassDirty =
-    [...breakGlass].sort().join(' ') !==
-    [...savedBreakGlass].sort().join(' ')
+    [...breakGlass].sort().join('\x00') !==
+    [...savedBreakGlass].sort().join('\x00')
 
   return (
     <SsoCardShell>
@@ -817,20 +857,49 @@ export function OrgSsoCard() {
               'shows you exactly which accounts are affected.'}
           </Typography>
 
-          {/* Break-glass designation — the precondition, stated first. */}
-          <Alert severity={hasBreakGlass ? 'success' : 'info'}>
-            {hasBreakGlass
-              ? `${savedBreakGlass.length} break-glass account(s) designated. ` +
-                'They keep their password even after enforcement, so a lapsed ' +
-                'certificate or a removed application in your identity ' +
-                'provider cannot lock your organization out of itself.'
-              : 'Before you can enforce, designate at least one break-glass ' +
-                'account: someone who keeps a password even after ' +
-                'enforcement. If your identity provider stops answering — an ' +
-                'expired certificate, a deleted application — that account is ' +
-                'the only way back in, and we cannot let you in either. ' +
-                'Rehearse to pick one.'}
+          {/* The precondition, stated first — and now satisfiable two ways. */}
+          <Alert
+            severity={hasOutsideOwner || hasBreakGlass ? 'success' : 'info'}
+          >
+            {hasOutsideOwner
+              ? 'Your organization keeps a way in that does not depend on ' +
+                'your identity provider: ' +
+                ownersOutsidePool
+                  .map((owner) => owner.email ?? owner.uid)
+                  .join(', ') +
+                ` — owner${ownersOutsidePool.length > 1 ? 's' : ''} who sign ` +
+                'in outside your identity pool. Enforcement never touches ' +
+                'those accounts, so an expired certificate or a deleted ' +
+                'application cannot lock your organization out of itself.'
+              : hasBreakGlass
+                ? `${savedBreakGlass.length} break-glass account(s) designated. ` +
+                  'They keep their password even after enforcement, so a lapsed ' +
+                  'certificate or a removed application in your identity ' +
+                  'provider cannot lock your organization out of itself.'
+                : 'Before you can enforce, your organization needs one way ' +
+                  'in that survives your identity provider failing — an ' +
+                  'expired certificate, a deleted application. Either an ' +
+                  'owner who signs in outside your identity pool (they keep ' +
+                  'their own password or social login, and enforcement never ' +
+                  'touches them), or a break-glass account inside the pool ' +
+                  'that keeps a password. Rehearse to see where you stand: ' +
+                  'without one of the two, nobody could sign in and we could ' +
+                  'not let you back in either.'}
           </Alert>
+          {/*
+            "We could not check" is not "you have nobody". Enforcement is
+            refused either way, but only one of those is the org's problem to
+            fix, and an error swallowed into an empty list reads exactly like
+            the other one.
+          */}
+          {ownerCheckFailed ? (
+            <Alert severity="warning">
+              {'We could not finish checking whether your organization has an ' +
+                'owner outside the identity pool, so enforcement is refused ' +
+                'until we can. Nothing has changed. Rehearse again in a ' +
+                'moment, and contact us if it keeps happening.'}
+            </Alert>
+          ) : null}
           {/*
             The refusal, rendered where it can be acted on (AGL-1888). The
             snackbar carries the sentence; this carries the LIST — which of
@@ -850,31 +919,33 @@ export function OrgSsoCard() {
             </Alert>
           ) : null}
           {/*
-            The honest empty state, and the one that matters most right now.
+            The honest empty state — now with something the admin can DO.
 
             A pool created by `provisionSsoPool` is made with
             `emailSignInConfig.enabled: false`, no console path can set a
             password on an account inside a pool (`/api/orgs/members/password`
             refuses on `tenantId`), and social logins cannot be linked to a
             governed account at all. So for an org whose pool we provisioned,
-            EVERY account holds nothing but the SAML link — no designation can
-            be effective, and `enforce-apply` refuses whatever is ticked.
+            EVERY account holds nothing but the SAML link and no tick in the
+            table below can ever be effective.
 
-            Saying "designate a break-glass account" into that is a dead end
-            that reads as the admin's failure to find one. Until AGL-1888
-            settles how an org gets a credential that survives the sweep, the
-            card says what is true: the rehearsal is real and useful, and
-            enforcement is not available yet.
+            That used to end in "talk to us", which is the one shape a
+            self-serve flow may not have. The way out (AGL-1888 option (a)) is
+            an owner who is not in the pool at all, and making someone an owner
+            is something the org does for itself — so this says so, rather than
+            pointing at a checkbox that cannot be ticked.
           */}
-          {preview && !eligibleBreakGlass.length ? (
+          {preview && !eligibleBreakGlass.length && !hasOutsideOwner ? (
             <Alert severity="warning">
-              {'No account in your identity pool can serve as break-glass ' +
-                'yet: every one of them signs in through your identity ' +
-                'provider and holds nothing else, which is exactly the ' +
-                'credential that stops working in the situation break-glass ' +
-                'is for. Enforcement stays unavailable until that is ' +
-                'resolved — talk to us before relying on it. The rehearsal ' +
-                'above is accurate and costs nothing to re-run.'}
+              {'No account in your identity pool can serve as break-glass: ' +
+                'every one of them signs in through your identity provider ' +
+                'and holds nothing else, which is exactly the credential ' +
+                'that stops working in the situation break-glass is for. ' +
+                'Give your organization an owner who signs in outside the ' +
+                'pool instead — an owner whose email is not routed to your ' +
+                'identity provider, with their own password or social login ' +
+                '— then rehearse again. Enforcement stays unavailable until ' +
+                'then, and the rehearsal costs nothing to re-run.'}
             </Alert>
           ) : null}
 
@@ -884,7 +955,17 @@ export function OrgSsoCard() {
               disabled={busy || !canManage || !isActive}
               onClick={async () => {
                 const result = await run({ action: 'enforce-preview' })
-                if (result?.preview) setPreview(result.preview)
+                if (result?.preview) {
+                  setPreview(result.preview)
+                  // The rehearsal carries the same assessment `enforce-apply`
+                  // would refuse on, so it becomes the card's answer about
+                  // where the org stands. One source, refreshed by the action
+                  // that re-plans the pool — the alternative is a refusal
+                  // banner that outlives the state it described.
+                  setLockout(
+                    (result.preview as EnforcementPreview).lockout ?? null,
+                  )
+                }
               }}
             >
               {'Rehearse'}
@@ -893,7 +974,15 @@ export function OrgSsoCard() {
               variant="contained"
               color="warning"
               disabled={
-                busy || !canManage || !isActive || sso.enforced || !hasBreakGlass
+                busy ||
+                !canManage ||
+                !isActive ||
+                sso.enforced ||
+                // Either route out of the lockout will do, and with NEITHER
+                // the refusal is certain — so it is stated above rather than
+                // discovered by clicking. An owner outside the pool needs no
+                // designation, which is why this is not just `hasBreakGlass`.
+                (!hasBreakGlass && !hasOutsideOwner)
               }
               onClick={async () => {
                 try {
@@ -902,9 +991,10 @@ export function OrgSsoCard() {
                     description:
                       'Passwords and linked social logins will be removed from ' +
                       'every account in your identity pool, except the ' +
-                      'break-glass accounts you designated. Anyone who has only ' +
-                      'those will need your identity provider to get back in. ' +
-                      'This cannot be undone by turning enforcement off.',
+                      'break-glass accounts you designated. Accounts outside ' +
+                      'the pool are not touched. Anyone who has only a pool ' +
+                      'account will need your identity provider to get back ' +
+                      'in. This cannot be undone by turning enforcement off.',
                     confirmationButtonProps: { color: 'warning' },
                   })
                 } catch {

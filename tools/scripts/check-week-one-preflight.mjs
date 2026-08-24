@@ -91,13 +91,33 @@ const LEGAL_MARKERS = [
 ]
 
 /**
- * The demo org the Sep 3–4 demos run on. `demo` is NOT just a sales prop: the
- * tenant middleware falls back to it for `app.aglyn.com` and for every Vercel
- * preview, and it is the launch runbook's cold-tenant-fetch subject. Anything
- * that reseeds it has a blast radius well outside the demo.
+ * The hosts the demo org serves, each with the brand string that proves the
+ * seeder actually ran against it. A 200 is NOT the check: `demo` answered 200
+ * for months while serving a component scratch canvas.
+ *
+ * ⚠️ `demo` IS DELIBERATELY ABSENT, and re-adding it would be a mistake.
+ * It was here asserting `/sourdough|croissant|Bakery/`, which was never true
+ * and is now decided never to become true. There is no `hosts/demo` document
+ * at all: the `demo` subdomain is served by a legacy push-id host in an
+ * individual's personal org, with zero `seed-` documents and four renderer
+ * test screens (`Hierarchy Child`, `Layout Test Page`). It is also the tenant
+ * middleware's fallback for `app.aglyn.com`, for every Vercel preview and for
+ * localhost:4500, so it must not be reseeded or deleted — `seed-demo-host.mjs`
+ * would merge a competing home screen over a working dev fixture while
+ * pruning none of it, because the prune only removes `seed-` ids. Asserting
+ * bakery content on it was asserting something we have chosen not to do.
+ *
+ * `showcase` replaces it, and is the one row that carries a second job: it is
+ * the render canary's subject (`AGLYN_CANARY_SITE_HOST`). The canary grades
+ * only "host resolved + non-empty node tree" so an ordinary customer edit
+ * cannot page on-call — which is only meaningful while something guarantees
+ * the tree. THIS ROW IS THAT GUARANTEE. Its content comes from the `showcase`
+ * brand pack in version control, so if the canary is ever green over a host
+ * that has drifted, this is what says so — on a schedule, where it can file
+ * rather than page.
  */
 const DEMO_HOSTS = [
-  ['demo', 'https://demo.aglyn.app/', /sourdough|croissant|Bakery/i],
+  ['showcase', 'https://showcase.aglyn.app/', /Platform Showcase/i],
   ['dental', 'https://northgate-dental.aglyn.app/', /Northgate Dental/i],
   ['legal', 'https://harborline-law.aglyn.app/', /Harborline/i],
   ['restaurant', 'https://casa-verde.aglyn.app/', /Casa Verde/i],
@@ -496,8 +516,11 @@ async function runSelfTest() {
     /Northgate/,
   ])
   await checkDemoOrg()
-  DEMO_HOSTS.length = 0
-  DEMO_HOSTS.push(...savedHosts)
+  // Restored in ONE call rather than `length = 0` then `push`. The two-step
+  // form is a read-modify-write across an `await`, which `require-atomic-updates`
+  // flags correctly even though this runner is single-threaded — and the rule
+  // stops being theoretical the moment anything here runs concurrently.
+  DEMO_HOSTS.splice(0, DEMO_HOSTS.length, ...savedHosts)
 
   docsRoot = docsDir
   const red = results.filter((r) => r.state === FAIL || r.state === UNKNOWN)
