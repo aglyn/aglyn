@@ -455,6 +455,10 @@ export function OrgSsoCard() {
   const hasBreakGlass = savedBreakGlass.length > 0
   const emailForUid = (uid: string) =>
     preview?.accounts.find((account) => account.uid === uid)?.email ?? null
+  /** Pool accounts a designation would actually protect the org with. */
+  const eligibleBreakGlass = (preview?.accounts ?? []).filter((account) =>
+    protectsIfDesignated(account, sso.providerId),
+  )
   /** Designations that have not been saved yet — the Save button's whole job. */
   const breakGlassDirty =
     [...breakGlass].sort().join(' ') !==
@@ -843,6 +847,34 @@ export function OrgSsoCard() {
                   .map((uid) => emailForUid(uid) ?? uid)
                   .join(', ') +
                 '. Pick an account that also has a password.'}
+            </Alert>
+          ) : null}
+          {/*
+            The honest empty state, and the one that matters most right now.
+
+            A pool created by `provisionSsoPool` is made with
+            `emailSignInConfig.enabled: false`, no console path can set a
+            password on an account inside a pool (`/api/orgs/members/password`
+            refuses on `tenantId`), and social logins cannot be linked to a
+            governed account at all. So for an org whose pool we provisioned,
+            EVERY account holds nothing but the SAML link — no designation can
+            be effective, and `enforce-apply` refuses whatever is ticked.
+
+            Saying "designate a break-glass account" into that is a dead end
+            that reads as the admin's failure to find one. Until AGL-1888
+            settles how an org gets a credential that survives the sweep, the
+            card says what is true: the rehearsal is real and useful, and
+            enforcement is not available yet.
+          */}
+          {preview && !eligibleBreakGlass.length ? (
+            <Alert severity="warning">
+              {'No account in your identity pool can serve as break-glass ' +
+                'yet: every one of them signs in through your identity ' +
+                'provider and holds nothing else, which is exactly the ' +
+                'credential that stops working in the situation break-glass ' +
+                'is for. Enforcement stays unavailable until that is ' +
+                'resolved — talk to us before relying on it. The rehearsal ' +
+                'above is accurate and costs nothing to re-run.'}
             </Alert>
           ) : null}
 

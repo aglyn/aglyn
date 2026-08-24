@@ -526,3 +526,66 @@ describe('OrgSsoCard break-glass designation (AGL-1888)', () => {
     expect(refusal.textContent).not.toMatch(/u-2/)
   })
 })
+
+/**
+ * AGL-1888: a pool WE provisioned cannot hold an effective break-glass
+ * account at all, and the card must say so rather than asking for one.
+ *
+ * `provisionSsoPool` creates the tenant with `emailSignInConfig.enabled:
+ * false`; `/api/orgs/members/password` refuses on `tenantId`; social logins
+ * cannot be linked to a governed account. So every account in the pool holds
+ * nothing but the SAML link, `assessSsoLockoutRisk` can never answer safe,
+ * and "designate a break-glass account" is a dead end that reads as the
+ * admin's failure to find one.
+ */
+describe('OrgSsoCard break-glass with no eligible account (AGL-1888)', () => {
+  it('says enforcement is unavailable when no pool account could ever qualify', async () => {
+    serveByAction({
+      status: { body: liveOrg() },
+      'enforce-preview': {
+        body: {
+          ok: true,
+          preview: {
+            scanned: 2,
+            changed: 0,
+            accounts: [
+              account({ uid: 'u-1', email: 'a@acme.com', unlinked: [] }),
+              account({ uid: 'u-2', email: 'b@acme.com', unlinked: [] }),
+            ],
+          },
+        },
+      },
+    })
+
+    render(<OrgSsoCard />)
+    await screen.findByText('On')
+    fireEvent.click(button('Rehearse'))
+
+    expect(
+      await screen.findByText(/No account in your identity pool can serve as break-glass/),
+    ).toBeTruthy()
+  })
+
+  it('does not say that when the pool does hold a qualifying account', async () => {
+    // The paired positive: the warning must be about the POOL, not about
+    // every rehearsal. `account()` defaults to holding a password.
+    serveByAction({
+      status: { body: liveOrg() },
+      'enforce-preview': {
+        body: {
+          ok: true,
+          preview: { scanned: 1, changed: 1, accounts: [account()] },
+        },
+      },
+    })
+
+    render(<OrgSsoCard />)
+    await screen.findByText('On')
+    fireEvent.click(button('Rehearse'))
+
+    await screen.findByLabelText('Break-glass: owner@acme.com')
+    expect(
+      screen.queryByText(/No account in your identity pool can serve as break-glass/),
+    ).toBeNull()
+  })
+})
