@@ -84,6 +84,7 @@ import {
 } from '../contexts/interactions-context'
 import { MediaPickerContext } from '../contexts/media-picker-context'
 import { ComponentPromotionContext } from '../contexts/component-promotion-context'
+import { InstanceAttrOverrides } from './instance-attr-overrides.component'
 import useDeleteElementCallback from '../hooks/use-delete-element-callback'
 
 // The AGL-567 debounce now lives in `../hooks/use-debounced-commit` so the
@@ -1388,6 +1389,25 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                   schema={schema}
                   {...rest}
                 />
+
+                {/* Per-instance ATTRIBUTE overrides (AGL-1899), the
+                    attribute-side twin of the Styles panel's override
+                    section. Rendered OUTSIDE `ElementPropsFormTemplate` —
+                    which is the `<form>` — because it runs a form of its own:
+                    nesting them would produce invalid markup and a submit
+                    from the inner one would be the outer one's submit.
+
+                    It writes `node.attrOverrides`, a first-class node field,
+                    and reads its values from the component DEFINITION rather
+                    than from this node's props, so it shares no value plumbing
+                    with the form above and cannot become a second writer on
+                    anything the form above owns. */}
+                {isInstance ? (
+                  <InstanceAttrOverrides
+                    node={node}
+                    componentMapper={elementPropsComponentMapper}
+                  />
+                ) : null}
 
                 {boundPropSummaries.length ? (
                   <Box sx={{ mt: 2 }}>
