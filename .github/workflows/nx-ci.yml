@@ -283,4 +283,34 @@ jobs:
       # package reaching it lands on every published customer page. ~1s.
       - run: npm run check:aglyn-barrel
 
-      - run: npx nx affected -t lint test build --parallel=3
+      # The affected run, TEE'd (AGL-1617). Run 32687205268 failed here with
+      # the whole of its diagnosis being "Failed tasks: - console:test":
+      # GitHub truncates the MIDDLE of a long ##[group] and jest prints its
+      # failure block in the middle, so the job log carried zero FAIL markers
+      # and zero failed-test summaries. The tee keeps the untruncated bytes as
+      # an artifact; the digest prints a summary too small to be cut.
+      #
+      # set -o pipefail is NOT optional. GitHub's default shell is
+      # `bash -e {0}` and -e does NOT imply pipefail, so `nx ... | tee f`
+      # would exit with TEE's status — zero, always — and every red test run
+      # in this job would report green.
+      - name: test
+        run: |
+          set -o pipefail
+          npx nx affected -t lint test build --parallel=3 2>&1 | tee "$RUNNER_TEMP/nx-test.log"
+
+      # --task-failed: this step only runs because the job is already red, so
+      # the premise comes from the workflow rather than from a log that may
+      # not contain it. A log with nothing in it is INCONCLUSIVE, not clean.
+      - if: failure()
+        run: node tools/scripts/lib/ci-test-digest.mjs "$RUNNER_TEMP/nx-test.log" --task-failed
+
+      # The raw bytes. Named per job — a different name from main-gate.yml's,
+      # so neither can ever collide with the other.
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nx-test-log-nx-ci-main
+          path: ${{ runner.temp }}/nx-test.log
+          retention-days: 7
+          if-no-files-found: warn
