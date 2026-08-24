@@ -101,14 +101,25 @@ worth learning properly:
 | Costs | A **manager seat** | A **collaborator seat** on each site they can reach |
 | Use for | Your own staff | Contractors, and **the client** |
 
+![The team members table showing a workspace manager alongside a site collaborator, with their different access scopes and the seat counts](/img/guides/team-managers-vs-collaborators.png)
+
+The **Access** column is where the difference shows: a manager reads **All sites**,
+a collaborator reads the number of sites they were granted. The line above the table
+counts the two separately, because only managers use a team seat.
+
 **Give clients collaborator access, not manager access.** A manager can see every
 other client's site, their content and their form submissions. That is usually a
 contractual problem, and it's not undone by anyone being careful.
 
 Steps:
 
-1. **Organization → Team** to add your own staff as managers.
-2. On each **site**, use its members card to invite that project's collaborators.
+1. **Organization → Team** to add your own staff as managers — leave **All sites**
+   ticked on the invite row.
+2. For a collaborator, invite them from the same page with **All sites** *unticked*,
+   then use their **Access** cell to pick the sites and give each one a role. Access
+   is granted per site from here, not from the site itself.
+
+   ![The site access dialog for one member, with All sites unticked and a single site granted the editor role](/img/guides/site-members-invite.png)
 3. Give a client who should draft but not go live the **Author** role on their
    site. It is the site role between Viewer and Editor: it can edit every kind of
    content — pages, layouts, components and collection entries — and it cannot

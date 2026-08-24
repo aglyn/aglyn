@@ -249,7 +249,28 @@ crop. Paste each `spec` into the `SHOTS` array, run the harness, then replace
 the `<!-- screenshot: … -->` comment on the named docs page with a standard
 image reference using the alt text given.
 
-## Run of 2026-08-23 (AGL-1950) — 6 captured, 10 not
+## Second run of 2026-08-23 (AGL-1950) — 11 captured, 5 not
+
+The four fixture-blocked entries below are now captured (**A8, A11, A13**), plus
+**A12** on a re-pointed surface, from fixtures added in
+`tools/e2e/seed-docs-fixtures.mjs` — a **separate, additive** seed rather than
+edits to `seed-e2e.mjs`, so the e2e suite's member counts, seat assertions and
+empty-state pages do not move under a suite that never asked for a third member
+or a disputed order.
+
+**A9 was re-shot: the image published by the first run was wrong.** It showed
+thirteen scope rows and was missing `Orders — record shipments`, even though the
+commit that added that scope is an *ancestor* of the commit the image was
+committed in. The capture had run against a dev server compiled from an older
+checkout. Nothing in the harness could catch it — the crop was right, the dialog
+was fully in frame, the shot passed, and the result was a plausible, confident,
+wrong picture of a security-relevant surface. **Pin the server to the commit you
+intend to publish from, and count the rows in the file afterwards.**
+
+The five that remain are **A1, A2, A7, A10, A14** — plus **A15**, which is a
+decision rather than a capture. None is a matter of harness time; see each entry.
+
+## First run of 2026-08-23 (AGL-1950) — 6 captured, 10 not
 
 Six are in the tree and on their pages: **A3, A4, A5, A6, A9, A16**. The other
 ten are **not captured, and none of them is a matter of running the harness
@@ -431,7 +452,7 @@ hand and redact.)*
 
 ## API (AGL-1928, guides)
 
-### A8. `static/img/api/api-keys-card.png` — ⛔ BLOCKED (AGL-1950)
+### A8. `static/img/api/api-keys-card.png` — ✅ CAPTURED (AGL-1950, 2026-08-23 second pass)
 
 - **Docs page:** `guides/your-first-api-call.md` → `#step-1-create-a-key`
 - **Capture:** **Organization → Settings**, scrolled to the **API keys** card,
@@ -443,14 +464,28 @@ hand and redact.)*
   ③ the last-used column.
 - **Alt text:** The API keys card listing two keys with their scopes, truncated
   prefixes and last-used times, and a Create API key button.
-- **⛔ Blocked (2026-08-23):** the fixture org has **no API keys**, and the shot
-  is specifically of a *populated* list with a revoked row. Creating two real
-  keys to photograph them is the A10 problem one step removed. Unblock by seeding
-  two key documents (one revoked) in `seed-e2e.mjs` — then this becomes a plain
-  harness shot.
-- **Spec correction:** **API keys** is a section in the Settings page's left
-  **Navigation** list, not a card on the General page, so `scroll` will never
-  reach it — it has to be clicked.
+- **✅ Captured 2026-08-23 (second pass)**, against two key documents seeded by
+  `tools/e2e/seed-docs-fixtures.mjs`.
+- **The fixture needs no credential to exist, and that is the point.** The
+  collection is top-level `apiKeys` and **the document id IS the SHA-256 of the
+  raw token**, so a seeded row is the hash of nothing: no key was ever minted and
+  no string authenticates against it. This is what makes A8 safe where A10 is
+  not — do not "improve" it by minting real keys through the dialog.
+- **⚠️ Spec correction — a revoked key CANNOT be photographed here.**
+  `OrgApiKeysCard` runs `keys.filter((key) => !key.revokedAt)` before it maps
+  rows, so a revoked key leaves the card entirely. There is no strikethrough, no
+  `Revoked` chip, no dimmed row — the only revocation strings on the surface are
+  in the confirm dialog. The seed writes a revoked key (`old-migration-script`)
+  anyway, as a **negative control**: it must NOT appear in the image, and the row
+  count is what proves the filter is still there.
+- **Spec correction:** **API keys** is a **tab** on the Settings page, not a card
+  on the General page and not a left-nav list item — so `scroll` will never reach
+  it. It has to be clicked. Worse for a capture: **every tab panel stays mounted
+  and hidden**, so `waitFor: 'API keys'` matches instantly on text nobody can see.
+  The `clipTo` is the real guard, because a `display:none` card has no bounding
+  box and the harness fails the shot rather than cropping to something else.
+- **Callouts dropped.** See the note under A11 — the badge lands on the content
+  to the element's left, and here it sat across the key prefix it pointed at.
 
 ```js
 {
@@ -481,12 +516,25 @@ hand and redact.)*
   media scopes as a group.
 - **Alt text:** The Create API key dialog with a descriptive name typed and the
   Datasets — read scope ticked, showing every available scope.
-- **✅ Captured 2026-08-23.** Opening the dialog writes nothing; the key is only
-  created on submit, which the shot never presses.
-- **Spec correction — there are THIRTEEN scopes, not eight:** Datasets read/write,
+- **✅ Captured 2026-08-23. ⚠️ RE-SHOT the same day — the first image was wrong.**
+  Opening the dialog writes nothing; the key is only created on submit, which the
+  shot never presses.
+- **⚠️ The published image showed THIRTEEN rows and was missing `Orders — record
+  shipments`.** `orders:write` was added to the picker by `0354a2bf8`, which is an
+  **ancestor of the capture commit** — so the code was in the tree and the image
+  still lacked the row. The capture ran against a dev server compiled from an
+  older checkout, and nothing in the harness can see that: the crop was correct,
+  the dialog was fully in frame, the shot passed. **This is the exact failure the
+  entry below warns about, and it happened anyway, one line down from the
+  warning.** A stale dev server produces a plausible, correct-looking, wrong
+  image. Re-shot against a server pinned to the capture commit; the current file
+  has all fourteen rows, ending `Media — upload`.
+- **Spec correction — there are FOURTEEN scopes, not thirteen and not eight:**
+  Datasets read/write,
   Contacts read/write, Sites read/publish/create, Form submissions read/write,
-  Orders read, Products read, Media read/upload. The spec's warning still stands
-  and now bites harder: a crop that stops early republishes a stale surface.
+  Orders **read and record-shipments**, Products read, Media read/upload. The
+  spec's warning still stands and now bites harder: a crop that stops early
+  republishes a stale surface — and so does a stale *server*.
 - **Two traps the spec walks into.** (1) **Datasets — read is ticked by default**,
   so the instruction to tick it turns it *off*; the first run of this shot
   published an unticked box. (2) At 1440×900 the dialog is **taller than the
@@ -532,7 +580,7 @@ hand and redact.)*
 
 ## Agency workspace (guides)
 
-### A11. `static/img/guides/team-managers-vs-collaborators.png` — ⛔ BLOCKED (AGL-1950)
+### A11. `static/img/guides/team-managers-vs-collaborators.png` — ✅ CAPTURED (AGL-1950, 2026-08-23 second pass)
 
 - **Docs page:** `guides/run-an-agency-workspace.md` → `#step-3-access`
 - **Capture:** **Organization → Team** on an org holding both a workspace
@@ -543,12 +591,31 @@ hand and redact.)*
   ③ the seat counts.
 - **Alt text:** The team members table showing a workspace manager alongside a
   site collaborator, with their different access scopes and the seat counts.
-- **⛔ Blocked (2026-08-23):** the fixture org has two members and **both are
-  Team managers** (owner + editor). The shot's entire subject is a manager and a
-  site collaborator side by side, so an owner-and-editor table would assert the
-  distinction rather than show it. Unblock by seeding a site-scoped collaborator
-  — note the seat-count line is rendered from these rows, so check what else
-  asserts on it before changing the fixture.
+- **✅ Captured 2026-08-23 (second pass)**, against the collaborator seeded by
+  `tools/e2e/seed-docs-fixtures.mjs` (Priya Raman, editor, one site).
+- **A collaborator is NOT a role value.** Managers and collaborators share one
+  vocabulary (`owner|admin|editor|viewer`); the difference is reach.
+  `isOrgWideMember` returns false only for a member carrying `allHosts: false`
+  **and** a non-empty `hostAccess` — **both**. A member doc with neither is read
+  as a *legacy* org-wide row and renders `Team manager`, which is the quiet way
+  this fixture could have produced the exactly-wrong image.
+- **The seat line moved as predicted and is correct:** `2 of 15 manager seats
+  used · 1 site collaborator (metered per site)`. `countManagerSeats` counts
+  org-wide members only, so the collaborator lands in the second half of the
+  sentence and the e2e suite's manager count is untouched.
+- **Spec correction:** the card header is `Organization members — E2E Bakery Co`,
+  not `Members`. The plan's locator still matches, because Playwright's
+  `has-text` is a case-insensitive *substring* — do not "tighten" it to
+  `:text-is()`. The access cells render `All sites` and `1 site(s)` (uppercased
+  by CSS, so `innerText` reads `ALL SITES` / `1 SITE(S)` — a text assertion
+  written in the source casing fails against a surface that is rendering fine).
+- **⚠️ Callouts dropped, and this generalises to every card in this file.** The
+  harness draws its badge at `(x−14, y−14)` of the target. In a dialog that lands
+  in the backdrop; on a left-aligned table row it lands **on the content**. Here
+  callout ③ covered the `2` in `2 of 15 manager seats used` — the number it
+  existed to point at — and ① resolved to nothing, leaving the numbering to start
+  at ②. Annotate what a reader would otherwise hunt for; a cropped card is not
+  that.
 
 ```js
 {
@@ -562,7 +629,7 @@ hand and redact.)*
 }
 ```
 
-### A12. `static/img/guides/site-members-invite.png` — ⛔ BLOCKED (AGL-1950)
+### A12. `static/img/guides/site-members-invite.png` — ✅ CAPTURED (AGL-1950, 2026-08-23 second pass, RE-POINTED)
 
 - **Docs page:** `guides/run-an-agency-workspace.md` → `#step-3-access`
 - **Capture:** a **site's** members card with the invite control open, showing
@@ -570,12 +637,25 @@ hand and redact.)*
 - **Frame:** the card plus the open invite control.
 - **Alt text:** A site's members card with the invite control open, granting
   access to that one site.
-- **⛔ Blocked (2026-08-23) — the surface moved.** `/{host}/setup` has no Members
-  card: its Navigation is Basic details, SEO, Theme, Custom domain, Emails,
-  Activity. The equivalent control now lives on the **organization Team** page,
-  as the invite row whose **All sites** checkbox can be unticked to scope an
-  invite to one site. Re-point the spec there and re-check the guide's prose
-  before capturing — the page it illustrates describes the old location.
+- **✅ Captured 2026-08-23 (second pass), on a different surface.** `/{host}/setup`
+  still has no Members card (Basic details · SEO · Theme · Custom domain · Emails ·
+  Activity), so the spec's target is gone for good.
+- **⚠️ The obvious re-point is the wrong one.** The first attempt shot the Team
+  page's invite row with **All sites** unticked, as the previous pass suggested.
+  That image is a near-duplicate of A11 with an empty checkbox in it: unticking
+  there reveals **no site list**, so it shows the *absence* of org-wide access and
+  nothing about per-site scoping — a picture of a negative. The real control is
+  the **Site access dialog** behind a member's `1 site(s)` / `All sites` access
+  cell, which is where `orgHosts` is enumerated, one row per site with its own
+  role. That is what the guide describes, so that is what is in the file.
+- **Alt text corrected:** it is a site-access dialog for an existing member, not
+  an invite control. The filename is kept so the plan's index still resolves.
+- **The guide's prose was wrong too, and is fixed.** `run-an-agency-workspace.md`
+  step 2 told the reader to use *"each site's members card"* — the surface that no
+  longer exists. It now points at the Team page and the per-member Access cell.
+- **Note for a future re-shoot:** the fixture org has one site, so the dialog
+  lists one row. It reads correctly, but a two-site org would show the choice
+  rather than imply it.
 
 ```js
 {
@@ -592,7 +672,7 @@ hand and redact.)*
 
 ## Commerce (AGL-1794, AGL-1873)
 
-### A13. `static/img/commerce/order-charged-back.png` — ⛔ BLOCKED (AGL-1950)
+### A13. `static/img/commerce/order-charged-back.png` — ✅ CAPTURED (AGL-1950, 2026-08-23 second pass)
 
 - **Docs page:** `commerce-and-bookings/commerce/overview.md` → `#a-lost-dispute`
 - **Precondition:** a seeded order carrying `dispute` with a lost outcome and a
@@ -605,12 +685,32 @@ hand and redact.)*
   ③ the Disputes filter.
 - **Alt text:** An order showing Charged back status with the reversed amount,
   distinct from a refund, and the Disputes filter on the orders list.
-- **⛔ Blocked (2026-08-23):** the seed carries **no orders at all**, so there is
-  nothing to photograph — the precondition (an order with a lost dispute and a
-  non-zero `refundedCents`) has to be seeded first.
-- **Spec correction:** the route is wrong. `/{host}/commerce/orders` **404s**;
-  orders are a section of `/{host}/products` (Catalog · Orders · Promotions ·
-  Reservations · Settings · Analytics).
+- **✅ Captured 2026-08-23 (second pass)**, against three orders seeded by
+  `tools/e2e/seed-docs-fixtures.mjs` — one charged back, two ordinary.
+- **Spec correction — the route needs the tab.** `/{host}/commerce/orders`
+  **404s**. Orders are a tab of the commerce plugin page and `HubTabs` seeds its
+  state from the query param, so the working path is
+  **`/{orgSlug}/hosts/{host}/products?tab=orders`**.
+- **Spec correction — `Disputes` is a select, not a button.** The plan's
+  `button:has-text("Disputes")` matches nothing; it is a MUI `TextField select`
+  (`All orders` / `Open dispute` / `Charged back`).
+- **Spec correction — no detail dialog is needed.** The plan asks for "the order
+  row **and** its detail" so the status and the reversed amount are in one image.
+  The row already carries both: the Total column renders **`$0.00`** over
+  **`$62.00 less refunds`**, and the `Charged back` chip sits **beside** the
+  untouched `Refunded` status chip. That pairing is a better statement of the
+  distinction than the dialog is — a lost dispute is a refund the merchant did
+  not choose — and it keeps the `Disputes` filter in the same frame, which a
+  dialog crop would have lost.
+- **⚠️ Do not copy the demo-brands order shape.** `tools/scripts/lib/demo-brands.mjs`
+  writes `orderNumber` / `email` / `items[].unitPriceCents`; `HostOrder` reads
+  `number` / `customerEmail` / `lineItems[].unitAmountCents`. An order seeded in
+  the demo shape renders a doc-id order number, an em-dash customer and a blank
+  item name — it photographs as a broken console rather than as a chargeback.
+- **Callouts dropped, and here they were actively misleading:** the badge for the
+  `Charged back` chip is drawn up and to its left, which is exactly where the
+  `Refunded` chip sits — callout ① for the chargeback landed **on the refund**,
+  marking the one thing the image exists to distinguish it from.
 
 ```js
 {
