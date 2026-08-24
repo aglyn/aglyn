@@ -105,24 +105,19 @@ export function ConsentBannerCard(props: ConsentBannerCardProps) {
   )
 
   /**
-   * The advertising question (AGL-1649), as AGL-2402 left it.
+   * The advertising question (AGL-1649).
    *
-   * What turning it ON actually does is POSTURE-DEPENDENT, and this copy has
-   * to say which — it is the one sentence a host reads at the moment they
-   * flip the switch.
+   * Turning it ON grants NOTHING. It adds a second question to the banner and
+   * the privacy-choices panel, so a visitor has somewhere to say yes; until
+   * one does, `ad_storage` and its two siblings stay denied exactly as they
+   * are today. That holds in BOTH postures, which is why this copy is not
+   * mode-dependent.
    *
-   * - `strict` (opt-in everywhere): nothing is granted until a visitor ticks
-   *   the second box. The switch really is inert until then.
-   * - `geo` (the default): visitors in prior-consent regions get the same
-   *   explicit question, but everywhere else the implied default now CARRIES
-   *   the advertising grant (AGL-2402 — safe by geography, since an `implied`
-   *   record can only be written in the opt-out posture). For those visitors
-   *   the switch is not inert: it starts advertising storage.
-   *
-   * The card used to say "nothing is granted until one says yes" in both
-   * modes. That was written before AGL-2402 and survived it, which meant the
-   * console told a host their switch was inert while it was granting
-   * `ad_storage` for every US visitor on the site.
+   * It was mode-dependent for one day. AGL-2402 widened the rule so the
+   * opt-out posture's implied default carried advertising, and this card was
+   * rewritten to disclose it. The behaviour was narrowed back on 2026-08-24
+   * to agree with the published Cookie Policy, so the original sentence — the
+   * true one again — is restored here.
    *
    * Off is written as a field DELETE rather than `false`, matching
    * `consent.disabled`, so an untouched host document carries no consent keys
@@ -135,14 +130,12 @@ export function ConsentBannerCard(props: ConsentBannerCardProps) {
       })
       enqueueSnackbar(
         active
-          ? mode === 'strict'
-            ? 'Visitors will be asked about advertising — nothing is granted until one says yes'
-            : 'Visitors in the EU/UK will be asked about advertising; visitors elsewhere get advertising storage from their next visit, with the opt-out control'
+          ? 'Visitors will be asked about advertising — nothing is granted until one says yes'
           : 'Advertising storage stays denied for every visitor',
         { variant: 'success', persist: false },
       )
     },
-    [firestore, hostId, enqueueSnackbar, mode],
+    [firestore, hostId, enqueueSnackbar],
   )
 
   const handleMode = useCallback(
@@ -250,15 +243,13 @@ export function ConsentBannerCard(props: ConsentBannerCardProps) {
                   component="span"
                   sx={{ display: 'block' }}
                 >
-                  {'Off by default. While it is off, Google Analytics runs ' +
-                    'with advertising storage denied for every visitor, so ' +
-                    'Google Ads linking and remarketing audiences collect ' +
-                    'nothing. Turn it on to add a second, separate question ' +
-                    'to the banner and the privacy-choices panel. Advertising ' +
-                    'follows the same consent mode as analytics: in the EU/UK ' +
-                    'it needs an explicit yes, and elsewhere in ' +
-                    'geo-conditional mode it is granted by the implied ' +
-                    'default, with the opt-out control always available.'}
+                  {'Off by default. Google Analytics runs with advertising ' +
+                    'storage denied unless a visitor explicitly allows it, ' +
+                    'so Google Ads linking and remarketing audiences ' +
+                    'collect nothing. Turn this on to add a second, ' +
+                    'separate question to the banner — turning it on grants ' +
+                    'nothing on its own, and a visitor who allows analytics ' +
+                    'is not thereby allowing advertising.'}
                 </Typography>
               </span>
             }
@@ -296,20 +287,15 @@ export function ConsentBannerCard(props: ConsentBannerCardProps) {
         ) : null}
         {asksAds && machineryLive ? (
           <Alert severity="info">
-            {mode === 'strict'
-              ? 'Advertising is a second, separate question, and in opt-in ' +
-                'mode it always needs an explicit yes. Visitors who allow ' +
-                'only analytics keep advertising storage denied, and ' +
-                'advertising is withdrawn by every refusal — Decline, an ' +
-                'opt-out, or a Global Privacy Control signal.'
-              : 'Advertising is a second, separate question. EU/UK and ' +
-                'unknown-region visitors are asked, and allowing only ' +
-                'analytics keeps advertising storage denied. Visitors ' +
-                'elsewhere are granted advertising storage by the same ' +
-                'implied default that grants analytics, and use "Your ' +
-                'Privacy Choices" to opt out; Global Privacy Control is ' +
-                'honored automatically. Advertising never outlives ' +
-                'analytics — every refusal withdraws both.'}
+            {'Advertising is a second, separate question, and it always ' +
+              'needs an explicit yes — in both consent modes, everywhere in ' +
+              'the world. Visitors who allow only analytics keep ' +
+              'advertising storage denied, and a visitor tracked under the ' +
+              'implied default is never treated as having allowed ' +
+              'advertising. Advertising never outlives analytics either: ' +
+              'every refusal — Decline, an opt-out, or a Global Privacy ' +
+              'Control signal — withdraws both. Visitors change their mind ' +
+              'either way through "Your Privacy Choices".'}
           </Alert>
         ) : null}
         {!hasGa && !disabled ? (

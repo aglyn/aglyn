@@ -268,10 +268,17 @@ export function DocumentPreview(props: DocumentPreviewProps) {
           status: 'implied',
           analytics: true,
           country,
-          // The implied default carries the advertising grant too where the
-          // host asks (AGL-2402) — `decideVisitorConsent` writes exactly this,
-          // and a preview that omitted it UNDERSTATED what a US visitor gets.
-          advertising: asksAds,
+          // ANALYTICS ONLY, because that is exactly what
+          // `decideVisitorConsent` writes: the implied default carries no
+          // advertising grant. AGL-2402 briefly made this `advertising:
+          // asksAds`; narrowed back on 2026-08-24 with the engine.
+          //
+          // The preview has to mirror the WRITE, not just end up at the same
+          // verdict. `adsAllowed` below re-derives through
+          // `advertisingGrantedByRecord`, which refuses `implied` either way —
+          // so a stale `true` here would not change the verdict, and would
+          // instead sit in the simulated record OVERSTATING what a US visitor
+          // gets to anything that reads the record itself.
         }
       }
     }

@@ -27,16 +27,25 @@
  * had ONE workaround — switch the whole consent tool off and run their own
  * CMP — which is a far bigger hammer than the problem.
  *
- * Every test below exists to hold one line: a grant requires the host to have
- * turned the question on AND a record whose status can carry one. Since
- * AGL-2402 that status set includes `implied` — safe by geography, because an
- * implied record can only be written in the opt-out posture — but NOT a legacy
- * record, and NOT a hand-edited localStorage entry, and never any of the
- * refusal statuses.
+ * Every test below exists to hold one line: a grant requires a visitor's
+ * explicit yes to THIS category, on a site whose host turned the question on.
+ * Nothing else — not an implied default, not a legacy record, not a
+ * hand-edited localStorage entry, and never a refusal status — may produce
+ * one.
+ *
+ * AGL-2402 (`a410d8785`) briefly widened the status set to include `implied`,
+ * on a geographic-safety argument that is sound as far as it goes and is
+ * still pinned below. It was narrowed back on 2026-08-24 because the second
+ * half of that argument did not hold: the published Cookie Policy tells
+ * visitors, in its per-cookie table and again under "Your choices", that
+ * advertising cookies are set only where they have allowed them. The
+ * behaviour agrees with the strictest published statement, not the loosest.
  */
 
+import type { VisitorConsentStatus } from './visitor-consent'
 import {
   advertisingGrantedByRecord,
+  advertisingGrantedByStatus,
   analyticsConsentSignals,
   consentGatedCategories,
   consentModeSignals,
@@ -87,7 +96,7 @@ describe('the host has to turn the question on (AGL-1649)', () => {
   })
 })
 
-describe('only a record that actually grants THIS category grants it', () => {
+describe('only an explicit yes to THIS category grants it', () => {
   it('records an advertising grant from an explicit accept', () => {
     const record = storeVisitorConsent('h1', {
       status: 'accepted',
@@ -106,35 +115,39 @@ describe('only a record that actually grants THIS category grants it', () => {
     expect(record.advertising).toBe(false)
   })
 
-  it('GRANTS advertising from an implied default when the host asks (AGL-2402)', () => {
-    // Widened deliberately. This used to assert `false`, on the reasoning
-    // that advertising carries obligations analytics does not — true in
-    // PRIOR-CONSENT regions, and applied worldwide it cost the audience
-    // everywhere without protecting anyone the posture was not already
-    // protecting. What makes the wider rule safe is geographic and is pinned
-    // by the two cases below, not by this one.
+  it('NEVER grants advertising from an implied default', () => {
+    // The load-bearing one. In the opt-out posture a US visitor is defaulted
+    // INTO analytics; advertising carries obligations analytics does not, so
+    // being defaulted in must not produce an advertising basis. "Implied
+    // consent to advertising" is a declaration to Google we could not
+    // support with anything on file — the AGL-1622 defect shape exactly.
+    //
+    // Note the input: `advertising: true` is passed IN and must still come
+    // back false. The grant is re-derived against the STATUS, so a caller
+    // asking for an implied grant cannot obtain one. AGL-2402 made this
+    // assert `true`; narrowed back 2026-08-24.
     const record = storeVisitorConsent('h1', {
       status: 'implied',
       advertising: true,
     })
     expect(record.analytics).toBe(true)
-    expect(record.advertising).toBe(true)
+    expect(record.advertising).toBe(false)
   })
 
-  it('still refuses advertising on an implied record the host never asked for', () => {
-    // The host opt-in is what makes an implied grant honest: a site that
-    // never shows the advertising question must not carry a record claiming
-    // the visitor allowed it. `advertising` omitted means NO.
+  it('and not from an implied record on a host that never asked either', () => {
+    // The omitted case, which must fall the same way: `advertising` absent
+    // means NO. Both halves matter — one asserts the status rule, this one
+    // asserts that absence is not silently upgraded.
     const record = storeVisitorConsent('h1', { status: 'implied' })
     expect(record.analytics).toBe(true)
     expect(record.advertising).toBe(false)
   })
 
   it('PRIOR-CONSENT regions can never reach an implied record at all', () => {
-    // The guarantee the widened rule rests on. If this ever goes red, an EU
-    // visitor could be defaulted into advertising and the change above stops
-    // being safe — so it is asserted here rather than left as a comment on
-    // `advertisingGrantedByStatus`.
+    // Kept from AGL-2402 as defence in depth. It is no longer what makes the
+    // rule safe — `advertisingGrantedByStatus` refusing `implied` is — but it
+    // is the guarantee that would have to hold FIRST if opt-out advertising
+    // is ever revisited, and it is cheap to keep honest in the meantime.
     for (const country of ['DE', 'FR', 'GB', 'GI', 'IE', 'NO', 'IS', 'RE']) {
       expect(resolveConsentPosture(null, country)).toBe('opt-in')
     }
@@ -202,6 +215,47 @@ describe('the stored record is derived, never trusted', () => {
 
   it('grants nothing when there is no record at all', () => {
     expect(advertisingGrantedByRecord(GA_ADS, null)).toBe(false)
+  })
+
+  it('FAILS CLOSED on an unknown or absent status', () => {
+    // `strictNullChecks` is OFF repo-wide, so the `VisitorConsentStatus` type
+    // is not a runtime guarantee: a corrupted record, a status from a future
+    // version, or a plain `undefined` all reach this function. Every one of
+    // them must read as DENIED.
+    //
+    // This is the case an exclusion-list implementation would fail. Written
+    // as `status !== 'declined' && status !== 'opted-out' && …`, the rule
+    // grants advertising to every value below — which is why
+    // `advertisingGrantedByStatus` is an equality test against the single
+    // granting status instead.
+    for (const status of [
+      undefined,
+      null,
+      '',
+      'unknown',
+      'ACCEPTED',
+      'accepted ',
+      'implied',
+      'pending',
+    ]) {
+      expect({
+        status,
+        granted: advertisingGrantedByStatus(status as VisitorConsentStatus),
+      }).toEqual({ status, granted: false })
+    }
+    // Non-vacuity: the one value that MUST grant still does, so a function
+    // hard-wired to `return false` cannot pass this suite.
+    expect(advertisingGrantedByStatus('accepted')).toBe(true)
+  })
+
+  it('and a record carrying an unknown status grants nothing either', () => {
+    // The same fail-closed direction one layer up, through the real reader.
+    window.localStorage.setItem(
+      visitorConsentStorageKey('h1'),
+      JSON.stringify({ v: 1, at: 1, status: 'pending', advertising: true }),
+    )
+    expect(advertisingGrantedByRecord(GA_ADS, readStoredVisitorConsent('h1')))
+      .toBe(false)
   })
 })
 

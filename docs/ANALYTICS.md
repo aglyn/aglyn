@@ -725,21 +725,31 @@ to know why the numbers moved on 2026-08-14.
 `7901f7332`, and the "open question" this section used to end on is settled.
 The category is off for every site that exists and is gated on the host
 turning it on **and** an analytics id being configured
-(`hostAsksAboutAdvertising()`); it adds a second, separate question to the
-banner and to the preferences panel so a visitor has somewhere to say yes.
-Advertising then follows the SAME posture as analytics rather than a stricter
-one — AGL-2402 widened `advertisingGrantedByStatus` so the opt-out posture's
-`implied` default carries it, which is safe by geography because an `implied`
-record can only ever be written outside the prior-consent regions. So on a
-`geo` site, turning the switch on DOES start advertising storage for non-EU/UK
-visitors; on a `strict` site it grants nothing until someone says yes. The
-rest of default-deny survives intact: a record written before the category
-existed reads
+(`hostAsksAboutAdvertising()`); turning it on grants nothing by itself, it
+adds a second, separate question to the banner and to the preferences panel
+so a visitor has somewhere to say yes. Default-deny survives it: only an
+explicit `accepted` grants advertising, in both postures and every region, so
+a record written before the category existed reads
 as never-asked rather than as a yes, the grant is re-derived on every read and
 write (so a hand-edited `localStorage` entry, or one left behind after a host
 switched the category back off, decays to denied), and advertising is clamped
 to analytics — `ad_storage: 'granted'` alongside `analytics_storage: 'denied'`
 is not a state this tool can reach.
+
+**The rule was wider for three days, 2026-08-21 to 2026-08-24.** AGL-2402
+(`a410d8785`) made the opt-out posture's `implied` default carry advertising,
+arguing it was safe by geography — an `implied` record can only ever be
+written outside the prior-consent regions, which is true and is still asserted
+in `visitor-consent-advertising.spec.ts`. What did not hold was the disclosure
+half of the argument. That commit stated the published Cookie Policy had been
+updated first; read against the live page, the policy says two different
+things — its "Marketing / advertising" paragraph does describe the opt-out
+posture, but the per-cookie table says `_gac`, `_gcl_au`, `_fbp` and `_fbc` are
+"set only where you have allowed advertising cookies", and "Your choices"
+repeats it. The behaviour was narrowed back to agree with the strictest
+published statement. Revisiting opt-out advertising means republishing the
+policy FIRST, and `consent-advertising-copy-drift.spec.ts` is the lock that
+makes the copy move with the rule in either direction.
 
 **Two payload builders, and the split is deliberate.** Both live in
 `libs/aglyn/src/lib/app-utils/visitor-consent.ts`, and between them they are

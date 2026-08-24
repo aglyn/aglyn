@@ -36,17 +36,20 @@
  *   visitor who has not granted. It is already default-on outside the
  *   prior-consent regions. **This module does not touch it and must not.**
  *
- *   ⚠️ Its AD signals are no longer the same as this module's. When this was
- *   written (2026-08-20) `aglyn.com` denied all three, and the sentence below
- *   about "exactly as `aglyn.com` already declares them" was true. It is not
- *   any more: AGL-1649/AGL-2402 gave hosts an advertising category that runs
- *   on implied consent outside the EU/UK, and the marketing host opted in.
- *   Re-verified live from the US on 2026-08-23: the record is
+ *   ✅ Its AD signals match this module's again. There was a three-day window
+ *   where they did not: AGL-2402 (2026-08-21) let the implied default carry
+ *   advertising, the marketing host had opted into asking, and a US visitor
+ *   was measured on 2026-08-23 with the record
  *   `{"status":"implied","analytics":true,"advertising":true,"country":"US"}`
- *   and the collect hit carries `gcs=G111` — ad storage GRANTED. That is the
- *   host's configured choice on a surface that can ask, and it is deliberate;
- *   it is recorded here only so the next reader does not take the comparison
- *   below as current fact.
+ *   and a collect hit carrying `gcs=G111` — ad storage GRANTED.
+ *
+ *   That was narrowed back on 2026-08-24 (only an explicit accept grants
+ *   advertising), so an implied US visitor on `aglyn.com` is once again
+ *   `advertising:false` with all three ad signals denied, exactly as this
+ *   module declares them. A host that asks can still OBTAIN the grant — it
+ *   just takes a visitor saying yes in "Your Privacy Choices" now, so it is
+ *   no longer the default state of an unmeasured visitor. Re-measure before
+ *   relying on the comparison below if the rule moves again.
  * - **`app.aglyn.com` and `docs.aglyn.com`** — GA loads unconditionally on
  *   both (no gate can run here), and BEFORE this module they carried no
  *   consent declaration of any kind. That was not "default on where lawful";

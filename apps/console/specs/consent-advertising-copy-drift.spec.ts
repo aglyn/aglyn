@@ -19,50 +19,64 @@
  * The advertising-consent COPY cannot drift from the advertising-consent
  * BEHAVIOUR (AGL-1649).
  *
- * ## The failure this exists to prevent, which already happened once
+ * ## The failure this exists to prevent, which already happened twice
  *
  * AGL-1649 shipped the advertising category with a genuine default-deny:
- * only an explicit accept could carry a grant. Six hours later AGL-2402
- * (`a410d8785`) widened `advertisingGrantedByStatus` so the opt-out posture's
- * `implied` default carries it too — a defensible change, safe by geography,
- * with its own tests.
+ * only an explicit accept could carry a grant. AGL-2402 (`a410d8785`) then
+ * widened `advertisingGrantedByStatus` so the opt-out posture's `implied`
+ * default carried it too. It touched FOUR files, none of which was a sentence
+ * a human reads, and NINE surfaces describing the old rule silently became
+ * false — the console card, the snackbar shown at the instant a host flips
+ * the switch, the customer docs, the generated assist index the in-console
+ * assist paraphrases back to hosts, and five doc comments. This spec was
+ * written to close that, and rewrote all nine to match the wider rule.
  *
- * It touched FOUR files, none of which was a sentence a human reads. Every
- * surface describing the old rule survived the change and became false:
+ * On 2026-08-24 the behaviour was narrowed BACK to `accepted` only, and this
+ * file did its job: it went red on the anchor and named every surface to
+ * restore. The copy and the assertions below now describe the narrow rule.
  *
- * - the console card told a host, in-product, that "a visitor tracked under
- *   implied consent is never treated as having allowed advertising";
- * - the snackbar shown at the instant the host flips the switch said
- *   "nothing is granted until one says yes" — while in geo mode the switch
- *   starts `ad_storage` for every US visitor on the site;
- * - the customer docs said advertising is "never implied";
- * - and the generated assist index carried that sentence into the in-console
- *   AI help, which paraphrases it back to hosts.
+ * ## Why the narrowing happened, since it is what this file now pins
  *
- * That is not a documentation nit. A host configuring a privacy control was
- * being told the opposite of what their own site does, which is the
- * deceptive-practices exposure AGL-2402's own commit message says it updated
- * the published policy to avoid — and then it missed every in-repo surface.
+ * AGL-2402's case had two halves. The geographic half is sound: an `implied`
+ * record can only be written in the opt-out posture, so an EU visitor can
+ * never reach the wider rule. The disclosure half is the one that failed. That
+ * commit stated the published Cookie Policy had been updated FIRST; read
+ * against the live page, the policy says two different things. Its "Marketing
+ * / advertising" paragraph does describe the opt-out posture — but the
+ * per-cookie table says `_gac`, `_gcl_au`, `_fbp` and `_fbc` are "set only
+ * where you have allowed advertising cookies", and "Your choices" repeats
+ * that advertising cookies "are set only where you have consented". A policy
+ * that says both cannot authorise the wider behaviour, so the behaviour now
+ * matches the strictest thing it says.
  *
  * ## Why this test is a two-way lock, not a word blocklist
  *
  * Every case below asserts the BEHAVIOUR first and the copy second. A
  * blocklist alone would pass if the copy were simply deleted, and would also
- * become wrong the day someone legitimately narrows the rule back. So:
+ * become wrong the day someone legitimately widens the rule again. So:
  *
- * - if `implied` grants advertising, the copy must not deny it AND must
- *   disclose it;
- * - the behaviour assertion is the anchor — revert AGL-2402 and this file
- *   goes red pointing at the copy that now needs restoring, rather than
- *   silently passing on prose that has quietly become right again.
+ * - while `implied` does NOT grant advertising, the copy must not claim it
+ *   does AND must positively say that an explicit yes is required;
+ * - the behaviour assertion is the anchor — re-widen the rule and this file
+ *   goes red pointing at the copy that then needs rewriting, rather than
+ *   silently passing on prose that has quietly become wrong.
  *
- * PLANTED RED (verified, both directions):
- *   1. re-insert "This one is **never implied**." into `cookie-consent.md`
- *      → the blocklist case fails, naming the file and the phrase.
- *   2. delete the implied-default sentence from the console card's Alert
+ * The blocklist is deliberately phrased in the PRESENT TENSE about current
+ * behaviour, so that the historical notes several of these surfaces now carry
+ * ("AGL-2402 widened the rule, and it was narrowed back") do not trip it.
+ * Narrating what the rule used to be is not claiming it is the rule.
+ *
+ * PLANTED RED (verified, all four directions — see the commit message):
+ *   1. re-insert "the implied default covers advertising too" into
+ *      `cookie-consent.md` → the blocklist case fails, naming file and phrase.
+ *   2. delete the explicit-yes sentence from the console card's Alert
  *      → the disclosure case fails.
- *   3. narrow `advertisingGrantedByStatus` back to `accepted` only
+ *   3. re-widen `advertisingGrantedByStatus` to accept `implied`
  *      → the anchor fails first, in every case.
+ *   4. run this blocklist against the WIDENED copy (`git show ca324b4e6:…`)
+ *      → ALL ELEVEN surfaces trip it, each naming its own phrase. That is the
+ *      real proof the list is not decorative: it is the exact copy someone
+ *      re-widening the rule would write, and every file of it is caught.
  */
 
 import { readFileSync } from 'fs'
@@ -141,47 +155,68 @@ const SURFACES: readonly string[] = [
   'libs/aglyn/src/lib/app-utils/advertising-tags.ts',
   'libs/aglyn/src/lib/app-utils/visitor-consent-advertising.spec.ts',
   'apps/tenant/app/[host]/[[...slug]]/site-analytics.tsx',
+  // The two this list MISSED on its first pass, both found by grepping
+  // AGL-2402 rather than by the list itself — which is the argument for
+  // keeping the grep in the loop when the rule next moves.
+  //
+  // `document-preview.component.tsx` is not prose at all: the console's
+  // region simulator BUILDS a fake visitor record, and it was writing
+  // `advertising: asksAds` onto an implied one. A preview that disagrees with
+  // the engine is worse than stale prose, because a host uses it to check
+  // exactly this.
+  'apps/console/components/document-preview.component.tsx',
+  // `platform-consent-default.ts` carried a live measurement of aglyn.com's
+  // own ad signals (`gcs=G111`, ad storage granted) as current fact.
+  'libs/aglyn/src/lib/app-utils/platform-consent-default.ts',
 ]
 
 /**
- * Claims that are UNCONDITIONALLY false while `implied` can carry a grant.
+ * Claims that are UNCONDITIONALLY false while `implied` CANNOT carry a grant.
  *
- * Deliberately excludes anything a mode-scoped sentence could legitimately
- * say. "nothing is granted until one says yes" is TRUE in `strict` mode and
- * the console card still says it on that branch, so it is not here — a
- * blocklist that punished true statements would be edited away rather than
- * obeyed. Each entry below is false in every posture.
+ * Every entry is a present-tense assertion that the implied default produces
+ * advertising, or that advertising tracks the analytics posture. Each one is
+ * lifted from the copy as `ca324b4e6` wrote it for the widened rule, so
+ * re-widening the behaviour and re-applying that copy trips this list.
+ *
+ * Deliberately NOT here: any phrase a historical note needs. Several surfaces
+ * now say "AGL-2402 widened the rule … it was narrowed back on 2026-08-24",
+ * which is true and must stay sayable. The entries are therefore assertions
+ * about what the rule IS, never mentions of what it WAS.
  */
 const CONTRADICTIONS: readonly string[] = [
-  'never implied',
-  'never by the implied default',
-  'implied default never',
-  'implied never does',
-  'implied never grants',
-  'implied state grants analytics and denies advertising',
-  'implied consent is never treated as having allowed',
-  'merely defaulted into analytics',
-  'no amount of not-objecting adds up to a yes',
-  'not an implied default',
-  'only where a visitor has explicitly allowed',
+  'implied default covers advertising',
+  'implied default now carries',
+  'granted by the implied default',
+  'implied default that grants analytics',
+  'implied default outside the prior-consent regions',
+  'same consent mode as analytics',
+  'follows the same posture as analytics',
+  'a us implied visitor can',
+  'implied default carries the advertising grant',
+  'runs on implied consent',
+  'get advertising storage from their next visit',
+  'does start advertising storage',
+  'it starts advertising storage',
+  'status set includes implied',
 ]
 
 describe('advertising-consent copy tracks advertising-consent behaviour', () => {
-  it('the anchor: an implied record CAN carry an advertising grant', () => {
-    // AGL-2402. Everything below is conditioned on this, so if the rule is
-    // ever narrowed again this case fails first and the copy cases become
-    // the follow-up work rather than a silent inconsistency.
-    expect(advertisingGrantedByStatus('implied')).toBe(true)
-    // The refusal paths are what keep the widened rule honest; if one of
-    // these ever flipped, the copy would need a far bigger rewrite than a
-    // blocklist could describe.
+  it('the anchor: an implied record CANNOT carry an advertising grant', () => {
+    // Everything below is conditioned on this, so if the rule is ever widened
+    // again this case fails first and the copy cases become the follow-up
+    // work rather than a silent inconsistency.
+    expect(advertisingGrantedByStatus('implied')).toBe(false)
+    // The refusal paths refuse too, and `accepted` is the ONE that grants.
+    // Without this line a function hard-wired to `return false` would satisfy
+    // the anchor while breaking the product.
+    expect(advertisingGrantedByStatus('accepted')).toBe(true)
     expect(advertisingGrantedByStatus('declined')).toBe(false)
     expect(advertisingGrantedByStatus('opted-out')).toBe(false)
     expect(advertisingGrantedByStatus('gpc-opt-out')).toBe(false)
   })
 
   it.each(SURFACES)('%s does not contradict it', (relativePath) => {
-    expect(advertisingGrantedByStatus('implied')).toBe(true)
+    expect(advertisingGrantedByStatus('implied')).toBe(false)
     const text = flatten(relativePath)
     // Non-vacuity: a path typo would otherwise read as an empty file and
     // pass every `not.toContain` below.
@@ -194,24 +229,34 @@ describe('advertising-consent copy tracks advertising-consent behaviour', () => 
   })
 
   /**
-   * The other half of the lock. Denying the old claim is not the same as
-   * telling a host the true one, and the true one is the surprising one:
-   * flipping the switch on a geo-conditional site starts advertising storage
-   * for visitors who are never shown a banner.
+   * The other half of the lock. Not saying the false thing is not the same as
+   * saying the true one, and silence is its own drift: a host who reads
+   * nothing about the implied default cannot tell whether their switch is
+   * inert or not.
+   *
+   * Two requirements, because either alone is satisfiable by accident. The
+   * copy must say an explicit yes is REQUIRED, and it must say specifically
+   * that the implied default does NOT supply one — the exact question a host
+   * in geo mode is going to ask.
    */
   it.each([
     'apps/console/components/consent-banner-card.component.tsx',
     'apps/docs/docs/marketing-and-automation/analytics/cookie-consent.md',
-  ])('%s positively discloses the implied grant', (relativePath) => {
-    expect(advertisingGrantedByStatus('implied')).toBe(true)
-    // VISIBLE copy, never the comments — see `visibleCopy`.
+  ])('%s positively states that an explicit yes is required', (relativePath) => {
+    expect(advertisingGrantedByStatus('implied')).toBe(false)
+    // VISIBLE copy, never the comments — see `visibleCopy`. The doc comments
+    // on the card say all of this, so without the stripping this case would
+    // pass on a card whose Alert had been blanked.
     const text = visibleCopy(relativePath)
     expect(text.length).toBeGreaterThan(200)
-    // The disclosure has to name the mechanism (the implied default) AND the
-    // remedy (the persistent opt-out), because one without the other is
-    // still a misleading description of what the host just turned on.
-    expect(text).toMatch(/implied default/)
-    expect(text).toMatch(/privacy choices|opt-out/)
+    expect(text).toMatch(/explicit yes/)
+    // The denial, allowing for either surface's phrasing: "implied default is
+    // NEVER treated as having allowed" (card) and "implied state grants
+    // analytics and DENIES advertising" (docs). `[^.]` keeps the two halves
+    // inside one sentence, so an unrelated later "never" cannot satisfy it.
+    expect(text).toMatch(
+      /implied (?:default|state|consent)[^.]{0,120}(?:never|denies|denied)/,
+    )
   })
 
   it('the generated assist index is in step with the doc it is built from', () => {
@@ -220,6 +265,6 @@ describe('advertising-consent copy tracks advertising-consent behaviour', () => 
     // a phrase from the CORRECTED doc proves the generator was re-run, which
     // `not.toContain` on the old phrase alone would not.
     const index = flatten('apps/console/constants/assist-docs-index.generated.ts')
-    expect(index).toContain('prior-consent regions always need an explicit yes')
+    expect(index).toContain('every visitor needs an explicit yes')
   })
 })

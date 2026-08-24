@@ -41,15 +41,10 @@ storage** in **Site setup → SEO → Cookie consent**. The switch needs a
 configured Google Analytics ID to do anything — there is no advertising storage
 to ask about without a tag.
 
-Advertising then follows **the same consent mode as analytics** — it is a second
-question, not a second rulebook. It gets its own checkbox on the banner and in
-the preferences panel, so a visitor can allow analytics and refuse advertising.
-In **opt-in everywhere** mode, and for EU/UK and unknown-region visitors in
-geo-conditional mode, advertising storage stays denied until someone explicitly
-allows it. Everywhere else in geo-conditional mode it is granted by the same
-implied default that grants analytics, and **Your Privacy Choices** is the
-opt-out — so on a geo-conditional site, turning this on does start advertising
-storage for those visitors.
+Turning it on **grants nothing by itself**. It adds a second question, with its
+own checkbox, to the banner and to the preferences panel, so that a visitor has
+somewhere to say yes. Until one does, nothing changes — in either consent mode,
+for visitors anywhere in the world.
 
 Built-in Aglyn analytics are unaffected by all of this: the pageview beacon is
 **cookieless** and stores no visitor identifier, so it needs no consent.
@@ -64,25 +59,22 @@ Built-in Aglyn analytics are unaffected by all of this: the pageview beacon is
   assignment is remembered only for the visit (sessionStorage) instead of across
   visits.
 - **Advertising storage** (`ad_storage`, `ad_user_data`, `ad_personalization`),
-  on sites that have turned the advertising question on. It follows the same
-  posture as analytics, and never a looser one:
-  - **Prior-consent regions always need an explicit yes.** The EU/EEA, the UK,
-    and any visitor whose region cannot be determined see the banner first, and
-    advertising storage is denied until they tick that specific box. This holds
-    however your site is configured — an implied state cannot be recorded for
-    those visitors at all, so there is no path by which one is defaulted into
-    advertising.
-  - **Elsewhere, the implied default covers advertising too.** In
-    geo-conditional mode a visitor outside those regions is granted analytics
-    *and* advertising from their first visit, without a banner, exactly as
-    analytics alone worked before — because the laws that apply there (for
-    example California's CPRA) regulate advertising on an opt-out basis. **Your
-    Privacy Choices** is their opt-out, and Global Privacy Control is honored
-    automatically. Choose **Opt-in everywhere** if you would rather ask every
-    visitor.
-  - A visitor who already has a recorded state from before you turned the
-    question on reads as *never asked*, not as a yes — their existing choice
-    stands until they change it in Your Privacy Choices.
+  on sites that have turned the advertising question on. **Every visitor needs
+  an explicit yes**, everywhere, in both consent modes. Analytics can be granted
+  by implication where the law allows it — advertising never is, and no amount
+  of not-objecting adds up to a yes:
+  - **Prior-consent regions.** The EU/EEA, the UK, and any visitor whose region
+    cannot be determined see the banner first, and advertising storage is denied
+    until they tick that specific box.
+  - **Everywhere else.** Being defaulted into analytics in an opt-out region is
+    not an answer to a question about advertising, so an *implied* state grants
+    analytics and denies advertising. Those visitors see no banner, so the way
+    they say yes is **Your Privacy Choices**, where the advertising checkbox is
+    offered whenever your site asks the question. Until one is ticked there,
+    advertising storage stays denied.
+  - A visitor who clicked **Allow** on an analytics-only banner before you
+    turned the question on reads as *never asked*, not as a yes. They see the
+    new question the next time they are asked.
   - Advertising cannot outlive analytics. Unticking analytics while leaving
     advertising ticked is a refusal of both, and every refusal path — Decline,
     Decline all, an opt-out, a GPC signal — withdraws the two together. There

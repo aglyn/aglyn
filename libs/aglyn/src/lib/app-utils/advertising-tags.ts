@@ -21,9 +21,9 @@
  * ## The hole this closes
  *
  * Until now the consent machinery could gate exactly one thing: Google. The
- * `advertising` category has existed since AGL-1649 and it is honest — it
- * follows the visitor's posture exactly, so a prior-consent visitor needs an
- * explicit accept and GPC never carries it — but the
+ * `advertising` category has existed since AGL-1649 and it is honest — only an
+ * explicit accept can carry it, the implied default never does, GPC never
+ * does — but the
  * only ENFORCEMENT it ever reached was {@link consentModeSignals}, four
  * strings handed to `gtag`. A non-Google tag could not be consent-gated at
  * all, because nothing in the repo knew how to gate one. Deciding to deploy a
@@ -75,14 +75,12 @@
  *    for this site. A host that switched the tool off (`consent.disabled`)
  *    runs their own CMP and ours has no answer on file to act on.
  * 4. **{@link advertisingGrantedByRecord}** — the host asks about advertising
- *    AND the visitor's record grants that specific category. This is
+ *    AND the visitor explicitly said yes to that specific category. This is
  *    where the region behaviour is INHERITED rather than reimplemented: an
  *    EEA/UK visitor pre-choice has no record, an unknown-region visitor has no
- *    record, and `gpc-opt-out` cannot carry a grant. A US `implied` visitor
- *    CAN (AGL-2402), which is the point of the widening — and it is still the
- *    posture deciding, not this file, because an `implied` record is only ever
- *    written outside the prior-consent regions. There is deliberately no
- *    country logic in this file.
+ *    record, a US `implied` visitor's status cannot carry an advertising
+ *    grant, and `gpc-opt-out` cannot either. There is deliberately no country
+ *    logic in this file.
  * 5. **A configured, well-formed account id for a KNOWN vendor.** The gate
  *    describes what may load; the host document decides what is configured.
  *

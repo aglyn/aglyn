@@ -321,13 +321,12 @@ export default function SiteAnalytics({
     ? consent.ready && isAnalyticsAllowed(host, consent.stored)
     : true
   // Advertising storage (AGL-1649). Off unless the host turned the question
-  // on AND this visitor's record grants that category — an explicit yes, or
-  // the implied default outside the prior-consent regions (AGL-2402, where an
-  // implied record is the only kind that can be written). Every other path —
-  // no record yet, a decline, an opt-out, GPC, or a record written before the
-  // category existed — leaves the three advertising signals denied, exactly
-  // as AGL-1622 set them. Resolved client-side like the rest of the gate, so
-  // the ISR-cached HTML carries neither snippet.
+  // on AND this visitor explicitly answered yes to that category; every
+  // other path — no record yet, a visitor merely defaulted into analytics by
+  // the implied default, a decline, an opt-out, GPC, or a record written
+  // before the category existed — leaves the three advertising signals
+  // denied, exactly as AGL-1622 set them. Resolved client-side like the rest
+  // of the gate, so the ISR-cached HTML carries neither snippet.
   const advertisingAllowed =
     consentRequired && advertisingGrantedByRecord(host, consent.stored)
 
