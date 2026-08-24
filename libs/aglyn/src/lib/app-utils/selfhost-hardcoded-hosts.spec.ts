@@ -414,6 +414,21 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'Reader of AGLYN_TENANT_APEX; the literal is its default.',
   },
   {
+    file: 'tools/scripts/check-contact-addresses.mjs',
+    count: 3,
+    reason:
+      "AGL-2400. The contact-address guard's own output: two verdict strings " +
+      'naming the domain it swept, and the Groups admin URL ' +
+      '(`groups.google.com/a/aglyn.com/g/<name>/members`) printed in the ' +
+      'remediation hint, which is an instruction to a human, not a fetch. ' +
+      'The script makes NO network call of any kind — deliberately, so it ' +
+      'needs no credential — so it cannot reach our infrastructure from ' +
+      "anyone's deployment, which is the AGL-2124 failure this ratchet " +
+      'exists to prevent. Internal CI guard over this repo\'s tracked files; ' +
+      'a self-hoster never runs it. Landed unlisted in 94b6a011c, which left ' +
+      'this ratchet red on main.',
+  },
+  {
     file: 'tools/scripts/check-legal-index-dates.mjs',
     count: 1,
     reason:
@@ -450,6 +465,28 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
     count: 1,
     reason:
       'The mount path of Aglyn own Google shared drive, where the pricing source-of-truth doc lives. Internal tool, and the leg that reads it is skipped entirely when the drive is not mounted (AGL-1885).',
+  },
+  {
+    file: 'tools/scripts/lib/contact-addresses.mjs',
+    count: 22,
+    reason:
+      'AGL-2400. The registry of which @aglyn.com addresses are provisioned ' +
+      'to RECEIVE mail: sixteen intake addresses, one sender, and five ' +
+      'inside the `UNVERIFIED_PROVISIONING` provenance rows (one of which ' +
+      'is `docs.aglyn.com/trust`, naming the page that publishes `help@`). ' +
+      'These literals are the SUBJECT of the comparison, not a destination — ' +
+      'the file constructs no URL, makes no network call, and is imported ' +
+      'only by check-contact-addresses.mjs and its node:test suite. Nothing ' +
+      'here is configurable because there is nothing to configure: the list ' +
+      "answers 'which addresses has Aglyn provisioned', so parameterising it " +
+      'would empty it of meaning. A self-hoster who forks and wants the same ' +
+      'guard over their own addresses replaces the list, exactly as with ' +
+      'lib/uptime-targets.mjs. ' +
+      "⚠️ The sweep's own domain is hardcoded a 23rd time in `ADDRESS_RE`, " +
+      'which this ratchet cannot see: the source reads `aglyn\\.com` and the ' +
+      "backslash defeats AGLYN_HOST's literal dot. Recorded so a future " +
+      'reader is not misled into thinking 22 is the whole story. Landed ' +
+      'unlisted in 94b6a011c, which left this ratchet red on main.',
   },
   {
     file: 'tools/scripts/lib/firewall-posture.mjs',
