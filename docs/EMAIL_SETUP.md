@@ -320,10 +320,19 @@ AGL-2400 as open regardless of what the auto-replies say.
   relays through Resend, so the include only authorized SendGrid's shared IP
   space for nothing. Resend's SPF lives on the `send.` subdomain; this root
   record stays Google-only.
-- **DMARC:** `p=quarantine; pct=100; sp=quarantine` with aggregate + forensic
-  reports to `webmaster@aglyn.com` (AGL-1493, 2026-08-13). Flip to `p=reject`
-  once the report backlog confirms all three senders (Resend, Workspace,
-  Stripe) pass aligned — all product mail is DKIM `d=aglyn.com` strict.
+- **DMARC:** `p=reject; pct=100; sp=reject` with aggregate + forensic reports
+  to `webmaster@aglyn.com` (AGL-1493 set `p=quarantine` 2026-08-13; tightened
+  to `p=reject`, verified live at the zone 2026-08-24 — AGL-1876). All product
+  mail is DKIM `d=aglyn.com` strict, and all three senders (Resend, Workspace,
+  Stripe) pass aligned.
+
+  ⚠️ **Under `p=reject` a misaligned message is refused at SMTP, not
+  spam-foldered.** The failure signature is therefore a *missing* email with no
+  copy anywhere for the recipient to find — not a message sitting in a junk
+  folder. If someone reports a receipt or invite that never arrived, check the
+  DMARC aggregate reports for that sender before looking anywhere else; a new
+  sending path that was never aligned fails this way and nothing else in the
+  product will say so.
 - **aglyn.app:** locked down 2026-08-13 (AGL-1494) — `v=spf1 -all`, null DKIM,
   `p=reject; sp=reject`. Nothing legitimate sends from it; keep it that way.
 
@@ -516,9 +525,10 @@ a cold domain, whatever aglyn.com's history).
 
 ## Later hardening (optional)
 
-- Tighten DMARC from `p=quarantine` to `p=reject` once the aggregate-report
-  backlog confirms Resend, Workspace and Stripe all pass aligned. (`p=none` →
-  `p=quarantine` was done in AGL-1493; see "Current DNS facts" above.)
+- ~~Tighten DMARC from `p=quarantine` to `p=reject`~~ — done; the zone has
+  carried `p=reject; sp=reject` since before 2026-08-24. (`p=none` →
+  `p=quarantine` was AGL-1493; see "Current DNS facts" above for the
+  refused-at-SMTP failure signature this creates.)
 - Consider a monitored `hello@aglyn.com` reply-to for a human touch. Nothing
   sets `replyTo` today, on any message — AGL-2408 §4.
 - ~~Consolidate the ~18 copy-pasted Resend call sites~~ — done in AGL-709; see
