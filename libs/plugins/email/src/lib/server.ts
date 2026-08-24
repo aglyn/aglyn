@@ -19,6 +19,7 @@ import { registerPluginApiRoute, type PluginApiHandler } from '@aglyn/aglyn/serv
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { createHash, createHmac, timingSafeEqual } from 'crypto'
+import { BRAND } from '@aglyn/shared-data-enums'
 
 /**
  * One-click unsubscribe (AGL-161), split into a safe GET and a mutating POST
@@ -89,13 +90,32 @@ function escapeAttribute(value: string): string {
     .replace(/"/g, '&quot;')
 }
 
+/**
+ * Branded shell (AGL-2411): the plain `system-ui` box this used to be read as
+ * an unstyled error page, not a page this product owns — which matters here
+ * specifically, because this is the one screen a recipient who does NOT trust
+ * the sender is looking at. `BRAND.ORG_NAME` rather than a literal "Aglyn":
+ * a self-host operator's deployment must show ITS name here, not ours (see
+ * `@aglyn/shared-data-enums`'s `BRAND`, already the pattern the staff email
+ * designer's sample links follow). Colors are the console theme's actual
+ * tokens (`consoleOptions.palette` in `console.theme.ts`), not new ones.
+ */
 function page(body: string): string {
+  const brandName = escapeAttribute(BRAND.ORG_NAME)
   return (
-    '<!doctype html><meta name="viewport" content="width=device-width">' +
-    '<div style="max-width:420px;margin:15vh auto;padding:24px;' +
-    'font-family:system-ui,sans-serif">' +
+    '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1">' +
+    `<title>${brandName}</title>` +
+    '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;' +
+    "background:#F5F5F5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto," +
+    'Helvetica,Arial,sans-serif;padding:24px;box-sizing:border-box">' +
+    '<div style="max-width:420px;width:100%;background:#FFFFFF;border-radius:12px;' +
+    'padding:36px 32px;box-shadow:0 1px 3px rgba(0,0,0,.08),0 8px 24px rgba(0,0,0,.06)">' +
+    `<div style="font-size:15px;font-weight:700;letter-spacing:.02em;color:#404C5C;` +
+    `margin-bottom:4px">${brandName}</div>` +
+    '<div style="width:32px;height:3px;border-radius:2px;background:#e040fb;' +
+    'margin-bottom:24px"></div>' +
     body +
-    '</div>'
+    '</div></div>'
   )
 }
 
@@ -160,16 +180,18 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
     res.setHeader('Cache-Control', 'no-store')
     return res.status(200).send(
       page(
-        '<h1 style="font-size:22px">Unsubscribe?</h1>' +
-          `<p style="opacity:.8">Confirm that <strong>${escapeAttribute(
+        '<h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#212121">' +
+          'Unsubscribe?</h1>' +
+          `<p style="margin:0 0 24px;font-size:14px;line-height:1.5;color:#616161">` +
+          `Confirm that <strong style="color:#212121">${escapeAttribute(
             email,
           )}</strong> should stop receiving emails from this site.</p>` +
           `<form method="post" action="/api/email/unsubscribe?${escapeAttribute(
             query,
           )}">` +
-          '<button type="submit" style="font:inherit;padding:10px 18px;' +
-          'border:0;border-radius:6px;background:#111;color:#fff;' +
-          'cursor:pointer">Unsubscribe</button>' +
+          '<button type="submit" style="font:inherit;font-size:14px;font-weight:600;' +
+          'padding:11px 20px;border:0;border-radius:8px;background:#404C5C;color:#fff;' +
+          'cursor:pointer;width:100%">Unsubscribe</button>' +
           '</form>',
       ),
     )
@@ -214,9 +236,19 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
     res.setHeader('Cache-Control', 'no-store')
     return res.status(200).send(
       page(
-        '<h1 style="font-size:22px">You\'re unsubscribed</h1>' +
-          '<p style="opacity:.8">You won\'t receive further emails from ' +
-          'this site.</p>',
+        '<div style="width:40px;height:40px;border-radius:50%;background:#EEF0F2;' +
+          'display:flex;align-items:center;justify-content:center;margin-bottom:16px;' +
+          'font-size:18px;color:#404C5C">&#10003;</div>' +
+          '<h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#212121">' +
+          "You're unsubscribed</h1>" +
+          '<p style="margin:0 0 20px;font-size:14px;line-height:1.5;color:#616161">' +
+          "You won't receive further emails from this site.</p>" +
+          // Same signed params, so the click that just proved this is really
+          // this recipient's link doubles as the resubscribe link — no new
+          // token, no second email round-trip (AGL-2499).
+          `<a href="/api/email/resubscribe?${escapeAttribute(query)}" ` +
+          'style="font-size:13px;color:#00B0FF;text-decoration:none">' +
+          'Changed your mind? Resubscribe</a>',
       ),
     )
   } catch (error) {
@@ -225,7 +257,121 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
   }
 }
 
+/**
+ * The self-service way back in (AGL-2499) that `unsubscribeHandler` never
+ * had: same signed-link shape, same safe-GET/mutating-POST split, same
+ * HMAC — a resubscribe link is only as trustworthy as the unsubscribe link
+ * it rides in on, so it earns no looser a contract.
+ *
+ * Reverses ONLY a self-service unsubscribe (`reason: 'unsubscribe'`). A
+ * bounce or spam-complaint suppression (`email-events.ts`'s Resend webhook)
+ * protects the SENDER's deliverability, not a preference the recipient can
+ * waive by clicking a link — undoing one from here would let anyone who
+ * still holds an old campaign email re-arm sending to an address that
+ * bounced or complained.
+ */
+const resubscribeHandler: PluginApiHandler = async (req, res) => {
+  const method = String(req.method ?? 'GET').toUpperCase()
+  if (method !== 'GET' && method !== 'HEAD' && method !== 'POST') {
+    res.setHeader('Allow', 'GET, POST')
+    return res.status(405).send('Method not allowed')
+  }
+
+  const { hostId, email, signature } = readParams(req)
+  const secret =
+    process.env.EMAIL_UNSUBSCRIBE_SECRET || process.env.CRON_SECRET
+  if (!hostId || !email || !signature || !secret) {
+    return res.status(400).send('Invalid link')
+  }
+  const expected = createHmac('sha256', secret)
+    .update(`${hostId}:${email}`)
+    .digest('hex')
+  const valid =
+    expected.length === signature.length &&
+    timingSafeEqual(
+      new Uint8Array(Buffer.from(expected)),
+      new Uint8Array(Buffer.from(signature)),
+    )
+  if (!valid) return res.status(403).send('Invalid link')
+
+  const query =
+    `hostId=${encodeURIComponent(hostId)}` +
+    `&email=${encodeURIComponent(email)}` +
+    `&sig=${encodeURIComponent(signature)}`
+
+  if (method !== 'POST') {
+    // SAFE, same reasoning as the unsubscribe GET: a prescanner must not be
+    // able to resubscribe someone either.
+    res.setHeader('Content-Type', 'text/html; charset=utf-8')
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow')
+    res.setHeader('Cache-Control', 'no-store')
+    return res.status(200).send(
+      page(
+        '<h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#212121">' +
+          'Resubscribe?</h1>' +
+          `<p style="margin:0 0 24px;font-size:14px;line-height:1.5;color:#616161">` +
+          `Start receiving emails from this site again at <strong style="color:#212121">` +
+          `${escapeAttribute(email)}</strong>.</p>` +
+          `<form method="post" action="/api/email/resubscribe?${escapeAttribute(
+            query,
+          )}">` +
+          '<button type="submit" style="font:inherit;font-size:14px;font-weight:600;' +
+          'padding:11px 20px;border:0;border-radius:8px;background:#00B0FF;color:#fff;' +
+          'cursor:pointer;width:100%">Resubscribe</button>' +
+          '</form>',
+      ),
+    )
+  }
+
+  try {
+    const firestore = firebaseAdmin.app().firestore()
+    const ref = firestore
+      .collection('hosts')
+      .doc(hostId)
+      .collection('suppressions')
+      .doc(suppressionKey(email))
+    const snapshot = await ref.get()
+    if (snapshot.exists && snapshot.get('reason') !== 'unsubscribe') {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      res.setHeader('X-Robots-Tag', 'noindex, nofollow')
+      res.setHeader('Cache-Control', 'no-store')
+      return res.status(200).send(
+        page(
+          '<h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#212121">' +
+            "Can't resubscribe this address</h1>" +
+            '<p style="margin:0;font-size:14px;line-height:1.5;color:#616161">' +
+            'This address was suppressed by a delivery problem, not an ' +
+            'unsubscribe, so it can’t be re-added from this link. Contact ' +
+            'the site directly if this looks wrong.</p>',
+        ),
+      )
+    }
+    // Idempotent whether or not a doc existed — a resubscribe click on an
+    // address that was never suppressed (or already resubscribed) is not an
+    // error, it is the state the visitor wanted.
+    await ref.delete()
+    res.setHeader('Content-Type', 'text/html; charset=utf-8')
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow')
+    res.setHeader('Cache-Control', 'no-store')
+    return res.status(200).send(
+      page(
+        '<div style="width:40px;height:40px;border-radius:50%;background:#EEF0F2;' +
+          'display:flex;align-items:center;justify-content:center;margin-bottom:16px;' +
+          'font-size:18px;color:#404C5C">&#10003;</div>' +
+          '<h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#212121">' +
+          "You're resubscribed</h1>" +
+          '<p style="margin:0;font-size:14px;line-height:1.5;color:#616161">' +
+          "You'll receive emails from this site again.</p>",
+      ),
+    )
+  } catch (error) {
+    console.error(error)
+    return res.status(500).send('Resubscribe failed — please try again')
+  }
+}
+
 /** Registers the email plugin's public API routes (AGL-396). */
 export function registerEmailApi(): void {
   registerPluginApiRoute('email/unsubscribe', unsubscribeHandler)
+  registerPluginApiRoute('email/resubscribe', resubscribeHandler)
 }

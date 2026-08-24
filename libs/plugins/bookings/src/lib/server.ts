@@ -238,6 +238,10 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
   const email = String(req.body?.email ?? '')
     .trim()
     .toLowerCase()
+  // Explicit opt-in checkbox (AGL-2499) — a booking is not by itself
+  // consent to be emailed marketing, so this is only set when the visitor
+  // checked it.
+  const marketingConsent = req.body?.marketingConsent === true
   if (!hostId || !serviceId || !Number.isFinite(startsAtMs) || !startsAtMs) {
     return res.status(400).json({ error: 'Invalid booking request' })
   }
@@ -482,6 +486,7 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         refId: bookingId,
         summary: `Booked "${String(service.name ?? 'a service').slice(0, 60)}"`,
       },
+      ...(marketingConsent ? { marketingConsent: true } : {}),
     })
 
     if (paid) {
@@ -621,6 +626,7 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
           // it, so the leads audience was addressed by nobody's name.
           ...(name ? { name } : {}),
           source: 'booking',
+          ...(marketingConsent ? { marketingConsent: true } : {}),
         },
       })
       return res
@@ -638,6 +644,7 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         // AGL-2303, same as the checkout branch above.
         ...(name ? { name } : {}),
         source: 'booking',
+        ...(marketingConsent ? { marketingConsent: true } : {}),
       },
     })
 

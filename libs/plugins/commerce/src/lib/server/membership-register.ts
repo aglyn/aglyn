@@ -54,6 +54,8 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
   const displayName = String(req.body?.displayName ?? '')
     .trim()
     .slice(0, 80)
+  // Explicit opt-in checkbox (AGL-2499) — never inferred from signing up.
+  const marketingConsent = req.body?.marketingConsent === true
   if (!hostId) return res.status(400).json({ error: 'Missing host' })
   if (!EMAIL_PATTERN.test(email)) {
     return res.status(400).json({ error: 'Enter a valid email' })
@@ -174,6 +176,7 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
         // line above, already stored on the member document.
         ...(displayName ? { name: displayName } : {}),
         source: 'signup',
+        ...(marketingConsent ? { marketingConsent: true } : {}),
       },
     })
     // Contacts ingestion (AGL-197).
@@ -183,6 +186,7 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
       name: displayName || undefined,
       source: 'member',
       interaction: { refId: memberRef.id, summary: 'Joined as a member' },
+      ...(marketingConsent ? { marketingConsent: true } : {}),
     })
     // Event triggers (AGL-128/148): sign-ups double as leads here too.
     await emitHostEvent(hostId, 'memberSignUp', { email })
