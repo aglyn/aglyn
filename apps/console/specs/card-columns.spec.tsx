@@ -33,7 +33,9 @@
 import { render } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import CardColumns from '../components/card-columns.component'
+import CardColumns, {
+  type CardColumnsProps,
+} from '../components/card-columns.component'
 
 /** Every rule emotion emitted for the rendered tree, as text. */
 const stylesheet = () =>
@@ -52,7 +54,7 @@ const rulesFor = (className: string) =>
     .split('\n')
     .filter((line) => line.includes(className))
 
-function mount(props?: { columns?: number; spacing?: number }) {
+function mount(props?: Omit<CardColumnsProps, 'items'>) {
   const { container } = render(
     <CardColumns
       {...props}
@@ -124,6 +126,24 @@ describe('CardColumns', () => {
     expect(rules.find((rule) => rule.includes('min-width:900px'))).toContain(
       'column-count: 3',
     )
+  })
+
+  it('hides a wrapper whose card rendered NOTHING', () => {
+    // `PluginWidgetSlot` renders an empty fragment when no plugin is entitled
+    // for the slot. Its wrapper would then be an empty block carrying only
+    // `margin-bottom`, which multicol counts as content and balances the
+    // columns around — a hole reintroduced by the component that exists to
+    // close holes.
+    const { rules } = mount()
+    const empty = rules.find((rule) => rule.includes(':empty'))
+    expect(empty).toBeTruthy()
+    expect(empty).toContain('display: none')
+    // THE CONTROL: it must be the `:empty` rule that hides them, not a blanket
+    // one — the non-empty children are still `display: block`.
+    const child = rules.find(
+      (rule) => rule.includes('>*') && !rule.includes(':empty'),
+    )
+    expect(child).toContain('display: block')
   })
 
   it('renders every item it is handed, in order', () => {
@@ -205,5 +225,68 @@ describe('the billing page pairs its narrow cards (AGL-2486)', () => {
     // those would be a regression, so the full-width items must survive.
     expect(source).toMatch(/size:\s*\{\s*xs:\s*12\s*\}/)
     expect(source).toContain('<BillingPlanCardsComponent')
+  })
+})
+
+describe('the screen version view packs its detail cards (AGL-2486)', () => {
+  const source = readFileSync(
+    join(
+      __dirname,
+      '..',
+      'app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/view/page.tsx',
+    ),
+    'utf8',
+  )
+
+  it('reads a real file', () => {
+    expect(source.length).toBeGreaterThan(10000)
+  })
+
+  it('routes the detail cards through CardColumns', () => {
+    expect(source).toContain('<CardColumns')
+  })
+
+  it('no longer pins them into rigid rows', () => {
+    // Zach, with a screenshot: "card masonry needs fixed". Four cards at
+    // `lg: 4` beside one at `lg: 8` IS the bug — the row is as tall as `SEO`,
+    // so `Publishing` and `Page Activity` were drawn stretched with a screen
+    // of dead space under them.
+    //
+    // Anchored to the start of a line so that the comment ABOVE the fix — which
+    // quotes the old `size` verbatim to explain what went wrong — does not
+    // satisfy the guard on its own. It did, on the first run.
+    expect(source).not.toMatch(/^\s*size:\s*\{\s*xs:\s*12,\s*md:\s*6,\s*lg:\s*4\s*\},$/m)
+    expect(source).not.toMatch(/^\s*size:\s*\{\s*xs:\s*12,\s*md:\s*6,\s*lg:\s*8\s*\},$/m)
+  })
+
+  it('keeps all five cards, by key, in the balanced flow', () => {
+    // Named individually so that deleting one from the flow — the easy way to
+    // "fix" a layout — fails here rather than shipping.
+    for (const key of [
+      'basic-details',
+      'publishing',
+      'page-access',
+      'seo',
+      'page-activity',
+    ]) {
+      expect(source).toContain(`key: '${key}'`)
+    }
+  })
+
+  it('takes the default TWO columns, not the three the old `lg: 4` implied', () => {
+    // Measured in Chrome at a 1488px content width: three columns balance to
+    // 988/764/278px — 932px ragged, barely better than the rows being
+    // replaced — because multicol cannot reorder and `SEO` alone is taller
+    // than a third of the flow. Two leave 210px. Pinned because "the cards
+    // said `lg: 4`, so use three" is the plausible-looking regression.
+    expect(source).not.toMatch(/columns=\{\{?\s*(md|lg|3)/)
+  })
+
+  it('leaves Versions and Raw JSON at full width', () => {
+    // A version table and a JSON dump earn the whole row; folding them into
+    // the column flow would be the regression in the other direction.
+    expect(source).toMatch(/size:\s*\{\s*xs:\s*12\s*\}/)
+    expect(source).toContain("header={'Versions'}")
+    expect(source).toContain("header={'Raw JSON'}")
   })
 })

@@ -22,7 +22,17 @@ import type { ReactNode } from 'react'
 export interface CardColumnsProps {
   /** The cards, in reading order. */
   items: Array<{ key?: string; children: ReactNode }>
-  /** Columns at the wide breakpoint. Always one below `md`. */
+  /**
+   * Columns at the wide breakpoint. Always one below `md`.
+   *
+   * Two is right far more often than it looks. A third column was measured on
+   * the screen version view — whose cards were authored `lg: 4`, i.e. three
+   * abreast — and it is WORSE, because multicol may not reorder: with one card
+   * (`SEO`) taller than a third of the flow, Chrome's balance came out
+   * 988/764/278px, 932px of raggedness, against 210px at two columns. More
+   * columns means less room to even them out. Raise this only against a
+   * measurement.
+   */
   columns?: number
   /** Gutter, in theme spacing units. */
   spacing?: number
@@ -104,6 +114,16 @@ export default function CardColumns({
           // column track past the edge.
           minWidth: 0,
         },
+        // A card that renders NOTHING must not weigh on the balance. The
+        // screen version view puts `<PluginWidgetSlot slot="hostActivity">`
+        // in this flow, and that renders an empty fragment for a workspace
+        // with no activity plugin entitled — leaving a wrapper carrying only
+        // its bottom margin, which multicol counts as real content and
+        // balances the columns around. `:empty` is exact here: the wrapper
+        // has no element and no text node in that case and only in that case.
+        // More specific than the `& > *` above (`:empty` adds a class-level
+        // component), so `display: none` wins over `display: block`.
+        '& > *:empty': { display: 'none' },
       }}
     >
       {items.map((item, index) => (

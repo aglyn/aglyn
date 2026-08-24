@@ -86,6 +86,7 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import ScreenAnalyticsCard from '../../../../../../../../../../components/analytics/screen-analytics-card.component'
+import CardColumns from '../../../../../../../../../../components/card-columns.component'
 import AuthenticatedLayout from '../../../../../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../../../../../../components/layouts/main.layout'
@@ -999,11 +1000,38 @@ function ScreenDetails() {
         }
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <GridItems
+          {/* The detail cards read as a BALANCED multi-column flow
+              (AGL-2486). Zach: "card masonry needs fixed". They declared
+              `size: { xs: 12, md: 6, lg: 4 }` — a rigid flex row, in which
+              every item is as tall as the tallest one beside it. `SEO` (three
+              fields and a media picker) and `Basic Details` are several times
+              the height of `Publishing` and `Page Activity`, so the short
+              cards were stretched to the tall ones and the page drew a screen
+              of dead space under them.
+
+              Not `GridItems masonry`: within a band it groups items by their
+              `size`, and cards that all declare one width are ONE bucket — a
+              single third-of-the-page column with the rest of the page empty,
+              which is how the staff org page regressed. `CardColumns` hands
+              the break placement to the browser, and `column-fill: balance`
+              is the mechanism that evens the columns out whatever the cards
+              weigh today.
+
+              TWO columns, not the three the `lg: 4` implied. Measured on this
+              page in Chrome, at a 1488px content width: three columns pack
+              shorter (987px against 1159px) but come out 988/764/278 —
+              932px of raggedness, barely better than the rows being replaced —
+              because multicol may not reorder, and `SEO` alone is taller than
+              a third of the flow. Two columns leave 210px. The complaint here
+              is the ragged hole, not the page length.
+
+              `Versions` and `Raw JSON` stay full width underneath: a version
+              table and a JSON dump earn the whole row. */}
+          <CardColumns
             spacing={3}
             items={[
               {
-                size: { xs: 12, md: 6, lg: 4 },
+                key: 'basic-details',
                 children: (
                   <CardDisplay
                     header={'Basic Details'}
@@ -1044,7 +1072,7 @@ function ScreenDetails() {
                 ),
               },
               {
-                size: { xs: 12, md: 6, lg: 4 },
+                key: 'publishing',
                 children: (
                   <CardDisplay
                     header={'Publishing'}
@@ -1217,7 +1245,7 @@ function ScreenDetails() {
                 ),
               },
               {
-                size: { xs: 12, md: 6, lg: 4 },
+                key: 'page-access',
                 children: (
                   <CardDisplay
                     header={'Page Access'}
@@ -1291,7 +1319,7 @@ function ScreenDetails() {
                 ),
               },
               {
-                size: { xs: 12, md: 6, lg: 4 },
+                key: 'seo',
                 children: (
                   <CardDisplay
                     header={'SEO'}
@@ -1355,8 +1383,11 @@ function ScreenDetails() {
                 ),
               },
               {
-                size: { xs: 12, md: 6, lg: 8 },
+                key: 'page-activity',
                 children: (
+                  // The slot renders an empty fragment when no activity
+                  // plugin is entitled — `CardColumns` drops the wrapper via
+                  // `:empty` so an absent widget cannot skew the balance.
                   <PluginWidgetSlot
                     slot="hostActivity"
                     hostId={hostId}
@@ -1365,6 +1396,11 @@ function ScreenDetails() {
                   />
                 ),
               },
+            ]}
+          />
+          <GridItems
+            spacing={3}
+            items={[
               {
                 size: { xs: 12 },
                 children: (
