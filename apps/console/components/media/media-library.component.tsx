@@ -51,7 +51,6 @@ import {
   DialogTitle,
   Drawer,
   FormControlLabel,
-  Grid,
   IconButton,
   LinearProgress,
   Link,
@@ -216,6 +215,25 @@ const MEDIA_SEARCH_MAX_DOCS = 1200
  * folder is a handful of round-trips, not five hundred.
  */
 const SCOPE_CHUNK_SIZE = 100
+
+/**
+ * The narrowest a media tile may be drawn before the grid drops a column
+ * instead (AGL-2486). Derived from what the card actually has to fit, not
+ * picked for a round number:
+ *
+ *   116px  the fixed thumbnail height both cards share (`THUMB_HEIGHT`).
+ *          160px wide keeps it slightly landscape rather than a letterbox
+ *          slot that crops every photo it is handed.
+ *    16px  the text row's horizontal padding (`px: 1` either side).
+ *   ~30px  the overflow-menu IconButton sitting beside the text.
+ *
+ * which leaves ~114px for the two `caption` lines. That is enough for the
+ * `PNG · 192 KB` meta row to render whole — it is the longer of the two in
+ * practice — and enough filename stem to tell two files apart, which is the
+ * job the label has. Below this the filename degrades to `og--workflo…` and
+ * the tile stops being scannable, so the grid gives up a column instead.
+ */
+const TILE_MIN_WIDTH = 160
 
 /**
  * One "Used on" reference (AGL-845) as returned by /api/media/references —
@@ -3488,12 +3506,44 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             : 'No media here — upload images, video, PDFs and documents to use on your site.'}
         </Typography>
       ) : (
-        <Grid container spacing={2}>
+        /**
+         * An INTRINSIC grid, not a twelve-column split (AGL-2486).
+         *
+         * This was `<Grid container>` with `size={{ xs: 6, sm: 4, md: 3, lg: 2 }}`,
+         * and it had two separate faults that compounded:
+         *
+         * 1. A twelve-column split fixes the COLUMN COUNT — `lg: 2` is six
+         *    across, at every width in that band. Narrowing the container
+         *    could only squash the tiles, never drop a column, so thumbnails
+         *    compressed and filenames truncated to `og--workflo…`.
+         * 2. Those breakpoints read the VIEWPORT, not this container. Inside
+         *    the media picker dialog — a ~1200px box on a 2560px monitor —
+         *    `lg` was always what matched, so the grid packed six columns
+         *    into dialog-sized space no matter how narrow the dialog got.
+         *
+         * `auto-fill` + `minmax(TILE_MIN_WIDTH, 1fr)` inverts it: the tile
+         * declares the width it needs to stay legible and the column count
+         * falls out of the space actually available, which is the container's
+         * own width. Fewer, correctly-sized tiles instead of more, broken ones.
+         *
+         * `auto-fill` rather than `auto-fit` on purpose. `auto-fit` collapses
+         * the empty tracks and lets `1fr` stretch what is left, so a folder
+         * holding one file would draw a single card the full width of the
+         * dialog. `auto-fill` keeps the empty tracks, so the last row of a
+         * short folder lines up with every other row.
+         *
+         * Folders and files share the one grid and the one track definition,
+         * so a row of folders is sized exactly like a row of files.
+         */
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(auto-fill, minmax(${TILE_MIN_WIDTH}px, 1fr))`,
+            gap: 2,
+          }}
+        >
           {visibleFolders.map((folder) => (
-            <Grid
-              key={`folder-${folder.$id}`}
-              size={{ xs: 6, sm: 4, md: 3, lg: 2 }}
-            >
+            <Box key={`folder-${folder.$id}`} sx={{ minWidth: 0 }}>
               <MediaFolderCard
                 folder={folder}
                 count={folderCounts[folder.$id] ?? 0}
@@ -3526,10 +3576,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                     : undefined
                 }
               />
-            </Grid>
+            </Box>
           ))}
           {visibleItems.map((media: any) => (
-            <Grid key={media.$id} size={{ xs: 6, sm: 4, md: 3, lg: 2 }}>
+            <Box key={media.$id} sx={{ minWidth: 0 }}>
               <DraggableCard
                 mediaId={media.$id as string}
                 disabled={Boolean(onSelect)}
@@ -3617,9 +3667,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                   }
                 />
               </DraggableCard>
-            </Grid>
+            </Box>
           ))}
-        </Grid>
+        </Box>
       )}
       {hasMore ? (
         <Button

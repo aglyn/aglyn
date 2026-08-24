@@ -99,9 +99,66 @@ export function MediaPickerDialog(props: MediaPickerDialogProps) {
   const showOrg = Boolean(orgScope) && (hostId ? tab === 'org' : true)
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      // `false`, not `"md"` — `md` capped the paper at 900px, which is why a
+      // library of 4-across thumbnails browsed three-across in a letterbox.
+      // The real cap lives in the sx below, where it can be a ratio.
+      maxWidth={false}
+      slotProps={{
+        paper: {
+          /**
+           * A BROWSING surface, sized like one (AGL-2486).
+           *
+           * ~80% of the viewport so it dominates the screen while still
+           * reading as a layer over the page behind it, capped at 1200px so
+           * it stops growing on a 4K monitor — past that the grid is scanning
+           * distance, not more files.
+           *
+           * The 4:3 is a PREFERENCE, not a constraint. `aspect-ratio` only
+           * decides the height while the height is free; `max-height` clamps
+           * it, and the box simply goes wider-than-4:3 on a short viewport
+           * rather than pushing Cancel below the fold. A 1200x900 dialog does
+           * not fit a 1440x760 laptop, and a dialog you cannot reach the
+           * buttons of is worse than a narrow one — so the ratio yields.
+           *
+           * Lengths and breakpoints only, deliberately: this dialog is opened
+           * from the besigner as well as from console chrome, and those are
+           * different `cssVariables` surfaces, where a `theme.vars` token
+           * resolves on one and silently produces nothing on the other.
+           * `breakpoints.down` is a media-query string, which is surface-free.
+           */
+          sx: (theme) => ({
+            width: '80vw',
+            maxWidth: 1200,
+            aspectRatio: '4 / 3',
+            maxHeight: 'calc(100vh - 64px)',
+            // Below `sm` the "80% of the viewport" instruction stops making
+            // sense: 80% of a phone is a peephole with a margin around it.
+            // Full-bleed sheet instead, ratio abandoned.
+            [theme.breakpoints.down('sm')]: {
+              width: '100%',
+              maxWidth: '100%',
+              height: '100%',
+              maxHeight: '100%',
+              margin: 0,
+              borderRadius: 0,
+              aspectRatio: 'auto',
+            },
+          }),
+        },
+      }}
+    >
       <DialogTitle>{'Choose media'}</DialogTitle>
-      <DialogContent>
+      {/*
+        `minHeight: 0` is what makes the grid scroll INSIDE the box. As a
+        column flex child its `min-height: auto` resolves to min-content, so a
+        full library would push the paper taller than its own aspect ratio
+        instead of scrolling — the classic flexbox overflow trap. MUI already
+        puts `overflow-y: auto` here; this lets it actually take effect.
+      */}
+      <DialogContent sx={{ minHeight: 0 }}>
         {showTabs ? (
           <Tabs
             value={tab}
