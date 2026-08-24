@@ -725,10 +725,16 @@ to know why the numbers moved on 2026-08-14.
 `7901f7332`, and the "open question" this section used to end on is settled.
 The category is off for every site that exists and is gated on the host
 turning it on **and** an analytics id being configured
-(`hostAsksAboutAdvertising()`); turning it on grants nothing by itself, it
-adds a second, separate question to the banner and to the preferences panel
-so a visitor has somewhere to say yes. Default-deny survives it: `implied`
-never grants advertising, a record written before the category existed reads
+(`hostAsksAboutAdvertising()`); it adds a second, separate question to the
+banner and to the preferences panel so a visitor has somewhere to say yes.
+Advertising then follows the SAME posture as analytics rather than a stricter
+one — AGL-2402 widened `advertisingGrantedByStatus` so the opt-out posture's
+`implied` default carries it, which is safe by geography because an `implied`
+record can only ever be written outside the prior-consent regions. So on a
+`geo` site, turning the switch on DOES start advertising storage for non-EU/UK
+visitors; on a `strict` site it grants nothing until someone says yes. The
+rest of default-deny survives intact: a record written before the category
+existed reads
 as never-asked rather than as a yes, the grant is re-derived on every read and
 write (so a hand-edited `localStorage` entry, or one left behind after a host
 switched the category back off, decays to denied), and advertising is clamped

@@ -372,10 +372,12 @@ export const THIRD_PARTY_COOKIES: Record<string, ThirdPartyCookies> = {
    * Policy (2026-08-20) already names Google and Meta, so the inventory is the
    * half that was behind.
    *
-   * Both entries are reached only where a visitor has explicitly allowed
-   * advertising on a site whose owner turned the question on. Nothing here is
-   * set under implied consent alone in a prior-consent region, and nothing is
-   * set at all on a site that never asked.
+   * Both entries are reached only where the visitor's consent record grants
+   * advertising, on a site whose owner turned the question on — an explicit
+   * allow, or the implied default outside the prior-consent regions
+   * (AGL-2402). Nothing here is set under implied consent in a prior-consent
+   * region, because no implied record can be written there at all, and
+   * nothing is set on a site that never asked.
    */
   'Google advertising (ad_storage)': {
     // Set by gtag's conversion linker once `ad_storage` is granted. Distinct

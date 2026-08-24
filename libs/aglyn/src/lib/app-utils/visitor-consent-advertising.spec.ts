@@ -27,10 +27,12 @@
  * had ONE workaround — switch the whole consent tool off and run their own
  * CMP — which is a far bigger hammer than the problem.
  *
- * Every test below exists to hold one line: a grant requires a visitor's
- * explicit yes to THIS category, on a site whose host turned the question on.
- * Nothing else — not an implied default, not a legacy record, not a
- * hand-edited localStorage entry — may produce one.
+ * Every test below exists to hold one line: a grant requires the host to have
+ * turned the question on AND a record whose status can carry one. Since
+ * AGL-2402 that status set includes `implied` — safe by geography, because an
+ * implied record can only be written in the opt-out posture — but NOT a legacy
+ * record, and NOT a hand-edited localStorage entry, and never any of the
+ * refusal statuses.
  */
 
 import {
@@ -85,7 +87,7 @@ describe('the host has to turn the question on (AGL-1649)', () => {
   })
 })
 
-describe('only an explicit yes to THIS category grants it', () => {
+describe('only a record that actually grants THIS category grants it', () => {
   it('records an advertising grant from an explicit accept', () => {
     const record = storeVisitorConsent('h1', {
       status: 'accepted',

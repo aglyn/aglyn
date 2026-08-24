@@ -105,12 +105,26 @@ export function ConsentBannerCard(props: ConsentBannerCardProps) {
   )
 
   /**
-   * The advertising question (AGL-1649).
+   * The advertising question (AGL-1649), as AGL-2402 left it.
    *
-   * Turning it ON grants NOTHING. It adds a second question to the banner and
-   * the privacy-choices panel, so a visitor has somewhere to say yes; until
-   * one does, `ad_storage` and its two siblings stay denied exactly as they
-   * are today. Off is written as a field DELETE rather than `false`, matching
+   * What turning it ON actually does is POSTURE-DEPENDENT, and this copy has
+   * to say which — it is the one sentence a host reads at the moment they
+   * flip the switch.
+   *
+   * - `strict` (opt-in everywhere): nothing is granted until a visitor ticks
+   *   the second box. The switch really is inert until then.
+   * - `geo` (the default): visitors in prior-consent regions get the same
+   *   explicit question, but everywhere else the implied default now CARRIES
+   *   the advertising grant (AGL-2402 — safe by geography, since an `implied`
+   *   record can only be written in the opt-out posture). For those visitors
+   *   the switch is not inert: it starts advertising storage.
+   *
+   * The card used to say "nothing is granted until one says yes" in both
+   * modes. That was written before AGL-2402 and survived it, which meant the
+   * console told a host their switch was inert while it was granting
+   * `ad_storage` for every US visitor on the site.
+   *
+   * Off is written as a field DELETE rather than `false`, matching
    * `consent.disabled`, so an untouched host document carries no consent keys
    * at all.
    */
@@ -121,12 +135,14 @@ export function ConsentBannerCard(props: ConsentBannerCardProps) {
       })
       enqueueSnackbar(
         active
-          ? 'Visitors will be asked about advertising — nothing is granted until one says yes'
+          ? mode === 'strict'
+            ? 'Visitors will be asked about advertising — nothing is granted until one says yes'
+            : 'Visitors in the EU/UK will be asked about advertising; visitors elsewhere get advertising storage from their next visit, with the opt-out control'
           : 'Advertising storage stays denied for every visitor',
         { variant: 'success', persist: false },
       )
     },
-    [firestore, hostId, enqueueSnackbar],
+    [firestore, hostId, enqueueSnackbar, mode],
   )
 
   const handleMode = useCallback(
@@ -234,13 +250,15 @@ export function ConsentBannerCard(props: ConsentBannerCardProps) {
                   component="span"
                   sx={{ display: 'block' }}
                 >
-                  {'Off by default. Google Analytics runs with advertising ' +
-                    'storage denied unless a visitor explicitly allows it, ' +
-                    'so Google Ads linking and remarketing audiences ' +
-                    'collect nothing. Turn this on to add a second, ' +
-                    'separate question to the banner — turning it on grants ' +
-                    'nothing on its own, and a visitor who allows analytics ' +
-                    'is not thereby allowing advertising.'}
+                  {'Off by default. While it is off, Google Analytics runs ' +
+                    'with advertising storage denied for every visitor, so ' +
+                    'Google Ads linking and remarketing audiences collect ' +
+                    'nothing. Turn it on to add a second, separate question ' +
+                    'to the banner and the privacy-choices panel. Advertising ' +
+                    'follows the same consent mode as analytics: in the EU/UK ' +
+                    'it needs an explicit yes, and elsewhere in ' +
+                    'geo-conditional mode it is granted by the implied ' +
+                    'default, with the opt-out control always available.'}
                 </Typography>
               </span>
             }
@@ -278,10 +296,20 @@ export function ConsentBannerCard(props: ConsentBannerCardProps) {
         ) : null}
         {asksAds && machineryLive ? (
           <Alert severity="info">
-            {'Advertising is a second, separate question. Visitors who ' +
-              'allow only analytics keep advertising storage denied, and a ' +
-              'visitor tracked under implied consent is never treated as ' +
-              'having allowed advertising — that needs an explicit yes.'}
+            {mode === 'strict'
+              ? 'Advertising is a second, separate question, and in opt-in ' +
+                'mode it always needs an explicit yes. Visitors who allow ' +
+                'only analytics keep advertising storage denied, and ' +
+                'advertising is withdrawn by every refusal — Decline, an ' +
+                'opt-out, or a Global Privacy Control signal.'
+              : 'Advertising is a second, separate question. EU/UK and ' +
+                'unknown-region visitors are asked, and allowing only ' +
+                'analytics keeps advertising storage denied. Visitors ' +
+                'elsewhere are granted advertising storage by the same ' +
+                'implied default that grants analytics, and use "Your ' +
+                'Privacy Choices" to opt out; Global Privacy Control is ' +
+                'honored automatically. Advertising never outlives ' +
+                'analytics — every refusal withdraws both.'}
           </Alert>
         ) : null}
         {!hasGa && !disabled ? (

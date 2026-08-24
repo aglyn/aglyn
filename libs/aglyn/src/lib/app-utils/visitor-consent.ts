@@ -33,11 +33,13 @@
  *   AGL-82), and the stored consent choice itself.
  * - **Consent-gated: `advertising`** (AGL-1649) — GA4's `ad_storage`,
  *   `ad_user_data` and `ad_personalization`. OFF for every site unless the
- *   host turns the question on, and granted only by an explicit visitor yes
- *   to that specific category: never by the implied default, never by a
- *   record written before the category existed. A host who needs Ads storage
- *   previously had one workaround — switch the whole tool off and run their
- *   own CMP — which is why this exists.
+ *   host turns the question on, and then it follows the SAME posture as
+ *   analytics: an explicit visitor yes to that specific category in the
+ *   opt-in posture, and the implied default in the opt-out posture
+ *   (AGL-2402). Never from a record written before the category existed, and
+ *   never from any refusal status. A host who needs Ads storage previously had
+ *   one workaround — switch the whole tool off and run their own CMP — which
+ *   is why this exists.
  * - **Consent-gated: `analytics`.** Today that is the customer-configured
  *   Google Analytics tag — a third-party identifier-setting script — plus
  *   the CROSS-VISIT persistence of the `aglyn:visitor` experiment id (the id
@@ -346,9 +348,11 @@ export interface StoredVisitorConsent {
    * is not "said yes". Reading it the other way would hand Google a basis
    * for every visitor who ever clicked Allow on an analytics-only banner.
    *
-   * Only an EXPLICIT accept can carry one: an `implied` default never does,
-   * because being defaulted into analytics in an opt-out region is not a
-   * visitor answering a question about advertising.
+   * An explicit accept carries one, and since AGL-2402 so does an `implied`
+   * default — but ONLY on a site whose host turned the question on, and only
+   * in the opt-out posture, which is the only posture an `implied` record can
+   * be written in. See {@link advertisingGrantedByStatus} for why that is a
+   * geographic guarantee rather than a judgement call.
    */
   advertising?: boolean
   /** ISO country at decision time, when known — the `implied,us` shape. */
@@ -760,9 +764,10 @@ export const GA_CONSENT_DEFAULT_SNIPPET = `gtag('consent', 'default', ${JSON.str
  * literals fixed at module load; the only thing the caller chooses is which
  * of the two to emit.
  *
- * Reached only where {@link advertisingGrantedByRecord} says yes — host
- * opted in, explicit accept, explicit yes to this category — which is
- * evaluated client-side after hydration, like every other part of this gate.
+ * Reached only where {@link advertisingGrantedByRecord} says yes — the host
+ * opted in, and the visitor's record grants this category, whether by an
+ * explicit yes or by the opt-out posture's implied default (AGL-2402) — which
+ * is evaluated client-side after hydration, like every other part of this gate.
  * The ISR property is unaffected: the cached HTML contains neither snippet,
  * because the whole block is inside the client-side `analyticsAllowed`
  * condition.
@@ -853,8 +858,11 @@ export function residentGaMeasurementIds(): string[] {
  * Symmetric on purpose: a visitor who opts out and changes their mind in the
  * same pageview would otherwise stay silently unmeasured until they navigated,
  * because the re-rendered `<Script>` cannot re-execute an already-loaded tag.
- * The re-grant restores ANALYTICS only — the tool never asked about
- * advertising, so the ad signals stay denied in both directions.
+ * The re-grant restores whatever the CALLER passes — analytics alone on a site
+ * that never asks the advertising question (`advertising` defaults to false),
+ * and both categories where the visitor's record grants both (AGL-1649). The
+ * clamp in {@link consentModeSignals} still makes ads-without-analytics
+ * unrepresentable, so a withdrawal can never restore advertising alone.
  */
 export function setResidentAnalyticsTags(
   granted: boolean,
