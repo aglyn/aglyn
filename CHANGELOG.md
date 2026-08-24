@@ -9,6 +9,35 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.14 — 2026-08-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.13...v1.0.0-beta.14)
+
+### Added
+
+- **email:** marketing consent capture, list opt-in, resubscribe ([AGL-2499](https://linear.app/aglyn/issue/AGL-2499))
+
+### Fixed
+
+- **security:** two secret compares that short-circuit on the first byte ([AGL-1881](https://linear.app/aglyn/issue/AGL-1881), [AGL-512](https://linear.app/aglyn/issue/AGL-512))
+- **tenant:** the beacon lockdown spec stops timing out on a cold runner ([AGL-1627](https://linear.app/aglyn/issue/AGL-1627))
+- **ci:** the emulator sweep runs the tenant spec it has been skipping ([AGL-1627](https://linear.app/aglyn/issue/AGL-1627), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+
+### Changed
+
+- **email:** the transactional email palette is named once ([AGL-2499](https://linear.app/aglyn/issue/AGL-2499), [AGL-2025](https://linear.app/aglyn/issue/AGL-2025))
+
+### Documentation
+
+- **cloud:** the functions env example names a file firebase will accept ([AGL-1617](https://linear.app/aglyn/issue/AGL-1617))
+
+<details>
+<summary>Also in this release: 1 test</summary>
+
+- **pricing:** the published marketplace take rate gets a fixed point ([AGL-2194](https://linear.app/aglyn/issue/AGL-2194))
+
+</details>
+
 ## v1.0.0-beta.13 — 2026-08-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.12...v1.0.0-beta.13)
