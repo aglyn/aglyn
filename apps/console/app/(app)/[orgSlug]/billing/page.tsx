@@ -20,6 +20,7 @@ import {
   buildBeginCheckoutParams,
   readGaClientId,
   trackEvent,
+  trackEventBeforeNavigation,
 } from '@aglyn/aglyn/app-utils/analytics-events'
 import { readInternalTrafficOverride } from '@aglyn/aglyn/app-utils/internal-traffic'
 import {
@@ -641,6 +642,15 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             { variant: 'info', persist: false },
           )
         }
+        // Held so the hosted-redirect branch below can WAIT for the hit
+        // (AGL-1580). The console's transport is Firebase `logEvent`, which is
+        // async and reaches gtag only after the SDK's initialization promise
+        // settles; on the redirect path `window.location.assign` ran in the
+        // same tick and destroyed the document first, so a still-initializing
+        // tag lost the event outright. Started at the emit, awaited at the
+        // redirect — the refusal branches in between run against the timeout
+        // rather than after it, so the common path waits for nothing.
+        let beginCheckoutFlush: Promise<void> | undefined
         // In-page checkout (AGL-1132) when the route returns a client secret;
         // otherwise the unchanged redirect. The route decides — it only picks
         // embedded when the flag is on AND a publishable key is configured —
@@ -665,7 +675,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
           // the tenant storefront's cart checkout cannot drift into two shapes
           // under one event name. `value` is derived from the item rather than
           // restated here — same number, one definition.
-          trackEvent(
+          beginCheckoutFlush = trackEventBeforeNavigation(
             'begin_checkout',
             buildBeginCheckoutParams({
               billingInterval: interval === 'year' ? 'annual' : 'monthly',
@@ -701,6 +711,12 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
         if (!response.ok || !payload?.url) {
           throw new Error(payload?.error ?? 'Checkout failed')
         }
+        // The ONE line that changed on the money path (AGL-1580). It does not
+        // touch the session, the target, the price or any refusal above — it
+        // only lets the analytics hit reach gtag before the document dies, and
+        // it is bounded, so a blocked analytics host delays the redirect by at
+        // most `NAVIGATION_FLUSH_TIMEOUT_MS` and then it proceeds regardless.
+        await beginCheckoutFlush
         window.location.assign(payload.url)
       } catch (error) {
         console.error(error)

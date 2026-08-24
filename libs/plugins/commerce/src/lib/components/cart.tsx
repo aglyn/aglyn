@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import {
   buildBeginCheckoutParams,
   trackEvent,
+  trackEventBeforeNavigation,
 } from '@aglyn/aglyn/app-utils/analytics-events'
 import {
   isPaymentsNotConfigured,
@@ -296,7 +297,16 @@ function CartLines(props: {
         // authoritative after a coupon or gift card, which the line prices
         // below are not. No `billing_interval`: a storefront cart is not a
         // subscription.
-        trackEvent(
+        //
+        // AWAITED before the redirect (AGL-1580). This surface registers no
+        // transport, so delivery is a synchronous `window.gtag` call and the
+        // await resolves immediately — a storefront checkout is not slowed by
+        // one microtask. It is written this way anyway because the property
+        // that makes it safe is invisible from here: the day this bundle grows
+        // an async transport, or a host registers one for it, the bare call
+        // would start losing the event on exactly the branch that navigates,
+        // and nothing at this call site would look different.
+        await trackEventBeforeNavigation(
           'begin_checkout',
           buildBeginCheckoutParams({
             value: (cart?.subtotalCents ?? 0) / 100,

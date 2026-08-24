@@ -28,6 +28,7 @@ import {
   sanitizeEventParams,
   trackAuthoredEvent,
   trackEvent,
+  trackEventBeforeNavigation,
 } from './analytics-events'
 
 type GtagCall = [string, string, Record<string, unknown>]
@@ -153,6 +154,105 @@ describe('analytics-events (AGL-1561)', () => {
 
       expect(calls).toHaveLength(1)
       expect(calls[0][1]).toBe('host_created')
+    })
+  })
+
+  describe('trackEventBeforeNavigation holds the hit against a navigation (AGL-1580)', () => {
+    // The measured bug: the console's transport is Firebase `logEvent`, which
+    // awaits the SDK's initialization promise before the hit ever reaches
+    // gtag. On the hosted-redirect path `window.location.assign` ran in the
+    // same tick, so while that promise was still PENDING the document was
+    // destroyed before gtag was called and `begin_checkout` was lost outright.
+    // Verified against real gtag.js with the transports interposed: a pending
+    // init loses the event, awaiting the log delivers it.
+    //
+    // These assert the delivery CONTRACT the fix rests on, in both directions.
+
+    it('does not resolve until an async transport has handed the hit over', async () => {
+      let handOver: () => void = () => undefined
+      const delivered: string[] = []
+      configureAnalyticsTransport(
+        (name) =>
+          new Promise<void>((resolve) => {
+            handOver = () => {
+              delivered.push(name)
+              resolve()
+            }
+          }),
+      )
+
+      let navigated = false
+      const flush = trackEventBeforeNavigation('begin_checkout', {
+        currency: 'USD',
+        value: 33,
+        items: [],
+      }).then(() => {
+        navigated = true
+      })
+
+      // The whole point: the caller is still waiting, so its
+      // `window.location.assign` has not run and the document is still alive.
+      await Promise.resolve()
+      expect(delivered).toEqual([])
+      expect(navigated).toBe(false)
+
+      handOver()
+      await flush
+      expect(delivered).toEqual(['begin_checkout'])
+      expect(navigated).toBe(true)
+    })
+
+    it('releases the navigation anyway when analytics never answers', async () => {
+      jest.useFakeTimers()
+      try {
+        // A blocked analytics host — an ad blocker, a proxy, a consent tool
+        // that never loads — leaves Firebase's init promise pending forever.
+        // A bare await would hang the customer's redirect on a metric.
+        configureAnalyticsTransport(() => new Promise<void>(() => undefined))
+
+        let released = false
+        const flush = trackEventBeforeNavigation('begin_checkout', {
+          currency: 'USD',
+          value: 33,
+          items: [],
+        }).then(() => {
+          released = true
+        })
+
+        await Promise.resolve()
+        expect(released).toBe(false)
+
+        jest.advanceTimersByTime(300)
+        await flush
+        expect(released).toBe(true)
+      } finally {
+        jest.useRealTimers()
+      }
+    })
+
+    it('costs a synchronous surface nothing — the storefront still goes straight to gtag', async () => {
+      const calls = installGtag()
+
+      await trackEventBeforeNavigation('begin_checkout', {
+        currency: 'USD',
+        value: 59.98,
+        items: [],
+      })
+
+      expect(calls).toHaveLength(1)
+      expect(calls[0][1]).toBe('begin_checkout')
+    })
+
+    it('never rejects, so a failing transport cannot strand a checkout', async () => {
+      configureAnalyticsTransport(() => Promise.reject(new Error('blocked')))
+
+      await expect(
+        trackEventBeforeNavigation('begin_checkout', {
+          currency: 'USD',
+          value: 33,
+          items: [],
+        }),
+      ).resolves.toBeUndefined()
     })
   })
 
