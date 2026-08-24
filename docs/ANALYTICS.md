@@ -1546,6 +1546,74 @@ is gone by the time the redirect lands. `login` never carries them: a
 returning user's session was not produced by today's campaign, and stamping
 one on it would credit the ad for revenue it did not cause.
 
+#### 12a. The capture is correct and, today, it is fed nothing (AGL-1731)
+
+The parser, the four doors and the durable write all work. **No visitor
+currently reaches them carrying a campaign**, and that is a separate defect
+from the one §12 fixed.
+
+`aglyn.com` is a tenant site and `app.aglyn.com` is the console — a real
+cross-origin hop. Nothing in this repository forwards a query parameter across
+it. `onboardingSignupHref`
+(`libs/aglyn/src/lib/app-utils/onboarding-deep-link.ts`) builds a **fresh**
+`?plan=…&interval=…` URL, has no parameter through which a caller could pass
+anything else, and has **zero production callers** — by design, because the
+pricing CTAs are authored besigner content on `aglyn.com`, not repo files.
+
+So `utm_*` reaches `/signup` only if a human typed it into the CTA href. That
+is worse than nothing: a hardcoded `utm_source=google` is **static**, so every
+visitor who clicks that button is attributed to Google whether they came from
+Google, Hacker News or a bookmark. Confidently wrong attribution is harder to
+detect than absent attribution and reaches the same spend decisions.
+
+**What is actually needed** is per-visitor forwarding: the landing page must
+copy the campaign off its OWN inbound URL onto the console-bound href at click
+time. The only seam that sees every authored link is `AppLink`
+(`libs/shared/ui/jsx`), and decorating there means calling `useSearchParams` in
+a component the console renders on every page — a dynamic-rendering hazard on
+surfaces that are statically generated today. It was **not** attempted a day
+before freeze and is not attributable to guesswork: it needs measuring.
+
+Until then GA4's `_gl` linker is the only cross-origin path that carries
+anything, it carries the **session** rather than `utm_*` into `users/{uid}`,
+and §"One property, one stream, three domains" above records why it is
+best-effort rather than certain.
+
+The one hop this repo *does* own was dropping the campaign and now does not:
+`sendToConsentGate` (`apps/console/utils/legal-consent.ts`) bounces the fourth
+account-creation door from `/signin` to `/signup` and used to build a bare
+`?consent=required`. It now re-parses the campaign through the same allowlist
+and re-serialises it — a parse-and-rebuild, not a string copy, so a marketing
+link cannot push anything else onto a URL this code owns.
+
+#### 12b. ⚠️ The capture is not gated on consent, and that is unresolved
+
+Both exits — the GA4 hit and the `users/{uid}` write — run for **every**
+signup, including a visitor who declined analytics on `aglyn.com` and a visitor
+whose browser sends Global Privacy Control.
+
+This is not a regression; it is the console's standing posture. `app.aglyn.com`
+has no consent banner, no region gate and no GPC handling
+(`platform-consent-default.ts` states it outright — "GA loads unconditionally
+on both (no gate can run here)"), and `hasGlobalPrivacyControl()` is read
+**only** on the tenant runtime. What §12 changed is *what* that ungated hit
+carries: a marketing label now travels with it and is stored durably against an
+identified person.
+
+Two things make this a question for counsel rather than a bug to fix here:
+
+- The pinned privacy policy (v2) has **no** marketing-attribution category in
+  its §1.1 account-data enumeration. The nearest disclosure is "referring URLs,
+  and similar analytics" under *automatically collected usage data* — a stretch
+  to read as covering a durable label joined to revenue.
+- §3 of that same policy promises a "Your Privacy Choices" control **on any
+  page**. On the console no such control exists on any page.
+
+Pinned as an executable assertion in
+`apps/console/specs/signup-campaign-attribution.spec.tsx` ("captures even under
+GPC, because the console has no gate"), so that answering the question requires
+deliberately changing that test rather than silently changing the product.
+
 ### 13. Why a server event can still report nothing with the credentials in place (AGL-2327)
 
 Three distinct causes have been mistaken for each other, twice. Check them in

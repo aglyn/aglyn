@@ -30,7 +30,12 @@
  * abandoned sign-up self-heal instead of leaving a tick lying around that
  * silently consents to a LATER attempt.
  */
+import {
+  campaignAttributionQuery,
+  parseCampaignAttribution,
+} from '@aglyn/aglyn'
 import { getAdditionalUserInfo, type UserCredential } from 'firebase/auth'
+import { hardNavigate } from './hard-navigate'
 
 const MARKER_KEY = 'aglyn:legal-consent-at'
 const DEFAULT_MAX_AGE_MS = 120_000
@@ -48,9 +53,38 @@ export const CONSENT_REQUIRED_SEARCH = 'consent=required'
  * A hard navigation, not a router push: the caller has just signed an account
  * out, and the sign-up page has to boot against that cleared auth state rather
  * than re-use a tree rendered while it was still signed in.
+ *
+ * ## Why the campaign is rebuilt onto this URL (AGL-1731)
+ *
+ * This bounce is the fourth account-creation door: someone clicked "Sign in
+ * with Google" on `/signin`, Firebase created an account instead, and they are
+ * moved here to be shown the Terms. It is the only door whose URL this code
+ * writes, and it used to write a bare `/signup?consent=required` — so an ad
+ * that landed on `/signin?utm_source=…` produced an account attributed to
+ * nothing. That loss is silent and permanent: the signup page can only read
+ * the URL it is given, and by the time it mounts the marketing URL is gone.
+ *
+ * The campaign is re-PARSED and re-SERIALISED rather than forwarded. Copying
+ * `window.location.search` wholesale would carry whatever else rode the link
+ * — including the `?email=` that the allowlist exists to refuse — onto a URL
+ * this code is responsible for. Round-tripping through the same two functions
+ * the signup page reads with means this hop can carry the three allowlisted
+ * campaign keys and, by construction, nothing else.
+ *
+ * Through `hardNavigate` rather than `window.location.assign` directly: jsdom
+ * makes `assign` read-only, so the URL this builds could not otherwise be
+ * observed in a spec — and an unasserted URL is how the bare version survived.
  */
 export function sendToConsentGate(): void {
-  window.location.assign(`/signup?${CONSENT_REQUIRED_SEARCH}`)
+  const campaign = parseCampaignAttribution(
+    new URLSearchParams(
+      typeof window === 'undefined' ? '' : window.location.search,
+    ),
+  )
+  const carried = campaignAttributionQuery(campaign)
+  hardNavigate(
+    `/signup?${CONSENT_REQUIRED_SEARCH}${carried ? `&${carried}` : ''}`,
+  )
 }
 
 /**

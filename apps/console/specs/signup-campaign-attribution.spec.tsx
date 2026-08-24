@@ -307,4 +307,58 @@ describe('campaign attribution at signup (AGL-1731)', () => {
     await waitFor(() => expect(campaignWrites()).toHaveLength(1))
     expect(campaignWrites()[0].data.signupCampaign.query).toBe('utm_source=hn')
   })
+
+  it('captures nothing when the clickwrap consent is withheld', async () => {
+    mockSearch = '?utm_source=google&utm_medium=cpc&utm_campaign=sept-launch'
+
+    render(<SignUp />)
+    // No tick. The gate at the top of `handleSignUp` returns before any
+    // account exists, so there is no uid to attribute to in the first place.
+    await act(async () => {
+      submitPasswordForm()
+    })
+
+    expect(mockCreateUser).not.toHaveBeenCalled()
+    expect(signUpEvents()).toHaveLength(0)
+    expect(campaignWrites()).toHaveLength(0)
+  })
+
+  /**
+   * ⚠️ This test records the CURRENT posture, and does not endorse it.
+   *
+   * `app.aglyn.com` has no consent banner, no region gate and no GPC handling
+   * — `platform-consent-default.ts` says so outright, and the console's GA has
+   * run unconditionally since AGL-118. A visitor who declined analytics on
+   * `aglyn.com`, or whose browser sends Global Privacy Control, still has a
+   * campaign label written against their account here.
+   *
+   * That is a legal question, not an engineering one, and it is open on
+   * AGL-1731. It is pinned as an executable assertion rather than a comment so
+   * that whoever answers it has to come here and change this deliberately —
+   * a gate added upstream would otherwise turn this file green while silently
+   * changing what the product does.
+   */
+  it('captures even under GPC, because the console has no gate (AGL-1731, open)', async () => {
+    Object.defineProperty(window.navigator, 'globalPrivacyControl', {
+      configurable: true,
+      value: true,
+    })
+    mockSearch = '?utm_source=google&utm_medium=cpc&utm_campaign=sept-launch'
+
+    await signUpThroughPasswordDoor()
+
+    await waitFor(() => expect(campaignWrites()).toHaveLength(1))
+    expect(campaignWrites()[0].data.signupCampaign.query).toBe(
+      'utm_source=google&utm_medium=cpc&utm_campaign=sept-launch',
+    )
+    expect(signUpEvents()[0][1]).toEqual({
+      method: 'password',
+      campaign_source: 'google',
+      campaign_medium: 'cpc',
+      campaign_name: 'sept-launch',
+    })
+
+    delete (window.navigator as { globalPrivacyControl?: boolean })
+      .globalPrivacyControl
+  })
 })
