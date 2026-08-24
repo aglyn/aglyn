@@ -35,9 +35,17 @@
  * is the one failure this record cannot have.
  *
  * **Never show platform totals where the return wants Texas.** Items 1 and 2
- * come from `byJurisdiction['US-TX']`. The all-jurisdictions table below is
- * the audit trail for why the rest of the quarter is not on the return —
- * and the early-warning list for economic nexus elsewhere.
+ * come from `byJurisdiction['US-TX']`. The "Aglyn's own sales by jurisdiction"
+ * table below is the audit trail for why the rest of the quarter is not on the
+ * return.
+ *
+ * **Never let one taxpayer's table answer for another's** (AGL-1956). That
+ * table used to call itself the economic-nexus early warning, and it reads
+ * `platformRevenue` — Aglyn's own invoices. Nexus from MERCHANTS' sales is a
+ * different taxpayer's money and is answered by "Facilitated sales by buyer
+ * state" in the storefront card. Two adjacent tables, never one: the rule that
+ * `platformRevenue` and `storefrontTaxCollected` are never summed is what
+ * keeps both figures meaning something.
  *
  * **Never claim a figure it did not compute.** Taxable purchases (use tax on
  * Aglyn's own purchases) is not in `platformRevenue`; the line says NOT
@@ -849,9 +857,9 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
             <CardDisplay
               header={'Aglyn’s own sales by jurisdiction'}
               help={docsHelp('salesTaxReturn', {
-                anchor: '#all-jurisdictions',
+                anchor: '#aglyns-own-sales-by-jurisdiction',
                 excerpt:
-                  'Every buyer state for Aglyn’s OWN subscription and add-on revenue in the period. Texas is the return; the rest is the audit trail for why that revenue is not on it.',
+                  'Every buyer state for Aglyn’s OWN subscription and add-on revenue in the period. Texas is the return; the rest is the audit trail for why that revenue is not on it. NOT the nexus list — see “Facilitated sales by buyer state”.',
               })}
               contentGutterX
               contentGutterY

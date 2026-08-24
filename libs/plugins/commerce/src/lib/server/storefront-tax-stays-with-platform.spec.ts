@@ -25,8 +25,10 @@ import { checkoutHandler } from './checkout'
  * On a `mode: 'stripe'` store the shopper's tax is computed against AGLYN's
  * registrations — measured in AGL-1904, reported by Stripe as
  * `automatic_tax.liability: { type: "self" }` — and Aglyn is the registered
- * Texas taxpayer that must remit it (AGL-1811, taxpayer 32077682212, first
- * taxable sales date 2026-09-01).
+ * Texas taxpayer that must remit it, from a first taxable sales date of
+ * 2026-09-01 (AGL-1811). The registration identifiers themselves are operator
+ * configuration and are deliberately NOT quoted here: this repository is
+ * public, and `check-no-tax-identifiers` refuses them in tracked source.
  *
  * The session nonetheless sent `payment_intent_data[application_fee_amount]`.
  * On a destination charge that form means Stripe transfers `amount_total − fee`

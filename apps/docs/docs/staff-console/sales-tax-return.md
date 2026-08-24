@@ -101,16 +101,48 @@ during the period with their tax share estimated at each row's own tax-to-gross 
 and leaves applying them to the preparer. At launch volumes this is an inspection, not
 a computation.
 
-## All jurisdictions
+## Aglyn's own sales by jurisdiction
 
-Every buyer state in the period, Texas first.
+Every buyer state in the period, Texas first — for **Aglyn's own** subscription and
+add-on revenue.
 
-Texas is the return. The other rows are two things at once: the audit trail for why the
-rest of the period's revenue is *not* on the Texas return, and the early-warning list
-for economic nexus somewhere else — a state whose totals are climbing is a state worth
-checking a threshold against.
+Texas is the return. The other rows are the audit trail for why the rest of the
+period's revenue is *not* on the Texas return.
 
 Rows with no readable billing address appear as `unknown` and are flagged.
+
+:::caution This table is not the nexus list
+It used to say it was. It reads `platformRevenue` — Aglyn's own invoices — so it
+cannot answer a question about what Aglyn facilitated for its merchants. For that,
+read **Facilitated sales by buyer state** below. The two are different taxpayers'
+money and are never summed.
+:::
+
+## Facilitated sales by buyer state
+
+Aglyn is a marketplace facilitator, so each state asks the same question: how much did
+you facilitate into me, and in how many transactions. This table, in the storefront
+commerce card, is the answer — merchants' storefront sales grouped by where the shopper
+was.
+
+It **sums all three liability buckets**, on purpose. A threshold counts the sale
+whoever remits the tax, and reading only the Aglyn-liable rows would under-report
+exactly the states worth watching: the ones where Aglyn collects nothing today. Who
+remits is still on each row, as *Of which Aglyn owes*, so the nexus question and the
+"what do we owe" question never blur together.
+
+**Texas is not read off this table.** A Texas LLC has no in-state economic-nexus
+threshold, so the Texas obligation is unconditional from 2026-09-01 whatever the
+figures say. The table is for *other* states.
+
+:::warning These figures are a lower bound
+A storefront sale that collected no tax at all files no tax row, so it does not appear
+here — and that is precisely the population a nexus check wants to see. Treat a state's
+total as a floor, never a measurement. Recorded on AGL-1956.
+:::
+
+A state showing sales and no tax collected is flagged **No tax collected**. That is the
+row to check a threshold against.
 
 ## Exporting the working papers
 

@@ -1024,7 +1024,11 @@ export function taxReturnCsv(payload: TaxReturnPayload | null): string {
         ])
       : [['—', '0', 'None — every row read cleanly', '']]),
     [],
-    ['All jurisdictions'],
+    // AGLYN'S OWN sales — `platformRevenue`. Named for the taxpayer whose
+    // money it is (AGL-1956): this section used to be headed "All
+    // jurisdictions", which read as every sale the platform saw and was in
+    // fact only Aglyn's subscription and add-on invoices.
+    ['Aglyn’s own sales by jurisdiction'],
     [
       'Jurisdiction',
       'Transactions',
@@ -1039,6 +1043,33 @@ export function taxReturnCsv(payload: TaxReturnPayload | null): string {
       row.taxableSalesDollars,
       row.taxCollectedDollars,
     ]),
+    [],
+    // MERCHANTS' sales, by where the shopper was — the nexus evidence
+    // (AGL-1956). A different taxpayer's money from the section above and
+    // never summed with it, which is why it is its own block rather than more
+    // rows. The export is the contemporaneous record behind a filed return, so
+    // the figure a state would ask about belongs in it.
+    ['Facilitated sales by buyer state (merchants’ storefronts)'],
+    [
+      'Buyer state',
+      'Sales',
+      'Total sales (USD)',
+      'Tax collected (USD)',
+      'Of which Aglyn owes (USD)',
+    ],
+    ...(taxReturnFacilitatedJurisdictionRows(payload).length
+      ? taxReturnFacilitatedJurisdictionRows(payload).map((row) => [
+          row.jurisdiction,
+          String(row.transactionCount),
+          row.totalSalesDollars,
+          row.taxCollectedDollars,
+          row.aglynLiableTaxDollars,
+        ])
+      : [['—', '0', '0.00', '0.00', '0.00']]),
+    [
+      'LOWER BOUND — a storefront sale that collected no tax files no row, ' +
+        'so it is absent here. Texas needs no threshold (AGL-1811).',
+    ],
     [],
     /*
      * THE WORKING PAPERS (AGL-2329).
