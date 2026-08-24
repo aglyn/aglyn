@@ -153,7 +153,7 @@ export function RecentSignInsCard() {
           'Signed out. Every device has been signed out, including this ' +
             'one — you will be asked to sign in again. It takes effect ' +
             'everywhere within a few seconds; a page already open on another ' +
-            'device may keep reading data for up to an hour.',
+            'device may keep reading and changing data for up to an hour.',
         )
       } catch {
         setError('Could not sign that device out')
@@ -294,7 +294,7 @@ export function RecentSignInsCard() {
             } signs out every device on your account, including this one. ` +
               'You will need to sign in again. It takes effect everywhere ' +
               'within a few seconds; a page already open on another device ' +
-              'may keep reading data for up to an hour.'}
+              'may keep reading and changing data for up to an hour.'}
           </DialogContentText>
         </DialogContent>
         <DialogActions>

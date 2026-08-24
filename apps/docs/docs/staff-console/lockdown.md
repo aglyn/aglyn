@@ -538,9 +538,13 @@ change worth its own issue and is not this one.
 
 **The residual, stated plainly.** Anything that goes through our servers stops
 within about fifteen seconds (the cached revocation epoch). A tab already open
-on the signed-out device can keep reading the database directly until its ID
+on the signed-out device can keep reaching the database directly until its ID
 token expires, up to an hour, because security rules key on that token and not
-on our cookie. It cannot obtain another one.
+on our cookie. That residual is **not read-only**: the rules carry no assertion
+about revocation, so the tab keeps every client write the account already had —
+publishing, content edits, media metadata, presence and co-editing. Object
+storage is the one exception, because it denies the client outright. The tab
+cannot obtain another token.
 
 ## Asset quarantine — one file, not the site that serves it
 

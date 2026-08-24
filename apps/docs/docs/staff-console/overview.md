@@ -194,10 +194,14 @@ surprise people:
   produce a fresh authentication, while the account holder signs in again normally and
   keeps working. The honest sentence is **"everyone signs out once, you sign back in,
   that device does not."**
-- **A page already open on the signed-out device may keep reading data for up to an
-  hour.** Anything that goes through our servers stops within about fifteen seconds.
-  Direct database reads from a tab that is already open survive until its token
-  expires; it cannot get another one.
+- **A page already open on the signed-out device may keep reading *and writing* data
+  for up to an hour.** Anything that goes through our servers stops within about
+  fifteen seconds. Direct database access from a tab that is already open survives
+  until its token expires — security rules key on that token, and they do not ask
+  whether the session was revoked, so the tab keeps whatever write access the account
+  had. It cannot get another token. Uploaded files are the exception: storage is
+  closed to the client entirely, so those stop at once. Say this plainly to the
+  account holder rather than implying the residual is read-only.
 
 If the account holder may still have working sessions they do not recognise — or the
 device is one you cannot see in the list — **change the password too**, which revokes

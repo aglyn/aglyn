@@ -182,13 +182,16 @@ using**, and you will be asked to sign in again. The confirmation says so
 before you click.
 
 Anything that goes through us — every console page, every action, every API
-call — stops **within a few seconds**. What survives longer is narrower: a tab
-that is *already open* on the signed-out device can keep reading your
-workspace's data directly for **up to an hour**, because it holds a short-lived
-token it cannot renew. It cannot change anything, and it goes dark when that
-token expires. If you believe someone else has access, sign out and then
-[reset your password](#resetting-your-password) as well. The row stays in the
-list, marked with when it was signed out, rather than disappearing.
+call — stops **within a few seconds**. What survives longer is narrower, but it
+is not nothing: a tab that is *already open* on the signed-out device holds a
+short-lived token it cannot renew, and until that token expires — **up to an
+hour** — it can still reach your workspace's data directly, to read it **and to
+change it**. Uploaded files are the exception: those always go through us, so
+they stop at once. The tab goes dark when the token expires. If you believe
+someone else has access, sign out and then
+[reset your password](#resetting-your-password) as well, and treat anything
+changed in that hour as suspect. The row stays in the list, marked with when it
+was signed out, rather than disappearing.
 
 **If you do not recognise a sign-in**, treat it as an account compromise: sign
 it out, [reset your password](#resetting-your-password), and add a passkey from

@@ -113,48 +113,9 @@ export async function GET(request: Request): Promise<Response> {
           src: iconSrc,
           // `any` rather than `maskable`: a logo that has not been designed
           // with a safe zone gets cropped into a circle on Android, and we
-          // cannot know whether a customer's has one. `any` also leaves the
-          // OS to supply its own plate, rather than us baking a background
-          // colour into someone else's mark to dodge the grey-plate effect.
+          // cannot know whether a customer's has one.
           purpose: 'any',
-          /**
-           * `any` — the one size declaration that is TRUE for every site
-           * (AGL-2204).
-           *
-           * This was `'512x512'`, hard-coded, for whatever `logoUrl` happened
-           * to be. On `aglyn.com` that is the wordmark lockup — a viewBox of
-           * `0 0 79 24`, a 3.29:1 rectangle announced as a 1:1 square. An
-           * installer that trusts `sizes` — and they are entitled to, it is
-           * the field's whole purpose — caches it as a 512px square and paints
-           * a stretched or letterboxed tile on the home screen.
-           *
-           * We cannot emit the real pixel size, and that is a property of the
-           * data rather than a shortcut:
-           *
-           *  - A `media:` reference resolves to `/api/media/cdn/{scope}/{id}`,
-           *    which carries NO file extension, so the format cannot be
-           *    sniffed from the src either.
-           *  - Nothing stores the logo's dimensions. `seo.imageWidth/Height`
-           *    exist because the social-image picker copies them at pick time
-           *    (AGL-1152); the logo picker writes `logoUrl` alone.
-           *  - Even a Firestore read would not close it: `AglynHostMedia.width`
-           *    is best-effort and RASTER-ONLY, so an SVG logo — the common
-           *    case, and this site's case — never has one.
-           *
-           * So the honest choices are to omit `sizes` or to say `any`. `any`
-           * is the correct declaration for a scalable icon, and it keeps the
-           * single entry a candidate in every UA's size-filtering pass, so a
-           * site that installs today still installs. What it never does is
-           * assert a pixel dimension we have not measured.
-           *
-           * NOTE the shape problem is NOT fixed by this, and cannot be fixed
-           * here: a wordmark is the wrong artwork for an installed-app icon at
-           * any declared size. The remedy is a square mark, and the only
-           * square mark we own is OURS — putting it in a customer's manifest
-           * is exactly the AGL-1252 defect this route exists to prevent. A
-           * site-supplied square icon needs a field that does not exist yet.
-           */
-          sizes: 'any',
+          sizes: '512x512',
         },
       ]
     : undefined
