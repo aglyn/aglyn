@@ -25,11 +25,19 @@
  * so the uptime probe + alert path that already watches serving also watches
  * the thing we would need on the worst day.
  *
- * Degraded (503) when any backup is in a failed state, when no READY backup
- * exists, or when the newest READY backup is older than `MAX_BACKUP_AGE_DAYS`
- * — a weekly cadence that stops producing is as broken as one that fails.
- * The verdict logic is `backupsHealth` in the shared health lib, where it is
- * spec-covered branch by branch.
+ * Degraded (503) when there is no recent restore point: no READY backup and
+ * nothing recent to be waiting on, or a newest READY backup older than
+ * `MAX_BACKUP_AGE_DAYS` — a weekly cadence that stops producing is as broken
+ * as one that fails.
+ *
+ * It answers 200 with an explicit `determinate: false` for the third state,
+ * where the answer could not be READ — a transient upstream error, a partial
+ * listing, or a run that has not finished. Reporting those as
+ * `backup-failed` is what made this endpoint 503 for four and a half days
+ * with healthy backups behind it (AGL-1843). The verdict logic is
+ * `backupsHealth` in the shared health lib, where every state is spec-covered
+ * and the escalation that keeps 200-on-unknown from being fail-open is
+ * argued in full.
  *
  * Same three rules as the sibling health endpoints — never cached, checks the
  * real thing, cost-bounded. Each probe is one metadata-only REST call (backup
@@ -77,6 +85,19 @@ const PROBE_TTL_MS = 5 * 60_000
 
 const EMPTY_STATES: BackupsCheck['states'] = {}
 
+/**
+ * Upstream statuses that will NOT heal on their own (AGL-1843).
+ *
+ * The split matters because it is what keeps "indeterminate answers 200" from
+ * becoming fail-open. A 429 or a 503 from `firestore.googleapis.com` says
+ * nothing about the backups and is gone by the next probe; paging on it is
+ * the noise this pass exists to remove. A 401/403/404 or a missing credential
+ * is a configuration fact — a revoked `roles/datastore.backupsViewer`, a
+ * deleted database — that stays true until someone acts, so it stays RED and
+ * cannot silently retire the check.
+ */
+const PERMANENT_HTTP_STATUSES = new Set([400, 401, 403, 404])
+
 const backupsProbe = memoizeWithTtl<BackupsCheck>(PROBE_TTL_MS, async () => {
   const startedAt = Date.now()
   const fail = (code: string): BackupsCheck => ({
@@ -86,6 +107,13 @@ const backupsProbe = memoizeWithTtl<BackupsCheck>(PROBE_TTL_MS, async () => {
     states: EMPTY_STATES,
     newestReadyAgeDays: null,
   })
+  /**
+   * The third state: we could not read the listing, so we have no verdict.
+   * `backupsHealth(null, …)` owns what that reports — the route only decides
+   * WHICH failures are undeterminable rather than determined-bad.
+   */
+  const unreadable = (code: string): BackupsCheck =>
+    backupsHealth(null, Date.now() - startedAt, Date.now(), { code })
   try {
     // Touch the facade so the import above can never be tree-shaken into
     // skipping app initialization.
@@ -106,14 +134,28 @@ const backupsProbe = memoizeWithTtl<BackupsCheck>(PROBE_TTL_MS, async () => {
     )
     // The status code, never the error body — this response is public and a
     // Google error message can carry project ids and resource paths.
-    if (!response.ok) return fail(`http-${response.status}`)
+    if (!response.ok) {
+      return PERMANENT_HTTP_STATUSES.has(response.status)
+        ? fail(`http-${response.status}`)
+        : unreadable(`http-${response.status}`)
+    }
 
     const body = (await response.json()) as {
       backups?: { state?: string; snapshotTime?: string }[]
+      // Rather than failing the whole request when one location is
+      // unreachable, the API returns a PARTIAL result set and names the
+      // locations it could not reach here. Dropping this field turned a
+      // partial read into a confident "no READY backup" (AGL-1843) — the
+      // swallowed-query-as-measured-zero shape, one layer up.
+      unreachable?: string[]
     }
-    return backupsHealth(body.backups ?? [], Date.now() - startedAt)
+    return backupsHealth(body.backups ?? [], Date.now() - startedAt, Date.now(), {
+      unreachable: body.unreachable ?? [],
+    })
   } catch (error) {
-    return fail(String((error as { code?: string })?.code ?? 'unknown'))
+    // A throw here is a transport fault or an unparseable body — never a
+    // statement about the backups themselves.
+    return unreadable(String((error as { code?: string })?.code ?? 'unknown'))
   }
 })
 

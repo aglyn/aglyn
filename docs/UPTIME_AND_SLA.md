@@ -388,8 +388,25 @@ Notes that keep these honest:
   a half days — 210 consecutive windows, 6/6 probe regions — while the backups
   were entirely healthy (AGL-1843). An aged-out backup behind a good one is how
   a managed backup *ends*, not a failure; what reproduces AGL-1490 is a newest
-  run that produced nothing usable, so that is what is measured. Since
-  AGL-1843 the same endpoint carries a SECOND, separately-labeled check —
+  run that produced nothing usable, so that is what is measured.
+
+  **Second pass (2026-08-24, AGL-1843): the check now has THREE states, not
+  two.** Everything it could not establish — a transient upstream error, a
+  partial listing (`ListBackupsResponse.unreachable`), a run that had not
+  finished — used to collapse into `backup-failed`, the loudest thing it can
+  say, and in every one of those cases it was false. Indeterminate now answers
+  **200** with `determinate: false` and its own code (`backups-unreadable`,
+  `backups-partial`, `backups-not-ready-yet`). Three things bound that so it
+  is not fail-open: it is only tolerated while a backup younger than 8 days
+  exists, it never overrides a stale READY backup, and PERMANENT upstream
+  refusals (missing credential, 401/403/404) stay hard red so a revoked
+  `roles/datastore.backupsViewer` cannot silently retire the check. The same
+  pass also stopped reading `NOT_AVAILABLE` as damage at all: it is documented
+  as "not available **at this moment**", and the same backup ids were measured
+  flipping in BOTH directions (`3b5238df` and `eb4d21e3` were both
+  `NOT_AVAILABLE` on 2026-08-17 and both `READY` on 2026-08-24). What goes red
+  is the fact that actually matters — no restore point inside the age budget.
+  Since AGL-1843 the same endpoint carries a SECOND, separately-labeled check —
   `exports` — watching the weekly Firestore GCS export
   (`gs://aglyn-main-firestore-exports`, cron in `scheduled-crons.yml`): 503
   when no completed export exists or the newest is older than 8 days

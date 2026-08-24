@@ -184,6 +184,17 @@ export interface BackupsCheck extends HealthCheck {
   states: Record<string, number>
   /** Age of the newest READY backup, in days. Null when there is none. */
   newestReadyAgeDays: number | null
+  /**
+   * Present, and always `false`, ONLY in the third state (AGL-1843): the
+   * check could not determine whether backups are healthy. Omitted entirely
+   * from a real verdict, exactly as `code` is omitted from a healthy one, so
+   * `ok: true` with no `determinate` key means "measured, and fine".
+   *
+   * An indeterminate check reports `ok: true` and therefore does not page.
+   * That is deliberate and it is bounded — see the escalation note in
+   * `backupsHealth`.
+   */
+  determinate?: false
 }
 
 /**
@@ -192,76 +203,187 @@ export interface BackupsCheck extends HealthCheck {
  */
 export const MAX_BACKUP_AGE_DAYS = 8
 
+/**
+ * States in which a backup has not FAILED — it is simply not usable yet.
+ *
+ * `STATE_UNSPECIFIED` is a real member of the API's `Backup.State` enum ("The
+ * state is unspecified"), and proto3 JSON omits a default-valued field, so a
+ * backup in it arrives with **no `state` key at all**. Treating that absence
+ * as a failure is the `strictNullChecks`-off trap this file is otherwise
+ * careful about: a missing field must never fold into a red.
+ */
+const BACKUP_IN_FLIGHT = new Set(['CREATING', 'STATE_UNSPECIFIED'])
+
+/**
+ * `backups` is the listing, or `null` when it could not be read at all.
+ *
+ * `options.unreachable` is `ListBackupsResponse.unreachable` — the locations
+ * the API could not reach. Non-empty means the listing is a PARTIAL result
+ * set. `options.code` is the code to report when `backups` is `null`.
+ */
 export function backupsHealth(
-  backups: BackupSnapshot[],
+  backups: BackupSnapshot[] | null,
   ms: number,
   now: number = Date.now(),
+  options: { unreachable?: string[]; code?: string } = {},
 ): BackupsCheck {
+  // ## THE THREE STATES (AGL-1843, second pass)
+  //
+  // This check used to have two: healthy, and failed. Everything it could not
+  // establish — an upstream that errored, a partial listing, a run that had
+  // not finished — collapsed into "backup failed", which is the loudest thing
+  // it can say and was, in every one of those cases, false. It reported 503
+  // `backup-failed` continuously for four and a half days while the backups
+  // were fine, against a monitor that emails on a five-minute interval.
+  //
+  // ### Why `NOT_AVAILABLE` is not a failure — measured, not assumed
+  //
+  // The API documents the state as "The backup is not available **at this
+  // moment**", and that temporal wording is literal. The same three backup
+  // ids, read from `gcloud firestore backups list` on three dates:
+  //
+  //   id          2026-08-13      2026-08-17/18    2026-08-24
+  //   3b5238df…   NOT_AVAILABLE   NOT_AVAILABLE    READY
+  //   eb4d21e3…   READY           NOT_AVAILABLE    READY
+  //   d14ce827…   —               READY            READY
+  //
+  // `NOT_AVAILABLE` flips in BOTH directions, on backups whose `expireTime`
+  // is months away, independent of age. The 2026-08-02 backup that AGL-1490
+  // was filed about — "half the Firestore backups are NOT_AVAILABLE" — is
+  // READY today, twenty-two days old. It was never broken. Neither was the
+  // 2026-08-09 one, which went READY → NOT_AVAILABLE → READY. And the
+  // predicted permanent day-7 degradation did not happen: d14ce827 is READY
+  // at day 8. So every rule that reads a `NOT_AVAILABLE` count as damage is
+  // reading a maintenance window as an outage.
+  //
+  // ### What the check actually needs to answer
+  //
+  // "Can we restore, and is the restore point recent?" That question is
+  // answered ENTIRELY by the age of the newest READY backup. No other row in
+  // the listing can make a fresh READY backup un-restorable. So a fresh READY
+  // backup is unconditionally green, and everything below it is the taxonomy
+  // of why we could not find one.
+  //
+  // ### Why indeterminate answers 200, and why that is not fail-open
+  //
+  // Three things bound it, because a backups check that cannot go red is
+  // worse than no backups check:
+  //   1. It is time-bounded. Indeterminacy is only tolerated while a backup
+  //      younger than `MAX_BACKUP_AGE_DAYS` exists. A schedule that stops, or
+  //      that never produces anything usable, crosses the budget and goes red
+  //      within eight days whatever the states say.
+  //   2. It never overrides staleness. If a READY backup exists and is over
+  //      budget, that is `backup-stale` — a newer CREATING or NOT_AVAILABLE
+  //      row earns no freshness credit, so a run that hangs every week cannot
+  //      hold the check green.
+  //   3. The route classifies PERMANENT upstream failures (no credential,
+  //      401/403/404) as hard red rather than indeterminate, so a revoked IAM
+  //      role cannot silence this forever. And `checks.exports` in the same
+  //      endpoint is an independent, still-hard-red probe of the GCS copy:
+  //      "we cannot read the managed backups" answers 200 only while we can
+  //      still prove a fresh independent copy exists.
+  //
+  // State 3a — the listing could not be read AT ALL. That is not a verdict;
+  // it is the absence of one, and reporting it as `backup-failed` is the
+  // defect this pass exists to remove.
+  if (backups === null) {
+    return {
+      ok: true,
+      ms,
+      code: options.code ?? 'backups-unreadable',
+      states: {},
+      newestReadyAgeDays: null,
+      determinate: false,
+    }
+  }
+
   const states: Record<string, number> = {}
   for (const backup of backups) {
-    const state = backup.state ?? 'UNKNOWN'
+    const state = backup.state ?? 'STATE_UNSPECIFIED'
     states[state] = (states[state] ?? 0) + 1
   }
 
-  const newestReadyMs = backups
-    .filter((backup) => backup.state === 'READY' && backup.snapshotTime)
-    .map((backup) => Date.parse(backup.snapshotTime as string))
-    .filter((time) => Number.isFinite(time))
-    .reduce<number | null>((newest, time) => Math.max(newest ?? time, time), null)
-  const newestReadyAgeDays =
-    newestReadyMs === null
-      ? null
-      : Math.round(((now - newestReadyMs) / 86_400_000) * 10) / 10
+  const snapshotMsOf = (backup: BackupSnapshot): number =>
+    backup.snapshotTime ? Date.parse(backup.snapshotTime) : Number.NaN
+  const newestOf = (keep: (backup: BackupSnapshot) => boolean): number | null =>
+    backups
+      .filter(keep)
+      .map(snapshotMsOf)
+      .filter((time) => Number.isFinite(time))
+      .reduce<number | null>((newest, time) => Math.max(newest ?? time, time), null)
+  const ageDaysOf = (time: number): number =>
+    Math.round(((now - time) / 86_400_000) * 10) / 10
 
-  // `CREATING` is tolerated: every Sunday there is a window where the newest
-  // backup legitimately is one, and paging on it weekly would teach everyone
-  // to ignore the alert. It earns no freshness credit either — a backup that
-  // never finishes fails the age rule instead.
-  //
-  // `NOT_AVAILABLE` BEHIND the newest READY backup is tolerated for a sharper
-  // reason (AGL-1843): it is not a failure at all, it is how a managed backup
-  // ends. Every backup this project has ever taken flips `READY` →
-  // `NOT_AVAILABLE` at roughly one week old while its `expireTime` sits ~90
-  // days out, so an aged-out backup lingers in the listing for another three
-  // months. Against a weekly schedule that means the steady state is ~13
-  // aged-out backups beside exactly one READY one — and the original rule
-  // ("any non-READY backup fails") could therefore NEVER be satisfied again.
-  // It went red on 2026-08-13 and stayed red, structurally, for as long as
-  // the schedule kept working. A check that cannot go green is worth no more
-  // than one that cannot go red: both times the alert says nothing, and this
-  // one was actively teaching the one person who receives it that a backup
-  // page is noise — eight days before launch.
-  //
-  // What genuinely reproduces AGL-1490 is a NEWEST run that produced nothing
-  // usable, so that is what is measured: a non-READY backup is a failure only
-  // when it is newer than the newest READY one (or when it cannot be dated,
-  // which is not a claim of freshness this check will make on its behalf).
-  // On 2026-08-13 the unusable 08-02 backup WAS the newest, so the condition
-  // this rule was born to catch still trips it. The age rule below remains
-  // the backstop: if the flip ever starts happening faster than the schedule
-  // replaces it, `newestReadyAgeDays` crosses the budget and this goes red on
-  // freshness instead — which is the honest reason to be worried.
-  const failed = backups.some((backup) => {
-    if (backup.state === 'READY' || backup.state === 'CREATING') return false
-    if (newestReadyMs === null) return true
-    const snapshotMs = backup.snapshotTime
-      ? Date.parse(backup.snapshotTime)
-      : Number.NaN
-    return !Number.isFinite(snapshotMs) || snapshotMs > newestReadyMs
-  })
+  const newestReadyMs = newestOf((backup) => backup.state === 'READY')
+  const newestAnyMs = newestOf(() => true)
+  const newestReadyAgeDays = newestReadyMs === null ? null : ageDaysOf(newestReadyMs)
+  const newestAnyAgeDays = newestAnyMs === null ? null : ageDaysOf(newestAnyMs)
 
-  const code = failed
-    ? 'backup-failed'
-    : newestReadyAgeDays === null
-      ? 'no-ready-backup'
-      : newestReadyAgeDays > MAX_BACKUP_AGE_DAYS
-        ? 'backup-stale'
-        : undefined
+  // State 1 — HEALTHY. A restore point exists and it is recent. Nothing else
+  // in the listing can falsify that, so nothing else is consulted.
+  if (newestReadyAgeDays !== null && newestReadyAgeDays <= MAX_BACKUP_AGE_DAYS) {
+    return { ok: true, ms, states, newestReadyAgeDays }
+  }
 
+  // State 2a — FAILED. A backup that is neither READY nor in flight and that
+  // carries no usable `snapshotTime` cannot be aged at all, so we cannot even
+  // say when the last run was. That is positive evidence of something wrong,
+  // and "assume it aged out" is the assumption that hides a broken run.
+  const undateable = backups.some(
+    (backup) =>
+      backup.state !== 'READY' &&
+      !BACKUP_IN_FLIGHT.has(backup.state ?? 'STATE_UNSPECIFIED') &&
+      !Number.isFinite(snapshotMsOf(backup)),
+  )
+  if (undateable) {
+    return { ok: false, ms, code: 'backup-failed', states, newestReadyAgeDays }
+  }
+
+  // State 3b — the listing is a PARTIAL result set. `ListBackupsResponse`
+  // carries `unreachable`: rather than failing the request when one location
+  // cannot be reached, the API returns the backups it could see and names the
+  // ones it could not. Positive evidence survives that (state 1 above already
+  // returned); negative evidence does not — "we saw no fresh READY backup" is
+  // not a finding when we did not see everything.
+  if ((options.unreachable ?? []).length > 0) {
+    return {
+      ok: true,
+      ms,
+      code: 'backups-partial',
+      states,
+      newestReadyAgeDays,
+      determinate: false,
+    }
+  }
+
+  // State 3c — a recent run exists, it simply is not usable AT THIS MOMENT:
+  // mid-creation on a Sunday, or inside one of the `NOT_AVAILABLE` windows
+  // measured above. Only reachable when NOTHING is READY — a stale READY
+  // backup falls through to `backup-stale` below, so this can never buy a
+  // hanging schedule more than the eight-day budget.
+  if (
+    newestReadyAgeDays === null &&
+    newestAnyAgeDays !== null &&
+    newestAnyAgeDays <= MAX_BACKUP_AGE_DAYS
+  ) {
+    return {
+      ok: true,
+      ms,
+      code: 'backups-not-ready-yet',
+      states,
+      newestReadyAgeDays,
+      determinate: false,
+    }
+  }
+
+  // State 2b — FAILED on freshness. Either nothing has ever been READY and
+  // nothing recent exists to be waiting on, or the newest READY backup is
+  // past the budget. Both mean the same operational thing: there is no recent
+  // restore point, which is the only fact this check exists to protect.
   return {
-    ok: code === undefined,
+    ok: false,
     ms,
-    ...(code === undefined ? {} : { code }),
+    code: newestReadyAgeDays === null ? 'no-ready-backup' : 'backup-stale',
     states,
     newestReadyAgeDays,
   }
