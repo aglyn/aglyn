@@ -65,10 +65,12 @@ describe('InlineTextEditorComponent pills (AGL-586)', () => {
   const openEditor = async (node: any) => {
     render(<InlineTextEditorComponent />)
     act(() => inlineTextEdit.open(node, rect))
-    const label = ((node.componentSchema?.flags?.richTextEditable ?? 0) &
-      Aglyn.FEATURE_FLAG.ENABLED) !== 0
-      ? 'Edit rich text'
-      : 'Edit text'
+    const label =
+      ((node.componentSchema?.flags?.richTextEditable ?? 0) &
+        Aglyn.FEATURE_FLAG.ENABLED) !==
+      0
+        ? 'Edit rich text'
+        : 'Edit text'
     const surface = await screen.findByRole('textbox', { name: label })
     // The surface DOM is built on a requestAnimationFrame after open.
     await waitFor(() =>
@@ -190,7 +192,9 @@ describe('InlineTextEditorComponent pills (AGL-586)', () => {
         node,
         expect.objectContaining({
           refId: 'hero',
-          [Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY]: { headline: 'Ship faster' },
+          [Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY]: {
+            headline: 'Ship faster',
+          },
         }),
       )
       expect(inlineTextEdit.node).toBeUndefined()
@@ -226,9 +230,7 @@ describe('InlineTextEditorComponent pills (AGL-586)', () => {
         unknown
       >
       expect(props['refId']).toBe('hero')
-      expect(
-        Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY in props,
-      ).toBe(false)
+      expect(Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY in props).toBe(false)
     })
 
     it('cancels without committing on Escape', async () => {
@@ -345,7 +347,12 @@ describe('the text editor follows the canvas (AGL-1644)', () => {
   it('falls back to the captured rect when there is no anchor', () => {
     render(<InlineTextEditorComponent />)
     act(() =>
-      inlineTextEdit.open(node(), { left: 40, top: 210, width: 200, height: 24 }),
+      inlineTextEdit.open(node(), {
+        left: 40,
+        top: 210,
+        width: 200,
+        height: 24,
+      }),
     )
     expect(window.getComputedStyle(overlay()).top).toBe('210px')
   })
@@ -421,8 +428,7 @@ describe('InlineTextEditorComponent: a commit that changes nothing (AGL-2486)', 
     fireEvent.blur(surface)
 
     const props = updateNodeProps.mock.calls.at(-1)?.[1] as
-      | Record<string, unknown>
-      | undefined
+      Record<string, unknown> | undefined
     if (props) expect('html' in props).toBe(false)
   })
 
@@ -434,8 +440,7 @@ describe('InlineTextEditorComponent: a commit that changes nothing (AGL-2486)', 
     fireEvent.blur(surface)
 
     const props = updateNodeProps.mock.calls.at(-1)?.[1] as
-      | Record<string, unknown>
-      | undefined
+      Record<string, unknown> | undefined
     // Either no write at all, or a write that cannot move the document.
     expect(JSON.stringify(props ?? JSON.parse(before))).toBe(before)
   })
@@ -647,10 +652,17 @@ describe('InlineTextEditorComponent: clicking away commits (AGL-2486)', () => {
     const node = plainNode('Be first through the door')
     render(<InlineTextEditorComponent />)
     act(() => inlineTextEdit.open(node, rect))
-    // Deliberately NOT awaiting the seeding frame.
-    expect(
-      (await screen.findByRole('textbox', { name: 'Edit text' })).textContent,
-    ).toBe('')
+    // Deliberately NOT awaiting the seeding frame — and deliberately a
+    // SYNCHRONOUS query (AGL-1617). `await findByRole` is itself a yield:
+    // it polls, so the seeding `requestAnimationFrame` gets a turn before
+    // the assertion reads the box, and on a loaded runner it takes it. That
+    // is the whole failure — CI read back "Be first through the door" for a
+    // box this test requires to still be empty. The sync `act` above has
+    // already rendered the textbox; only its CONTENT waits on the frame, so
+    // querying without yielding is what "has not been built yet" means.
+    expect(screen.getByRole('textbox', { name: 'Edit text' }).textContent).toBe(
+      '',
+    )
 
     fireEvent.pointerDown(canvasStandIn)
 
