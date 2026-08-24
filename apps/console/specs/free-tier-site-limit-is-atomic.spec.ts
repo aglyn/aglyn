@@ -141,11 +141,26 @@ function mockMakeFirestore() {
       try {
         const queued: Array<() => void> = []
         const tx = {
-          get: async (ref: { path: string }) => ({
-            exists: mockDocs.has(ref.path),
-            data: () => mockDocs.get(ref.path),
-            get: (field: string) => (mockDocs.get(ref.path) ?? {})[field],
-          }),
+          /**
+           * Overloaded exactly as the real `Transaction.get` is — a document
+           * reference or a QUERY. `claimHostForOrg` re-reads subdomain
+           * uniqueness inside this transaction (AGL-2465); a query has no
+           * `path`, and it reads COMMITTED state, since `queued` below is not
+           * applied until commit. That is what lets the loser of a race see
+           * the winner's host, the same way it already sees the winner's entry
+           * in the org directory map.
+           */
+          get: async (target: { path?: string; get?: () => Promise<unknown> }) => {
+            if (!target?.path && typeof target?.get === 'function') {
+              return await target.get()
+            }
+            const ref = target as { path: string }
+            return {
+              exists: mockDocs.has(ref.path),
+              data: () => mockDocs.get(ref.path),
+              get: (field: string) => (mockDocs.get(ref.path) ?? {})[field],
+            }
+          },
           set: (
             ref: { path: string },
             data: Record<string, unknown>,
