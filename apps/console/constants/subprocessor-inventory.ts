@@ -97,6 +97,31 @@
  *    `fetch` commented out is not a data flow; a `fetch` whose URL is only in
  *    a docblock is invisible, and that is the accepted cost.
  *  - **What a marketplace plugin bundle contacts.** Not in this repo.
+ *  - **A host an AUTHOR typed.** The largest invisible class, and the one
+ *    most likely to be misfiled — in either direction. A site owner may paste
+ *    any `https` address into an image field, a post, a cover, or a `url(...)`
+ *    in their own CSS, and the visitor's browser then fetches it directly. No
+ *    literal for it can exist here, because our code never names it, and no
+ *    input validator sees it either: `sanitizeAuthorCss` refuses the SCHEME
+ *    and deliberately never the host.
+ *
+ *    **Those hosts are not Annex III rows, and must not be added as ones**
+ *    (AGL-1736). Annex III lists the sub-processors AGLYN engages; this
+ *    recipient was engaged by the customer, who is the controller for their
+ *    own visitors, and we introduced nobody — we provided a canvas. The set
+ *    is also per-customer, unbounded, and changes with any edit, so it is not
+ *    enumerable even in principle and a catch-all row naming the CATEGORY
+ *    would be a vendor entry that names no vendor.
+ *
+ *    Note the boundary against `not-a-subprocessor` below, because it is
+ *    narrow and the YouTube and Vimeo entries sit on the other side of it:
+ *    that disposition is for a customer-chosen destination OUR CODE NAMES, so
+ *    a reader who greps the tree and finds the literal has somewhere to land.
+ *    A host only the customer ever names has no literal to declare, so it
+ *    gets no entry here at all. Silence in this file is therefore NOT the
+ *    disclosure — the disclosure is a product property, stated on the trust
+ *    page and in the Privacy Policy and DPA clauses that say Aglyn does not
+ *    proxy the request and that the site owner names their own hosts.
  *  - **What a vendor's own package contacts.** That is
  *    `check:dependency-egress` and its 152-row register; this file is its
  *    complement, not its replacement. Neither subsumes the other — that was
