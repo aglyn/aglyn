@@ -2555,6 +2555,86 @@ describe('hosts', () => {
       )
     })
 
+    /**
+     * AGL-1400 added the FOURTH billing-excluding `kind` — `'template'`, a
+     * collection ENTRY template — and it is the one value this block never
+     * named. The freeze is written on the FIELD, so the value arrived covered,
+     * and the AGL-1400 comment in the `collections` block points here for its
+     * entitlement half. But "the rule already covers the new case" is a claim
+     * about a rule nobody re-read, and the coverage this file had was three
+     * writes of `'email'` and three of `'error'` — never once the value whose
+     * whole point is that it is not the client's to write.
+     *
+     * It matters more here than for the other two, because `kind: 'template'`
+     * is the one exclusion `billableScreenIds` honours even for a ROUTED
+     * screen. For `'email'` and `'error'` the routing map outranks the
+     * document, so a client that could write them would still be paying for
+     * anything it left published. A template opts out of that override — a
+     * template is routed on purpose, so the map cannot arbitrate — which means
+     * one `updateDoc` here would take a live, routed, serving page off
+     * `screensPerHost` permanently and give the count nothing to notice.
+     */
+    it('an editor cannot declare a screen a collection entry template (AGL-1400)', async () => {
+      await seedScreens()
+      // The bypass: `page-1` is ROUTED (it carries a slug), and a template is
+      // the one kind that keeps its exclusion while routed. So this single
+      // write is a live page off the plan, permanently, with nothing to undo.
+      await mustDeny(
+        'screens/page-1 { kind: "template" }',
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'page-1'), {
+          kind: 'template',
+        }),
+      )
+      // The return leg: promotion is checked exactly like a create by
+      // /api/hosts/screens, and this is the door that would skip that gate.
+      await env.withSecurityRulesDisabled(async (context) => {
+        await setDoc(
+          doc(context.firestore(), 'hosts', HOST, 'screens', 'tmpl-1'),
+          { displayName: 'Post', kind: 'template', versionId: 'v1' },
+        )
+      })
+      await mustDeny(
+        'screens/tmpl-1 { kind: "page" }',
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'tmpl-1'), {
+          kind: 'page',
+        }),
+      )
+      // Clearing the field promotes it just as surely, so it is denied too.
+      await mustDeny(
+        'screens/tmpl-1 { kind: deleteField() }',
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'tmpl-1'), {
+          kind: deleteField(),
+        }),
+      )
+      // The ORG OWNER is refused as well, and the pair below is what makes
+      // that assertion mean something. The cap is enforced against the org and
+      // the owner is inside it, so a deny that only stopped editors would leave
+      // the bypass open to the role that actually owns the billing page — but a
+      // deny also passes for a principal who could not write the document at
+      // all, so the allow proves this one can.
+      await mustAllow(
+        'screens/page-1 rename as owner',
+        updateDoc(doc(authed(OWNER), 'hosts', HOST, 'screens', 'page-1'), {
+          displayName: 'Pricing (v2)', updatedAt: new Date(),
+        }),
+      )
+      await mustDeny(
+        'screens/page-1 { kind: "template" } as owner',
+        updateDoc(doc(authed(OWNER), 'hosts', HOST, 'screens', 'page-1'), {
+          kind: 'template',
+        }),
+      )
+      // The positive control the deny must not have taken with it: a template
+      // is an ordinary besigner document otherwise, and AGL-1400's whole
+      // settlement is that the collection POINTER at it is a free client write.
+      await mustAllow(
+        'screens/tmpl-1 rename',
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'tmpl-1'), {
+          displayName: 'Post template (v2)', updatedAt: new Date(),
+        }),
+      )
+    })
+
     it('an editor cannot un-delete a screen', async () => {
       await seedScreens()
       await mustDeny(
