@@ -138,6 +138,13 @@ whole reason this document exists.
    anything starts reading them. **Revoke the debug tokens in the Firebase
    console *before* deleting the Vercel records** — deleting the variable
    removes our copy, not Firebase's acceptance of the token. (AGL-2402)
+   - Which tokens, and did the revoke land? `npm run check:app-check-debug-tokens`
+     lists every debug token registered on every app in the project and exits 1
+     while any remains (2 if it could not look — never 0). Measured 2026-08-24:
+     **2 registered on the single web app**, and the value held by these two
+     variables still exchanged for a live production attestation token, so this
+     is an active bypass rather than an inert record. Re-run it after revoking;
+     0 is the evidence the click worked.
 2. **Delete the inert shared `RESEND_API_KEY` record** (empty `projectId`).
    Confirm it is empty first; deleting a *linked* shared record breaks mail.
 3. **Split the preview-only three** — `MEMBER_SESSION_SECRET`,
