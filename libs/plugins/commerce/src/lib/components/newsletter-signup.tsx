@@ -33,6 +33,13 @@ export interface NewsletterSignupProps {
   heading?: string
   buttonLabel?: string
   successText?: string
+  /**
+   * Enrolls the subscriber into this list's members (AGL-2499), in
+   * addition to the always-on contacts upsert. This is the id shown on the
+   * Audiences page's list settings — copy it from there. Left blank, the
+   * block behaves exactly as before: contacts only.
+   */
+  listId?: string
 }
 
 /**
@@ -42,7 +49,7 @@ export interface NewsletterSignupProps {
  */
 const NewsletterSignup = forwardRef<HTMLDivElement, NewsletterSignupProps>(
   (props, ref) => {
-    const { heading, buttonLabel, successText, ...rest } = props
+    const { heading, buttonLabel, successText, listId, ...rest } = props
     // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
     const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const { hostId } = Aglyn.useSite()
@@ -59,7 +66,11 @@ const NewsletterSignup = forwardRef<HTMLDivElement, NewsletterSignupProps>(
         const response = await siteFetch('/api/commerce/newsletter', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ hostId, email }),
+          body: JSON.stringify({
+            hostId,
+            email,
+            ...(listId ? { listId } : {}),
+          }),
         })
         // GA4 lead conversion (AGL-1561) — AGL-301's subscribe element is a
         // form completion in every sense that matters, and it shares nothing
@@ -153,6 +164,13 @@ export const schema: Aglyn.ComponentSchema<NewsletterSignupProps> = {
       name: 'successText',
       label: 'Success text',
       description: 'Shown after subscribing.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+    },
+    {
+      name: 'listId',
+      label: 'List',
+      description:
+        'Optional — enrolls subscribers into this list too (id from Audiences → Lists). Blank keeps the old contacts-only behavior.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
     },
   ],

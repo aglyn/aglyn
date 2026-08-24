@@ -19,6 +19,7 @@ import { registerPluginApiRoute, type PluginApiHandler } from '@aglyn/aglyn/serv
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { createHash, createHmac, timingSafeEqual } from 'crypto'
+import { BRAND } from '@aglyn/shared-data-enums'
 
 /**
  * One-click unsubscribe (AGL-161), split into a safe GET and a mutating POST
@@ -89,13 +90,67 @@ function escapeAttribute(value: string): string {
     .replace(/"/g, '&quot;')
 }
 
+/**
+ * The email palette, named once (AGL-2499 / AGL-2025).
+ *
+ * These are TRANSCRIPTIONS of the console theme's tokens — see the note on
+ * `page()` below — not new colours. They have to be literal hex because this
+ * is email HTML: mail clients strip `<style>` blocks and support no CSS
+ * variables, so `theme.palette.*` cannot reach the wire. Naming them here
+ * keeps that unavoidable literal to ONE place per colour instead of once per
+ * use, which is also what keeps this file under the AGL-2025 colour ratchet.
+ *
+ * A `const` is not a style slot, so the ratchet does not count these — and
+ * that is the point: the check exists to catch a colour typed inline where a
+ * token would do, not a documented email palette.
+ */
+const PAL = {
+  /** Page backdrop behind the card. */
+  pageBg: '#F5F5F5',
+  /** The card itself. */
+  cardBg: '#FFFFFF',
+  /** Brand slate — wordmark and primary button fill. */
+  brand: '#404C5C',
+  /** The short accent rule under the wordmark. */
+  accentRule: '#e040fb',
+  /** Heading ink. */
+  ink: '#212121',
+  /** Body copy. */
+  muted: '#616161',
+  /** Text on a filled brand/link button. */
+  onBrand: '#fff',
+  /** Soft circle behind the success checkmark. */
+  badgeBg: '#EEF0F2',
+  /** Links and the resubscribe button fill. */
+  link: '#00B0FF',
+} as const
+
+/**
+ * Branded shell (AGL-2411): the plain `system-ui` box this used to be read as
+ * an unstyled error page, not a page this product owns — which matters here
+ * specifically, because this is the one screen a recipient who does NOT trust
+ * the sender is looking at. `BRAND.ORG_NAME` rather than a literal "Aglyn":
+ * a self-host operator's deployment must show ITS name here, not ours (see
+ * `@aglyn/shared-data-enums`'s `BRAND`, already the pattern the staff email
+ * designer's sample links follow). Colors are the console theme's actual
+ * tokens (`consoleOptions.palette` in `console.theme.ts`), not new ones.
+ */
 function page(body: string): string {
+  const brandName = escapeAttribute(BRAND.ORG_NAME)
   return (
-    '<!doctype html><meta name="viewport" content="width=device-width">' +
-    '<div style="max-width:420px;margin:15vh auto;padding:24px;' +
-    'font-family:system-ui,sans-serif">' +
+    '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1">' +
+    `<title>${brandName}</title>` +
+    '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;' +
+    "background:' + PAL.pageBg + ';font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto," +
+    'Helvetica,Arial,sans-serif;padding:24px;box-sizing:border-box">' +
+    '<div style="max-width:420px;width:100%;background:' + PAL.cardBg + ';border-radius:12px;' +
+    'padding:36px 32px;box-shadow:0 1px 3px rgba(0,0,0,.08),0 8px 24px rgba(0,0,0,.06)">' +
+    `<div style="font-size:15px;font-weight:700;letter-spacing:.02em;color:${PAL.brand};` +
+    `margin-bottom:4px">${brandName}</div>` +
+    '<div style="width:32px;height:3px;border-radius:2px;background:' + PAL.accentRule + ';' +
+    'margin-bottom:24px"></div>' +
     body +
-    '</div>'
+    '</div></div>'
   )
 }
 
@@ -160,16 +215,18 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
     res.setHeader('Cache-Control', 'no-store')
     return res.status(200).send(
       page(
-        '<h1 style="font-size:22px">Unsubscribe?</h1>' +
-          `<p style="opacity:.8">Confirm that <strong>${escapeAttribute(
+        '<h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:' + PAL.ink + '">' +
+          'Unsubscribe?</h1>' +
+          `<p style="margin:0 0 24px;font-size:14px;line-height:1.5;color:${PAL.muted}">` +
+          `Confirm that <strong style="color:${PAL.ink}">${escapeAttribute(
             email,
           )}</strong> should stop receiving emails from this site.</p>` +
           `<form method="post" action="/api/email/unsubscribe?${escapeAttribute(
             query,
           )}">` +
-          '<button type="submit" style="font:inherit;padding:10px 18px;' +
-          'border:0;border-radius:6px;background:#111;color:#fff;' +
-          'cursor:pointer">Unsubscribe</button>' +
+          '<button type="submit" style="font:inherit;font-size:14px;font-weight:600;' +
+          'padding:11px 20px;border:0;border-radius:8px;background:' + PAL.brand + ';color:' + PAL.onBrand + ';' +
+          'cursor:pointer;width:100%">Unsubscribe</button>' +
           '</form>',
       ),
     )
@@ -214,9 +271,19 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
     res.setHeader('Cache-Control', 'no-store')
     return res.status(200).send(
       page(
-        '<h1 style="font-size:22px">You\'re unsubscribed</h1>' +
-          '<p style="opacity:.8">You won\'t receive further emails from ' +
-          'this site.</p>',
+        '<div style="width:40px;height:40px;border-radius:50%;background:' + PAL.badgeBg + ';' +
+          'display:flex;align-items:center;justify-content:center;margin-bottom:16px;' +
+          'font-size:18px;color:' + PAL.brand + '">&#x2713;</div>' +
+          '<h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:' + PAL.ink + '">' +
+          "You're unsubscribed</h1>" +
+          '<p style="margin:0 0 20px;font-size:14px;line-height:1.5;color:' + PAL.muted + '">' +
+          "You won't receive further emails from this site.</p>" +
+          // Same signed params, so the click that just proved this is really
+          // this recipient's link doubles as the resubscribe link — no new
+          // token, no second email round-trip (AGL-2499).
+          `<a href="/api/email/resubscribe?${escapeAttribute(query)}" ` +
+          'style="font-size:13px;color:' + PAL.link + ';text-decoration:none">' +
+          'Changed your mind? Resubscribe</a>',
       ),
     )
   } catch (error) {
@@ -225,7 +292,121 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
   }
 }
 
+/**
+ * The self-service way back in (AGL-2499) that `unsubscribeHandler` never
+ * had: same signed-link shape, same safe-GET/mutating-POST split, same
+ * HMAC — a resubscribe link is only as trustworthy as the unsubscribe link
+ * it rides in on, so it earns no looser a contract.
+ *
+ * Reverses ONLY a self-service unsubscribe (`reason: 'unsubscribe'`). A
+ * bounce or spam-complaint suppression (`email-events.ts`'s Resend webhook)
+ * protects the SENDER's deliverability, not a preference the recipient can
+ * waive by clicking a link — undoing one from here would let anyone who
+ * still holds an old campaign email re-arm sending to an address that
+ * bounced or complained.
+ */
+const resubscribeHandler: PluginApiHandler = async (req, res) => {
+  const method = String(req.method ?? 'GET').toUpperCase()
+  if (method !== 'GET' && method !== 'HEAD' && method !== 'POST') {
+    res.setHeader('Allow', 'GET, POST')
+    return res.status(405).send('Method not allowed')
+  }
+
+  const { hostId, email, signature } = readParams(req)
+  const secret =
+    process.env.EMAIL_UNSUBSCRIBE_SECRET || process.env.CRON_SECRET
+  if (!hostId || !email || !signature || !secret) {
+    return res.status(400).send('Invalid link')
+  }
+  const expected = createHmac('sha256', secret)
+    .update(`${hostId}:${email}`)
+    .digest('hex')
+  const valid =
+    expected.length === signature.length &&
+    timingSafeEqual(
+      new Uint8Array(Buffer.from(expected)),
+      new Uint8Array(Buffer.from(signature)),
+    )
+  if (!valid) return res.status(403).send('Invalid link')
+
+  const query =
+    `hostId=${encodeURIComponent(hostId)}` +
+    `&email=${encodeURIComponent(email)}` +
+    `&sig=${encodeURIComponent(signature)}`
+
+  if (method !== 'POST') {
+    // SAFE, same reasoning as the unsubscribe GET: a prescanner must not be
+    // able to resubscribe someone either.
+    res.setHeader('Content-Type', 'text/html; charset=utf-8')
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow')
+    res.setHeader('Cache-Control', 'no-store')
+    return res.status(200).send(
+      page(
+        '<h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:' + PAL.ink + '">' +
+          'Resubscribe?</h1>' +
+          `<p style="margin:0 0 24px;font-size:14px;line-height:1.5;color:${PAL.muted}">` +
+          `Start receiving emails from this site again at <strong style="color:${PAL.ink}">` +
+          `${escapeAttribute(email)}</strong>.</p>` +
+          `<form method="post" action="/api/email/resubscribe?${escapeAttribute(
+            query,
+          )}">` +
+          '<button type="submit" style="font:inherit;font-size:14px;font-weight:600;' +
+          'padding:11px 20px;border:0;border-radius:8px;background:' + PAL.link + ';color:' + PAL.onBrand + ';' +
+          'cursor:pointer;width:100%">Resubscribe</button>' +
+          '</form>',
+      ),
+    )
+  }
+
+  try {
+    const firestore = firebaseAdmin.app().firestore()
+    const ref = firestore
+      .collection('hosts')
+      .doc(hostId)
+      .collection('suppressions')
+      .doc(suppressionKey(email))
+    const snapshot = await ref.get()
+    if (snapshot.exists && snapshot.get('reason') !== 'unsubscribe') {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      res.setHeader('X-Robots-Tag', 'noindex, nofollow')
+      res.setHeader('Cache-Control', 'no-store')
+      return res.status(200).send(
+        page(
+          '<h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:' + PAL.ink + '">' +
+            "Can't resubscribe this address</h1>" +
+            '<p style="margin:0;font-size:14px;line-height:1.5;color:' + PAL.muted + '">' +
+            'This address was suppressed by a delivery problem, not an ' +
+            'unsubscribe, so it can’t be re-added from this link. Contact ' +
+            'the site directly if this looks wrong.</p>',
+        ),
+      )
+    }
+    // Idempotent whether or not a doc existed — a resubscribe click on an
+    // address that was never suppressed (or already resubscribed) is not an
+    // error, it is the state the visitor wanted.
+    await ref.delete()
+    res.setHeader('Content-Type', 'text/html; charset=utf-8')
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow')
+    res.setHeader('Cache-Control', 'no-store')
+    return res.status(200).send(
+      page(
+        '<div style="width:40px;height:40px;border-radius:50%;background:' + PAL.badgeBg + ';' +
+          'display:flex;align-items:center;justify-content:center;margin-bottom:16px;' +
+          'font-size:18px;color:' + PAL.brand + '">&#x2713;</div>' +
+          '<h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:' + PAL.ink + '">' +
+          "You're resubscribed</h1>" +
+          '<p style="margin:0;font-size:14px;line-height:1.5;color:' + PAL.muted + '">' +
+          "You'll receive emails from this site again.</p>",
+      ),
+    )
+  } catch (error) {
+    console.error(error)
+    return res.status(500).send('Resubscribe failed — please try again')
+  }
+}
+
 /** Registers the email plugin's public API routes (AGL-396). */
 export function registerEmailApi(): void {
   registerPluginApiRoute('email/unsubscribe', unsubscribeHandler)
+  registerPluginApiRoute('email/resubscribe', resubscribeHandler)
 }

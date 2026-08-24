@@ -20,6 +20,8 @@ import { mdiAccountPlusOutline } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Checkbox from '@mui/material/Checkbox'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import Link from '@mui/material/Link'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
@@ -54,6 +56,7 @@ const MemberSignup = forwardRef<HTMLDivElement, MemberSignupProps>(
     const [displayName, setDisplayName] = useState('')
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
+    const [marketingConsent, setMarketingConsent] = useState(false)
     const [error, setError] = useState('')
     const [busy, setBusy] = useState(false)
 
@@ -70,6 +73,7 @@ const MemberSignup = forwardRef<HTMLDivElement, MemberSignupProps>(
             email,
             password,
             ...(displayName ? { displayName } : {}),
+            ...(marketingConsent ? { marketingConsent: true } : {}),
           }),
         })
         if (!response.ok) {
@@ -90,7 +94,16 @@ const MemberSignup = forwardRef<HTMLDivElement, MemberSignupProps>(
       } finally {
         setBusy(false)
       }
-    }, [hostId, busy, displayName, email, password, continueFallback, siteFetch])
+    }, [
+      hostId,
+      busy,
+      displayName,
+      email,
+      password,
+      marketingConsent,
+      continueFallback,
+      siteFetch,
+    ])
 
     if (!hostId) {
       return (
@@ -143,6 +156,18 @@ const MemberSignup = forwardRef<HTMLDivElement, MemberSignupProps>(
             onChange={(event) => setPassword(event.target.value)}
             size="small"
             helperText="At least 8 characters"
+          />
+          <FormControlLabel
+            control={
+              <Checkbox
+                size="small"
+                checked={marketingConsent}
+                onChange={(event) =>
+                  setMarketingConsent(event.target.checked)
+                }
+              />
+            }
+            label="Email me about offers and updates"
           />
           {error ? <Alert severity="error">{error}</Alert> : null}
           <Button

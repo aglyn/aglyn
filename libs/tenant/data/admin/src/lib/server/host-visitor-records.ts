@@ -114,6 +114,15 @@ export interface HostLeadInput {
   name?: string
   /** `signup`, `booking`, … — the surface that produced it. */
   source: string
+  /**
+   * Explicit marketing opt-in, with a consent timestamp — the same shape
+   * `upsertHostContact` already carries (AGL-301). Omitted or `false` writes
+   * nothing: a lead is a side effect of an action the visitor DID take
+   * (sign up, book), which is not by itself consent to be emailed
+   * marketing, so this is only set when the caller captured an explicit
+   * checkbox.
+   */
+  marketingConsent?: boolean
 }
 
 /**
@@ -171,6 +180,9 @@ export async function addHostLead(options: {
       email: lead.email,
       ...(lead.name ? { name: lead.name } : {}),
       source: lead.source,
+      ...(lead.marketingConsent
+        ? { marketingConsent: true, marketingConsentAtMs: Date.now() }
+        : {}),
       createdAt: FieldValue.serverTimestamp(),
     }
     const refused = await firestore.runTransaction(async (tx) => {

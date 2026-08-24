@@ -84,7 +84,11 @@ function makeDocRef(path: string): any {
     get: async () => ({
       exists: docs.has(path),
       data: () => docs.get(path),
+      get: (field: string) => (docs.get(path) ?? {})[field],
     }),
+    delete: async () => {
+      docs.delete(path)
+    },
   }
 }
 
@@ -173,10 +177,11 @@ interface Reply {
 
 async function call(options: {
   method: string
+  route?: string
   query?: Record<string, string>
   body?: Record<string, string>
 }): Promise<Reply> {
-  const handler = resolvePluginApiRoute('email/unsubscribe')
+  const handler = resolvePluginApiRoute(options.route ?? 'email/unsubscribe')
   expect(handler).toBeDefined()
   const reply: Reply = { status: 200, body: '', headers: {} }
   const res: any = {
@@ -320,5 +325,81 @@ describe('email/unsubscribe', () => {
     expect(reply.status).toBe(500)
     expect(docs.size).toBe(0)
     consoleError.mockRestore()
+  })
+})
+
+describe('email/resubscribe', () => {
+  const RESUB = { route: 'email/resubscribe' }
+
+  beforeEach(() => {
+    docs.clear()
+    clock = 0
+    transactionFailure = null
+    process.env.EMAIL_UNSUBSCRIBE_SECRET = SECRET
+  })
+
+  it('does NOT write on GET', async () => {
+    docs.set(SUPPRESSION_PATH, { email: RECIPIENT, reason: 'unsubscribe' })
+    const reply = await call({ ...RESUB, method: 'GET', query: validQuery() })
+    expect(reply.status).toBe(200)
+    expect(docs.has(SUPPRESSION_PATH)).toBe(true)
+  })
+
+  it('reuses the SAME signature the unsubscribe link carries', async () => {
+    // The whole point (AGL-2499): no second token, no second email — the
+    // signed params already in hand on the unsubscribe success page work
+    // here unmodified.
+    const reply = await call({ ...RESUB, method: 'GET', query: validQuery() })
+    expect(reply.body).toContain(`sig=${sign(HOST, RECIPIENT)}`)
+  })
+
+  it('deletes an unsubscribe-reason suppression on POST', async () => {
+    docs.set(SUPPRESSION_PATH, { email: RECIPIENT, reason: 'unsubscribe' })
+    const reply = await call({ ...RESUB, method: 'POST', query: validQuery() })
+    expect(reply.status).toBe(200)
+    expect(reply.body).toContain("You're resubscribed")
+    expect(docs.has(SUPPRESSION_PATH)).toBe(false)
+  })
+
+  it('is idempotent when nothing was suppressed', async () => {
+    const reply = await call({ ...RESUB, method: 'POST', query: validQuery() })
+    expect(reply.status).toBe(200)
+    expect(reply.body).toContain("You're resubscribed")
+  })
+
+  it('refuses to reverse a bounce suppression', async () => {
+    docs.set(SUPPRESSION_PATH, { email: RECIPIENT, reason: 'bounce' })
+    const reply = await call({ ...RESUB, method: 'POST', query: validQuery() })
+    expect(reply.status).toBe(200)
+    expect(reply.body).toContain("Can't resubscribe")
+    // Untouched — still suppressed, by the reason it was suppressed for.
+    expect(docs.get(SUPPRESSION_PATH)).toEqual({
+      email: RECIPIENT,
+      reason: 'bounce',
+    })
+  })
+
+  it('refuses to reverse a spam-complaint suppression', async () => {
+    docs.set(SUPPRESSION_PATH, { email: RECIPIENT, reason: 'complaint' })
+    const reply = await call({ ...RESUB, method: 'POST', query: validQuery() })
+    expect(docs.get(SUPPRESSION_PATH)?.['reason']).toBe('complaint')
+    expect(reply.body).toContain("Can't resubscribe")
+  })
+
+  it('refuses a bad signature on POST without writing', async () => {
+    docs.set(SUPPRESSION_PATH, { email: RECIPIENT, reason: 'unsubscribe' })
+    const reply = await call({
+      ...RESUB,
+      method: 'POST',
+      query: { ...validQuery(), sig: 'deadbeef' },
+    })
+    expect(reply.status).toBe(403)
+    expect(docs.has(SUPPRESSION_PATH)).toBe(true)
+  })
+
+  it('answers 405 to a verb that is neither', async () => {
+    const reply = await call({ ...RESUB, method: 'DELETE', query: validQuery() })
+    expect(reply.status).toBe(405)
+    expect(reply.headers['allow']).toBe('GET, POST')
   })
 })

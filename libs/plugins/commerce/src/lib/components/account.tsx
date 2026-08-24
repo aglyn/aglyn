@@ -21,8 +21,10 @@ import { mdiAccountCircleOutline } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Checkbox from '@mui/material/Checkbox'
 import Chip from '@mui/material/Chip'
 import Divider from '@mui/material/Divider'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import MuiLink from '@mui/material/Link'
 import Tab from '@mui/material/Tab'
 import Tabs from '@mui/material/Tabs'
@@ -91,6 +93,7 @@ const CustomerAccount = forwardRef<HTMLDivElement, CustomerAccountProps>(
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [displayName, setDisplayName] = useState('')
+    const [marketingConsent, setMarketingConsent] = useState(false)
     const [error, setError] = useState('')
     const [busy, setBusy] = useState(false)
     const [addressDraft, setAddressDraft] = useState<CommerceModel.OrderAddress | null>(
@@ -130,6 +133,9 @@ const CustomerAccount = forwardRef<HTMLDivElement, CustomerAccountProps>(
             email,
             password,
             ...(tab === 1 && displayName ? { displayName } : {}),
+            ...(tab === 1 && marketingConsent
+              ? { marketingConsent: true }
+              : {}),
           }),
         })
         const payload = await response.json().catch(() => ({}))
@@ -150,7 +156,17 @@ const CustomerAccount = forwardRef<HTMLDivElement, CustomerAccountProps>(
       } finally {
         setBusy(false)
       }
-    }, [hostId, busy, tab, email, password, displayName, refresh, siteFetch])
+    }, [
+      hostId,
+      busy,
+      tab,
+      email,
+      password,
+      displayName,
+      marketingConsent,
+      refresh,
+      siteFetch,
+    ])
 
     const handleSignOut = useCallback(async () => {
       if (!hostId) return
@@ -238,6 +254,20 @@ const CustomerAccount = forwardRef<HTMLDivElement, CustomerAccountProps>(
               size="small"
               helperText={tab === 1 ? 'At least 8 characters' : undefined}
             />
+            {tab === 1 ? (
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    size="small"
+                    checked={marketingConsent}
+                    onChange={(event) =>
+                      setMarketingConsent(event.target.checked)
+                    }
+                  />
+                }
+                label="Email me about offers and updates"
+              />
+            ) : null}
             {error ? <Alert severity="error">{error}</Alert> : null}
             <Button
               variant="contained"

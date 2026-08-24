@@ -31,7 +31,7 @@
   "libs/plugins/commerce/src/lib/components/reservation-widget.tsx": 2,
   "libs/plugins/commerce/src/lib/components/wishlist.tsx": 2,
   "libs/plugins/email/src/lib/components/email-blocks.tsx": 23,
-  "libs/plugins/email/src/lib/server.ts": 2,
+  "libs/plugins/email/src/lib/server.ts": 1,
   "libs/plugins/events-calendar/src/lib/components/event-list.tsx": 2,
   "libs/plugins/marketing/src/lib/components/announcement-bar-card.component.tsx": 2,
   "libs/plugins/marketing/src/lib/components/site-runtime.tsx": 13,

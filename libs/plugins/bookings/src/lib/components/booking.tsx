@@ -20,8 +20,10 @@ import { mdiCalendarClock } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Checkbox from '@mui/material/Checkbox'
 import Chip from '@mui/material/Chip'
 import CircularProgress from '@mui/material/CircularProgress'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import MenuItem from '@mui/material/MenuItem'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
@@ -78,6 +80,7 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
   const [slotMs, setSlotMs] = useState<number | null>(null)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [marketingConsent, setMarketingConsent] = useState(false)
   const [status, setStatus] = useState<
     'idle' | 'loading' | 'booking' | 'booked' | 'error'
   >('idle')
@@ -151,6 +154,7 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
           startsAtMs: slotMs,
           name,
           email,
+          ...(marketingConsent ? { marketingConsent: true } : {}),
         }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -171,7 +175,16 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
       setErrorMessage('Booking failed — try again')
       setStatus('error')
     }
-  }, [hostId, serviceId, slotMs, name, email, status, siteFetch])
+  }, [
+    hostId,
+    serviceId,
+    slotMs,
+    name,
+    email,
+    marketingConsent,
+    status,
+    siteFetch,
+  ])
 
   if (!hostId) {
     return (
@@ -317,6 +330,18 @@ const Booking = forwardRef<HTMLDivElement, BookingProps>((props, ref) => {
             onChange={(event) => setEmail(event.target.value)}
             size="small"
             fullWidth
+          />
+          <FormControlLabel
+            control={
+              <Checkbox
+                size="small"
+                checked={marketingConsent}
+                onChange={(event) =>
+                  setMarketingConsent(event.target.checked)
+                }
+              />
+            }
+            label="Email me about offers and updates"
           />
           {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
           <Button

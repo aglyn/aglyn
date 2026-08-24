@@ -49,6 +49,7 @@ import {
   tenantHostAliasTag,
 } from '@aglyn/tenant-data-admin/render-cache'
 import { revalidatePath, revalidateTag } from 'next/cache'
+import { timingSafeEqual } from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
@@ -74,6 +75,27 @@ function unauthorized(): Response {
   return Response.json({ error: 'unauthorized' }, { status: 401 })
 }
 
+/**
+ * Constant-time secret compare (AGL-512, closed here by AGL-1881).
+ *
+ * The presented header was compared with `!==`, which short-circuits on the
+ * first differing byte — the defect AGL-512 closed for the download and
+ * supplier tokens and missed here. `REVALIDATE_SECRET` is a long-lived,
+ * shared, unrotated static value with no rate limit in front of it, which is
+ * the shape a byte-at-a-time oracle is actually practical against.
+ *
+ * Length first, because `timingSafeEqual` THROWS on a length mismatch rather
+ * than answering false. That does leak the secret's length; a length is not
+ * the secret, and refusing to compare at all would leak far more.
+ */
+function secretMatches(presented: unknown, expected: string): boolean {
+  if (typeof presented !== 'string') return false
+  const a = Buffer.from(presented, 'utf8')
+  const b = Buffer.from(expected, 'utf8')
+  if (a.length !== b.length) return false
+  return timingSafeEqual(new Uint8Array(a), new Uint8Array(b))
+}
+
 export async function POST(request: Request): Promise<Response> {
   const secret = process.env['REVALIDATE_SECRET']
   if (!secret) {
@@ -85,7 +107,9 @@ export async function POST(request: Request): Promise<Response> {
       { status: 503 },
     )
   }
-  if (request.headers.get('x-revalidate-secret') !== secret) return unauthorized()
+  if (!secretMatches(request.headers.get('x-revalidate-secret'), secret)) {
+    return unauthorized()
+  }
 
   let payload: { host?: unknown; hostId?: unknown; paths?: unknown }
   try {
