@@ -19,7 +19,7 @@ import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { createHmac } from 'crypto'
+import { createHmac, timingSafeEqual } from 'crypto'
 import { requireActiveMember } from './membership'
 import { checkMemberEntitlement } from './gate'
 import { tokenSigningSecret } from './download'
@@ -39,6 +39,28 @@ function sign(hostId: string, productId: string, video: number, exp: number) {
     .update(`stream:${hostId}:${productId}:${video}:${exp}`)
     .digest('hex')
     .slice(0, 32)
+}
+
+/**
+ * Constant-time signature compare (AGL-512, closed here by AGL-1881).
+ *
+ * The presented signature was compared with `!==`, which short-circuits on
+ * the first differing byte — the exact defect AGL-512 closed in `download.ts`
+ * and `supplier-update.ts` and missed here, one directory over. It matters
+ * more on this route than it reads: the signature is a truncated HMAC over
+ * values the caller already knows (`hostId`, `productId`, `video`, `exp`), so
+ * a byte-at-a-time oracle recovers a token for a video the caller was never
+ * entitled to, and the 15-minute TTL does not bound the attempt rate.
+ *
+ * Length is checked first because `timingSafeEqual` THROWS on a length
+ * mismatch rather than returning false, and the expected length here is a
+ * public constant (32 hex chars) — leaking it costs nothing.
+ */
+function signatureMatches(presented: string, expected: string): boolean {
+  const a = Buffer.from(String(presented ?? ''), 'utf8')
+  const b = Buffer.from(String(expected ?? ''), 'utf8')
+  if (a.length !== b.length) return false
+  return timingSafeEqual(new Uint8Array(a), new Uint8Array(b))
 }
 
 /**
@@ -88,7 +110,11 @@ export const streamHandler: PluginApiHandler = async (req, res) => {
     // GET: signature + expiry gate, then redirect to the media.
     const exp = Number(req.query.exp ?? 0)
     const sig = String(req.query.sig ?? '')
-    if (!exp || exp < Date.now() || sig !== sign(hostId, productId, video, exp)) {
+    if (
+      !exp ||
+      exp < Date.now() ||
+      !signatureMatches(sig, sign(hostId, productId, video, exp))
+    ) {
       return res.status(403).send('Link expired — reload the page')
     }
     const productSnapshot = await firebaseAdmin
