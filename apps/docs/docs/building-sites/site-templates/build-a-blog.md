@@ -71,13 +71,30 @@ Each entry carries, besides the title, excerpt, cover image, and markdown body:
 
 ### Scheduling
 
-Each entry row has a **Schedule** button. Pick a **Publish at** time (the past is
-refused) and confirm — the entry's status chip reads **scheduled** with the local
-time, and *"the entry goes live once the time passes (applied on the next site
-refresh)"*, exactly as the dialog says: no manual step, and its status flips to
-published on its own. A scheduled entry joins the sitemap and RSS feed at the same
-moment. **Publish**/**Unpublish** on the row toggle an entry immediately, and **View**
-opens the live URL once it's published.
+The same three publication controls live in **two places**, so you can decide when a post goes
+live without leaving what you're doing: the entry row's **actions menu** in the list,
+and a **Publication** panel at the bottom of the entry editor itself.
+
+- **Publish** / **Unpublish** — takes the entry live, or pulls it back, immediately.
+- **Schedule…** — pick a **Publish at** time in the **future** (the past is refused).
+  The status chip reads **Scheduled** with the local time, and the entry goes live
+  once that time passes — applied on the next site refresh, so there's no manual
+  step and its status flips to published on its own. A scheduled entry joins the
+  sitemap and RSS feed at the same moment.
+- **Edit published date…** — sets the date the entry *claims* it was published, and
+  it must be in the **past**. This is what search engines read as the article's
+  publication date, so it's the control to use when you've imported an archive and
+  every post is dated to the day you migrated.
+
+:::note The two dates are different
+**Published date** is when a post says it went out; **Publish at** is when a post is
+*due* to go out. Scheduling refuses a past time and backdating refuses a future one,
+so each control only ever writes its own field. The Publication panel states which
+one it's showing you — "Published *{date}*" against the first, "Scheduled for
+*{date}*" against the second.
+:::
+
+**View** opens the live URL once the entry is published.
 
 <!-- screenshot: content/entry-schedule-dialog.png per SCREENSHOT_PLAN.md -->
 
