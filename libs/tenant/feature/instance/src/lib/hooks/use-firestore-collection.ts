@@ -25,6 +25,7 @@ import {
   type QueryDocumentSnapshot,
 } from 'firebase/firestore'
 import { useEffect, useRef, useState, type DependencyList } from 'react'
+import { CONFIRMABLE_LISTEN_OPTIONS } from './helpers/listen-options'
 import {
   DENIAL_STREAK_TO_REPORT,
   denialLabelForQuery,
@@ -201,6 +202,10 @@ export function useFirestoreCollection<T = DocumentData>(
     const subscribe = () => {
       unsubscribe = onSnapshot(
         q,
+        // Without this the cache→server confirmation is never delivered and
+        // `fromCache` latches true for the life of the listener, refusing
+        // every guarded save on the page (AGL-2486). See `listen-options.ts`.
+        CONFIRMABLE_LISTEN_OPTIONS,
         (snapshot) => {
           if (cancelled) return
           /**
