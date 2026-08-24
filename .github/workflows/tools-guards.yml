@@ -306,6 +306,27 @@ jobs:
       # grades red, which is the direction the self-test wants anyway.
       - run: npm run test:week-one-preflight
 
+      # test:runbook-commands  The launch-day runbook's script references
+      # (AGL-1533). `LAUNCH_DAY_RUNBOOK.md` is executed once, by one person, at
+      # 6am, and it tells that person to run named scripts. Nothing checked
+      # that those scripts are where the document says they are — and the
+      # 2026-08-24 pass found one that was not: the runbook's companion prose
+      # said `tools/scripts/verify-production-aliases.mjs`, and the file is at
+      # `tools/deploy/verify-production-aliases.mjs`. That is not a soft
+      # failure; it is `Cannot find module` on the step that verifies a
+      # production alias before tagging.
+      #
+      # Same split as week-one-preflight above, for the same reason: this step
+      # runs `--self-test`, NOT the live check. The live run reads the
+      # "Platform Docs" shared drive, which CI does not mount, so there it can
+      # only ever exit 2 (INCONCLUSIVE) — a check that cannot pass is theatre.
+      # The self-test carries the proof instead: it drives the evaluator at a
+      # missing script, a missing npm target, a glob resolving to nothing, and
+      # an on-disk fixture, and FAILS IF ANY OF THEM STAYS GREEN — with a
+      # positive control so that a green run cannot be the extractor simply
+      # matching nothing. Secretless and offline.
+      - run: npm run test:runbook-commands
+
       # test:ci-test-digest  The CI test digest (AGL-1617). Main Gate run
       # 32685698590 and NX CI run 32687205268 both went red with nothing but
       # "Failed tasks: - console:test": GitHub truncates the MIDDLE of a long
