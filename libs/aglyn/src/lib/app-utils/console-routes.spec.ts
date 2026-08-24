@@ -123,7 +123,23 @@ describe('buildRoute', () => {
     // that is not explicitly apex-level must carry `[orgSlug]` as its first
     // segment. A new route that forgets it is the exact regression this
     // sweep was cleaning up after.
-    const apexPrefixes = ['/manage', '/admin', '/signin', '/signout', '/signup', '/verify-email']
+    //
+    // `/billing` is the fourth category and the newest (AGL-2430): a route
+    // that is apex-level BECAUSE it cannot be org-scoped. Stripe's
+    // subscription emails store one custom link for the whole account with
+    // nothing to interpolate a workspace into, so the org has to come from
+    // the session instead of the URL. It is the only member of that category
+    // and should stay that way — anything else that "just needs a shorter
+    // URL" belongs under `[orgSlug]`.
+    const apexPrefixes = [
+      '/manage',
+      '/admin',
+      '/signin',
+      '/signout',
+      '/signup',
+      '/verify-email',
+      '/billing',
+    ]
     for (const template of Object.values(Route)) {
       if (apexPrefixes.some((prefix) => template.startsWith(prefix))) continue
       expect(template.startsWith('/[orgSlug]')).toBe(true)

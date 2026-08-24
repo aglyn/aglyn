@@ -1,0 +1,140 @@
+name: External facts
+
+# Re-reads the external facts open Linear issues depend on (AGL-2193), daily.
+#
+# ## Why this exists
+#
+# On 2026-08-24 a reconciliation of the 38 launch blockers found SIX already
+# complete and still open — 16%. Not one could have been caught automatically,
+# because not one was closed by a commit: a Texas Form 401 effective 08/14 and
+# discovered nine days late, a Google payments profile address, two config
+# screens, a besigner publish with no commit at all (AGL-2396, `/newsroom`),
+# and a decision. `check:shipped-not-closed` reads the git log and is
+# STRUCTURALLY BLIND to every one of them.
+#
+# So the issue now carries a machine-runnable statement of what would finish
+# it — a ```aglyn-check block — and this reads them all, every morning.
+#
+# ## Where the answer GOES — this is the point, not the schedule
+#
+# A daily job whose output lives only in an Actions log is the "written but
+# never read" failure wearing a green tick. Three sinks, in order of how likely
+# anyone is to see them:
+#
+#  1. A COMMENT ON THE ISSUE whose assertions now all pass. That is where the
+#     decision gets made, and it is the only sink that reaches someone who is
+#     not already looking at CI. `--comment` is on for the scheduled run.
+#  2. The run's STEP SUMMARY — the verdict on the run page itself, not folded
+#     inside a log group.
+#  3. The job's own red. Exit 1 (something looks finished) and exit 2 (cannot
+#     check) both fail the run, which mails the actor. Same doctrine as
+#     legal-drift.yml: a red that means something IS the deliverable.
+#
+# ⛔ IT COMMENTS, IT NEVER CLOSES. The Todo list is handpicked. An assertion
+# can only say an external fact is now true, which is not the same claim as
+# "this issue is done" — and a false auto-close is strictly worse than a missed
+# one, because it removes the issue from the place a human would have seen it.
+# Do not "finish" this by adding a status mutation.
+#
+# ## Configuration
+#
+# - secret LINEAR_API_KEY — ⚠️ NOT SET AS OF 2026-08-24, so this workflow will
+#   fail on the guard step below until Zach creates it. That is deliberate and
+#   it is not a bug to route around: `check:legal-drift` spent its first day
+#   wired, scheduled and inert waiting on an unset repo variable (AGL-2379),
+#   green the whole time because a missing credential skipped its step. A
+#   check nobody has enabled must LOOK broken, not clean.
+#     Linear → Settings → Security & access → Personal API keys.
+#     `gh secret set LINEAR_API_KEY`
+#   Read scope is enough for the report; the comment sink needs write.
+#
+# - secret AGLYN_PROBE_TOKEN — already set. Every aglyn.com / app.aglyn.com /
+#   docs.aglyn.com path answers 429 `x-vercel-mitigated: challenge` to any
+#   non-browser client, on every path, whether or not the page exists. Without
+#   this header every HTTP assertion reports UNKNOWN — which is honest, and
+#   useless. Note this is OUR OWN `x-aglyn-probe` firewall bypass rule and NOT
+#   Vercel's `x-vercel-protection-bypass`: that one is Deployment Protection
+#   (preview auth), a different product, and it does not clear a Bot Protection
+#   challenge on production.
+
+on:
+  schedule:
+    # 08:10 UTC daily — after the overnight scheduled crons, before the day
+    # starts in US Central. Off the hour on purpose: GitHub's scheduler queues
+    # heavily at :00 and a delayed run is a run nobody reads with breakfast.
+    - cron: '10 8 * * *'
+  workflow_dispatch:
+    inputs:
+      comment:
+        description: 'Post a Linear comment on issues that now look finished'
+        type: boolean
+        default: false
+
+concurrency:
+  group: external-facts
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  facts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      # No `npm ci`. The checker is built-in fetch and nothing else, so this
+      # job cannot be reddened by a dependency, a lockfile or a registry
+      # outage — the probe-uptime.mjs precedent. A monitor that fails for
+      # reasons unrelated to what it monitors trains people to ignore it.
+
+      # The self-test FIRST, and it is not a formality. The single thing this
+      # checker must never do is report PASS on a page it did not read, and a
+      # comparator that has stopped comparing reports exactly that. This suite
+      # also runs in tools-guards.yml; it is here so a broken comparator fails
+      # the job BEFORE its verdict is printed and believed.
+      - run: npm run test:external-facts
+
+      # Refuse to no-op. A missing credential must FAIL the job, never skip
+      # the step (rules-drift.yml / legal-drift.yml precedent).
+      - name: Refuse to no-op without credentials
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          AGLYN_PROBE_TOKEN: ${{ secrets.AGLYN_PROBE_TOKEN }}
+        run: |
+          missing=0
+          if [ -z "$LINEAR_API_KEY" ]; then
+            echo "LINEAR_API_KEY repo secret is not set, so no assertion can be read." >&2
+            echo "An unreadable board is not a clean board — this job fails rather" >&2
+            echo "than reporting an empty sweep." >&2
+            echo "  gh secret set LINEAR_API_KEY" >&2
+            echo "(Linear -> Settings -> Security & access -> Personal API keys.)" >&2
+            missing=1
+          fi
+          if [ -z "$AGLYN_PROBE_TOKEN" ]; then
+            echo "AGLYN_PROBE_TOKEN repo secret is not set. Every HTTP assertion" >&2
+            echo "against our own hosts will be challenged (429) and report UNKNOWN." >&2
+            missing=1
+          fi
+          [ "$missing" -eq 0 ] || exit 2
+
+      # Exit 1 = something looks finished. Exit 2 = something could not be
+      # read. BOTH are meant to fail the run. Do not add `continue-on-error`
+      # and do not `|| true` this: the run's own red is sink #3, and the whole
+      # defect being fixed is that nobody was told.
+      - name: Re-read the assertions
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          AGLYN_PROBE_TOKEN: ${{ secrets.AGLYN_PROBE_TOKEN }}
+        run: |
+          comment=""
+          if [ "${{ github.event_name }}" = "schedule" ] || \
+             [ "${{ inputs.comment }}" = "true" ]; then
+            comment="--comment"
+          fi
+          npm run check:external-facts -- --from-linear $comment

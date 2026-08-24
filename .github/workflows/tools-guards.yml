@@ -659,6 +659,22 @@ jobs:
       # part-promoted issue shipped, and reading ancestry as deployment.
       - run: npm run test:shipped-not-closed
 
+      # AGL-2193. The other half of the same problem, and the bigger half: six
+      # of today's 38 launch blockers were already complete and still open, and
+      # NONE of them was closed by a commit, so the check above could never
+      # have seen any of them. `check:external-facts` re-reads the external
+      # fact each issue is actually waiting on.
+      #
+      # Only the self-test runs here — the check itself needs LINEAR_API_KEY
+      # and the network; `external-facts.yml` owns the daily live run. What
+      # this pins is the one thing that must never regress: a bot-protection
+      # challenge, a 200 shell, a DNS failure and a malformed block all report
+      # UNKNOWN and never a verdict. `aglyn.com` challenges every non-browser
+      # client on every path, and a challenge page contains none of the strings
+      # an assertion looks for — so a two-state comparator PASSES every
+      # `expect-absent` assertion vacuously, silently, on the happy path.
+      - run: npm run test:external-facts
+
       # AGL-1877. The Texas data-processing tax code (`txcd_10103001`) on
       # Aglyn's own Stripe products — the single input that decides how much
       # sales tax is collected and remitted from Sep 1. It was set by hand in

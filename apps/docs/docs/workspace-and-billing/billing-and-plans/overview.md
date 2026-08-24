@@ -358,6 +358,11 @@ monthly invoice as a usage line. See
   restores the plan with no further action**, and you can update your card at any
   time from **Manage payment methods**, which keeps working even after a
   subscription lapses.
+- **A shortcut straight to billing: `app.aglyn.com/billing`.** It doesn't name a
+  workspace, so it's safe to bookmark or to follow from an email. Sign in and it
+  takes you to your workspace's Billing page; if you manage several, it asks which
+  one. It keeps working while a workspace is past due or suspended for non-payment —
+  a lock over an unpaid bill must never be the thing that stops you paying it.
 - **We don't quote you an exact number of retries or days**, and that is deliberate.
   The retry schedule is a Stripe-side setting rather than something Aglyn controls or
   can read back, so any specific figure we printed here would be one we could not

@@ -102,3 +102,78 @@ export const LIVE_RETRY_WINDOW_IS_KNOWN = LIVE_MODE_DUNNING_SCHEDULE !== null
  * asserted either way until the live Dashboard is read.
  */
 export const LIVE_STRIPE_DUNNING_EMAIL_IS_KNOWN = false
+
+/**
+ * WHAT THE LIVE DASHBOARD SAYS, as read by Zach on 2026-08-23 at
+ * Settings → Billing → Subscriptions and emails. Recorded here because it is
+ * unreadable through the API (see above) and because two of the four lines
+ * are decisions with reasons, not merely observations.
+ *
+ * This constant is documentation with a type. Nothing branches on it — the
+ * code cannot read these settings, so a branch would be a lie. It exists so
+ * the next person to open that Dashboard page finds out what the current
+ * values mean before changing one.
+ */
+export const LIVE_STRIPE_SUBSCRIPTION_EMAIL_SETTINGS = {
+  readOn: '2026-08-23',
+  /**
+   * ON. The customer IS told when a card payment fails — this is the only
+   * failed-payment email anyone sends. Aglyn composes none of its own, and
+   * the in-app notification it does send is suppressed entirely by a muted
+   * `billing` category (`system-email-catalog.ts`). Turning this off leaves
+   * a failed renewal with no customer-reachable signal at all.
+   */
+  sendEmailsWhenCardPaymentsFail: true,
+  /**
+   * `Use a mix of both (Legacy)`, with all four destinations — free-trial
+   * reminders, expiring cards, card-payment failures, upcoming renewals —
+   * pointing at `https://aglyn.com/`, the marketing homepage.
+   *
+   * THAT IS THE DEFECT. A customer whose card just failed is mailed a link
+   * to a page with no way to update a card, and the subscription then runs
+   * out its retries and cancels. `Route.BILLING_ENTRY` (`/billing`) exists
+   * to give those four fields somewhere true to point.
+   *
+   * ⛔ SWITCHING OFF `Use a mix of both (Legacy)` IS IRREVERSIBLE. Stripe
+   * shows a confirmation dialog saying so, and the legacy option cannot be
+   * restored on this account afterwards. Zach has seen that dialog and
+   * deliberately declined it once. Do not take it on his behalf.
+   */
+  paymentMethodUpdates: 'mix-of-both-legacy' as const,
+  /**
+   * OFF, and it STAYS OFF. This is a decision, not an oversight.
+   *
+   * The toggle appends a Stripe-hosted "manage your subscription" link to
+   * subscription emails, which lands the customer in Stripe's billing portal
+   * — where CANCEL is a button. Cancellation at Aglyn goes through the
+   * retention funnel (AGL-1859/AGL-1863): survey, downsell, winback, and
+   * only then the cancel. A portal link routes around all of it, and the
+   * customer who was going to accept a downsell never sees one.
+   *
+   * The asymmetry is the whole design, and it is the same one the console's
+   * own billing page already implements: RECOVERY is self-serve and as
+   * frictionless as we can make it — that is what `/billing` is for —
+   * while LEAVING goes through Aglyn's funnel. Friction belongs on the way
+   * out, never on the way back in.
+   *
+   * Note this is a different question from the card-update path, which
+   * legitimately hands off to Stripe's portal from inside the console
+   * (`handleOpenPortal` on the billing page). That hand-off starts from a
+   * page we control, after the customer has already arrived somewhere that
+   * knows which org they are fixing.
+   */
+  includeSubscriptionManagementLink: false,
+}
+
+/**
+ * The URL to paste into all four "Payment method updates" fields.
+ *
+ * Org-agnostic on purpose — Stripe stores ONE link for the whole account and
+ * offers nothing to interpolate a workspace into. `/billing` authenticates
+ * the visitor and then routes them to their own workspace's billing page;
+ * signed out, it goes through `/signin?continue=/billing` and comes back.
+ *
+ * `app.` and not the apex: the apex is the marketing site, and a workspace
+ * subdomain would name an org the mail cannot know.
+ */
+export const BILLING_ENTRY_URL = 'https://app.aglyn.com/billing'

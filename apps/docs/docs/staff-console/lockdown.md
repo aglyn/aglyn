@@ -1147,3 +1147,93 @@ card-expiring and receipt emails are ON. Until then:
 
 The mode-tagged constants, and the probe evidence above, live in one place:
 `apps/console/utils/stripe-dunning-schedule.ts`.
+
+### What the live Dashboard did say, once someone opened it (AGL-2430)
+
+Zach read Settings → Billing → **Subscriptions and emails** on the live account
+on 2026-08-23. The retry schedule itself is still owed; what was read was the
+**email** half, and it found a defect worse than an unknown number.
+
+| Setting | Live value | Verdict |
+| -- | -- | -- |
+| Send emails when card payments fail | **ON** | Good — the customer is told |
+| Payment method updates | `Use a mix of both (Legacy)`, all four links → `https://aglyn.com/` | **The defect** |
+| Include a link for customers to manage their subscriptions | **OFF** | Deliberate — see below |
+
+**The defect.** All four "Payment method updates" destinations — free-trial
+reminders, expiring cards, card-payment failures, upcoming renewals — point at
+the **marketing homepage**. A customer whose card fails is emailed a link to a
+page with no way to update a card. Stripe then retries, and at the end of the
+retries the live terminal setting cancels the subscription. The email works, the
+notification works, and the customer still cannot pay.
+
+**The fix, and the one Zach rejected.** Pointing those fields at Stripe's own
+hosted card-update page was proposed and refused: *"they should be able to manage
+this inside the console not an external source."* That reframes the problem —
+the risk that proposal was routing around, a past-due or locked workspace unable
+to reach its own billing page, is a bug to fix rather than a reason to send
+customers away. See **The billing recovery path must survive a billing lock**
+below.
+
+**What to paste, and the one-way door.** The URL is
+`https://app.aglyn.com/billing` (`Route.BILLING_ENTRY`), org-agnostic because
+Stripe stores ONE link for the whole account. ⛔ **Switching off `Use a mix of
+both (Legacy)` is irreversible** — Stripe shows a confirmation dialog saying so,
+and the legacy option cannot be restored afterwards. Zach has seen that dialog
+and declined it once, deliberately. It is his call and nobody else's.
+
+### ⛔ "Include a link for customers to manage their subscriptions" stays OFF
+
+Not an oversight — a decision, recorded here and in
+`LIVE_STRIPE_SUBSCRIPTION_EMAIL_SETTINGS` so nobody switches it on later as a
+tidy-up.
+
+The toggle appends a Stripe-hosted "manage your subscription" link to
+subscription emails, which lands the customer in Stripe's billing portal — where
+**cancel is a button**. Cancellation at Aglyn goes through the retention funnel
+(AGL-1859/AGL-1863): survey, downsell, winback, and only then the cancel. A
+portal link in an email routes around all of it.
+
+The asymmetry is the design, and it is the same one the console's billing page
+already implements: **recovery is self-serve and as frictionless as we can make
+it; leaving goes through the funnel.** Friction belongs on the way out, never on
+the way back in.
+
+This is a different question from the card-update hand-off, which legitimately
+opens Stripe's portal from **Manage payment methods** inside the console. That
+starts from a page we control, after the customer has already arrived somewhere
+that knows which workspace they are fixing.
+
+### The billing recovery path must survive a billing lock
+
+A lock imposed for non-payment that also prevents payment is a **deadlock**: it
+can never be lifted by the one action that would lift it. Nothing on this path is
+exotic, which is exactly the hazard — each link was written correctly and
+independently, and any one of them can be closed by a well-meaning change.
+
+The set, as it stands:
+
+1. **Sign-in works.** `/api/auth/session` calls `getLockdownVerdict` with `staff`
+   and `uid` and **no `org`** — and that helper evaluates the org scope only when
+   handed an org doc. A suspended workspace's members can still get a session
+   cookie.
+2. **The console shell renders.** `PlatformLockdownGate` is platform-scope only
+   (`/api/lockdown-status` reports nothing about an org), so an org lock does not
+   replace the app with the notice screen.
+3. **The reads succeed.** `orgNotSuspended()` in the Firestore rules gates
+   **writes**. The org doc is `isOrgMember()`-readable and `billing/stripe` is
+   `canManageOrg()`-readable, neither conditioned on suspension.
+4. **The card-update route answers.** `api/billing/subscription` carries
+   `// lockdown-423: exempt` — its `portal` action is the card-update path.
+5. **`applyOrgLockdown` keeps sessions for a `billing` lock.** The env-gated
+   auto-lock sweep passes `revokeMemberTokens: false` outright, and the staff
+   route gates it on `reason === 'security' || reason === 'manual'` — precisely
+   so members of a billing-locked workspace can reach billing and fix the thing.
+6. **The entry point does not filter.** `/billing` routes a suspended, past-due
+   workspace exactly like a healthy one.
+
+`apps/console/specs/billing-recovery-reachable.spec.ts` holds all six in one
+place, with the reason attached to each. It reads source rather than driving a
+locked session — a real drive needs a live delinquent org — so treat a green as
+*"nobody has removed the exemption"*, never as *"a locked customer was observed
+paying"*.
