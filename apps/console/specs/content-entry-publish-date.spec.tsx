@@ -87,6 +87,13 @@ jest.mock('@aglyn/aglyn', () => ({
   hostPublicOrigin: jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/host-naming',
   ).hostPublicOrigin,
+  // The REAL gate, not a stub (AGL-471). Entry scheduling is a Business
+  // entitlement and `hasEntitlement` delegates straight to this; stubbing it
+  // true would leave these cases asserting scheduling works on a plan they
+  // never actually check. The closed world above is why it has to be listed.
+  checkEntitlement: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
+  ).checkEntitlement,
   isHostCollectionKind: () => () => true,
   COLLECTION_CATEGORIES_MAX: 20,
   findCollectionSlugOwner: () => null,
