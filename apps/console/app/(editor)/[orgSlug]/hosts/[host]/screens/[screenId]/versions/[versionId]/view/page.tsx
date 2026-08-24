@@ -36,6 +36,7 @@ import {
   ICON_VARIANT_SYMBOL_SECURE,
   ICON_VARIANT_TEXT,
 } from '@aglyn/shared-data-enums'
+import { mdiChevronDown, mdiChevronUp } from '@aglyn/shared-data-mdi'
 import {
   AppLink,
   CardDisplay,
@@ -50,11 +51,13 @@ import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   Button,
   Chip,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
   DialogContentText,
   DialogTitle,
+  IconButton,
   List,
   ListItem,
   ListItemIcon,
@@ -173,15 +176,28 @@ const SCREEN_LOAD_OVERLAY_MAX_MS = 12000
  * is a flex stack at natural heights, which is what stops a short card from
  * being stretched to a tall neighbour — the defect this replaced.
  *
- * Which card gets which width is content-driven, and the content said the
- * opposite of what it looks like. Measured on this page in Chrome, in one run
- * across four splits, `SEO` gets TALLER as it widens — 738px at a 354px
- * column, 764px at 480px, 857px at 732px, 989px at 984px — because it is
- * dominated by a fixed-aspect social-image preview that scales with the card.
- * `Publishing` shrinks (279px → 241px) because its chips and buttons stop
- * wrapping. So the form-and-button cards take the wide column and the
- * image-led `SEO` card takes the narrow one; the reverse (`SEO` wide) was
- * measured at a 1291px band against this arrangement's 1066px.
+ * ## The assignment is Zach's, and it is deliberately not the packing optimum
+ *
+ * "the basic details probably needs to be the smaller column like it was
+ * originally, page access can be 1 of 3 columns … seo 2 of 3", then "the
+ * publishing card can move just below basic details and be 1 of 3 columns",
+ * then "Swap page activity and versions. make activity full".
+ *
+ * So: `Basic Details`, `Publishing`, `Page Access` narrow, in that order;
+ * `SEO` and `Versions` wide; `Page Activity` full width in a band of its own.
+ *
+ * On packing alone that is the wrong way round, and the number is recorded
+ * here so nobody "corrects" it back by measuring. `SEO` gets TALLER as it
+ * widens — measured on this page in Chrome, 738px at a 354px column, 764px at
+ * 480px, 857px at 732px, 989px at 984px — because it is dominated by a
+ * fixed-aspect social-image preview that scales with the card. Putting it in
+ * the wide column therefore costs band height. Zach looked at both and chose
+ * this one anyway: a cramped image preview and truncated form fields read
+ * worse than a shorter band does. Legibility beat packing; that is his call
+ * and it is not a defect to fix.
+ *
+ * ORDER inside a bucket is source order, so the authored order of the three
+ * narrow items IS the rendered column order. Moving one changes the layout.
  *
  * The widths collapse with the viewport, so nothing ever spans more columns
  * than exist: two equal columns at `md`, one at `xs`, where the cards read in
@@ -790,6 +806,18 @@ function ScreenDetails() {
    * description as edits, and so either can be saved on its own.
    */
   const [seoImage, setSeoImage] = useState<ScreenSocialImageDraft | null>(null)
+
+  /**
+   * `Raw JSON` starts CLOSED (AGL-2486). Zach: "Raw JSON can be the very last
+   * card and it should probably be collapsed by default". It is a developer
+   * view of the stored document — useful, but it was several hundred pixels of
+   * machine text sitting between the reader and the bottom of the page.
+   *
+   * Deliberately NOT persisted. Nothing else in the console remembers a card's
+   * open state, and a preference store nobody asked for is not what to add the
+   * day before freeze. Every load starts closed.
+   */
+  const [rawJsonOpen, setRawJsonOpen] = useState(false)
   const handleSeoSave = useCallback(async () => {
     if (!seoDraft && !seoImage) return
     /**
@@ -1048,7 +1076,7 @@ function ScreenDetails() {
             masonry
             items={[
               {
-                size: CARD_WIDE,
+                size: CARD_NARROW,
                 children: (
                   <CardDisplay
                     header={'Basic Details'}
@@ -1089,7 +1117,7 @@ function ScreenDetails() {
                 ),
               },
               {
-                size: CARD_WIDE,
+                size: CARD_NARROW,
                 children: (
                   <CardDisplay
                     header={'Publishing'}
@@ -1262,7 +1290,7 @@ function ScreenDetails() {
                 ),
               },
               {
-                size: CARD_WIDE,
+                size: CARD_NARROW,
                 children: (
                   <CardDisplay
                     header={'Page Access'}
@@ -1336,7 +1364,7 @@ function ScreenDetails() {
                 ),
               },
               {
-                size: CARD_NARROW,
+                size: CARD_WIDE,
                 children: (
                   <CardDisplay
                     header={'SEO'}
@@ -1400,22 +1428,7 @@ function ScreenDetails() {
                 ),
               },
               {
-                size: CARD_NARROW,
-                children: (
-                  // The slot renders an empty fragment when no activity
-                  // plugin is entitled — `GridItems masonry` drops the item
-                  // wrapper via `:empty`, so an absent widget cannot leave a
-                  // gap at the bottom of the column.
-                  <PluginWidgetSlot
-                    slot="hostActivity"
-                    hostId={hostId}
-                    targetId={screenId}
-                    header={'Page Activity'}
-                  />
-                ),
-              },
-              {
-                size: { xs: 12 },
+                size: CARD_WIDE,
                 children: (
                   <CardDisplay
                     header={'Versions'}
@@ -1537,32 +1550,96 @@ function ScreenDetails() {
               },
               {
                 size: { xs: 12 },
+                // FULL WIDTH, in a band of its own below the columns — Zach:
+                // "make activity full". `masonry` gives every full-width item
+                // its own band, so this is what puts the activity feed under
+                // the two columns rather than inside one.
+                //
+                // The slot renders an empty fragment when no activity plugin
+                // is entitled, and `GridItems masonry` drops the item wrapper
+                // via `:empty` — otherwise an absent widget would leave a
+                // band-sized gap here.
+                children: (
+                  <PluginWidgetSlot
+                    slot="hostActivity"
+                    hostId={hostId}
+                    targetId={screenId}
+                    header={'Page Activity'}
+                  />
+                ),
+              },
+              {
+                // Per-screen traffic (AGL-152). Pulled into the same flow as
+                // the cards above so that `Raw JSON` can sit BELOW it \u2014 Zach
+                // wanted the JSON last, and it used to be rendered above this
+                // card by virtue of being the last grid item. Full width: it
+                // is a chart, and it earns the row.
+                size: { xs: 12 },
+                children: (
+                  <ScreenAnalyticsCard hostId={hostId} screenId={screenId} />
+                ),
+              },
+              {
+                // LAST card on the page, and CLOSED by default (AGL-2486).
+                //
+                // The collapse is MUI's `Collapse` behind a chevron in the
+                // card header \u2014 the same pattern the assist panel and the
+                // interaction builder already use, rather than a new one.
+                // `unmountOnExit` matters twice over: the `<pre>` is not in
+                // the DOM at all while closed, so a large screen document
+                // costs nothing to render, and the closed card measures as a
+                // plain header rather than reporting a placeholder height the
+                // way `content-visibility` would.
+                size: { xs: 12 },
                 children: (
                   <CardDisplay
                     header={'Raw JSON'}
                     help={docsHelp('screens', { excerpt: 'The screen document as stored \u2014 a read-only developer view of its structure.' })}
-                    contentGutterX
-                    contentGutterY
-                    contentBordered="all"
+                    // Gutters and the content border belong to the CONTENT, so
+                    // they come off with it. Left on, a closed card draws an
+                    // empty bordered strip under its header \u2014 42px of nothing
+                    // that reads as a rendering fault rather than a collapsed
+                    // card.
+                    contentGutterX={rawJsonOpen}
+                    contentGutterY={rawJsonOpen}
+                    contentBordered={rawJsonOpen ? 'all' : undefined}
+                    HeaderProps={{
+                      action: (
+                        <IconButton
+                          size="small"
+                          onClick={() => setRawJsonOpen((prior) => !prior)}
+                          aria-expanded={rawJsonOpen}
+                          aria-label={
+                            rawJsonOpen ? 'Hide raw JSON' : 'Show raw JSON'
+                          }
+                        >
+                          <MdiIcon
+                            path={
+                              rawJsonOpen
+                                ? mdiChevronUp.path
+                                : mdiChevronDown.path
+                            }
+                          />
+                        </IconButton>
+                      ),
+                    }}
                   >
-                    <pre
-                      style={{
-                        margin: 0,
-                        maxHeight: 360,
-                        overflow: 'auto',
-                      }}
-                    >
-                      {JSON.stringify(screen, null, 2)}
-                    </pre>
+                    <Collapse in={rawJsonOpen} unmountOnExit>
+                      <pre
+                        style={{
+                          margin: 0,
+                          maxHeight: 360,
+                          overflow: 'auto',
+                        }}
+                      >
+                        {JSON.stringify(screen, null, 2)}
+                      </pre>
+                    </Collapse>
                   </CardDisplay>
                 ),
               },
             ]}
           />
-          {/* Per-screen traffic (AGL-152). */}
-          <div style={{ marginTop: 24 }}>
-            <ScreenAnalyticsCard hostId={hostId} screenId={screenId} />
-          </div>
         </Container>
       </DashboardLayout>
       <Dialog
