@@ -5364,6 +5364,141 @@ describe('a timed suspension expires in rules, at both scopes (AGL-1981)', () =>
 })
 
 /**
+ * THE PLATFORM PANIC BUTTON REACHES THE CLIENT SDK (AGL-1881).
+ *
+ * `lockdowns/platform` stopped every server-owned surface — pages 503 in
+ * ~30s, Admin-SDK routes 423 in ~15s — and stopped the client SDK not at
+ * all. `hostWritesFrozen()` was `hostSuspended() || hostOrgSuspended()`, and
+ * neither of those reads `/lockdowns/platform`. So a besigner tab already
+ * open kept `updateDoc`-ing `hosts/{h}/screens/{s}` straight past the panic
+ * button, indefinitely — not for one token lifetime, forever, because no
+ * part of the client write path ever consulted the lock. That is the exact
+ * hole AGL-1965 closed for host scope and AGL-238 for org scope, left open
+ * on the WIDEST scope, which is the one staff pull during a live compromise.
+ *
+ * Three cases, and each is load-bearing:
+ *
+ *  - **locked → a member's write is refused.** The bug.
+ *  - **locked → STAFF still write.** The un-panic invariant from AGL-1501:
+ *    a platform lockdown must never lock out the people who can lift it. It
+ *    holds here for free — `isStaff()` is the first disjunct of every rule,
+ *    so the staff path short-circuits before `hostWritesFrozen()` is
+ *    evaluated and never pays the lock's read at all.
+ *  - **expired → writes land again.** `untilMs` is an expiry that passes
+ *    with no write, exactly as `suspendedUntilMs` does on the org and host
+ *    carriers. The predicate shares `lockWindowActive()` with them rather
+ *    than restating "active", so the three levers cannot drift.
+ *
+ * The fixture writes the doc the way /api/admin/lockdown leaves it, with
+ * rules disabled — no client may write this collection (asserted above), and
+ * a lock the test could set from a client would be a lock anyone could lift.
+ */
+describe('a platform lockdown freezes client writes (AGL-1881)', () => {
+  const lockPlatform = async (fields) => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'lockdowns', 'platform'), {
+        scope: 'platform',
+        reason: 'security',
+        message: 'Back soon',
+        lockedAtMs: Date.now(),
+        ...fields,
+      })
+    })
+  }
+
+  it('a member cannot publish while the platform lock is up', async () => {
+    await mustAllow(
+      'an editor publishing BEFORE the lock — the positive control',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1'), {
+        name: 'Home',
+      }),
+    )
+    await lockPlatform()
+    await mustDeny(
+      'an editor updating a screen during a platform lockdown',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1'), {
+        name: 'Home, edited through the panic button',
+      }),
+    )
+    await mustDeny(
+      'an editor saving canvas nodes during a platform lockdown',
+      setDoc(
+        doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1', 'versions', 'v1'),
+        { nodes: { root: { text: 'still editing' } } },
+        { merge: true },
+      ),
+    )
+    await mustDeny(
+      'an admin moving the live `screens` pointer during a platform lockdown',
+      updateDoc(doc(authed(OWNER), 'hosts', HOST), {
+        screens: { 'screen-1': { versionId: 'v1', path: '/' } },
+      }),
+    )
+  })
+
+  it('STAFF still write — the un-panic invariant (AGL-1501)', async () => {
+    await lockPlatform()
+    const staffDb = authed(STAFF, { staff: true })
+    await mustAllow(
+      'staff updating a screen during a platform lockdown',
+      updateDoc(doc(staffDb, 'hosts', HOST, 'screens', 'screen-1'), {
+        name: 'Staff working inside the lock',
+      }),
+    )
+    await mustAllow(
+      'staff moving the live `screens` pointer during a platform lockdown',
+      updateDoc(doc(staffDb, 'hosts', HOST), {
+        screens: { 'screen-1': { versionId: 'v1', path: '/' } },
+      }),
+    )
+  })
+
+  it('an EXPIRED platform lock stops freezing, with no write to lift it', async () => {
+    await lockPlatform({ untilMs: Date.now() - AN_HOUR })
+    await mustAllow(
+      'an editor publishing after the platform lock expired',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1'), {
+        name: 'Home, restored',
+      }),
+    )
+  })
+
+  it('a STILL-RUNNING timed platform lock keeps freezing', async () => {
+    // Without this, the case above passes just as well against a predicate
+    // that reads every lock as expired — which is the fix deleting itself.
+    await lockPlatform({ untilMs: Date.now() + AN_HOUR })
+    await mustDeny(
+      'an editor publishing during a timed platform lockdown',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1'), {
+        name: 'Home, edited',
+      }),
+    )
+  })
+
+  it('a MALFORMED expiry leaves the lock standing', async () => {
+    // The `suspensionActive()` posture, shared: the field is Admin-SDK-only,
+    // so a non-number can only arrive through our own bug, and failing
+    // closed is the right way round to be wrong about a panic button.
+    await lockPlatform({ untilMs: 'soon' })
+    await mustDeny(
+      'an editor publishing under a lock with a junk expiry',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1'), {
+        name: 'Home, edited',
+      }),
+    )
+  })
+
+  it('no platform doc means no freeze — the everyday path is untouched', async () => {
+    await mustAllow(
+      'an editor publishing with no platform lockdown document at all',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1'), {
+        name: 'Home',
+      }),
+    )
+  })
+})
+
+/**
  * The org half of AGL-1501 (AGL-1507): `suspendedReasonCode`/
  * `suspendedMessage`/`suspendedUntilMs` joined `suspendedAt` on BOTH deny
  * branches of the org update rule. The manager branch is already swept by the
