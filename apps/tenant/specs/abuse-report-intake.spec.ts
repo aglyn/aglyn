@@ -856,13 +856,16 @@ describe('AGL-2035 · §512(c)(2) publishes the agent, phone included', () => {
     return response.text()
   }
 
+  // A reserved 555 number rather than the live one: a fixture is not a place
+  // to keep the operator's real telephone details in sync.
+  const AGENT_PHONE = '+1-555-0142'
   const FILED = {
     ...AGLYN_OPERATED,
     NEXT_PUBLIC_OPERATOR_DMCA_AGENT_NAME: 'Copyright Compliance Department',
     NEXT_PUBLIC_OPERATOR_DMCA_AGENT_ADDRESS:
       'c/o Northwest Registered Agent, LLC., 5900 Balcones Drive STE 100, Austin, TX 78731',
     NEXT_PUBLIC_OPERATOR_DMCA_AGENT_EMAIL: 'dmca@aglyn.com',
-    NEXT_PUBLIC_OPERATOR_DMCA_AGENT_PHONE: '512-222-8232',
+    NEXT_PUBLIC_OPERATOR_DMCA_AGENT_PHONE: AGENT_PHONE,
     NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED: 'true',
   }
 
@@ -876,7 +879,7 @@ describe('AGL-2035 · §512(c)(2) publishes the agent, phone included', () => {
       expect(body).toContain('dmca@aglyn.com')
       // The phone is the element AGL-2035 is about: the live policy page
       // published name, email and address and no number at all.
-      expect(body).toContain('512-222-8232')
+      expect(body).toContain(AGENT_PHONE)
     })
 
     it('says the agent is registered, because this deployment says so', async () => {
@@ -907,7 +910,7 @@ describe('AGL-2035 · §512(c)(2) publishes the agent, phone included', () => {
     beforeEach(() =>
       setOperator({
         ...AGLYN_OPERATED,
-        NEXT_PUBLIC_OPERATOR_DMCA_AGENT_PHONE: '512-222-8232',
+        NEXT_PUBLIC_OPERATOR_DMCA_AGENT_PHONE: AGENT_PHONE,
         NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED: 'true',
       }),
     )
@@ -919,7 +922,7 @@ describe('AGL-2035 · §512(c)(2) publishes the agent, phone included', () => {
       const body = await form()
       expect(body).not.toContain('Designated agent for copyright notices')
       expect(body).not.toContain('registered with the U.S. Copyright Office')
-      expect(body).not.toContain('512-222-8232')
+      expect(body).not.toContain(AGENT_PHONE)
     })
   })
 
@@ -930,7 +933,7 @@ describe('AGL-2035 · §512(c)(2) publishes the agent, phone included', () => {
       const body = await form()
       expect(body).not.toContain('Designated agent for copyright notices')
       expect(body).not.toContain('dmca@aglyn.com')
-      expect(body).not.toContain('512-222-8232')
+      expect(body).not.toContain(AGENT_PHONE)
     })
   })
 })

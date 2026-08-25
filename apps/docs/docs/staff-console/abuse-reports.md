@@ -242,14 +242,17 @@ usually quarantining the specific asset rather than locking the site.
 :::warning The agent is filed. The publication half is not.
 **Registered.** Copyright Office designated-agent record `DMCA-1038349`, active
 since **2026-08-18**, next renewal **2029-08-18**. Agent: *Copyright Compliance
-Department*, `dmca@aglyn.com`, `512-222-8232`, c/o Northwest Registered Agent,
-LLC., 5900 Balcones Drive STE 100, Austin, TX 78731. Earlier text on this page
+Department*, `dmca@aglyn.com`, c/o Northwest Registered Agent, LLC., 5900
+Balcones Drive STE 100, Austin, TX 78731. The agent's telephone number is
+deliberately not written here: this repository is public. It belongs in
+deployment configuration as `NEXT_PUBLIC_OPERATOR_DMCA_AGENT_PHONE`, and it must
+not be reintroduced into a doc, a fixture or a test. Earlier text on this page
 and on AGL-1618 said no filing existed; that was corrected 2026-08-19.
 
 **What is still outstanding is publication, and it is a real condition, not
 paperwork.** §512(c)(2) requires those same four details — name, address,
 *phone*, email — to be available to the public through the service, and
-§512(i)(1)(A) conditions the entire safe harbour on having informed subscribers
+§512(i)(1)(A) conditions the entire safe harbor on having informed subscribers
 of the repeat-infringer policy. Neither is on `/legal/dmca` yet (AGL-2035,
 AGL-2007), and `/legal/dmca` is besigner-published content, so closing them is a
 publication pass rather than a repo edit.
