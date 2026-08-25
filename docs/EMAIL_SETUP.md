@@ -117,6 +117,37 @@ So the code half of AGL-2400 is done and the mail half is not: the two intakes
 that already had a reference number now post it to the submitter, and the four
 addresses that are email-only still answer a stranger with silence.
 
+#### And a failed receipt is now visible, which under `p=reject` it was not
+
+The two form-backed receipts are best-effort by design — a receipt that cannot
+be sent must never turn a submission we already hold into a 503. But the first
+implementation was best-effort in the wrong way: both call sites awaited the
+send and **discarded the result**, so a receipt that never left was a
+`console.warn` in a serverless log and nothing else.
+
+That is a worse blind spot here than it looks, because of the DMARC row below.
+`aglyn.com` publishes `p=reject`, so a refused or misaligned message is turned
+away **at SMTP** — it is not spam-foldered, it simply does not exist, on either
+side. Nobody discovers the failure by looking, and the one person who knows
+something is missing is the submitter, who has no way to tell us. A receipt
+that silently never sent was therefore indistinguishable from one that arrived.
+
+Each intake now writes `receiptStatus` / `receiptReason` /
+`receiptAttemptedAtMs` back onto its own row, and `/admin/abuse-reports`
+renders it beside the address to re-send from, with a count at the top of the
+queue. **Three states, and they must not collapse:** `sent` (Resend accepted
+it — not "delivered"; a later bounce is not visible from here), `failed`
+(actionable, with the reason, because an unconfigured deployment is an env fix
+and a rejection is a re-send), and **absent**, which means *nobody measured* —
+every row filed before this shipped. Rendering the third as `failed` would fill
+the queue with imaginary work on day one, which is how staff learn to ignore a
+flag; rendering it as `sent` would assert a delivery nothing observed.
+
+This does **nothing** for the four email-only intakes. A Google Groups
+auto-reply is sent by Google, is not observable from the repo, and has no
+per-message outcome to record — one more reason the remaining half of this
+issue cannot be closed from here.
+
 ### The Workspace change — Zach's, because these are account settings
 
 **Groups → the group → Settings → Email options → Auto replies**, check
@@ -333,6 +364,10 @@ AGL-2400 as open regardless of what the auto-replies say.
   DMARC aggregate reports for that sender before looking anywhere else; a new
   sending path that was never aligned fails this way and nothing else in the
   product will say so.
+
+  One exception, and it is the only one: the two §512 receipts record their own
+  outcome on the intake row and show it in `/admin/abuse-reports` (AGL-2400,
+  above). Every other sender in the tree still fails this way silently.
 - **aglyn.app:** locked down 2026-08-13 (AGL-1494) — `v=spf1 -all`, null DKIM,
   `p=reject; sp=reject`. Nothing legitimate sends from it; keep it that way.
 
