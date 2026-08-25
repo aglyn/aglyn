@@ -21,9 +21,8 @@
  * ## The hole this closes
  *
  * Until now the consent machinery could gate exactly one thing: Google. The
- * `advertising` category has existed since AGL-1649 and it is honest — only an
- * explicit accept can carry it, the implied default never does, GPC never
- * does — but the
+ * `advertising` category has existed since AGL-1649 and it is honest — a
+ * refusal always wins, and a host that never asked gets nothing — but the
  * only ENFORCEMENT it ever reached was {@link consentModeSignals}, four
  * strings handed to `gtag`. A non-Google tag could not be consent-gated at
  * all, because nothing in the repo knew how to gate one. Deciding to deploy a

@@ -55,6 +55,7 @@ import {
   TextField,
   Tooltip,
   Typography,
+  TablePagination,
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -143,6 +144,39 @@ export function OrgMembersCard() {
   // literal (AGL-2319): a white-label org's admins see their own brand.
   const { branding } = useBranding()
   const managerSeatsUsed = useMemo(() => countManagerSeats(members), [members])
+
+  /**
+   * Pagination for the roster (AGL-693).
+   *
+   * Zach: *"We are also missing pagination on the team page like we have on
+   * the layouts page."* The list rendered every member unbounded, which is
+   * fine at three and is a page that never ends on an org with two hundred —
+   * and this is the one list in the console whose row count is set by the
+   * customer's headcount rather than by what they built.
+   *
+   * Local slicing, not a paged read: `members` is already fully in memory (the
+   * seat counts and the manager-seat gate above both count across ALL of them),
+   * so paging the query would mean two different populations answering two
+   * questions on one card.
+   */
+  const [page, setPage] = useState(0)
+  const [rowsPerPage, setRowsPerPage] = useState(10)
+  const pagedMembers = useMemo(
+    () =>
+      members.length <= rowsPerPage
+        ? members
+        : members.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage),
+    [members, page, rowsPerPage],
+  )
+  /*
+    Removing the last member on a page would otherwise strand the reader on an
+    empty one with no way back. Clamped rather than reset, so removing someone
+    from page 3 keeps them on page 3.
+  */
+  useEffect(() => {
+    const lastPage = Math.max(0, Math.ceil(members.length / rowsPerPage) - 1)
+    if (page > lastPage) setPage(lastPage)
+  }, [page, members.length, rowsPerPage])
   const seatQuota = checkOrgSeatQuota(org, 'managers', managerSeatsUsed)
   // An org admin sees every org host via the memberRoles projection, so
   // this doubles as the org host directory for the access editor.
@@ -442,7 +476,7 @@ export function OrgMembersCard() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {members.map((member) => (
+            {pagedMembers.map((member) => (
               <TableRow key={member.$id}>
                 <TableCell>
                   {/* The roster row had no avatar at all (AGL-1126) — a
@@ -675,6 +709,18 @@ export function OrgMembersCard() {
             ))}
           </TableBody>
         </Table>
+        <TablePagination
+          component="div"
+          count={members.length}
+          page={page}
+          onPageChange={(_event, next) => setPage(next)}
+          rowsPerPage={rowsPerPage}
+          onRowsPerPageChange={(event) => {
+            setRowsPerPage(Number(event.target.value))
+            setPage(0)
+          }}
+          rowsPerPageOptions={[10, 25, 50]}
+        />
         {canManage && invites.length > 0 ? (
           <Stack spacing={1}>
             <Typography variant="subtitle2">{'Pending invites'}</Typography>

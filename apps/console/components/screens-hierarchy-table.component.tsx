@@ -56,8 +56,11 @@ import {
   Stack,
   Tooltip,
   Typography,
+  TablePagination,
 } from '@mui/material'
-import { Fragment, useCallback, useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useCallback, useMemo, useState, type ReactNode,
+  useEffect,
+} from 'react'
 import { collectionTemplateRoutesSummary } from '../constants/collection-templates'
 import type { UseCollectionTemplatesResult } from '../hooks/use-collection-templates'
 import { TABLE_HEAD_HEIGHT } from '../constants/shared'
@@ -452,6 +455,60 @@ export function ScreensHierarchyTableComponent(
     return rows
   }, [screens, screensById, collapsedIds])
 
+  /**
+   * Pagination that pages ROOTS, never rows (AGL-693).
+   *
+   * Zach asked for the pagination the layouts list has. A tree cannot take it
+   * literally: slicing `visibleRows` by row would put a child on a different
+   * page from its parent, and a hierarchy split across pages is not a
+   * hierarchy — the indentation would be describing a parent the reader
+   * cannot see.
+   *
+   * So the page unit is the TOP-LEVEL screen, and each one brings its whole
+   * expanded subtree with it. A page therefore holds `rowsPerPage` roots and
+   * however many descendants they have, which is the count that means
+   * something on this page anyway: "25 sections", not "25 rows of tree".
+   *
+   * ⚠️ Drag-to-reorder cannot cross a page boundary — dnd-kit only knows about
+   * mounted rows. That is a real limit and the reason the default is generous
+   * (25) rather than the grid's 5: on a host whose whole tree fits on one page
+   * nothing changes at all, which is the common case.
+   */
+  const [page, setPage] = useState(0)
+  const [rowsPerPage, setRowsPerPage] = useState(25)
+  const rootCount = useMemo(
+    () => visibleRows.filter((entry) => entry.depth === 0).length,
+    [visibleRows],
+  )
+  const pagedRows = useMemo(() => {
+    if (rootCount <= rowsPerPage) return visibleRows
+    const firstRoot = page * rowsPerPage
+    const lastRoot = firstRoot + rowsPerPage
+    let seen = -1
+    let start = -1
+    let end = visibleRows.length
+    visibleRows.forEach((entry, index) => {
+      if (entry.depth !== 0) return
+      seen += 1
+      if (seen === firstRoot) start = index
+      // The row AFTER the page's last root is where the slice stops, which is
+      // what carries the final root's descendants along with it.
+      if (seen === lastRoot && end === visibleRows.length) end = index
+    })
+    return start === -1 ? [] : visibleRows.slice(start, end)
+  }, [visibleRows, rootCount, page, rowsPerPage])
+
+  /*
+    A tree that shrinks under a reader — a delete, a filter, a collapse — can
+    strand them past the last page, which renders as an empty table with no
+    way back. Clamp rather than reset: staying on page 3 of 4 is right, and
+    jumping to page 1 on every delete is not.
+  */
+  useEffect(() => {
+    const lastPage = Math.max(0, Math.ceil(rootCount / rowsPerPage) - 1)
+    if (page > lastPage) setPage(lastPage)
+  }, [page, rootCount, rowsPerPage])
+
   const handleToggleCollapse = useCallback((id: ScreenUid) => {
     setCollapsedIds((previous) => {
       const next = new Set(previous)
@@ -558,7 +615,7 @@ export function ScreensHierarchyTableComponent(
                 </TableCell>
               </TableRow>
             )}
-            {visibleRows.map((entry) => {
+            {pagedRows.map((entry) => {
               const { row } = entry
               // A screen can't move inside its own subtree; nesting under a
               // row and slotting between that row's siblings both re-parent,
@@ -599,6 +656,21 @@ export function ScreensHierarchyTableComponent(
           </TableBody>
         </Table>
       </TableContainer>
+      {/* Counted in TOP-LEVEL screens, and labelled so — the number would be a
+          lie about rows, which is not what a page holds here. */}
+      <TablePagination
+        component="div"
+        count={rootCount}
+        page={page}
+        onPageChange={(_event, next) => setPage(next)}
+        rowsPerPage={rowsPerPage}
+        onRowsPerPageChange={(event) => {
+          setRowsPerPage(Number(event.target.value))
+          setPage(0)
+        }}
+        rowsPerPageOptions={[10, 25, 50]}
+        labelRowsPerPage="Top-level screens per page:"
+      />
       <DragOverlay dropAnimation={null}>
         {activeRow && (
           <Paper elevation={4} sx={{ px: 1.5, py: 0.5, width: 'fit-content' }}>

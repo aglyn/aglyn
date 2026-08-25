@@ -23,11 +23,11 @@ import {
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
 import {
-  DataTableComponent,
 } from '@aglyn/shared-ui-jsx/components/data-table.component'
-import { GridActionsCellItem, type GridColDef } from '@mui/x-data-grid'
+import { type GridColDef } from '@mui/x-data-grid'
 import {
   mdiBookmarkOutline,
+  mdiEyeOutline,
   mdiPencilOutline,
   mdiStorefrontOutline,
   mdiTrashCanOutline,
@@ -66,7 +66,15 @@ import {
   setDoc,
   updateDoc,
 } from 'firebase/firestore'
+import { ICON_VARIANT_SHOW_DETAIL } from '@aglyn/shared-data-enums'
 import { useRouter } from 'next/navigation'
+import ArtifactTable, {
+  ArtifactRowActions,
+  artifactActionsColumn,
+} from './artifacts/artifact-table.component'
+import ArtifactDeleteConfirmDescription, {
+  fetchArtifactUsage,
+} from './artifacts/artifact-delete-confirm.component'
 import { buildRoute, Route } from '../constants/route-links'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import { useHostSubdomain } from './host-id-provider'
@@ -322,12 +330,28 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
 
   const handleDelete = useCallback(
     (definition: any) => async () => {
+      /*
+        The scan STARTS here and the dialog opens in the same tick (AGL-703).
+        Awaiting it first would hold a destructive dialog closed for the length
+        of a multi-collection read, which reads as a dead button — the failure
+        AGL-1461 fixed on the media side.
+      */
+      const scan = (async () =>
+        fetchArtifactUsage({
+          hostId,
+          kind: 'component',
+          id: definition.$id,
+          idToken: await (user as any)?.getIdToken?.(),
+        }))()
       const confirmed = await confirm({
         title: 'Delete this component?',
-        description:
-          `"${definition.displayName ?? definition.$id}" disappears from ` +
-          'Your components; existing instances on screens render as empty ' +
-          'placeholders after the next publish.',
+        description: (
+          <ArtifactDeleteConfirmDescription
+            kind="component"
+            name={definition.displayName ?? definition.$id}
+            scan={scan}
+          />
+        ),
         confirmationText: 'Delete',
         confirmationButtonProps: { color: 'error' },
       })
@@ -343,7 +367,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
         persist: false,
       })
     },
-    [confirm, firestore, hostId, enqueueSnackbar],
+    [confirm, firestore, hostId, enqueueSnackbar, user],
   )
 
   // Same column/action shape the layouts and screens lists use (AGL-693),
@@ -418,104 +442,134 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
       valueGetter: (value: any) => value?.toDate?.() ?? null,
       valueFormatter: (value: any) => value?.toLocaleString?.() || '--',
     },
-    {
-      field: 'actions',
-      type: 'actions',
-      headerName: 'Actions',
-      width: 190,
-      getActions: ({ id, row }: any) => {
-        const definition = { ...row, $id: id as string }
-        return [
-          <GridActionsCellItem
-            key="action-besigner"
-            icon={<MdiIcon path={mdiVectorSquare.path} />}
-            label="Open in besigner"
-            disabled={opening === definition.$id}
-            onClick={() => void handleOpenInBesigner(definition)}
-          />,
-          <GridActionsCellItem
-            key="action-rename"
-            icon={<MdiIcon path={mdiPencilOutline.path} />}
-            label="Rename"
-            onClick={() =>
-              setEditor({
-                id: definition.$id,
-                name: definition.displayName ?? '',
-                description: definition.description ?? '',
-                icon: definition.icon,
-              })
-            }
-          />,
-          <GridActionsCellItem
-            key="action-save-template"
-            icon={<MdiIcon path={mdiBookmarkOutline.path} />}
-            label="Save as template"
-            showInMenu
-            onClick={() =>
-              setSaveTemplateFor({
-                kind: 'component',
-                displayName: definition.displayName ?? '',
-                // Unlike screens and layouts, a component definition holds
-                // its own nodes — there is no version doc to fetch.
-                loadNodes: async () =>
-                  definition.nodes
-                    ? { nodes: definition.nodes, rootId: definition.rootId }
-                    : null,
-              })
-            }
-          />,
-          <GridActionsCellItem
-            key="action-publish"
-            icon={<MdiIcon path={mdiStorefrontOutline.path} />}
-            label="Publish to marketplace"
-            showInMenu
-            onClick={() =>
-              setPublisher({
-                id: definition.$id,
-                name: definition.displayName ?? '',
-                description: definition.description ?? '',
-                category: '',
-                price: '',
-              })
-            }
-          />,
-          <GridActionsCellItem
-            key="action-delete"
-            icon={<MdiIcon path={mdiTrashCanOutline.path} />}
-            label="Delete"
-            showInMenu
-            onClick={handleDelete(definition)}
-          />,
-        ]
-      },
-    },
+    /*
+      ONE quick action, then the overflow (AGL-693). This list had five inline
+      icons — besigner, rename, and three behind MUI's own `showInMenu` — which
+      is the arrangement the other three lists each varied in their own way.
+      Everything except Preview now lives in the menu.
+    */
+    artifactActionsColumn((row: any) => {
+      const definition = { ...row, $id: row.$id as string }
+      const versionId = definition.versionId as string | undefined
+      return (
+        <ArtifactRowActions
+          label={definition.displayName ?? definition.$id}
+          quick={{
+            icon: mdiEyeOutline.path,
+            label: 'Preview',
+            // A component with no version has never been opened in the
+            // besigner, so there is no snapshot to render. Disabled and
+            // saying so, rather than a link to an empty preview.
+            ...(versionId
+              ? {
+                  to: buildRoute(Route.COMPONENT_PREVIEW, {
+                    orgSlug,
+                    host,
+                    componentId: definition.$id,
+                    versionId,
+                  }),
+                }
+              : {
+                  unavailableReason:
+                    'Nothing to preview yet — open it in the besigner once.',
+                }),
+          }}
+          items={[
+            {
+              key: 'details',
+              label: 'View details',
+              icon: <MdiIcon path={ICON_VARIANT_SHOW_DETAIL.path} size={0.8} />,
+              onClick: () =>
+                router.push(
+                  buildRoute(Route.COMPONENT_DETAILS, {
+                    orgSlug,
+                    host,
+                    componentId: definition.$id,
+                  }),
+                ),
+            },
+            {
+              key: 'besigner',
+              label: 'Edit in besigner',
+              icon: <MdiIcon path={mdiVectorSquare.path} size={0.8} />,
+              disabled: opening === definition.$id,
+              onClick: () => void handleOpenInBesigner(definition),
+            },
+            {
+              key: 'rename',
+              label: 'Rename',
+              icon: <MdiIcon path={mdiPencilOutline.path} size={0.8} />,
+              onClick: () =>
+                setEditor({
+                  id: definition.$id,
+                  name: definition.displayName ?? '',
+                  description: definition.description ?? '',
+                  icon: definition.icon,
+                }),
+            },
+            {
+              key: 'save-template',
+              label: 'Save as template',
+              icon: <MdiIcon path={mdiBookmarkOutline.path} size={0.8} />,
+              onClick: () =>
+                setSaveTemplateFor({
+                  kind: 'component',
+                  displayName: definition.displayName ?? '',
+                  // Unlike screens and layouts, a component definition holds
+                  // its own nodes — there is no version doc to fetch.
+                  loadNodes: async () =>
+                    definition.nodes
+                      ? { nodes: definition.nodes, rootId: definition.rootId }
+                      : null,
+                }),
+            },
+            {
+              key: 'publish',
+              label: 'Publish to marketplace',
+              icon: <MdiIcon path={mdiStorefrontOutline.path} size={0.8} />,
+              onClick: () =>
+                setPublisher({
+                  id: definition.$id,
+                  name: definition.displayName ?? '',
+                  description: definition.description ?? '',
+                  category: '',
+                  price: '',
+                }),
+            },
+            {
+              key: 'delete',
+              label: 'Delete',
+              destructive: true,
+              icon: <MdiIcon path={mdiTrashCanOutline.path} size={0.8} />,
+              onClick: handleDelete(definition),
+            },
+          ]}
+        />
+      )
+    }),
   ]
 
   // No card header: the page header already says "Reusable Components",
   // and screens/layouts do not repeat it either (AGL-693).
   return (
     <CardDisplay>
-      <DataTableComponent
+      <ArtifactTable
         rowHeight={TABLE_ROW_HEIGHT}
-        getRowId={(row) => row.$id}
         columns={columns}
         noRowsLabel="No reusable components yet — use Create component above, or save one from the besigner"
         rows={components}
-        // The whole row opens the detail page (AGL-693); action cells stop
-        // propagation so a menu click never navigates underneath it.
-        onRowClick={({ id }) =>
+        // The whole row opens the detail page (AGL-693); the action cluster
+        // stops propagation so a menu click never navigates underneath it.
+        onOpen={(id) =>
           router.push(
             buildRoute(Route.COMPONENT_DETAILS, {
               orgSlug,
               host,
-              componentId: id as string,
+              componentId: id,
             }),
           )
         }
-        sx={{ '& .MuiDataGrid-row': { cursor: 'pointer' } }}
         initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
-        pageSizeOptions={[5, 10, 15]}
-        pagination
       />
       <Dialog
         open={Boolean(editor)}

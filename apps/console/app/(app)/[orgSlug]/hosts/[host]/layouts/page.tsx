@@ -26,11 +26,13 @@ import { MUI_BUNDLE_ID } from '@aglyn/aglyn'
 import {
   ICON_VARIANT_MODIFY_DELETE,
   ICON_VARIANT_MODIFY_EDIT,
+  ICON_VARIANT_SHOW_DETAIL,
 } from '@aglyn/shared-data-enums'
 import {
   mdiBookmarkOutline,
   mdiPageLayoutBody,
   mdiStorefrontOutline,
+  mdiEyeOutline,
 } from '@aglyn/shared-data-mdi'
 import {
   AppLink,
@@ -41,14 +43,23 @@ import {
   useConfirmationContext,
   useLoading,
 } from '@aglyn/shared-ui-jsx'
-import { DataTableComponent } from '@aglyn/shared-ui-jsx/components/data-table.component'
+import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
+import { checkOrgQuota } from '../../../../../../constants/entitlements'
+import useCurrentOrg from '../../../../../../hooks/use-current-org'
+import ArtifactTable, {
+  ArtifactRowActions,
+  artifactActionsColumn,
+} from '../../../../../../components/artifacts/artifact-table.component'
+import ArtifactDeleteConfirmDescription, {
+  fetchArtifactUsage,
+} from '../../../../../../components/artifacts/artifact-delete-confirm.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { Button, Stack } from '@mui/material'
 import DocumentPresenceChips from '../../../../../../components/document-presence-chips.component'
 import usePresenceSummary from '../../../../../../hooks/use-presence-summary'
 import TemplateGalleryDialog from '../../../../../../components/templates/template-gallery-dialog.component'
-import { GridActionsCellItem, type GridColDef } from '@mui/x-data-grid'
+import { type GridColDef } from '@mui/x-data-grid'
 import {
   collection,
   doc,
@@ -64,6 +75,7 @@ import {
   useFirestore,
   useHostResourceApi,
   useHostVersionApi,
+  useUser,
 } from '@aglyn/tenant-feature-instance'
 import CreateArtifactDrawer from '../../../../../../components/create-artifact-drawer.component'
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
@@ -116,6 +128,9 @@ function Layouts(props) {
   }, [])
   const [pageSize, setPageSize] = useState<number>(5)
   const firestore = useFirestore()
+  const { org, ready: orgReady } = useCurrentOrg()
+  // The where-used scan is an authenticated POST (host admin only).
+  const { data: user } = useUser()
   const createHostResource = useHostResourceApi()
   const createHostVersion = useHostVersionApi()
   // Save as template (AGL-668). A layout's nodes live on its published
@@ -159,6 +174,13 @@ function Layouts(props) {
     { idField: '$id' },
   )
   const layouts = data || []
+  /**
+   * `sharedLayoutsPerHost` is enforced by `/api/hosts/resources` and had no
+   * standing surface here — an author learned the cap by being refused a
+   * create. The count is the listener's, which is the same source the create
+   * gate uses, so the readout and the refusal cannot disagree.
+   */
+  const layoutQuota = checkOrgQuota(org, 'sharedLayoutsPerHost', layouts.length)
   const { enqueueSnackbar } = useSnackbar()
 
   const [error, setError] = useState(null)
@@ -261,10 +283,34 @@ function Layouts(props) {
   const handleDeleteLayout = useCallback(
     (id: string) => async () => {
       let dequeueLoading
+      /*
+        The scan STARTS here and the dialog opens in the same tick (AGL-703) —
+        see `ArtifactDeleteConfirmDescription` for why it is not awaited.
+
+        The old sentence named the CONSEQUENCE and not the dependents: "screens
+        bound to it will render without shared chrome" is true and unanswerable
+        — which screens? The answer was one request away and already rendered
+        on the layout's own detail page.
+      */
+      const scan = (async () =>
+        fetchArtifactUsage({
+          hostId,
+          kind: 'layout',
+          id,
+          idToken: await (user as any)?.getIdToken?.(),
+        }))()
       await confirm({
-        title: 'Are you sure?',
-        description:
-          "You are about to delete a layout. Screens bound to it will render without shared chrome until they are rebound. Press 'Delete' to confirm or 'Cancel' to keep the layout.",
+        title: 'Delete this layout?',
+        description: (
+          <ArtifactDeleteConfirmDescription
+            kind="layout"
+            name={
+              layouts.find((layout: any) => layout.$id === id)?.displayName ??
+              id
+            }
+            scan={scan}
+          />
+        ),
         confirmationText: 'Delete',
         confirmationButtonProps: { color: 'error' },
       })
@@ -300,64 +346,6 @@ function Layouts(props) {
 
   const columns: GridColDef[] = [
     {
-      field: 'actions',
-      type: 'actions',
-      width: 100,
-      getActions: ({ id, row }) => {
-        const layoutId = id as string
-        const versionId = row.versionId as string
-        return [
-          <GridActionsCellItem
-            key="action-edit"
-            icon={<MdiIcon path={ICON_VARIANT_MODIFY_EDIT.path} />}
-            label="edit"
-            LinkComponent={CellItemLinkComponent}
-            {...({
-              href: buildRoute(Route.LAYOUT_BESIGNER, { orgSlug, 
-                host,
-                layoutId,
-                versionId,
-              }),
-            } as any)}
-          />,
-          <GridActionsCellItem
-            key="action-save-template"
-            icon={<MdiIcon path={mdiBookmarkOutline.path} />}
-            label="Save as template"
-            onClick={() =>
-              setSaveTemplateFor(
-                buildTemplateSource(layoutId, versionId, row.displayName),
-              )
-            }
-          />,
-          // Publishing shares the whole layout with other organizations;
-          // saving a template above keeps it on this site (AGL-672).
-          <GridActionsCellItem
-            key="action-publish"
-            icon={<MdiIcon path={mdiStorefrontOutline.path} />}
-            label="Publish to marketplace"
-            onClick={() =>
-              setPublishTarget({
-                endpoint: 'marketplace/publish-layout',
-                payload: { hostId, layoutId },
-                displayName: row.displayName,
-                description: row.description,
-                noun: 'layout',
-                categoryPlaceholder: 'e.g. Marketing, Docs, Storefront',
-              })
-            }
-          />,
-          <GridActionsCellItem
-            key="action-delete"
-            icon={<MdiIcon path={ICON_VARIANT_MODIFY_DELETE.path} color="error" />}
-            label="Delete"
-            onClick={handleDeleteLayout(layoutId)}
-          />,
-        ]
-      },
-    },
-    { field: '$id', headerName: 'ID', type: 'string', minWidth: 150 },
-    {
       field: 'displayName',
       headerName: 'Display name',
       minWidth: 220,
@@ -379,6 +367,7 @@ function Layouts(props) {
         </Stack>
       ),
     },
+    { field: '$id', headerName: 'ID', type: 'string', minWidth: 150 },
     {
       field: 'description',
       headerName: 'Description',
@@ -413,6 +402,99 @@ function Layouts(props) {
       valueGetter: (value: any) => value?.toDate?.() ?? null,
       valueFormatter: (value: any) => value?.toLocaleString?.() || '--',
     },
+    /*
+      The trailing cluster every artifact list shares (AGL-693). Layouts put
+      FOUR inline icons in a LEADING column — the arrangement Zach called out
+      — so a delete sat two icons from the row's own open handler and the
+      first thing in the row was a toolbar rather than the layout's name.
+    */
+    artifactActionsColumn((row: any) => {
+      const layoutId = row.$id as string
+      const versionId = row.versionId as string
+      return (
+        <ArtifactRowActions
+          label={row.displayName ?? layoutId}
+          quick={{
+            icon: mdiEyeOutline.path,
+            label: 'Preview',
+            ...(versionId
+              ? {
+                  to: buildRoute(Route.LAYOUT_PREVIEW, {
+                    orgSlug,
+                    host,
+                    layoutId,
+                    versionId,
+                  }),
+                }
+              : {
+                  unavailableReason:
+                    'Nothing to preview yet — open it in the besigner once.',
+                }),
+          }}
+          items={[
+            {
+              key: 'details',
+              label: 'View details',
+              icon: <MdiIcon path={ICON_VARIANT_SHOW_DETAIL.path} size={0.8} />,
+              onClick: () =>
+                router.push(
+                  buildRoute(Route.LAYOUT_DETAILS, { orgSlug, host, layoutId }),
+                ),
+            },
+            {
+              key: 'besigner',
+              label: 'Edit in besigner',
+              icon: (
+                <MdiIcon path={ICON_VARIANT_MODIFY_EDIT.path} size={0.8} />
+              ),
+              onClick: () =>
+                router.push(
+                  buildRoute(Route.LAYOUT_BESIGNER, {
+                    orgSlug,
+                    host,
+                    layoutId,
+                    versionId,
+                  }),
+                ),
+            },
+            {
+              key: 'save-template',
+              label: 'Save as template',
+              icon: <MdiIcon path={mdiBookmarkOutline.path} size={0.8} />,
+              onClick: () =>
+                setSaveTemplateFor(
+                  buildTemplateSource(layoutId, versionId, row.displayName),
+                ),
+            },
+            {
+              // Publishing shares the whole layout with other organizations;
+              // saving a template above keeps it on this site (AGL-672).
+              key: 'publish',
+              label: 'Publish to marketplace',
+              icon: <MdiIcon path={mdiStorefrontOutline.path} size={0.8} />,
+              onClick: () =>
+                setPublishTarget({
+                  endpoint: 'marketplace/publish-layout',
+                  payload: { hostId, layoutId },
+                  displayName: row.displayName,
+                  description: row.description,
+                  noun: 'layout',
+                  categoryPlaceholder: 'e.g. Marketing, Docs, Storefront',
+                }),
+            },
+            {
+              key: 'delete',
+              label: 'Delete',
+              destructive: true,
+              icon: (
+                <MdiIcon path={ICON_VARIANT_MODIFY_DELETE.path} size={0.8} />
+              ),
+              onClick: handleDeleteLayout(layoutId),
+            },
+          ]}
+        />
+      )
+    }),
   ]
 
   return (
@@ -434,17 +516,38 @@ function Layouts(props) {
           icon: { path: mdiPageLayoutBody.path },
         }}
         headerRight={
-          <Stack direction="row" spacing={1}>
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() => setTemplatesOpen(true)}
-            >
-              {'Templates'}
-            </Button>
-            <Button size="small" variant="contained" onClick={handleFormOpen}>
-              {'Create New Layout'}
-            </Button>
+          /*
+            The plan readout sits OPPOSITE the heading, beside the create
+            button (AGL-2113) — the arrangement the Sites page uses for
+            `6 of 10 sites · Business plan`. Zach: *"the 'templates on your
+            plan' need to be moved to the header like we have on the hosts
+            page, same thing goes for the screens page, components, layouts
+            and templates."*
+
+            Above the table rather than inside it, because it is a fact about
+            the PAGE: a reader deciding whether to create another one is
+            looking at the create button, and that is where the number has to
+            be. Inside the card it was a caption on a list.
+          */
+          <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+            <QuotaReadoutComponent
+              ready={orgReady}
+              used={layouts.length}
+              limit={layoutQuota.limit}
+              noun="layout"
+            />
+            <Stack direction="row" spacing={1}>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => setTemplatesOpen(true)}
+              >
+                {'Templates'}
+              </Button>
+              <Button size="small" variant="contained" onClick={handleFormOpen}>
+                {'Create New Layout'}
+              </Button>
+            </Stack>
           </Stack>
         }
         aside={
@@ -471,27 +574,23 @@ function Layouts(props) {
             blurb="Layout templates add a ready-made layout you can restyle in the besigner. Existing layouts are never touched."
           />
           <CardDisplay>
-            <DataTableComponent
+            <ArtifactTable
               rowHeight={TABLE_ROW_HEIGHT}
-              getRowId={(row) => row.$id}
               columns={columns}
               noRowsLabel="No layouts"
               rows={layouts}
-              onRowClick={({ id }) =>
+              onOpen={(id) =>
                 router.push(
                   buildRoute(Route.LAYOUT_DETAILS, {
                     orgSlug,
                     host,
-                    layoutId: id as string,
+                    layoutId: id,
                   }),
                 )
               }
-              sx={{ '& .MuiDataGrid-row': { cursor: 'pointer' } }}
               loading={status === 'loading'}
               initialState={{ pagination: { paginationModel: { pageSize } } }}
               onPaginationModelChange={(model) => setPageSize(model.pageSize)}
-              pageSizeOptions={[5, 10, 15]}
-              pagination
             />
           </CardDisplay>
         </Container>

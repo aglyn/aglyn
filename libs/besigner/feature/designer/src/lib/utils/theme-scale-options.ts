@@ -89,6 +89,40 @@ const FONT_SIZE_VARIANTS: ReadonlyArray<{ key: string; label: string }> = [
   { key: 'overline', label: 'Overline' },
 ]
 
+/**
+ * Every variant the theme defines, not just the ones MUI ships (Zach
+ * 2026-08-25).
+ *
+ * The list above names MUI's own variants in reading order; a host that adds
+ * rungs of its own — Aglyn's theme carries `lede`, `bodyCompact` and `micro`
+ * for the 17/13/11px steps MUI has no name for — had no way to offer them,
+ * so pages reached for the pixels instead. Discovering the extras keeps the
+ * curated order for the familiar ones and appends whatever else the host
+ * defined, sorted small to large so the ramp still reads.
+ *
+ * A variant is anything under `theme.typography` that is an OBJECT carrying a
+ * `fontSize`; that skips `fontFamily`, the `fontWeight*` scalars and
+ * `pxToRem` without naming them.
+ */
+function themeTypographyVariants(
+  typography: Record<string, unknown> | undefined,
+): Array<{ key: string; label: string }> {
+  if (!typography) return []
+  const known = new Set(FONT_SIZE_VARIANTS.map((entry) => entry.key))
+  const extra: Array<{ key: string; label: string; size: number }> = []
+  for (const key of Object.keys(typography)) {
+    if (known.has(key)) continue
+    const value = typography[key]
+    if (!value || typeof value !== 'object') continue
+    const size = (value as Record<string, unknown>).fontSize
+    const parsed = Number.parseFloat(String(size ?? ''))
+    if (!Number.isFinite(parsed)) continue
+    extra.push({ key, label: humanizeKey(key), size: parsed })
+  }
+  extra.sort((a, b) => a.size - b.size)
+  return [...FONT_SIZE_VARIANTS, ...extra.map(({ key, label }) => ({ key, label }))]
+}
+
 /** Font sizes from `theme.typography`, e.g. `h4.fontSize` → `2.125rem`. */
 export function buildFontSizeScaleOptions(
   theme: ThemeScaleSource | undefined,
@@ -96,7 +130,7 @@ export function buildFontSizeScaleOptions(
   const typography = theme?.typography
   if (!typography) return []
   const options: ThemeScaleOption[] = []
-  for (const { key, label } of FONT_SIZE_VARIANTS) {
+  for (const { key, label } of themeTypographyVariants(typography)) {
     const variant = typography[key]
     if (!variant || typeof variant !== 'object') continue
     const fontSize = (variant as Record<string, unknown>)['fontSize']
@@ -115,12 +149,36 @@ export function buildFontSizeScaleOptions(
  * who wants exactly 700 means. The token entries come first so the
  * theme-following answer is the one in reach.
  */
-const FONT_WEIGHT_TOKENS: ReadonlyArray<{ key: string; label: string }> = [
-  { key: 'fontWeightLight', label: 'Light (theme)' },
-  { key: 'fontWeightRegular', label: 'Regular (theme)' },
-  { key: 'fontWeightMedium', label: 'Medium (theme)' },
-  { key: 'fontWeightBold', label: 'Bold (theme)' },
-]
+/**
+ * Weight tokens are DISCOVERED, not listed (Zach 2026-08-25).
+ *
+ * This was the four MUI defaults hardcoded, which meant a host that added a
+ * weight to its ramp — Aglyn's own theme carries SemiBold 600, ExtraBold 800
+ * and Black 900 — got a picker that could not offer it, and the only way to
+ * reach the brand's own weight was to type a raw number. Reading the keys off
+ * `theme.typography` instead means any host's ramp shows up with no edit here.
+ *
+ * Ordered by the weight each resolves to, so the menu reads light → heavy
+ * rather than in whatever order the theme object happened to be written.
+ */
+const FONT_WEIGHT_KEY = /^fontWeight(.+)$/
+
+function themeFontWeightTokens(
+  typography: Record<string, unknown> | undefined,
+): Array<{ key: string; label: string; weight: number }> {
+  if (!typography) return []
+  const found: Array<{ key: string; label: string; weight: number }> = []
+  for (const key of Object.keys(typography)) {
+    const match = FONT_WEIGHT_KEY.exec(key)
+    if (!match) continue
+    const raw = typography[key]
+    const weight =
+      typeof raw === 'number' ? raw : Number.parseFloat(String(raw ?? ''))
+    if (!Number.isFinite(weight)) continue
+    found.push({ key, label: `${humanizeKey(match[1])} (theme)`, weight })
+  }
+  return found.sort((a, b) => a.weight - b.weight)
+}
 
 const FONT_WEIGHT_LADDER: ReadonlyArray<{ value: string; label: string }> = [
   { value: '100', label: 'Thin' },
@@ -139,7 +197,7 @@ export function buildFontWeightScaleOptions(
 ): ThemeScaleOption[] {
   const typography = theme?.typography
   const options: ThemeScaleOption[] = []
-  for (const { key, label } of FONT_WEIGHT_TOKENS) {
+  for (const { key, label } of themeFontWeightTokens(typography)) {
     const hint = hintOf(typography ? typography[key] : undefined)
     if (!hint) continue
     options.push({ value: key, label, hint })
@@ -280,6 +338,10 @@ export interface StyleThemeScales {
   shadow: PresetChoiceOption[]
   /** The theme's own faces, then web-safe stacks (AGL-2486). */
   fontFamily: PresetChoiceOption[]
+  /** Whole typography variants — `typography: 'h2'` (Zach 2026-08-25). */
+  typographyVariant: PresetChoiceOption[]
+  /** Grid/flex gaps on the theme's spacing ladder (Zach 2026-08-25). */
+  gap: PresetChoiceOption[]
 }
 
 export function buildStyleThemeScales(
@@ -291,8 +353,10 @@ export function buildStyleThemeScales(
     zIndex: buildZIndexScaleOptions(theme),
     spacing: buildSpacingScaleOptions(theme),
     cornerRadius: buildCornerRadiusChoices(theme),
-    shadow: buildShadowChoices(),
+    shadow: buildShadowChoices(theme),
     fontFamily: buildFontFamilyChoices(theme),
+    typographyVariant: buildTypographyVariantChoices(theme),
+    gap: buildGapChoices(theme),
   }
 }
 
@@ -381,35 +445,72 @@ export function buildCornerRadiusChoices(
  * real value it is (a component or the theme may be drawing one), and the
  * escape hatch is a `Custom…` entry in this very control.
  *
- * The values are literal CSS rather than `theme.shadows` indices for one
- * reason: MUI's `boxShadow` sx key IS declared with `themeKey: 'shadows'`,
- * so a bare number resolves against the elevation ladder — but that ladder
- * is 25 near-identical Material elevations, which is a worse menu for an
- * author than four shadows that visibly differ. A host's own ladder is
- * still reachable through Custom…, and any number already stored keeps
- * resolving exactly as before because this control does not rewrite values
- * it did not touch.
+ * The menu is SHORT but the values are theme ELEVATIONS (Zach 2026-08-25).
+ *
+ * An earlier pass wrote literal CSS here on the reasoning that MUI's ladder
+ * is "25 near-identical Material elevations, a worse menu than four shadows
+ * that visibly differ". The menu half of that is right and is kept — nobody
+ * should scroll 25 rows. The value half was not: a literal shadow is a
+ * bespoke value that ignores `theme.shadows`, so a host that retunes its
+ * elevations leaves every stored shadow behind, and the four we shipped
+ * matched no token in any theme.
+ *
+ * Both hold at once by curating INDICES: six rungs off the host's own
+ * ladder, each stored as the number `boxShadow` already resolves through
+ * (`themeKey: 'shadows'`), and each previewing the CSS that number renders
+ * so the row still shows what it looks like. Same trick as Corner Radius —
+ * store the theme multiple, preview the resolved value.
+ *
+ * `none` stays a string because it is the real value it is: a component or
+ * the theme may be drawing a shadow this element wants gone.
  */
-export function buildShadowChoices(): PresetChoiceOption[] {
-  return [
-    { value: 'none', label: 'No shadow' },
-    {
-      value: '0 1px 3px rgba(0,0,0,0.2)',
-      label: 'Soft — sits on the page',
-    },
-    {
-      value: '0 4px 12px rgba(0,0,0,0.15)',
-      label: 'Lifted — floats a little',
-    },
-    {
-      value: '0 12px 32px rgba(0,0,0,0.25)',
-      label: 'Raised — floats well above',
-    },
-    {
-      value: 'inset 0 2px 6px rgba(0,0,0,0.2)',
-      label: 'Inset — pressed into the page',
-    },
-  ]
+const SHADOW_STEPS: ReadonlyArray<{ elevation: number; label: string }> = [
+  { elevation: 1, label: 'Barely there — a hairline lift' },
+  { elevation: 3, label: 'Soft — sits on the page' },
+  { elevation: 6, label: 'Lifted — floats a little' },
+  { elevation: 12, label: 'Raised — floats well above' },
+  { elevation: 24, label: 'Highest — dialog level' },
+]
+
+/**
+ * The literal presets shipped before the ladder existed. Only reached when a
+ * theme carries no usable `shadows` array, so the control never degrades to
+ * an empty menu on a host with an unusual theme.
+ */
+const FALLBACK_SHADOWS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: '0 1px 3px rgba(0,0,0,0.2)', label: 'Soft — sits on the page' },
+  { value: '0 4px 12px rgba(0,0,0,0.15)', label: 'Lifted — floats a little' },
+  { value: '0 12px 32px rgba(0,0,0,0.25)', label: 'Raised — floats well above' },
+  {
+    value: 'inset 0 2px 6px rgba(0,0,0,0.2)',
+    label: 'Inset — pressed into the page',
+  },
+]
+
+export function buildShadowChoices(
+  theme?: ThemeScaleSource | undefined,
+): PresetChoiceOption[] {
+  const shadows = theme?.shadows
+  const options: PresetChoiceOption[] = [{ value: 'none', label: 'No shadow' }]
+  if (!Array.isArray(shadows) || shadows.length === 0) {
+    for (const entry of FALLBACK_SHADOWS) {
+      options.push({ value: entry.value, label: entry.label, preview: entry.value })
+    }
+    return options
+  }
+  for (const { elevation, label } of SHADOW_STEPS) {
+    const resolved = shadows[elevation]
+    // A host with a shorter ladder simply offers fewer rungs rather than
+    // storing an index that resolves to nothing.
+    if (typeof resolved !== 'string' || !resolved || resolved === 'none') continue
+    options.push({
+      value: elevation,
+      label,
+      hint: `Elevation ${elevation}`,
+      preview: resolved,
+    })
+  }
+  return options
 }
 
 /* ── Font family ──────────────────────────────────────────────────────── */
@@ -494,5 +595,75 @@ export function buildFontFamilyChoices(
     }
   }
   for (const font of WEB_SAFE_FONTS) push(font.value, font.label)
+  return options
+}
+
+/* ── Typography variant ───────────────────────────────────────────────── */
+
+/**
+ * Whole text styles from `theme.typography` (Zach 2026-08-25).
+ *
+ * Every other control in this group sets ONE property, which means matching
+ * a heading to the theme took five correct picks in a row — face, size,
+ * weight, line height, letter spacing — and getting any of them wrong left
+ * text that looked almost right. `typography: 'h2'` is a single sx key that
+ * applies all of them at once, and it is the key MUI itself reaches for.
+ *
+ * This is the control whose absence let the press page ship eleven headings
+ * at the MUI default `h2` — Light 300 at 60px — while every panel in the
+ * besigner reported nothing wrong: there was no field that said "this is a
+ * Heading 2", only fields that said "this is 60px" once someone typed it.
+ *
+ * The hint names what the variant resolves to in THIS theme rather than in
+ * the abstract, because "Heading 2" means nothing until you know the host
+ * made it 40px semibold.
+ */
+export function buildTypographyVariantChoices(
+  theme: ThemeScaleSource | undefined,
+): PresetChoiceOption[] {
+  const typography = theme?.typography
+  if (!typography) return []
+  const options: PresetChoiceOption[] = []
+  for (const { key, label } of themeTypographyVariants(typography)) {
+    const variant = typography[key]
+    if (!variant || typeof variant !== 'object') continue
+    const { fontSize, fontWeight } = variant as Record<string, unknown>
+    const parts = [hintOf(fontSize), hintOf(fontWeight) && `weight ${hintOf(fontWeight)}`]
+      .filter(Boolean)
+      .join(' · ')
+    options.push({ value: key, label, hint: parts || undefined })
+  }
+  return options
+}
+
+/* ── Gap ──────────────────────────────────────────────────────────────── */
+
+/**
+ * Grid and flex gaps on the theme's spacing ladder (Zach 2026-08-25).
+ *
+ * `gap`, `rowGap` and `columnGap` were free-text boxes, which reads as a
+ * CSS length question and gets answered with one — but MUI runs all three
+ * through `createUnaryUnit(theme, 'spacing', …)`, exactly like margin and
+ * padding. So `gap: 2` is a theme multiple that follows a host retuning its
+ * unit, and `gap: '16px'` is a bespoke value that does not.
+ *
+ * The box styler has offered this ladder for margin and padding since
+ * AGL-2486; gaps sit in the Grid and Flex groups, which is why they were
+ * missed. Same rungs, same labels, so the two controls agree.
+ *
+ * A `PresetChoiceOption` rather than a `ThemeScaleOption` because the value
+ * STORED is a number and that interface is string-only — the same reason
+ * Corner Radius is a preset.
+ */
+export function buildGapChoices(
+  theme: ThemeScaleSource | undefined,
+): PresetChoiceOption[] {
+  const spacing = theme?.spacing
+  const options: PresetChoiceOption[] = []
+  for (const { step, label } of SPACING_STEPS) {
+    const hint = resolveSpacing(spacing, step)
+    if (hint === '') continue
+    options.push({ value: step, label, hint })
+  }
   return options
 }

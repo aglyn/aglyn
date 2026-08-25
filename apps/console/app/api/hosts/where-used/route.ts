@@ -205,6 +205,16 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
+    /**
+     * Did every scan read its whole collection?
+     *
+     * `false` means the answer is a LOWER BOUND: everything listed is real,
+     * but "nothing listed" proves nothing. Callers must not present an empty
+     * result as "unused" while this is false — `artifact-usage-copy.ts` is
+     * where that rule lives for the console.
+     */
+    let truncated = false
+
     if (kind === 'component' || kind === 'layout') {
       /**
        * Documents plus, for screens/layouts, their published nodes.
@@ -217,13 +227,25 @@ async function handler(request: Request): Promise<Response> {
       const readCandidates = async (
         collectionName: 'screens' | 'layouts' | 'components',
         withNodes: boolean,
-      ): Promise<UsageCandidate[]> =>
-        (
-          await readUsageCandidates(hostRef, collectionName, {
-            withNodes,
-            limit: 200,
-          })
-        ).candidates
+      ): Promise<UsageCandidate[]> => {
+        const read = await readUsageCandidates(hostRef, collectionName, {
+          withNodes,
+          limit: 200,
+        })
+        /*
+          The cap is REPORTED, not swallowed (AGL-703).
+
+          `readUsageCandidates` fetches one document over the limit precisely
+          so it can say whether there were more, and this function threw that
+          away — so a site with 201 screens got an answer indistinguishable
+          from a complete one, and the delete confirmation built on it would
+          say "nothing uses this" on the strength of a scan that stopped
+          reading. That is the same defect `media-usage-copy` exists to
+          prevent one collection over.
+        */
+        if (read.truncated) truncated = true
+        return read.candidates
+      }
 
       if (kind === 'layout') {
         // No node search needed: the reference is a `layoutId` field, on
@@ -267,6 +289,16 @@ async function handler(request: Request): Promise<Response> {
     return Response.json({
       dependents,
       total: dependents.length,
+      /**
+       * Whether the scan read everything it needed to.
+       *
+       * The field a caller must consult before saying "nothing uses this".
+       * Absent on an older deployment, and every reader treats absent as
+       * INCOMPLETE for the reason `coverageOf` documents: the alternative is a
+       * delete confirmation promising safety on the strength of a field that
+       * was not there.
+       */
+      complete: !truncated,
       // Any dependent still holding a legacy name token: a rename breaks it.
       legacyCount: dependents.filter((item) => item.via.includes('name'))
         .length,

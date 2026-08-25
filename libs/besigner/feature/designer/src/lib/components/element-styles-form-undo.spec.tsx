@@ -242,19 +242,22 @@ describe('styles panel undo/redo re-sync (AGL-2486)', () => {
    */
   describe('a value stored as a NUMBER', () => {
     it('rolls a free-text field back', async () => {
-      // Gap: bare number × the theme spacing unit.
-      const node = seedNode({ gap: 2 })
+      // Flex Grow: a unitless number, and one of the fields still on free
+      // text because no theme scale answers it. Gap used to stand here; it
+      // is a spacing picker now (Zach 2026-08-25), and the preset case is
+      // covered by Corner Radius below.
+      const node = seedNode({ flexGrow: 2 })
       render(panel(node))
       await open('Flexbox & Grid')
-      expect(box('Gap').value).toBe('2')
+      expect(box('Flex Grow').value).toBe('2')
 
-      type('Gap', '4')
+      type('Flex Grow', '4')
       settle()
-      expect(live().sx).toEqual({ gap: 4 })
+      expect(live().sx).toEqual({ flexGrow: 4 })
 
       await undo()
-      expect(live().sx).toEqual({ gap: 2 })
-      expect(box('Gap').value).toBe('2')
+      expect(live().sx).toEqual({ flexGrow: 2 })
+      expect(box('Flex Grow').value).toBe('2')
     })
 
     it('rolls a theme-scale field back', async () => {
@@ -342,19 +345,19 @@ describe('styles panel undo/redo re-sync (AGL-2486)', () => {
     it('still keeps an in-progress edit on a numeric field', async () => {
       // The guard the seed must not have traded away: a field the author IS
       // typing in stays theirs, even though it now starts pristine.
-      const node = seedNode({ gap: 2, rowGap: 1 })
+      const node = seedNode({ flexGrow: 2, flexShrink: 1 })
       render(panel(node))
       await open('Flexbox & Grid')
 
-      type('Gap', '4')
+      type('Flex Grow', '4')
       act(() => {
         Aglyn.canvas.transact(() => {
-          live().sx = { ...(live().sx as object), rowGap: 5 } as any
+          live().sx = { ...(live().sx as object), flexShrink: 5 } as any
         })
       })
       await act(async () => undefined)
-      expect(box('Gap').value).toBe('4')
-      expect(box('Row Gap').value).toBe('5')
+      expect(box('Flex Grow').value).toBe('4')
+      expect(box('Flex Shrink').value).toBe('5')
     })
   })
 

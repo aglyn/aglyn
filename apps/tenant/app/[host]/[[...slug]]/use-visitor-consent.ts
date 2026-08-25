@@ -25,6 +25,7 @@
 // asserts it.
 import {
   hasGlobalPrivacyControl,
+  hostAsksAboutAdvertising,
   isExplicitConsentStatus,
   readStoredVisitorConsent,
   resolveConsentPosture,
@@ -171,18 +172,33 @@ export async function decideVisitorConsent(
     // paint, and the persistent "Your Privacy Choices" pill is the opt-out
     // surface. No banner, no notice: the Squarespace shape.
     return {
-      // ANALYTICS ONLY. The implied default carries no advertising grant, and
-      // the omission is the point: `advertising` absent means no, and a
-      // visitor defaulted in without being asked has answered no question
-      // about advertising. AGL-2402 briefly passed
-      // `advertising: hostAsksAboutAdvertising(host)` here; that was narrowed
-      // back on 2026-08-24 to agree with the published Cookie Policy.
+      // ANALYTICS **AND ADVERTISING** since 2026-08-25 — the AGL-2402 shape,
+      // restored deliberately once its precondition was actually met.
       //
-      // Belt AND braces: even if this call were handed `advertising: true`,
-      // `storeVisitorConsent` re-derives the grant against the STATUS through
-      // `advertisingGrantedByStatus`, which refuses `implied`. Neither layer
-      // is load-bearing alone.
-      stored: storeVisitorConsent(hostId, { status: 'implied', country }),
+      // AGL-2402 first passed `advertising: hostAsksAboutAdvertising(host)`
+      // here and it was narrowed back on 2026-08-24, for a good reason: the
+      // published Cookie Policy still said advertising cookies were "set only
+      // where you have allowed" (×4 in the per-cookie table) and "set only
+      // where you have consented" ("Your choices"), which contradicted its own
+      // "Marketing / advertising" paragraph. A policy that said both could not
+      // authorise the wider behaviour.
+      //
+      // Those five sentences were rewritten in the Cookie Policy master on
+      // 2026-08-25 so both documents now say the same thing, and the Privacy
+      // Policy already did. **The policy moved first, then this.** Reversing it
+      // means moving the policies back first — not editing this line alone.
+      //
+      // Still guarded twice, which is why this is safe to widen: this branch is
+      // only reached in the OPT-OUT posture (the EEA/UK/Gibraltar/outermost set
+      // and any undeterminable region stay opt-in and record no default at
+      // all), and `storeVisitorConsent` re-derives the grant from the STATUS
+      // via `advertisingGrantedByStatus`, which now accepts `implied` but still
+      // refuses `gpc-opt-out` and `declined`.
+      stored: storeVisitorConsent(hostId, {
+        status: 'implied',
+        country,
+        advertising: hostAsksAboutAdvertising(host),
+      }),
       posture,
       country,
     }

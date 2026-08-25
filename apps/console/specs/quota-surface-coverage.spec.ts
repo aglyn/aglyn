@@ -72,6 +72,13 @@ const USAGE_SURFACES = [
   'apps/console/components/billing/billing-register-allocations-card.component.tsx',
   'apps/console/components/quota-warnings-banner.component.tsx',
   'apps/console/components/templates/host-templates-card.component.tsx',
+  // The readout moved OUT of the card and into the page header (AGL-693),
+  // so the page is now a surface. The card stays on the list: it still owns
+  // the count and the `templatesPerHost` check the readout is derived from.
+  'apps/console/app/(app)/[orgSlug]/hosts/[host]/templates/page.tsx',
+  // AGL-693 gave these two keys their first standing readout.
+  'apps/console/app/(app)/[orgSlug]/hosts/[host]/screens/page.tsx',
+  'apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/page.tsx',
   'libs/plugins/commerce/src/lib/components/console/locations-card.component.tsx',
   'libs/plugins/commerce/src/lib/components/console/registers-card.component.tsx',
   'libs/plugins/commerce/src/lib/components/console/products-hub-card.component.tsx',
@@ -349,18 +356,27 @@ describe('AGL-2246 · every quota key is visible somewhere', () => {
     expect(DOCS_HELP_ANCHORS.emailCampaigns).toContain('#monthly-send-cap')
   })
 
-  it('templatesPerHost is surfaced on its own card AND on the plan grid', () => {
+  it('templatesPerHost is surfaced in the console AND on the plan grid', () => {
     // The specific regression this file was written for, pinned twice: the
-    // card is where an operator hits the cap, the grid is where a shopper
+    // console is where an operator hits the cap, the grid is where a shopper
     // compares plans. Either alone leaves half the gap.
+    //
+    // The two halves live in two files since AGL-693 — the CARD owns the count
+    // and the `templatesPerHost` check, the PAGE renders the readout in its
+    // header beside the create button (the Sites-page arrangement). Asserted
+    // separately rather than against a concatenation, so moving the readout
+    // somewhere that renders nothing still reddens.
     const card = SURFACE_TEXT.find(({ file }) =>
       file.endsWith('host-templates-card.component.tsx'),
+    )
+    const page = SURFACE_TEXT.find(({ file }) =>
+      file.endsWith('hosts/[host]/templates/page.tsx'),
     )
     const grid = SURFACE_TEXT.find(({ file }) =>
       file.endsWith('billing-plan-cards.component.tsx'),
     )
     expect(card?.text).toContain('templatesPerHost')
-    expect(card?.text).toContain('<QuotaReadoutComponent')
+    expect(page?.text).toContain('<QuotaReadoutComponent')
     // `entitlements.` and not the bare key: the grid also carries a COMMENT
     // naming `templatesPerHost`, and asserting the bare name passed while the
     // rendered row was deleted. Proven by mutating exactly that way.
@@ -371,9 +387,41 @@ describe('AGL-2246 · every quota key is visible somewhere', () => {
     // `checkQuota(undefined, …)` resolves the FREE tier, so a readout that
     // rendered a denominator before the org doc landed would tell a Business
     // customer their cap is 10.
+    //
+    // The page reads `quota.ready`, which is the card's `orgReady` published
+    // through `onQuota` — so the rule is unchanged and only the wire is new.
+    // Both halves are pinned: the card must still SEND the flag, and the page
+    // must still HONOUR it. Asserting only the page would pass on a card that
+    // had started publishing `ready: true` unconditionally.
     const card = SURFACE_TEXT.find(({ file }) =>
       file.endsWith('host-templates-card.component.tsx'),
     )?.text
-    expect(card).toMatch(/<QuotaReadoutComponent[\s\S]*?ready=\{orgReady\}/)
+    const page = SURFACE_TEXT.find(({ file }) =>
+      file.endsWith('hosts/[host]/templates/page.tsx'),
+    )?.text
+    expect(card).toMatch(/onQuota\?\.\(\{\s*ready: orgReady/)
+    expect(page).toMatch(/<QuotaReadoutComponent[\s\S]*?ready=\{quota\.ready\}/)
+  })
+
+  /**
+   * The two quota keys AGL-693 gave a standing surface for the first time.
+   *
+   * `screensPerHost` and `sharedLayoutsPerHost` were both enforced on create
+   * and readable nowhere — an author learned the cap by being refused, which
+   * is the exact failure this file exists to end. They are asserted with the
+   * same two-part rule as templates: the key is checked, and the readout is
+   * gated on the plan having resolved.
+   */
+  it('screensPerHost and sharedLayoutsPerHost have standing readouts', () => {
+    const screens = SURFACE_TEXT.find(({ file }) =>
+      file.endsWith('hosts/[host]/screens/page.tsx'),
+    )?.text
+    const layouts = SURFACE_TEXT.find(({ file }) =>
+      file.endsWith('hosts/[host]/layouts/page.tsx'),
+    )?.text
+    expect(screens).toContain("'screensPerHost'")
+    expect(screens).toMatch(/<QuotaReadoutComponent[\s\S]*?ready=\{orgReady\}/)
+    expect(layouts).toContain("'sharedLayoutsPerHost'")
+    expect(layouts).toMatch(/<QuotaReadoutComponent[\s\S]*?ready=\{orgReady\}/)
   })
 })

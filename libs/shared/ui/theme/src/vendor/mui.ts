@@ -45,6 +45,22 @@ declare module '@mui/material/Container' {
     variant?: 'vertical' | 'horizontal' | 'boxed'
   }
 }
+/**
+ * `<Typography variant="lede">` and its two siblings (AGL-1308).
+ *
+ * The `TypographyVariants` augmentation further down puts the three variants
+ * on the THEME; this is what lets a component ASK for one. Declaring the theme
+ * side alone is the half-fix that compiles the theme and then rejects every
+ * use of it — the same trap `TypographyVariantsOptions` without
+ * `TypographyVariants` sets, one level up.
+ */
+declare module '@mui/material/Typography' {
+  interface TypographyPropsVariantOverrides {
+    lede: true
+    bodyCompact: true
+    micro: true
+  }
+}
 declare module '@mui/material/ToggleButtonGroup' {
   interface ToggleButtonGroupPropsColorOverrides extends ColorPropOverrides {}
 }
@@ -162,6 +178,62 @@ declare module '@mui/material/styles' {
     svgFilled: IActionStates
     svgStroke: IActionStates
     text: Palette['text']
+  }
+
+  /**
+   * The brand's extra rungs on the font-weight scale (AGL-1308).
+   *
+   * MUI ships four — `fontWeightLight/Regular/Medium/Bold` — and the brand
+   * adds three above them: 600, 800 and 900, all real weights because Roboto
+   * Flex is a variable face covering 100–1000. Declaring them here is what
+   * makes `createTheme({ typography: { fontWeightSemiBold: 600 } })` compile;
+   * without the augmentation `TypographyVariantsOptions` is a closed shape and
+   * the theme itself does not typecheck.
+   *
+   * They are reachable the way the built-ins are: `@mui/system`'s `style()`
+   * retries a miss as `${prop}${capitalize(value)}`, so `fontWeight: 'black'`
+   * resolves to `typography.fontWeightBlack`.
+   *
+   * BOTH interfaces, and that is not belt-and-braces. `TypographyVariantsOptions`
+   * is what `createTheme` ACCEPTS and `TypographyVariants` is what the resolved
+   * `theme.typography` HANDS BACK — augmenting only the first compiles the
+   * theme and then fails every reader, which is the shape this was in.
+   *
+   * Optional on the options side, required on the resolved side: an override
+   * may omit it (MUI merges the default in), a reader may not have to check.
+   *
+   * ## And three SCALE variants
+   *
+   * `lede`, `bodyCompact` and `micro` — 17px, 13px and 11px with their line
+   * heights — exist because the built pages kept reaching for those sizes and,
+   * with nothing to ask for, wrote the pixels: /press alone carried 286 such
+   * literals. Full variant objects rather than bare sizes, so one pick brings
+   * the line height with it. Named for the JOB rather than the number, so the
+   * name survives a retune: a lede stays the lede if the brand moves it to
+   * 18px. `@mui/material/Typography` is augmented separately, above, so a
+   * component can ASK for one.
+   *
+   * ⚑ Declared in THIS file rather than beside the values in
+   * `console.theme.ts`, because module augmentation belongs with the rest of
+   * the vendor augmentations — and putting it here is what let it be added
+   * without touching a file another session was editing at the time.
+   */
+  interface TypographyVariantsOptions {
+    fontWeightSemiBold?: number
+    fontWeightExtraBold?: number
+    fontWeightBlack?: number
+    lede?: CSSProperties
+    bodyCompact?: CSSProperties
+    micro?: CSSProperties
+  }
+
+  interface TypographyVariants {
+    fontWeightSemiBold: number
+    fontWeightExtraBold: number
+    fontWeightBlack: number
+    lede: CSSProperties
+    bodyCompact: CSSProperties
+    micro: CSSProperties
   }
 
   interface ZIndex {

@@ -172,54 +172,77 @@ export function analyticsGrantedByStatus(
 }
 
 /**
- * Whether a status can carry an advertising grant at all (AGL-1649; widened
- * by AGL-2402 and NARROWED BACK by AGL-1649 on 2026-08-24).
+ * Whether a status can carry an advertising grant at all (AGL-1649; widened by
+ * AGL-2402, narrowed back on 2026-08-24, widened again on 2026-08-25).
  *
- * NARROWER than {@link analyticsGrantedByStatus} by one status, and that one
- * is the whole point: `implied` grants analytics (the opt-out posture
- * defaults a visitor in) and must never grant advertising. Being defaulted
- * into analytics in an opt-out region is not a visitor answering a question
- * about advertising, so an implied state grants the first and denies the
- * second.
+ * The SAME status set as {@link analyticsGrantedByStatus}, and the agreement is
+ * deliberate: `implied` grants both. Being defaulted in where the law permits a
+ * default is one posture, applied to both categories, and the visitor's opt-out
+ * surface is the same one.
  *
- * ## Why this was widened, and why it is narrow again
+ * ## Why it moved three times, because the next person will move it again
  *
- * AGL-2402 (`a410d8785`) made `implied` qualify, on the reasoning that the
- * rule is safe by geography: an `implied` record can only ever be written in
- * the OPT-OUT posture, because {@link resolveConsentPosture} puts the EU 27,
+ * AGL-2402 (`a410d8785`) first made `implied` qualify, on the reasoning that
+ * the rule is safe by GEOGRAPHY: an `implied` record can only ever be written
+ * in the OPT-OUT posture, because {@link resolveConsentPosture} puts the EU 27,
  * the EEA/EFTA three, the UK, Gibraltar, the EU outermost regions AND any
  * visitor whose region cannot be determined into opt-in, where
- * `decideVisitorConsent` records no default at all. That geographic guarantee
- * is real and is still asserted in `visitor-consent-advertising.spec.ts`.
+ * `decideVisitorConsent` records no default at all. That half was always sound
+ * and is still asserted in `visitor-consent-advertising.spec.ts`.
  *
- * What did not hold was the second half of the argument. That commit's
- * message stated the published Cookie Policy had been updated FIRST, so the
- * wider behaviour would not outrun its disclosure. Read against the live page
- * on 2026-08-24 the disclosure is SPLIT: the "Marketing / advertising"
- * paragraph does describe the opt-out posture, but the per-cookie table says
- * `_gac`, `_gcl_au`, `_fbp` and `_fbc` are "set only where you have allowed
- * advertising cookies", and "Your choices" says advertising cookies "are set
- * only where you have consented". A policy that says both cannot authorise
- * the wider behaviour.
+ * The half that failed was DISCLOSURE. That commit stated the published Cookie
+ * Policy had been updated first; read against the live page on 2026-08-24 it
+ * said two different things — its "Marketing / advertising" paragraph described
+ * the opt-out posture, while the per-cookie table said `_gac`, `_gcl_au`,
+ * `_fbp` and `_fbc` were "set only where you have allowed advertising cookies"
+ * and "Your choices" repeated it. A policy that says both cannot authorise the
+ * wider behaviour, so the code was narrowed to the strictest thing it said.
  *
- * So the behaviour is narrow again: it agrees with the strictest thing the
- * published policy says, needs no republication, and is the conservative
- * position for launch. If opt-out advertising is wanted later, the policy
- * goes first and this function follows — not the other way round.
+ * On 2026-08-25 the master moved for real, in the right order: those five
+ * opt-in-only sentences were rewritten in the Cookie Policy gdoc, and only then
+ * did this function follow. The Privacy Policy needed nothing — it already said
+ * *"With your consent, we do 'share' … for cross-context behavioral
+ * advertising"*, named Google and Meta, and described the EU/UK-ask-first vs.
+ * elsewhere-from-first-visit split. The flat "we do not sell or share" denial
+ * that the narrowing reasoned from was a paraphrase in `docs/ANALYTICS.md`, not
+ * a sentence in the document.
  *
- * A `true` here is necessary, never sufficient: the host must ALSO have
- * opted into asking (see {@link hostAsksAboutAdvertising}), and the visitor
- * must ALSO have answered yes to this specific category.
+ * ⛔ Re-narrowing is a POLICY act, not a code change. Move the published
+ * masters first and let this follow — never the other way round. Nine surfaces
+ * describe this rule to a human and `consent-advertising-copy-drift.spec.ts`
+ * fails on all of them the moment the two disagree.
+ *
+ * A `true` here is necessary, never sufficient: the host must ALSO have opted
+ * into asking (see {@link hostAsksAboutAdvertising}), and a refusal — declined,
+ * opted out, or a GPC signal — outranks the default everywhere.
  */
 export function advertisingGrantedByStatus(
   status: VisitorConsentStatus,
 ): boolean {
-  // Fails CLOSED: an exact match against the single granting status, so any
+  // Fails CLOSED: an exact match against the granting statuses, so any
   // unknown, absent or future status answers `false`. `strictNullChecks` is
   // off repo-wide, which means `status` can be `null`/`undefined` at runtime
   // despite the type — an equality test denies those, an exclusion list
   // (`status !== 'declined' && …`) would have granted them.
-  return status === 'accepted'
+  //
+  // `implied` GRANTS from 2026-08-25, and the policy went first (Zach's call,
+  // executed in that order). `decideVisitorConsent` only ever writes `implied`
+  // in the OPT-OUT posture — `resolveConsentPosture` keeps the EU 27, the
+  // EEA/EFTA three, the UK, Gibraltar, the EU outermost regions AND any visitor
+  // whose region cannot be determined in opt-in, where no default is recorded at
+  // all — so this widens advertising to the rest of the world only, and the
+  // geographic guarantee `visitor-consent-advertising.spec.ts` asserts is
+  // untouched. `gpc-opt-out` and `declined` still answer `false`.
+  //
+  // The disclosure this rests on is now consistent in BOTH masters, which is
+  // what the 2026-08-24 narrowing was waiting for: the Privacy Policy already
+  // said *"With your consent, we do 'share' … Where the law requires us to ask
+  // first — the EU, the UK, and anywhere we cannot determine your region — it
+  // does not load until you accept. Elsewhere it runs from your first visit"*,
+  // and the Cookie Policy's two remaining opt-in-only sentences (the ×4
+  // per-cookie note and the "Your choices" bullet) were rewritten to match it
+  // the same day. Re-narrow this ONLY by moving the policies back first.
+  return status === 'accepted' || status === 'implied'
 }
 
 /**
@@ -365,10 +388,11 @@ export interface StoredVisitorConsent {
    * is not "said yes". Reading it the other way would hand Google a basis
    * for every visitor who ever clicked Allow on an analytics-only banner.
    *
-   * Only an EXPLICIT accept can carry one, on a site whose host turned the
-   * question on. An implied default never does, because being defaulted into
-   * analytics in an opt-out region is not a visitor answering a question
-   * about advertising. See {@link advertisingGrantedByStatus}.
+   * Carried by an explicit accept, and — since 2026-08-25 — by the opt-out
+   * posture's implied default, on a site whose host turned the question on.
+   * Never by a refusal: declined, opted out and GPC all deny it everywhere.
+   * See {@link advertisingGrantedByStatus} for the order the policy and the
+   * code move in.
    */
   advertising?: boolean
   /** ISO country at decision time, when known — the `implied,us` shape. */

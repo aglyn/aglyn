@@ -24,8 +24,10 @@ import {
   buildFontFamilyChoices,
   buildFontSizeScaleOptions,
   buildFontWeightScaleOptions,
+  buildGapChoices,
   buildShadowChoices,
   buildStyleThemeScales,
+  buildTypographyVariantChoices,
   buildZIndexScaleOptions,
 } from './theme-scale-options'
 
@@ -198,6 +200,148 @@ describe('preset choices (AGL-2486)', () => {
       value: 'none',
       label: 'No shadow',
     })
+  })
+
+  it('puts gaps on the theme spacing ladder, like margin and padding', () => {
+    const choices = buildGapChoices(theme as any)
+    expect(choices.length).toBeGreaterThan(0)
+    // Stored as the multiple MUI's own `createUnaryUnit(theme, 'spacing')`
+    // resolves — the same arithmetic the box styler's margins already use.
+    for (const choice of choices) {
+      expect(typeof choice.value).toBe('number')
+      expect(resolve({ gap: choice.value }).gap).toBe(
+        theme.spacing(choice.value as number),
+      )
+    }
+    // A host that retunes its unit moves every gap with it.
+    const wide = createTheme({ spacing: 10 })
+    expect(
+      styleFunctionSx({ theme: wide, sx: { gap: 2 } } as any),
+    ).toMatchObject({ gap: '20px' })
+  })
+
+  it('offers a host’s own type rungs, not just MUI’s variants', () => {
+    // Aglyn's theme carries lede/bodyCompact/micro for the 17/13/11px steps
+    // MUI has no name for. Before they could be OFFERED, a page wanting 11px
+    // had no choice but to write the pixels — /press carried 165 of them.
+    const branded = createTheme({
+      typography: {
+        lede: { fontSize: '1.0625rem', fontWeight: 400 },
+        bodyCompact: { fontSize: '0.8125rem', fontWeight: 400 },
+        micro: { fontSize: '0.6875rem', fontWeight: 400 },
+      } as any,
+    })
+    const sizes = buildFontSizeScaleOptions(branded as any)
+    const values = sizes.map((o) => o.value)
+    expect(values).toContain('micro.fontSize')
+    expect(values).toContain('bodyCompact.fontSize')
+    expect(values).toContain('lede.fontSize')
+    // Named for a human, and the STORED token path resolves through the theme.
+    expect(sizes.find((o) => o.value === 'micro.fontSize')?.label).toBe('Micro')
+    expect(sizes.find((o) => o.value === 'bodyCompact.fontSize')?.label).toBe(
+      'Body compact',
+    )
+    expect(
+      styleFunctionSx({
+        theme: branded,
+        sx: { fontSize: 'micro.fontSize' },
+      } as any),
+    ).toMatchObject({ fontSize: '0.6875rem' })
+    // MUI's own variants keep their curated order ahead of the extras.
+    expect(values[0]).toBe('h1.fontSize')
+    // And they show up as whole Text Styles too, not only as sizes.
+    const styles = buildTypographyVariantChoices(branded as any).map(
+      (o) => o.value,
+    )
+    expect(styles).toContain('micro')
+    expect(styles).toContain('lede')
+  })
+
+  it('discovers a host’s own weight tokens instead of MUI’s four', () => {
+    const branded = createTheme({
+      typography: {
+        fontWeightSemiBold: 600,
+        fontWeightExtraBold: 800,
+        fontWeightBlack: 900,
+      } as any,
+    })
+    const options = buildFontWeightScaleOptions(branded as any)
+    const tokens = options.filter((o) => String(o.value).startsWith('fontWeight'))
+    const values = tokens.map((o) => o.value)
+    expect(values).toContain('fontWeightExtraBold')
+    expect(values).toContain('fontWeightBlack')
+    // Light → heavy, not object-key order.
+    const weights = tokens.map((o) => Number(o.hint))
+    expect(weights).toEqual([...weights].sort((a, b) => a - b))
+    // Named for a human, and the stored token resolves through the theme.
+    expect(tokens.find((o) => o.value === 'fontWeightExtraBold')?.label).toBe(
+      'Extra bold (theme)',
+    )
+    expect(
+      styleFunctionSx({
+        theme: branded,
+        sx: { fontWeight: 'fontWeightExtraBold' },
+      } as any),
+    ).toMatchObject({ fontWeight: 800 })
+    // The short form MUI's own docs use has to resolve too.
+    expect(
+      styleFunctionSx({ theme: branded, sx: { fontWeight: 'extraBold' } } as any),
+    ).toMatchObject({ fontWeight: 800 })
+  })
+
+  it('stores shadows as theme ELEVATIONS, not bespoke CSS', () => {
+    const choices = buildShadowChoices(theme as any)
+    const elevations = choices.filter((c) => typeof c.value === 'number')
+    expect(elevations.length).toBeGreaterThan(0)
+    // The load-bearing claim: what is stored resolves through the host's own
+    // ladder, so retuning `theme.shadows` moves every element that used it.
+    for (const choice of elevations) {
+      expect(resolve({ boxShadow: choice.value }).boxShadow).toBe(
+        theme.shadows[choice.value as number],
+      )
+    }
+    // The row still SHOWS the shadow it will draw, or the menu is unreadable.
+    for (const choice of elevations) {
+      expect(choice.preview).toBe(theme.shadows[choice.value as number])
+    }
+  })
+
+  it('keeps the shadow menu short enough to read', () => {
+    // The whole reason this control did not use `theme.shadows` before was
+    // that 25 near-identical elevations is a worse menu than four that
+    // visibly differ. Curating indices keeps the menu AND the token.
+    expect(buildShadowChoices(theme as any).length).toBeLessThan(9)
+    expect(theme.shadows.length).toBe(25)
+  })
+
+  it('falls back to literal shadows when a theme has no ladder', () => {
+    const choices = buildShadowChoices({ typography: {} } as any)
+    expect(choices[0]).toEqual({ value: 'none', label: 'No shadow' })
+    expect(choices.length).toBeGreaterThan(1)
+    for (const choice of choices.slice(1)) {
+      expect(typeof choice.value).toBe('string')
+    }
+  })
+
+  it('offers whole text styles that resolve to the theme variant', () => {
+    const choices = buildTypographyVariantChoices(theme as any)
+    const h2 = choices.find((c) => c.value === 'h2')
+    expect(h2).toBeDefined()
+    expect(h2?.label).toBe('Heading 2')
+    // One pick has to bring the whole variant — size AND weight — or it is
+    // just another single-property field wearing a better name.
+    const applied = resolve({ typography: 'h2' })
+    expect(applied.fontSize).toBe(theme.typography.h2.fontSize)
+    expect(applied.fontWeight).toBe(theme.typography.h2.fontWeight)
+  })
+
+  it('names what a text style resolves to in THIS theme', () => {
+    const branded = createTheme({ typography: { h2: { fontSize: '40px', fontWeight: 800 } } })
+    const h2 = buildTypographyVariantChoices(branded as any).find(
+      (c) => c.value === 'h2',
+    )
+    expect(h2?.hint).toContain('40px')
+    expect(h2?.hint).toContain('800')
   })
 
   it('leads the font list with the SITE theme’s own faces', () => {

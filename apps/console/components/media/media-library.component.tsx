@@ -2624,13 +2624,40 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           : null
       }
       if (reference.kind === 'entry') {
-        const base = buildRoute(Route.HOST_CONTENT, {
+        /*
+          Straight to the ENTRY that holds the asset (AGL-2498), not to its
+          collection.
+
+          This used to be `…/content?collection=<id>`, which was as close as
+          it could get: the entry had no address of its own, so "Used on"
+          could only open the right list and leave the reader to find the row.
+          Both halves are path segments now, and the scan already carries both
+          (`collectionId` and the entry's own `id`), so the link lands on the
+          document the asset is actually in.
+
+          A reference with no collection still cannot be addressed — nothing
+          knows which list it belongs to — so it falls back to the manager.
+          The ROW is the safety answer; the link is the convenience.
+        */
+        if (reference.collectionId) {
+          return buildRoute(Route.CONTENT_ENTRY_DETAILS, {
+            orgSlug,
+            host: reference.hostSubdomain,
+            // The scan carries the collection's document ID, and the route
+            // segment is its SLUG. That resolves: the content scope accepts an
+            // id and rewrites the address to the slug form, precisely so links
+            // like this one — and every `…/content/{id}` written before the
+            // segment changed — keep working. Teaching the scan to carry the
+            // slug as well would buy one avoided redirect for a second field
+            // that can disagree with the first.
+            collectionSlug: reference.collectionId,
+            entryId: reference.id,
+          })
+        }
+        return buildRoute(Route.HOST_CONTENT, {
           orgSlug,
           host: reference.hostSubdomain,
         })
-        return reference.collectionId
-          ? `${base}?collection=${encodeURIComponent(reference.collectionId)}`
-          : base
       }
       return null
     },

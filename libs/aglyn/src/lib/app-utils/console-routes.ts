@@ -140,6 +140,45 @@ export enum Route {
   AUTH_VERIFY_EMAIL = '/verify-email',
   HOST_LIST = '/[orgSlug]/hosts',
   HOST_CONTENT = '/[orgSlug]/hosts/[host]/content',
+  // The collection is a PATH SEGMENT, not `?collection=` (AGL-2498).
+  //
+  // It was a query parameter because the manager began as one page with a
+  // Select on it, and the Select was the only thing that knew which
+  // collection you were looking at. That is the wrong owner: which collection
+  // is open is the page's IDENTITY, not a filter applied to it. As a
+  // parameter it could be dropped by any link that rebuilt the query, it
+  // sorted below `?tab=` in a URL nobody could read, and — the reason this
+  // moved — it left the entry beneath it with nowhere to hang: an entry is
+  // addressed `collection + entry`, and half of that address cannot live in
+  // the path while the other half lives in the query.
+  //
+  // The segment is the collection's SLUG, not its document id, and that is a
+  // correction rather than a preference. Collection document ids are not
+  // uniform — the seeded ones were given readable ids (`blog`, `changelog`)
+  // and everything created since gets a `createResourceUid`, so routing by id
+  // produced `/content/changelog` beside `/content/QgXv7lU_rG` on ONE site.
+  // Zach: "one is using the id in the url while others use a slug".
+  //
+  // A slug is the right key on the merits too: it is unique per host and kind
+  // (claimed in a transaction by /api/hosts/collections), it is the
+  // collection's own public address, and it is the thing an author recognises.
+  // A document id is still ACCEPTED and rewritten to the slug form, so no
+  // existing link breaks.
+  //
+  // `?collection=` still resolves the same way (AGL-845's DAM deep links are
+  // in the wild).
+  HOST_CONTENT_COLLECTION = '/[orgSlug]/hosts/[host]/content/[collectionSlug]',
+  // One entry's detail page (AGL-2498). `entries` is a LITERAL segment rather
+  // than `content/[collectionId]/[entryId]`, and it is load-bearing twice
+  // over: it mirrors the Firestore path the entry actually lives at
+  // (`collections/{c}/entries/{e}`), and it keeps the id space clear so a
+  // later sibling — a collection's own settings page, say — cannot be
+  // shadowed by an entry that happens to be called the same thing.
+  //
+  // `[entryId]` also carries the sentinel `new`, which is a draft that has no
+  // document yet. Entry ids come from `createResourceUid`, so nothing real
+  // can collide with it.
+  CONTENT_ENTRY_DETAILS = '/[orgSlug]/hosts/[host]/content/[collectionSlug]/entries/[entryId]',
   MANAGE_TEAM = '/[orgSlug]/team',
   MANAGE_TEAM_MEMBER = '/[orgSlug]/team/[uid]',
   // Support is an UMBRELLA, not a page (AGL-1158). The two channels beneath
@@ -296,6 +335,28 @@ export interface RoutePayload {
   [Route.ORG_SETTINGS]: { orgSlug: string }
   [Route.HOST_LIST]: { orgSlug: string }
   [Route.HOST_CONTENT]: { orgSlug: string; host: string }
+  [Route.HOST_CONTENT_COLLECTION]: {
+    orgSlug: string
+    host: string
+    /** The collection's slug — see the route. A document id also resolves. */
+    collectionSlug: string
+  }
+  [Route.CONTENT_ENTRY_DETAILS]: {
+    orgSlug: string
+    host: string
+    collectionSlug: string
+    /**
+     * An entry id, or the literal `new` for a draft with no document yet.
+     *
+     * An ID here while the collection above is a SLUG, deliberately. An entry
+     * slug is unique only WITHIN its collection and it is editable on the
+     * detail page — so routing by it would move the console address out from
+     * under someone in the middle of typing in the slug field, and a draft has
+     * no slug at all to route by. The entry id is also what every activity
+     * record and the DAM's "Used on" list already carry.
+     */
+    entryId: string
+  }
   [Route.MANAGE_TEAM]: { orgSlug: string }
   [Route.MANAGE_TEAM_MEMBER]: { orgSlug: string; uid: string }
   [Route.MANAGE_SUPPORT]: { orgSlug: string }

@@ -59,19 +59,19 @@ Built-in Aglyn analytics are unaffected by all of this: the pageview beacon is
   assignment is remembered only for the visit (sessionStorage) instead of across
   visits.
 - **Advertising storage** (`ad_storage`, `ad_user_data`, `ad_personalization`),
-  on sites that have turned the advertising question on. **Every visitor needs
-  an explicit yes**, everywhere, in both consent modes. Analytics can be granted
-  by implication where the law allows it — advertising never is, and no amount
-  of not-objecting adds up to a yes:
+  on sites that have turned the advertising question on. **Where it starts
+  depends on the visitor's region**, and it is the same split analytics uses:
   - **Prior-consent regions.** The EU/EEA, the UK, and any visitor whose region
     cannot be determined see the banner first, and advertising storage is denied
-    until they tick that specific box.
-  - **Everywhere else.** Being defaulted into analytics in an opt-out region is
-    not an answer to a question about advertising, so an *implied* state grants
-    analytics and denies advertising. Those visitors see no banner, so the way
-    they say yes is **Your Privacy Choices**, where the advertising checkbox is
-    offered whenever your site asks the question. Until one is ticked there,
-    advertising storage stays denied.
+    until they tick that specific box. Not objecting is never a yes here.
+  - **Everywhere else.** Advertising runs from their first visit, alongside
+    analytics, on the same implied basis — these visitors see no banner, and
+    **Your Privacy Choices** is where they turn it off. That is the opt-out
+    posture the Privacy Policy and the Cookie Policy both describe.
+  - A visitor who **declines**, opts out, or arrives with a **Global Privacy
+    Control** signal gets no advertising storage anywhere in the world. A
+    refusal outranks the regional default; the default only ever fills a
+    silence.
   - A visitor who clicked **Allow** on an analytics-only banner before you
     turned the question on reads as *never asked*, not as a yes. They see the
     new question the next time they are asked.

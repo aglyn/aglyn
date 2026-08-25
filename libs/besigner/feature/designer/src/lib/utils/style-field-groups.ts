@@ -634,6 +634,20 @@ function styleFieldGroups(
       $id: 'typography',
       label: 'Typography',
       fields: [
+        // Text Style leads the group because it is the one pick that can be
+        // RIGHT on its own (Zach 2026-08-25). Every field under it sets a
+        // single property, so matching the theme by hand meant five correct
+        // picks in a row; `typography: 'h2'` applies the face, size, weight,
+        // line height, letter spacing and casing the host defined, and keeps
+        // following them when the host retunes its scale. The fields below
+        // still work — they now read as adjustments ON a text style rather
+        // than as the only way to describe one.
+        presetField(
+          'typography',
+          'Text Style',
+          'A complete text style from the theme — sets face, size, weight and spacing together. Adjust individual properties below.',
+          options?.themeScales?.typographyVariant ?? [],
+        ),
         // The face comes FIRST, and it is a picker (AGL-2486, Zach
         // 2026-08-23: *"font family should be a selection and then option
         // for custom"*). It was a free-text box carrying the advice
@@ -695,6 +709,20 @@ function styleFieldGroups(
           'Text Decoration',
           'A line under, over or through the text.',
           ['none', 'underline', 'overline', 'line-through'],
+          half,
+        ),
+        // Italic for a whole ELEMENT (Zach 2026-08-25). It existed only in
+        // the inline text editor, which styles a selection inside a run — so
+        // there was no way to italicise a caption, a label or a quote block
+        // as a whole without hand-writing sx. `fontStyle` is one of MUI's
+        // theme-backed typography keys and was the last one this group did
+        // not offer.
+        selectField(
+          'fontStyle',
+          'Font Style',
+          'Italic or upright.',
+          ['normal', 'italic', 'oblique'],
+          half,
         ),
       ],
     },
@@ -854,20 +882,40 @@ function styleFieldGroups(
  * Every property both sections carried is still here; the whole point is
  * that nothing had to be dropped to stop saying it twice.
  */
-export function buildFlexGridGroup(): StyleFieldGroup {
+export function buildFlexGridGroup(
+  options?: StyleFieldGroupOptions,
+): StyleFieldGroup {
   const group = withFieldClear(
     withStyleFieldHelp({
       $id: 'flex-grid',
       label: 'Flexbox & Grid',
       fields: [
-        // Container: the gutters between children.
-        textField(
+        // Container: the gutters between children, on the SPACING ladder
+        // (Zach 2026-08-25). These were free-text boxes, which reads as a CSS
+        // length question and gets answered with one — but MUI runs all three
+        // through the same `createUnaryUnit(theme, 'spacing')` as margin and
+        // padding, so `2` follows the host's unit and `'16px'` does not. Same
+        // rungs the box styler already offers, so the two controls agree.
+        presetField(
           'gap',
           'Gap',
           'Space between the children, in both directions.',
+          options?.themeScales?.gap ?? [],
         ),
-        textField('rowGap', 'Row Gap', 'Space between rows.', half),
-        textField('columnGap', 'Column Gap', 'Space between columns.', half),
+        presetField(
+          'rowGap',
+          'Row Gap',
+          'Space between rows.',
+          options?.themeScales?.gap ?? [],
+          half,
+        ),
+        presetField(
+          'columnGap',
+          'Column Gap',
+          'Space between columns.',
+          options?.themeScales?.gap ?? [],
+          half,
+        ),
         // Container: the grid it defines for them.
         textField(
           'gridTemplateColumns',

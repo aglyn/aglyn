@@ -218,19 +218,18 @@ describe('the advertising-tag gate', () => {
   })
 
   describe('no vendor script exists without an advertising grant', () => {
-    it('(a) an IMPLIED-consent visitor — the US default — gets nothing', async () => {
-      // `implied` grants ANALYTICS. That is the whole trap: a visitor
-      // defaulted in outside the prior-consent regions has answered no
-      // question about advertising, and this is the case that would go green
-      // by accident if the gate reused `isAnalyticsAllowed`.
+    it('(a) an IMPLIED-consent visitor — the US default — NOW gets the tags', async () => {
+      // ⚑ This case has flipped twice; read the history before flipping it a
+      // third time. AGL-2402 granted, 2026-08-24 narrowed back (the published
+      // Cookie Policy still said advertising cookies were "set only where you
+      // have allowed"), 2026-08-25 restored once BOTH legal masters agreed —
+      // the Privacy Policy already described the opt-out posture and the
+      // Cookie Policy's five opt-in-only sentences were rewritten that day.
       //
       // `OUR_HOST` DOES ask about advertising (`consent: { advertising: true
-      // }`), and `advertising: true` is passed IN, so every other condition
-      // in `advertisingGrantedByRecord` is satisfied and only the STATUS rule
-      // is left holding the line. Both of those matter: between AGL-2402 and
-      // 2026-08-24 this case was rewritten to omit them, which left it
-      // passing under the widened rule AND the narrow one — a case that could
-      // not fail either way and pinned nothing.
+      // }`) and `advertising: true` is passed IN, so this asserts the full
+      // chain: the status rule permits it, the host asked, the caller asked,
+      // and the vendor script actually reaches the DOM.
       const stored = storeVisitorConsent(HOST_ID, {
         status: 'implied',
         country: 'US',
@@ -238,10 +237,30 @@ describe('the advertising-tag gate', () => {
       })
       expect(stored.analytics).toBe(true)
       // The re-derivation, asserted before the render so a failure here says
-      // "the engine granted it" rather than "the DOM was empty".
-      expect(stored.advertising).toBe(false)
+      // "the engine refused it" rather than "the DOM was empty".
+      expect(stored.advertising).toBe(true)
 
       await renderGate(OUR_HOST)
+      expect(vendorScripts().length).toBeGreaterThan(0)
+    })
+
+    it('(a1) …but NOT on a host that never asked about advertising', async () => {
+      // The other half of the widened rule, and the one that keeps it from
+      // becoming "implied means yes everywhere". The status now permits a
+      // grant, so `hostAsksAboutAdvertising` is what is left holding the line
+      // for a Host whose owner never turned the question on. Same `$id` as the
+      // stored record, so the ONLY difference from case (a) is `consent`.
+      const NEVER_ASKED = { ...OUR_HOST, consent: {} }
+      const stored = storeVisitorConsent(HOST_ID, {
+        status: 'implied',
+        country: 'US',
+        advertising: true,
+      })
+      // The record itself still says no, because `hostAsksAboutAdvertising` is
+      // re-checked at read time and this host does not ask.
+      expect(stored.analytics).toBe(true)
+
+      await renderGate(NEVER_ASKED)
       expect(vendorScripts()).toHaveLength(0)
     })
 
@@ -249,9 +268,10 @@ describe('the advertising-tag gate', () => {
       // Hand-edited records, written straight to localStorage so nothing
       // sanitises them on the way in. The engine re-derives the grant against
       // the STATUS on every read, so the gate's answer must not depend on the
-      // file on disk being honest — `implied` included, alongside every
-      // status that must always refuse.
-      for (const status of ['implied', 'declined', 'opted-out', 'gpc-opt-out']) {
+      // file on disk being honest. ⚑ `implied` LEFT this list on 2026-08-25 —
+      // it is a real basis now; these are the statuses that must ALWAYS refuse
+      // however the record is doctored.
+      for (const status of ['declined', 'opted-out', 'gpc-opt-out']) {
         window.localStorage.setItem(
           visitorConsentStorageKey(HOST_ID),
           JSON.stringify({

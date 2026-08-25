@@ -29,10 +29,36 @@ the `_gl` linker is honoured per-tag: two ids would give a visitor a fresh
 `client_id` on the domain hop. Separate the surfaces in reports with the
 built-in **Hostname** dimension.
 
-**Google Signals is OFF and ads personalization is 0/307 regions on both.
-Keep it that way** — the live privacy policy's flat "we do not sell or share"
-denial depends on it, and the server-side sender asserts `non_personalized_ads`
-per hit so a dashboard change cannot quietly opt revenue into ads.
+⛔ **THE SENTENCE THAT USED TO BE HERE WAS WRONG, AND IT MISLED A WHOLE SESSION
+(2026-08-25).** It read: *"Google Signals is OFF and ads personalization is 0/307
+regions on both. Keep it that way — the live privacy policy's flat 'we do not
+sell or share' denial depends on it."*
+
+**The Privacy Policy has no such flat denial and never did.** Read from the
+master on 2026-08-25, it says: *"We do not 'sell' personal information **for
+money**. With your consent, we do **'share'** personal information for
+cross-context behavioral advertising"* — it names Google and Meta, describes the
+EU/UK opt-in vs. rest-of-world opt-out split, and documents "Your Privacy
+Choices" and Global Privacy Control. It is a **sale** denial, not a **share**
+denial. Anyone reasoning from the old sentence will conclude retargeting is
+legally blocked when it is not. ⚑ Read the master, not this file's summary of it.
+
+**Current state, verified 2026-08-25:** Google Signals **OFF** (leave it — that
+is cross-device identity on signed-in Google users, a bigger step than cookie
+retargeting and nothing here needs it). Ads personalization is now **307 of 307
+regions**, opened by Zach. The server-side sender still asserts
+`non_personalized_ads` per hit.
+
+**The AGL-1559 posture line "no Google Ads link" expired on 2026-08-20** — the
+link to account `841-500-9958` exists, with **Personalized Advertising ON**, and
+**ads personalization is now 307 of 307 regions** (opened 2026-08-25). GA4
+audiences therefore export to Google Ads. That is intended: it is what makes
+Google remarketing possible at all, and both legal masters describe it.
+
+Google Signals remains **off** and should stay off — it is cross-device identity
+built on signed-in Google users, a materially bigger step than cookie
+retargeting, and nothing in the current setup needs it. Turning it on is a fresh
+decision, not a continuation of this one.
 
 Cross-domain measurement is configured on the tag (Contains `aglyn.com`, which
 matches `app.aglyn.com` too; plus legacy `aglyn.io`), and `aglyn.com` is listed
@@ -96,6 +122,34 @@ skipped, and skipping it is silent: a visitor going console → docs → console
 would post a self-referral that overwrites the real acquisition source on
 exactly the journeys the docs instrumentation exists to measure. Adding a
 redundant `docs.aglyn.com` row would have been the other way to get this wrong.
+
+⛔ **`stripe.com` IS NOT ON THE UNWANTED-REFERRAL LIST, AND CHECKOUT LEAVES THE
+SITE.** Found 2026-08-25. The list is a single `Referral domain contains
+aglyn.com`, which covers every first-party subdomain and nothing else. But
+embedded checkout (`release_native_checkout`) is **`{"enabled": false,
+"rolloutPercent": 0}` in LIVE Remote Config with no conditional overrides** — so
+both the storefront cart and the console's own plan purchase still redirect to
+**`checkout.stripe.com`** and come back.
+
+That return is a cross-domain referral. GA4 starts a **new session with
+source/medium `stripe.com / referral`**, which overwrites the acquisition source
+— so the `purchase` key event, and therefore the Google Ads `purchase`
+conversion imported from it, lands on `stripe.com / referral` instead of the ad
+click that paid for it. **Every paid conversion is misattributed, and the
+symptom is a campaign that looks like it produced no revenue.**
+
+It would have bitten on **2026-09-01**, when commerce opens and `purchase` first
+carries money.
+
+✅ **FIXED 2026-08-25** — `Referral domain contains stripe.com` now sits beside
+`aglyn.com` in the unwanted-referral list, and the panel was re-opened after
+saving to confirm it stuck. ⛔ **If anyone ever "tidies" that list, the bug comes
+straight back, and it is invisible** until someone asks why paid campaigns show
+no revenue.
+
+⚑ The panel is a cross-origin iframe inside GA4 that swallows agent clicks — but
+the same tag opens **top-level** at `tagmanager.google.com` → **Google tags** tab
+→ the tag by id, where everything works normally. Tracked on AGL-2193.
 
 One consequence of the cross-domain list worth knowing before reading reports:
 the domains in it are **excluded from enhanced measurement's outbound-click
@@ -753,20 +807,31 @@ switched the category back off, decays to denied), and advertising is clamped
 to analytics — `ad_storage: 'granted'` alongside `analytics_storage: 'denied'`
 is not a state this tool can reach.
 
-**The rule was wider for three days, 2026-08-21 to 2026-08-24.** AGL-2402
-(`a410d8785`) made the opt-out posture's `implied` default carry advertising,
-arguing it was safe by geography — an `implied` record can only ever be
-written outside the prior-consent regions, which is true and is still asserted
-in `visitor-consent-advertising.spec.ts`. What did not hold was the disclosure
-half of the argument. That commit stated the published Cookie Policy had been
-updated first; read against the live page, the policy says two different
-things — its "Marketing / advertising" paragraph does describe the opt-out
-posture, but the per-cookie table says `_gac`, `_gcl_au`, `_fbp` and `_fbc` are
-"set only where you have allowed advertising cookies", and "Your choices"
-repeats it. The behaviour was narrowed back to agree with the strictest
-published statement. Revisiting opt-out advertising means republishing the
-policy FIRST, and `consent-advertising-copy-drift.spec.ts` is the lock that
-makes the copy move with the rule in either direction.
+**The status set has moved three times, and the ORDER is the lesson.** AGL-2402
+(`a410d8785`, 2026-08-21) made the opt-out posture's `implied` default carry
+advertising, arguing it was safe by geography — an `implied` record can only
+ever be written outside the prior-consent regions, which is true and is still
+asserted in `visitor-consent-advertising.spec.ts`. What did not hold was the
+disclosure half. That commit stated the published Cookie Policy had been updated
+first; read against the live page it said two different things — its "Marketing
+/ advertising" paragraph described the opt-out posture, but the per-cookie table
+said `_gac`, `_gcl_au`, `_fbp` and `_fbc` are "set only where you have allowed
+advertising cookies", and "Your choices" repeated it. So on **2026-08-24** the
+behaviour was narrowed back to agree with the strictest published statement.
+
+On **2026-08-25** it was widened again, and this time in the right order: those
+five opt-in-only sentences were rewritten in the **Cookie Policy master first**,
+and only then did `advertisingGrantedByStatus` follow. The Privacy Policy needed
+no change and never did — it already said *"With your consent, we do 'share' …
+for cross-context behavioral advertising"*, named Google and Meta, and described
+the EU/UK-ask-first vs. elsewhere-from-first-visit split.
+
+⛔ **This document previously paraphrased that policy as a flat "we do not sell
+or share" denial, and reasoning from that paraphrase is what treated retargeting
+as legally blocked when it was not.** Read the master, never a doc's summary of
+it. Re-narrowing is a policy act: move the published masters first and let the
+code follow. `consent-advertising-copy-drift.spec.ts` is the lock that makes the
+copy move with the rule in either direction — it has now gone red in both.
 
 **Two payload builders, and the split is deliberate.** Both live in
 `libs/aglyn/src/lib/app-utils/visitor-consent.ts`, and between them they are
@@ -1588,6 +1653,9 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
   data retention **14 months** (event and user), email redaction **on**.
   Leave all of it that way — the live privacy policy's flat "we do not sell or
   share" denial rests on it.
+  ⚑ **"no Google Ads link" expired on 2026-08-20** — see the coupled-controls
+  warning at the top of this doc. Everything else in this bullet was re-verified
+  on 2026-08-25 and still holds.
 
 **Bookings (AGL-2481) needs NO new custom dimension.** Stated positively so
 nobody goes looking: the booking `purchase` carries only `transaction_id`,

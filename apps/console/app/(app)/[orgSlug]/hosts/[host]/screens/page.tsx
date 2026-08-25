@@ -38,6 +38,7 @@ import {
   ICON_VARIANT_MODIFY_DELETE,
   ICON_VARIANT_PAGES,
   ICON_VARIANT_SHOW_DETAIL,
+  ICON_VARIANT_BESIGNER,
 } from '@aglyn/shared-data-enums'
 import {
   AppLink,
@@ -95,6 +96,7 @@ import RowActionsMenu from '../../../../../../components/row-actions-menu.compon
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../../components/layouts/main.layout'
+import { ArtifactRowActions } from '../../../../../../components/artifacts/artifact-table.component'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
 import SaveAsTemplateDialog, {
   type SaveAsTemplateSource,
@@ -107,6 +109,7 @@ import {
   type ScreenMoveRequest,
 } from '../../../../../../components/screens-hierarchy-table.component'
 import { checkOrgQuota } from '../../../../../../constants/entitlements'
+import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { docsHelp } from '../../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
@@ -219,6 +222,8 @@ function Screens(props) {
   }, [screens])
   const { enqueueSnackbar, closeSnackbar } = useSnackbar()
   const { org, ready: orgReady } = useCurrentOrg()
+  /** The cap behind the header readout; the create gate reads the same key. */
+  const screenQuota = checkOrgQuota(org, 'screensPerHost', billableScreenCount)
   const logActivity = useHostActivityLogger(hostId)
 
   const [error, setError] = useState(null)
@@ -589,29 +594,18 @@ function Screens(props) {
     }
   }, [translationsFor, firestore, hostId, enqueueSnackbar])
 
-  // Detail sits with the drag handle on the LEFT of the row (AGL-693) —
-  // it is navigation, not a row action, and it reads better beside the
-  // handle than lost among the trailing icons.
-  const renderRowLeadingActions = useCallback(
-    (row: any) => (
-      <IconButton
-        size="small"
-        aria-label={`Details for ${row.displayName ?? row.$id}`}
-        component={CellItemLinkComponent as any}
-        {...({
-          href: buildRoute(Route.SCREEN_DETAILS, {
-            orgSlug,
-            host,
-            screenId: row.$id,
-            versionId: row.versionId as string,
-          }),
-        } as any)}
-      >
-        <MdiIcon path={ICON_VARIANT_SHOW_DETAIL.path} size={0.8} />
-      </IconButton>
-    ),
-    [orgSlug, host],
-  )
+  /*
+    The row's LEFT is the drag handle and the expand chevron, and nothing else
+    (AGL-693). Zach: *"The screens should only have the drag or expand icon to
+    the left."*
+
+    A "Details" icon used to sit there, on the argument that it is navigation
+    rather than a row action. That was true and is now moot: the ROW opens the
+    detail view, so a second control that does the same thing is a smaller
+    target for the same destination — and it made screens the only list whose
+    rows began with a toolbar. It moves into the overflow, where every other
+    list also names it.
+  */
 
   /**
    * Who is already in this screen, beside its name (AGL-2486).
@@ -660,55 +654,74 @@ function Screens(props) {
           routes: collectionTemplates.routesByScreenId.get(row.$id),
         },
       )
+      const label = (row as { displayName?: string }).displayName ?? row.$id
+      const versionId = row.versionId as string
       return (
-      <>
-        {liveUrl ? (
-          <AppLink
-            componentVariant="icon-button"
-            size="small"
-            aria-label="View live"
-            href={liveUrl}
-            target="_blank"
-            rel="noreferrer"
-          >
-            <MdiIcon path={mdiOpenInNew.path} size={0.8} />
-          </AppLink>
-        ) : unavailableReason ? (
-          <Tooltip title={unavailableReason}>
-            {/* span: a disabled button emits no events for the tooltip */}
-            <span>
-              <IconButton size="small" aria-label="No single live page" disabled>
-                <MdiIcon path={mdiOpenInNew.path} size={0.8} />
-              </IconButton>
-            </span>
-          </Tooltip>
-        ) : null}
-        {hostLocales.length ? (
-          <IconButton
-            size="small"
-            aria-label="Translations"
-            onClick={() => {
-              const current = screens.find(
-                (screen: any) => screen.$id === row.$id,
-              ) as any
-              setTranslationsFor({
-                screenId: row.$id,
-                locale: current?.locale ?? '',
-                variants: { ...(current?.localeVariants ?? {}) },
-              })
-            }}
-          >
-            <MdiIcon path={mdiTranslate.path} size={0.8} />
-          </IconButton>
-        ) : null}
-        {/* Secondary and destructive actions live behind the overflow menu
-            the components list already uses (AGL-701) — a delete sitting
-            inline is one mis-click from the row's open handler. Labelled per
-            row: the menu repeats once per screen, so "More actions" alone
-            says nothing about which one. */}
-        <RowActionsMenu
-          label={(row as { displayName?: string }).displayName ?? row.$id}
+        <ArtifactRowActions
+          label={label}
+          /*
+            A screen is the ONE artifact with a real address of its own, so its
+            quick action is the live page rather than a preview — Zach: *"it
+            should be preview if it is not a screen or open live page"*.
+
+            Shown DISABLED with the reason when there is no single live page: a
+            collection template renders under routes the collection owns, so it
+            has no one URL. Removing the control there would read as the
+            feature being missing rather than inapplicable.
+          */
+          quick={{
+            icon: mdiOpenInNew.path,
+            label: 'Open live page',
+            ...(liveUrl
+              ? { href: liveUrl }
+              : {
+                  unavailableReason:
+                    unavailableReason ?? 'No single live page for this screen.',
+                }),
+          }}
           items={[
+            {
+              key: 'details',
+              label: 'View details',
+              icon: <MdiIcon path={ICON_VARIANT_SHOW_DETAIL.path} size={0.8} />,
+              onClick: () => handleRowOpen(row),
+            },
+            {
+              key: 'besigner',
+              label: 'Edit in besigner',
+              icon: <MdiIcon path={ICON_VARIANT_BESIGNER.path} size={0.8} />,
+              onClick: () =>
+                router.push(
+                  buildRoute(Route.SCREEN_BESIGNER, {
+                    orgSlug,
+                    host,
+                    screenId: row.$id,
+                    versionId,
+                  }),
+                ),
+            },
+            // Translations only where the site HAS locales — the control is
+            // meaningless on a single-language site and this is the one menu
+            // item that varies by host rather than by row.
+            ...(hostLocales.length
+              ? [
+                  {
+                    key: 'translations',
+                    label: 'Translations…',
+                    icon: <MdiIcon path={mdiTranslate.path} size={0.8} />,
+                    onClick: () => {
+                      const current = screens.find(
+                        (screen: any) => screen.$id === row.$id,
+                      ) as any
+                      setTranslationsFor({
+                        screenId: row.$id,
+                        locale: current?.locale ?? '',
+                        variants: { ...(current?.localeVariants ?? {}) },
+                      })
+                    },
+                  },
+                ]
+              : []),
             {
               key: 'save-template',
               label: 'Save as template',
@@ -720,32 +733,26 @@ function Screens(props) {
               label: 'Delete',
               destructive: true,
               icon: (
-                <MdiIcon
-                  path={ICON_VARIANT_MODIFY_DELETE.path}
-                  color="error"
-                  size={0.8}
-                />
+                <MdiIcon path={ICON_VARIANT_MODIFY_DELETE.path} size={0.8} />
               ),
               onClick: () =>
-                void handleDeleteScreen(
-                  row.$id,
-                  row.versionId as string,
-                )(),
+                void handleDeleteScreen(row.$id, versionId)(),
             },
           ]}
         />
-      </>
       )
     },
     [
-      hostId,
       handleDeleteScreen,
+      handleRowOpen,
       hostLocales.length,
       screens,
       hostData,
-      routingMap,
       buildTemplateSource,
       collectionTemplates,
+      router,
+      orgSlug,
+      host,
     ],
   )
 
@@ -770,17 +777,36 @@ function Screens(props) {
           icon: { path: ICON_VARIANT_PAGES.path },
         }}
         headerRight={
-          <Stack direction="row" spacing={1}>
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() => setTemplatesOpen(true)}
-            >
-              {'Templates'}
-            </Button>
-            <Button size="small" variant="contained" onClick={handleFormOpen}>
-              {'Create New Screen'}
-            </Button>
+          /*
+            The plan readout opposite the heading (AGL-2113), the Sites page
+            arrangement. `screensPerHost` was enforced on create and had no
+            standing surface at all, so an author learned the cap by being
+            refused — the exact failure the shared readout exists to end.
+
+            Counted with `billableScreenIds`, the SAME rule the create gate
+            calls. A separate count here is how a readout and the refusal it
+            belongs to come to disagree, which is what the comment above that
+            memo is about.
+          */
+          <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+            <QuotaReadoutComponent
+              ready={orgReady}
+              used={billableScreenCount}
+              limit={screenQuota.limit}
+              noun="screen"
+            />
+            <Stack direction="row" spacing={1}>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => setTemplatesOpen(true)}
+              >
+                {'Templates'}
+              </Button>
+              <Button size="small" variant="contained" onClick={handleFormOpen}>
+                {'Create New Screen'}
+              </Button>
+            </Stack>
           </Stack>
         }
         aside={
@@ -844,8 +870,7 @@ function Screens(props) {
             {/*  getItemId={(item) => item.$id}*/}
             {/*/>*/}
             <ScreensHierarchyTableComponent
-              renderRowLeadingActions={renderRowLeadingActions}
-              renderRowPresence={renderRowPresence}
+                    renderRowPresence={renderRowPresence}
               onRowOpen={handleRowOpen}
               screens={screens}
               routingMap={routingMap}

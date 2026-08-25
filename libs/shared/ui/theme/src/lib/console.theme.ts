@@ -363,6 +363,87 @@ const baseOptions: ThemeOptions = {
   spacing: 8,
   typography: {
     fontFamily: buildFontFamilyList().join(','),
+    // The brand's named weights, beyond MUI's four (Zach 2026-08-25).
+    //
+    // MUI ships Light 300 / Regular 400 / Medium 500 / Bold 700, and the
+    // brand type ramp uses three more — the press page's own typography
+    // card states it: "Black (heroes) · ExtraBold (H2) · Bold · SemiBold ·
+    // Regular · Light (numerals)". Without these, reaching 600/800/900 meant
+    // typing a raw number, which pins an element to a weight instead of to
+    // the brand and leaves it behind when the ramp moves.
+    //
+    // They are ADDITIVE — `createTypography` deep-merges unknown keys
+    // through its `...other`, so nothing MUI defines changes. And they are
+    // reachable the same way the built-ins are: `@mui/system`'s `style()`
+    // retries a miss as `${prop}${capitalize(value)}`, so `fontWeight:
+    // 'extraBold'` resolves to `typography.fontWeightExtraBold`. The
+    // besigner's weight picker discovers them off the theme rather than
+    // from a list, so they appear in the panel without another edit.
+    //
+    // Roboto Flex is a variable face covering 100–1000, so every rung here
+    // renders as a real weight rather than a synthesised one.
+    fontWeightSemiBold: 600,
+    fontWeightExtraBold: 800,
+    fontWeightBlack: 900,
+    // The brand's display ramp, so `variant="h1"` / `"h2"` MEANS the brand
+    // (Zach 2026-08-25). MUI's defaults are Light 300 at 96px/60px — a
+    // display face for a Material app, and nothing like the type card on
+    // /press ("Black (heroes) · ExtraBold (H2)"). Because they did not match,
+    // every heading on a built page carried a hand-written `fontSize` and
+    // `fontWeight`, which is how eleven of them shipped at Light 300: the
+    // variant said Heading 2 and rendered as something nobody chose.
+    //
+    // Scoped deliberately to h1 and h2. They have ZERO `variant="hN"` usages
+    // in the console and one in the tenant app, so this restyles no product
+    // surface — it only changes what a SITE gets when it asks for a heading,
+    // which is exactly the thing that should follow the brand. h3–h6 carry
+    // 95 usages between them and are left on MUI's scale; `overline` has 19
+    // and is left alone for the same reason.
+    //
+    // `responsiveFontSizes` runs over these afterwards (xs→xl), so these are
+    // the DESKTOP end of a ramp that scales itself down — 56px/40px here
+    // land near the 34px/30px the mobile frames show.
+    h1: {
+      fontSize: '3.5rem',
+      fontWeight: 900,
+      lineHeight: 1.05,
+      letterSpacing: '-0.025em',
+    },
+    h2: {
+      fontSize: '2.5rem',
+      fontWeight: 800,
+      lineHeight: 1.15,
+      letterSpacing: '-0.02em',
+    },
+    // The three text rungs the brand uses that MUI's scale has no name for
+    // (Zach 2026-08-25). MUI runs 16 / 14 / 12 (`body1` / `body2` /
+    // `caption`); the built pages kept reaching for 17, 13 and 11 and, with
+    // nothing to ask for, wrote the pixels. /press alone carried 286 such
+    // literals — 165 of them the same 11px metadata line — each one pinned to
+    // a size instead of to the scale.
+    //
+    // Full variant objects rather than bare sizes, so one pick brings the
+    // line height with it: `variant="micro"` or, where the element's own
+    // variant must stay, `fontSize: 'micro.fontSize'` — the token path the
+    // Font Size picker already offers for `h4.fontSize`.
+    //
+    // Named for the job, not the number, so the name survives a retune: a
+    // lede stays the lede if the brand moves it to 18px.
+    lede: {
+      fontSize: '1.0625rem',
+      fontWeight: 400,
+      lineHeight: 1.6,
+    },
+    bodyCompact: {
+      fontSize: '0.8125rem',
+      fontWeight: 400,
+      lineHeight: 1.5,
+    },
+    micro: {
+      fontSize: '0.6875rem',
+      fontWeight: 400,
+      lineHeight: 1.6,
+    },
   },
   zIndex: {
     max: 2147483647,

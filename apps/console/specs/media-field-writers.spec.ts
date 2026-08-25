@@ -42,7 +42,7 @@
  * FIELDS keep an absolute URL, because `og:image` reads them out of band.
  */
 
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { code } from './source-text'
@@ -68,17 +68,28 @@ const PUBLISH_FORM = join(
   'marketplace',
   'publish-plugin-form.component.tsx',
 )
-const CONTENT_PAGE = join(
-  __dirname,
-  '..',
-  'app',
-  '(app)',
-  '[orgSlug]',
-  'hosts',
-  '[host]',
-  'content',
-  'page.tsx',
-)
+/**
+ * EVERY content-surface source file, concatenated.
+ *
+ * It was one path — `app/(app)/[orgSlug]/hosts/[host]/content/page.tsx` —
+ * because the content manager was one 4,200-line component. AGL-2498 split it
+ * into a scope provider, a list page and an entry detail page, and a guard
+ * that still named the old file read an empty corpus and passed over nothing.
+ * The `not.toHaveLength(0)` assertion below is what caught that, which is
+ * exactly why it is there.
+ *
+ * A DIRECTORY rather than three paths, deliberately: the rule is about the
+ * content surface, not about three files that happen to hold it today, so
+ * splitting a fourth component out of it cannot quietly leave the new one
+ * unscanned.
+ */
+const CONTENT_DIR = join(__dirname, '..', 'components', 'content')
+const CONTENT_SOURCES = readdirSync(CONTENT_DIR)
+  .filter((name) => name.endsWith('.tsx') || name.endsWith('.ts'))
+  .filter((name) => !name.endsWith('.spec.tsx') && !name.endsWith('.spec.ts'))
+  .sort()
+  .map((name) => readFileSync(join(CONTENT_DIR, name), 'utf8'))
+  .join('\n')
 
 /**
  * Comments stripped — the rule has to be in the CODE, not the prose.
@@ -95,10 +106,7 @@ const faviconCode = code(
   readFileSync(FAVICON_CARD, 'utf8'),
   'favicon-card.component.tsx',
 )
-const contentCode = code(
-  readFileSync(CONTENT_PAGE, 'utf8'),
-  'hosts/[host]/content/page.tsx',
-)
+const contentCode = code(CONTENT_SOURCES, 'components/content/*')
 
 describe('site logo card (AGL-1407)', () => {
   it('writes the picked asset through mediaNodeSrc, not media.url', () => {

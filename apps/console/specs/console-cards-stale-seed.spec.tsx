@@ -155,6 +155,11 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   MdiIcon: () => null,
+  // The shared row cluster renders its quick action as an `AppLink` when the
+  // destination is a route rather than a handler (AGL-693).
+  AppLink: ({ children, href }: { children?: ReactNode; href?: string }) => (
+    <a href={href}>{children}</a>
+  ),
   useConfirmationContext: () => ({
     confirm: jest.fn().mockResolvedValue(undefined),
   }),
@@ -162,8 +167,14 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 /**
  * The components list is an x-data-grid, which virtualises and renders no
  * rows at zero height in jsdom. This stand-in renders each row's action cell
- * so the REAL dialog and the REAL save handler are still what the spec
- * drives — only the grid chrome is replaced.
+ * so the REAL menu, the REAL dialog and the REAL save handler are still what
+ * the spec drives — only the grid chrome is replaced.
+ *
+ * `renderCell`, not `getActions` (AGL-693). Every artifact list now shares one
+ * trailing cluster — a quick action plus an overflow menu — rendered by a
+ * normal column, rather than MUI's `type: 'actions'` splitting icons between
+ * the row and a menu it owns. Rendering the cell is also what keeps this stand-in
+ * honest: the menu the spec clicks through is the component's own.
  */
 jest.mock('@aglyn/shared-ui-jsx/components/data-table.component', () => ({
   DataTableComponent: ({ rows, columns }: any) => (
@@ -171,16 +182,9 @@ jest.mock('@aglyn/shared-ui-jsx/components/data-table.component', () => ({
       {rows.map((row: any) => (
         <div key={row.$id}>
           {columns
-            .filter((column: any) => column.type === 'actions')
-            .flatMap((column: any) => column.getActions({ row, id: row.$id }))
-            .map((action: any, index: number) => (
-              <button
-                key={index}
-                type="button"
-                onClick={(event) => action.props.onClick?.(event)}
-              >
-                {action.props.label}
-              </button>
+            .filter((column: any) => column.field === 'actions')
+            .map((column: any, index: number) => (
+              <div key={index}>{column.renderCell({ row, id: row.$id })}</div>
             ))}
         </div>
       ))}
@@ -290,8 +294,18 @@ describe('LanguagesCard (AGL-1358)', () => {
 })
 
 describe('HostComponentsCard (AGL-1358)', () => {
+  /**
+   * Rename lives behind the row's OVERFLOW MENU (AGL-693).
+   *
+   * It was an inline icon until every artifact list was given the same row
+   * grammar — one quick action, then the menu — so reaching it now takes the
+   * two clicks a person takes. Driven through the menu rather than around it
+   * on purpose: a test that reached the handler directly would keep passing if
+   * the item stopped being reachable at all.
+   */
   const renameAndSave = () => {
-    fireEvent.click(screen.getByRole('button', { name: 'Rename' }))
+    fireEvent.click(screen.getByRole('button', { name: /More actions/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Rename' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
   }
 

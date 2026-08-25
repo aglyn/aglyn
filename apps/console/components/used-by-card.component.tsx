@@ -78,6 +78,15 @@ export function UsedByCard({
   const { data: user } = useUser()
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [dependents, setDependents] = useState<Dependent[]>([])
+  /**
+   * Did the scan read everything it needed to (AGL-703)?
+   *
+   * The endpoint caps each collection at 200 documents and reads one past the
+   * cap so it can say. It used to discard that, so this card printed "nothing
+   * uses this — deleting it changes no live page" on the strength of a scan
+   * that had stopped looking. Absent reads as INCOMPLETE.
+   */
+  const [complete, setComplete] = useState(false)
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
@@ -99,6 +108,7 @@ export function UsedByCard({
         const payload = await response.json()
         if (!active) return
         setDependents((payload?.dependents ?? []) as Dependent[])
+        setComplete(payload?.complete === true)
         setStatus('ready')
       } catch (error) {
         console.error(error)
@@ -173,9 +183,19 @@ export function UsedByCard({
         </Stack>
       ) : dependents.length === 0 ? (
         <Stack spacing={1}>
-          <Typography variant="body2">
-            {`Nothing uses this ${noun} — deleting it changes no live page.`}
-          </Typography>
+          {/* The unqualified claim is reachable only from a COMPLETE scan.
+              A truncated one found nothing and proves nothing, and the two
+              must not read alike — that is the whole point of the flag. */}
+          {complete ? (
+            <Typography variant="body2">
+              {`Nothing uses this ${noun} — deleting it changes no live page.`}
+            </Typography>
+          ) : (
+            <Alert severity="warning">
+              {`Nothing found, but this site has more content than one pass ` +
+                `reads — something may still use this ${noun}.`}
+            </Alert>
+          )}
           <Typography variant="caption" color="text.secondary">
             {SCOPE_NOTE[kind]}
           </Typography>

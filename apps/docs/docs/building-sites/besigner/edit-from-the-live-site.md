@@ -1,5 +1,5 @@
 ---
-sidebar_position: 12
+sidebar_position: 13
 title: Edit from the live site
 description: The admin bar on published sites — jump from any live page straight into the besigner for the screen serving it.
 ---

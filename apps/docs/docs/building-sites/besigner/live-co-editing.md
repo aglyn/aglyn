@@ -1,5 +1,5 @@
 ---
-sidebar_position: 11
+sidebar_position: 12
 title: Live co-editing & unsaved work
 description: See who else is editing, work on the same document together, survive save conflicts, and recover unsaved changes after a crash.
 ---

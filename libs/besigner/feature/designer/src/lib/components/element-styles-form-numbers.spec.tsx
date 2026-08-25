@@ -270,9 +270,42 @@ describe('styles panel numeric values (AGL-2486)', () => {
     })
 
     it('does the same for the gap controls', async () => {
+      // Gap is a spacing picker now (Zach 2026-08-25), so the ladder stores
+      // the multiple directly — and Custom… still has to normalise a typed
+      // number the same way, or `gap: '2'` reaches CSS as an invalid length.
       await renderPanel({}, 'Flexbox & Grid')
-      type('Gap', '2')
+      act(() => {
+        fireEvent.mouseDown(screen.getByLabelText('Gap'))
+      })
+      act(() => {
+        // By ROLE, not by text: each rung renders its label AND the px it
+        // resolves to ("Small" + "16px"), so a text query matches the inner
+        // label span and clicking that never reaches the option.
+        fireEvent.click(
+          within(screen.getByRole('listbox')).getByRole('option', {
+            name: /^Small/,
+          }),
+        )
+      })
+      act(() => jest.advanceTimersByTime(ATTRIBUTE_COMMIT_DEBOUNCE_MS))
       expect(live().sx).toEqual({ gap: 2 })
+      // A NUMBER, or MUI stops multiplying it by the spacing unit and the
+      // declaration is dropped by the CSS parser.
+      expect(typeof (live().sx as any).gap).toBe('number')
+    })
+
+    it('normalises a gap typed into Custom… to a number', async () => {
+      await renderPanel({}, 'Flexbox & Grid')
+      act(() => {
+        fireEvent.mouseDown(screen.getByLabelText('Gap'))
+      })
+      act(() => {
+        fireEvent.click(
+          within(screen.getByRole('listbox')).getByText('Custom…'),
+        )
+      })
+      type('Gap custom value', '3')
+      expect(live().sx).toEqual({ gap: 3 })
     })
   })
 })

@@ -29,16 +29,16 @@ import {
   useLoading,
 } from '@aglyn/shared-ui-jsx'
 import {
-  DataTableComponent,
 } from '@aglyn/shared-ui-jsx/components/data-table.component'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
-import { GridActionsCellItem, type GridColDef } from '@mui/x-data-grid'
+import { type GridColDef } from '@mui/x-data-grid'
 import {
   mdiDownloadOutline,
   mdiFileMultipleOutline,
   mdiPencilOutline,
   mdiPlusBoxOutline,
   mdiTrashCanOutline,
+  mdiEyeOutline,
 } from '@aglyn/shared-data-mdi'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -60,7 +60,12 @@ import {
   query,
   updateDoc,
 } from 'firebase/firestore'
+import { ICON_VARIANT_SHOW_DETAIL } from '@aglyn/shared-data-enums'
 import { useRouter } from 'next/navigation'
+import ArtifactTable, {
+  ArtifactRowActions,
+  artifactActionsColumn,
+} from '../artifacts/artifact-table.component'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { checkOrgQuota } from '../../constants/entitlements'
 import { TABLE_ROW_HEIGHT } from '../../constants/shared'
@@ -123,7 +128,26 @@ function sourceChip(
  * in completely different places — a page template makes a screen, a
  * component template goes onto one.
  */
-export function HostTemplatesCard({ hostId }: { hostId: string }) {
+/** What the page needs to render the header's plan readout. */
+export interface TemplateQuotaReadout {
+  ready: boolean
+  used: number
+  limit: number
+}
+
+export function HostTemplatesCard({
+  hostId,
+  onQuota,
+}: {
+  hostId: string
+  /**
+   * Publishes the template count and cap so the PAGE can render the readout in
+   * its header. The card keeps ownership of the numbers because it owns the
+   * listener they come from — a page that counted separately would be a second
+   * source for the same fact.
+   */
+  onQuota?: (readout: TemplateQuotaReadout) => void
+}) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -621,78 +645,97 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
         row.template.createdAt?.toDate?.() ?? null,
       valueFormatter: (value: any) => value?.toLocaleString?.() || '--',
     },
-    {
-      field: 'actions',
-      type: 'actions',
-      headerName: 'Actions',
-      width: 160,
-      getActions: ({ row }: any) => {
-        const template = row.template
-        const bundle = row.pages.length > 1
-        const actions = [
-          // Edit is per-page and has no bundle meaning — there is no single
-          // canvas behind five documents — so a grouped row offers the page
-          // list instead, and the detail page carries the per-page Edit
-          // (AGL-696).
-          bundle ? (
-            <GridActionsCellItem
-              key="action-pages"
-              icon={<MdiIcon path={mdiFileMultipleOutline.path} />}
-              label={`Open ${row.pages.length} pages`}
-              LinkComponent={AppLink as any}
-              {...({
-                href: buildRoute(Route.TEMPLATE_DETAILS, {
-                  orgSlug,
-                  host,
-                  templateId: template.$id,
-                }),
-              } as any)}
-            />
-          ) : (
-            <GridActionsCellItem
-              key="action-edit"
-              icon={<MdiIcon path={mdiPencilOutline.path} />}
-              label="Edit in besigner"
-              LinkComponent={AppLink as any}
-              {...({
-                href: buildRoute(Route.TEMPLATE_BESIGNER, {
-                  orgSlug,
-                  host,
-                  templateId: template.$id,
-                }),
-              } as any)}
+    /*
+      The shared trailing cluster (AGL-693). A template's quick action is
+      Preview — it is the one artifact with no live address of its own and no
+      detail worth a second icon, so "what does it look like" is the question
+      the row is actually asked.
+
+      BUNDLES keep their own wording throughout. A five-page template has no
+      single canvas behind it, so "Edit in besigner" is meaningless on one and
+      the menu offers its page list instead — that distinction is AGL-696's and
+      moving the controls must not quietly drop it.
+    */
+    artifactActionsColumn((row: any) => {
+      const template = row.template
+      const bundle = row.pages.length > 1
+      const items = [
+        {
+          key: 'details',
+          label: bundle ? `Open ${row.pages.length} pages` : 'View details',
+          icon: (
+            <MdiIcon
+              path={bundle ? mdiFileMultipleOutline.path : ICON_VARIANT_SHOW_DETAIL.path}
+              size={0.8}
             />
           ),
-          <GridActionsCellItem
-            key="action-use"
-            icon={<MdiIcon path={mdiPlusBoxOutline.path} />}
-            label={bundle ? `Use all ${row.pages.length} pages` : 'Use'}
-            onClick={
-              bundle ? handleUseBundle(row) : () => setUseTemplate(template)
-            }
-          />,
-          <GridActionsCellItem
-            key="action-delete"
-            icon={<MdiIcon path={mdiTrashCanOutline.path} />}
-            label={bundle ? `Delete all ${row.pages.length} pages` : 'Delete'}
-            showInMenu
-            onClick={handleDelete(row)}
-          />,
-        ]
-        if (hasUpdate(template)) {
-          actions.unshift(
-            <GridActionsCellItem
-              key="action-update"
-              icon={<MdiIcon path={mdiDownloadOutline.path} />}
-              label="Update available"
-              disabled={updating === template.$id}
-              onClick={handleUpdate(template)}
-            />,
-          )
-        }
-        return actions
-      },
-    },
+          onClick: () =>
+            router.push(
+              buildRoute(Route.TEMPLATE_DETAILS, {
+                orgSlug,
+                host,
+                templateId: template.$id,
+              }),
+            ),
+        },
+        ...(bundle
+          ? []
+          : [
+              {
+                key: 'besigner',
+                label: 'Edit in besigner',
+                icon: <MdiIcon path={mdiPencilOutline.path} size={0.8} />,
+                onClick: () =>
+                  router.push(
+                    buildRoute(Route.TEMPLATE_BESIGNER, {
+                      orgSlug,
+                      host,
+                      templateId: template.$id,
+                    }),
+                  ),
+              },
+            ]),
+        {
+          key: 'use',
+          label: bundle ? `Use all ${row.pages.length} pages` : 'Use',
+          icon: <MdiIcon path={mdiPlusBoxOutline.path} size={0.8} />,
+          onClick: bundle
+            ? handleUseBundle(row)
+            : () => setUseTemplate(template),
+        },
+        {
+          key: 'delete',
+          label: bundle ? `Delete all ${row.pages.length} pages` : 'Delete',
+          destructive: true,
+          icon: <MdiIcon path={mdiTrashCanOutline.path} size={0.8} />,
+          onClick: handleDelete(row),
+        },
+      ]
+      if (hasUpdate(template)) {
+        items.unshift({
+          key: 'update',
+          label: 'Update available',
+          icon: <MdiIcon path={mdiDownloadOutline.path} size={0.8} />,
+          disabled: updating === template.$id,
+          onClick: handleUpdate(template),
+        } as any)
+      }
+      return (
+        <ArtifactRowActions
+          label={template.displayName ?? template.$id}
+          quick={{
+            icon: mdiEyeOutline.path,
+            label: 'Preview',
+            to: buildRoute(Route.TEMPLATE_PREVIEW, {
+              orgSlug,
+              host,
+              templateId: template.$id,
+            }),
+          }}
+          items={items}
+        />
+      )
+    }),
   ]
 
   /**
@@ -715,23 +758,42 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
     'templatesPerHost',
     (templateDocs ?? []).length,
   )
+  /**
+   * Hand the page the numbers it needs for the header readout.
+   *
+   * An effect rather than a render-time call: this fires during the card's
+   * render otherwise, and setting state on the parent mid-render is the React
+   * warning that turns into a loop. Keyed on the three primitives, so it
+   * re-publishes when the count or the plan actually changes and not on every
+   * keystroke elsewhere on the page.
+   */
+  // `quotaLimit`, not `limit` — the bare name is Firestore's `limit()` in this
+  // file, and shadowing it turns the entries listener into a type error a few
+  // hundred lines up.
+  const quotaUsed = (templateDocs ?? []).length
+  const quotaLimit = templateQuota.limit
+  useEffect(() => {
+    onQuota?.({ ready: orgReady, used: quotaUsed, limit: quotaLimit })
+  }, [onQuota, orgReady, quotaUsed, quotaLimit])
 
   return (
     <CardDisplay>
-      <QuotaReadoutComponent
-        ready={orgReady}
-        used={(templateDocs ?? []).length}
-        limit={templateQuota.limit}
-        noun="template"
-        sx={{ px: 2, pt: 1 }}
-      />
-      <DataTableComponent
+      {/* The readout moved OUT of this card and into the page header, beside
+          the create button, matching the Sites page (AGL-2113). It read as a
+          caption on a list here; opposite the heading it is a fact about the
+          page, which is what it is. `HostTemplatesCard` publishes the numbers
+          through `onQuota` so the page can render it without counting the
+          documents a second time — two counts of the same thing is how a
+          readout and the gate it belongs to come to disagree. */}
+      <ArtifactTable
         rowHeight={TABLE_ROW_HEIGHT}
+        // A template ROW is a page GROUP, not a document — a five-page bundle
+        // is one row keyed by its group, so this list keeps its own row id.
         getRowId={(row) => row.key}
         columns={columns}
         noRowsLabel="No templates yet — use Create template above, save one from a screen, or install one from the marketplace"
         rows={rows}
-        onRowClick={({ row }) =>
+        onOpen={(_id, row) =>
           router.push(
             buildRoute(Route.TEMPLATE_DETAILS, {
               orgSlug,
@@ -740,11 +802,8 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
             }),
           )
         }
-        sx={{ '& .MuiDataGrid-row': { cursor: 'pointer' } }}
         loading={status === 'loading'}
         initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
-        pageSizeOptions={[5, 10, 15]}
-        pagination
       />
       <UseTemplateDialog
         hostId={hostId}

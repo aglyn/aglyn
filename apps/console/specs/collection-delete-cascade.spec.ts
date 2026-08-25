@@ -32,21 +32,32 @@
  * rather than caught here.
  */
 
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const ERASE_ROUTE = join(__dirname, '..', 'app', 'api', 'resources', 'erase', 'route.ts')
-const CONTENT_PAGE = join(
-  __dirname,
-  '..',
-  'app',
-  '(app)',
-  '[orgSlug]',
-  'hosts',
-  '[host]',
-  'content',
-  'page.tsx',
-)
+/**
+ * EVERY content-surface source file, concatenated.
+ *
+ * It was one path — `app/(app)/[orgSlug]/hosts/[host]/content/page.tsx` —
+ * because the content manager was one 4,200-line component. AGL-2498 split it
+ * into a scope provider, a list page and an entry detail page, and a guard
+ * that still named the old file read an empty corpus and passed over nothing.
+ * The `not.toHaveLength(0)` assertion below is what caught that, which is
+ * exactly why it is there.
+ *
+ * A DIRECTORY rather than three paths, deliberately: the rule is about the
+ * content surface, not about three files that happen to hold it today, so
+ * splitting a fourth component out of it cannot quietly leave the new one
+ * unscanned.
+ */
+const CONTENT_DIR = join(__dirname, '..', 'components', 'content')
+const CONTENT_SOURCES = readdirSync(CONTENT_DIR)
+  .filter((name) => name.endsWith('.tsx') || name.endsWith('.ts'))
+  .filter((name) => !name.endsWith('.spec.tsx') && !name.endsWith('.spec.ts'))
+  .sort()
+  .map((name) => readFileSync(join(CONTENT_DIR, name), 'utf8'))
+  .join('\n')
 
 const read = (path: string) => readFileSync(path, 'utf8')
 
@@ -77,7 +88,7 @@ describe('collection delete runs the shared cascade helper (AGL-1324)', () => {
   })
 
   it('deletes the collection from the console via the erase route', () => {
-    const source = read(CONTENT_PAGE)
+    const source = CONTENT_SOURCES
     expect(source).toContain("'/api/resources/erase'")
     expect(source).toContain("kind: 'collections'")
   })
@@ -114,16 +125,41 @@ describe('collection delete runs the shared cascade helper (AGL-1324)', () => {
     return found
   }
 
+  /**
+   * A `…Ref(` helper's own definition, or `null` when there is no such name.
+   *
+   * AGL-2498 moved the entry path into one `entryRef` builder — which is the
+   * right shape (one place constructs it) and invisible to a guard that only
+   * reads the `deleteDoc` argument: `deleteDoc(entryRef(id))` names no segment
+   * at all. Rather than inline the path back out to keep a source scanner
+   * happy, the scanner follows the one indirection.
+   */
+  const refBuilder = (source: string, name: string): string | null => {
+    const token = `const ${name} = `
+    const start = source.indexOf(token)
+    if (start === -1) return null
+    // To the end of the declaration — the next line that starts a new one.
+    const end = source.indexOf('\n  const ', start + token.length)
+    return source.slice(start, end === -1 ? source.length : end)
+  }
+
   it('leaves the console with no client-SDK delete of a collection doc', () => {
     // The rules deny it (AGL-947) and it would orphan `entries` — so every
-    // `deleteDoc` on this page must name a LEAF this page owns. Two do now:
-    // the single-entry delete (AGL-1324) and the author record (AGL-2486),
-    // which has no subcollection of its own and so cascades nothing.
-    const source = read(CONTENT_PAGE)
+    // `deleteDoc` on this surface must name a LEAF it owns. Two do: the
+    // single-entry delete (AGL-1324) and the author record (AGL-2486), which
+    // has no subcollection of its own and so cascades nothing.
+    const source = CONTENT_SOURCES
     const calls = deleteDocArguments(source)
     expect(calls).not.toHaveLength(0)
     for (const argument of calls) {
-      expect(argument).toMatch(/'entries'|'authors'/)
+      const viaHelper = /deleteDoc\(\s*(\w+Ref)\(/.exec(argument)
+      // Resolved through the helper when the call uses one, so the assertion
+      // is still about the PATH rather than about how it was spelled.
+      const subject = viaHelper
+        ? refBuilder(source, viaHelper[1])
+        : argument
+      expect(subject).toBeTruthy()
+      expect(subject as string).toMatch(/'entries'|'authors'/)
     }
   })
 
@@ -131,7 +167,7 @@ describe('collection delete runs the shared cascade helper (AGL-1324)', () => {
     // The specific shape AGL-947 forbids: a path that STOPS at the
     // collection. Checked separately from the allow-list above so that
     // adding a third leaf resource cannot quietly re-admit this one.
-    const source = read(CONTENT_PAGE)
+    const source = CONTENT_SOURCES
     for (const argument of deleteDocArguments(source)) {
       // One path segment after `'collections'` and then the `doc(` closes:
       // that is a handle on the collection itself. The entry delete carries

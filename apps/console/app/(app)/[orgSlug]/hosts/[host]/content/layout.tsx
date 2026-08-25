@@ -16,24 +16,46 @@
  */
 
 import type { Metadata } from 'next'
+import { segmentTitle } from '../../../../../page-title'
+import { ContentScopeProvider } from '../../../../../../components/content/content-scope.context'
 import type { ReactNode } from 'react'
 
 // Title-only shell (AGL-1059): the page is a client component, and a client
 // component cannot export `metadata` — so its title lives here, in the
-// nearest server layout. The suffix comes from the root title template.
+// nearest server layout.
+//
+// `segmentTitle`, not a bare string, since AGL-2498 put titled routes BELOW
+// this one (`content/{collectionSlug}` and its entry). A segment that sets a
+// plain string carries no template of its own, so it CONSUMES the root
+// template and everything beneath renders unbranded — "dR3GYhkZS1 · Entry ·
+// aglyn-marketing" with no "· Aglyn" on the end. The bare path keeps this
+// exact default; only the object around it is new.
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ host: string }>
 }): Promise<Metadata> {
   const { host } = await params
-  return { title: `Content · ${host}` }
+  return { title: segmentTitle(`Content · ${host}`) }
 }
 
+/**
+ * The shared scope for every content route (AGL-2498).
+ *
+ * A SERVER layout rendering a CLIENT provider: `generateMetadata` above and
+ * `'use client'` cannot live in one file, and both are needed here.
+ *
+ * Mounting the provider at this level is what let the collection list and the
+ * entry detail become separate page components without the data layer becoming
+ * two. A layout persists across its children in the App Router, so opening an
+ * entry unmounts the list and mounts the detail while the collections listener,
+ * the entries listener, the categories, the authors and the screens all stay
+ * exactly where they were.
+ */
 export default function HostContentTitleLayout({
   children,
 }: {
   children: ReactNode
 }) {
-  return <>{children}</>
+  return <ContentScopeProvider>{children}</ContentScopeProvider>
 }

@@ -700,7 +700,12 @@ const ElementStylesForm = observer(
     )
     // Every typed layout field, rendered under the alignment toggles in
     // the single Flexbox & Grid section (AGL-2486).
-    const flexGridGroup = useMemo(() => buildFlexGridGroup(), [])
+    // Gaps are theme-spacing pickers now, so this group needs the scales too
+    // (Zach 2026-08-25).
+    const flexGridGroup = useMemo(
+      () => buildFlexGridGroup({ themeScales }),
+      [themeScales],
+    )
 
     // Breakpoint-scoped editing (AGL-333): when the artboard preview is a
     // device size, style edits write into that breakpoint's slice of the
