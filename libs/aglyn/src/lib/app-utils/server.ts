@@ -32,6 +32,9 @@ export * from './content-authors'
 export * from './child-contract'
 export * from './child-contract-compose'
 export * from './console-routes'
+// What a stored screen-link value means, with no React attached — the
+// where-used scan reads these on the server (AGL-703).
+export * from './screen-link-value'
 export * from './analytics-path-key'
 export * from './contacts'
 export * from './compose-layout-nodes'

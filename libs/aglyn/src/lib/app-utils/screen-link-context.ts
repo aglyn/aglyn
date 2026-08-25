@@ -20,6 +20,7 @@
 // barrel from the tenant page) makes the bundler duplicate parts of the
 // module graph — a second canvas/emitter instance renders the site blank.
 import { createContext, useContext, useMemo } from 'react'
+import { parseScreenLinkValue } from './screen-link-value'
 
 /**
  * Host routing map: screen id → routed path in the tenant matcher format
@@ -250,37 +251,18 @@ export function resolveScreenHref(
 }
 
 /**
- * Prefix marking a stored link value as a screen REFERENCE rather than a
- * literal href (AGL-1335).
- *
- * A `Link`-typed component prop stores its value in the same string slot
- * whichever way it was authored, and every value written before the picker
- * existed is a raw path (`/pricing`). A bare screen id is indistinguishable
- * from a relative path that happens to have no slash, so the id-carrying
- * shape is the one that gets the marker: a legacy string keeps meaning
- * exactly what it always meant, and only newly picked values indirect
- * through the routing map.
+ * Link VALUE parsing lives in `./screen-link-value` — server-safe, because
+ * the where-used scan runs on the server and this module's `createContext`
+ * keeps it out of the `@aglyn/aglyn/server` barrel (AGL-703). Re-exported
+ * here so every existing importer, and the spec beside this file, keeps
+ * reaching them at the address they have always used.
  */
-export const SCREEN_LINK_VALUE_PREFIX = 'screen:'
-
-/** Wraps a screen id as a stored link value — see {@link SCREEN_LINK_VALUE_PREFIX}. */
-export function formatScreenLinkValue(screenId: string): string {
-  return `${SCREEN_LINK_VALUE_PREFIX}${screenId}`
-}
-
-/**
- * The screen id a stored link value references, or `undefined` when the
- * value is a literal href (legacy raw string, external URL, or unset).
- */
-export function parseScreenLinkValue(
-  value: unknown,
-): string | undefined {
-  if (typeof value !== 'string') return undefined
-  const trimmed = value.trim()
-  if (!trimmed.startsWith(SCREEN_LINK_VALUE_PREFIX)) return undefined
-  const id = trimmed.slice(SCREEN_LINK_VALUE_PREFIX.length).trim()
-  return id || undefined
-}
+export {
+  SCREEN_LINK_VALUE_PREFIX,
+  formatScreenLinkValue,
+  nodesReferenceScreen,
+  parseScreenLinkValue,
+} from './screen-link-value'
 
 /**
  * Navigable protocols only. A stored `javascript:`/`data:` href would

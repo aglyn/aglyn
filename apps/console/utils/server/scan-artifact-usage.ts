@@ -15,14 +15,28 @@
  * limitations under the License.
  */
 
-import { nodesReferenceComponent } from '@aglyn/aglyn/server'
+import {
+  nodesReferenceComponent,
+  nodesReferenceScreen,
+} from '@aglyn/aglyn/server'
 
 export interface UsageDependent {
-  type: 'screen' | 'layout' | 'component'
+  type: 'screen' | 'layout' | 'component' | 'collection'
   id: string
   name: string
   via: Array<'id' | 'name'>
   versionId?: string
+  /**
+   * HOW the dependent references the artifact — screens only, for now
+   * (AGL-703).
+   *
+   * A component or a layout has exactly one kind of dependent and the noun
+   * says everything: an instance, or a binding. A screen has three, and they
+   * break in three different ways — a link goes dead, a child moves, a
+   * collection loses the page it renders through. Copy that could not tell
+   * them apart would have to describe the worst case every time.
+   */
+  relation?: 'link' | 'child' | 'template'
 }
 
 /** A screen/layout/component reduced to what a usage scan needs. */
@@ -42,6 +56,8 @@ export interface UsageCandidate {
   versionId?: string
   /** Screens only: the layout they render inside. */
   layoutId?: string
+  /** Screens only: the screen they nest under, which is part of their path. */
+  parentId?: string
 }
 
 /** `displayName`, falling back to a legacy `name`, then the raw id. */
@@ -139,6 +155,144 @@ export function scanLayoutUsage(
     ...dependentsOf(screens, 'screen'),
     ...dependentsOf(layouts, 'layout'),
   ]
+}
+
+/** A collection reduced to the screen pointers a usage scan cares about. */
+export interface CollectionCandidate {
+  id: string
+  displayName?: string
+  slug?: string
+  deletedAt?: unknown
+  /** The three fields a collection can name a template screen with. */
+  listScreenId?: string
+  entryScreenId?: string
+  templateScreenId?: string
+}
+
+/**
+ * The fields a collection points a template screen with (AGL-105/AGL-551).
+ *
+ * Re-stated rather than imported from `constants/collection-templates`: that
+ * module is reached by `'use client'` pages, and this one runs on the server.
+ * The set is small and the tenant runtime's own copy is the authority both
+ * follow — see `COLLECTION_TEMPLATE_SCREEN_FIELDS` for why there are three.
+ */
+const TEMPLATE_FIELDS = [
+  'listScreenId',
+  'entryScreenId',
+  'templateScreenId',
+] as const
+
+/**
+ * Everything that depends on a SCREEN (AGL-703).
+ *
+ * The kind this endpoint could not answer, and the one whose deletion is
+ * hardest to reason about — because a screen is referenced three unrelated
+ * ways and only one of them looks like a reference:
+ *
+ * - **links.** Buttons, nav strips, tab sets and `Link`-typed component props
+ *   store a screen id, deliberately, so renames and re-parenting cannot break
+ *   them (AGL-1335). Deleting the target is the one thing that still can, and
+ *   AGL-1893 is the issue that got filed when it did: a link to a retired
+ *   screen shipped as a live-looking control that silently did nothing on two
+ *   production pages for two days.
+ * - **children.** A screen's path is built from its ancestors, so a screen
+ *   nested under this one is affected by its removal in a way no link is.
+ * - **collection templates.** A collection renders its list and its entries
+ *   THROUGH a screen. That pointer is the only dependent here that takes a
+ *   live route down, so it is the one the copy must not average away.
+ *
+ * Deliberately NOT counted: the deleted screen's own published path. That is
+ * the thing being deleted, not something that depends on it.
+ */
+export function scanScreenUsage(
+  screenId: string,
+  sources: {
+    screens: UsageCandidate[]
+    layouts: UsageCandidate[]
+    components: UsageCandidate[]
+    collections: CollectionCandidate[]
+  },
+): UsageDependent[] {
+  if (!screenId) return []
+  /**
+   * One row per DOCUMENT, keyed by kind and id.
+   *
+   * A child screen that also links back to its parent is one thing in the
+   * list and not two, and `relation` keeps the more consequential answer:
+   * template beats child beats link, because that is the order in which they
+   * cost the reader something — a lost page, a moved path, a dead link.
+   */
+  const rank = { template: 3, child: 2, link: 1 } as const
+  const found = new Map<string, UsageDependent>()
+  const add = (dependent: UsageDependent) => {
+    const key = `${dependent.type}:${dependent.id}`
+    const existing = found.get(key)
+    if (
+      existing &&
+      rank[existing.relation ?? 'link'] >= rank[dependent.relation ?? 'link']
+    ) {
+      return
+    }
+    found.set(key, dependent)
+  }
+
+  for (const candidate of sources.screens) {
+    if (!isLive(candidate) || candidate.id === screenId) continue
+    if (candidate.parentId === screenId) {
+      add({
+        type: 'screen',
+        id: candidate.id,
+        name: labelFor(candidate),
+        via: ['id'],
+        relation: 'child',
+        ...(candidate.versionId ? { versionId: candidate.versionId } : {}),
+      })
+    }
+  }
+
+  const collectLinks = (
+    candidates: UsageCandidate[],
+    type: 'screen' | 'layout' | 'component',
+  ) => {
+    for (const candidate of candidates) {
+      if (!isLive(candidate) || candidate.id === screenId) continue
+      if (!nodesReferenceScreen(candidate.nodes as never, screenId)) continue
+      add({
+        type,
+        id: candidate.id,
+        name: labelFor(candidate),
+        // Links store ids, so a rename can never break one — only a delete.
+        via: ['id'],
+        relation: 'link',
+        ...(candidate.versionId ? { versionId: candidate.versionId } : {}),
+      })
+    }
+  }
+  collectLinks(sources.screens, 'screen')
+  collectLinks(sources.layouts, 'layout')
+  collectLinks(sources.components, 'component')
+
+  for (const contentCollection of sources.collections) {
+    if (contentCollection.deletedAt) continue
+    const binds = TEMPLATE_FIELDS.some(
+      (field) => contentCollection[field] === screenId,
+    )
+    if (!binds) continue
+    add({
+      type: 'collection',
+      id: contentCollection.id,
+      name: String(
+        contentCollection.displayName ??
+          contentCollection.slug ??
+          contentCollection.id,
+      ),
+      via: ['id'],
+      relation: 'template',
+    })
+  }
+
+  return [...found.values()]
 }
 
 /**

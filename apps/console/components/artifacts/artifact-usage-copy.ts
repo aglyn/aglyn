@@ -51,10 +51,26 @@
 
 /** One thing that references the artifact being deleted. */
 export interface ArtifactDependent {
-  type: 'screen' | 'layout' | 'component' | 'workflow' | 'variable'
+  type:
+    | 'screen'
+    | 'layout'
+    | 'component'
+    | 'workflow'
+    | 'variable'
+    | 'collection'
   id: string
   name: string
   versionId?: string
+  /**
+   * HOW it references the artifact — screens only (AGL-703).
+   *
+   * A component's dependents all break the same way and a layout's do too, so
+   * one sentence covers each. A screen's do not: a dead link, a re-parented
+   * child, and a collection that has lost the screen it renders through are
+   * three different outcomes, and exactly one of them takes a page off the
+   * site. See {@link consequenceNote}.
+   */
+  relation?: 'link' | 'child' | 'template'
 }
 
 /** What `/api/hosts/where-used` answered with. */
@@ -73,7 +89,7 @@ export interface ArtifactUsageScan {
 }
 
 /** The kinds this copy covers. */
-export type ArtifactUsageKind = 'component' | 'layout'
+export type ArtifactUsageKind = 'component' | 'layout' | 'screen'
 
 /** Coerce whatever the response carried; anything but `true` is incomplete. */
 export const scanIsComplete = (value: unknown): boolean => value === true
@@ -86,12 +102,67 @@ export const scanIsComplete = (value: unknown): boolean => value === true
  * layout needs to know their pages keep serving, and an author deleting a
  * component needs to know the opposite of a white screen.
  */
-export const consequenceNote = (kind: ArtifactUsageKind): string =>
-  kind === 'component'
-    ? 'Nothing goes down: each place it was used keeps rendering, with an ' +
+export const consequenceNote = (
+  kind: ArtifactUsageKind,
+  dependents: ArtifactDependent[] = [],
+): string => {
+  if (kind === 'component') {
+    return (
+      'Nothing goes down: each place it was used keeps rendering, with an ' +
       'empty space where this component was, until you replace or remove it.'
-    : 'Nothing goes down: those screens keep serving, rendering without the ' +
+    )
+  }
+  if (kind === 'layout') {
+    return (
+      'Nothing goes down: those screens keep serving, rendering without the ' +
       'shared chrome until they are bound to another layout.'
+    )
+  }
+  return screenConsequenceNote(dependents)
+}
+
+/**
+ * The screen sentence, built from what the scan actually found (AGL-703).
+ *
+ * The one kind where "nothing goes down" is not always true, so it is not
+ * always said. A collection renders its list and its entry pages THROUGH a
+ * screen, and deleting that screen takes those routes off the site — while a
+ * dead link or a re-parented child leaves every page still serving. Averaging
+ * the three into one reassuring sentence would understate the first; leading
+ * with the first would overstate the other two, on the far more common path.
+ *
+ * With NO dependent list — a failed or unread scan — every consequence is
+ * stated, because the one thing that must not happen is a reader inferring
+ * safety from a scan that never ran.
+ */
+function screenConsequenceNote(dependents: ArtifactDependent[]): string {
+  const templates = dependents.filter(
+    (dependent) => dependent.relation === 'template',
+  )
+  /** True of every screen delete, whatever else is also true. */
+  const SURVIVES =
+    'Pages that link to it keep rendering — those links stop working until ' +
+    'you point them somewhere else — and any screen nested under it keeps ' +
+    'its own published path.'
+
+  if (!dependents.length) {
+    // No list to reason from: state the worst case alongside the rest, so
+    // nobody reads safety into a scan that did not run.
+    return (
+      'Links to it stop working, and any collection that renders its pages ' +
+      `through it loses them until another screen is picked. ${SURVIVES}`
+    )
+  }
+  if (!templates.length) return `Nothing goes down: ${SURVIVES}`
+
+  const names = templates.map((dependent) => dependent.name).join(', ')
+  const verb = templates.length === 1 ? 'renders' : 'render'
+  return (
+    `This one does break: ${names} ${verb} pages through this screen, so ` +
+    `those pages stop resolving until you point the collection at another ` +
+    `screen. Otherwise: ${SURVIVES.charAt(0).toLowerCase()}${SURVIVES.slice(1)}`
+  )
+}
 
 /** The lead sentence — what is being deleted. */
 export const deleteConfirmationLead = (
@@ -101,7 +172,9 @@ export const deleteConfirmationLead = (
   `"${name}" will be deleted. ` +
   (kind === 'component'
     ? 'It disappears from Your components.'
-    : 'It disappears from Layouts.')
+    : kind === 'layout'
+      ? 'It disappears from Layouts.'
+      : 'It disappears from Screens and its published path stops resolving.')
 
 /** Shown while the scan is still running. Never a blank space. */
 export const SCAN_PENDING_NOTE = ' Checking where it is used…'
@@ -147,7 +220,7 @@ export function deleteConfirmationNote(
   return (
     ` Used by${bound} ${dependents.length} ${
       dependents.length === 1 ? 'thing' : 'things'
-    }: ${list}. ${consequenceNote(kind)}`
+    }: ${list}. ${consequenceNote(kind, dependents)}`
   )
 }
 

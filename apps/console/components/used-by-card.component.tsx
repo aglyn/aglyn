@@ -19,17 +19,25 @@
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import { buildRoute, Route } from '../constants/route-links'
 import { useHostSubdomain } from './host-id-provider'
 import { useOrgSlug } from '../hooks/use-org-scope'
 
 interface Dependent {
-  type: 'screen' | 'layout' | 'component' | 'workflow' | 'variable'
+  type:
+    | 'screen'
+    | 'layout'
+    | 'component'
+    | 'workflow'
+    | 'variable'
+    | 'collection'
   id: string
   name: string
   versionId?: string
+  /** Screens only: how it references this screen (AGL-703). */
+  relation?: 'link' | 'child' | 'template'
 }
 
 /**
@@ -37,7 +45,7 @@ interface Dependent {
  * assumed: "Used by" is read as a deletion-safety answer, and an unstated
  * boundary turns "nothing listed" into a promise the scan never made.
  */
-const SCOPE_NOTE: Record<'component' | 'layout', string> = {
+const SCOPE_NOTE: Record<UsedByKind, string> = {
   component:
     'Scanned: the published version of every screen and layout, plus other ' +
     'components — a component can be placed inside another one. Unpublished ' +
@@ -46,10 +54,26 @@ const SCOPE_NOTE: Record<'component' | 'layout', string> = {
     'Scanned: every screen that renders inside this layout, and every ' +
     'layout nested inside it — deleting this one unwraps the screens ' +
     'under those too. Published or not, everything is scanned.',
+  screen:
+    'Scanned: link targets on the published version of every screen and ' +
+    'layout, on every component, the screens nested under this one, and the ' +
+    'collections that render their pages through it. Links typed as plain ' +
+    'addresses rather than picked as screens are not scanned — nothing ' +
+    'records which screen those meant.',
+}
+
+/** The artifacts this card can scan. */
+export type UsedByKind = 'component' | 'layout' | 'screen'
+
+/** What a screen dependent's `relation` is called on the row. */
+const RELATION_LABEL: Record<'link' | 'child' | 'template', string> = {
+  link: 'links here',
+  child: 'nested under',
+  template: 'renders through',
 }
 
 /**
- * "Used by" card for a component or layout detail page (AGL-703).
+ * "Used by" card for a component, layout, or screen detail page (AGL-703).
  *
  * Deleting a component or a layout used to be a guess. This answers it from
  * the runtime's own reference model — reusable-instance `props.refId` for
@@ -68,7 +92,7 @@ export function UsedByCard({
   noun,
 }: {
   hostId: string
-  kind: 'component' | 'layout'
+  kind: UsedByKind
   id: string
   /** How to name the scanned artifact in copy, e.g. 'component'. */
   noun: string
@@ -76,7 +100,38 @@ export function UsedByCard({
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
   const { data: user } = useUser()
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  /**
+   * The signed-in user, held in a REF rather than read from the closure.
+   *
+   * `user` was in the scan effect's dependency array, and `useUser()` can hand
+   * back a fresh object on any re-render — which re-fired the scan on every
+   * one of them once the reader had asked. That is the same hundreds-of-reads
+   * cost this card was just changed to stop paying, arriving by a different
+   * door: not on mount, but on every render after the button.
+   *
+   * A ref because the token is needed WHEN the scan runs and never decides
+   * WHETHER it should — which is exactly the thing a dependency array is for.
+   */
+  const userRef = useRef(user)
+  userRef.current = user
+  /**
+   * IDLE until the reader asks (AGL-703).
+   *
+   * The scan reads every screen, every layout, and — for a component — every
+   * component definition, decoding published node trees as it goes. On the
+   * marketing site's own layout that is 53 dependents found across several
+   * hundred document reads, and it was firing on every visit to the detail
+   * page whether or not anybody was thinking about deleting anything.
+   *
+   * So it runs the way the media library's "Find where this is used" runs
+   * (AGL-845), and for the same stated reason: *"scanning every published
+   * screen, layout, and content entry for this asset's URLs is expensive, so
+   * it runs ONLY when the user asks, never on drawer open."* The answer is
+   * worth a request; it is not worth one per page view.
+   */
+  const [status, setStatus] = useState<
+    'idle' | 'loading' | 'ready' | 'error'
+  >('idle')
   const [dependents, setDependents] = useState<Dependent[]>([])
   /**
    * Did the scan read everything it needed to (AGL-703)?
@@ -87,15 +142,29 @@ export function UsedByCard({
    * that had stopped looking. Absent reads as INCOMPLETE.
    */
   const [complete, setComplete] = useState(false)
-  const [attempt, setAttempt] = useState(0)
+  /**
+   * WHICH artifact the reader asked about, and how many times.
+   *
+   * A counter alone was not enough, and the failure is worth stating because
+   * it is invisible: this effect and the reset below both watch `id`, effects
+   * run in declaration order, and so switching artifact re-fired the scan
+   * with the previous ask still standing — one unrequested scan of the new
+   * artifact before the reset could clear the counter. Naming the target
+   * inside the ask makes the two agree without depending on their order.
+   */
+  const target = `${kind}:${id}`
+  const [ask, setAsk] = useState<{ target: string; n: number } | null>(null)
 
   useEffect(() => {
     if (!hostId || !id) return
+    // `null` is the un-asked state: mounting must not scan. A stale target is
+    // the un-asked state too — see `ask`.
+    if (!ask || ask.target !== target) return
     let active = true
     setStatus('loading')
     void (async () => {
       try {
-        const idToken = await (user as any)?.getIdToken?.()
+        const idToken = await (userRef.current as any)?.getIdToken?.()
         const response = await fetch('/api/hosts/where-used', {
           method: 'POST',
           headers: {
@@ -119,7 +188,26 @@ export function UsedByCard({
     return () => {
       active = false
     }
-  }, [hostId, kind, id, user, attempt])
+    // NOT `user`: see `userRef`. Only an explicit ask may start a scan.
+  }, [hostId, kind, id, target, ask])
+
+  /** Every control that starts a scan — first ask, rescan, and retry. */
+  const runScan = useCallback(
+    () =>
+      setAsk((previous) => ({
+        target,
+        n: previous?.target === target ? previous.n + 1 : 1,
+      })),
+    [target],
+  )
+
+  // Switching artifact throws the previous answer away rather than showing
+  // one artifact's dependents under another's name.
+  useEffect(() => {
+    setStatus('idle')
+    setDependents([])
+    setComplete(false)
+  }, [hostId, kind, id])
 
   const hrefFor = useCallback(
     (dependent: Dependent) => {
@@ -145,6 +233,11 @@ export function UsedByCard({
           componentId: dependent.id,
         })
       }
+      if (dependent.type === 'collection') {
+        // The collection LIST page: a template binding is changed in the
+        // collection's settings, which is where this lands the reader.
+        return buildRoute(Route.HOST_CONTENT, { orgSlug, host })
+      }
       // A screen with no published version has nowhere to link to; the row
       // still has to appear, because it still uses this.
       return null
@@ -161,12 +254,30 @@ export function UsedByCard({
       help={
         kind === 'component'
           ? docsHelp('components', { anchor: '#used-by' })
-          : docsHelp('layouts', { anchor: '#used-by' })
+          : kind === 'layout'
+            ? docsHelp('layouts', { anchor: '#used-by' })
+            : // No "Used by" heading on the screens topic to deep-link to —
+              // what a screen's dependents ARE is routing, which is the
+              // section that explains how a path is built from the tree.
+              docsHelp('screens', { anchor: '#screens--routing' })
       }
       contentGutterX
       contentGutterY
     >
-      {status === 'loading' ? (
+      {status === 'idle' ? (
+        <Stack spacing={1} sx={{ alignItems: 'flex-start' }}>
+          <Typography variant="body2" color="text.secondary">
+            {`Find every screen, layout, and component that renders this ` +
+              `${noun} before you change or delete it.`}
+          </Typography>
+          <Button size="small" variant="outlined" onClick={runScan}>
+            {'Find where this is used'}
+          </Button>
+          <Typography variant="caption" color="text.secondary">
+            {SCOPE_NOTE[kind]}
+          </Typography>
+        </Stack>
+      ) : status === 'loading' ? (
         <Typography variant="body2" color="text.secondary">
           {`Checking what uses this ${noun}…`}
         </Typography>
@@ -177,7 +288,7 @@ export function UsedByCard({
               'as nothing using it — treat deletion as unsafe until the ' +
               'check succeeds.'}
           </Alert>
-          <Button size="small" onClick={() => setAttempt((n) => n + 1)}>
+          <Button size="small" onClick={runScan}>
             {'Try again'}
           </Button>
         </Stack>
@@ -223,13 +334,45 @@ export function UsedByCard({
                     {dependent.name}
                   </Typography>
                 )}
-                <Chip size="small" variant="outlined" label={dependent.type} />
+                <Stack direction="row" spacing={0.5}>
+                  {/* WHICH kind of reference, when that changes the answer:
+                      a collection template is the only screen dependent that
+                      takes a live route down (AGL-703). */}
+                  {dependent.relation ? (
+                    <Chip
+                      size="small"
+                      color={
+                        dependent.relation === 'template'
+                          ? 'warning'
+                          : 'default'
+                      }
+                      variant={
+                        dependent.relation === 'template'
+                          ? 'filled'
+                          : 'outlined'
+                      }
+                      label={RELATION_LABEL[dependent.relation]}
+                    />
+                  ) : null}
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    label={dependent.type}
+                  />
+                </Stack>
               </Stack>
             )
           })}
           <Typography variant="caption" color="text.secondary">
             {SCOPE_NOTE[kind]}
           </Typography>
+          <Button
+            size="small"
+            onClick={runScan}
+            sx={{ alignSelf: 'flex-start' }}
+          >
+            {'Rescan'}
+          </Button>
         </Stack>
       )}
     </CardDisplay>

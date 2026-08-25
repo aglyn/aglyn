@@ -42,10 +42,14 @@ import {
   type ArtifactDependent,
 } from '../components/artifacts/artifact-usage-copy'
 
-const dependent = (name: string): ArtifactDependent => ({
+const dependent = (
+  name: string,
+  relation?: ArtifactDependent['relation'],
+): ArtifactDependent => ({
   type: 'screen',
   id: `id-${name}`,
   name,
+  ...(relation ? { relation } : {}),
 })
 
 describe('artifact delete copy respects what the scan actually read', () => {
@@ -85,7 +89,7 @@ describe('artifact delete copy respects what the scan actually read', () => {
   })
 
   it('names the dependents it found, and counts the rest', () => {
-    const many = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map(dependent)
+    const many = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((n) => dependent(n))
     const note = deleteConfirmationNote(
       { dependents: many, complete: true },
       'component',
@@ -159,6 +163,71 @@ describe('artifact delete copy respects what the scan actually read', () => {
     expect(
       deleteConfirmationNote({ dependents: [], complete: true }, 'component'),
     ).not.toMatch(/nothing goes down/i)
+  })
+
+  /**
+   * SCREENS (AGL-703) — the kind where "nothing goes down" is sometimes a lie.
+   *
+   * A screen is referenced three unrelated ways and only one of them takes a
+   * live route off the site: a collection renders its list and entry pages
+   * THROUGH a screen, so deleting that screen is not a degraded link, it is a
+   * missing page. The other two — a dead nav link, a re-parented child — leave
+   * everything serving.
+   *
+   * So the screen sentence is built from the dependents rather than picked
+   * per kind, and these pin the seam. Averaging the three into one reassuring
+   * sentence is the failure mode; so is leading with the worst case on the far
+   * more common path.
+   */
+  it('promises nothing goes down when only links and children point at it', () => {
+    const note = deleteConfirmationNote(
+      {
+        dependents: [dependent('Home', 'link'), dependent('About', 'child')],
+        complete: true,
+      },
+      'screen',
+    )
+    expect(note).toMatch(/nothing goes down/i)
+    expect(note).toMatch(/links stop working/i)
+    expect(note).toMatch(/keeps its own published path/i)
+    expect(note).not.toMatch(/does break/i)
+  })
+
+  it('REFUSES that promise when a collection renders through it', () => {
+    const note = deleteConfirmationNote(
+      {
+        dependents: [
+          dependent('Home', 'link'),
+          { type: 'collection', id: 'blog', name: 'Blog', relation: 'template' },
+        ],
+        complete: true,
+      },
+      'screen',
+    )
+    // The one dependent that costs a page must not be softened by the two
+    // that do not.
+    expect(note).not.toMatch(/nothing goes down/i)
+    expect(note).toMatch(/does break/i)
+    expect(note).toMatch(/Blog/)
+    expect(note).toMatch(/stop resolving/i)
+    // And the reassuring half is still there — it is still true of the links.
+    expect(note).toMatch(/links stop working/i)
+  })
+
+  it('states every screen consequence when the scan could not run', () => {
+    // No list to reason from: the worst case has to be on the page, or a
+    // reader infers safety from a scan that never happened.
+    const note = deleteConfirmationNote(null, 'screen')
+    expect(note).toMatch(/could not check/i)
+    expect(note).toMatch(/loses them until another screen is picked/i)
+    expect(note).not.toMatch(/nothing goes down/i)
+  })
+
+  it('names Screens, not a card, in the screen lead', () => {
+    expect(deleteConfirmationLead('screen', 'Pricing')).toContain('"Pricing"')
+    expect(deleteConfirmationLead('screen', 'Pricing')).toMatch(
+      /published path stops resolving/i,
+    )
   })
 
   it('names the artifact in the lead so the dialog is about one thing', () => {

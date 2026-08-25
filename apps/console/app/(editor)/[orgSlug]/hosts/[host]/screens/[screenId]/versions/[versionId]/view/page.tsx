@@ -112,6 +112,10 @@ import {
 import PluginWidgetSlot from '../../../../../../../../../../components/plugin-widget-slot.component'
 import { CONTENT_MAX_WIDTH } from '../../../../../../../../../../constants/shared'
 import { docsHelp } from '../../../../../../../../../../constants/docs-links'
+import UsedByCard from '../../../../../../../../../../components/used-by-card.component'
+import ArtifactDeleteConfirmDescription, {
+  fetchArtifactUsage,
+} from '../../../../../../../../../../components/artifacts/artifact-delete-confirm.component'
 import {
   collectionTemplatePublishMessage,
   collectionTemplateRoutesSummary,
@@ -449,13 +453,39 @@ function ScreenDetails() {
     screenFromCache,
   ])
 
+  /**
+   * The signed-in user, for the id token the where-used scan needs.
+   *
+   * Declared HERE, above the first callback that names it: a `useCallback`
+   * dependency array is evaluated during render, so a `const` further down
+   * the component is read in its temporal dead zone and throws on the way in
+   * — the same trap AGL-693 hit with `screenQuota` on the screens list.
+   */
+  const { data: user } = useUser()
+
   // --- Delete -----------------------------------------------------------
   const handleDelete = useCallback(async () => {
+    /*
+      The scan starts here and the dialog opens in the same tick (AGL-703) —
+      the old sentence said what happens to THIS screen and nothing about the
+      nav links pointing at it, or a collection rendering its pages through it.
+    */
+    const scan = (async () =>
+      fetchArtifactUsage({
+        hostId,
+        kind: 'screen',
+        id: screenId,
+        idToken: await (user as any)?.getIdToken?.(),
+      }))()
     const confirmed = await confirm({
       title: 'Delete this screen?',
-      description:
-        `"${displayName}" is removed from the site and its published ` +
-        'path stops resolving.',
+      description: (
+        <ArtifactDeleteConfirmDescription
+          kind="screen"
+          name={displayName}
+          scan={scan}
+        />
+      ),
       confirmationText: 'Delete',
       confirmationButtonProps: { color: 'error' },
     })
@@ -492,6 +522,9 @@ function ScreenDetails() {
     enqueueSnackbar,
     router,
     logActivity,
+    user,
+    orgSlug,
+    host,
   ])
 
   // --- Publish / unpublish the route ------------------------------------
@@ -604,7 +637,6 @@ function ScreenDetails() {
    * successful publish into an error, and the revalidate window is still
    * underneath as the backstop.
    */
-  const { data: user } = useUser()
   // Shared with the besigner's versions panel (AGL-1150). This was the only
   // publish site that dropped a cache; keeping the call in one helper is what
   // stops the next publish surface from quietly forgetting it.
@@ -1360,6 +1392,21 @@ function ScreenDetails() {
                       </Typography>
                     </Stack>
                   </CardDisplay>
+                ),
+              },
+              {
+                // What breaks if this screen goes (AGL-703). On demand, like
+                // the media library's own audit: the scan reads every screen,
+                // layout and component on the site, which is not a cost to
+                // pay on every visit to a detail page.
+                size: CARD_NARROW,
+                children: (
+                  <UsedByCard
+                    hostId={hostId}
+                    kind="screen"
+                    id={screenId}
+                    noun="screen"
+                  />
                 ),
               },
               {

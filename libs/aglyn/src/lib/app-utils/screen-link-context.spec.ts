@@ -21,6 +21,7 @@ import {
   brokenScreenLinkProps,
   formatScreenLinkValue,
   isScreenLinkBroken,
+  nodesReferenceScreen,
   parseScreenLinkValue,
   resolveScreenHref,
   splitLinkValue,
@@ -221,5 +222,51 @@ describe('a dead screen link (AGL-1893)', () => {
         'pricing',
       )
     })
+  })
+})
+
+/**
+ * The server-side half of the same value model (AGL-703).
+ *
+ * `/api/hosts/where-used` answers "what breaks if I delete this screen", and
+ * a link is one of the three ways a screen is referenced. Kept beside the
+ * parsing it depends on: a scan that disagreed with {@link splitLinkValue}
+ * about what a stored value points at would be wrong about exactly the links
+ * an author cannot see.
+ */
+describe('nodesReferenceScreen (AGL-703)', () => {
+  const nodes = (props: Record<string, unknown>) => ({
+    n1: { componentId: 'button', props },
+  })
+
+  it('matches the marked form and the legacy bare id', () => {
+    expect(nodesReferenceScreen(nodes({ screenId: 'screen:about' }), 'about'))
+      .toBe(true)
+    expect(nodesReferenceScreen(nodes({ screenId: 'about' }), 'about')).toBe(
+      true,
+    )
+  })
+
+  it('walks nested items, where a nav strip keeps its targets', () => {
+    // The case a shallow prop scan misses entirely — and it is most of the
+    // internal links on a typical site.
+    expect(
+      nodesReferenceScreen(
+        nodes({ items: [{ label: 'About', link: 'screen:about' }] }),
+        'about',
+      ),
+    ).toBe(true)
+  })
+
+  it('does not match a plain address that merely looks similar', () => {
+    expect(nodesReferenceScreen(nodes({ href: '/about' }), 'about')).toBe(false)
+    expect(nodesReferenceScreen(nodes({ href: 'about-us' }), 'about')).toBe(
+      false,
+    )
+  })
+
+  it('is false for empty inputs rather than throwing', () => {
+    expect(nodesReferenceScreen(null, 'about')).toBe(false)
+    expect(nodesReferenceScreen(nodes({ screenId: 'about' }), '')).toBe(false)
   })
 })
