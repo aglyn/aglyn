@@ -180,6 +180,32 @@ let connectedDatabase = false
 let connectedAuth = false
 
 /**
+ * True when THIS Chrome instance is under WebDriver automation control
+ * (Puppeteer, Playwright, Selenium, or a raw CDP client) — never true for a
+ * person's own browser.
+ *
+ * The `initializeFirestore` call below already documents the fault this
+ * exists for: "the emulator's WebChannel streaming misbehaves in automated
+ * Chrome — listeners serve the initial empty from-cache snapshot and the
+ * server sync never arrives" (AGL-217). That mitigation only reaches
+ * `FIREBASE_FIRESTORE_EMULATOR_ENABLED`, so an automated session against a
+ * REAL, deployed backend — a browser-automation agent driving a live
+ * console, which is exactly what `navigator.webdriver` detects — stayed
+ * exposed. `getDocs`/`getDoc` and `onSnapshot` all resolve over the same
+ * Watch stream internally, so a one-shot read wedges exactly like a listener
+ * does: no error, nothing to catch, `loading` simply never gets its
+ * settling event. That is the Media Library grid spinning on "Loading
+ * media…" indefinitely with a perfectly healthy account and a perfectly
+ * healthy network.
+ *
+ * `undefined` during SSR reads as `false` — `navigator` does not exist in
+ * Node, and a server render can only ever produce the auto-detected
+ * transport, never the forced one.
+ */
+const isAutomatedChromeSession = (): boolean =>
+  typeof navigator !== 'undefined' && navigator.webdriver === true
+
+/**
  * The console tag's gtag config — ONE object, at module scope, deliberately
  * (AGL-1979).
  *
@@ -244,8 +270,11 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
         // streaming misbehaves in automated Chrome — listeners serve the
         // initial empty from-cache snapshot and the server sync never
         // arrives, which looks like "empty pages with zero errors"
-        // (the AGL-217 mystery). Production keeps the default transport
-        // and persistent cache.
+        // (the AGL-217 mystery). Real traffic keeps the default transport
+        // and persistent cache — except a WebDriver-controlled Chrome
+        // against a real backend, which forces long-polling for the same
+        // reason without giving up the cache (see `isAutomatedChromeSession`
+        // below).
         //
         // ⚠️ CONSEQUENCE, and it will cost you hours if you do not know it
         // (AGL-1066): every stale-session/stale-cache fault is UNREPRODUCIBLE
@@ -264,12 +293,24 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
           app,
           FIREBASE_FIRESTORE_EMULATOR_ENABLED
             ? { experimentalForceLongPolling: true }
-            : // NOT unconditional (AGL-1456). `persistentLocalCache` writes
-              // document bodies to this origin's IndexedDB, so on a custom
-              // console domain it is the same exposure D6 removed from the
-              // refresh token — see `firestore-cache.ts` for why one
-              // declaration governs both.
-              { localCache: localCacheFor(authPersistence) },
+            : {
+                // NOT unconditional (AGL-1456). `persistentLocalCache` writes
+                // document bodies to this origin's IndexedDB, so on a custom
+                // console domain it is the same exposure D6 removed from the
+                // refresh token — see `firestore-cache.ts` for why one
+                // declaration governs both.
+                localCache: localCacheFor(authPersistence),
+                // The real-backend half of the AGL-217 mitigation above: force
+                // long-polling for a WebDriver-controlled Chrome even when it
+                // is NOT talking to the emulator, because the WebChannel wedge
+                // is a property of automated Chrome, not of which backend it
+                // is automating against. Never true for a real visitor, so
+                // production traffic keeps the SDK's own auto-detected
+                // transport untouched.
+                ...(isAutomatedChromeSession()
+                  ? { experimentalForceLongPolling: true }
+                  : {}),
+              },
         )
         if (FIREBASE_FIRESTORE_EMULATOR_ENABLED) {
           connectFirestoreEmulator(getFirestore(app), 'localhost', 8082)
