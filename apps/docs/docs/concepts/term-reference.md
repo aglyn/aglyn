@@ -103,17 +103,17 @@ has one public profile (handle, display name, listings).
 
 One page of a site: a slug, publish state, and a designed node tree.
 Screens can nest (parent/child slugs) and can bind to a shared layout.
-→ [Screens & layouts](../building-sites/screens-and-layouts/overview.md)
+→ [Screens](../building-sites/screens-and-layouts/screens.md)
 
 ### Layout
 
 Shared site chrome — app bar, footer, navigation — designed once and
-rendered around every screen bound to it. → [Screens & layouts](../building-sites/screens-and-layouts/overview.md)
+rendered around every screen bound to it. → [Layouts](../building-sites/screens-and-layouts/layouts.md)
 
 ### Slug
 
 A screen's URL segment. Nested screens compose their ancestors' slugs into
-the full path. → [Screens & layouts](../building-sites/screens-and-layouts/overview.md)
+the full path. → [Screens](../building-sites/screens-and-layouts/screens.md#screens--routing)
 
 ### Version
 

@@ -232,7 +232,7 @@ top of work other people are in the middle of.
 Drafts live in **this browser only** (they don't follow you across machines), are
 kept for up to **7 days**, and are deleted the moment a save succeeds. They're a
 crash net, not version history — for named, durable snapshots use
-[versions](../screens-and-layouts/overview.md#versions--scheduled-publishing).
+[versions](../screens-and-layouts/versions-and-publishing.md).
 
 ## The Save button always answers
 
@@ -245,5 +245,5 @@ saved", or the conflict warning), never silence.
 ## Related
 
 - [The Besigner](overview.md)
-- [Screens & layouts — versions](../screens-and-layouts/overview.md#versions--scheduled-publishing)
+- [Screens & layouts — versions](../screens-and-layouts/versions-and-publishing.md)
 - [Teams, roles & membership](../../workspace-and-billing/teams-and-roles/overview.md)

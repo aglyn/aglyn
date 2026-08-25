@@ -12,6 +12,12 @@ a **reusable component**.
 An instance is not a copy. It **grafts the source at render time**, so editing the component
 updates every page that places it. Change a font size once and the whole site follows.
 
+A component is content you repeat **inside** a page. If what you want is the frame
+*around* the page — header, navigation, footer — that is a
+[layout](../screens-and-layouts/layouts.md), not a component. And if you want a starting
+point you copy once, with no live link back to the source, that is a
+[template](../site-templates/templates-library.md).
+
 :::info Plan availability
 **Starter and above.** On Free, promoting an element answers *"Reusable components
 require a Starter plan — see Billing to upgrade."* There is no cap on how many
@@ -309,4 +315,4 @@ generic package glyph.
 
 - [Copy & paste elements](copy-paste.md)
 - [The Besigner](overview.md)
-- [Screens & layouts](../screens-and-layouts/overview.md#reusable-components)
+- [Screens & layouts](../screens-and-layouts/overview.md)

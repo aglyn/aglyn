@@ -670,9 +670,8 @@ export const BesignerVersionsComponent = observer(
             >
               {'Versions'}
               <HelpTip
-                {...docsHelp('screens', {
-                  anchor: '#versions--scheduled-publishing',
-                  title: 'Versions & scheduled publishing',
+                {...docsHelp('versionsAndPublishing', {
+                  anchor: '#the-versions-dialog',
                   excerpt:
                     'Every publish creates a version you can view, restore, or schedule to go live at a set time.',
                 })}

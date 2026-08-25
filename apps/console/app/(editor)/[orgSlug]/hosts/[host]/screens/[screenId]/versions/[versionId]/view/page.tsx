@@ -969,8 +969,7 @@ function ScreenDetails() {
           },
         ]}
         help={{
-          topic: 'screens',
-          anchor: '#versions--scheduled-publishing',
+          topic: 'versionsAndPublishing',
         }}
         header={{
           children: displayName,
@@ -1121,7 +1120,7 @@ function ScreenDetails() {
                 children: (
                   <CardDisplay
                     header={'Publishing'}
-                    help={docsHelp('screens', { anchor: '#versions--scheduled-publishing', excerpt: 'Publish this screen live now or schedule a version to go live at a set time.' })}
+                    help={docsHelp('versionsAndPublishing', { anchor: '#scheduled-publishing', excerpt: 'Publish this screen live now or schedule a version to go live at a set time.' })}
                     contentGutterX
                     contentGutterY
                     contentBordered="all"
@@ -1432,7 +1431,7 @@ function ScreenDetails() {
                 children: (
                   <CardDisplay
                     header={'Versions'}
-                    help={docsHelp('screens', { anchor: '#versions--scheduled-publishing', excerpt: 'Every publish is a version you can view, restore, or schedule.' })}
+                    help={docsHelp('versionsAndPublishing', { anchor: '#publish--roll-back', excerpt: 'Every publish is a version you can view, restore, or schedule.' })}
                     contentBordered="all"
                   >
                     <Table size="small">

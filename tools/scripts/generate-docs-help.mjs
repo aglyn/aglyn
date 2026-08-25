@@ -63,7 +63,10 @@ const CONSOLE_ALIASES = {
   interactions: '/building-sites/besigner/interactions-and-custom-html',
   members: '/guides/member-accounts',
   pos: '/commerce-and-bookings/commerce/pos-and-reservations',
-  screens: '/building-sites/screens-and-layouts/overview',
+  // `screens`, `layouts` and `versionsAndPublishing` need no alias — they
+  // auto-derive from their own page basenames (AGL-2486). The hub page that
+  // kept the old `…/screens-and-layouts/overview` URL alive derives
+  // `screensAndLayouts` from its parent directory.
   team: '/workspace-and-billing/teams-and-roles/overview',
   workflows: '/marketing-and-automation/workflows-and-actions/overview',
 }
@@ -91,9 +94,12 @@ const BESIGNER_TOPICS = {
   dragDropHierarchy: '/building-sites/besigner/drag-drop-hierarchy',
   elementCatalog: '/building-sites/besigner/element-catalog',
   interactions: '/building-sites/besigner/interactions-and-custom-html',
+  // The besigner's only screens/layouts link is the app bar's "Shared layout"
+  // control, which is about LAYOUTS — so the topic is `layouts`, not the
+  // combined page it used to point at (AGL-2486).
+  layouts: '/building-sites/screens-and-layouts/layouts',
   responsiveStyling: '/building-sites/besigner/responsive-styling',
   reusableComponents: '/building-sites/besigner/reusable-components',
-  screens: '/building-sites/screens-and-layouts/overview',
   seo: '/building-sites/seo/overview',
   textEditing: '/building-sites/besigner/text-editing',
 }

@@ -26,7 +26,7 @@ The **console** is where you manage a site. Here's what each part of the chrome 
   the editor: your recent screens by default, or type to find any screen or layout in the
   site by name. **View all screens** opens the full list.
 - **Version dropdown** (right, near your avatar) — pick or schedule a
-  [version](../building-sites/screens-and-layouts/overview.md#versions--scheduled-publishing) to view.
+  [version](../building-sites/screens-and-layouts/versions-and-publishing.md) to view.
 - **Notifications** — the bell shows an unread badge and drops down your 10 most recent
   notifications (form submissions, bookings, invoices, team changes), split across an
   **Inbox** tab (unread) and an **Archive** tab (already read). **Mark all read** clears

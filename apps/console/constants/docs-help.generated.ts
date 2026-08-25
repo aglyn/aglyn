@@ -348,6 +348,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Add a language switcher',
     excerpt: 'Let visitors move between your site\'s locales.',
   },
+  layouts: {
+    path: '/building-sites/screens-and-layouts/layouts',
+    title: 'Layouts',
+    excerpt: 'A layout is the shared frame your screens render inside — header, nav and footer in one place, nested up to five deep.',
+  },
   liveCoEditing: {
     path: '/building-sites/besigner/live-co-editing',
     title: 'Live co-editing & unsaved work',
@@ -534,9 +539,14 @@ export const DOCS_HELP_TOPICS = {
     excerpt: 'Turn a site into a reusable template and install marketplace templates.',
   },
   screens: {
+    path: '/building-sites/screens-and-layouts/screens',
+    title: 'Screens',
+    excerpt: 'Screens are your pages — how each one gets a slug, how the hierarchy builds your URLs, and which screens count against your plan.',
+  },
+  screensAndLayouts: {
     path: '/building-sites/screens-and-layouts/overview',
     title: 'Screens & Layouts',
-    excerpt: 'Screen hierarchy and routing, shared layouts, reusable components, and versioning.',
+    excerpt: 'The four building blocks of a site\'s structure — screens, layouts, reusable components and templates — and which one you want.',
   },
   securityAndCompliance: {
     path: '/enterprise/security-and-compliance',
@@ -633,6 +643,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Availability & status',
     excerpt: 'The live status page, what it does and does not show, and why there is no committed uptime percentage yet.',
   },
+  versionsAndPublishing: {
+    path: '/building-sites/screens-and-layouts/versions-and-publishing',
+    title: 'Versions & scheduled publishing',
+    excerpt: 'Every screen, layout and reusable component keeps named versions — publish one, roll back to an older one, or schedule one to go live.',
+  },
   webhooks: {
     path: '/marketing-and-automation/workflows-and-actions/webhooks',
     title: 'Webhooks',
@@ -721,6 +736,7 @@ export const DOCS_HELP_ANCHORS = {
   interactions: ['#fluent-interactions', '#plan-availability', '#pick-the-target-by-clicking', '#interaction-cookbook', '#custom-html-block', '#related'],
   inviteTeammates: ['#invite-someone', '#pending-invites', '#who-gets-told', '#accepting-an-invite', '#an-invitation-never-changes-who-owns-the-workspace', '#how-team-members-act', '#you-are-a-site-collaborators-support-channel', '#help-a-teammate-who-is-locked-out', '#why-you-cant-always-set-a-password', '#activity-log', '#tips', '#related'],
   languageSwitcher: ['#steps', '#tips', '#related'],
+  layouts: ['#what-a-layout-is', '#nested-layouts', '#used-by', '#layouts-vs-reusable-components', '#related'],
   liveCoEditing: ['#whos-here', '#presence-colors', '#per-version-rooms', '#presence-in-lists', '#not-a-lock', '#editing-together', '#saving-together', '#when-a-save-is-refused', '#local-draft-recovery', '#the-save-button-always-answers', '#related'],
   lockdown: ['#what-a-lockdown-does', '#reasons-and-the-notice', '#read-only-mode', '#what-reads-keep-working-does-and-does-not-cover', '#read-only-timing', '#read-only-evidence', '#read-only-revocation-evidence', '#a-gentler-lock-never-softens-a-stricter-one', '#enforcement', '#maintenance-windows-and-expiry', '#who-keeps-access-the-un-panic-invariant', '#feature-scope', '#signups-also-refuses-account-creation--if-the-valve-is-armed', '#domain-scope', '#device-scope', '#asset-quarantine--one-file-not-the-site-that-serves-it', '#which-digest', '#quarantine-keys', '#quarantine-audiences', '#disabled-files-page', '#deny-list', '#quarantine-curl', '#quarantine-history', '#tenant-api-coverage', '#analytics-beacon', '#operating-it', '#never-take-a-lock-or-a-lift-on-trust', '#what-a-caller-is-told', '#drill-provenance', '#production-drill-blocked', '#verifying-a-lockdown-on-the-wire', '#what-the-audit-row-records', '#the-live-dunning-schedule-has-not-been-read-agl-2430', '#what-the-live-dashboard-did-say-once-someone-opened-it-agl-2430', '#-include-a-link-for-customers-to-manage-their-subscriptions-stays-off', '#the-billing-recovery-path-must-survive-a-billing-lock'],
   longFormMarkdown: ['#the-markdown-element', '#what-the-markdown-supports', '#the-table-of-contents-element', '#how-it-finds-the-markdown', '#heading-links', '#related'],
@@ -758,7 +774,8 @@ export const DOCS_HELP_ANCHORS = {
   salesTaxReturn: ['#choosing-the-period', '#rows-that-need-attention', '#the-figures', '#refunds', '#aglyns-own-sales-by-jurisdiction', '#facilitated-sales-by-buyer-state', '#exporting-the-working-papers', '#related'],
   sandboxSecurity: ['#a-separate-origin', '#per-manifest-network-policy', '#when-you-cant-declare-the-origin', '#pinned-immutable-artifacts', '#what-this-means-when-you-build', '#related'],
   saveATemplate: ['#start-from-a-template', '#where-to-find-it', '#save-your-site-as-a-template', '#saving-a-single-page-instead', '#tips', '#related'],
-  screens: ['#what-counts-against-your-screen-allowance', '#screens--routing', '#layouts', '#nested-layouts', '#used-by', '#reusable-components', '#versions--scheduled-publishing', '#error--maintenance-screens', '#related'],
+  screens: ['#screens--routing', '#what-counts-against-your-screen-allowance', '#error--maintenance-screens', '#related'],
+  screensAndLayouts: ['#which-one-do-you-want', '#related'],
   securityAndCompliance: ['#what-it-covers', '#contract-documents', '#legal-reacceptance', '#why-the-gaps-are-listed-first', '#reporting-a-vulnerability'],
   selfHosting: ['#the-short-version', '#the-full-runbook', '#who-runs-this-install', '#your-dmca-position-is-your-own', '#addresses', '#tenant-domain', '#tenant-host-cname', '#console-url', '#aglyn-standalone', '#reverse-proxy', '#platform-brand', '#optional-keys', '#scheduled-jobs', '#issue-reports', '#request-geo', '#bucket-cors', '#docs-build', '#honest-limits', '#related'],
   seo: ['#per-screen-seo', '#how-a-page-title-is-built', '#site-wide-defaults', '#search-engine-visibility', '#the-whole-site', '#a-single-page', '#sitemap--robots', '#social-cards', '#structured-data', '#analytics-integration', '#related'],
@@ -778,6 +795,7 @@ export const DOCS_HELP_ANCHORS = {
   themeBuilder: ['#edit-your-theme', '#related'],
   troubleshooting: ['#checklist', '#verified-but-not-serving', '#the-site-loads-for-some-people-and-not-others', '#still-stuck', '#related'],
   uptimeAndStatus: ['#the-status-page', '#there-is-no-committed-uptime-percentage', '#where-the-platform-runs', '#reporting-an-outage'],
+  versionsAndPublishing: ['#the-versions-dialog', '#publish--roll-back', '#scheduled-publishing', '#plan-requirements', '#related'],
   webhooks: ['#outbound-webhooks', '#inbound-webhooks', '#tips', '#related'],
   whiteLabel: ['#where', '#fields', '#where-you-see-it', '#email', '#merge-tokens', '#email-logo', '#sending-address', '#custom-console-domain', '#platform-brand', '#related'],
   workflows: ['#workflows', '#actions-builder', '#webhooks', '#run-history', '#related'],

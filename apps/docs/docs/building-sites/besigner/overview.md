@@ -73,7 +73,7 @@ plan-gated (noted where relevant).
 ## The canvas
 
 The canvas shows your screen composed with its theme and, if bound, its
-[layout](../screens-and-layouts/overview.md#layouts). Selection overlays highlight the
+[layout](../screens-and-layouts/layouts.md). Selection overlays highlight the
 active element without affecting page scroll.
 
 When a drop isn't allowed, the Besigner explains **why** — it surfaces the specific
@@ -121,7 +121,7 @@ its empty state instead.
 Promote any subtree into a **reusable component**, then insert instances of it across
 screens. Editing the source updates every instance at render time. You can rename, demote,
 or delete reusable components from the site dashboard. See
-[Reusable components](../screens-and-layouts/overview.md#reusable-components).
+[Reusable components](reusable-components.md).
 
 ## Editing together
 

@@ -33,7 +33,7 @@ overlays, custom JS, server actions) require Pro+. See
 Put the menu in your **layout** (not a single screen) so it shows on every
 page. Open your **Main Layout** in the Besigner to follow along; if you
 don't have a layout yet, see
-[Screens & layouts](../building-sites/screens-and-layouts/overview.md#layouts).
+[Screens & layouts](../building-sites/screens-and-layouts/layouts.md).
 
 ## 1. Insert the Mega Menu
 

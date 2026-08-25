@@ -27,9 +27,9 @@ export const BESIGNER_DOCS = {
   dragDropHierarchy: '/building-sites/besigner/drag-drop-hierarchy',
   elementCatalog: '/building-sites/besigner/element-catalog',
   interactions: '/building-sites/besigner/interactions-and-custom-html',
+  layouts: '/building-sites/screens-and-layouts/layouts',
   responsiveStyling: '/building-sites/besigner/responsive-styling',
   reusableComponents: '/building-sites/besigner/reusable-components',
-  screens: '/building-sites/screens-and-layouts/overview',
   seo: '/building-sites/seo/overview',
   textEditing: '/building-sites/besigner/text-editing',
 } as const satisfies Record<string, string>
@@ -42,9 +42,9 @@ export const BESIGNER_DOCS_ANCHORS = {
   dragDropHierarchy: ['#where-you-can-drag', '#what-a-drag-does', '#drop-zones-edges-vs-center', '#containers-vs-leaf-elements', '#containers-accept-children', '#leaf-elements-dont--dropping-on-one-makes-a-sibling', '#adding-a-new-element', '#when-a-drop-is-rejected', '#moving-an-element-without-dragging', '#multi-drag', '#tips', '#related'],
   elementCatalog: ['#finding-an-element', '#element-search', '#element-detail', '#layout', '#grid', '#surface', '#accordion', '#navigation', '#tabs', '#tabs-that-go-to-another-screen', '#pagination', '#text', '#data-display', '#media', '#image-list', '#forms-input-commerce-members', '#related'],
   interactions: ['#fluent-interactions', '#plan-availability', '#pick-the-target-by-clicking', '#interaction-cookbook', '#custom-html-block', '#related'],
+  layouts: ['#what-a-layout-is', '#nested-layouts', '#used-by', '#layouts-vs-reusable-components', '#related'],
   responsiveStyling: ['#style-per-breakpoint', '#interaction-states', '#you-can-see-the-state-while-you-style-it', '#fields-you-dont-touch-keep-inheriting', '#states-and-breakpoints-combine', '#focus-state', '#box-stylers', '#spacing-side-names', '#spacing-units', '#spacing-steps', '#spacing-custom-amounts', '#unit-px', '#unit-rem', '#unit-em', '#unit-percent', '#unit-ch', '#unit-viewport', '#unit-small-viewport', '#style-groups', '#borders-without-css', '#picking-a-font', '#gradient-backgrounds', '#visibility-per-device-band', '#scheme-scoped-colors', '#custom-classes', '#custom-css-sx', '#semantic-sections--theme-mode', '#edit-json-for-one-element'],
   reusableComponents: ['#promote', '#insert-instances', '#properties', '#declare-them', '#use-them', '#save-then-publish', '#fill-them-in-per-page', '#restyle-one-instance', '#override-an-attribute-on-one-instance', '#retrofit-duplicated-sections', '#detach', '#nesting', '#used-by', '#manage', '#copy--paste-vs-reusable-components', '#tips', '#related'],
-  screens: ['#what-counts-against-your-screen-allowance', '#screens--routing', '#layouts', '#nested-layouts', '#used-by', '#reusable-components', '#versions--scheduled-publishing', '#error--maintenance-screens', '#related'],
   seo: ['#per-screen-seo', '#how-a-page-title-is-built', '#site-wide-defaults', '#search-engine-visibility', '#the-whole-site', '#a-single-page', '#sitemap--robots', '#social-cards', '#structured-data', '#analytics-integration', '#related'],
   textEditing: ['#edit-inline', '#committing', '#inline-toolbar', '#rich-text', '#the-text-attribute', '#text-field-read-only', '#remove-formatting', '#line-breaks', '#bindings-in-text', '#limits', '#wrapped-outlines', '#related'],
 } as const satisfies Partial<Record<BesignerDocsKey, readonly `#${string}`[]>>

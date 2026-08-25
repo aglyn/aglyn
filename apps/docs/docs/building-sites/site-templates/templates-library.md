@@ -14,6 +14,12 @@ to a site you are running.
 Find it at **Templates** in a site's navigation, alongside Screens, Layouts and
 Components — the three things a template can produce.
 
+A template is a **copy**, not a live link: once you use one, the result is yours outright
+and editing the template never changes what you already made. If you want one edit to
+update every place a thing appears, you want a
+[reusable component](../besigner/reusable-components.md). If you want one frame around
+many pages, you want a [layout](../screens-and-layouts/layouts.md).
+
 ## The three kinds
 
 | Kind | What it holds | What you get from it |
