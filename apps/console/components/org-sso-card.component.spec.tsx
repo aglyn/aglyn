@@ -267,6 +267,17 @@ const claim = (over: Partial<Record<string, unknown>> = {}) => ({
   domain: 'acme.com',
   verified: false,
   attested: false,
+  /**
+   * What the SERVER says it will publish (AGL-1887 part 2), defaulted the way
+   * the server defaults it: a verified claim publishes.
+   *
+   * An attested fixture has to state this explicitly, because `attested: true`
+   * covers TWO shapes that differ on exactly this field — a claim document
+   * carrying `attestedBy` (publishable) and a bare `sso.domains` entry with no
+   * claim document at all (not publishable). Collapsing them is the bug these
+   * cases exist to keep out.
+   */
+  publishable: over['verified'] === true,
   recordHost: '_aglyn-challenge.acme.com',
   recordValue: 'aglyn-domain-verification=tok',
   lastRecords: null,
@@ -347,6 +358,87 @@ describe('OrgSsoCard activation gate (AGL-1375)', () => {
     render(<OrgSsoCard />)
 
     await screen.findByText('On')
+    fireEvent.click(button('Turn off'))
+
+    expect(mockConfirmCalls).toHaveLength(1)
+    expect(mockConfirmCalls[0].title).toBe('Turn single sign-on off?')
+    expect(mockConfirmCalls[0].description).toMatch(/turn it back on without/)
+  })
+})
+
+/**
+ * AGL-1887 part 2: the door has to open from HERE, or it is still a one-way door.
+ *
+ * Part 2 widened the server — `publishSsoDomains` now admits a staff-attested
+ * claim as well as a DNS-verified one — and shipped without moving the card,
+ * which was still gated on `verified` because that was the server's rule when
+ * part 1 wrote it. The result: staff attest the domain, the server would
+ * publish it, and the admin looks at a disabled "Turn on" and a warning saying
+ * they cannot. The mechanism was reachable only by a route no customer has.
+ *
+ * The gate is now the server's own per-domain verdict, `publishable`. These
+ * cases pin both sides of it, because widening the gate to `attested` — the
+ * obvious-looking fix — would re-open part 1's bug for the orgs that have no
+ * claim document, whom the server still refuses.
+ */
+describe('OrgSsoCard restores an attested org (AGL-1887)', () => {
+  it('THE FIX: offers Turn on once staff have attested the domain', async () => {
+    // A claim document carrying `attestedBy`: no DNS proof, and the server
+    // publishes it anyway. Gating on `verified` reddens exactly this case.
+    serve(
+      statusPayload([claim({ attested: true, publishable: true })], {
+        status: 'disabled',
+      }),
+    )
+
+    render(<OrgSsoCard />)
+
+    await screen.findByText('Off')
+    expect(button('Turn on').disabled).toBe(false)
+    // And the sentence telling them they cannot is gone with it. Leaving the
+    // warning beside a working button is its own bug — the card would be
+    // contradicting itself about whether the org is stranded.
+    expect(screen.queryByText(/cannot be turned on until one of your domains/)).toBe(
+      null,
+    )
+  })
+
+  it('THE NEGATIVE: the same domain with no claim document is still refused', async () => {
+    // `attested: true`, `publishable: false` — the pre-self-serve org nobody
+    // has attested yet, surfaced from `sso.domains` with no claim behind it.
+    // The server skips it (`!claim.exists`), so the card must keep refusing.
+    // This is what stops the fix being "accept anything attested".
+    serve(
+      statusPayload([claim({ attested: true, publishable: false })], {
+        status: 'disabled',
+      }),
+    )
+
+    render(<OrgSsoCard />)
+
+    await screen.findByText('Off')
+    expect(button('Turn on').disabled).toBe(true)
+    expect(
+      screen.getByText(/cannot be turned on until one of your domains/),
+    ).toBeTruthy()
+  })
+
+  it('stops threatening that Turn off is permanent once an attestation exists', async () => {
+    // The copy is downstream of the same verdict, and it has to move with it.
+    // Telling an org it can never turn SSO back on, while the button that does
+    // so is enabled, is the AGL-1375 sentence inverted — false in the other
+    // direction, and this time it scares them off an action that works.
+    serve(
+      statusPayload([claim({ attested: true, publishable: true })], {
+        status: 'active',
+      }),
+    )
+
+    render(<OrgSsoCard />)
+
+    await screen.findByText('On')
+    expect(screen.queryByText(/Turning it off would be permanent for now/)).toBe(null)
+
     fireEvent.click(button('Turn off'))
 
     expect(mockConfirmCalls).toHaveLength(1)

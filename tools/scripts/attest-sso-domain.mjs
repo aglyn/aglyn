@@ -188,6 +188,29 @@ console.log(
   `  attestedBy    : ${claim.exists ? (claim.get('attestedBy') ?? '(none)') : '(none)'}`,
 )
 console.log(`  routing doc   : ${routing.exists ? routing.get('active') : '(none)'}`)
+
+// The attestation is only HALF of what `activate` consults. The route reads
+// the org's `sso.domains` array and hands THAT list to `publishSsoDomains`, so
+// a domain the array does not name is never offered to the gate at all and the
+// marker sits there doing nothing. Every pre-self-serve org is already in the
+// array — that is how they are live — so this is a warning rather than a
+// refusal, but it is the difference between "attested and it worked" and
+// "attested and Turn on still says no".
+const governed = Array.isArray(orgSnapshot.get('sso')?.domains)
+  ? orgSnapshot.get('sso').domains
+  : []
+const isGoverned = governed.includes(domain)
+console.log(`  in sso.domains: ${isGoverned}`)
+if (!isGoverned) {
+  console.log(
+    `\n  ⚠️  ${domain} is NOT in this org's sso.domains ${JSON.stringify(governed)}.\n` +
+      '     `activate` publishes only what that array names, so this\n' +
+      '     attestation alone will not make Turn on work. Add the domain\n' +
+      '     through the console (Set up DNS proof → verify), or confirm with\n' +
+      '     whoever owns this org why it is missing, before relying on this.',
+  )
+}
+
 console.log(`\n  would write   : attestedBy=${BY}, attestedAt=<server>, note=${NOTE}`)
 
 if (!COMMIT) {

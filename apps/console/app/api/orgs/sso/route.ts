@@ -142,6 +142,19 @@ async function handler(request: Request): Promise<Response> {
           // document — and would otherwise have read back as neither verified
           // nor attested, which is the one combination that is not true of it.
           attested: isStaffAttestedClaim(data['attestedBy']),
+          // What `publishSsoDomains` will ACTUALLY accept, mirrored clause for
+          // clause (AGL-1887 part 2). The card needs this as its own field,
+          // because `verified` and `attested` no longer add up to it:
+          //
+          //  - a claim with `attestedBy` publishes, and is not verified;
+          //  - a domain surfaced by the fallback below is `attested` too, and
+          //    does NOT publish — it has no claim document for the gate to
+          //    read, which is the whole reason AGL-1375 was a one-way door.
+          //
+          // Deriving "can this org turn SSO on" from `attested` would put the
+          // button back on the wrong side of that door for the second group.
+          publishable:
+            data['verified'] === true || isStaffAttestedClaim(data['attestedBy']),
           recordHost: `_aglyn-challenge.${doc.id}`,
           recordValue: `aglyn-domain-verification=${data['token']}`,
           lastRecords: data['lastRecords'] ?? null,
@@ -173,6 +186,11 @@ async function handler(request: Request): Promise<Response> {
           domain,
           verified: false,
           attested: true,
+          // Governed, and NOT publishable: there is no claim document, so the
+          // publish gate has nothing to read and skips it. This is the org
+          // still standing in front of the one-way door until somebody runs
+          // `tools/scripts/attest-sso-domain.mjs` for it.
+          publishable: false,
           recordHost: `_aglyn-challenge.${domain}`,
           recordValue: '',
           lastRecords: null,
