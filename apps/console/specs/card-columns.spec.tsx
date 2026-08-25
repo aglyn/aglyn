@@ -227,3 +227,61 @@ describe('the billing page pairs its narrow cards (AGL-2486)', () => {
     expect(source).toContain('<BillingPlanCardsComponent')
   })
 })
+
+describe('the staff user detail page balances its narrow run (AGL-2486)', () => {
+  const source = readFileSync(
+    join(__dirname, '..', 'app/(app)/admin/users/[uid]/page.tsx'),
+    'utf8',
+  )
+
+  it('reads a real file', () => {
+    expect(source.length).toBeGreaterThan(10000)
+  })
+
+  it('no longer pins the five narrow cards into rows of two', () => {
+    // Five cards declaring `md: 6` are three rigid rows — the same shape the
+    // org page had, and the same consequence: `Organizations` is a table that
+    // grows with the account's memberships and stretched `Password` beside it
+    // into a mostly-empty card, while the fifth card sat alone with a
+    // half-width hole next to it.
+    expect(source).toContain('<CardColumns')
+    expect(source).not.toMatch(/size:\s*\{\s*xs:\s*12,\s*md:\s*6\s*\}/)
+  })
+
+  it('does not reach for GridItems masonry, the obvious WRONG fix', () => {
+    // `GridItems masonry` buckets by `size`: five cards sharing one width
+    // share ONE column and leave the other half of the page empty. It is the
+    // regression the org page arrived at by using the fix, so pin it here
+    // rather than rediscover it on a staff-only page nobody measures.
+    //
+    // Anchored to the JSX PROP, not to the word: the page's own comment names
+    // `GridItems masonry` as the fix it declined, and a loose `toContain`
+    // fails on that comment while a page that actually passed the prop with
+    // the comment deleted would pass. It is the prop that changes the layout.
+    expect(source).not.toMatch(/^\s*masonry\s*$/m)
+  })
+
+  it('carries every one of the five cards into the balanced flow', () => {
+    // A key with no sibling `size` is what says a card is in the multicol
+    // flow rather than a grid band. Named individually so dropping one on the
+    // floor during a future edit is a red, not a quietly shorter page.
+    for (const key of [
+      'identity',
+      'organizations',
+      'password',
+      'device-sessions',
+      'erase',
+    ]) {
+      expect(source).toContain(`key: '${key}'`)
+    }
+  })
+
+  it('leaves the two wide cards in the grid, at full width', () => {
+    // The win is the narrow run pairing up. Legal acceptances and the audit
+    // trail are wide tables and earn the page width, so `GridItems` stays and
+    // the full-width items with it — CardColumns is nested inside one of
+    // them, exactly as on the billing page.
+    expect(source).toContain('<GridItems')
+    expect(source).toMatch(/size:\s*\{\s*xs:\s*12\s*\}/)
+  })
+})
