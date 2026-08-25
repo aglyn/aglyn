@@ -251,7 +251,7 @@ describe('Consent preview — the advertising question (AGL-2486)', () => {
     // This is the surface in Zach's screenshot: he saw the analytics row and
     // nothing else.
     expect(screen.queryByText(/Analytics \(Google Analytics\)/)).not.toBeNull()
-    expect(screen.queryByText(/Advertising — personalised ads/)).not.toBeNull()
+    expect(screen.queryByText(/Advertising — personalized ads/)).not.toBeNull()
   })
 
   it('reports the advertising verdict in the panel, not analytics alone', async () => {
@@ -298,7 +298,7 @@ describe('Consent preview — the advertising question (AGL-2486)', () => {
     // asked for would be its own legal defect — and this is the assertion
     // that would catch it.
     expect(screen.queryByText(/Analytics \(Google Analytics\)/)).not.toBeNull()
-    expect(screen.queryByText(/Advertising — personalised ads/)).toBeNull()
+    expect(screen.queryByText(/Advertising — personalized ads/)).toBeNull()
     expect(consentPanel()?.textContent).toMatch(/Advertising: not asked/)
   })
 })

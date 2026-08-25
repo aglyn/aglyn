@@ -22,7 +22,7 @@ element-specific settings in the **Attributes** panel.
 
 ## Finding the one you want {#finding-an-element}
 
-You do not have to recognise an element by name. Two places offer them — the
+You do not have to recognize an element by name. Two places offer them — the
 **Elements** tab beside Hierarchy, and the **Choose element** dialog — and both
 search and describe them the same way.
 
@@ -46,7 +46,7 @@ box brings the curated categories back.
 Point at an element and a detail view explains it before you commit to it:
 
 - **A live preview** — the element genuinely rendered, with its preset content and
-  **your site's theme**, so the colours and type are the ones you will actually get.
+  **your site's theme**, so the colors and type are the ones you will actually get.
   It is a picture, not a playground: nothing in it is clickable.
 - **What it is for**, in a sentence — written per element rather than generated, so it
   tells you when to reach for this one instead of the similar one next to it.
@@ -72,7 +72,7 @@ for the site.
 | --- | --- |
 | **Box** | The plain container. No styling of its own — you give it padding, background and borders from the Styles panel. Renders as `div`, `span`, `p`, `figure`, `figcaption`, `blockquote` or `pre`. For landmarks, use **Section** instead. |
 | **Section** | Grouping inside a semantic HTML element (`section`, `article`, `aside`, `nav`, `header`, `footer`, `main`) with an accessible label, so the page keeps a meaningful document outline. |
-| **Container** | Centres content and caps its maximum width. |
+| **Container** | Centers content and caps its maximum width. |
 | **Stack** | One-dimensional row or column with a gap. Also the element that carries **repeat over a dataset**. |
 | **Grid** | Responsive 12-column layout. See [Grid](#grid) below. |
 | **Layout slot** | Where a bound layout injects the screen's own content. |
@@ -147,7 +147,7 @@ never shuffles your content. The preset ships three tabs with three matching pan
 you only touch the matching if you add a panel yourself.
 
 On the **canvas** every panel is shown stacked, each captioned with the tab it belongs to
-— a hidden panel can't be edited, and a caption with a name you don't recognise is a
+— a hidden panel can't be edited, and a caption with a name you don't recognize is a
 label typo you can see. Preview and the published site show one at a time.
 
 #### Tabs that go to another screen

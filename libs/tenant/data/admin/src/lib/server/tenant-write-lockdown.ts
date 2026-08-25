@@ -56,7 +56,12 @@ import {
   normalizeOrgLockdown,
   resolveLockdown,
 } from '@aglyn/aglyn/server'
-import { getPlatformLockdown, lockdownJsonResponse } from './lockdown'
+import {
+  getPlatformLockdown,
+  heldSiteTakedown,
+  lockdownJsonResponse,
+  rememberSiteTakedown,
+} from './lockdown'
 import { getHostDocAdmin, getOrgForHost } from './organizations'
 
 /**
@@ -71,6 +76,22 @@ import { getHostDocAdmin, getOrgForHost } from './organizations'
  * unreachable Firestore is an outage, not a lockdown, and a shop that stops
  * taking orders because a read timed out is a worse failure than the one
  * being guarded against.
+ *
+ * …EXCEPT for a takedown (AGL-1881, extending AGL-1621). One class of lock
+ * inverts that cost function — "the database was down" is not an answer to a
+ * court order — and until now the ledger that carries it covered only the
+ * four scopes whose lock lives in `lockdowns/*`. Org and host locks live on
+ * the org/host document, so the two scopes MOST likely to be carrying a
+ * legal order were the two that fell through. Every successful read now
+ * records its org and host verdict, and a failed read serves back whichever
+ * of them was a takedown and is still active.
+ *
+ * Note what is NOT done here: the catch does not fail closed on the state it
+ * could not read. On a read failure `suspendedEnforcement` is exactly as
+ * unreadable as everything else, which is the whole reason a separate
+ * durable ledger exists — and a catch that locked unconditionally would take
+ * every shop on the platform offline on any transient blip, which is the
+ * deliberate posture this keeps for the default case.
  */
 export async function getSiteLockdown(
   hostId: string,
@@ -83,18 +104,26 @@ export async function getSiteLockdown(
       getOrgForHost(hostId),
       getHostDocAdmin(hostId),
     ])
-    const state = resolveLockdown(
-      {
-        platform,
-        org: normalizeOrgLockdown(resolved?.org as never),
-        host: normalizeHostLockdown(host as never),
-      },
-      nowMs,
-    )
+    const org = normalizeOrgLockdown(resolved?.org as never)
+    const hostState = normalizeHostLockdown(host as never)
+    rememberSiteTakedown(hostId, { org, host: hostState })
+    const state = resolveLockdown({ platform, org, host: hostState }, nowMs)
     return isLockdownActive(state, nowMs) ? state : null
   } catch (error) {
     console.error('[tenant-write-lockdown] verdict failed', hostId, error)
-    return null
+    const held = heldSiteTakedown(hostId, nowMs)
+    // The shipped fail-open answer, returned by the same statement it always
+    // was, for every case where nothing takedown-class was ever observed.
+    if (!held.org && !held.host) return null
+    // The platform read is TTL-cached and swallows its own errors (it carries
+    // its own ledger entry), so asking again here costs nothing and keeps a
+    // wider lock from being masked by a narrower held one.
+    const platform = await getPlatformLockdown().catch(() => null)
+    const state = resolveLockdown(
+      { platform, org: held.org, host: held.host },
+      nowMs,
+    )
+    return isLockdownActive(state, nowMs) ? state : null
   }
 }
 

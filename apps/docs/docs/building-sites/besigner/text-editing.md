@@ -7,7 +7,7 @@ description: Edit text directly on the canvas, on the element itself, with basic
 # Inline & rich text editing
 
 Text is edited **where it lives**. Double-click a heading on the canvas and you are
-typing into that heading — the real one, at its real size, weight, colour and
+typing into that heading — the real one, at its real size, weight, color and
 position. Nothing pops open, nothing moves, and the page reflows around you as you
 type, exactly as visitors will see it.
 
@@ -71,9 +71,9 @@ nothing else.
 
 :::info Formatting is not styling
 Rich text says a word is *emphasised*; it does not say what emphasis looks like.
-Colour, size, weight and spacing come from your theme and the
+Color, size, weight and spacing come from your theme and the
 [Styles panel](responsive-styling.md), which is what keeps a site looking like one
-site. If you find yourself wanting to colour a single word, that is the
+site. If you find yourself wanting to color a single word, that is the
 [JSS (sx) tab](responsive-styling.md#custom-css-sx), not this.
 :::
 
@@ -163,7 +163,7 @@ An inline run of text that wraps onto several lines is **outlined line by line**
 with a single name label — the same way a browser highlights text you select with
 the mouse. It is one element, drawn as the several line boxes it genuinely occupies,
 rather than one big rectangle that would cover the empty space beside a short last
-line and the neighbouring text beside the first.
+line and the neighboring text beside the first.
 
 Blocks are unaffected: one element, one box, as before.
 

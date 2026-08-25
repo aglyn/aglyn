@@ -57,11 +57,11 @@ background pass runs each hour and mails the bookings that are then 23–25 hour
 so a reminder lands about 24 hours ahead rather than at an exact minute.
 
 A booking is reminded once. The pass records that it has sent, so a booking is never
-mailed twice, and these do not go out for cancelled bookings or for bookings taken
+mailed twice, and these do not go out for canceled bookings or for bookings taken
 without an email address.
 
 The reminder uses your designed **booking reminder** email template if you have one,
-and your own brand if your plan includes white-labelling; otherwise it sends a plain
+and your own brand if your plan includes white-labeling; otherwise it sends a plain
 text reminder naming the service and the time.
 
 **Where to see it.** The **Upcoming bookings** card shows `24-hour reminders · N due in
@@ -112,17 +112,17 @@ be paid. Confirm your obligations with a qualified tax professional.
 
 Use the console **bookings** page to see and manage upcoming appointments.
 
-### Cancelling and refunding {#cancelling-and-refunding}
+### Canceling and refunding {#canceling-and-refunding}
 
-Cancelling a booking reopens the slot. For a **paid** booking, cancelling also
+Canceling a booking reopens the slot. For a **paid** booking, canceling also
 **refunds the visitor through Stripe** — the button reads **Cancel and refund**
 and tells you the amount before you confirm.
 
 - The refund pulls the money back out of your account and returns Aglyn's
   platform fee on it, so a refunded appointment costs you nothing in fees.
-- If the refund fails, **the booking is not cancelled**. The appointment stays on
+- If the refund fails, **the booking is not canceled**. The appointment stays on
   the list and the message says what went wrong, so you never end up with a
-  cancelled slot the visitor was never paid back for.
+  canceled slot the visitor was never paid back for.
 - Refunding is **site-admin only**, because it moves money.
 - Bookings paid before this was supported have to be refunded from the Stripe
   dashboard instead — the console will say so, and will remind you to tick

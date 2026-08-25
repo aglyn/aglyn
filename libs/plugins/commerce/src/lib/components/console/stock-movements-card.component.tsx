@@ -69,7 +69,7 @@ const REASON_LABEL: Record<CommerceModel.InventoryAdjustmentReason, string> = {
   restock: 'Restock',
   correction: 'Correction',
   damage: 'Damaged',
-  cancellation: 'Order cancelled',
+  cancellation: 'Order canceled',
 }
 
 type MovementRow = CommerceModel.InventoryAdjustment & { $id: string }

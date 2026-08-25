@@ -56,7 +56,7 @@ itself turn up in a search.
 An assigned error screen **doesn't count against your plan's screen allowance**. Nothing
 about it is a page of your site: it renders on addresses that matched nothing, so it has
 no URL of its own — the same reason a collection's entry template doesn't count. See
-[what counts against your screen allowance](../screens-and-layouts/overview.md#what-counts-against-your-screen-allowance).
+[what counts against your screen allowance](../screens-and-layouts/screens.md#what-counts-against-your-screen-allowance).
 
 There's one thing to know, and it's the reason you don't need to publish the screen at
 all:

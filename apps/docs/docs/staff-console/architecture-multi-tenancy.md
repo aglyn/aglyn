@@ -208,7 +208,7 @@ of this project's variables are `sensitive`, so "the API gave me nothing" means
 does not exist when it does.
 :::
 
-The middleware gate is defence in depth behind that. Two corrections worth
+The middleware gate is defense in depth behind that. Two corrections worth
 recording, because the earlier version of this page asserted the opposite:
 
 - It was **not** "inert until ops sets `NEXT_PUBLIC_WORKSPACE_DOMAIN`". That

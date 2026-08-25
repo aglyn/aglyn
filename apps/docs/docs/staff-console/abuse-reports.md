@@ -171,7 +171,7 @@ Two known edges of a host-scope lock, both carried in AGL-1981, both worth
 knowing before you promise a customer or yourself that a site is frozen:
 
 - **A timed suspension never expires in the rules.** The server-side helpers
-  honour `suspendedUntilMs` and the rules do not. So when a timed lock lapses the
+  honor `suspendedUntilMs` and the rules do not. So when a timed lock lapses the
   site starts serving again while the client SDK stays frozen — the customer gets
   their site back and cannot edit it, with no error explaining why. Prefer an
   untimed lock you come back and lift by hand.
@@ -219,10 +219,10 @@ copyright notice cannot be anonymous and every other category can be.
 A valid takedown notice under 17 U.S.C. §512(c)(3) carries, among other things:
 
 1. **Identification of the copyrighted work** said to be infringed.
-2. **A good-faith statement** that the use is not authorised by the owner, its
+2. **A good-faith statement** that the use is not authorized by the owner, its
    agent, or the law.
 3. **A statement under penalty of perjury** that the information is accurate and
-   the sender is authorised to act for the owner.
+   the sender is authorized to act for the owner.
 4. **A physical or electronic signature.**
 
 The form enforces all four — plus a reply address, which the other categories do
@@ -353,7 +353,7 @@ about infringement.
 
 **Counted against the workspace**, not the site. Someone who loses one site and
 opens another in the same workspace has not been terminated in any sense the
-statute would recognise.
+statute would recognize.
 
 **Strikes come off.** A strike is withdrawn when:
 
@@ -381,7 +381,7 @@ and judging the circumstances is the part a person does.
 
 **"Not this time" is a valid answer**, and it is recorded in the audit log
 exactly like a termination. If two of the three strikes are the same complainant
-over the same disputed licence, say so and escalate — that *is* the policy being
+over the same disputed license, say so and escalate — that *is* the policy being
 reasonably implemented.
 
 A strike count shown as blank means **unknown**, not zero: the queue looks up a

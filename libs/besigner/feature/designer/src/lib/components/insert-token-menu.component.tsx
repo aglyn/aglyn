@@ -182,6 +182,7 @@ export function InsertTokenMenu(props: InsertTokenMenuProps) {
       // Focus goes back to the edited input (with the caret placed after
       // the inserted token), never to the adornment button.
       disableRestoreFocus
+      slotProps={{ paper: { sx: { width: 340, maxWidth: '90vw' } } }}
     >
       {/* One help affordance for BOTH bindings entry points (AGL-2167):
           this menu is what the per-field {x} adornment opens and what the
@@ -245,12 +246,14 @@ export function InsertTokenMenu(props: InsertTokenMenuProps) {
             }}
           >
             <Stack sx={{ minWidth: 0 }}>
-              <Typography variant="body2" noWrap>
-                {option.label}
-              </Typography>
+              <Typography variant="body2">{option.label}</Typography>
               {/* Live value preview (AGL-262) / token description. */}
               {option.preview ? (
-                <Typography variant="caption" color="text.secondary" noWrap>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ overflowWrap: 'break-word' }}
+                >
                   {option.preview}
                 </Typography>
               ) : null}

@@ -195,7 +195,7 @@ export const HOST_TOKENS: Record<string, HostTokenDefinition> = {
     key: 'socialLinks',
     type: 'text',
     label: 'Social links',
-    description: 'The site’s social profiles, as a list of labelled links.',
+    description: 'The site’s social profiles, as a list of labeled links.',
     // Rendered as text here so a token in copy degrades to something readable;
     // a renderer wanting real links reads `host.business.socialLinks` itself.
     resolve: (host) => {

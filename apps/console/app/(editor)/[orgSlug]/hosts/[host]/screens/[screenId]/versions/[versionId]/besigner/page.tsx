@@ -1382,7 +1382,7 @@ function BesignerPage(props) {
             <HelpTip
               title="Screens & layouts"
               excerpt="A layout wraps this screen in shared chrome — appbar, footer — maintained once. Layouts can nest; the screen renders in the innermost slot."
-              href={besignerDocsUrl('screens', '#layouts')}
+              href={besignerDocsUrl('layouts', '#what-a-layout-is')}
               sx={{ ml: 0.25, fontSize: '0.9em' }}
             />
           </Typography>

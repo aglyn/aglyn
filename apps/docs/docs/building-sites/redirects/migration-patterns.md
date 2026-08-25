@@ -16,7 +16,7 @@ Redirects earn their keep during change. Here are the patterns you'll reach for 
 
 ## Renamed a screen
 
-When you change a screen's [slug](../screens-and-layouts/overview.md#screens--routing), add a
+When you change a screen's [slug](../screens-and-layouts/screens.md#screens--routing), add a
 redirect from the **old** path to the **new** one so existing links and search results keep
 working.
 

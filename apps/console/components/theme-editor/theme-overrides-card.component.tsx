@@ -241,7 +241,7 @@ export function ThemeOverridesCard(props: {
         {stale ? (
           <Alert severity="warning">
             {'These changes were made against a different theme. They still ' +
-              'apply, because a brand colour usually still means the same ' +
+              'apply, because a brand color usually still means the same ' +
               'thing — but a component style written for another theme often ' +
               'does not. Check them, or clear them all below.'}
           </Alert>

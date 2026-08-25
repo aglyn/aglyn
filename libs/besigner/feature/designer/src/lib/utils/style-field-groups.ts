@@ -559,14 +559,14 @@ function styleFieldGroups(
         colorField(
           'color',
           'Text Color',
-          'The colour of the text inside.',
+          'The color of the text inside.',
           presetColors,
           half,
         ),
         colorField(
           'backgroundColor',
           'Background Color',
-          'A solid colour behind the content.',
+          'A solid color behind the content.',
           presetColors,
           half,
         ),
@@ -718,7 +718,7 @@ function styleFieldGroups(
         colorField(
           'borderColor',
           'Border Color',
-          'What colour that line is.',
+          'What color that line is.',
           presetColors,
           half,
         ),

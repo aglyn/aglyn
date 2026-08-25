@@ -147,7 +147,7 @@ template** does the same for `/collections/{slug}`.
 ## 4. What checkout does
 
 Both buy buttons and the cart's **Checkout** redirect to **Stripe-hosted
-Checkout**, then back to your site with a success/cancelled marker:
+Checkout**, then back to your site with a success/canceled marker:
 
 ### Paying without leaving your site
 
@@ -169,7 +169,7 @@ Nothing else about a sale changes when it is on, and that is deliberate:
   drawn by us instead of by Stripe — so the two cannot quote different totals.
 - **Your order is still created by Stripe's webhook, never by the browser.**
   If a shopper pays and immediately closes the tab, the order, the stock
-  decrement, the receipt and the gift-card or licence-key steps all still
+  decrement, the receipt and the gift-card or license-key steps all still
   happen. If they pay and then refresh the page, none of it happens twice.
 - **A declined card stays on the form.** The basket, address and payment
   method the shopper already entered are kept, with the decline shown beside

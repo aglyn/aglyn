@@ -117,7 +117,7 @@ launching page by page — the switch also covers pages you haven't created yet,
 per-screen visibility cannot.
 
 :::caution `noindex` is a request, not access control
-Both controls ask search engines not to list a page. Well-behaved crawlers honour that;
+Both controls ask search engines not to list a page. Well-behaved crawlers honor that;
 nothing stops a person with the URL. If a page must be genuinely inaccessible, use
 [site protection](../site-protection/overview.md) instead.
 :::

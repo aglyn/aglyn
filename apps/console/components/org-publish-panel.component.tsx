@@ -403,7 +403,7 @@ export function OrgPublishPanel({
           </Typography>
         ) : kind === 'theme' ? (
           <Typography variant="body2" color="text.secondary">
-            {'Publishes this site’s colours, typography, shape and component ' +
+            {'Publishes this site’s colors, typography, shape and component ' +
               'styles on their own. Both light and dark schemes are required, ' +
               'and text has to be readable against its background — you will ' +
               'be told before anything is published if not.'}

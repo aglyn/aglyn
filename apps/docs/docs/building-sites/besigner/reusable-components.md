@@ -12,6 +12,12 @@ a **reusable component**.
 An instance is not a copy. It **grafts the source at render time**, so editing the component
 updates every page that places it. Change a font size once and the whole site follows.
 
+A component is content you repeat **inside** a page. If what you want is the frame
+*around* the page — header, navigation, footer — that is a
+[layout](../screens-and-layouts/layouts.md), not a component. And if you want a starting
+point you copy once, with no live link back to the source, that is a
+[template](../site-templates/templates-library.md).
+
 :::info Plan availability
 **Starter and above.** On Free, promoting an element answers *"Reusable components
 require a Starter plan — see Billing to upgrade."* There is no cap on how many
@@ -150,15 +156,15 @@ each element inside it, indented — and a `•` marks the ones this instance ha
 overridden. Pick one and the whole panel styles that element, on this instance.
 
 That picker is what a variant needs. A component's headline usually sets **its own**
-colour, so a background change on the outer element never reaches it: switching one CTA
+color, so a background change on the outer element never reaches it: switching one CTA
 to a white band without also targeting the headline gives you white text on white. Set
 the background on the outer element, then pick the headline and the sub-copy and set
-their colours too.
+their colors too.
 
 **Taking off a gradient.** If the component's background is a gradient, setting
 *Background Color* on the instance is not enough — `background-image` paints over
 `background-color`, so the gradient still wins. Set **Background Fill** to *Solid color*
-as well: that records "paint no image" for this placement and your colour shows. The
+as well: that records "paint no image" for this placement and your color shows. The
 field's first choice, *Inherited*, is the way back — it drops the override and the
 component's gradient returns. Overriding to a *different* gradient works the same way.
 
@@ -309,4 +315,4 @@ generic package glyph.
 
 - [Copy & paste elements](copy-paste.md)
 - [The Besigner](overview.md)
-- [Screens & layouts](../screens-and-layouts/overview.md#reusable-components)
+- [Screens & layouts](../screens-and-layouts/overview.md)

@@ -80,7 +80,7 @@ searchable and paged, newest first. Click a member to open their detail drawer:
 - **Subscriptions** — active and past storefront subscriptions with their
   renewal date.
 - **Lifetime purchases** — everything the member actually paid: charged order
-  totals minus refunds (pending and cancelled orders don't count).
+  totals minus refunds (pending and canceled orders don't count).
 
 ### Suspend or reactivate a member
 

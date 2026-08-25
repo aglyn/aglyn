@@ -428,7 +428,7 @@ function Layouts(props) {
             href: buildRoute(Route.HOST_LAYOUTS, { orgSlug,  host }),
           },
         ]}
-        help={{ topic: 'screens', anchor: '#layouts' }}
+        help="layouts"
         header={{
           children: 'Layouts',
           icon: { path: mdiPageLayoutBody.path },

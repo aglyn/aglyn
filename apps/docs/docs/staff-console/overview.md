@@ -203,7 +203,7 @@ surprise people:
   closed to the client entirely, so those stop at once. Say this plainly to the
   account holder rather than implying the residual is read-only.
 
-If the account holder may still have working sessions they do not recognise — or the
+If the account holder may still have working sessions they do not recognize — or the
 device is one you cannot see in the list — **change the password too**, which revokes
 on the same terms and additionally takes back the credential.
 
@@ -351,7 +351,7 @@ The platform do-not-contact list for **phone numbers** — calls and texts. It i
 email unsubscribe list; email opt-outs live with the campaign that sent them.
 
 Aglyn sends no marketing calls or texts today, and the page says so: there is no consent
-record behind them yet. The list exists so that an outbound programme has something to
+record behind them yet. The list exists so that an outbound program has something to
 check the day one starts, and so that an opt-out we receive *now* is not lost.
 
 **Record a request** is for an opt-out that arrived outside the product — by email to

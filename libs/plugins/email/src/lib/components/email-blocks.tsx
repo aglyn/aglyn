@@ -95,7 +95,7 @@ export const emailSectionSchema: Aglyn.ComponentSchema<EmailSectionProps> = {
   $id: SECTION_ID,
   pluginId: BUNDLE_ID,
   displayName: 'Email section',
-  description: 'An email-safe band with its own background colour and padding.',
+  description: 'An email-safe band with its own background color and padding.',
   category: Aglyn.ComponentCategory.LAYOUT,
   icon: { path: mdiEmailOutline.path, sx: { color: '#f57c00' } },
   attributes: [

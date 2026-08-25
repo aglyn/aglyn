@@ -906,7 +906,7 @@ function AdminMediaQuarantine() {
 
                 {listing && clearable > 0 ? (
                   <Alert severity="warning">
-                    {`${clearable} of these ${listing.count} entries enforce nothing right now — their expiry has passed, or their reason is one no reader recognises — and every one of them still occupies a slot. Clear these first.`}
+                    {`${clearable} of these ${listing.count} entries enforce nothing right now — their expiry has passed, or their reason is one no reader recognizes — and every one of them still occupies a slot. Clear these first.`}
                   </Alert>
                 ) : null}
 

@@ -155,7 +155,7 @@ export function useArtifactUpdate(hostId: string) {
         }
         if (options.mode === 'copy') {
           enqueueSnackbar(
-            `Installed v${payload.version} as a new copy — your customised ` +
+            `Installed v${payload.version} as a new copy — your customized ` +
               'version is kept, no longer linked to the listing.',
             { variant: 'success', persist: false },
           )

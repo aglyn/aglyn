@@ -33,14 +33,14 @@ overlays, custom JS, server actions) require Pro+. See
 Put the menu in your **layout** (not a single screen) so it shows on every
 page. Open your **Main Layout** in the Besigner to follow along; if you
 don't have a layout yet, see
-[Screens & layouts](../building-sites/screens-and-layouts/overview.md#layouts).
+[Screens & layouts](../building-sites/screens-and-layouts/layouts.md).
 
 ## 1. Insert the Mega Menu
 
 1. In the Besigner, select your header's nav bar (the **App Bar** or its
    **Toolbar**) so the new element lands inside it.
 2. Open **Add Element** and expand the **Navigation** group.
-3. Insert **Mega Menu**. It arrives as a nav item labelled *Menu* with a
+3. Insert **Mega Menu**. It arrives as a nav item labeled *Menu* with a
    starter panel of three link columns.
 
 ![The Navigation group in the element picker — Dropdown Menu, Dropdown Panel, Mega Menu, Drawer, Menu Button, and Mobile Nav](/img/guides/mega-menu-elements-navigation.png)

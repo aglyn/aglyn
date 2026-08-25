@@ -104,7 +104,7 @@ Some people get motion sickness, migraines or vertigo from movement on
 screen, and both macOS and Windows have a system setting to ask for less of
 it.
 
-Aglyn honours that setting. A visitor who has turned on **Reduce motion**
+Aglyn honors that setting. A visitor who has turned on **Reduce motion**
 sees your page with every element in its final position, fully visible, with
 no movement at all — including elements set to animate on scroll. You do not
 have to do anything, and there is no way to override it.

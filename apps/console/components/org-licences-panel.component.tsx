@@ -195,7 +195,7 @@ export function OrgLicencesPanel({
       <Alert severity="info">
         {'A marketplace purchase licenses one organization. Any member with ' +
           'install permission can install what this workspace owns — and a ' +
-          'second workspace needs its own licence.'}
+          'second workspace needs its own license.'}
       </Alert>
 
       {held.length === 0 ? (
@@ -281,7 +281,7 @@ export function OrgLicencesPanel({
               'purchase licenses one organization, so this says which.',
           })}
           subheader={
-            'Your own receipts, and which workspace each licence landed in'
+            'Your own receipts, and which workspace each license landed in'
           }
           contentGutterX
           contentGutterY

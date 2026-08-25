@@ -368,7 +368,7 @@ function RoomAvatars({ entries }: { entries: PresenceEntry[] }) {
         topic="liveCoEditing"
         anchor="#whos-here"
         title="Who else is here"
-        excerpt="One avatar per editing session, in that session's colour. A room is one VERSION of a document, so someone editing a different version will not appear."
+        excerpt="One avatar per editing session, in that session's color. A room is one VERSION of a document, so someone editing a different version will not appear."
         sx={{ ml: 0.5, fontSize: '0.9em' }}
       />
     </Stack>

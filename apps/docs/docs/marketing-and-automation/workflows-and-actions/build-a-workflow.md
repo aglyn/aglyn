@@ -52,7 +52,7 @@ A workflow row reads **Ran** under *What happened*, or the error when it failed,
 the time it took beneath.
 
 :::note Runs recorded before this shipped are not in the table
-Workflow executions were written in a shape the table did not recognise, so anything
+Workflow executions were written in a shape the table did not recognize, so anything
 that ran before AGL-2222 is filtered out of it. Those runs are not lost — the
 dashboard's **Recent Activity** card and **Setup → Activity** show every one of them,
 as *"Workflow ran on formSubmission"* with the duration appended and failures in red.

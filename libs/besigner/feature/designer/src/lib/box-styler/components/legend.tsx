@@ -41,7 +41,7 @@ export const LEGEND_ITEMS = [
   {
     item: 'margin',
     label: 'Margin',
-    hint: 'Space OUTSIDE the element, pushing its neighbours away',
+    hint: 'Space OUTSIDE the element, pushing its neighbors away',
   },
   {
     item: 'border',

@@ -372,7 +372,7 @@ export function inspectUploadBytes(
         detected: signature.label,
         message:
           `${subject} contains ${signature.label}, which cannot be uploaded ` +
-          `whatever it is named or labelled.`,
+          `whatever it is named or labeled.`,
       }
     }
   }
@@ -384,7 +384,7 @@ export function inspectUploadBytes(
       code: 'type_mismatch',
       detected: `something other than ${expected[0].label}`,
       message:
-        `${subject} is labelled ${contentType} but its contents are not ` +
+        `${subject} is labeled ${contentType} but its contents are not ` +
         `${expected[0].label}. Re-save it in the format it claims to be, or ` +
         `upload it under its real type.`,
     }

@@ -18,7 +18,7 @@ can pick their language.
 ## Steps
 
 1. Add the **language switcher** to a screen or your shared
-   [layout](../screens-and-layouts/overview.md#layouts) (so it appears site-wide).
+   [layout](../screens-and-layouts/layouts.md) (so it appears site-wide).
 2. It lists your active locales and links each visitor to the matching variant of the current
    page.
 3. Publish.

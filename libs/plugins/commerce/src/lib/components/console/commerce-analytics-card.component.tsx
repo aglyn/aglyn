@@ -145,7 +145,7 @@ export function CommerceAnalyticsCard(props: CommerceAnalyticsCardProps) {
           anchor: '#orders',
           excerpt:
             'Revenue, orders and average order value over the last 30 days, ' +
-            'each against the 30 days before it. Pending and cancelled orders ' +
+            'each against the 30 days before it. Pending and canceled orders ' +
             'are left out — neither is money.',
         })}
         contentGutterX
@@ -166,7 +166,7 @@ export function CommerceAnalyticsCard(props: CommerceAnalyticsCardProps) {
           anchor: '#orders',
           excerpt:
             'Revenue, orders and average order value over the last 30 days, ' +
-            'each against the 30 days before it. Pending and cancelled orders ' +
+            'each against the 30 days before it. Pending and canceled orders ' +
             'are left out — neither is money.',
         })}
         contentGutterX
@@ -203,7 +203,7 @@ export function CommerceAnalyticsCard(props: CommerceAnalyticsCardProps) {
         anchor: '#orders',
         excerpt:
           'Revenue, orders and average order value over the last 30 days, ' +
-          'each against the 30 days before it. Pending and cancelled orders ' +
+          'each against the 30 days before it. Pending and canceled orders ' +
           'are left out — neither is money.',
       })}
       contentGutterX

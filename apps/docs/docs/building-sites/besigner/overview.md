@@ -73,7 +73,7 @@ plan-gated (noted where relevant).
 ## The canvas
 
 The canvas shows your screen composed with its theme and, if bound, its
-[layout](../screens-and-layouts/overview.md#layouts). Selection overlays highlight the
+[layout](../screens-and-layouts/layouts.md). Selection overlays highlight the
 active element without affecting page scroll.
 
 When a drop isn't allowed, the Besigner explains **why** — it surfaces the specific
@@ -89,7 +89,7 @@ Every element on the canvas is a node in a tree. The hierarchy panel lets you:
 - See which nodes are layout-only vs. screen content.
 - Read how deeply a node is nested by counting the guide lines to the left of its name —
   one per level, the same weight at every level. The branch holding the current selection
-  draws its guides in the accent colour.
+  draws its guides in the accent color.
 - **Copy** a node and its children and **paste** them elsewhere — including into a different
   screen, layout or component. See [Copy & paste elements](copy-paste.md).
 
@@ -121,7 +121,7 @@ its empty state instead.
 Promote any subtree into a **reusable component**, then insert instances of it across
 screens. Editing the source updates every instance at render time. You can rename, demote,
 or delete reusable components from the site dashboard. See
-[Reusable components](../screens-and-layouts/overview.md#reusable-components).
+[Reusable components](reusable-components.md).
 
 ## Editing together
 

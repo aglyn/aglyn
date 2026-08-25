@@ -83,7 +83,7 @@ const kindLabels = (brand: string): Record<string, string> => ({
  */
 const EXAMPLES: readonly { case: string; verdict: string; ours: boolean }[] = [
   {
-    case: '"The heading on my About page is the wrong colour."',
+    case: '"The heading on my About page is the wrong color."',
     verdict: 'Your site — change it in the editor, or ask whoever builds it.',
     ours: false,
   },

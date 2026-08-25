@@ -42,7 +42,7 @@ without going to the attributes panel — the same gesture that edits any other 
 edit back.
 
 Text is set for reading rather than for a layout: 17px on a generous line height, in the
-theme's primary text colour, with headings that step up in size on wider screens. You don't
+theme's primary text color, with headings that step up in size on wider screens. You don't
 need to style anything for it to look right.
 
 The element draws its **Content** attribute and nothing else, so it takes no child elements —
@@ -79,7 +79,7 @@ into a paragraph this way when it starts at **1**, so a sentence ending `…the 
 and continuing `1997. A good year for the web.` stays a sentence. Leave a blank line before
 the list if you really do want it to start at another number.
 
-Anything the dialect doesn't recognise stays as **words**. That includes HTML: paste
+Anything the dialect doesn't recognize stays as **words**. That includes HTML: paste
 `<script>` into a document and visitors read `<script>`, they don't run it. This isn't a
 setting you can turn off — the element never builds an HTML string in the first place, so
 there's nothing to escape or trust.

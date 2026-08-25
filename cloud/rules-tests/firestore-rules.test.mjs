@@ -4552,6 +4552,150 @@ describe('the §512 counter-notice and strike ledger are staff-read, nobody-writ
   })
 })
 
+/**
+ * The SSO domain claim, and the field AGL-1887 added to it.
+ *
+ * `publishSsoDomains` will publish a domain on EITHER of two markers now:
+ * `verified === true` (DNS proof this platform re-checked) or a non-empty
+ * string `attestedBy` (a named staff member vouching, for the orgs onboarded
+ * by hand before self-serve). That second marker is what reopened the one-way
+ * door AGL-1375 left — and it is only as trustworthy as the answer to "who
+ * can write it".
+ *
+ * The answer has to be NOBODY client-side. `attestedBy` is a claim of
+ * ownership that skips the DNS proof entirely, so an org that could set it on
+ * its own claim document could publish `ssoDomains/{domain}` for a domain it
+ * does not own — and every sign-in on that domain would route to its IdP.
+ * That is the whole account-takeover vector the `verified` check exists to
+ * plug, and widening the gate without pinning the writer would have handed it
+ * over.
+ *
+ * So this suite is the other half of the feature, not a nicety. The block at
+ * `orgs/{orgId}/ssoDomains/{domain}` is `allow read, write: if false` — staff
+ * included, because `attestSsoDomain` and `tools/scripts/attest-sso-domain.mjs`
+ * go through the Admin SDK, which bypasses rules. A staff session in a browser
+ * is still a browser, and there is no reason for it to hold the write.
+ *
+ * The read denial is older (AGL-1210) and stands for a different reason: the
+ * claim carries the DNS challenge token, and anyone who can read another org's
+ * token can publish it as their own TXT record.
+ */
+describe('an SSO domain attestation is unwritable from any client (AGL-1887)', () => {
+  const DOMAIN = 'acme.test'
+  const claimPath = (orgId = ORG) => ['orgs', orgId, 'ssoDomains', DOMAIN]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      // A claim midway through the honest path: token issued, DNS not proved.
+      // This is exactly the document an attacker wants one field added to.
+      await setDoc(doc(db, ...claimPath()), {
+        domain: DOMAIN,
+        token: 'challenge-token-nobody-else-may-see',
+        verified: false,
+        createdAt: Date.now(),
+      })
+      await setDoc(doc(db, 'ssoDomains', DOMAIN), {
+        orgId: ORG, tenantId: 'org-acme-t1', providerId: 'saml.acme',
+        protocol: 'saml', active: true,
+      })
+    })
+  })
+
+  it('nobody adds attestedBy to their own claim — owner, editor, staff alike', async () => {
+    // The sharpest case in the file: the org owner, on their OWN org's claim
+    // document, for a domain their org already legitimately routes. Every
+    // instinct about ownership says yes and the answer is still no, because
+    // the same write shape works just as well on a domain they do not own.
+    for (const [label, db] of [
+      ['an anonymous visitor', anon()],
+      ['the org owner', authed(OWNER)],
+      ['an editor', authed(EDITOR)],
+      ['an outsider', authed(OUTSIDER)],
+      ['staff', authed(STAFF, { staff: true })],
+    ]) {
+      await mustDeny(
+        `${label} adding attestedBy to orgs/${ORG}/ssoDomains/${DOMAIN}`,
+        updateDoc(doc(db, ...claimPath()), { attestedBy: 'uid-not-staff' }),
+      )
+      await mustDeny(
+        `${label} attesting a claim into existence at a chosen domain`,
+        setDoc(doc(db, 'orgs', ORG, 'ssoDomains', 'someone-else.test'), {
+          domain: 'someone-else.test', attestedBy: 'uid-not-staff',
+        }),
+      )
+      // `verified` is the older half of the same gate. A fix that pinned
+      // `attestedBy` and left this open would have closed nothing.
+      await mustDeny(
+        `${label} marking their own claim DNS-verified`,
+        updateDoc(doc(db, ...claimPath()), { verified: true }),
+      )
+      await mustDeny(
+        `${label} deleting a claim to start it over`,
+        deleteDoc(doc(db, ...claimPath())),
+      )
+    }
+  })
+
+  it('an outsider cannot plant an attestation on ANOTHER org’s claim', async () => {
+    // The cross-org shape, spelled out separately: `OTHER_ORG` is a real org
+    // this uid genuinely owns, so nothing about the request looks anomalous
+    // except the path it points at.
+    await mustDeny(
+      `${OUTSIDER} attesting a domain onto ${OTHER_ORG}`,
+      setDoc(doc(anon(), 'orgs', OTHER_ORG, 'ssoDomains', DOMAIN), {
+        domain: DOMAIN, attestedBy: OUTSIDER,
+      }),
+    )
+    await mustDeny(
+      `${OUTSIDER} attesting ${DOMAIN} onto the org that already routes it`,
+      setDoc(doc(authed(OUTSIDER), ...claimPath()), {
+        domain: DOMAIN, attestedBy: OUTSIDER,
+      }),
+    )
+  })
+
+  it('nobody reads a claim, because the token in it is the ownership proof', async () => {
+    // AGL-1210's half. The console reaches claims through /api/orgs/sso,
+    // which returns one only to an admin of THAT org.
+    for (const [label, db] of [
+      ['an anonymous visitor', anon()],
+      ['the org owner', authed(OWNER)],
+      ['staff', authed(STAFF, { staff: true })],
+    ]) {
+      await mustDeny(
+        `${label} reading the challenge token on orgs/${ORG}/ssoDomains/${DOMAIN}`,
+        getDoc(doc(db, ...claimPath())),
+      )
+    }
+  })
+
+  it('the routing document itself takes no client write either', async () => {
+    // The claim is the gate; this is what the gate opens. Left writable, the
+    // attestation would be an obstacle to walk around rather than a lock.
+    for (const [label, db] of [
+      ['an anonymous visitor', anon()],
+      ['the org owner', authed(OWNER)],
+      ['staff', authed(STAFF, { staff: true })],
+    ]) {
+      await mustDeny(
+        `${label} pointing ${DOMAIN} routing at their own tenant`,
+        updateDoc(doc(db, 'ssoDomains', DOMAIN), { orgId: OTHER_ORG }),
+      )
+      await mustDeny(
+        `${label} publishing routing for a domain outright`,
+        setDoc(doc(db, 'ssoDomains', 'unclaimed.test'), {
+          orgId: ORG, tenantId: 'org-acme-t1', active: true,
+        }),
+      )
+      await mustDeny(
+        `${label} reading who ${DOMAIN} routes to`,
+        getDoc(doc(db, 'ssoDomains', DOMAIN)),
+      )
+    }
+  })
+})
+
 describe('the lockdowns collection is staff-read, nobody-write (AGL-1507)', () => {
   const LOCKED_UID = OUTSIDER
   beforeEach(async () => {
@@ -5216,6 +5360,141 @@ describe('a timed suspension expires in rules, at both scopes (AGL-1981)', () =>
         }),
       )
     }
+  })
+})
+
+/**
+ * THE PLATFORM PANIC BUTTON REACHES THE CLIENT SDK (AGL-1881).
+ *
+ * `lockdowns/platform` stopped every server-owned surface — pages 503 in
+ * ~30s, Admin-SDK routes 423 in ~15s — and stopped the client SDK not at
+ * all. `hostWritesFrozen()` was `hostSuspended() || hostOrgSuspended()`, and
+ * neither of those reads `/lockdowns/platform`. So a besigner tab already
+ * open kept `updateDoc`-ing `hosts/{h}/screens/{s}` straight past the panic
+ * button, indefinitely — not for one token lifetime, forever, because no
+ * part of the client write path ever consulted the lock. That is the exact
+ * hole AGL-1965 closed for host scope and AGL-238 for org scope, left open
+ * on the WIDEST scope, which is the one staff pull during a live compromise.
+ *
+ * Three cases, and each is load-bearing:
+ *
+ *  - **locked → a member's write is refused.** The bug.
+ *  - **locked → STAFF still write.** The un-panic invariant from AGL-1501:
+ *    a platform lockdown must never lock out the people who can lift it. It
+ *    holds here for free — `isStaff()` is the first disjunct of every rule,
+ *    so the staff path short-circuits before `hostWritesFrozen()` is
+ *    evaluated and never pays the lock's read at all.
+ *  - **expired → writes land again.** `untilMs` is an expiry that passes
+ *    with no write, exactly as `suspendedUntilMs` does on the org and host
+ *    carriers. The predicate shares `lockWindowActive()` with them rather
+ *    than restating "active", so the three levers cannot drift.
+ *
+ * The fixture writes the doc the way /api/admin/lockdown leaves it, with
+ * rules disabled — no client may write this collection (asserted above), and
+ * a lock the test could set from a client would be a lock anyone could lift.
+ */
+describe('a platform lockdown freezes client writes (AGL-1881)', () => {
+  const lockPlatform = async (fields) => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'lockdowns', 'platform'), {
+        scope: 'platform',
+        reason: 'security',
+        message: 'Back soon',
+        lockedAtMs: Date.now(),
+        ...fields,
+      })
+    })
+  }
+
+  it('a member cannot publish while the platform lock is up', async () => {
+    await mustAllow(
+      'an editor publishing BEFORE the lock — the positive control',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1'), {
+        name: 'Home',
+      }),
+    )
+    await lockPlatform()
+    await mustDeny(
+      'an editor updating a screen during a platform lockdown',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1'), {
+        name: 'Home, edited through the panic button',
+      }),
+    )
+    await mustDeny(
+      'an editor saving canvas nodes during a platform lockdown',
+      setDoc(
+        doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1', 'versions', 'v1'),
+        { nodes: { root: { text: 'still editing' } } },
+        { merge: true },
+      ),
+    )
+    await mustDeny(
+      'an admin moving the live `screens` pointer during a platform lockdown',
+      updateDoc(doc(authed(OWNER), 'hosts', HOST), {
+        screens: { 'screen-1': { versionId: 'v1', path: '/' } },
+      }),
+    )
+  })
+
+  it('STAFF still write — the un-panic invariant (AGL-1501)', async () => {
+    await lockPlatform()
+    const staffDb = authed(STAFF, { staff: true })
+    await mustAllow(
+      'staff updating a screen during a platform lockdown',
+      updateDoc(doc(staffDb, 'hosts', HOST, 'screens', 'screen-1'), {
+        name: 'Staff working inside the lock',
+      }),
+    )
+    await mustAllow(
+      'staff moving the live `screens` pointer during a platform lockdown',
+      updateDoc(doc(staffDb, 'hosts', HOST), {
+        screens: { 'screen-1': { versionId: 'v1', path: '/' } },
+      }),
+    )
+  })
+
+  it('an EXPIRED platform lock stops freezing, with no write to lift it', async () => {
+    await lockPlatform({ untilMs: Date.now() - AN_HOUR })
+    await mustAllow(
+      'an editor publishing after the platform lock expired',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1'), {
+        name: 'Home, restored',
+      }),
+    )
+  })
+
+  it('a STILL-RUNNING timed platform lock keeps freezing', async () => {
+    // Without this, the case above passes just as well against a predicate
+    // that reads every lock as expired — which is the fix deleting itself.
+    await lockPlatform({ untilMs: Date.now() + AN_HOUR })
+    await mustDeny(
+      'an editor publishing during a timed platform lockdown',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1'), {
+        name: 'Home, edited',
+      }),
+    )
+  })
+
+  it('a MALFORMED expiry leaves the lock standing', async () => {
+    // The `suspensionActive()` posture, shared: the field is Admin-SDK-only,
+    // so a non-number can only arrive through our own bug, and failing
+    // closed is the right way round to be wrong about a panic button.
+    await lockPlatform({ untilMs: 'soon' })
+    await mustDeny(
+      'an editor publishing under a lock with a junk expiry',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1'), {
+        name: 'Home, edited',
+      }),
+    )
+  })
+
+  it('no platform doc means no freeze — the everyday path is untouched', async () => {
+    await mustAllow(
+      'an editor publishing with no platform lockdown document at all',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1'), {
+        name: 'Home',
+      }),
+    )
   })
 })
 

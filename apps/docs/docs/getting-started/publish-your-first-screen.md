@@ -31,7 +31,7 @@ path yet are prompted to set one in Properties first.
 2. Drag components from the drawer onto the canvas. Rearrange them in the **hierarchy**
    panel or directly on the canvas.
 3. Double-click text to edit it inline. Set component attributes in the inspector.
-4. Bind a shared **[layout](../building-sites/screens-and-layouts/overview.md#layouts)** if you want a
+4. Bind a shared **[layout](../building-sites/screens-and-layouts/layouts.md)** if you want a
    common header/footer.
 
 ## 3. Preview and publish
@@ -48,7 +48,7 @@ snapshots you can reopen, publish to roll back to, or schedule — requires **Pr
 above**, and scheduling a version requires **Business or above**. On Free and Starter the
 editor answers *"Versioning requires a Pro plan — see Billing to upgrade"* instead of
 opening the name dialog. See
-[Versions & scheduled publishing](../building-sites/screens-and-layouts/overview.md#versions--scheduled-publishing).
+[Versions & scheduled publishing](../building-sites/screens-and-layouts/versions-and-publishing.md).
 :::
 
 :::tip The Live button

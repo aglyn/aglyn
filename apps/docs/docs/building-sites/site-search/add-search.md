@@ -19,7 +19,7 @@ Included on **every plan**.
 
 1. In the [Besigner](../besigner/overview.md), open the elements drawer and add
    the **Search Box** (under **Forms**) to a screen — or to your shared
-   [layout](../screens-and-layouts/overview.md#layouts) so it appears site-wide.
+   [layout](../screens-and-layouts/layouts.md) so it appears site-wide.
 2. Optionally set the box's **Placeholder** text in the Attributes panel.
 3. **Publish.** Submitting the box sends visitors to your site's `/search`
    page with their query.
@@ -29,7 +29,7 @@ build.
 
 ## Tips
 
-- Put the Search Box in your header [layout](../screens-and-layouts/overview.md#layouts)
+- Put the Search Box in your header [layout](../screens-and-layouts/layouts.md)
   so it's reachable from every page.
 - Search covers [dataset](../../content-and-data/datasets/overview.md) records
   and [blog entries](../site-templates/build-a-blog.md), so well-structured

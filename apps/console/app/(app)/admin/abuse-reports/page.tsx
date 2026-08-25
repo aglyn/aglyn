@@ -356,10 +356,10 @@ const COUNTER_STATUS_HINT: Record<string, string> = {
     'Copy sent to the complainant, and the site’s suspension stamped with the restore date.',
   restored: 'Access put back. Any strike from the original notice is withdrawn.',
   suitFiled:
-    'The complainant told us they filed a court action. The material stays down and the scheduled restoration is cancelled.',
+    'The complainant told us they filed a court action. The material stays down and the scheduled restoration is canceled.',
   withdrawn: 'The subscriber took the counter-notice back.',
   rejected:
-    'Not a counter-notice — a misfiled question, not a judgement on the merits.',
+    'Not a counter-notice — a misfiled question, not a judgment on the merits.',
 }
 
 /** How loud the repeat-infringer verdict should be. */
@@ -761,7 +761,7 @@ function AdminAbuseReports() {
               : scheduling === 'alreadySooner'
                 ? ' — the existing suspension already ends sooner; left alone'
                 : scheduling === 'cancelled'
-                  ? ' — the scheduled restoration was cancelled'
+                  ? ' — the scheduled restoration was canceled'
                   : scheduling === 'noHost'
                     ? ' — no site resolved, so nothing was scheduled'
                     : ''
@@ -1293,10 +1293,10 @@ function AdminAbuseReports() {
                               : 'The electronic signature is the reporter’s legal name and is withheld from your staff role.'}
                         </Typography>
                         <Typography variant="caption">
-                          {`${report.dmca.goodFaith ? '✓' : '✗'} Good-faith belief the use is not authorised`}
+                          {`${report.dmca.goodFaith ? '✓' : '✗'} Good-faith belief the use is not authorized`}
                         </Typography>
                         <Typography variant="caption">
-                          {`${report.dmca.underPenalty ? '✓' : '✗'} Under penalty of perjury, authorised to act for the owner`}
+                          {`${report.dmca.underPenalty ? '✓' : '✗'} Under penalty of perjury, authorized to act for the owner`}
                         </Typography>
                         {/* The ticks record what the reporter asserted. They
                             are not a finding by us, and we do not adjudicate
@@ -1515,7 +1515,7 @@ function AdminAbuseReports() {
                     {notice.overdue ? (
                       <Alert severity="error">
                         {
-                          'The restoration deadline has passed and access is still not back. Restore it now, or record why it is lawfully held (a filed court action is the only reason §512(g) recognises).'
+                          'The restoration deadline has passed and access is still not back. Restore it now, or record why it is lawfully held (a filed court action is the only reason §512(g) recognizes).'
                         }
                       </Alert>
                     ) : null}

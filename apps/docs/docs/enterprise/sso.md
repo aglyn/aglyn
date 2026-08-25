@@ -246,7 +246,7 @@ linked to a governed identity would be a way in that your directory can neither
 see nor revoke, so we do not allow one to be created.
 
 This holds whether or not you have turned enforcement on. Enforcement decides
-whether we **remove** sign-in methods that already exist; it was never a licence
+whether we **remove** sign-in methods that already exist; it was never a license
 to keep handing out new ones in the meantime. Nothing about this can lock anyone
 out, because refusing to add a method never takes away a method someone already
 has.

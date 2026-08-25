@@ -1790,7 +1790,7 @@ export function MarketplaceListingContent({
                         {mustBuy && licensedElsewhere ? (
                           <Alert severity="info" sx={{ mb: 1 }}>
                             {'You already own this in another workspace. A ' +
-                              'licence covers one organization, so this one ' +
+                              'license covers one organization, so this one ' +
                               'needs its own.'}
                           </Alert>
                         ) : null}

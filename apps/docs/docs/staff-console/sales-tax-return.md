@@ -55,11 +55,11 @@ so the page states the count out loud and, when it is serious, says **do not fil
 
 | Finding | What it means |
 |---|---|
-| **Billed without automatic tax** | Charged before its subscription gained tax behaviour. If the buyer is in Texas, tax was under-collected and is still owed — Aglyn pays it out of the receipt. |
+| **Billed without automatic tax** | Charged before its subscription gained tax behavior. If the buyer is in Texas, tax was under-collected and is still owed — Aglyn pays it out of the receipt. |
 | **Tax but no stated base** | Tax was collected, but no line says what it was charged on, so the row adds nothing to Taxable sales. Derive the base by hand (80% of the charge) and add it. |
 | **No readable address** | The row is bucketed under `unknown` and is *not* in the Texas figures. If the customer is in Texas, the return understates the tax due. |
 | **Not in US dollars** | Summed at face value alongside dollar rows. Convert before relying on the totals. |
-| **No paid date** | Period assignment fell back to the query bounds, so the row may belong to a neighbouring period. |
+| **No paid date** | Period assignment fell back to the query bounds, so the row may belong to a neighboring period. |
 
 A clean period says so explicitly — "every row read cleanly" — so that silence is never
 mistaken for a passing check.

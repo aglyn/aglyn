@@ -16,7 +16,7 @@ site alerts — pure in-page effects with no server cost and no metering.
 
 The **automations engine** — server-side steps, custom JS, analytics events, and
 Marketing overlays — is **Pro+**, with **metered** runs. You build both in the same
-place; steps that need a higher plan are labelled in the editor.
+place; steps that need a higher plan are labeled in the editor.
 :::
 
 ## Create an action

@@ -189,6 +189,60 @@ const featureLedgerKey = (feature: LockdownFeatureKey): string =>
 const userLedgerKey = (uid: string): string => userLockdownDocId(uid)
 const domainLedgerKey = (hostname: string): string =>
   domainLockdownDocId(hostname)
+/**
+ * ORG and HOST scope (AGL-1881). These two locks have no document in
+ * `lockdowns/*` — they live as the `suspended*` family ON the org and host
+ * documents — so they never passed through a ledgered reader, and
+ * `getSiteLockdown` answered `null` flat when its reads threw. The route
+ * persists `suspendedEnforcement: 'takedown'` for both scopes all the same,
+ * from a control that promises the lock "keeps holding if Aglyn cannot reach
+ * the database". A court-ordered host takedown plus a partial Firestore
+ * outage therefore served the infringing site for the duration of the
+ * outage, which is the precise failure the mode exists to prevent.
+ *
+ * Keyed by HOST ID, both of them, including the org one. Every reader on
+ * this path is host-addressed, and on a failed read the org id is exactly as
+ * unreadable as the lock — `getOrgForHost` is the read that just threw. So
+ * "the org lock as seen through this host" is the only thing a failed read
+ * can look up, and it matches the ledger's existing warm-process semantics:
+ * an org takedown holds for each site a process has already read once.
+ *
+ * Distinct prefixes keep them disjoint from the four doc-id keys above
+ * (`platform`, `feature--`, `user--`, `domain--`).
+ */
+const orgForHostLedgerKey = (hostId: string): string =>
+  `org--for-host--${hostId}`
+const hostLedgerKey = (hostId: string): string => `host--${hostId}`
+
+/**
+ * Record what a SUCCESSFUL site read saw, per scope. Same contract as the
+ * four `lockdowns/*` readers: a takedown is remembered, and anything else —
+ * no lock, an ordinary lock, a takedown DOWNGRADED to one — retires the
+ * entry, which is how a lift takes effect.
+ */
+export function rememberSiteTakedown(
+  hostId: string,
+  states: { org: LockdownState | null; host: LockdownState | null },
+): void {
+  rememberTakedown(orgForHostLedgerKey(hostId), states.org)
+  rememberTakedown(hostLedgerKey(hostId), states.host)
+}
+
+/**
+ * What a FAILED site read may still serve: the remembered, still-active
+ * takedowns at org and host scope, or nulls — which is the shipped fail-open
+ * answer and therefore the default for every lock that is not an observed
+ * takedown.
+ */
+export function heldSiteTakedown(
+  hostId: string,
+  nowMs: number,
+): { org: LockdownState | null; host: LockdownState | null } {
+  return {
+    org: heldTakedown(orgForHostLedgerKey(hostId), nowMs),
+    host: heldTakedown(hostLedgerKey(hostId), nowMs),
+  }
+}
 
 let platformCache: { at: number; state: LockdownState | null } | undefined
 let platformPending: Promise<LockdownState | null> | undefined

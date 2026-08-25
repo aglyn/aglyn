@@ -550,7 +550,7 @@ export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | nul
               checked={adsChecked}
               onChange={(event) => setAdsChecked(event.target.checked)}
             />
-            {'Advertising — personalised ads and measuring ad performance'}
+            {'Advertising — personalized ads and measuring ad performance'}
           </label>
         ) : null}
         <div
@@ -608,7 +608,7 @@ export function ConsentBannerUi(props: ConsentBannerUiProps): ReactElement | nul
             {advertising
               ? 'This site would like to use analytics (Google Analytics) ' +
                 'to understand how it is used, and advertising cookies to ' +
-                'personalise ads and measure how they perform. Neither runs ' +
+                'personalize ads and measure how they perform. Neither runs ' +
                 'unless you allow it — everything else works either way. ' +
                 'Use Preferences to choose them separately.'
               : 'This site would like to use analytics (Google Analytics) to ' +

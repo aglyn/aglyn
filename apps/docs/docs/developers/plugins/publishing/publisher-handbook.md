@@ -35,7 +35,7 @@ it and when.
 
 You can read the agreement in full at
 [aglyn.com/legal/marketplace-publisher-agreement](https://aglyn.com/legal/marketplace-publisher-agreement),
-alongside the rest of the [legal centre](https://aglyn.com/legal). The
+alongside the rest of the [legal center](https://aglyn.com/legal). The
 version in force is stated at the top of that page, and it is the same
 string the panel records against your acceptance.
 
@@ -516,7 +516,7 @@ publish can change a version somebody already has.
 
 Two things it will stop you on:
 
-- **A mismatched manifest `id`.** An update is recognised by your
+- **A mismatched manifest `id`.** An update is recognized by your
   publisher organization plus the manifest `id` — so a bundle carrying a
   different `id` would create a *separate listing*, not a new version.
   The page says so and refuses rather than letting you find out from a
@@ -549,7 +549,7 @@ version never changes it — change that from the listing itself.
 
 ## How installs work (the buyer side)
 
-Browse is a catalogue — cards link to the **detail page**, which is the
+Browse is a catalog — cards link to the **detail page**, which is the
 only place an install happens. The buyer picks targets (**all sites**,
 **selected sites**, or org-wide for plugins), confirms a dialog that
 names exactly where the install lands, and the pin is written: your

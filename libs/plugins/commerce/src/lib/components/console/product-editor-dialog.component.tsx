@@ -922,7 +922,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             helperText={
               subsLocked
                 ? `Subscriptions are on ${subs.planLabel ?? 'a higher plan'}`
-                : 'Subscriptions bill until cancelled'
+                : 'Subscriptions bill until canceled'
             }
           >
             <MenuItem value="once">{'One-time purchase'}</MenuItem>

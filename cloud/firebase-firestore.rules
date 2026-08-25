@@ -860,6 +860,22 @@ service cloud.firestore {
       // Writes are API-only for the stronger reason: `verified` is the whole
       // security property, and a client that can set it has defeated domain
       // verification entirely.
+      //
+      // AGL-1887 added a SECOND way to satisfy that gate, which makes this
+      // block load-bearing in a new way. `publishSsoDomains` now publishes on
+      // `verified == true` OR a non-empty string `attestedBy` — a named staff
+      // member vouching for an org onboarded by hand before self-serve, whose
+      // domain has no DNS proof behind it and never will. `attestedBy` skips
+      // the proof, so a client able to write it could publish routing for a
+      // domain it does not own, which is the same takeover the `verified`
+      // check exists to stop. Deny-all is what keeps the marker meaningful.
+      //
+      // STAFF ARE DENIED HERE TOO, and that is not an oversight: the only
+      // writer is `attestSsoDomain` (and tools/scripts/attest-sso-domain.mjs)
+      // through the Admin SDK, which bypasses rules. A staff browser session
+      // has no reason to hold a write that lands beside an `adminAudit` row.
+      // `cloud/rules-tests/firestore-rules.test.mjs` is what goes red if any
+      // of this is loosened.
       match /ssoDomains/{domain} {
         allow read, write: if false;
       }
@@ -1126,9 +1142,73 @@ service cloud.firestore {
      * fixture rather than trusting the list.
      */
     function suspensionActive(carrier) {
-      return carrier.get('suspendedAt', null) != null &&
-        !(carrier.get('suspendedUntilMs', null) is number &&
-          carrier.get('suspendedUntilMs', 0) <= request.time.toMillis());
+      return lockWindowActive(
+        carrier.get('suspendedAt', null) != null,
+        carrier.get('suspendedUntilMs', null));
+    }
+    /**
+     * "A lock was placed, and its optional expiry has not passed." The ONE
+     * notion of active in this file (AGL-1881), extracted from
+     * `suspensionActive` above so the platform lever below shares it rather
+     * than restating it. A second copy is how two panic levers end up
+     * disagreeing about a window that closed one millisecond ago.
+     *
+     * `placed` is a boolean because the two carriers say it differently: the
+     * org/host family says it with `suspendedAt`, and `lockdowns/platform`
+     * says it by EXISTING — the doc's only writer is the audited staff route,
+     * so a document that is there at all means someone pulled the lever
+     * (`lockdownRefusedSignup()` in `libs/aglyn/.../lockdown.ts` takes the
+     * identical existence-is-the-lever position, deliberately stricter than
+     * `normalizeLockdownDoc`).
+     *
+     * Both directions of caution from AGL-1981 carry over unchanged, because
+     * this IS that code: an ABSENT expiry is indefinite, never lapsed; a
+     * MALFORMED one leaves the lock standing.
+     */
+    function lockWindowActive(placed, untilMs) {
+      return placed &&
+        !(untilMs is number && untilMs <= request.time.toMillis());
+    }
+    /**
+     * THE PLATFORM PANIC BUTTON, in rules (AGL-1881).
+     *
+     * `/api/admin/lockdown` at platform scope writes `lockdowns/platform`,
+     * and until this every enforcement point that read it was server-side:
+     * the tenant middleware (pages 503), the ~36 `lockdownRefusal()` routes
+     * (423), the session mint. The client SDK read it nowhere. So the panic
+     * button stopped everything EXCEPT a browser tab already holding a
+     * Firestore connection — and publishing is exactly that: `screen-
+     * publishing.ts` writes `hosts/{h}/screens/{s}` direct from the page.
+     * During the compromise this lever exists for, the attacker's open tab
+     * kept writing indefinitely; not for one token lifetime, forever.
+     *
+     * COST, measured rather than assumed, because it is charged on every
+     * non-staff host write. Padding `hostWritesFrozen` with dummy `exists()`
+     * calls against the emulator until a legitimate editor write flips to
+     * DENIED: the screen-update path took 3 document accesses before this
+     * and takes 4 after, against the ceiling of 10 for a single-document
+     * request — 6 to spare. So `exists()` and `get()` on the SAME path
+     * inside one evaluation are one access, not two, and this lever is one
+     * read per write, not two.
+     *
+     * It is the LAST disjunct of `hostWritesFrozen` on purpose: the host arm
+     * reads a document three other helpers have already read (free), the org
+     * arm is the next cheapest, and this one is the only one that can add a
+     * new access — so a write that is refused for a narrower reason never
+     * pays for it.
+     *
+     * The un-panic invariant (AGL-1501) is untouched and is not maintained
+     * here: `isStaff()` is the first disjunct of every rule that calls
+     * `hostWritesFrozen`, so the staff path short-circuits before this
+     * function is reached and staff never depend on this read succeeding.
+     * That ordering is the invariant — do not move this check above it.
+     */
+    function platformLockdownActive() {
+      return exists(/databases/$(database)/documents/lockdowns/platform) &&
+        lockWindowActive(
+          true,
+          get(/databases/$(database)/documents/lockdowns/platform)
+            .data.get('untilMs', null));
     }
     // Suspension write-block (AGL-210/238): a staff-suspended org keeps
     // read access but cannot mutate content. Fail-open when the org doc
@@ -1178,8 +1258,9 @@ service cloud.firestore {
         get(/databases/$(database)/documents/hosts/$(hostId)).data);
     }
     /**
-     * The single predicate every host write rule below asks. Both scopes
-     * freeze content writes; `suspendedMode: 'read-only'` (AGL-1511) is a
+     * The single predicate every host write rule below asks. All THREE
+     * scopes that can freeze a site freeze content writes — host, its org,
+     * and (since AGL-1881) the platform; `suspendedMode: 'read-only'` (AGL-1511) is a
      * suspension too — the site keeps SERVING and stops accepting writes,
      * which is exactly this.
      *
@@ -1188,7 +1269,8 @@ service cloud.firestore {
      * lock must be able to work inside it and lift it.
      */
     function hostWritesFrozen(hostId) {
-      return hostSuspended(hostId) || hostOrgSuspended(hostId);
+      return hostSuspended(hostId) || hostOrgSuspended(hostId) ||
+        platformLockdownActive();
     }
     match /hosts/{hostId} {
       // Queries must be membership-constrained (the console filters on

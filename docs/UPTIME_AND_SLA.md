@@ -1296,13 +1296,108 @@ step 5 onward costs money and is a decision, not a task.
    `roles/logging.viewer` on `aglyn-main`. That is what the 403 above is, and
    with it a future probe could read the log directly as a second, independent
    reader. Not required for anything shipped.
-5. **Billable, and the real fix: a Vercel log drain into GCP Logging.**
-   Log drains require **Vercel Pro** (~$20/user/month; tracked as AGL-723,
-   already targeted for mid-September). Once on Pro: Vercel → each of
-   `aglyn-console` and `aglyn-tenant` → Integrations → Log Drains → add a drain
-   to GCP Logging. Verify with `GET /v2/integrations/log-drains`, which returns
-   `[]` on both projects today — that empty array is the current evidence of the
-   gap, so it is also the check that the drain took.
+5. **The real fix: two Vercel log drains pointed at our own receiver.**
+
+   :::warning This step used to say "add a drain to GCP Logging". It was wrong.
+   **Vercel has no native GCP Logging destination.** A log drain POSTs to an
+   HTTPS endpoint *you host*; the marketplace destinations are Dash0, Datadog,
+   Splunk, S3 and friends, none of which is Cloud Logging. Anyone following the
+   old instruction would have gone looking in the dashboard for a picker that
+   does not exist and concluded the plan was wrong rather than the doc. The
+   endpoint is now written and shipped — see **the receiver** below.
+   :::
+
+   Log drains require **Vercel Pro**; team `aglyn` is on `pro` as of
+   2026-08-25, so the plan precondition (AGL-723) is met. Both projects still
+   return `[]` from `GET /v2/integrations/log-drains` — that empty array is the
+   current evidence of the gap, so it is also the check that the drain took.
+
+   **Before creating either drain**, set both variables on the **console**
+   project (Production) and redeploy, because the receiver fails closed and a
+   drain created against an unconfigured endpoint just delivers 403s until
+   Vercel disables it:
+
+   | variable | value |
+   | -- | -- |
+   | `VERCEL_LOG_DRAIN_SECRET` | `openssl rand -hex 32`; paste the SAME value into each drain's *Signature Verification Secret* field |
+   | `VERCEL_LOG_DRAIN_VERIFY` | the `x-vercel-verify` token Vercel shows beside the endpoint URL |
+
+   Then, per project (`aglyn-console` **and** `aglyn-tenant`) — Team Settings →
+   Drains → Add Drain → Logs → Custom endpoint:
+
+   - **Endpoint URL** `https://app.aglyn.com/api/log-drain` — ONE receiver for
+     both projects, on the console, for the same reason
+     `/api/health/server-errors` is: a tenant runtime too broken to answer
+     anything still has its 5xx counted somewhere that answers, and each entry
+     carries its own `projectId` so the two never blur.
+   - **Format** `ndjson` (`json` also parses; the receiver reads either).
+   - **Sources** `lambda`, `edge`, `external` — the runtime tiers. **Not**
+     `build` or `static`: a build log has no status code, and a static 5xx is
+     the CDN's, not ours.
+   - **Environments** `production` only. Preview 5xx are expected and would
+     page on unfinished work.
+   - **Sampling** none (100%). The receiver's own 5xx filter is the cost
+     control, and sampling a rare error is how you miss it.
+
+   Equivalent REST payload, if you would rather not click — note the current
+   endpoint is `POST /v1/drains`; `POST /v2/integrations/log-drains` is
+   deprecated and rejects anything but an OAuth2 integration token:
+
+   ```jsonc
+   // POST /v2/integrations/log-drains?teamId=…   (deprecated shape, per project)
+   {
+     "name": "aglyn-runtime-5xx",
+     "url": "https://app.aglyn.com/api/log-drain",
+     "deliveryFormat": "ndjson",
+     "sources": ["lambda", "edge", "external"],
+     "environments": ["production"],
+     "projectIds": ["<aglyn-console or aglyn-tenant project id>"],
+     "secret": "<the same VERCEL_LOG_DRAIN_SECRET>"
+   }
+   ```
+
+   Verify the same way the gap was measured: `GET
+   /v2/integrations/log-drains` per project, now non-empty.
+
+   **The receiver** (`apps/console/app/api/log-drain/route.ts`, shipped
+   2026-08-25) is what makes this cost nothing much:
+
+   - **It verifies `x-vercel-signature`** — HMAC-SHA1 of the *raw* body keyed
+     by `VERCEL_LOG_DRAIN_SECRET`, timing-safe compared — and **fails closed**.
+     Unset secret, missing header or wrong value: nothing is written, ever.
+   - **It filters to server errors BEFORE writing, and this is the whole cost
+     story.** A drain streams *every* request log for both projects; writing
+     all of them would turn a ~$20/month monitoring budget into a real bill.
+     Forwarded: `statusCode >= 500`, `proxy.statusCode >= 500`, `statusCode
+     === -1` (documented as a crashed lambda — the OOM case the hook cannot
+     see), and `level`/`type` of `fatal`. Dropped unwritten: everything else,
+     including plain `level: "error"` console lines (the hook already covers
+     our own thrown errors properly) and `proxy.statusCode === -1`, which is
+     *background ISR revalidation* and would otherwise forward healthy traffic
+     forever. On a healthy day this endpoint writes nothing at all.
+   - **It writes to `vercel-runtime`, not `server-errors`.** The latter is the
+     `onRequestError` hook's log and step 4's policy keys on it; merging would
+     count one incident twice and make triage start by asking which arm saw
+     it. Same discipline that keeps `client-errors` and `server-errors` apart.
+   - **It cannot feed back on itself.** The receiver runs on the console,
+     whose logs this same drain collects. Every entry whose path is
+     `/api/log-drain` is dropped *before* the 5xx gate, so the receiver's own
+     500s are structurally unforwardable; and every line it logs about itself
+     is a `console.warn`, i.e. `level: "warning"`, which the 5xx gate drops on
+     a second, independent property.
+   - **Its cost is bounded and its lossiness is reported.** 60 entries per
+     minute per instance, the same budget `reportServerError` uses; overflow
+     increments a counter that is `console.warn`ed as a summary when the
+     window rolls, and every response body carries `suppressed`.
+   - **It answers 200 on an accepted delivery whatever happens downstream.**
+     Vercel disables a drain that fails more than 80% of deliveries or 50
+     times in an hour, so a receiver that 5xx'd during a Cloud Logging wobble
+     would switch the monitor off mid-incident.
+   - **It sends no more than the shipped beacons do.** No request bodies, no
+     `proxy.path` (that one carries the query string), no client IP, user
+     agent or referer. The route *pattern*, status, host, region, project and
+     a 1 KB-clamped message — the last is where `Task timed out after 10.01
+     seconds` lives, which is the entire triage value of the platform-5xx case.
 6. **After the drain, the policy this issue originally specified.** A log-based
    counter metric on
 
@@ -1313,14 +1408,51 @@ step 5 onward costs money and is a decision, not a task.
    with a threshold policy — proposed `> 5` in 5 minutes, `ALIGN_DELTA` /
    `REDUCE_SUM`, grouped by project. Re-tune against the beta baseline; the
    point of the beta window is to get one.
+
+   The receiver populates `httpRequest.status` and writes under
+   `resource.type="global"` to a log id containing `vercel` precisely so this
+   filter works as written. **One caveat:** a crashed lambda (`statusCode:
+   -1`) and a `fatal` entry have no HTTP status to report, so they land with
+   `httpRequest.status` absent and this filter misses them — which is the
+   subset the other two arms are worst at seeing. Prefer
+
+   ```
+   resource.type="global" AND logName=~"vercel" AND severity>=ERROR
+   ```
+
+   unless the 5xx-only volume turns out to need the narrower form; every entry
+   in this log is already a server error by construction, so `severity>=ERROR`
+   is not the blunt instrument it would be on a raw log.
 7. **Then reconcile the three.** With the drain live it sees a superset of what
    the hook sees, and keeping every arm at page level would triple-page. Keep
    them all — the hook and its endpoint survive a Vercel outage and a plan
    downgrade — but let the drain's policy be the one that pages, and demote the
    other two to the counter form.
 
-Until step 5 lands, AGL-1921's platform-5xx blind spot stays open and this
-section is the honest statement of how much of the server tier is watched.
+Until the two drains in step 5 are actually created, AGL-1921's platform-5xx
+blind spot stays open and this section is the honest statement of how much of
+the server tier is watched. The receiver being deployed changes nothing on its
+own: an endpoint nobody is delivering to is a monitor that reports silence.
+
+**What stays blind even with all three arms live**, so nobody reads this
+section as "the server tier is covered":
+
+- **A Vercel-side outage.** If the platform cannot run our functions it also
+  cannot deliver a drain; the external uptime monitors are the only arm that
+  survives that, which is why steps 1–4 stay in place rather than being
+  replaced by the drain.
+- **The console being down.** The receiver lives on `aglyn-console`, so a
+  console outage silences the *tenant's* drain too. Vercel retries and then
+  disables a drain that keeps failing, so a long console outage can require
+  re-enabling the drains by hand afterwards — check the Drains page after any
+  console incident.
+- **Anything below 500.** A route answering 200 with a broken body, a 403 storm
+  from a bad rule, a 404 spike from a lost route: none is a server error and
+  none of the three arms sees it.
+- **Deliberate drops.** `level: "error"` console lines and anything past the
+  60/minute/instance budget are not forwarded — the budget reports itself, but
+  the reading is "at least this many", never "exactly this many".
+- **Preview deployments**, excluded by the drain's `environments` above.
 
 **Marginal cost of the 08-24 arm: effectively zero.** Firestore writes are
 bounded by coalescing at ≤12/minute/instance and only during an incident (~$0.02

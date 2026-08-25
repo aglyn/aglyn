@@ -87,7 +87,7 @@ async function retireLicenseKeys(
             atMs: Date.now(),
             event: 'license-retired',
             detail:
-              `${retired} licence key${retired === 1 ? '' : 's'} retired. ` +
+              `${retired} license key${retired === 1 ? '' : 's'} retired. ` +
               'The buyer already holds the key string, so it is not returned ' +
               'to the pool — reissuing it would give two people one secret.',
           }),

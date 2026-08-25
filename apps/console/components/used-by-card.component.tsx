@@ -151,7 +151,7 @@ export function UsedByCard({
       help={
         kind === 'component'
           ? docsHelp('components', { anchor: '#used-by' })
-          : docsHelp('screens', { anchor: '#used-by' })
+          : docsHelp('layouts', { anchor: '#used-by' })
       }
       contentGutterX
       contentGutterY

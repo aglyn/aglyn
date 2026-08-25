@@ -175,8 +175,8 @@ seeded emulator stack). Use two accounts with distinct names/photos.
 
 ### 13. `static/img/besigner/versions-dialog.png`
 
-- **Docs page:** `building-sites/screens-and-layouts/overview.md` →
-  `#versions--scheduled-publishing`
+- **Docs page:** `building-sites/screens-and-layouts/versions-and-publishing.md` →
+  `#the-versions-dialog`
 - **Capture:** besigner (Pro-plan seeded site) → click the version name in the app
   bar. The **Versions** dialog with 2–3 named versions, the **Published** chip on
   one, an **Open** chip, and ideally a "Publishes …" schedule chip on another row.

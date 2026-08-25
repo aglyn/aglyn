@@ -66,7 +66,7 @@ so does selecting a different element.
 ### Fields you don't touch keep inheriting
 
 A state only overrides what you actually change. Set a hover background
-and the text colour, padding and everything else keep coming from the
+and the text color, padding and everything else keep coming from the
 default styles — which is exactly how the browser treats it.
 
 That means setting a value **back** to what the default says removes it
@@ -108,10 +108,10 @@ For anything these chips do not cover — a custom selector, a child element,
 The spacing styler is **one diagram** of the element's box, drawn the way
 a browser actually builds it: **margin** on the outside, then the
 **border**, then **padding**, and the **content** in the middle. Each
-region is shaded and labelled, and every side shows the value it is
+region is shaded and labeled, and every side shows the value it is
 currently set to.
 
-![The box model diagram with margin, border, padding and contents regions labelled, one side selected, and its spacing editor open below](/img/besigner/box-styler-diagram.png)
+![The box model diagram with margin, border, padding and contents regions labeled, one side selected, and its spacing editor open below](/img/besigner/box-styler-diagram.png)
 
 - Pick the fan-out with **Side / Axis / All**: one side at a time, the
   vertical or horizontal pair together, or all four sides at once.
@@ -120,7 +120,7 @@ currently set to.
 - Every side takes either a **spacing step** from your theme or a
   [custom amount](#spacing-units) with a unit you choose.
 - The **border** ring is shown so the diagram matches what the browser
-  draws. Border width, style and colour are edited under **Borders &
+  draws. Border width, style and color are edited under **Borders &
   Shadows**, not here — there is one place for each.
 - Everything respects the active breakpoint scope.
 
@@ -139,7 +139,7 @@ terms that actually matter when you are deciding which one to reach for:
 
 | Region | What it is |
 | --- | --- |
-| Margin | Space **outside** the element, pushing its neighbours away |
+| Margin | Space **outside** the element, pushing its neighbors away |
 | Border | The line drawn around the element — set under **Borders & Shadows** |
 | Padding | Space **inside** the element, between its border and its content |
 | Contents | The element's own text or children |
@@ -149,10 +149,10 @@ Enter or Space opens the one you are on, and focusing a side shows its
 tooltip just as hovering does.
 
 :::tip Margin or padding?
-If you want to move an element **away from its neighbours**, that is
+If you want to move an element **away from its neighbors**, that is
 margin. If you want to give its own content **room to breathe inside**
 it — the gap between a card's edge and the text in it — that is padding.
-A background colour fills the padding and stops at the margin, which is
+A background color fills the padding and stops at the margin, which is
 usually the quickest way to see which one you actually changed.
 :::
 
@@ -362,15 +362,15 @@ it.
 ### Borders without CSS
 
 A border is three choices — how thick, what kind of line, and what
-colour — and the panel asks for them as three controls rather than as a
+color — and the panel asks for them as three controls rather than as a
 line of CSS you have to remember the grammar of.
 
 - **Thickness** is the number box. It is always in pixels, and the box
   says so, so there is no unit to type.
 - **Line style** is the menu beside it: *Solid line*, *Dashed line*,
   *Dotted line*, *Double line*, and *No line*.
-- **Colour** is the **Border Color** field next to it, which opens on
-  your theme palette first so a border can follow the site's colours
+- **Color** is the **Border Color** field next to it, which opens on
+  your theme palette first so a border can follow the site's colors
   instead of freezing a hex.
 
 Type a thickness with no style picked and you get a solid line — a
@@ -392,7 +392,7 @@ it.
 can pick the one that looks right.
 
 Every one of these menus ends with **Custom…**, which opens a text box
-for raw CSS: a border shorthand with a colour in it, a `clamp()` radius,
+for raw CSS: a border shorthand with a color in it, a `clamp()` radius,
 a multi-layer `box-shadow`. Values already saved that way keep working
 and open in that text box automatically — nothing you wrote by hand is
 replaced by the nearest preset. Edit a custom border back into a plain

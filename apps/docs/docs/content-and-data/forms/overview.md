@@ -148,10 +148,10 @@ Every field has a **Label** — the visible name of the input, and the one scree
 readers announce. A field can also carry a **Placeholder**: a grey example
 inside the empty input, such as `you@company.com` or "Tell us about your setup".
 Set one and the label moves above the box so both are readable at once; leave it
-empty and the label keeps its floating behaviour.
+empty and the label keeps its floating behavior.
 
 A placeholder is a hint, never a substitute for the label — it vanishes the
-moment a visitor starts typing, and a field labelled only by its placeholder is
+moment a visitor starts typing, and a field labeled only by its placeholder is
 unusable with a screen reader. Text, email, and multiline fields show it inside
 the input; a dropdown displays it until a choice is made; radio, checkbox, and
 rating fields ignore it. Clearing the setting removes the hint.
@@ -224,10 +224,10 @@ The site's **Inbox** page collects everything visitors send, in three tabs —
 reads as a list of people, not of forms: **From**, **Message**, **Received**, and the
 row actions.
 
-- **From** shows the sender — a coloured initials avatar and their name, with the
+- **From** shows the sender — a colored initials avatar and their name, with the
   **form name** as a caption underneath (the Form element's **Form name** attribute, so
-  name your forms distinctly: "Contact", "Newsletter", "Survey"). The avatar's colour is
-  derived from the name, so one sender keeps one colour on every machine.
+  name your forms distinctly: "Contact", "Newsletter", "Survey"). The avatar's color is
+  derived from the name, so one sender keeps one color on every machine.
 - Unread submissions are **bold with a dot** at the left of the row. There is no "New"
   chip — bold text and a chip saying *New* are the same fact twice. Site managers also
   get an in-app notification per submission.

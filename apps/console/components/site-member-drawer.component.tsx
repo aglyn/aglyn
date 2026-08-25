@@ -313,7 +313,7 @@ export function SiteMemberDrawer(props: SiteMemberDrawerProps) {
             {ordersUnreadable ? '—' : usd(lifetimeCents)}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            {'Charged order totals minus refunds; pending and cancelled ' +
+            {'Charged order totals minus refunds; pending and canceled ' +
               'orders excluded.'}
           </Typography>
 

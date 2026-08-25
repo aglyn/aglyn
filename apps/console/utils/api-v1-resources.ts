@@ -1665,7 +1665,7 @@ const ORDER_WRITE_TARGETS: OrderFulfilmentTarget[] = ['fulfilled', 'delivered']
  */
 const ORDER_WRITE_REFUSED: Record<string, string> = {
   cancelled:
-    'Cancelling an order releases held stock, so it is not part of this endpoint. Cancel it in the console.',
+    'Canceling an order releases held stock, so it is not part of this endpoint. Cancel it in the console.',
   refunded:
     'Refunding an order moves money, so it is not part of this endpoint. Refund it in the console.',
 }

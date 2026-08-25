@@ -56,7 +56,7 @@ The card shows how many seats you've **purchased**, how many are **assigned**, a
 many are **unassigned**, then lets you add or remove seats per site.
 
 - **Seats are reassignable.** Moving a seat between sites is immediate and costs
-  nothing — you're not buying or cancelling anything, just relocating capacity.
+  nothing — you're not buying or canceling anything, just relocating capacity.
 - **Taking a seat off a busy site doesn't delete anything.** If the site is running
   more registers than it can after the move, the extra ones stay set up but stop
   taking sales until you assign seats back or remove them. The console warns you
@@ -87,7 +87,7 @@ add-ons. The card shows how many seats you've **purchased**, how many are
 site. The same numbers appear on each site's own Collaborators card.
 
 - **Seats are reassignable.** Moving a seat between sites is immediate and costs
-  nothing — you're not buying or cancelling anything, just relocating capacity.
+  nothing — you're not buying or canceling anything, just relocating capacity.
 - **Nobody is ever removed for being over the limit.** If a site has more
   collaborators than its limit — because a seat moved, a plan changed, or the limit
   was corrected — everyone on it keeps their access and stays signed in. The only

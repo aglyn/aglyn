@@ -150,8 +150,15 @@ export const CLIENT_ERROR_LOG_ID = 'client-errors'
  *
  * Returns null when either half is missing; the caller decides what that
  * means (the reporter drops the batch, the heartbeat reports degraded).
+ *
+ * EXPORTED for the Vercel log-drain receiver (AGL-1921, third arm), which
+ * writes to `vercel-runtime` through this same credential for the same
+ * reason the heartbeat does: the failures that would silence the drain are
+ * the environmental ones AGL-1923's heartbeat already probes, and it probes
+ * them through exactly this path. A receiver that minted its own token would
+ * need its own dead-man's switch.
  */
-async function beaconLoggingTarget(): Promise<{
+export async function beaconLoggingTarget(): Promise<{
   token: string
   projectId: string
 } | null> {

@@ -167,6 +167,7 @@ const TOPIC_SURFACES: Record<string, { file: string; marker: string }> = {
     file: `${DESIGNER}/element-props-form.component.tsx`,
     marker: "{'Interactions'}",
   },
+  layouts: { file: SCREEN_EDITOR, marker: "{'Shared layout'}" },
   responsiveStyling: {
     file: `${DESIGNER}/element-styles-form.component.tsx`,
     marker: '<BoxStyler',
@@ -175,7 +176,6 @@ const TOPIC_SURFACES: Record<string, { file: string; marker: string }> = {
     file: `${DESIGNER}/component-accordion-list.tsx`,
     marker: 'item?.$id === REUSABLE_COMPONENT_CATEGORY',
   },
-  screens: { file: SCREEN_EDITOR, marker: "{'Shared layout'}" },
   seo: { file: SCREEN_EDITOR, marker: "{'SEO'}" },
   textEditing: {
     file: `${DESIGNER}/element-props-form.component.tsx`,

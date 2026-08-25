@@ -11,7 +11,7 @@ description: Fixes for common issues — publishing, domains, sign-in, and searc
 Publishing a screen creates a version that goes live — edits in the Besigner
 aren't public until you publish. See
 [Publish your first screen](/getting-started/publish-your-first-screen) and
-[Versions & scheduled publishing](/building-sites/screens-and-layouts/overview#versions--scheduled-publishing).
+[Versions & scheduled publishing](/building-sites/screens-and-layouts/versions-and-publishing).
 
 ## My custom domain won't verify
 

@@ -186,6 +186,13 @@ jobs:
       # `contentHash` untouched, additive only, gated behind --confirm — so
       # they are asserted here rather than trusted (AGL-1630).
       - run: npm run test:media-sha256-backfill
+      # The SSO attestation backfill writes the one field that lets a domain
+      # be published WITHOUT DNS proof, so a careless run routes another
+      # company's sign-ins to the wrong IdP. Its refusals — a domain another
+      # org already routes, a missing attester, --apply without the project
+      # id typed out — are the only thing standing between the two, so they
+      # are asserted rather than trusted (AGL-1887).
+      - run: npm run test:sso-attestation
       # Also run in rules-drift.yml and index-drift.yml. This workflow is
       # ACTIVE and runs it too; an older comment here claimed it was
       # `disabled_manually`, which was false (AGL-2381). Kept in all three on

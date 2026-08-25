@@ -87,7 +87,7 @@ I save a template" — is already written down on these pages. When your questio
 clearly matches one of them, the assistant hands you that page's own words,
 with a link to the full page, instead of writing you a fresh answer.
 
-You will recognise these replies: they open with the name of the page, quote it,
+You will recognize these replies: they open with the name of the page, quote it,
 and close by offering to go further if it missed what you meant.
 
 There are two things worth knowing about them.

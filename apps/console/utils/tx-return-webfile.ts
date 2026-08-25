@@ -290,7 +290,7 @@ export function taxReturnAttentionItems(
       count: Number(attention?.untaxedRows ?? 0),
       label: 'Rows billed without automatic tax',
       detail:
-        'Charged before their subscription gained tax behaviour. If any is ' +
+        'Charged before their subscription gained tax behavior. If any is ' +
         'a Texas sale, tax was under-collected and is still owed — Aglyn ' +
         'pays it from the receipt.',
     },
@@ -470,7 +470,7 @@ export function taxReturnAttentionItems(
       label: 'Marketplace rows with no readable date',
       detail:
         'Period assignment fell back to the query bounds, so these purchases ' +
-        'may belong to a neighbouring period.',
+        'may belong to a neighboring period.',
     },
     {
       id: 'rowsMissingPaidAt',
@@ -479,7 +479,7 @@ export function taxReturnAttentionItems(
       label: 'Rows with no paid date',
       detail:
         'Period assignment fell back to the query bounds, so these rows may ' +
-        'belong to a neighbouring period.',
+        'belong to a neighboring period.',
     },
   ]
   const nonZero = items.filter((item) => item.count > 0)

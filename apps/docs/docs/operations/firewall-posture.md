@@ -329,6 +329,6 @@ the real firewall**, hand it a fixture:
 npm run check:firewall-posture -- --fixture=/tmp/doctored.json
 ```
 
-The fixture is `{ "<project>": <config> | null }`, with `null` modelling "no
+The fixture is `{ "<project>": <config> | null }`, with `null` modeling "no
 config exists". Every project in the table must have an entry, so a fixture
 cannot silently skip one.
