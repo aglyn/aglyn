@@ -35,6 +35,7 @@ const orgs = new Map<string, Record<string, unknown>>()
 const hosts = new Map<string, Record<string, unknown>>()
 let platformDoc: Record<string, unknown> | undefined
 let orgReadsThrow = false
+let hostReadsThrow = false
 
 jest.mock('./organizations', () => ({
   __esModule: true,
@@ -43,7 +44,10 @@ jest.mock('./organizations', () => ({
     const org = orgs.get(hostId)
     return org ? { orgId: `org-${hostId}`, org } : null
   },
-  getHostDocAdmin: async (hostId: string) => hosts.get(hostId) ?? null,
+  getHostDocAdmin: async (hostId: string) => {
+    if (hostReadsThrow) throw new Error('firestore unavailable')
+    return hosts.get(hostId) ?? null
+  },
 }))
 
 jest.mock('./firebase-admin', () => ({
@@ -66,7 +70,10 @@ jest.mock('./firebase-admin', () => ({
   },
 }))
 
-import { invalidatePlatformLockdownCache } from './lockdown'
+import {
+  invalidatePlatformLockdownCache,
+  resetTakedownLedger,
+} from './lockdown'
 import { getSiteLockdown, visitorWriteRefusal } from './tenant-write-lockdown'
 
 const NOW = 1_755_000_000_000
@@ -77,7 +84,9 @@ beforeEach(() => {
   hosts.clear()
   platformDoc = undefined
   orgReadsThrow = false
+  hostReadsThrow = false
   invalidatePlatformLockdownCache()
+  resetTakedownLedger()
 })
 
 const readOnlyOrg = () =>
@@ -231,5 +240,133 @@ describe('AGL-1511 · visitor writes on a read-only site', () => {
         nowMs: NOW,
       }),
     ).toBeNull()
+  })
+})
+
+/**
+ * AGL-1881 — `enforcement: 'takedown'` at ORG and HOST scope.
+ *
+ * AGL-1621 built the takedown ledger and wired it into the four readers
+ * whose lock lives in `lockdowns/*`: platform, feature, user, domain. Org
+ * and host locks live on the org/host document instead and never passed
+ * through a ledgered reader, so `getSiteLockdown`'s catch returned null flat
+ * — while /api/admin/lockdown happily persisted `suspendedEnforcement:
+ * 'takedown'` for both scopes, from a control whose own label promises the
+ * lock "keeps holding if Aglyn cannot reach the database".
+ *
+ * A court-ordered host takedown plus a partial Firestore outage therefore
+ * answered `locked: false` and the infringing site kept serving — the exact
+ * failure the mode exists to prevent, on the two scopes most likely to be
+ * carrying a legal order.
+ *
+ * The crux, and why a ledger rather than a stricter catch: on a read failure
+ * `suspendedEnforcement` is exactly as unreadable as everything else. Only
+ * something remembered from a SUCCESSFUL read can classify the lock. And the
+ * catch stays fail-open for every other class on purpose — a Firestore blip
+ * must not stop the platform's shops taking orders.
+ */
+describe('AGL-1881 · a takedown at org/host scope survives a failed read', () => {
+  const takedownOrg = () =>
+    orgs.set(HOST, {
+      suspendedAt: { seconds: 1 },
+      suspendedReasonCode: 'legal',
+      suspendedEnforcement: 'takedown',
+    })
+  const takedownHost = (extra: Record<string, unknown> = {}) =>
+    hosts.set(HOST, {
+      suspendedAt: NOW,
+      suspendedReasonCode: 'legal',
+      suspendedEnforcement: 'takedown',
+      ...extra,
+    })
+
+  it('ORG: the takedown holds when the org read throws', async () => {
+    takedownOrg()
+    // One successful read — the observation that arms the ledger.
+    expect((await getSiteLockdown(HOST, NOW))?.scope).toBe('org')
+    orgReadsThrow = true
+    const held = await getSiteLockdown(HOST, NOW)
+    expect(held).toMatchObject({ scope: 'org', enforcement: 'takedown' })
+    const response = await visitorWriteRefusal({
+      hostId: HOST,
+      request: { method: 'POST' },
+      surface: 'checkout',
+      nowMs: NOW,
+    })
+    expect(response?.status).toBe(423)
+  })
+
+  it('HOST: the takedown holds when the host read throws', async () => {
+    takedownHost()
+    expect((await getSiteLockdown(HOST, NOW))?.scope).toBe('host')
+    hostReadsThrow = true
+    expect(await getSiteLockdown(HOST, NOW)).toMatchObject({
+      scope: 'host',
+      enforcement: 'takedown',
+    })
+  })
+
+  it('HOST: it holds when the OTHER read is the one that throws', async () => {
+    // The outage does not get to pick which document it took out. A host
+    // takedown remembered from a successful pass must survive the org read
+    // failing just the same, or the guarantee is "unless the blip landed on
+    // the neighbouring collection".
+    takedownHost()
+    await getSiteLockdown(HOST, NOW)
+    orgReadsThrow = true
+    expect(await getSiteLockdown(HOST, NOW)).toMatchObject({
+      scope: 'host',
+      enforcement: 'takedown',
+    })
+  })
+
+  it('an ORDINARY org lock still fails open — the default is unchanged', async () => {
+    readOnlyOrg()
+    await getSiteLockdown(HOST, NOW)
+    orgReadsThrow = true
+    expect(await getSiteLockdown(HOST, NOW)).toBeNull()
+  })
+
+  it('a NEVER-OBSERVED takedown fails open — the stated limit', async () => {
+    // Said out loud because the guarantee is easy to over-read: a COLD
+    // process that has never once read this host has nothing to hold, and a
+    // takedown placed DURING an outage is not enforced by this path at all.
+    takedownHost()
+    hostReadsThrow = true
+    expect(await getSiteLockdown(HOST, NOW)).toBeNull()
+  })
+
+  it('a LIFTED takedown stops holding — a successful read retires it', async () => {
+    takedownHost()
+    await getSiteLockdown(HOST, NOW)
+    hosts.set(HOST, {})
+    expect(await getSiteLockdown(HOST, NOW)).toBeNull()
+    hostReadsThrow = true
+    expect(await getSiteLockdown(HOST, NOW)).toBeNull()
+  })
+
+  it('an EXPIRED takedown releases on schedule, even while reads fail', async () => {
+    // A dead-man expiry must not become un-liftable by being classified.
+    takedownHost({ suspendedUntilMs: NOW + 1000 })
+    expect(await getSiteLockdown(HOST, NOW)).not.toBeNull()
+    hostReadsThrow = true
+    expect(await getSiteLockdown(HOST, NOW)).not.toBeNull()
+    expect(await getSiteLockdown(HOST, NOW + 2000)).toBeNull()
+  })
+
+  it('a takedown DOWNGRADED to an ordinary lock stops holding', async () => {
+    takedownHost()
+    await getSiteLockdown(HOST, NOW)
+    hosts.set(HOST, { suspendedAt: NOW, suspendedReasonCode: 'legal' })
+    await getSiteLockdown(HOST, NOW)
+    hostReadsThrow = true
+    expect(await getSiteLockdown(HOST, NOW)).toBeNull()
+  })
+
+  it('the ledger is per host — one site’s takedown is not another’s', async () => {
+    takedownHost()
+    await getSiteLockdown(HOST, NOW)
+    hostReadsThrow = true
+    expect(await getSiteLockdown('host-2', NOW)).toBeNull()
   })
 })
