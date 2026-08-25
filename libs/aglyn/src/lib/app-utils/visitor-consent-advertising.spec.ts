@@ -115,29 +115,32 @@ describe('only an explicit yes to THIS category grants it', () => {
     expect(record.advertising).toBe(false)
   })
 
-  it('NEVER grants advertising from an implied default', () => {
-    // The load-bearing one. In the opt-out posture a US visitor is defaulted
-    // INTO analytics; advertising carries obligations analytics does not, so
-    // being defaulted in must not produce an advertising basis. "Implied
-    // consent to advertising" is a declaration to Google we could not
-    // support with anything on file — the AGL-1622 defect shape exactly.
+  it('GRANTS advertising from an implied default when the caller asks for it', () => {
+    // The load-bearing one, and it has flipped TWICE — read the history before
+    // changing it again. AGL-2402 granted here; 2026-08-24 narrowed it back
+    // because the published Cookie Policy still said advertising cookies were
+    // "set only where you have allowed"; 2026-08-25 restored it once BOTH
+    // masters were made to say the same thing (the Privacy Policy already
+    // described the opt-out posture; the Cookie Policy's five opt-in-only
+    // sentences were rewritten that day).
     //
-    // Note the input: `advertising: true` is passed IN and must still come
-    // back false. The grant is re-derived against the STATUS, so a caller
-    // asking for an implied grant cannot obtain one. AGL-2402 made this
-    // assert `true`; narrowed back 2026-08-24.
+    // This branch is only reachable in the OPT-OUT posture — the EEA/UK/
+    // Gibraltar/outermost set and any undeterminable region never get an
+    // implied record at all, which the geography tests below still assert.
     const record = storeVisitorConsent('h1', {
       status: 'implied',
       advertising: true,
     })
     expect(record.analytics).toBe(true)
-    expect(record.advertising).toBe(false)
+    expect(record.advertising).toBe(true)
   })
 
-  it('and not from an implied record on a host that never asked either', () => {
-    // The omitted case, which must fall the same way: `advertising` absent
-    // means NO. Both halves matter — one asserts the status rule, this one
-    // asserts that absence is not silently upgraded.
+  it('but an implied record on a host that never asked stays FALSE', () => {
+    // Unchanged by the 2026-08-25 widening, and the half that keeps it honest:
+    // `advertising` absent still means NO. The status now permits a grant, so
+    // the CALLER's intent is what distinguishes these two cases — absence must
+    // never be silently upgraded just because the status allows it. A host that
+    // never turned the advertising question on passes nothing here.
     const record = storeVisitorConsent('h1', { status: 'implied' })
     expect(record.analytics).toBe(true)
     expect(record.advertising).toBe(false)
@@ -226,8 +229,14 @@ describe('the stored record is derived, never trusted', () => {
     // This is the case an exclusion-list implementation would fail. Written
     // as `status !== 'declined' && status !== 'opted-out' && …`, the rule
     // grants advertising to every value below — which is why
-    // `advertisingGrantedByStatus` is an equality test against the single
-    // granting status instead.
+    // `advertisingGrantedByStatus` is an equality test against the granting
+    // statuses instead.
+    //
+    // ⚑ `implied` MOVED OUT of this list on 2026-08-25 and into the granting
+    // set below — it is now a real basis in the opt-out posture, after both
+    // legal masters were made to say so. Everything else here still denies,
+    // and that is the half this test exists to protect: widening the granting
+    // set must not become an exclusion list.
     for (const status of [
       undefined,
       null,
@@ -235,7 +244,8 @@ describe('the stored record is derived, never trusted', () => {
       'unknown',
       'ACCEPTED',
       'accepted ',
-      'implied',
+      'IMPLIED',
+      'implied ',
       'pending',
     ]) {
       expect({
@@ -243,9 +253,14 @@ describe('the stored record is derived, never trusted', () => {
         granted: advertisingGrantedByStatus(status as VisitorConsentStatus),
       }).toEqual({ status, granted: false })
     }
-    // Non-vacuity: the one value that MUST grant still does, so a function
+    // Non-vacuity: the values that MUST grant still do, so a function
     // hard-wired to `return false` cannot pass this suite.
     expect(advertisingGrantedByStatus('accepted')).toBe(true)
+    expect(advertisingGrantedByStatus('implied')).toBe(true)
+    // And the two that must NEVER grant, whatever the posture: an explicit no
+    // and a GPC signal outrank the implied default entirely.
+    expect(advertisingGrantedByStatus('declined')).toBe(false)
+    expect(advertisingGrantedByStatus('gpc-opt-out')).toBe(false)
   })
 
   it('and a record carrying an unknown status grants nothing either', () => {

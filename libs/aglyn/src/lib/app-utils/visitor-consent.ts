@@ -214,12 +214,30 @@ export function analyticsGrantedByStatus(
 export function advertisingGrantedByStatus(
   status: VisitorConsentStatus,
 ): boolean {
-  // Fails CLOSED: an exact match against the single granting status, so any
+  // Fails CLOSED: an exact match against the granting statuses, so any
   // unknown, absent or future status answers `false`. `strictNullChecks` is
   // off repo-wide, which means `status` can be `null`/`undefined` at runtime
   // despite the type — an equality test denies those, an exclusion list
   // (`status !== 'declined' && …`) would have granted them.
-  return status === 'accepted'
+  //
+  // `implied` GRANTS from 2026-08-25, and the policy went first (Zach's call,
+  // executed in that order). `decideVisitorConsent` only ever writes `implied`
+  // in the OPT-OUT posture — `resolveConsentPosture` keeps the EU 27, the
+  // EEA/EFTA three, the UK, Gibraltar, the EU outermost regions AND any visitor
+  // whose region cannot be determined in opt-in, where no default is recorded at
+  // all — so this widens advertising to the rest of the world only, and the
+  // geographic guarantee `visitor-consent-advertising.spec.ts` asserts is
+  // untouched. `gpc-opt-out` and `declined` still answer `false`.
+  //
+  // The disclosure this rests on is now consistent in BOTH masters, which is
+  // what the 2026-08-24 narrowing was waiting for: the Privacy Policy already
+  // said *"With your consent, we do 'share' … Where the law requires us to ask
+  // first — the EU, the UK, and anywhere we cannot determine your region — it
+  // does not load until you accept. Elsewhere it runs from your first visit"*,
+  // and the Cookie Policy's two remaining opt-in-only sentences (the ×4
+  // per-cookie note and the "Your choices" bullet) were rewritten to match it
+  // the same day. Re-narrow this ONLY by moving the policies back first.
+  return status === 'accepted' || status === 'implied'
 }
 
 /**
