@@ -1048,9 +1048,93 @@ export interface UpsertOrgMemberOptions {
 }
 
 /**
+ * The owner seat is not writable through the membership door (AGL-1888).
+ *
+ * An exception, and modelled on {@link CollaboratorSeatLimitError}, for the
+ * same reason: it has to travel out of a function whose contract is "make it
+ * so" and which three routes call as a bare `await`. A returned verdict would
+ * be ignorable at every one of them, which is the shape of the bug.
+ */
+export class OrgOwnerSeatError extends Error {
+  /** Which invariant refused, for the log and the tests. */
+  readonly reason: 'grant' | 'demote'
+  constructor(reason: 'grant' | 'demote') {
+    super(
+      reason === 'grant'
+        ? 'The owner role cannot be granted through org membership — ' +
+            'ownership moves only by transfer.'
+        : 'This person owns the organization. Ownership moves only by ' +
+            'transfer, from Settings — an invitation cannot change it.',
+    )
+    this.name = 'OrgOwnerSeatError'
+    this.reason = reason
+  }
+}
+
+/**
+ * Turn an owner-seat refusal into a 409, or null when the error is something
+ * else and must keep propagating to the 500.
+ *
+ * Beside {@link collaboratorSeatRefusalResponse} so a route's catch block
+ * stays one line and cannot accidentally mask a real fault.
+ */
+export function orgOwnerSeatRefusalResponse(error: unknown): Response | null {
+  if (!(error instanceof OrgOwnerSeatError)) return null
+  return Response.json(
+    { error: error.message, code: 'org_owner_seat' },
+    { status: 409 },
+  )
+}
+
+/**
  * Creates or updates a member transactionally with its reverse-index
- * entry, then re-syncs host projections. Owner-role guards live in the
- * API routes (self-demotion, owner removal) — this is the mechanism.
+ * entry, then re-syncs host projections.
+ *
+ * ## The owner seat is refused here, not only in the routes (AGL-1888)
+ *
+ * It used to say "owner-role guards live in the API routes — this is the
+ * mechanism", and that was the defect. Both halves of the org-owner invariant
+ * were enforced only at the doors an admin clicks, and invite ACCEPTANCE is a
+ * door that re-validates neither:
+ *
+ *  - **Granting.** `/api/orgs/members` and `/api/orgs/invites` create both
+ *    refuse `role === 'owner'` outright, but acceptance passes the invite
+ *    doc's STORED role straight through (`/api/orgs/invites` accept, and
+ *    `/api/auth/sso-jit`). That is safe today only because every writer of an
+ *    invite doc refuses `owner` and the collection is `allow write: if false`
+ *    — a latent escalation the moment a fourth invite-writer forgets, and the
+ *    invariant that an org has exactly ONE owner is what the whole SSO
+ *    break-glass guarantee rests on ({@link transferOrgOwnership} MOVES the
+ *    seat; nothing else may create one).
+ *  - **Demoting**, which was reachable, self-serve, and irreversible. Invite
+ *    creation never checked that the address is already a member, and
+ *    acceptance accommodates an existing member re-accepting. So any admin
+ *    could invite the OWNER'S own verified address as `viewer`; the owner
+ *    clicks a normal-looking invitation to their own organization; this
+ *    function merge-writes `role: 'viewer'`, `allHosts: false` onto the owner's
+ *    member doc. `orgs/{orgId}.ownerUid` still names them, but every
+ *    authorization read goes through the member doc — so `canManageOrg` is
+ *    now false, `transfer-ownership` checks `membership.member.role ===
+ *    'owner'` and refuses them, `/api/orgs/members` refuses to edit the owner's
+ *    membership at all, and `findBreakGlassOrgOwners` (`where role == owner`)
+ *    finds nobody. The org loses its owner permanently, recoverable only by
+ *    staff. It is the AGL-1375 one-way door rebuilt out of the invite path,
+ *    and it needs no SSO to reach.
+ *
+ * Both checks live HERE because this is the single transaction every door
+ * funnels through, and the org doc and the existing member doc are already in
+ * its read set — so it costs nothing and cannot be forgotten by a fifth
+ * caller. The route-level refusals stay: they are better error messages at
+ * the point the admin is looking, not the control.
+ *
+ * The demotion guard asks BOTH `org.ownerUid` and the stored role, rather
+ * than trusting either to stand for the other. They are supposed to agree;
+ * an org where they have already diverged is exactly the one that most needs
+ * the write refused.
+ *
+ * {@link createOrganization} and {@link transferOrgOwnership} are unaffected —
+ * both write `role: 'owner'` with their own `tx.set`, and remain the only two
+ * producers of an owner in the product.
  */
 export async function upsertOrgMember(
   options: UpsertOrgMemberOptions,
@@ -1069,6 +1153,10 @@ export async function upsertOrgMember(
     title,
     invitedBy,
   } = options
+  // Before the transaction is even opened: this one needs no reads, and
+  // refusing here is what lets the spec assert that NOTHING was written
+  // rather than that a throw happened somewhere.
+  if (role === 'owner') throw new OrgOwnerSeatError('grant')
   const db = firestore()
   await db.runTransaction(async (tx) => {
     const orgSnapshot = await tx.get(db.collection('orgs').doc(orgId))
@@ -1080,6 +1168,14 @@ export async function upsertOrgMember(
       .collection('members')
       .doc(uid)
     const existing = await tx.get(memberRef)
+    // The owner's own row is not writable here (AGL-1888). Both facts, not
+    // one standing in for the other — see the note on this function.
+    if (
+      org.ownerUid === uid ||
+      (existing.data() as Partial<AglynOrgMember> | undefined)?.role === 'owner'
+    ) {
+      throw new OrgOwnerSeatError('demote')
+    }
     // Collaborator seat cap (AGL-2068), inside this transaction and before
     // any write. This is the door `/api/orgs/members` and invite ACCEPTANCE
     // come through, and neither metered `membersPerHost` at all — both gate

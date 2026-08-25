@@ -48,6 +48,7 @@ import {
   memberHasOrgPermission,
   meterOrgEmail,
   notifyOrgAdmins,
+  orgOwnerSeatRefusalResponse,
   resolveOrgMembership,
   upsertOrgMember,
   verifiedAccountEmails,
@@ -708,6 +709,15 @@ async function handler(request: Request): Promise<Response> {
     // which is what makes N simultaneous accepts land as one.
     const seatRefusal = collaboratorSeatRefusalResponse(error)
     if (seatRefusal) return seatRefusal
+    // The owner seat (AGL-1888). ACCEPTANCE is the door this reaches us
+    // through: it passes the invite doc's stored role into `upsertOrgMember`
+    // without re-validating it, so an invitation addressed to the OWNER'S own
+    // verified address used to demote them out of their own organization
+    // permanently. Refused in the grant transaction, mapped here so the
+    // person clicking a legitimate-looking invite gets told why rather than a
+    // bare 500. Nothing was written and the invite is left unaccepted.
+    const ownerRefusal = orgOwnerSeatRefusalResponse(error)
+    if (ownerRefusal) return ownerRefusal
     console.error(error)
     return Response.json({ error: 'Invite operation failed' }, { status: 500 })
   }
