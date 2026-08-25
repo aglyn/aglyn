@@ -44,6 +44,7 @@ let mockStore: Record<string, Record<string, any>> = {}
 let mockAllowed = true
 let mockResolvedHost: { $id: string; orgId: string } | null = null
 let mockWriteThrows = false
+let mockReceiptWriteThrows = false
 
 type Increment = { __increment: number }
 const mockIsIncrement = (value: unknown): value is Increment =>
@@ -69,6 +70,18 @@ const mockApplySet = (
   options?: { merge?: boolean },
 ) => {
   if (mockWriteThrows) throw new Error('firestore unavailable')
+  /**
+   * A SECOND failure switch, scoped to the receipt-outcome write alone
+   * (AGL-2400).
+   *
+   * `mockWriteThrows` cannot express this case: it fails the report's own
+   * write, which 503s before any mail is attempted, so the receipt note is
+   * never reached. The property under test is the opposite one — the report is
+   * safely stored, the mail has been sent, and only the note ABOUT it fails.
+   */
+  if (mockReceiptWriteThrows && 'receiptStatus' in patch) {
+    throw new Error('firestore unavailable for the receipt note')
+  }
   const base = options?.merge ? (mockStore[path] ?? {}) : {}
   const next: Record<string, any> = { ...base }
   for (const [key, value] of Object.entries(patch)) {
@@ -233,6 +246,7 @@ beforeEach(() => {
   mockStore = {}
   mockAllowed = true
   mockWriteThrows = false
+  mockReceiptWriteThrows = false
   mockNotifications = []
   mockSentEmails = []
   mockPlatformEmailMeter.length = 0
@@ -656,6 +670,64 @@ describe('a reporter who left an address gets their reference', () => {
     const response = await POST(formPost(withEmail))
     expect(response.status).toBe(200)
     expect(reports()).toHaveLength(1)
+  })
+
+  /**
+   * And whether the receipt LEFT is written down (AGL-2400).
+   *
+   * The send stays best-effort — that is right — but throwing the outcome away
+   * is not. `aglyn.com` publishes DMARC `p=reject`, so a refused receipt is
+   * turned away at SMTP and exists in no folder on either side: nobody finds
+   * it by looking, and the reporter has no way to tell us. Unless the row says
+   * so, a receipt that never sent looks exactly like one that arrived.
+   *
+   * Three states, and the third is the honest one: `sent`, `failed`, and the
+   * absence of both, which means nobody measured rather than that it went.
+   */
+  const theReport = () => reports()[0]?.[1]
+
+  it('records a send the provider accepted', async () => {
+    await POST(formPost(withEmail))
+    expect(theReport().receiptStatus).toBe('sent')
+    // Null, not absent: a row that answers "no reason" is distinguishable from
+    // one that was never asked, which is what the three states are for.
+    expect(theReport().receiptReason).toBeNull()
+    expect(typeof theReport().receiptAttemptedAtMs).toBe('number')
+  })
+
+  it('records the FAILURE, and its reason, when nothing could be sent', async () => {
+    // The self-host case: an operator with no RESEND_API_KEY stores reports
+    // and silently answers every reporter with nothing.
+    mockEmailConfigured = false
+    await POST(formPost(withEmail))
+    expect(theReport().receiptStatus).toBe('failed')
+    // The reason travels because it decides what a human does next — an
+    // unconfigured deployment is an env fix, a rejection is a re-send.
+    expect(theReport().receiptReason).toBe('unconfigured')
+  })
+
+  it('writes no receipt record for an ANONYMOUS report', async () => {
+    // The third state, and the case that must never read as a failure. With
+    // no address there was no receipt owed, so a `failed` marker here would
+    // put imaginary work in the staff queue for every anonymous report on the
+    // platform — which is how a real one stops being read.
+    await POST(formPost(PHISHING))
+    expect(mockSentEmails).toHaveLength(0)
+    expect(theReport().receiptStatus).toBeUndefined()
+    expect(theReport().receiptReason).toBeUndefined()
+  })
+
+  it('still answers 200 when the receipt NOTE cannot be written', async () => {
+    // The least important write in this handler must never be the one that
+    // fails the request: the report is already stored and the mail already
+    // sent, and a 503 here invites the reporter to file the whole thing again.
+    mockReceiptWriteThrows = true
+    const response = await POST(formPost(withEmail))
+    expect(response.status).toBe(200)
+    expect(reports()).toHaveLength(1)
+    expect(mockSentEmails).toHaveLength(1)
+    // And the row is honestly SILENT rather than falsely reassuring.
+    expect(theReport().receiptStatus).toBeUndefined()
   })
 })
 
