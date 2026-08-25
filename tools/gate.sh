@@ -769,7 +769,11 @@ if [ -z "${GATE_SNAPSHOT:-}" ]; then
   if cp "$SELF_PATH" "$GATE_SNAPSHOT_PATH" 2>/dev/null; then
     export GATE_SNAPSHOT=1
     export GATE_SOURCE_REPO="$SOURCE_REPO"
-    exec bash "$GATE_SNAPSHOT_PATH" "${GATE_ORIG_ARGS[@]}"
+    # bash 3.2 (the macOS default) treats an EMPTY array's `[@]` as unbound
+    # under `set -u`, so a bare `tools/gate.sh` — the documented invocation —
+    # died here before running a single phase. The `+` form expands to nothing
+    # when the array is empty instead of erroring.
+    exec bash "$GATE_SNAPSHOT_PATH" ${GATE_ORIG_ARGS[@]+"${GATE_ORIG_ARGS[@]}"}
   fi
   # A failed copy is not fatal — it just means this run keeps the old hazard.
   # Say so, rather than pretending the protection is in place.
