@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.19 — 2026-08-25
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/0162186e5...v1.0.0-beta.19)
+
+### Fixed
+
+- **besigner:** the styles-panel test fixture names every scale it must ([AGL-1308](https://linear.app/aglyn/issue/AGL-1308))
+
 ## v1.0.0-beta.18 — 2026-08-25
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.17...v1.0.0-beta.18)
