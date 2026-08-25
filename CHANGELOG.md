@@ -9,6 +9,18 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.18 — 2026-08-25
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.17...v1.0.0-beta.18)
+
+### Fixed
+
+- **tenant:** the counter-notice names the agent it is served on ([AGL-2035](https://linear.app/aglyn/issue/AGL-2035), [AGL-2026](https://linear.app/aglyn/issue/AGL-2026), [AGL-2044](https://linear.app/aglyn/issue/AGL-2044))
+
+### Documentation
+
+- **env:** the designated-agent block is required, not deferred ([AGL-2035](https://linear.app/aglyn/issue/AGL-2035))
+
 ## v1.0.0-beta.17 — 2026-08-25
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.16...v1.0.0-beta.17)
