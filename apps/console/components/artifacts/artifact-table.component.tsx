@@ -25,6 +25,11 @@ import type { ReactNode } from 'react'
 import RowActionsMenu, {
   type RowActionsMenuItem,
 } from '../row-actions-menu.component'
+import {
+  TABLE_PAGE_SIZE_DEFAULT,
+  TABLE_PAGE_SIZE_OPTIONS,
+  TABLE_ROWS_PER_PAGE_LABEL,
+} from '../../constants/shared'
 
 /**
  * ONE row grammar for every artifact list (AGL-693).
@@ -255,7 +260,19 @@ export function ArtifactTable(props: ArtifactTableProps) {
         ...(Array.isArray(sx) ? sx : sx ? [sx] : []),
       ]}
       pagination
-      pageSizeOptions={[5, 10, 15]}
+      // The console's ONE footer (AGL-693): same options, same default, same
+      // label. `initialState` is a default and not a lock — a caller that
+      // owns its page size (layouts bounds its listener by it) still passes
+      // its own through `rest`, which is spread after this.
+      pageSizeOptions={TABLE_PAGE_SIZE_OPTIONS}
+      initialState={{
+        pagination: {
+          paginationModel: { pageSize: TABLE_PAGE_SIZE_DEFAULT },
+        },
+      }}
+      slotProps={{
+        pagination: { labelRowsPerPage: TABLE_ROWS_PER_PAGE_LABEL },
+      }}
       {...rest}
     />
   )

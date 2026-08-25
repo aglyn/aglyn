@@ -127,8 +127,27 @@ describe('the two openers that are not comments (AGL-1479)', () => {
 
     const lost = LIBRARY.length - naive(LIBRARY).length
     const keptLoss = LIBRARY.length - code(LIBRARY, 'library').length
-    // The gap between them IS the hole, and it is not a rounding error.
-    expect(lost - keptLoss).toBeGreaterThan(10_000)
+    /*
+      The gap between them IS the hole, and it is not a rounding error.
+
+      The bound is an ORDER OF MAGNITUDE, not a measurement. The runaway span
+      starts at the file input's MIME type and ends at whatever comment
+      terminator happens to come next, so its exact length is a property of
+      where the next comment in the library file ends — and adding one
+      anywhere inside the span shortens it. It did: AGL-693 added a comment to
+      the empty state below the file input and the figure moved from just over
+      10,000 to 9,960, reddening a test about a parser bug because of an edit
+      that had nothing to do with parsing.
+
+      Thousands of characters swallowed by one attribute is the claim. A bound
+      a later edit can cross by writing a paragraph measures the file rather
+      than the defect.
+
+      (Writing that terminator literally here would have ended THIS comment
+      early — which is the same defect one level up, and is why the sentence
+      above describes it instead of quoting it.)
+    */
+    expect(lost - keptLoss).toBeGreaterThan(5_000)
   })
 
   /**

@@ -57,13 +57,14 @@ import {
   TableBody,
   TableCell,
   TableHead,
+  TablePagination,
   TableRow,
   TextField,
   Typography,
 } from '@mui/material'
 import { deleteDoc, doc, updateDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
   useHostResourceApi,
@@ -80,7 +81,13 @@ import RowActionsMenu, {
 } from '../row-actions-menu.component'
 import { docsHelp } from '../../constants/docs-links'
 import { buildRoute, Route } from '../../constants/route-links'
-import { CONTENT_MAX_WIDTH, TABLE_HEAD_HEIGHT } from '../../constants/shared'
+import {
+  CONTENT_MAX_WIDTH,
+  TABLE_HEAD_HEIGHT,
+  TABLE_PAGE_SIZE_DEFAULT,
+  TABLE_PAGE_SIZE_OPTIONS,
+  TABLE_ROWS_PER_PAGE_LABEL,
+} from '../../constants/shared'
 import useBranding from '../../hooks/use-branding'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import {
@@ -409,6 +416,44 @@ export function CollectionEntriesPage() {
    * Admin-only like the site delete — removing a collection removes the
    * /{slug} routes the site publishes, which is not a content edit.
    */
+  /**
+   * Entry pagination (AGL-693).
+   *
+   * The listener already caps at 200 entries — this is about the READING, not
+   * the query: a collection with a hundred posts rendered as one uninterrupted
+   * table, so the collection settings above it and the Authors tab beside it
+   * were a scroll away from anything. Every other artifact list pages, and
+   * this is the list with the most rows on it.
+   *
+   * 25 by default rather than the grid's 5: entries are one line each, and
+   * the common case is a blog whose whole archive fits on one page.
+   */
+  const [entryPage, setEntryPage] = useState(0)
+  const [entriesPerPage, setEntriesPerPage] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const pagedEntries = useMemo(
+    () =>
+      entries.slice(
+        entryPage * entriesPerPage,
+        entryPage * entriesPerPage + entriesPerPage,
+      ),
+    [entries, entryPage, entriesPerPage],
+  )
+  /*
+    Deleting the last entry on the last page, or switching to a shorter
+    collection, would otherwise strand the reader past the end — an empty
+    table with no control that says so. Clamp rather than reset: staying on
+    page 3 of 4 is right; jumping home on every delete is not.
+  */
+  useEffect(() => {
+    const lastPage = Math.max(0, Math.ceil(entries.length / entriesPerPage) - 1)
+    if (entryPage > lastPage) setEntryPage(lastPage)
+  }, [entryPage, entries.length, entriesPerPage])
+  // A different collection is a different list; page 3 of the last one means
+  // nothing here.
+  useEffect(() => {
+    setEntryPage(0)
+  }, [selected?.$id])
+
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deleteBusy, setDeleteBusy] = useState(false)
@@ -1242,7 +1287,7 @@ export function CollectionEntriesPage() {
                               </TableRow>
                             </TableHead>
                             <TableBody>
-                              {entries.map((entry) => {
+                              {pagedEntries.map((entry) => {
                                 const published = entry.status === 'published'
                                 /*
                                   Five equal text links (EDIT · UNPUBLISH ·
@@ -1454,6 +1499,25 @@ export function CollectionEntriesPage() {
                             </TableBody>
                           </Table>
                         )}
+                        {entries.length > 0 ? (
+                          <TablePagination
+                            component="div"
+                            count={entries.length}
+                            page={entryPage}
+                            onPageChange={(_event, next) =>
+                              setEntryPage(next)
+                            }
+                            rowsPerPage={entriesPerPage}
+                            onRowsPerPageChange={(event) => {
+                              setEntriesPerPage(
+                                parseInt(event.target.value, 10),
+                              )
+                              setEntryPage(0)
+                            }}
+                            rowsPerPageOptions={TABLE_PAGE_SIZE_OPTIONS}
+                            labelRowsPerPage={TABLE_ROWS_PER_PAGE_LABEL}
+                          />
+                        ) : null}
                       </Stack>
                     )}
                   </CardDisplay>

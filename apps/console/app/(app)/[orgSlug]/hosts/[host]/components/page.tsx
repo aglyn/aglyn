@@ -27,7 +27,10 @@ import { useHostResourceApi } from '@aglyn/tenant-feature-instance'
 import { useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
-import HostComponentsCard from '../../../../../../components/host-components-card.component'
+import HostComponentsCard, {
+  type ComponentQuotaReadout,
+} from '../../../../../../components/host-components-card.component'
+import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
@@ -47,6 +50,9 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
   const host = useHostSubdomain()
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
+
+  /** The card publishes its own count and cap; see `onQuota`. */
+  const [quota, setQuota] = useState<ComponentQuotaReadout | null>(null)
 
   // Create lives in the page header, not inside the card — that is where
   // Screens and Layouts put theirs, and a create action buried in the list
@@ -131,7 +137,18 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
         icon: { path: ICON_VARIANT_APP_SETTINGS.path },
       }}
       headerRight={
-        <Stack direction="row" spacing={1}>
+        // The readout leads the create buttons, as it does on Sites, screens,
+        // layouts and templates (AGL-2113/AGL-693). The numbers come from the
+        // CARD, which owns the listener they are counted from.
+        <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+          {quota ? (
+            <QuotaReadoutComponent
+              ready={quota.ready}
+              used={quota.used}
+              limit={quota.limit}
+              noun="component"
+            />
+          ) : null}
           <Button
             size="small"
             variant="outlined"
@@ -160,7 +177,7 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
       }
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-        <HostComponentsCard hostId={hostId} />
+        <HostComponentsCard hostId={hostId} onQuota={setQuota} />
         <TemplateGalleryDialog
           hostId={hostId}
           open={templatesOpen}

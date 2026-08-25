@@ -32,6 +32,43 @@ export const TABLE_ROW_HEIGHT = 48
 export const TABLE_HEAD_HEIGHT = 48
 
 /**
+ * ONE table footer for the whole console (AGL-693).
+ *
+ * Zach: *"The table footer is not consistent."* It was not: layouts paged 5 at
+ * a time, components and templates 10, the team list and the screens tree 25,
+ * and the labels ranged from `Rows per page` to `Top-level screens per page`.
+ * Three of those footers are MUI X `DataGrid`, two are a hand-rolled
+ * `TablePagination`, and each had picked its own numbers — so the same control
+ * offered a different menu depending on which list you were standing in.
+ *
+ * The options are the same everywhere BECAUSE they are arbitrary: nothing about
+ * layouts makes 5 the right first page and 10 wrong. What is not arbitrary is
+ * that a reader learns the control once.
+ */
+export const TABLE_PAGE_SIZE_OPTIONS = [10, 25, 50]
+
+/**
+ * The default page size, and it is the LARGEST list's answer rather than the
+ * smallest's.
+ *
+ * At 5, a site with six layouts paginated — a footer, a second page, and a
+ * control to dismiss both — to hide one row. 25 is past the length of nearly
+ * every list in the console, so the common case is a footer that reports the
+ * whole list and never asks anything of the reader.
+ */
+export const TABLE_PAGE_SIZE_DEFAULT = 25
+
+/**
+ * The label beside the size menu, on every list.
+ *
+ * Deliberately the generic noun even on the screens tree, which pages
+ * TOP-LEVEL screens and carries each one's subtree along with it: that
+ * distinction belongs in the count — see `labelDisplayedRows` there — and a
+ * different label in the same slot reads as a different control.
+ */
+export const TABLE_ROWS_PER_PAGE_LABEL = 'Rows per page:'
+
+/**
  * Canonical, published legal documents. These are hosted on the production
  * marketing site, not the console, so they are absolute cross-origin URLs
  * opened in a new tab — a full navigation, not in-SPA routing (hence a plain
