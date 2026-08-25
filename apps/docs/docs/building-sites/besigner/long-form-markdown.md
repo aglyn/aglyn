@@ -1,5 +1,5 @@
 ---
-sidebar_position: 10
+sidebar_position: 11
 title: Long documents in markdown
 description: Put a whole policy, terms or handbook page on the canvas as one Markdown element, and let a Table of contents element build the "On this page" list from its headings.
 ---

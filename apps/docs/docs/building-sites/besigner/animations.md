@@ -1,5 +1,5 @@
 ---
-sidebar_position: 13
+sidebar_position: 14
 title: Element animations
 description: Add fade, slide and zoom motion to any element, stagger a row of cards, choose when it plays, and keep the page fast and accessible.
 ---
