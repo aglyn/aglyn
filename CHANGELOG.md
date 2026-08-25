@@ -9,6 +9,15 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.16 — 2026-08-25
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.15...v1.0.0-beta.16)
+
+### Fixed
+
+- **tenant,aglyn:** a bounded read says so even when the gate thinned it ([AGL-1516](https://linear.app/aglyn/issue/AGL-1516), [AGL-471](https://linear.app/aglyn/issue/AGL-471))
+- **console:** the staff user detail cards balance instead of stretching ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+
 ## v1.0.0-beta.15 — 2026-08-25
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.14...v1.0.0-beta.15)
