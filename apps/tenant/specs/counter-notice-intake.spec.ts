@@ -190,6 +190,16 @@ const setOperator = (values: Record<string, string>): void => {
     'NEXT_PUBLIC_OPERATOR_NAME',
     'NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL',
     'NEXT_PUBLIC_OPERATOR_LEGAL_EMAIL',
+    // AGL-2035: the designated-agent block renders from these, so
+    // `setOperator` must be able to clear them. Left out, the UNCONFIGURED
+    // cases below would inherit whatever a shell or a leaked root `.env` had
+    // set and could assert "names nobody" while an agent block sat on the
+    // page.
+    'NEXT_PUBLIC_OPERATOR_DMCA_AGENT_NAME',
+    'NEXT_PUBLIC_OPERATOR_DMCA_AGENT_ADDRESS',
+    'NEXT_PUBLIC_OPERATOR_DMCA_AGENT_EMAIL',
+    'NEXT_PUBLIC_OPERATOR_DMCA_AGENT_PHONE',
+    'NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED',
   ]) {
     delete process.env[key]
   }
@@ -742,5 +752,111 @@ describe('AGL-2016 · the §512(g) statements name the right service provider', 
     // And the title loses the suffix rather than gaining a placeholder: a
     // sworn document with no publisher named beats one naming the wrong one.
     expect(body).toContain('<title>Counter-notice</title>')
+  })
+})
+
+describe('AGL-2035 · the counter-notice names the agent it is served on', () => {
+  // §512(g)(3) counter-notification is a document the subscriber SERVES ON THE
+  // DESIGNATED AGENT, and §512(c)(2) requires that agent's "name, address,
+  // phone number, and electronic mail address" to be available to the public
+  // through the service. The abuse intake published the block from AGL-2035;
+  // this one, its mirror image, did not — so the one page whose whole purpose
+  // is addressing a sworn document to the agent never said who the agent was.
+  //
+  // Forced red by stubbing `designatedAgentHtml()` to return `''` — the state
+  // this route was in before the call site existed. The two cases asserting
+  // something IS published went red; the two asserting nothing is published
+  // stayed green. That asymmetry is the point: a suite built only from the
+  // negatives passes unchanged on a route that renders no block at all.
+  const form = async (): Promise<string> => {
+    const response = await GET(
+      new Request('https://site.example.com/api/counter-notice'),
+    )
+    expect(response.status).toBe(200)
+    return (await response.text()).replace(/\s+/g, ' ')
+  }
+
+  // A reserved 555 number rather than the live one: a fixture is not a place
+  // to keep the operator's real telephone details in sync.
+  const AGENT_PHONE = '+1-555-0142'
+  const FILED = {
+    ...AGLYN_OPERATED,
+    NEXT_PUBLIC_OPERATOR_DMCA_AGENT_NAME: 'Copyright Compliance Department',
+    NEXT_PUBLIC_OPERATOR_DMCA_AGENT_ADDRESS:
+      '5900 Balcones Drive STE 100, Austin, TX 78731',
+    NEXT_PUBLIC_OPERATOR_DMCA_AGENT_EMAIL: 'dmca@aglyn.com',
+    NEXT_PUBLIC_OPERATOR_DMCA_AGENT_PHONE: AGENT_PHONE,
+    NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED: 'true',
+  }
+
+  afterEach(() => setOperator(AGLYN_OPERATED))
+
+  describe('PUBLISHED — a configured agent reaches the public page', () => {
+    beforeEach(() => setOperator(FILED))
+
+    it('prints all four §512(c)(2) details on the form', async () => {
+      const body = await form()
+      expect(body).toContain('Designated agent for copyright notices')
+      expect(body).toContain('Copyright Compliance Department')
+      expect(body).toContain('5900 Balcones Drive STE 100')
+      expect(body).toContain('dmca@aglyn.com')
+      expect(body).toContain(AGENT_PHONE)
+    })
+
+    it('says the agent is registered, because this deployment says so', async () => {
+      const body = await form()
+      expect(body).toContain('registered with the U.S. Copyright Office')
+    })
+  })
+
+  describe('CONFIGURED BUT NOT REGISTERED — details, no federal claim', () => {
+    beforeEach(() => {
+      const { NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED: _drop, ...rest } =
+        FILED
+      setOperator(rest)
+    })
+
+    it('publishes the block without asserting a Copyright Office filing', async () => {
+      // An operator who names an agent so the form has a name on it has not
+      // thereby claimed a federal registration. The claim renders from its own
+      // flag or not at all.
+      const body = await form()
+      expect(body).toContain('Copyright Compliance Department')
+      expect(body).not.toContain('registered with the U.S. Copyright Office')
+    })
+  })
+
+  describe('PARTIAL — a phone but no designation is not a designation', () => {
+    beforeEach(() =>
+      setOperator({
+        ...AGLYN_OPERATED,
+        NEXT_PUBLIC_OPERATOR_DMCA_AGENT_PHONE: AGENT_PHONE,
+        NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED: 'true',
+      }),
+    )
+
+    it('claims nothing when the agent has no name and no address', async () => {
+      // `operatorDmcaAgent()` requires both. A heading with a bare phone under
+      // it reads as a designation and is not one, and the `registered` flag
+      // must not survive the block it belongs to.
+      const body = await form()
+      expect(body).not.toContain('Designated agent for copyright notices')
+      expect(body).not.toContain('registered with the U.S. Copyright Office')
+      expect(body).not.toContain(AGENT_PHONE)
+    })
+  })
+
+  describe('UNCONFIGURED — a self-hoster inherits no agent of ours', () => {
+    beforeEach(() => setOperator({}))
+
+    it('renders no agent block at all', async () => {
+      // The severe case, and the same one AGL-2016 fixed for the jurisdiction
+      // clause: a self-hosted install must not hand its subscriber OUR agent
+      // to serve their counter-notice on.
+      const body = await form()
+      expect(body).not.toContain('Designated agent for copyright notices')
+      expect(body).not.toContain('dmca@aglyn.com')
+      expect(body).not.toContain(AGENT_PHONE)
+    })
   })
 })

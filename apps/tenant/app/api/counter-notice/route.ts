@@ -100,6 +100,7 @@ import {
   clientIp,
   contactHtml,
   contactText,
+  designatedAgentHtml,
   documentHtml,
   escapeHtml,
   EXAMPLE_URL,
@@ -127,6 +128,22 @@ function formHtml(options: {
   error?: string
 }): string {
   const { url, reference, error } = options
+  // AGL-2035: §512(g)(3) is a document SERVED ON THE DESIGNATED AGENT, so the
+  // subscriber composing one on this page needs to know who that is — the same
+  // §512(c)(2) block `/api/report-abuse` renders, from the same helper, in the
+  // same position: at the top of the fieldset holding the sworn statements.
+  //
+  // The lead-in sentence is bound to the block rather than printed above it.
+  // `designatedAgentHtml()` is empty on any deployment that has not named an
+  // agent, and a standing "that is who the statements are sworn to" with
+  // nothing after it points at an agent the page never names.
+  const agent = designatedAgentHtml()
+  const agentBlock = agent
+    ? `<p class="hint">A counter-notice is served on the service provider's
+    designated agent. On this deployment, that is who the statements below are
+    sworn to.</p>
+    ${agent}`
+    : ''
   return documentHtml(
     'Counter-notice',
     `<h1>Copyright counter-notice</h1>
@@ -169,6 +186,7 @@ speak to a lawyer before sending this.</div>
 
   <fieldset>
     <legend>Your statements</legend>
+    ${agentBlock}
     <label class="choice">
       <input type="checkbox" name="goodFaithMistake" value="on">
       <span>Under penalty of perjury, I have a good faith belief that the
