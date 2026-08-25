@@ -160,9 +160,28 @@ function safeImageUrl(url: string): string | null {
   return safeLinkUrl(url)
 }
 
-/** True for hrefs the parser emitted as site-relative (start with `/`). */
+/**
+ * True for hrefs the parser emitted as site-relative (start with `/`) AND that
+ * a client router can actually settle on.
+ *
+ * `/api/…` is excluded because those paths serve FILES, not pages —
+ * `/api/media/cdn/{scope}/{id}` is the download URL every media reference
+ * resolves to, and it is what "Browse media" hands an author who links a PDF
+ * or a logo kit. Routed through `AppLink` the click starts a client-side
+ * navigation that can never complete: the response is an attachment, so the
+ * router mounts its navigation-pending overlay and waits forever.
+ *
+ * The tell is a page trapped behind a spinner, NOT a failed download — the
+ * browser fetches the attachment underneath the overlay, so the file lands in
+ * Downloads while the site sits there looking broken. That mismatch sends you
+ * hunting the media endpoint, which answers `200` with a correct
+ * `Content-Disposition: attachment` every time.
+ *
+ * Both callers use this purely to choose `AppLink` vs a plain anchor, so
+ * narrowing it here fixes markdown bodies and collection item links together.
+ */
 export function isInternalMarkdownHref(href: string): boolean {
-  return /^\/(?!\/)/.test(href)
+  return /^\/(?!\/)/.test(href) && !/^\/api\//.test(href)
 }
 
 /**

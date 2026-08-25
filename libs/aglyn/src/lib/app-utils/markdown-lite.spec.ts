@@ -558,6 +558,22 @@ describe('markdown-lite', () => {
     expect(isInternalMarkdownHref('//evil.example')).toBe(false)
     expect(isInternalMarkdownHref('https://example.com')).toBe(false)
   })
+
+  it('refuses to client-route an /api file endpoint', () => {
+    // `/api/media/cdn/…` serves an attachment, so a client-side navigation
+    // never settles and the page hangs behind the router's pending overlay.
+    // It is still a link the parser keeps — it just must render a plain
+    // anchor and let the browser download it.
+    expect(isInternalMarkdownHref('/api/media/cdn/org:abc/xyz')).toBe(false)
+    expect(isInternalMarkdownHref('/api/media/cdn/org:abc/xyz?download=1')).toBe(
+      false,
+    )
+    expect(isInternalMarkdownHref('/api/anything')).toBe(false)
+    // The parser must still ACCEPT it, or the link would vanish entirely.
+    expect(isSupportedLinkHref('/api/media/cdn/org:abc/xyz')).toBe(true)
+    // A page route that merely starts with the same letters is unaffected.
+    expect(isInternalMarkdownHref('/apiary/guide')).toBe(true)
+  })
 })
 
 describe('serializeMarkdownLite (AGL-582)', () => {
