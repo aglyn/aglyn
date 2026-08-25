@@ -115,12 +115,36 @@ export function buildFontSizeScaleOptions(
  * who wants exactly 700 means. The token entries come first so the
  * theme-following answer is the one in reach.
  */
-const FONT_WEIGHT_TOKENS: ReadonlyArray<{ key: string; label: string }> = [
-  { key: 'fontWeightLight', label: 'Light (theme)' },
-  { key: 'fontWeightRegular', label: 'Regular (theme)' },
-  { key: 'fontWeightMedium', label: 'Medium (theme)' },
-  { key: 'fontWeightBold', label: 'Bold (theme)' },
-]
+/**
+ * Weight tokens are DISCOVERED, not listed (Zach 2026-08-25).
+ *
+ * This was the four MUI defaults hardcoded, which meant a host that added a
+ * weight to its ramp — Aglyn's own theme carries SemiBold 600, ExtraBold 800
+ * and Black 900 — got a picker that could not offer it, and the only way to
+ * reach the brand's own weight was to type a raw number. Reading the keys off
+ * `theme.typography` instead means any host's ramp shows up with no edit here.
+ *
+ * Ordered by the weight each resolves to, so the menu reads light → heavy
+ * rather than in whatever order the theme object happened to be written.
+ */
+const FONT_WEIGHT_KEY = /^fontWeight(.+)$/
+
+function themeFontWeightTokens(
+  typography: Record<string, unknown> | undefined,
+): Array<{ key: string; label: string; weight: number }> {
+  if (!typography) return []
+  const found: Array<{ key: string; label: string; weight: number }> = []
+  for (const key of Object.keys(typography)) {
+    const match = FONT_WEIGHT_KEY.exec(key)
+    if (!match) continue
+    const raw = typography[key]
+    const weight =
+      typeof raw === 'number' ? raw : Number.parseFloat(String(raw ?? ''))
+    if (!Number.isFinite(weight)) continue
+    found.push({ key, label: `${humanizeKey(match[1])} (theme)`, weight })
+  }
+  return found.sort((a, b) => a.weight - b.weight)
+}
 
 const FONT_WEIGHT_LADDER: ReadonlyArray<{ value: string; label: string }> = [
   { value: '100', label: 'Thin' },
@@ -139,7 +163,7 @@ export function buildFontWeightScaleOptions(
 ): ThemeScaleOption[] {
   const typography = theme?.typography
   const options: ThemeScaleOption[] = []
-  for (const { key, label } of FONT_WEIGHT_TOKENS) {
+  for (const { key, label } of themeFontWeightTokens(typography)) {
     const hint = hintOf(typography ? typography[key] : undefined)
     if (!hint) continue
     options.push({ value: key, label, hint })
@@ -282,6 +306,8 @@ export interface StyleThemeScales {
   fontFamily: PresetChoiceOption[]
   /** Whole typography variants — `typography: 'h2'` (Zach 2026-08-25). */
   typographyVariant: PresetChoiceOption[]
+  /** Grid/flex gaps on the theme's spacing ladder (Zach 2026-08-25). */
+  gap: PresetChoiceOption[]
 }
 
 export function buildStyleThemeScales(
@@ -296,6 +322,7 @@ export function buildStyleThemeScales(
     shadow: buildShadowChoices(theme),
     fontFamily: buildFontFamilyChoices(theme),
     typographyVariant: buildTypographyVariantChoices(theme),
+    gap: buildGapChoices(theme),
   }
 }
 
@@ -571,6 +598,38 @@ export function buildTypographyVariantChoices(
       .filter(Boolean)
       .join(' · ')
     options.push({ value: key, label, hint: parts || undefined })
+  }
+  return options
+}
+
+/* ── Gap ──────────────────────────────────────────────────────────────── */
+
+/**
+ * Grid and flex gaps on the theme's spacing ladder (Zach 2026-08-25).
+ *
+ * `gap`, `rowGap` and `columnGap` were free-text boxes, which reads as a
+ * CSS length question and gets answered with one — but MUI runs all three
+ * through `createUnaryUnit(theme, 'spacing', …)`, exactly like margin and
+ * padding. So `gap: 2` is a theme multiple that follows a host retuning its
+ * unit, and `gap: '16px'` is a bespoke value that does not.
+ *
+ * The box styler has offered this ladder for margin and padding since
+ * AGL-2486; gaps sit in the Grid and Flex groups, which is why they were
+ * missed. Same rungs, same labels, so the two controls agree.
+ *
+ * A `PresetChoiceOption` rather than a `ThemeScaleOption` because the value
+ * STORED is a number and that interface is string-only — the same reason
+ * Corner Radius is a preset.
+ */
+export function buildGapChoices(
+  theme: ThemeScaleSource | undefined,
+): PresetChoiceOption[] {
+  const spacing = theme?.spacing
+  const options: PresetChoiceOption[] = []
+  for (const { step, label } of SPACING_STEPS) {
+    const hint = resolveSpacing(spacing, step)
+    if (hint === '') continue
+    options.push({ value: step, label, hint })
   }
   return options
 }

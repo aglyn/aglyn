@@ -171,6 +171,49 @@ describe('style field groups (AGL-540/587)', () => {
     expect(Array.isArray((field as any).choices)).toBe(true)
   })
 
+  /**
+   * The gap-shaped hole this closes: three properties MUI resolves against
+   * the theme were reachable only by hand-writing sx, and nothing failed —
+   * `typography`, `gap` and `fontStyle` were simply absent, and absence is
+   * invisible. Enumerating MUI's theme-backed keys turns a missing control
+   * into a red test rather than something an author discovers by not
+   * finding it.
+   */
+  it('offers every sx property MUI resolves against the theme', () => {
+    const names = new Set([
+      ...groups.flatMap(styleGroupFieldNames),
+      ...styleGroupFieldNames(flexGridGroup),
+    ])
+    // Every `themeKey` entry in MUI's defaultSxConfig, minus the ones this
+    // panel deliberately does not surface as their own field:
+    //   bgcolor            — alias of backgroundColor, rewritten by expandSxAliases
+    //   font               — a shorthand no author should be writing
+    //   border*Color       — carried by the per-side CSS_BORDER editors
+    //   outlineColor       — carried by the outline CSS_BORDER editor
+    const themeBacked = [
+      'backgroundColor',
+      'border',
+      'borderBottom',
+      'borderColor',
+      'borderLeft',
+      'borderRight',
+      'borderTop',
+      'boxShadow',
+      'color',
+      'fontFamily',
+      'fontSize',
+      'fontStyle',
+      'fontWeight',
+      'gap',
+      'outline',
+      'typography',
+      'zIndex',
+    ]
+    for (const prop of themeBacked) {
+      expect(names).toContain(prop)
+    }
+  })
+
   it('keeps field names unique across groups and off panel-owned keys', () => {
     const names = [
       ...groups.flatMap(styleGroupFieldNames),
@@ -212,16 +255,43 @@ describe('style field groups (AGL-540/587)', () => {
     })
 
     it.each([
-      // A NUMBER in these means a theme multiple, not pixels: `gap: 2` is
-      // 16px (× the spacing unit). A px picker would show "2" and turn the
-      // next nudge into 3px — a silent 8× shrink.
-      'gap',
-      'rowGap',
-      'columnGap',
       // Unitless by convention; a unit picker would push px onto 1.5.
       'lineHeight',
     ])('keeps %s free text — its bare number is not pixels', (name) => {
       expect(componentOf(name)).toBe(FieldComponentType.TEXT_FIELD)
+    })
+
+    it.each([
+      // A NUMBER in these means a theme multiple, not pixels: `gap: 2` is
+      // 16px (× the spacing unit). A px picker would show "2" and turn the
+      // next nudge into 3px — a silent 8× shrink, which is why these are
+      // still barred from the dimension editor.
+      //
+      // They used to be free text for want of anything better. They are
+      // pickers on the spacing ladder now (Zach 2026-08-25), which is what
+      // the "theme multiple" reading always wanted — the same rungs the box
+      // styler offers for margin and padding.
+      'gap',
+      'rowGap',
+      'columnGap',
+    ])('puts %s on the spacing ladder, never the px editor', (name) => {
+      expect(componentOf(name)).toBe(FieldComponentType.PRESET_CHOICE)
+      expect(componentOf(name)).not.toBe(FieldComponentType.CSS_DIMENSION)
+    })
+
+    it('actually feeds the spacing ladder into the gap pickers', () => {
+      // The component type alone would pass with an empty menu, which is the
+      // failure this guards: the group is built by a DIFFERENT function than
+      // the rest of the panel, so it has to be handed the scales explicitly.
+      const withScales = buildFlexGridGroup({
+        themeScales: {
+          gap: [{ value: 2, label: 'Small', hint: '16px' }],
+        },
+      } as any)
+      const gap = withScales.fields.find((field) => field.name === 'gap')
+      expect((gap as any).choices).toEqual([
+        { value: 2, label: 'Small', hint: '16px' },
+      ])
     })
 
     it('tells the sizing keys that a fraction is a percentage', () => {

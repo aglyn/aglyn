@@ -363,6 +363,28 @@ const baseOptions: ThemeOptions = {
   spacing: 8,
   typography: {
     fontFamily: buildFontFamilyList().join(','),
+    // The brand's named weights, beyond MUI's four (Zach 2026-08-25).
+    //
+    // MUI ships Light 300 / Regular 400 / Medium 500 / Bold 700, and the
+    // brand type ramp uses three more — the press page's own typography
+    // card states it: "Black (heroes) · ExtraBold (H2) · Bold · SemiBold ·
+    // Regular · Light (numerals)". Without these, reaching 600/800/900 meant
+    // typing a raw number, which pins an element to a weight instead of to
+    // the brand and leaves it behind when the ramp moves.
+    //
+    // They are ADDITIVE — `createTypography` deep-merges unknown keys
+    // through its `...other`, so nothing MUI defines changes. And they are
+    // reachable the same way the built-ins are: `@mui/system`'s `style()`
+    // retries a miss as `${prop}${capitalize(value)}`, so `fontWeight:
+    // 'extraBold'` resolves to `typography.fontWeightExtraBold`. The
+    // besigner's weight picker discovers them off the theme rather than
+    // from a list, so they appear in the panel without another edit.
+    //
+    // Roboto Flex is a variable face covering 100–1000, so every rung here
+    // renders as a real weight rather than a synthesised one.
+    fontWeightSemiBold: 600,
+    fontWeightExtraBold: 800,
+    fontWeightBlack: 900,
   },
   zIndex: {
     max: 2147483647,

@@ -709,6 +709,20 @@ function styleFieldGroups(
           'Text Decoration',
           'A line under, over or through the text.',
           ['none', 'underline', 'overline', 'line-through'],
+          half,
+        ),
+        // Italic for a whole ELEMENT (Zach 2026-08-25). It existed only in
+        // the inline text editor, which styles a selection inside a run — so
+        // there was no way to italicise a caption, a label or a quote block
+        // as a whole without hand-writing sx. `fontStyle` is one of MUI's
+        // theme-backed typography keys and was the last one this group did
+        // not offer.
+        selectField(
+          'fontStyle',
+          'Font Style',
+          'Italic or upright.',
+          ['normal', 'italic', 'oblique'],
+          half,
         ),
       ],
     },
@@ -868,20 +882,40 @@ function styleFieldGroups(
  * Every property both sections carried is still here; the whole point is
  * that nothing had to be dropped to stop saying it twice.
  */
-export function buildFlexGridGroup(): StyleFieldGroup {
+export function buildFlexGridGroup(
+  options?: StyleFieldGroupOptions,
+): StyleFieldGroup {
   const group = withFieldClear(
     withStyleFieldHelp({
       $id: 'flex-grid',
       label: 'Flexbox & Grid',
       fields: [
-        // Container: the gutters between children.
-        textField(
+        // Container: the gutters between children, on the SPACING ladder
+        // (Zach 2026-08-25). These were free-text boxes, which reads as a CSS
+        // length question and gets answered with one — but MUI runs all three
+        // through the same `createUnaryUnit(theme, 'spacing')` as margin and
+        // padding, so `2` follows the host's unit and `'16px'` does not. Same
+        // rungs the box styler already offers, so the two controls agree.
+        presetField(
           'gap',
           'Gap',
           'Space between the children, in both directions.',
+          options?.themeScales?.gap ?? [],
         ),
-        textField('rowGap', 'Row Gap', 'Space between rows.', half),
-        textField('columnGap', 'Column Gap', 'Space between columns.', half),
+        presetField(
+          'rowGap',
+          'Row Gap',
+          'Space between rows.',
+          options?.themeScales?.gap ?? [],
+          half,
+        ),
+        presetField(
+          'columnGap',
+          'Column Gap',
+          'Space between columns.',
+          options?.themeScales?.gap ?? [],
+          half,
+        ),
         // Container: the grid it defines for them.
         textField(
           'gridTemplateColumns',

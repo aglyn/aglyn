@@ -24,6 +24,7 @@ import {
   buildFontFamilyChoices,
   buildFontSizeScaleOptions,
   buildFontWeightScaleOptions,
+  buildGapChoices,
   buildShadowChoices,
   buildStyleThemeScales,
   buildTypographyVariantChoices,
@@ -199,6 +200,56 @@ describe('preset choices (AGL-2486)', () => {
       value: 'none',
       label: 'No shadow',
     })
+  })
+
+  it('puts gaps on the theme spacing ladder, like margin and padding', () => {
+    const choices = buildGapChoices(theme as any)
+    expect(choices.length).toBeGreaterThan(0)
+    // Stored as the multiple MUI's own `createUnaryUnit(theme, 'spacing')`
+    // resolves — the same arithmetic the box styler's margins already use.
+    for (const choice of choices) {
+      expect(typeof choice.value).toBe('number')
+      expect(resolve({ gap: choice.value }).gap).toBe(
+        theme.spacing(choice.value as number),
+      )
+    }
+    // A host that retunes its unit moves every gap with it.
+    const wide = createTheme({ spacing: 10 })
+    expect(
+      styleFunctionSx({ theme: wide, sx: { gap: 2 } } as any),
+    ).toMatchObject({ gap: '20px' })
+  })
+
+  it('discovers a host’s own weight tokens instead of MUI’s four', () => {
+    const branded = createTheme({
+      typography: {
+        fontWeightSemiBold: 600,
+        fontWeightExtraBold: 800,
+        fontWeightBlack: 900,
+      } as any,
+    })
+    const options = buildFontWeightScaleOptions(branded as any)
+    const tokens = options.filter((o) => String(o.value).startsWith('fontWeight'))
+    const values = tokens.map((o) => o.value)
+    expect(values).toContain('fontWeightExtraBold')
+    expect(values).toContain('fontWeightBlack')
+    // Light → heavy, not object-key order.
+    const weights = tokens.map((o) => Number(o.hint))
+    expect(weights).toEqual([...weights].sort((a, b) => a - b))
+    // Named for a human, and the stored token resolves through the theme.
+    expect(tokens.find((o) => o.value === 'fontWeightExtraBold')?.label).toBe(
+      'Extra bold (theme)',
+    )
+    expect(
+      styleFunctionSx({
+        theme: branded,
+        sx: { fontWeight: 'fontWeightExtraBold' },
+      } as any),
+    ).toMatchObject({ fontWeight: 800 })
+    // The short form MUI's own docs use has to resolve too.
+    expect(
+      styleFunctionSx({ theme: branded, sx: { fontWeight: 'extraBold' } } as any),
+    ).toMatchObject({ fontWeight: 800 })
   })
 
   it('stores shadows as theme ELEVATIONS, not bespoke CSS', () => {

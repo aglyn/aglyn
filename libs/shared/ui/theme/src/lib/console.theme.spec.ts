@@ -24,6 +24,30 @@ import { consoleThemeLight } from './console.theme'
  * 24px right of the page container at every width below the container clamp
  * because of it.
  */
+describe('brand font weights (Zach 2026-08-25)', () => {
+  const typography = consoleThemeLight.typography as unknown as Record<
+    string,
+    unknown
+  >
+
+  it('carries the three weights beyond MUI’s four', () => {
+    // The brand ramp the press page documents: Black (heroes), ExtraBold
+    // (H2), Bold, SemiBold, Regular, Light (numerals).
+    expect(typography.fontWeightSemiBold).toBe(600)
+    expect(typography.fontWeightExtraBold).toBe(800)
+    expect(typography.fontWeightBlack).toBe(900)
+  })
+
+  it('leaves every weight MUI defines untouched', () => {
+    // Additive is the whole safety argument — these ship into the console and
+    // every tenant site, so nothing existing may move.
+    expect(typography.fontWeightLight).toBe(300)
+    expect(typography.fontWeightRegular).toBe(400)
+    expect(typography.fontWeightMedium).toBe(500)
+    expect(typography.fontWeightBold).toBe(700)
+  })
+})
+
 describe('MuiToolbar gutters (AGL-1230)', () => {
   const root = (consoleThemeLight.components?.MuiToolbar?.styleOverrides as any)?.root
   const call = (ownerState: unknown) =>
