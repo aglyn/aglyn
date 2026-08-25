@@ -48,6 +48,43 @@ describe('brand font weights (Zach 2026-08-25)', () => {
   })
 })
 
+describe('brand display ramp (Zach 2026-08-25)', () => {
+  const typography = consoleThemeLight.typography as unknown as Record<
+    string,
+    any
+  >
+
+  it('makes a heading MEAN the brand, not MUI’s Light 300', () => {
+    // The whole reason eleven /press headings shipped at Light 300: the
+    // variant said Heading 2 and resolved to a Material display face nobody
+    // chose, so every built page hand-wrote size and weight over the top.
+    expect(typography.h1.fontWeight).toBe(900)
+    expect(typography.h2.fontWeight).toBe(800)
+  })
+
+  it('leaves the variants the product actually uses alone', () => {
+    // h3–h6 carry 95 `variant="hN"` usages across the console and overline
+    // 19; h1/h2 carry none, which is why the ramp stops where it does.
+    expect(typography.h3.fontWeight).toBe(400)
+    expect(typography.h4.fontWeight).toBe(400)
+    expect(typography.h5.fontWeight).toBe(400)
+    expect(typography.h6.fontWeight).toBe(500)
+    expect(typography.overline.fontWeight).toBe(400)
+  })
+
+  it('scales itself instead of being pinned to desktop pixels', () => {
+    // `responsiveFontSizes` runs over these, so the small-screen value is the
+    // base and the breakpoints climb to the desktop figure the frames show.
+    const h2 = typography.h2
+    const queries = Object.keys(h2).filter((key) => key.startsWith('@media'))
+    expect(queries.length).toBeGreaterThan(0)
+    const largest = h2[queries[queries.length - 1]].fontSize
+    expect(Number.parseFloat(largest)).toBeGreaterThan(
+      Number.parseFloat(h2.fontSize),
+    )
+  })
+})
+
 describe('MuiToolbar gutters (AGL-1230)', () => {
   const root = (consoleThemeLight.components?.MuiToolbar?.styleOverrides as any)?.root
   const call = (ownerState: unknown) =>

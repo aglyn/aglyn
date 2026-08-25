@@ -385,6 +385,36 @@ const baseOptions: ThemeOptions = {
     fontWeightSemiBold: 600,
     fontWeightExtraBold: 800,
     fontWeightBlack: 900,
+    // The brand's display ramp, so `variant="h1"` / `"h2"` MEANS the brand
+    // (Zach 2026-08-25). MUI's defaults are Light 300 at 96px/60px — a
+    // display face for a Material app, and nothing like the type card on
+    // /press ("Black (heroes) · ExtraBold (H2)"). Because they did not match,
+    // every heading on a built page carried a hand-written `fontSize` and
+    // `fontWeight`, which is how eleven of them shipped at Light 300: the
+    // variant said Heading 2 and rendered as something nobody chose.
+    //
+    // Scoped deliberately to h1 and h2. They have ZERO `variant="hN"` usages
+    // in the console and one in the tenant app, so this restyles no product
+    // surface — it only changes what a SITE gets when it asks for a heading,
+    // which is exactly the thing that should follow the brand. h3–h6 carry
+    // 95 usages between them and are left on MUI's scale; `overline` has 19
+    // and is left alone for the same reason.
+    //
+    // `responsiveFontSizes` runs over these afterwards (xs→xl), so these are
+    // the DESKTOP end of a ramp that scales itself down — 56px/40px here
+    // land near the 34px/30px the mobile frames show.
+    h1: {
+      fontSize: '3.5rem',
+      fontWeight: 900,
+      lineHeight: 1.05,
+      letterSpacing: '-0.025em',
+    },
+    h2: {
+      fontSize: '2.5rem',
+      fontWeight: 800,
+      lineHeight: 1.15,
+      letterSpacing: '-0.02em',
+    },
   },
   zIndex: {
     max: 2147483647,
