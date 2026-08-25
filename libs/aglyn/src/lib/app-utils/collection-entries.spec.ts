@@ -22,6 +22,7 @@ import type {
 import {
   COLLECTION_ALL_PILL_DEFAULT,
   COLLECTION_ALL_PILL_NONE,
+  COLLECTION_ENTRIES_COMPONENT_ID,
   COLLECTION_ENTRIES_MAX,
   COLLECTION_ENTRIES_NODE_ID_PREFIX,
   COLLECTION_ENTRY_DATE_FORMAT_DEFAULT,
@@ -30,6 +31,7 @@ import {
   COLLECTION_SOURCE_MAX,
   buildCollectionCategoryLinks,
   collectionCategorySlug,
+  collectionSourceIsBounded,
   collectionSourceReachedBound,
   collectionEntryMetaValues,
   collectionEntryTokens,
@@ -1551,6 +1553,106 @@ describe('collectionSourceReachedBound (AGL-1516)', () => {
     // stops declaring itself. `get-collection-content.ts` passes this exact
     // constant to `.limit()`.
     expect(COLLECTION_SOURCE_MAX).toBe(100)
+  })
+})
+
+describe('collectionSourceIsBounded (AGL-1516)', () => {
+  /**
+   * Counting the entries is a PROXY for "the read hit its limit", and the
+   * proxy is wrong in the one direction that matters.
+   *
+   * The tenant query asks for `status in ['published', 'scheduled']` and then
+   * drops what is not live yet — a future `publishAt`, or (AGL-471) a due
+   * schedule on a plan without `scheduledPublishing`. So a read that came back
+   * holding all 100 of its documents can hand over 96 entries, and 96 does not
+   * look like a ceiling to anything downstream. That is a blog with a
+   * scheduling queue, which is most of them.
+   *
+   * A false here is not a cosmetic miss: `searchCapped` is the ONLY thing
+   * stopping a search over 96 of 400 posts from answering a miss with the flat
+   * "No matches." that claims to have looked everywhere.
+   */
+  const shortOfBound = Array.from(
+    { length: COLLECTION_SOURCE_MAX - 4 },
+    (_, i) => ({ $id: `e${i}`, title: `Post ${i}`, slug: `post-${i}` }),
+  )
+
+  it('believes a read that DECLARES it stopped at its bound', () => {
+    expect(
+      collectionSourceIsBounded({
+        entries: shortOfBound,
+        reachedBound: true,
+      }),
+    ).toBe(true)
+    // …and the count alone would have said otherwise, which is the whole
+    // reason the flag is threaded down from the query.
+    expect(collectionSourceReachedBound(shortOfBound)).toBe(false)
+  })
+
+  it('falls back to counting for a source that declares nothing', () => {
+    // A payload cached before the flag shipped, or a source assembled by
+    // hand. The old reading is still the best available one there.
+    expect(collectionSourceIsBounded({ entries: shortOfBound })).toBe(false)
+    expect(
+      collectionSourceIsBounded({
+        entries: Array.from({ length: COLLECTION_SOURCE_MAX }, (_, i) => ({
+          $id: `e${i}`,
+          title: `Post ${i}`,
+          slug: `post-${i}`,
+        })),
+      }),
+    ).toBe(true)
+  })
+
+  it('reads an absent source as unbounded rather than throwing', () => {
+    expect(collectionSourceIsBounded(undefined)).toBe(false)
+  })
+
+  it('stamps the entries block from the DECLARED bound, not the count', () => {
+    const nodes = {
+      root: { $id: 'root', componentId: 'div', nodes: ['list'] },
+      list: {
+        $id: 'list',
+        componentId: COLLECTION_ENTRIES_COMPONENT_ID,
+        parentId: 'root',
+        props: { search: true },
+        nodes: ['card'],
+      },
+      card: {
+        $id: 'card',
+        componentId: 'muiStack',
+        parentId: 'list',
+        props: {},
+        nodes: [],
+      },
+    } as any
+    const expanded = expandCollectionEntries(
+      nodes,
+      { blog: { slug: 'blog', entries: shortOfBound, reachedBound: true } },
+      'blog',
+    ) as any
+    expect(expanded['list'].props.searchCapped).toBe(true)
+  })
+
+  it('stamps the standalone box from the DECLARED bound too', () => {
+    const nodes = {
+      root: { $id: 'root', componentId: 'div', nodes: ['box'] },
+      box: {
+        $id: 'box',
+        componentId: COLLECTION_SEARCH_COMPONENT_ID,
+        parentId: 'root',
+        props: {},
+      },
+    } as any
+    const expanded = expandCollectionSearch(
+      nodes,
+      { blog: { slug: 'blog', entries: shortOfBound, reachedBound: true } },
+      'blog',
+    ) as any
+    expect(expanded['box'].props.searchCapped).toBe(true)
+    // The count it names is still the honest one — the entries it actually
+    // holds — and `searchCapped` is what says that number is a floor.
+    expect(expanded['box'].props.searchTotal).toBe(shortOfBound.length)
   })
 })
 

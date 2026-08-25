@@ -89,6 +89,9 @@ jest.mock('./get-screen-version', () => ({
 
 import { formatCollectionEntryDate } from '@aglyn/aglyn/server'
 import { composeNodesWithChrome } from './compose-screen-nodes'
+import { getPublishedCollectionSource } from './get-collection-content'
+
+const mockCollectionSource = getPublishedCollectionSource as jest.Mock
 
 /**
  * A screen that repeats over a dataset.
@@ -566,5 +569,50 @@ describe('composeNodesWithChrome fills Collection Search blocks (AGL-1516)', () 
       screenNodes: withSearch(),
     })) as any
     expect('searchIndex' in composed['box'].props).toBe(false)
+  })
+
+  it('carries a bounded read all the way to `searchCapped`', async () => {
+    // The last hop of the chain, and the one with no other witness. The
+    // loader knows the read stopped at its limit and the component knows how
+    // to say so; if the pipeline drops the fact in between, both halves stay
+    // green while the page tells a reader it searched a collection it only
+    // saw the first hundred of. Two entries here — deliberately nowhere near
+    // the bound — because a version that re-derives the flag by counting
+    // would pass a fixture built at 100 and fail this one.
+    const composed = (await composeNodesWithChrome({
+      hostId: 'h1',
+      screenNodes: withSearch(),
+      collection: { slug: 'blog', entries, entriesReachedBound: true },
+    })) as any
+    expect(composed['box'].props.searchCapped).toBe(true)
+  })
+
+  it('carries a bound off a FETCHED collection as well', async () => {
+    // The other half of the source assembly: a box pointed at a collection
+    // the URL did not route (a changelog search on the homepage) fetches its
+    // own source, and that read is bounded by the same `.limit()`.
+    const nodes = withSearch()
+    nodes.box.props = { collectionSlug: 'changelog' }
+    mockCollectionSource.mockResolvedValue({
+      entries: [
+        { $id: 'c1', title: 'Shipped', slug: 'shipped', excerpt: 'notes' },
+      ],
+      categories: [],
+      reachedBound: true,
+    })
+    const composed = (await composeNodesWithChrome({
+      hostId: 'h1',
+      screenNodes: nodes,
+    })) as any
+    expect(composed['box'].props.searchCapped).toBe(true)
+  })
+
+  it('leaves `searchCapped` off a read that came back complete', async () => {
+    const composed = (await composeNodesWithChrome({
+      hostId: 'h1',
+      screenNodes: withSearch(),
+      collection: { slug: 'blog', entries },
+    })) as any
+    expect('searchCapped' in composed['box'].props).toBe(false)
   })
 })
