@@ -17,6 +17,11 @@ content on the marketing site and is written separately.
 
 - **tenant,aglyn:** a bounded read says so even when the gate thinned it ([AGL-1516](https://linear.app/aglyn/issue/AGL-1516), [AGL-471](https://linear.app/aglyn/issue/AGL-471))
 - **console:** the staff user detail cards balance instead of stretching ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **orgs:** an invitation cannot demote the owner out of their own org ([AGL-1888](https://linear.app/aglyn/issue/AGL-1888), [AGL-1375](https://linear.app/aglyn/issue/AGL-1375))
+
+### Documentation
+
+- **orgs:** an invitation never changes who owns the workspace ([AGL-1888](https://linear.app/aglyn/issue/AGL-1888))
 
 ## v1.0.0-beta.15 — 2026-08-25
 
