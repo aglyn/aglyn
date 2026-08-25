@@ -109,7 +109,7 @@ export function parseAttestArgs(argv = [], options = {}) {
   if (!domain || !DOMAIN_PATTERN.test(domain)) {
     return refuse(
       `--domain=${rawDomain} is not a domain this platform can key a claim ` +
-        'by. Pass the bare registrable name, e.g. --domain=aglyn.com.',
+        'by. Pass the bare registrable name, e.g. --domain=example.com.',
     )
   }
 
