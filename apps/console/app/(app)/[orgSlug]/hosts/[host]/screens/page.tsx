@@ -109,6 +109,7 @@ import {
   type ScreenMoveRequest,
 } from '../../../../../../components/screens-hierarchy-table.component'
 import { checkOrgQuota } from '../../../../../../constants/entitlements'
+import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { docsHelp } from '../../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
@@ -221,6 +222,8 @@ function Screens(props) {
   }, [screens])
   const { enqueueSnackbar, closeSnackbar } = useSnackbar()
   const { org, ready: orgReady } = useCurrentOrg()
+  /** The cap behind the header readout; the create gate reads the same key. */
+  const screenQuota = checkOrgQuota(org, 'screensPerHost', billableScreenCount)
   const logActivity = useHostActivityLogger(hostId)
 
   const [error, setError] = useState(null)
@@ -774,17 +777,36 @@ function Screens(props) {
           icon: { path: ICON_VARIANT_PAGES.path },
         }}
         headerRight={
-          <Stack direction="row" spacing={1}>
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() => setTemplatesOpen(true)}
-            >
-              {'Templates'}
-            </Button>
-            <Button size="small" variant="contained" onClick={handleFormOpen}>
-              {'Create New Screen'}
-            </Button>
+          /*
+            The plan readout opposite the heading (AGL-2113), the Sites page
+            arrangement. `screensPerHost` was enforced on create and had no
+            standing surface at all, so an author learned the cap by being
+            refused — the exact failure the shared readout exists to end.
+
+            Counted with `billableScreenIds`, the SAME rule the create gate
+            calls. A separate count here is how a readout and the refusal it
+            belongs to come to disagree, which is what the comment above that
+            memo is about.
+          */
+          <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+            <QuotaReadoutComponent
+              ready={orgReady}
+              used={billableScreenCount}
+              limit={screenQuota.limit}
+              noun="screen"
+            />
+            <Stack direction="row" spacing={1}>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => setTemplatesOpen(true)}
+              >
+                {'Templates'}
+              </Button>
+              <Button size="small" variant="contained" onClick={handleFormOpen}>
+                {'Create New Screen'}
+              </Button>
+            </Stack>
           </Stack>
         }
         aside={

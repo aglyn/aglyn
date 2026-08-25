@@ -111,7 +111,19 @@ export function ArtifactRowActions(props: ArtifactRowActionsProps) {
     <Stack
       direction="row"
       spacing={0.5}
-      sx={{ alignItems: 'center', justifyContent: 'flex-end' }}
+      /*
+        `height: '100%'` is what actually centres these (AGL-693). A DataGrid
+        cell is a flex box, but `renderCell` content is auto-height inside it —
+        so at the taller `TABLE_ROW_HEIGHT` these icons sat at the top of the
+        row while the text beside them was centred, which is the misalignment
+        Zach spotted. `alignItems` alone cannot fix it: there is no spare
+        height to distribute until the child claims the row.
+      */
+      sx={{
+        height: '100%',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+      }}
       // The row's own click opens the detail view; without this every control
       // in here would navigate out from under the thing it just opened.
       onClick={(event) => event.stopPropagation()}

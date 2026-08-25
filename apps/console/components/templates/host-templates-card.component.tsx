@@ -128,7 +128,26 @@ function sourceChip(
  * in completely different places — a page template makes a screen, a
  * component template goes onto one.
  */
-export function HostTemplatesCard({ hostId }: { hostId: string }) {
+/** What the page needs to render the header's plan readout. */
+export interface TemplateQuotaReadout {
+  ready: boolean
+  used: number
+  limit: number
+}
+
+export function HostTemplatesCard({
+  hostId,
+  onQuota,
+}: {
+  hostId: string
+  /**
+   * Publishes the template count and cap so the PAGE can render the readout in
+   * its header. The card keeps ownership of the numbers because it owns the
+   * listener they come from — a page that counted separately would be a second
+   * source for the same fact.
+   */
+  onQuota?: (readout: TemplateQuotaReadout) => void
+}) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -739,16 +758,33 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
     'templatesPerHost',
     (templateDocs ?? []).length,
   )
+  /**
+   * Hand the page the numbers it needs for the header readout.
+   *
+   * An effect rather than a render-time call: this fires during the card's
+   * render otherwise, and setting state on the parent mid-render is the React
+   * warning that turns into a loop. Keyed on the three primitives, so it
+   * re-publishes when the count or the plan actually changes and not on every
+   * keystroke elsewhere on the page.
+   */
+  // `quotaLimit`, not `limit` — the bare name is Firestore's `limit()` in this
+  // file, and shadowing it turns the entries listener into a type error a few
+  // hundred lines up.
+  const quotaUsed = (templateDocs ?? []).length
+  const quotaLimit = templateQuota.limit
+  useEffect(() => {
+    onQuota?.({ ready: orgReady, used: quotaUsed, limit: quotaLimit })
+  }, [onQuota, orgReady, quotaUsed, quotaLimit])
 
   return (
     <CardDisplay>
-      <QuotaReadoutComponent
-        ready={orgReady}
-        used={(templateDocs ?? []).length}
-        limit={templateQuota.limit}
-        noun="template"
-        sx={{ px: 2, pt: 1 }}
-      />
+      {/* The readout moved OUT of this card and into the page header, beside
+          the create button, matching the Sites page (AGL-2113). It read as a
+          caption on a list here; opposite the heading it is a fact about the
+          page, which is what it is. `HostTemplatesCard` publishes the numbers
+          through `onQuota` so the page can render it without counting the
+          documents a second time — two counts of the same thing is how a
+          readout and the gate it belongs to come to disagree. */}
       <ArtifactTable
         rowHeight={TABLE_ROW_HEIGHT}
         // A template ROW is a page GROUP, not a document — a five-page bundle

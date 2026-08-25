@@ -43,6 +43,9 @@ import {
   useConfirmationContext,
   useLoading,
 } from '@aglyn/shared-ui-jsx'
+import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
+import { checkOrgQuota } from '../../../../../../constants/entitlements'
+import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import ArtifactTable, {
   ArtifactRowActions,
   artifactActionsColumn,
@@ -125,6 +128,7 @@ function Layouts(props) {
   }, [])
   const [pageSize, setPageSize] = useState<number>(5)
   const firestore = useFirestore()
+  const { org, ready: orgReady } = useCurrentOrg()
   // The where-used scan is an authenticated POST (host admin only).
   const { data: user } = useUser()
   const createHostResource = useHostResourceApi()
@@ -170,6 +174,13 @@ function Layouts(props) {
     { idField: '$id' },
   )
   const layouts = data || []
+  /**
+   * `sharedLayoutsPerHost` is enforced by `/api/hosts/resources` and had no
+   * standing surface here — an author learned the cap by being refused a
+   * create. The count is the listener's, which is the same source the create
+   * gate uses, so the readout and the refusal cannot disagree.
+   */
+  const layoutQuota = checkOrgQuota(org, 'sharedLayoutsPerHost', layouts.length)
   const { enqueueSnackbar } = useSnackbar()
 
   const [error, setError] = useState(null)
@@ -334,7 +345,6 @@ function Layouts(props) {
   const { peopleIn } = usePresenceSummary(hostId)
 
   const columns: GridColDef[] = [
-    { field: '$id', headerName: 'ID', type: 'string', minWidth: 150 },
     {
       field: 'displayName',
       headerName: 'Display name',
@@ -357,6 +367,7 @@ function Layouts(props) {
         </Stack>
       ),
     },
+    { field: '$id', headerName: 'ID', type: 'string', minWidth: 150 },
     {
       field: 'description',
       headerName: 'Description',
@@ -505,17 +516,38 @@ function Layouts(props) {
           icon: { path: mdiPageLayoutBody.path },
         }}
         headerRight={
-          <Stack direction="row" spacing={1}>
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() => setTemplatesOpen(true)}
-            >
-              {'Templates'}
-            </Button>
-            <Button size="small" variant="contained" onClick={handleFormOpen}>
-              {'Create New Layout'}
-            </Button>
+          /*
+            The plan readout sits OPPOSITE the heading, beside the create
+            button (AGL-2113) — the arrangement the Sites page uses for
+            `6 of 10 sites · Business plan`. Zach: *"the 'templates on your
+            plan' need to be moved to the header like we have on the hosts
+            page, same thing goes for the screens page, components, layouts
+            and templates."*
+
+            Above the table rather than inside it, because it is a fact about
+            the PAGE: a reader deciding whether to create another one is
+            looking at the create button, and that is where the number has to
+            be. Inside the card it was a caption on a list.
+          */
+          <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+            <QuotaReadoutComponent
+              ready={orgReady}
+              used={layouts.length}
+              limit={layoutQuota.limit}
+              noun="layout"
+            />
+            <Stack direction="row" spacing={1}>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => setTemplatesOpen(true)}
+              >
+                {'Templates'}
+              </Button>
+              <Button size="small" variant="contained" onClick={handleFormOpen}>
+                {'Create New Layout'}
+              </Button>
+            </Stack>
           </Stack>
         }
         aside={

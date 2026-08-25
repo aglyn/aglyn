@@ -21,7 +21,7 @@ import { mdiBookmarkOutline } from '@aglyn/shared-data-mdi'
 import { Container } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
-import { Button } from '@mui/material'
+import { Button, Stack } from '@mui/material'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { doc, setDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
@@ -36,7 +36,10 @@ import {
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../../components/layouts/main.layout'
-import HostTemplatesCard from '../../../../../../components/templates/host-templates-card.component'
+import HostTemplatesCard, {
+  type TemplateQuotaReadout,
+} from '../../../../../../components/templates/host-templates-card.component'
+import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
@@ -56,6 +59,8 @@ const HostTemplates: NextPageWithLayout<Record<string, never>> = () => {
 
   // Create sits in the page header alongside Screens and Layouts (AGL-694).
   const [creating, setCreating] = useState(false)
+  /** The card publishes its own count and cap; see `onQuota`. */
+  const [quota, setQuota] = useState<TemplateQuotaReadout | null>(null)
   // Name and kind first, then create (AGL-700). Kind is asked here because
   // it decides which picker the template shows up in (AGL-699), and it is
   // not something a later rename fixes.
@@ -125,14 +130,27 @@ const HostTemplates: NextPageWithLayout<Record<string, never>> = () => {
         icon: { path: mdiBookmarkOutline.path },
       }}
       headerRight={
-        <Button
-          size="small"
-          variant="contained"
-          disabled={creating}
-          onClick={() => setCreateOpen(true)}
-        >
-          {creating ? 'Creating…' : 'Create Template'}
-        </Button>
+        // Opposite the heading, beside the create button — the Sites page
+        // arrangement (AGL-2113). The numbers come from the CARD, which owns
+        // the listener they are counted from.
+        <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+          {quota ? (
+            <QuotaReadoutComponent
+              ready={quota.ready}
+              used={quota.used}
+              limit={quota.limit}
+              noun="template"
+            />
+          ) : null}
+          <Button
+            size="small"
+            variant="contained"
+            disabled={creating}
+            onClick={() => setCreateOpen(true)}
+          >
+            {creating ? 'Creating…' : 'Create Template'}
+          </Button>
+        </Stack>
       }
       aside={
         <CreateArtifactDrawer
@@ -146,7 +164,7 @@ const HostTemplates: NextPageWithLayout<Record<string, never>> = () => {
       }
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-        <HostTemplatesCard hostId={hostId} />
+        <HostTemplatesCard hostId={hostId} onQuota={setQuota} />
       </Container>
     </DashboardLayout>
   )
