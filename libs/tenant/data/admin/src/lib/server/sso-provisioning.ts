@@ -350,9 +350,10 @@ export async function issueDomainClaim(
 
   const ref = claimRef(orgId, domain)
   const snapshot = await ref.get()
-  const token =
-    (snapshot.exists && (snapshot.get('token') as string)) ||
-    randomBytes(24).toString('base64url')
+  const stored = snapshot.exists
+    ? (snapshot.get('token') as string | undefined)
+    : undefined
+  const token = stored || randomBytes(24).toString('base64url')
   if (!snapshot.exists) {
     await ref.set({
       domain,
@@ -360,6 +361,26 @@ export async function issueDomainClaim(
       verified: false,
       createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     })
+  } else if (!stored) {
+    // A claim document that EXISTS but carries NO token is a shape AGL-1887
+    // introduced: {@link attestSsoDomain} writes the attestation marker and
+    // nothing else, because a staff attestation has no DNS challenge behind
+    // it. Before self-serve, every claim document was created here and so
+    // always had a token — `exists` and `has a token` were the same fact.
+    //
+    // They are not any more, and conflating them broke the upgrade path for
+    // exactly the orgs AGL-1887 exists to serve. `exists` alone decided
+    // whether to persist, so "Set up DNS proof" on an attested domain minted
+    // a token, showed the admin a TXT record built from it, and stored it
+    // NOWHERE — a different value on every click. `verifyDomainClaim` re-reads
+    // `snapshot.get('token')`, finds `undefined`, and could never match the
+    // record they had just published. An attested domain could never become a
+    // verified one.
+    //
+    // MERGE, and `verified` is deliberately NOT written: the attestation has
+    // to survive being upgraded, and a claim already midway through DNS is not
+    // this branch's to demote.
+    await ref.set({ domain, token }, { merge: true })
   }
   return {
     error: null,

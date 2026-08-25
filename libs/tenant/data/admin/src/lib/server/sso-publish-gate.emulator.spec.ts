@@ -109,6 +109,13 @@ const BLANK_ATTESTATION_DOMAIN = 'blank-attestation.sso-publish-gate-fixture.com
 /** An `attestedBy` that is truthy but names nobody. */
 const NONSTRING_ATTESTATION_DOMAIN =
   'nonstring-attestation.sso-publish-gate-fixture.com'
+/**
+ * Attested, and on its way to being DNS-verified — the upgrade path.
+ *
+ * Kept apart from {@link ATTESTED_DOMAIN} because this case WRITES to the
+ * claim, and the attested control asserts the claim is left alone.
+ */
+const UPGRADE_DOMAIN = 'upgrade.sso-publish-gate-fixture.com'
 
 const ALL_DOMAINS = [
   VERIFIED_DOMAIN,
@@ -119,6 +126,7 @@ const ALL_DOMAINS = [
   ATTESTED_DOMAIN,
   BLANK_ATTESTATION_DOMAIN,
   NONSTRING_ATTESTATION_DOMAIN,
+  UPGRADE_DOMAIN,
 ]
 
 if (EMULATED && !getApps().length) {
@@ -214,6 +222,15 @@ describeEmulated('the SSO publish gate refuses an unproven domain (AGL-1912)', (
       domain: NONSTRING_ATTESTATION_DOMAIN,
       verified: false,
       attestedBy: true,
+    })
+    // Attested and TOKENLESS — the exact document `attestSsoDomain` writes for
+    // an org that had no claim before. `token` is absent rather than empty,
+    // because that is what the real write leaves behind and the bug this
+    // fixture catches turns on `snapshot.get('token')` being `undefined`.
+    await claim(ORG, UPGRADE_DOMAIN).set({
+      domain: UPGRADE_DOMAIN,
+      attestedBy: 'staff-uid-fixture',
+      attestationNote: 'ownership confirmed out of band',
     })
     // MISSING_CLAIM_DOMAIN gets no claim document at all, on purpose.
   }, 60_000)
@@ -322,6 +339,53 @@ describeEmulated('the SSO publish gate refuses an unproven domain (AGL-1912)', (
       .doc(NONSTRING_ATTESTATION_DOMAIN)
       .get()
     expect(doc.exists).toBe(false)
+  }, 60_000)
+
+  it('THE UPGRADE PATH: claiming an attested domain PERSISTS the token it shows', async () => {
+    // AGL-1887 part 2. `attestSsoDomain` creates a claim document with no
+    // token, a shape that did not exist before it — every claim used to be
+    // created by `issueDomainClaim`, so "the document exists" and "it has a
+    // token" were the same fact. `issueDomainClaim` still branched on
+    // `!snapshot.exists` alone, so for an attested domain it minted a token,
+    // returned a TXT record built from it, and wrote NOTHING.
+    //
+    // The admin publishes that record, clicks Verify, and `verifyDomainClaim`
+    // compares it against `snapshot.get('token')` — `undefined`. It can never
+    // match, and the next click shows a different record. The DNS upgrade the
+    // card nudges every attested org towards was unreachable for exactly the
+    // orgs AGL-1887 exists to serve.
+    //
+    // Firestore-shaped on purpose: the whole bug is that an ABSENT field reads
+    // back `undefined` and folds to falsy, with `strictNullChecks` off and no
+    // type error either way. A double that returned `''` or `null` would catch
+    // it; one that returned a stub token would not.
+    const first = await sso.issueDomainClaim(ORG, UPGRADE_DOMAIN)
+    expect(first.error).toBe(null)
+    expect(first.claim?.token).toBeTruthy()
+
+    const stored = await db
+      .collection('orgs')
+      .doc(ORG)
+      .collection('ssoDomains')
+      .doc(UPGRADE_DOMAIN)
+      .get()
+    // The record the admin was told to publish has to be the one we will
+    // check. This is the assertion the bug fails: `token` was undefined here.
+    expect(stored.get('token')).toBe(first.claim?.token)
+    expect(first.claim?.recordValue).toContain(first.claim?.token as string)
+
+    // STABLE across calls. A token that changes every click is the same defect
+    // wearing a different face — the admin publishes one value and we check
+    // another — and it would survive a fix that persisted without reusing.
+    const second = await sso.issueDomainClaim(ORG, UPGRADE_DOMAIN)
+    expect(second.claim?.token).toBe(first.claim?.token)
+
+    // And the attestation SURVIVES being upgraded. Issuing a claim must not
+    // clear the marker: doing so would strand the org again the moment they
+    // clicked "Set up DNS proof", and the failure would look like the original
+    // AGL-1375 bug rather than like this one.
+    expect(stored.get('attestedBy')).toBe('staff-uid-fixture')
+    expect(await publish(ORG, UPGRADE_DOMAIN)).toEqual([UPGRADE_DOMAIN])
   }, 60_000)
 
   it('deactivates rather than deletes on unpublish, and can be re-published', async () => {
