@@ -26,11 +26,13 @@ import { MUI_BUNDLE_ID } from '@aglyn/aglyn'
 import {
   ICON_VARIANT_MODIFY_DELETE,
   ICON_VARIANT_MODIFY_EDIT,
+  ICON_VARIANT_SHOW_DETAIL,
 } from '@aglyn/shared-data-enums'
 import {
   mdiBookmarkOutline,
   mdiPageLayoutBody,
   mdiStorefrontOutline,
+  mdiEyeOutline,
 } from '@aglyn/shared-data-mdi'
 import {
   AppLink,
@@ -41,14 +43,17 @@ import {
   useConfirmationContext,
   useLoading,
 } from '@aglyn/shared-ui-jsx'
-import { DataTableComponent } from '@aglyn/shared-ui-jsx/components/data-table.component'
+import ArtifactTable, {
+  ArtifactRowActions,
+  artifactActionsColumn,
+} from '../../../../../../components/artifacts/artifact-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { Button, Stack } from '@mui/material'
 import DocumentPresenceChips from '../../../../../../components/document-presence-chips.component'
 import usePresenceSummary from '../../../../../../hooks/use-presence-summary'
 import TemplateGalleryDialog from '../../../../../../components/templates/template-gallery-dialog.component'
-import { GridActionsCellItem, type GridColDef } from '@mui/x-data-grid'
+import { type GridColDef } from '@mui/x-data-grid'
 import {
   collection,
   doc,
@@ -299,63 +304,6 @@ function Layouts(props) {
   const { peopleIn } = usePresenceSummary(hostId)
 
   const columns: GridColDef[] = [
-    {
-      field: 'actions',
-      type: 'actions',
-      width: 100,
-      getActions: ({ id, row }) => {
-        const layoutId = id as string
-        const versionId = row.versionId as string
-        return [
-          <GridActionsCellItem
-            key="action-edit"
-            icon={<MdiIcon path={ICON_VARIANT_MODIFY_EDIT.path} />}
-            label="edit"
-            LinkComponent={CellItemLinkComponent}
-            {...({
-              href: buildRoute(Route.LAYOUT_BESIGNER, { orgSlug, 
-                host,
-                layoutId,
-                versionId,
-              }),
-            } as any)}
-          />,
-          <GridActionsCellItem
-            key="action-save-template"
-            icon={<MdiIcon path={mdiBookmarkOutline.path} />}
-            label="Save as template"
-            onClick={() =>
-              setSaveTemplateFor(
-                buildTemplateSource(layoutId, versionId, row.displayName),
-              )
-            }
-          />,
-          // Publishing shares the whole layout with other organizations;
-          // saving a template above keeps it on this site (AGL-672).
-          <GridActionsCellItem
-            key="action-publish"
-            icon={<MdiIcon path={mdiStorefrontOutline.path} />}
-            label="Publish to marketplace"
-            onClick={() =>
-              setPublishTarget({
-                endpoint: 'marketplace/publish-layout',
-                payload: { hostId, layoutId },
-                displayName: row.displayName,
-                description: row.description,
-                noun: 'layout',
-                categoryPlaceholder: 'e.g. Marketing, Docs, Storefront',
-              })
-            }
-          />,
-          <GridActionsCellItem
-            key="action-delete"
-            icon={<MdiIcon path={ICON_VARIANT_MODIFY_DELETE.path} color="error" />}
-            label="Delete"
-            onClick={handleDeleteLayout(layoutId)}
-          />,
-        ]
-      },
-    },
     { field: '$id', headerName: 'ID', type: 'string', minWidth: 150 },
     {
       field: 'displayName',
@@ -413,6 +361,99 @@ function Layouts(props) {
       valueGetter: (value: any) => value?.toDate?.() ?? null,
       valueFormatter: (value: any) => value?.toLocaleString?.() || '--',
     },
+    /*
+      The trailing cluster every artifact list shares (AGL-693). Layouts put
+      FOUR inline icons in a LEADING column — the arrangement Zach called out
+      — so a delete sat two icons from the row's own open handler and the
+      first thing in the row was a toolbar rather than the layout's name.
+    */
+    artifactActionsColumn((row: any) => {
+      const layoutId = row.$id as string
+      const versionId = row.versionId as string
+      return (
+        <ArtifactRowActions
+          label={row.displayName ?? layoutId}
+          quick={{
+            icon: mdiEyeOutline.path,
+            label: 'Preview',
+            ...(versionId
+              ? {
+                  to: buildRoute(Route.LAYOUT_PREVIEW, {
+                    orgSlug,
+                    host,
+                    layoutId,
+                    versionId,
+                  }),
+                }
+              : {
+                  unavailableReason:
+                    'Nothing to preview yet — open it in the besigner once.',
+                }),
+          }}
+          items={[
+            {
+              key: 'details',
+              label: 'View details',
+              icon: <MdiIcon path={ICON_VARIANT_SHOW_DETAIL.path} size={0.8} />,
+              onClick: () =>
+                router.push(
+                  buildRoute(Route.LAYOUT_DETAILS, { orgSlug, host, layoutId }),
+                ),
+            },
+            {
+              key: 'besigner',
+              label: 'Edit in besigner',
+              icon: (
+                <MdiIcon path={ICON_VARIANT_MODIFY_EDIT.path} size={0.8} />
+              ),
+              onClick: () =>
+                router.push(
+                  buildRoute(Route.LAYOUT_BESIGNER, {
+                    orgSlug,
+                    host,
+                    layoutId,
+                    versionId,
+                  }),
+                ),
+            },
+            {
+              key: 'save-template',
+              label: 'Save as template',
+              icon: <MdiIcon path={mdiBookmarkOutline.path} size={0.8} />,
+              onClick: () =>
+                setSaveTemplateFor(
+                  buildTemplateSource(layoutId, versionId, row.displayName),
+                ),
+            },
+            {
+              // Publishing shares the whole layout with other organizations;
+              // saving a template above keeps it on this site (AGL-672).
+              key: 'publish',
+              label: 'Publish to marketplace',
+              icon: <MdiIcon path={mdiStorefrontOutline.path} size={0.8} />,
+              onClick: () =>
+                setPublishTarget({
+                  endpoint: 'marketplace/publish-layout',
+                  payload: { hostId, layoutId },
+                  displayName: row.displayName,
+                  description: row.description,
+                  noun: 'layout',
+                  categoryPlaceholder: 'e.g. Marketing, Docs, Storefront',
+                }),
+            },
+            {
+              key: 'delete',
+              label: 'Delete',
+              destructive: true,
+              icon: (
+                <MdiIcon path={ICON_VARIANT_MODIFY_DELETE.path} size={0.8} />
+              ),
+              onClick: handleDeleteLayout(layoutId),
+            },
+          ]}
+        />
+      )
+    }),
   ]
 
   return (
@@ -471,27 +512,23 @@ function Layouts(props) {
             blurb="Layout templates add a ready-made layout you can restyle in the besigner. Existing layouts are never touched."
           />
           <CardDisplay>
-            <DataTableComponent
+            <ArtifactTable
               rowHeight={TABLE_ROW_HEIGHT}
-              getRowId={(row) => row.$id}
               columns={columns}
               noRowsLabel="No layouts"
               rows={layouts}
-              onRowClick={({ id }) =>
+              onOpen={(id) =>
                 router.push(
                   buildRoute(Route.LAYOUT_DETAILS, {
                     orgSlug,
                     host,
-                    layoutId: id as string,
+                    layoutId: id,
                   }),
                 )
               }
-              sx={{ '& .MuiDataGrid-row': { cursor: 'pointer' } }}
               loading={status === 'loading'}
               initialState={{ pagination: { paginationModel: { pageSize } } }}
               onPaginationModelChange={(model) => setPageSize(model.pageSize)}
-              pageSizeOptions={[5, 10, 15]}
-              pagination
             />
           </CardDisplay>
         </Container>
