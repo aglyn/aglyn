@@ -28,15 +28,18 @@ import {
   besignerDocsUrl,
   BesignerConflictAlertComponent,
   BesignerDraftAlertComponent,
+  describeComponentPropagation,
   recoverableRoomSessions,
   LayoutChromeContext,
   PropertiesDialogComponent,
   useAddElementDrawerCallback,
   useBesignerDocument,
+  useComponentPropagationNotice,
   useRenderedCanvasElements,
   useLayoutChromeCanvas,
   withBesignerContext,
   type BesignerSaveBaseline,
+  type ComponentPropagationChange,
   type WorkspaceEditorComponentProps,
 } from '@aglyn/besigner-ui'
 // import '@aglyn/foundation-feature-singleton'
@@ -246,7 +249,7 @@ function BesignerPage(props) {
   // until the definitions settle: building the chrome canvas without them
   // paints the dashed "SITE NAV" placeholder and swaps it for the nav a beat
   // later, and the canvas is rebuilt wholesale per node map anyway.
-  const { definitions: componentDefinitions } =
+  const { definitions: componentDefinitions, docs: componentDocs } =
     useHostComponentDefinitions(hostId)
   const chromeCanvas = useLayoutChromeCanvas(
     layoutId && componentDefinitions
@@ -266,6 +269,45 @@ function BesignerPage(props) {
   })
   const { data, status, error, hasPendingWrites } = result
   const nodes = data?.nodes
+
+  // Say so when a component on this page changed under the author
+  // (AGL-1898 phase 2). The re-graft itself already happened — the
+  // definitions listener above is the whole transport — but a component
+  // edit is usually too small to notice, so without a word the author
+  // cannot tell a working propagation from one they have not published
+  // yet. No extra reads: this is derived from the snapshot stream the
+  // canvas already consumes.
+  //
+  // The LAYOUT's nodes are watched alongside the screen's because the
+  // component an author goes off to edit is most often the site nav, which
+  // lives in the layout chrome rather than on the screen.
+  const componentNames = useMemo(
+    () =>
+      Object.fromEntries(
+        (componentDocs ?? []).map((definition) => [
+          definition.$id,
+          definition.displayName,
+        ]),
+      ),
+    [componentDocs],
+  )
+  const handleComponentPropagation = useCallback(
+    (changes: ComponentPropagationChange[]) =>
+      void enqueueSnackbar(describeComponentPropagation(changes), {
+        variant: 'info',
+        persist: false,
+      }),
+    [enqueueSnackbar],
+  )
+  useComponentPropagationNotice({
+    documents: [
+      nodes as Record<string, unknown> | undefined,
+      layoutVersionResult?.data?.nodes as Record<string, unknown> | undefined,
+    ],
+    definitions: componentDefinitions,
+    names: componentNames,
+    onPropagated: handleComponentPropagation,
+  })
 
   const screenKind = screenResult?.data?.kind
 

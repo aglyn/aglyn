@@ -138,6 +138,29 @@ const asMillis = (value: unknown): number | null => {
 }
 
 /**
+ * Did the submitter's emailed receipt actually leave? (AGL-2400)
+ *
+ * THREE answers, and collapsing any two of them is the bug. `'sent'` and
+ * `'failed'` are written by the tenant intake after it calls Resend; `null`
+ * means the row carries no record at all — every submission filed before that
+ * shipped, and every row from a deployment that never configured mail before
+ * this landed.
+ *
+ * `null` is UNKNOWN and must render as unknown. Reading it as `'failed'` fills
+ * the queue with imaginary work the day this deploys, which is how staff learn
+ * to scroll past the flag; reading it as `'sent'` asserts a delivery nothing
+ * measured. Deliberately the same "a verdict needs a third state" discipline
+ * the strike counter uses for an org past the lookup cap.
+ *
+ * Anything else in the field — a value from a future writer, or a corrupted
+ * row — answers `null` rather than being passed through, so the page's three
+ * branches stay exhaustive.
+ */
+function receiptStatus(value: unknown): 'sent' | 'failed' | null {
+  return value === 'sent' || value === 'failed' ? value : null
+}
+
+/**
  * One row, shaped for the page.
  *
  * `identityVisible` is returned explicitly rather than letting the page infer
@@ -174,6 +197,18 @@ function rowPayload(
     // every tier — it decides whether a follow-up question is even possible —
     // so the boolean is not redacted even when the address is.
     hasReporterContact: Boolean(data['reporterEmail']),
+    /**
+     * The receipt's fate (AGL-2400). NOT redacted, on the same argument as
+     * `hasReporterContact` above: "this person is holding nothing" is triage
+     * information at every tier, and a support-tier operator who can see the
+     * failure can escalate it to someone who can see the address. Redacting it
+     * would hide the work rather than the identity.
+     */
+    receiptStatus: receiptStatus(data['receiptStatus']),
+    receiptReason: asString(data['receiptReason']),
+    receiptAttemptedAtMs:
+      asMillis(data['receiptAttemptedAtMs']) ??
+      asMillis(data['receiptAttemptedAt']),
     dmca: dmca
       ? {
           work: asString(dmca['work']),
@@ -264,6 +299,19 @@ function counterNoticePayload(
     resolvedBy: asString(data['resolvedByEmail']),
     forwardedAtMs: asMillis(data['forwardedAt']),
     restoredAtMs: asMillis(data['restoredAt']),
+    /**
+     * The receipt's fate (AGL-2400), unredacted for the same reason as on a
+     * report — and sharper here. A counter-notice always carries an address,
+     * because §512(g)(3) requires one, so `failed` on this row is never
+     * ambiguous: somebody swore a legal statement, is locked out of their own
+     * site, was told on the form that this address is *"how we will tell you
+     * what happens next"*, and holds nothing.
+     */
+    receiptStatus: receiptStatus(data['receiptStatus']),
+    receiptReason: asString(data['receiptReason']),
+    receiptAttemptedAtMs:
+      asMillis(data['receiptAttemptedAtMs']) ??
+      asMillis(data['receiptAttemptedAt']),
   }
 }
 
@@ -578,6 +626,24 @@ async function handler(request: Request): Promise<Response> {
       ).length
 
       /**
+       * Submitters on this page who are holding NOTHING (AGL-2400).
+       *
+       * Counted across both queues because it is one failure with one remedy —
+       * a human re-sends the reference to the address already on the row — and
+       * splitting it in two would let the smaller half go unread.
+       *
+       * Counted from `'failed'` ONLY. A row with no receipt record is unknown,
+       * not broken (see `receiptStatus`), and a count that swept those in
+       * would read as hundreds on the day this deploys and be ignored by the
+       * second day. Like `openUrgent` this describes the returned PAGE, not
+       * the queue, and the page says so.
+       */
+      const receiptsFailed =
+        reports.filter((report) => report.receiptStatus === 'failed').length +
+        counterNotices.filter((notice) => notice.receiptStatus === 'failed')
+          .length
+
+      /**
        * Strike counts for the orgs on this page, one read per DISTINCT org.
        *
        * Only orgs that actually have a copyright report here: a strike count
@@ -617,6 +683,7 @@ async function handler(request: Request): Promise<Response> {
           counterNoticesTruncated: counterNotices.length === PAGE_SIZE,
           awaitingForward,
           overdueRestorations,
+          receiptsFailed,
           counterNoticeStatuses: Aglyn.COUNTER_NOTICE_STATUSES,
           restoreBusinessDays: Aglyn.COUNTER_NOTICE_RESTORE_BUSINESS_DAYS,
           count: reports.length,

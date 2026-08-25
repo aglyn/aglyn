@@ -64,11 +64,34 @@
  * deduplicating document id means a resubmission is the same row; it must not
  * be a second mail, and the gate is what stops an unauthenticated form from
  * being pointed at a third party's inbox more than once per distinct report.
+ *
+ * ## But best-effort has to leave evidence — `recordReceiptOutcome`
+ *
+ * Best-effort was the right call and it was originally implemented as
+ * fire-and-forget: both call sites awaited the send and threw the result away,
+ * so a receipt that never left was `console.warn`ed into a serverless log and
+ * nowhere else. That is the wrong half of best-effort. The mail is not a
+ * courtesy here — it is the only artifact the submitter ends up holding — so
+ * "we tried and it did not go" is a fact somebody has to be able to act on.
+ *
+ * It matters more on this deployment than the general case. `aglyn.com`
+ * publishes DMARC `p=reject`, so a misaligned or refused message is turned
+ * away at SMTP rather than filed in a junk folder: the failure signature is a
+ * *missing* email with no copy on either side. Neither party can discover it
+ * by looking. Without a stored outcome, a receipt that silently never sent is
+ * indistinguishable from one that arrived — and the only person who would ever
+ * notice is the submitter, who has no way to tell us.
+ *
+ * So the outcome is written back onto the intake row and surfaced in the staff
+ * queue, where the address to retry by hand is already on screen. Three states,
+ * not two: `sent`, `failed`, and — for every row written before this existed —
+ * absent, which means UNKNOWN and must never render as either.
  */
 
 import * as Aglyn from '@aglyn/aglyn/server'
-import { sendEmail } from '@aglyn/shared-util-email'
+import { type SendEmailResult, sendEmail } from '@aglyn/shared-util-email'
 import { meterPlatformEmail } from '@aglyn/tenant-data-admin'
+import { FieldValue } from 'firebase-admin/firestore'
 import { contactText } from './chrome'
 
 /**
@@ -92,9 +115,101 @@ const KEEP_THIS =
   'Keep this email. It is your record that we received the message above, ' +
   'and the reference is how we will find it if you write to us about it.'
 
-interface AcknowledgeResult {
+export interface AcknowledgeResult {
   /** `true` only when the provider accepted the message. */
   sent: boolean
+  /**
+   * Why it did not go, when it did not: `sendEmail`'s own reason, one of
+   * `unconfigured` | `no-recipient` | `rejected` | `network` | `rate-limited`.
+   * `null` on success.
+   */
+  reason: string | null
+}
+
+/**
+ * `sendEmail`'s failure reason, read through a cast.
+ *
+ * `strictNullChecks` is OFF repo-wide, so TypeScript will not narrow
+ * `SendEmailResult` on its `sent` boolean-literal discriminant and
+ * `result.reason` does not compile inside an `if (!result.sent)` branch. The
+ * shared lib hit the identical wall and answered it the identical way — see
+ * `rateLimitedRetryAtMs` — so this follows that precedent rather than
+ * inventing a second one.
+ */
+function failureReason(result: SendEmailResult): string | null {
+  const failure = result as { sent?: boolean; reason?: string }
+  if (failure.sent) return null
+  return failure.reason ?? 'unknown'
+}
+
+/**
+ * The minimum of a Firestore `DocumentReference` this module needs.
+ *
+ * Structural rather than the imported admin type, so the caller can hand over
+ * the reference it already built without this module taking a dependency on
+ * the SDK's class — and so a test double is a two-line object rather than a
+ * mock of the whole admin surface.
+ */
+export interface ReceiptTarget {
+  set(
+    data: Record<string, unknown>,
+    options: { merge: boolean },
+  ): Promise<unknown>
+}
+
+/**
+ * Record on the intake row whether its receipt actually left (AGL-2400).
+ *
+ * ## Why this is a write and not a log line
+ *
+ * The submitter's copy is the artifact. Under `p=reject` a failed send leaves
+ * no trace either party can find (see this module's header), so the only place
+ * the fact can survive is beside the submission it belongs to — where the
+ * staff queue already renders the address a human would retry from.
+ *
+ * ## Three states, and the third one is the honest one
+ *
+ * `sent` and `failed` are written here. The third is the ABSENCE of these
+ * fields, which every row filed before this shipped carries, and it means
+ * *unknown* — those receipts may well have gone. Rendering an unknown as
+ * `failed` would fill the queue with fictitious work on day one and teach
+ * staff to ignore the flag; rendering it as `sent` would assert something
+ * nothing measured. Readers must keep all three apart.
+ *
+ * ## Never throws, and never blocks the response
+ *
+ * Called after the submission's own write and outside its `try`, exactly like
+ * the send it describes. A row we already hold must not become a 503 because
+ * the note ABOUT its receipt could not be written — that would trade a small
+ * missing fact for the submitter swearing a legal statement all over again.
+ * A failure here is the one case that genuinely can only be logged.
+ */
+export async function recordReceiptOutcome(
+  ref: ReceiptTarget | null | undefined,
+  result: AcknowledgeResult | null | undefined,
+): Promise<void> {
+  if (!ref || !result) return
+  try {
+    await ref.set(
+      {
+        receiptStatus: result.sent ? 'sent' : 'failed',
+        // Kept on success too, as `null` rather than as an absent field: a row
+        // that answers `receiptReason` with nothing is distinguishable from a
+        // row that was never asked, which is the whole point of the three
+        // states above.
+        receiptReason: result.sent ? null : (result.reason ?? 'unknown'),
+        receiptAttemptedAt: FieldValue.serverTimestamp(),
+        // The millisecond twin, for the same reason `receivedAtMs` exists
+        // beside `receivedAt` on the counter-notice row: a server timestamp
+        // is unreadable until it resolves, and the staff queue sorts and
+        // renders from the number.
+        receiptAttemptedAtMs: Date.now(),
+      },
+      { merge: true },
+    )
+  } catch (error) {
+    console.warn('legal intake receipt outcome not recorded', error)
+  }
 }
 
 /**
@@ -138,7 +253,7 @@ export async function acknowledgeCounterNotice(options: {
   // person reporting it would be perverse. Metered after the send and
   // only when it happened, so an unconfigured deployment counts nothing.
   if (result.sent) await meterPlatformEmail()
-  return { sent: result.sent }
+  return { sent: result.sent, reason: failureReason(result) }
 }
 
 /**
@@ -186,5 +301,5 @@ export async function acknowledgeAbuseReport(options: {
   // person reporting it would be perverse. Metered after the send and
   // only when it happened, so an unconfigured deployment counts nothing.
   if (result.sent) await meterPlatformEmail()
-  return { sent: result.sent }
+  return { sent: result.sent, reason: failureReason(result) }
 }

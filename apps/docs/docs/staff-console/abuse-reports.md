@@ -405,9 +405,31 @@ incident.
 - **The notification fires once per report, not per submission.** A reporter
   resubmitting cannot re-alert you, which is right — and also means a situation
   getting worse does not raise its voice.
-- **No auto-acknowledgement email to the reporter.** They get the receipt page
-  with their reference at submit time and nothing afterwards. If they close the
-  tab before reading it, they have no record they reported anything.
+- **The reporter is emailed their reference, when they left an address**
+  (AGL-2400). This paragraph used to say the opposite — *"no
+  auto-acknowledgement email to the reporter"* — and had been wrong since the
+  receipt shipped. An anonymous report still gets nothing, correctly: there is
+  nobody to write to, and the queue says so on the row rather than leaving you
+  to infer it from an empty field.
+- **Each row tells you whether that receipt actually left.** Three answers, and
+  they are not interchangeable:
+  - *accepted for delivery* — Resend took it. Not proof of delivery; a bounce
+    afterwards is not visible from this page.
+  - *no receipt reached them* — shown in red, with the reason. **This is work.**
+    The reporter is holding nothing: no reference, no date, no evidence they
+    filed. Re-send it by hand to the address on the row. A reason of
+    `unconfigured` means this deployment has no outbound mail set up at all, so
+    fix the environment rather than retrying; anything else means the provider
+    refused that specific message.
+  - *not recorded* — the row predates the record. Treat it as **unknown**, not
+    as either answer.
+
+  Why this needs saying at all: `aglyn.com` publishes DMARC `p=reject`, so a
+  refused message is turned away at SMTP rather than landing in a junk folder.
+  There is no copy of it anywhere, on either side — so this page is the only
+  place the failure is knowable, and the reporter has no way to tell you.
+  The count at the top of the queue describes the rows on **this page**, like
+  the urgent count beside it, not the whole queue.
 - **`abuse@aglyn.com` and `dmca@aglyn.com` deliver** — confirmed 2026-08-19
   (AGL-1911) by reading Google Workspace group configuration, *not* by a test
   send. Both are Google Groups ("Legal - Abuse", "Legal - DMCA") with

@@ -100,8 +100,11 @@ import {
   firebaseAdmin,
   notifyStaff,
 } from '@aglyn/tenant-data-admin'
-import { FieldValue } from 'firebase-admin/firestore'
-import { acknowledgeAbuseReport } from '../_legal-intake/acknowledge'
+import { type DocumentReference, FieldValue } from 'firebase-admin/firestore'
+import {
+  acknowledgeAbuseReport,
+  recordReceiptOutcome,
+} from '../_legal-intake/acknowledge'
 // AGL-2016 + AGL-2026: both halves of the chrome the two §512 intakes share
 // — the operator-facing strings, and the page shell itself. AGL-1983 left
 // adopting the shared shell as a follow-up; this is it, so the local copies
@@ -430,11 +433,16 @@ export async function POST(request: Request): Promise<Response> {
   const reference = `AR-${reportId.slice(0, 10).toUpperCase()}`
 
   let firstReport = false
+  /**
+   * Hoisted out of the `try` so the receipt below can write its outcome back
+   * onto this same row (AGL-2400) — but ASSIGNED inside it, so a Firestore
+   * handle that throws on construction is still caught and still answers 503
+   * rather than escaping as a 500.
+   */
+  let ref: DocumentReference = null
   try {
     const firestore = firebaseAdmin.app().firestore()
-    const ref = firestore
-      .collection(Aglyn.ABUSE_REPORT_COLLECTION)
-      .doc(reportId)
+    ref = firestore.collection(Aglyn.ABUSE_REPORT_COLLECTION).doc(reportId)
     /**
      * A transaction, and `createdAt` written ONLY on the first write.
      *
@@ -546,12 +554,21 @@ export async function POST(request: Request): Promise<Response> {
    * have already stored into a 503 that invites the reporter to file again.
    */
   if (firstReport && report.reporterEmail) {
-    await acknowledgeAbuseReport({
+    const receipt = await acknowledgeAbuseReport({
       to: report.reporterEmail,
       reference,
       reportedUrl: report.url,
       isCopyright: report.category === 'dmca',
     })
+    /**
+     * And record whether it left, because nothing else can tell afterwards.
+     *
+     * `aglyn.com` publishes DMARC `p=reject`, so a refused receipt is turned
+     * away at SMTP and exists nowhere — not in the reporter's junk folder, not
+     * in ours. Read back off this row by the staff queue, which already shows
+     * the address to retry from. Never throws; see `recordReceiptOutcome`.
+     */
+    await recordReceiptOutcome(ref, receipt)
   }
 
   return asJson

@@ -46,6 +46,7 @@ let mockStore: Record<string, Record<string, any>> = {}
 let mockAllowed = true
 let mockResolvedHost: { $id: string; orgId: string } | null = null
 let mockWriteThrows = false
+let mockReceiptWriteThrows = false
 let mockNow = Date.UTC(2026, 7, 17, 9, 30)
 
 type Increment = { __increment: number }
@@ -72,6 +73,19 @@ const mockApplySet = (
   options?: { merge?: boolean },
 ) => {
   if (mockWriteThrows) throw new Error('firestore unavailable')
+  /**
+   * A SECOND failure switch, scoped to the receipt-outcome write alone
+   * (AGL-2400).
+   *
+   * `mockWriteThrows` cannot express this case: it fails the counter-notice's
+   * own write, which 503s before any mail is attempted, so the receipt note is
+   * never reached. The property under test is the opposite one — the notice is
+   * safely stored, the mail has been sent, and only the small note ABOUT it
+   * fails. That must stay a 200.
+   */
+  if (mockReceiptWriteThrows && 'receiptStatus' in patch) {
+    throw new Error('firestore unavailable for the receipt note')
+  }
   const base = options?.merge ? (mockStore[path] ?? {}) : {}
   const next: Record<string, any> = { ...base }
   for (const [key, value] of Object.entries(patch)) {
@@ -243,6 +257,7 @@ beforeEach(() => {
   mockStore = {}
   mockAllowed = true
   mockWriteThrows = false
+  mockReceiptWriteThrows = false
   mockNotifications = []
   mockSentEmails = []
   mockPlatformEmailMeter.length = 0
@@ -583,6 +598,79 @@ describe('the subscriber is emailed a copy of their receipt', () => {
     const response = await POST(formPost(COMPLETE))
     expect(response.status).toBe(503)
     expect(mockSentEmails).toHaveLength(0)
+  })
+})
+
+/**
+ * AGL-2400 — and whether the receipt LEFT is written down.
+ *
+ * The send is best-effort, which is right; throwing the outcome away is not.
+ * `aglyn.com` publishes DMARC `p=reject`, so a receipt Resend refuses is
+ * turned away at SMTP and exists in no folder on either side. Nobody finds it
+ * by looking, and the one person who knows — the subscriber, locked out with a
+ * §512(g) clock running — has no way to tell us. If the row does not say, then
+ * a receipt that never sent is indistinguishable from one that arrived.
+ *
+ * So each test here is about the STORED FACT rather than about the mail, and
+ * the three-way distinction is deliberate: `sent`, `failed`, and the absence
+ * of both — which means nobody measured, not that it went.
+ */
+describe('whether the receipt left is recorded on the notice', () => {
+  it('records a send the provider accepted', async () => {
+    await POST(formPost(COMPLETE))
+    expect(theNotice().receiptStatus).toBe('sent')
+    // Null, not absent. A row that answers "no reason" is distinguishable from
+    // a row that was never asked, which is the whole point of three states.
+    expect(theNotice().receiptReason).toBeNull()
+    expect(theNotice().receiptAttemptedAtMs).toBe(mockNow)
+  })
+
+  it('records the FAILURE, and its reason, when nothing could be sent', async () => {
+    // The self-host case, and the one that would otherwise vanish: an operator
+    // with no RESEND_API_KEY stores counter-notices and silently answers every
+    // one of them with nothing.
+    mockEmailConfigured = false
+    await POST(formPost(COMPLETE))
+    expect(theNotice().receiptStatus).toBe('failed')
+    // The reason travels, because it decides what a human does next: an
+    // unconfigured deployment is an env fix, a rejection is a re-send.
+    expect(theNotice().receiptReason).toBe('unconfigured')
+  })
+
+  it('does not re-stamp the receipt record on a resubmission', async () => {
+    // The `receivedAt` lesson, applied to the field beside it. Only the first
+    // submission sends, so only the first has an outcome — a later write that
+    // moved this timestamp would make a receipt look fresher than the one mail
+    // we actually attempted.
+    await POST(formPost(COMPLETE))
+    mockNow += 60 * 60_000
+    await POST(formPost(COMPLETE))
+    expect(mockSentEmails).toHaveLength(1)
+    expect(theNotice().receiptAttemptedAtMs).toBe(Date.UTC(2026, 7, 17, 9, 30))
+  })
+
+  it('still answers 200 when the receipt NOTE cannot be written', async () => {
+    // The note is the least important write in this handler and must never be
+    // the one that fails the request. The notice is already stored and the
+    // mail already sent; losing the record of it is a small blindness, while a
+    // 503 here asks a locked-out subscriber to swear a legal statement again.
+    mockReceiptWriteThrows = true
+    const response = await POST(formPost(COMPLETE))
+    expect(response.status).toBe(200)
+    expect(theNotice().status).toBe('received')
+    expect(mockSentEmails).toHaveLength(1)
+    // And the row is honestly SILENT rather than falsely reassuring.
+    expect(theNotice().receiptStatus).toBeUndefined()
+  })
+
+  it('leaves no receipt record when no mail was ever attempted', async () => {
+    // The third state, produced deliberately. A counter-notice we failed to
+    // store never reaches the send, so it must not carry a `failed` marker
+    // either — there is no submitter waiting on a receipt for a filing that
+    // does not exist.
+    mockWriteThrows = true
+    await POST(formPost(COMPLETE))
+    expect(notices()).toHaveLength(0)
   })
 })
 

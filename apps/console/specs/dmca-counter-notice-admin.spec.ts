@@ -759,6 +759,80 @@ describe('the queue shows the deadline', () => {
     expect(body.overdueRestorations).toBe(0)
   })
 
+  /*==========================================
+   * AGL-2400 — and whether the SUBSCRIBER got their copy.
+   *
+   * The tenant intake records `receiptStatus` after it tries to mail the
+   * reference. This is the only place anyone can read it. It matters because
+   * `aglyn.com` publishes DMARC `p=reject`: a refused receipt is turned away
+   * at SMTP and exists in no folder on either side, so nobody discovers the
+   * failure by looking — and the person it failed is a subscriber locked out
+   * of their own site who was told on the form that this address is *"how we
+   * will tell you what happens next"*.
+   *
+   * THREE states, and the tests below exist to stop any two collapsing. The
+   * absent one is the trap: every row filed before the intake recorded this
+   * carries nothing, and counting those as failures would put hundreds of
+   * imaginary jobs in the queue on the day it deploys — which is exactly how
+   * staff learn to scroll past the real one.
+   *=========================================*/
+  it('says the receipt failed, and why, so a human can re-send it', async () => {
+    seedDispute()
+    store[`dmcaCounterNotices/${COUNTER_ID}`].receiptStatus = 'failed'
+    store[`dmcaCounterNotices/${COUNTER_ID}`].receiptReason = 'rejected'
+    store[`dmcaCounterNotices/${COUNTER_ID}`].receiptAttemptedAtMs = nowMs - 500
+    const body = await (await get()).json()
+    expect(body.counterNotices[0].receiptStatus).toBe('failed')
+    expect(body.counterNotices[0].receiptReason).toBe('rejected')
+    expect(body.counterNotices[0].receiptAttemptedAtMs).toBe(nowMs - 500)
+    expect(body.receiptsFailed).toBe(1)
+  })
+
+  it('does not count a SENT receipt as work', async () => {
+    seedDispute()
+    store[`dmcaCounterNotices/${COUNTER_ID}`].receiptStatus = 'sent'
+    store[`dmcaCounterNotices/${COUNTER_ID}`].receiptReason = null
+    const body = await (await get()).json()
+    expect(body.counterNotices[0].receiptStatus).toBe('sent')
+    expect(body.receiptsFailed).toBe(0)
+  })
+
+  it('reports an unrecorded receipt as UNKNOWN, never as failed', async () => {
+    // The row every counter-notice filed before AGL-2400 looks like. It may
+    // well have been received; nothing measured it, and the queue must not
+    // invent either answer.
+    seedDispute()
+    const body = await (await get()).json()
+    expect(body.counterNotices[0].receiptStatus).toBeNull()
+    expect(body.receiptsFailed).toBe(0)
+  })
+
+  it('refuses to pass through a receipt status it does not recognise', async () => {
+    // A value from some future writer, or a corrupted row, must degrade to
+    // UNKNOWN rather than reaching a page whose three branches would then not
+    // be exhaustive.
+    seedDispute()
+    store[`dmcaCounterNotices/${COUNTER_ID}`].receiptStatus = 'queued'
+    const body = await (await get()).json()
+    expect(body.counterNotices[0].receiptStatus).toBeNull()
+    expect(body.receiptsFailed).toBe(0)
+  })
+
+  it('shows the failed receipt to the SUPPORT tier as well', async () => {
+    // Not redacted, on the same argument as `hasReporterContact`: "this person
+    // is holding nothing" is triage information at every tier, and a support
+    // operator who can see the failure can escalate it to someone who can see
+    // the address. Redacting it would hide the work rather than the identity.
+    seedDispute()
+    store[`dmcaCounterNotices/${COUNTER_ID}`].receiptStatus = 'failed'
+    store[`dmcaCounterNotices/${COUNTER_ID}`].receiptReason = 'unconfigured'
+    const body = await (await get('support-token')).json()
+    expect(body.identityVisible).toBe(false)
+    expect(body.counterNotices[0].subscriberEmail).toBeNull()
+    expect(body.counterNotices[0].receiptStatus).toBe('failed')
+    expect(body.counterNotices[0].receiptReason).toBe('unconfigured')
+  })
+
   it('shows the strike verdict beside a copyright report', async () => {
     seedDispute()
     store[`orgs/${ORG}/dmcaStrikes/prior-1`] = { withdrawnAt: null }

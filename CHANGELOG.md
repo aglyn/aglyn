@@ -9,6 +9,31 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.15 — 2026-08-25
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.14...v1.0.0-beta.15)
+
+### Added
+
+- **console:** the abuse queue says who is holding no receipt ([AGL-2400](https://linear.app/aglyn/issue/AGL-2400))
+- **besigner:** a screen says so when a component on it changed under the author ([AGL-1898](https://linear.app/aglyn/issue/AGL-1898))
+- **console:** a collection entry opens a detail page, not a dialog ([AGL-2498](https://linear.app/aglyn/issue/AGL-2498), [AGL-845](https://linear.app/aglyn/issue/AGL-845), [AGL-471](https://linear.app/aglyn/issue/AGL-471))
+
+### Fixed
+
+- **legal:** a receipt that never left is written down, not warned about ([AGL-2400](https://linear.app/aglyn/issue/AGL-2400))
+- **sso:** the console offers turn-on for an org the publish gate now admits ([AGL-1887](https://linear.app/aglyn/issue/AGL-1887))
+- **sso:** claiming an attested domain persists the token it shows ([AGL-1887](https://linear.app/aglyn/issue/AGL-1887))
+- **consent:** the host switch that obtains an advertising basis is declared ([AGL-1649](https://linear.app/aglyn/issue/AGL-1649), [AGL-1498](https://linear.app/aglyn/issue/AGL-1498), [AGL-1355](https://linear.app/aglyn/issue/AGL-1355), [AGL-1361](https://linear.app/aglyn/issue/AGL-1361))
+
+### Documentation
+
+- **legal:** the staff runbook said no receipt is emailed, and was wrong ([AGL-2400](https://linear.app/aglyn/issue/AGL-2400))
+- **media,besigner:** tell an author who hotlinks what their visitor's browser does ([AGL-1736](https://linear.app/aglyn/issue/AGL-1736))
+- **legal:** a host an author typed is not an Annex III row, and must not become one ([AGL-1736](https://linear.app/aglyn/issue/AGL-1736))
+- **ci:** the external-facts credential is set, and its own header said otherwise ([AGL-1921](https://linear.app/aglyn/issue/AGL-1921))
+- **monitoring:** the monitor inventory is ten, and server-errors is not one of them ([AGL-1921](https://linear.app/aglyn/issue/AGL-1921), [AGL-1843](https://linear.app/aglyn/issue/AGL-1843))
+
 ## v1.0.0-beta.14 — 2026-08-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.13...v1.0.0-beta.14)

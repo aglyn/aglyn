@@ -133,6 +133,14 @@ interface ReportDmca {
   underPenalty: boolean
 }
 
+/**
+ * Whether the submitter's emailed receipt left (AGL-2400).
+ *
+ * `null` is the third state and it means UNKNOWN — a row filed before the
+ * intake recorded this. It is NOT a failure and must never render as one.
+ */
+type ReceiptStatus = 'sent' | 'failed' | null
+
 /** One row of the queue — `rowPayload()` in /api/admin/abuse-reports. */
 interface AbuseReportRow {
   id: string
@@ -155,6 +163,10 @@ interface AbuseReportRow {
   reporterName: string | null
   /** Whether a contactable reporter exists at all. Never redacted. */
   hasReporterContact: boolean
+  /** Did the emailed receipt leave? `null` is UNKNOWN — see `receiptLine`. */
+  receiptStatus: ReceiptStatus
+  receiptReason: string | null
+  receiptAttemptedAtMs: number | null
   dmca: ReportDmca | null
   resolution: string | null
   resolvedBy: string | null
@@ -201,6 +213,10 @@ interface CounterNoticeRow {
   resolvedBy: string | null
   forwardedAtMs: number | null
   restoredAtMs: number | null
+  /** Did the emailed receipt leave? `null` is UNKNOWN — see `receiptLine`. */
+  receiptStatus: ReceiptStatus
+  receiptReason: string | null
+  receiptAttemptedAtMs: number | null
 }
 
 /**
@@ -245,6 +261,8 @@ interface ReportListing {
   counterNoticesTruncated: boolean
   awaitingForward: number
   overdueRestorations: number
+  /** Submitters on this page whose receipt is recorded as NOT sent. */
+  receiptsFailed: number
   counterNoticeStatuses: string[]
   count: number
   pageSize: number
@@ -360,6 +378,62 @@ const formatMs = (value: number | null): string =>
   typeof value === 'number' && Number.isFinite(value)
     ? new Date(value).toLocaleString()
     : 'unknown'
+
+/**
+ * What the submitter is holding (AGL-2400).
+ *
+ * The emailed receipt is the only artifact a submitter keeps — the receipt
+ * page is a tab they close — so "it did not send" is work, and this is the
+ * only place anyone can learn it. `aglyn.com` publishes DMARC `p=reject`, so a
+ * message that fails our own published policy is refused by the receiving
+ * server at SMTP rather than filed in a junk folder: it exists in no folder on
+ * either side, nobody discovers it by looking, and the submitter — who is the
+ * only person who knows something is missing — cannot tell us.
+ *
+ * Three branches for the route's three states, and they say different things
+ * on purpose:
+ *
+ *  - `failed` — actionable. Names the reason so the reader can tell an
+ *    unconfigured deployment (nothing to retry, fix the env) from a rejection
+ *    (retry, or the address is bad).
+ *  - `sent` — Resend ACCEPTED it. Not "delivered": a later bounce is not
+ *    visible from here, and the sentence must not imply it is.
+ *  - `null` — the row predates the record. Says so, rather than guessing in
+ *    either direction.
+ *
+ * The anonymous case never reaches here: with no address there was no receipt
+ * to send, and the "Who reported it" line above already says exactly that.
+ */
+function receiptLine(row: {
+  receiptStatus: ReceiptStatus
+  receiptReason: string | null
+  receiptAttemptedAtMs: number | null
+}): { text: string; failed: boolean } {
+  if (row.receiptStatus === 'failed') {
+    const reason = row.receiptReason ?? 'unknown'
+    const detail =
+      reason === 'unconfigured'
+        ? 'this deployment has no outbound mail configured, so nothing was attempted'
+        : `the provider did not accept it (${reason})`
+    return {
+      failed: true,
+      text:
+        `No receipt reached them — ${detail}. They are holding nothing: ` +
+        `no reference, no date, no evidence they filed. Send it by hand to ` +
+        `the address above. Attempted ${formatMs(row.receiptAttemptedAtMs)}.`,
+    }
+  }
+  if (row.receiptStatus === 'sent') {
+    return {
+      failed: false,
+      text: `Receipt accepted for delivery ${formatMs(row.receiptAttemptedAtMs)}. A bounce after that is not visible here.`,
+    }
+  }
+  return {
+    failed: false,
+    text: 'Whether a receipt was emailed was not recorded on this row — it predates the record. Treat it as unknown rather than as either answer.',
+  }
+}
 
 /**
  * The strike ledger for one account (AGL-2328).
@@ -489,6 +563,7 @@ function AdminAbuseReports() {
         counterNoticesTruncated: payload.counterNoticesTruncated === true,
         awaitingForward: Number(payload.awaitingForward ?? 0),
         overdueRestorations: Number(payload.overdueRestorations ?? 0),
+        receiptsFailed: Number(payload.receiptsFailed ?? 0),
         counterNoticeStatuses: Array.isArray(payload.counterNoticeStatuses)
           ? payload.counterNoticeStatuses
           : [],
@@ -866,6 +941,19 @@ function AdminAbuseReports() {
                   </Alert>
                 ) : null}
 
+                {/* AGL-2400. `warning`, not `error`: nothing is out of
+                    compliance yet, but somebody who wrote to us is holding no
+                    evidence they did, and only this screen knows. */}
+                {listing && listing.receiptsFailed > 0 ? (
+                  <Alert severity="warning">
+                    {`${listing.receiptsFailed} submitter${
+                      listing.receiptsFailed === 1
+                        ? ' on this page was'
+                        : 's on this page were'
+                    } never sent the emailed receipt. They hold no reference and no proof they filed, and there is no copy of the message anywhere for either side to find — under our published mail policy a receipt that fails is refused outright rather than landing in a junk folder. Each row below names the reason and the address to re-send from by hand.`}
+                  </Alert>
+                ) : null}
+
                 {listing?.truncated ? (
                   <Alert severity="warning">
                     {`This is the first ${listing.pageSize} reports by last update, and the counts above — including the urgent count — describe only those rows. There are more behind them. Filter by status to reach the rest.`}
@@ -1164,6 +1252,25 @@ function AdminAbuseReports() {
                             : 'Filed anonymously. Nobody left an address — this is not a redaction, there is genuinely nobody to reply to.'}
                         </Typography>
                       )}
+                      {/* Only where an address existed. With none there was no
+                          receipt to send, and the line above already says so —
+                          a second sentence about a mail nobody could receive
+                          would read as a failure. */}
+                      {report.hasReporterContact
+                        ? (() => {
+                            const receipt = receiptLine(report)
+                            return (
+                              <Typography
+                                variant="body2"
+                                color={
+                                  receipt.failed ? 'error.main' : 'text.secondary'
+                                }
+                              >
+                                {receipt.text}
+                              </Typography>
+                            )
+                          })()
+                        : null}
                     </Stack>
 
                     {report.dmca ? (
@@ -1543,6 +1650,23 @@ function AdminAbuseReports() {
                           }
                         </Typography>
                       )}
+                      {/* AGL-2400. Unconditional here: §512(g)(3) requires an
+                          address on every counter-notice, so unlike a report
+                          there is no anonymous case and a receipt was always
+                          owed. */}
+                      {(() => {
+                        const receipt = receiptLine(notice)
+                        return (
+                          <Typography
+                            variant="body2"
+                            color={
+                              receipt.failed ? 'error.main' : 'text.secondary'
+                            }
+                          >
+                            {receipt.text}
+                          </Typography>
+                        )
+                      })()}
                       {notice.noticeReference ? (
                         <Typography variant="caption" color="text.secondary">
                           {`Answering notice ${notice.noticeReference}. Restoring will withdraw the strike that notice earned.`}

@@ -346,6 +346,58 @@ describe('the reporter’s identity is a super-tier fact', () => {
     expect(JSON.stringify(body)).not.toContain('Dana Reyes')
   })
 
+  /**
+   * AGL-2400 — and whether the reporter got their copy.
+   *
+   * `receiptStatus` is written by the tenant intake after it tries to mail the
+   * reference, and this route is the only reader. It has to survive the
+   * redaction tier for the same reason `hasReporterContact` does: "this person
+   * is holding nothing" is triage information at every tier, and a support
+   * operator who can see the failure can escalate it to someone who can see
+   * the address. Redacting it would hide the WORK rather than the identity.
+   */
+  it('shows a failed receipt to the support tier, address redacted or not', async () => {
+    state.reports[REPORT_ID].receiptStatus = 'failed'
+    state.reports[REPORT_ID].receiptReason = 'rejected'
+    state.reports[REPORT_ID].receiptAttemptedAtMs = 4000
+    asSupport()
+    const body = await (await get()).json()
+    const phishing = body.reports.find((row: any) => row.id === REPORT_ID)
+    expect(body.identityVisible).toBe(false)
+    expect(phishing.reporterEmail).toBeNull()
+    // The failure and its reason survive the redaction; the address does not.
+    expect(phishing.receiptStatus).toBe('failed')
+    expect(phishing.receiptReason).toBe('rejected')
+    expect(phishing.receiptAttemptedAtMs).toBe(4000)
+    expect(body.receiptsFailed).toBe(1)
+  })
+
+  it('reports an unrecorded receipt as UNKNOWN, and counts it as nothing', async () => {
+    // Both fixture rows predate the record, which is what every report filed
+    // before AGL-2400 looks like. They may well have been acknowledged —
+    // nothing measured it — so the queue must invent neither answer, and above
+    // all must not open the day this deploys with a page of imaginary work.
+    asSuper()
+    const body = await (await get()).json()
+    for (const row of body.reports) expect(row.receiptStatus).toBeNull()
+    expect(body.receiptsFailed).toBe(0)
+  })
+
+  it('does not count a SENT receipt, or a status it does not recognise', async () => {
+    state.reports[REPORT_ID].receiptStatus = 'sent'
+    // A value from a future writer, or a corrupted row, degrades to UNKNOWN
+    // rather than reaching a page whose three branches would then not be
+    // exhaustive.
+    state.reports[DMCA_ID].receiptStatus = 'queued'
+    asSuper()
+    const body = await (await get()).json()
+    const phishing = body.reports.find((row: any) => row.id === REPORT_ID)
+    const dmca = body.reports.find((row: any) => row.id === DMCA_ID)
+    expect(phishing.receiptStatus).toBe('sent')
+    expect(dmca.receiptStatus).toBeNull()
+    expect(body.receiptsFailed).toBe(0)
+  })
+
   it('never redacts what the queue is actually triaged on', async () => {
     asSupport()
     const body = await (await get()).json()

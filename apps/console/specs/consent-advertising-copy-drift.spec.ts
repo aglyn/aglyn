@@ -168,6 +168,14 @@ const SURFACES: readonly string[] = [
   // `platform-consent-default.ts` carried a live measurement of aglyn.com's
   // own ad signals (`gcs=G111`, ad storage granted) as current fact.
   'libs/aglyn/src/lib/app-utils/platform-consent-default.ts',
+  // The PERSISTED schema. `consent.advertising` went undeclared on
+  // `AglynHost` for four days while the console wrote it and the tenant read
+  // it (`consent-host-schema-coverage.spec.ts` is the guard for that half);
+  // declaring it brought a description of the rule with it, and a description
+  // of the rule is a surface. It is also the first thing anyone extending the
+  // category model reads, which is the audience least able to tell a stale
+  // sentence from a current one.
+  'libs/aglyn/src/lib/foundation/definitions/platform.types.ts',
 ]
 
 /**

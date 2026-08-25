@@ -33,6 +33,16 @@ your reviewers directly:
   authoritative one. The table on [Trust & security](/trust) is the engineering
   view of the same set and may lag it.
 
+**One thing that list does not contain, stated here so a reviewer does not have
+to infer it.** It names the parties *Aglyn* engages. It does not name a host
+*your own authors* point at — a hotlinked image, or a `url(...)` in a
+stylesheet one of them wrote. Those requests go from your visitor's browser to
+that host directly and Aglyn does not proxy them, so the host is a recipient of
+your visitors' data that only you can enumerate and disclose. It is a property
+of the builder rather than an omission from the register, and it is written up
+in full at
+[Trust & security](/trust#hosts-our-customers-choose-which-are-not-on-that-list).
+
 Neither of those two is acceptance-pinned, so neither carries a version bump
 your people have to re-accept when it changes. The **Terms of Service** and the
 **Privacy Policy** are the opposite: each acceptance is pinned to a version and

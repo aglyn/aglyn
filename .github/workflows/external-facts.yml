@@ -38,12 +38,15 @@ name: External facts
 #
 # ## Configuration
 #
-# - secret LINEAR_API_KEY — ⚠️ NOT SET AS OF 2026-08-24, so this workflow will
-#   fail on the guard step below until Zach creates it. That is deliberate and
-#   it is not a bug to route around: `check:legal-drift` spent its first day
-#   wired, scheduled and inert waiting on an unset repo variable (AGL-2379),
-#   green the whole time because a missing credential skipped its step. A
-#   check nobody has enabled must LOOK broken, not clean.
+# - secret LINEAR_API_KEY — SET 2026-08-24 06:47 UTC; the 09:01 scheduled run
+#   read the board and succeeded, so this workflow is live rather than inert.
+#   (This note said "NOT SET" for the first hours of that day. Re-read
+#   `gh secret list` before believing it either way.)
+#   The refuse-to-no-op guard below stays regardless, and is not a bug to route
+#   around: `check:legal-drift` spent its first day wired, scheduled and inert
+#   waiting on an unset repo variable (AGL-2379), green the whole time because
+#   a missing credential skipped its step. A check nobody has enabled must LOOK
+#   broken, not clean.
 #     Linear → Settings → Security & access → Personal API keys.
 #     `gh secret set LINEAR_API_KEY`
 #   Read scope is enough for the report; the comment sink needs write.

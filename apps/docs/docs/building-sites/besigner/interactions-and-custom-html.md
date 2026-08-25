@@ -126,6 +126,17 @@ model:
 - **Embed mode** for third-party widgets: the raw snippet runs inside a
   **sandboxed iframe** with scripts allowed but no access to your site,
   cookies, or visitor data. Set the iframe height to fit the widget.
+- **A `url(...)` still reaches out, and that is on you.** Sanitizing stops
+  your CSS from *executing*; it does not stop it from *fetching*. Only
+  `https:`, `data:` and `blob:` addresses are accepted — anything else,
+  `http:` included, is rewritten to `url(about:invalid)`, which loads nothing
+  and leaves the rest of the rule intact. **Which `https` host you name is
+  your choice, and we do not proxy it**: your visitor's browser contacts that
+  host directly, so it learns their IP address, user-agent and the page they
+  are on. The same rule covers a `style` attribute inside your markup and the
+  Styles panel's Custom CSS. Hosts you reference this way are yours to name in
+  your own privacy notice — see
+  [Trust & security](/trust#hosts-our-customers-choose-which-are-not-on-that-list).
 
 Prefer first-party blocks where one exists — embeds can't participate in
 theming or interactions.

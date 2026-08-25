@@ -91,8 +91,11 @@ import {
   firebaseAdmin,
   notifyStaff,
 } from '@aglyn/tenant-data-admin'
-import { FieldValue } from 'firebase-admin/firestore'
-import { acknowledgeCounterNotice } from '../_legal-intake/acknowledge'
+import { type DocumentReference, FieldValue } from 'firebase-admin/firestore'
+import {
+  acknowledgeCounterNotice,
+  recordReceiptOutcome,
+} from '../_legal-intake/acknowledge'
 import {
   clientIp,
   contactHtml,
@@ -403,9 +406,16 @@ export async function POST(request: Request): Promise<Response> {
   const reference = `CN-${noticeId.slice(0, 10).toUpperCase()}`
 
   let firstSubmission = false
+  /**
+   * Hoisted out of the `try` so the receipt below can write its outcome back
+   * onto this same row (AGL-2400) — but ASSIGNED inside it, so a Firestore
+   * handle that throws on construction is still caught and still answers 503
+   * rather than escaping as a 500.
+   */
+  let ref: DocumentReference = null
   try {
     const firestore = firebaseAdmin.app().firestore()
-    const ref = firestore
+    ref = firestore
       .collection(Aglyn.DMCA_COUNTER_NOTICE_COLLECTION)
       .doc(noticeId)
     await firestore.runTransaction(async (tx) => {
@@ -520,11 +530,23 @@ export async function POST(request: Request): Promise<Response> {
      * `{sent:false}` on a deployment with no mail configured, so the receipt
      * page — which is still the primary artifact — never depends on it.
      */
-    await acknowledgeCounterNotice({
+    const receipt = await acknowledgeCounterNotice({
       to: notice.email,
       reference,
       reportedUrl: notice.url,
     })
+    /**
+     * And record whether it left, because nothing else can tell afterwards.
+     *
+     * Sharper here than on the abuse intake: this form's email field is
+     * labelled *"How we will tell you what happens next"*, so a receipt that
+     * silently never sent breaks a promise made on the page. Under DMARC
+     * `p=reject` the failure leaves no trace either side can find, and the
+     * person it fails is a subscriber locked out of their own site while a
+     * §512(g) clock runs. Read back off this row by the staff queue, where the
+     * address to retry from is already on screen.
+     */
+    await recordReceiptOutcome(ref, receipt)
   }
 
   return asJson

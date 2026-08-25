@@ -50,6 +50,13 @@ interface DomainClaim {
    * dropped (it is live), never counted as verified (nobody checked).
    */
   attested: boolean
+  /**
+   * What `publishSsoDomains` will accept for this domain — DNS-verified, or
+   * carrying a staff attestation (AGL-1887 part 2). Sent by the server rather
+   * than derived here, because the gate is the server's rule and a copy of it
+   * on the client is a copy that drifts.
+   */
+  publishable: boolean
   recordHost: string
   recordValue: string
   lastRecords: string[] | null
@@ -437,7 +444,6 @@ export function OrgSsoCard() {
     )
   }
 
-  const verifiedDomains = claims.filter((claim) => claim.verified)
   // Attested domains govern sign-in today even though no DNS record backs
   // them, so they count for "can this org be live" — otherwise an already-live
   // org is told to verify a domain before turning on something already on.
@@ -446,22 +452,33 @@ export function OrgSsoCard() {
   )
   const isActive = sso.status === 'active'
   /**
-   * What `activate` will actually publish (AGL-1375).
+   * What `activate` will actually publish (AGL-1375, AGL-1887).
    *
-   * `publishSsoDomains` re-reads each claim document and skips anything
-   * without `verified === true`, so a domain that is merely attested
-   * publishes nothing and the route answers 400 "No verified domains to
-   * publish". `governedDomains` is the wider set — right for "is this org
-   * live", wrong for "will the server accept this" — and gating the button on
-   * it offered an action the server refuses.
+   * `publishSsoDomains` re-reads each claim document and admits on two
+   * positive markers: `verified === true`, or a staff attestation. The server
+   * reports that verdict per domain as `publishable`, and this gate is exactly
+   * it — not a client-side re-derivation, which is what would drift.
    *
-   * The consequence is not a failed click. Turning off succeeds, turning back
-   * on does not, so an org whose domains are only attested cannot restore SSO
-   * from here at all: a one-way door with the button on the wrong side of it.
+   * Part 1 gated on `verifiedDomains` because at the time that WAS the
+   * server's rule. Part 2 widened the server, and leaving this on `verified`
+   * would have kept the door shut from the console for the very orgs part 2
+   * unstranded: attested, publishable, and still looking at a disabled button.
+   *
+   * `governedDomains` stays the wider set — right for "is this org live",
+   * wrong for "will the server accept this".
    */
-  const canActivate = verifiedDomains.length > 0
-  /** Live, but on an attestation no DNS record backs — the trap's precondition. */
-  const attestedOnly = Boolean(governedDomains.length) && !verifiedDomains.length
+  const canActivate = claims.some((claim) => claim.publishable)
+  /**
+   * Governed today, and nothing here can be re-published — the one-way door's
+   * actual precondition (AGL-1375).
+   *
+   * NOT "attested" any more: an attestation is now a way THROUGH the door. What
+   * strands an org is having no claim document at all, which is the shape every
+   * pre-self-serve org is in until staff attest it. Keyed on `canActivate` so
+   * this and the button can never disagree about which side of the door the org
+   * is on.
+   */
+  const cannotRestore = Boolean(governedDomains.length) && !canActivate
 
   /**
    * What the SERVER has stored, not what is ticked on screen. An unsaved
@@ -608,9 +625,13 @@ export function OrgSsoCard() {
                   variant="outlined"
                   disabled={busy || !canManage}
                   onClick={() =>
-                    // An attested domain has no claim document yet, so there is
-                    // no token to check against — issue one first, which is
-                    // what surfaces the TXT record to publish.
+                    // An attested domain has no TOKEN to check against — the
+                    // fallback shape has no claim document at all, and the
+                    // attestation `attestSsoDomain` writes deliberately does
+                    // not mint one. Either way `add-domain` is the right first
+                    // step: `issueDomainClaim` persists a token onto whichever
+                    // of the two it finds and surfaces the TXT record to
+                    // publish, without disturbing the attestation.
                     claim.attested
                       ? void run(
                           { action: 'add-domain', domain: claim.domain },
@@ -777,7 +798,7 @@ export function OrgSsoCard() {
             <Alert severity="info">
               {'Verify at least one domain before turning single sign-on on.'}
             </Alert>
-          ) : attestedOnly && isActive ? (
+          ) : cannotRestore && isActive ? (
             // The one-way door, stated before it is opened rather than after
             // (AGL-1375). "Add DNS proof when you get the chance" was true of
             // everything except the button sitting next to it.
@@ -787,7 +808,7 @@ export function OrgSsoCard() {
                 'permanent for now: turning it back on needs a domain we have ' +
                 'seen a DNS record for. Add that proof above first.'}
             </Alert>
-          ) : attestedOnly ? (
+          ) : cannotRestore ? (
             <Alert severity="warning">
               {'Single sign-on cannot be turned on until one of your domains ' +
                 'has DNS proof. Use “Set up DNS proof” above, publish the ' +
@@ -811,10 +832,10 @@ export function OrgSsoCard() {
               onClick={async () => {
                 try {
                   await confirm({
-                    title: attestedOnly
+                    title: cannotRestore
                       ? 'Turn single sign-on off? You will not be able to turn it back on'
                       : 'Turn single sign-on off?',
-                    description: attestedOnly
+                    description: cannotRestore
                       ? // The old copy — "you can turn it back on" — was the
                         // single most misleading sentence on the card for
                         // exactly the orgs this applies to (AGL-1375). Turning

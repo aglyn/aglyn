@@ -161,6 +161,13 @@ jest.mock('@aglyn/aglyn', () => ({
   // hide the refusal or invent one — an unfaithful fake fabricates false
   // greens and false reds alike. It is a pure function over a string, so
   // there is nothing to fake.
+  // Real too (AGL-1898), and for the same reason: it is a pure walk over a
+  // node map, and it is what decides whether a component snapshot is this
+  // page's business. A stub answering a constant would make the propagation
+  // notice either always fire or never.
+  collectReferencedComponentIds: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/compose-reusable-components',
+  ).collectReferencedComponentIds,
   reservedScreenRouteMessage: jest.requireActual(
     '@aglyn/aglyn/app-utils/screen-route',
   ).reservedScreenRouteMessage,
@@ -229,6 +236,23 @@ jest.mock('@aglyn/besigner-ui', () => ({
     jest
       .requireActual('../../../libs/besigner/feature/designer/src/lib/utils/docs-help')
       .besignerDocsUrl(...args),
+  // Real hook and real copy (AGL-1898), for the same reason as the URL
+  // builder above: it reads the definitions listener the page already has,
+  // adds no reads of its own, and a stub would let the page pass it
+  // anything — including the screen's nodes without the layout's, which is
+  // the case the notice exists for.
+  useComponentPropagationNotice: (...args: unknown[]) =>
+    jest
+      .requireActual(
+        '../../../libs/besigner/feature/designer/src/lib/hooks/use-component-propagation-notice',
+      )
+      .useComponentPropagationNotice(...args),
+  describeComponentPropagation: (...args: unknown[]): string =>
+    jest
+      .requireActual(
+        '../../../libs/besigner/feature/designer/src/lib/hooks/use-component-propagation-notice',
+      )
+      .describeComponentPropagation(...args),
 }))
 jest.mock('@aglyn/shared-ui-theme', () => ({
   getGoogleFontsUrl: () => undefined,
