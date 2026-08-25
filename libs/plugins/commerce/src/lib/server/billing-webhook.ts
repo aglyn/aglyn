@@ -3805,7 +3805,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                   timeline: CommerceModel.appendOrderEvent(
                     lifted,
                     'paid-after-cancel',
-                    'This cancelled order was paid anyway — the payment link ' +
+                    'This canceled order was paid anyway — the payment link ' +
                       'was still live. The money is in Stripe and this order ' +
                       'records no sale; refund it in Stripe, or reconcile it ' +
                       'by hand.',
@@ -3891,9 +3891,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         if (paidAfterCancel && hostId) {
           await notifyHostManagers(String(hostId), {
             type: 'content.order',
-            title: 'A cancelled order was paid',
+            title: 'A canceled order was paid',
             body:
-              `Order ${orderId} was cancelled, but its payment link was still ` +
+              `Order ${orderId} was canceled, but its payment link was still ` +
               'live and has been paid. The money is in Stripe and no sale was ' +
               'recorded — refund it in Stripe or reconcile it by hand.',
             link: `/${hostId}/orders`,

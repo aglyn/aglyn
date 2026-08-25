@@ -293,7 +293,7 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
         console.error(error)
         enqueueSnackbar(
           'The request did not complete, so it is NOT known whether the ' +
-            'order was cancelled. Reopen the order to check — retrying is ' +
+            'order was canceled. Reopen the order to check — retrying is ' +
             'safe, the server cancels once.',
           { variant: 'error', allowDuplicate: true },
         )
@@ -306,7 +306,7 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
           // refunded) while this dialog was open. The route's message names
           // the state that refused it, and nothing was written.
           enqueueSnackbar(
-            payload?.error ?? 'This order can no longer be cancelled',
+            payload?.error ?? 'This order can no longer be canceled',
             {
               variant: 'warning',
               allowDuplicate: true,
@@ -342,10 +342,10 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
       const units = Number(payload?.units ?? 0)
       enqueueSnackbar(
         payload?.alreadyCancelled
-          ? 'Order was already cancelled'
+          ? 'Order was already canceled'
           : units > 0
-            ? `Order cancelled — ${units} ${units === 1 ? 'unit' : 'units'} returned to stock`
-            : 'Order cancelled',
+            ? `Order canceled — ${units} ${units === 1 ? 'unit' : 'units'} returned to stock`
+            : 'Order canceled',
         { variant: 'success', persist: false },
       )
     } finally {
@@ -399,7 +399,7 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
           ? `Refunds ${usd(scopedCents)} for ${(lineItemIds ?? [])
               .map((index) => lines[index]?.name ?? `line ${index}`)
               .join(', ')} through Stripe, and withdraws that line's ` +
-            'downloads, licence keys and gated content. A licence key already ' +
+            'downloads, license keys and gated content. A license key already ' +
             'sent to the buyer is retired, not returned to your pool — they ' +
             'still hold the string, so reissuing it would give two people one ' +
             'working key.'

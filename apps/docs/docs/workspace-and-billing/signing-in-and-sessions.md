@@ -193,7 +193,7 @@ someone else has access, sign out and then
 changed in that hour as suspect. The row stays in the list, marked with when it
 was signed out, rather than disappearing.
 
-**If you do not recognise a sign-in**, treat it as an account compromise: sign
+**If you do not recognize a sign-in**, treat it as an account compromise: sign
 it out, [reset your password](#resetting-your-password), and add a passkey from
 the same Security section.
 

@@ -108,7 +108,7 @@ idempotent. Handlers run sequentially with no error isolation, deliberately:
 isolating them would trade a duplicated side effect for a dropped one, which
 is the worse trade on a money path.
 
-A handler may return `{ claimed: true }` to tell the platform it **recognised**
+A handler may return `{ claimed: true }` to tell the platform it **recognized**
 the event as its own — it found the order, the purchase, the booking. Returning
 nothing keeps the previous meaning ("not mine"), so existing handlers need no
 change. Every registered handler still runs after one has claimed; the claim is

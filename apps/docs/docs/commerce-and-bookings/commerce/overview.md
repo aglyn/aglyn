@@ -85,11 +85,11 @@ the shelf in front of the cashier is the truth.
 the answer to "the shelf says four and the console says six, what happened?"
 
 Five things write to it and they all appear in one list, newest first: a paid
-sale, a refunded return, a cancelled order putting stock back, a point-of-sale
+sale, a refunded return, a canceled order putting stock back, a point-of-sale
 sale at the register, and any hand adjustment you make from the products hub.
 Each row carries **when**, **which product** (and variant, when the product has
 options), **how much the count changed**, the **reason** — Sale, Refund return,
-Restock, Correction, Damaged, Order cancelled — and the **source** that wrote
+Restock, Correction, Damaged, Order canceled — and the **source** that wrote
 it. Filter by product or by reason to narrow it.
 
 The list holds the most recent 100 movements. Filtering happens inside that
@@ -225,24 +225,24 @@ means reading the caption, not assuming the big number is what was charged.
 
 ### Statuses and channels {#order-statuses}
 
-Statuses render as coloured pills, and the colour is part of the message:
+Statuses render as colored pills, and the color is part of the message:
 
-| Status | Pill | Colour |
+| Status | Pill | Color |
 | --- | --- | --- |
 | `pending` | **Pending** | Neutral grey — an unpaid order is not a problem, it is not money yet. |
 | `paid` | **Paid** | Green. |
 | `partially_fulfilled` | **Partly fulfilled** | Amber — something is still owed to the buyer. |
 | `fulfilled` | **Fulfilled** | Blue. |
 | `delivered` | **Delivered** | Blue. |
-| `cancelled` | **Cancelled** | Neutral grey. |
+| `cancelled` | **Canceled** | Neutral grey. |
 | `refunded` | **Refunded** | Red. |
 
 The left column is the value in the API and the CSV; the middle one is what the
 console shows. They differ in one place — `partially_fulfilled` displays as **Partly
 fulfilled** — so a filter or a script written against the label will miss it.
 
-Red and grey are reserved deliberately. Cancelled and refunded are the states worth
-spotting in a scan of fifty rows, and colouring pending as a warning would spend that
+Red and grey are reserved deliberately. Canceled and refunded are the states worth
+spotting in a scan of fifty rows, and coloring pending as a warning would spend that
 attention on orders that are merely young.
 
 Four channels say where the sale came through:
@@ -266,9 +266,9 @@ itself is not gated**: a list of your own orders is not a paid feature, and ever
 filter, the CSV export and draft orders work on any plan that can sell at all.
 :::
 
-Two behaviours here look like bugs and are not:
+Two behaviors here look like bugs and are not:
 
-- **Pending and cancelled orders are left out of the tiles.** Neither is money: one
+- **Pending and canceled orders are left out of the tiles.** Neither is money: one
   has not been paid and the other never will be. So the tile count can be lower than
   the number of rows you are looking at. Refunds are handled differently — they are
   **subtracted** rather than dropped, so a refund inside the window pulls revenue and
@@ -278,8 +278,8 @@ Two behaviours here look like bugs and are not:
   that isn't true. The same rule governs the
   [traffic delta in analytics](../../marketing-and-automation/analytics/overview.md#traffic-delta).
 
-:::caution The tiles summarise the loaded window, not your books
-The screen loads a bounded page of recent orders — 200 — and the tiles summarise what
+:::caution The tiles summarize the loaded window, not your books
+The screen loads a bounded page of recent orders — 200 — and the tiles summarize what
 is loaded. A store past that many orders in 60 days is reading a slice, at the same
 bound the commerce analytics card has always had. Use **Export CSV** and your Stripe
 payouts to reconcile; use the tiles to see which way the last month went.

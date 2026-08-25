@@ -168,7 +168,7 @@ export function CloseAccountCard({ user, hasPassword }: CloseAccountCardProps) {
         code === 'auth/wrong-password' || code === 'auth/invalid-credential'
           ? 'That password is not right.'
           : code === 'auth/popup-closed-by-user'
-            ? 'Confirmation cancelled — the account was not closed.'
+            ? 'Confirmation canceled — the account was not closed.'
             : `Could not confirm it is you: ${code ?? 'unknown error'}`,
         { variant: 'error' },
       )

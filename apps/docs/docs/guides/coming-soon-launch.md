@@ -54,7 +54,7 @@ and set the Form's **Success message** to something that confirms the signup
 ("Thanks — we'll email you when we open"). The
 [Forms & lead capture](../content-and-data/forms/overview.md) page covers the form
 elements and every field property in full; the only thing that matters here is that
-you give the field a **Field name** you'll recognise later, such as `email`.
+you give the field a **Field name** you'll recognize later, such as `email`.
 
 ## 2. Make it the home page
 
@@ -68,7 +68,7 @@ and its version history are all worth keeping, and you'll want it back in step 5
 
 1. Open your **current** home screen (**Sites** → your site → **Screens** → click the
    row). In the **Publishing** card, change **Slug** from `/` to something you'll
-   recognise — `home` works — and choose **Update route**. The screen stays published,
+   recognize — `home` works — and choose **Update route**. The screen stays published,
    just at `/home` now.
 2. Open the **Coming soon** screen. Change its **Slug** to `/` and choose
    **Update route** (or **Publish**, if you haven't published it yet).
@@ -129,7 +129,7 @@ your sitemap.
 
 :::caution `noindex` is a request, not a lock
 Unlisted and the site-wide switch ask search engines not to list a page. Well-behaved
-crawlers honour that; nothing stops a person with the URL from opening it, and nothing
+crawlers honor that; nothing stops a person with the URL from opening it, and nothing
 stops a badly-behaved crawler either. If a page must be genuinely inaccessible, protect
 it properly — see [Site protection](../building-sites/site-protection/overview.md) and
 [Password-protect a screen](../building-sites/site-protection/password-a-screen.md).

@@ -232,7 +232,7 @@ export function ThemeSourceCard(props: {
             ) : (
               <>
                 {'This site goes back to the platform’s default appearance. ' +
-                  'Your colours, typography and component styles are kept so ' +
+                  'Your colors, typography and component styles are kept so ' +
                   'you can bring them back.'}
                 {installed ? (
                   <Alert severity="info" sx={{ marginTop: 2 }}>

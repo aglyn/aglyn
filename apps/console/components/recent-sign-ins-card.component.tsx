@@ -220,7 +220,7 @@ export function RecentSignInsCard() {
       ) : (
         <>
           <Typography variant="body2" color="text.secondary" gutterBottom>
-            {'If you do not recognise one of these, sign it out and change ' +
+            {'If you do not recognize one of these, sign it out and change ' +
               'your password. Signing out one device signs out every device, ' +
               'including this one.'}
           </Typography>

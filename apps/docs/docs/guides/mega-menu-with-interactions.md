@@ -40,7 +40,7 @@ don't have a layout yet, see
 1. In the Besigner, select your header's nav bar (the **App Bar** or its
    **Toolbar**) so the new element lands inside it.
 2. Open **Add Element** and expand the **Navigation** group.
-3. Insert **Mega Menu**. It arrives as a nav item labelled *Menu* with a
+3. Insert **Mega Menu**. It arrives as a nav item labeled *Menu* with a
    starter panel of three link columns.
 
 ![The Navigation group in the element picker — Dropdown Menu, Dropdown Panel, Mega Menu, Drawer, Menu Button, and Mobile Nav](/img/guides/mega-menu-elements-navigation.png)

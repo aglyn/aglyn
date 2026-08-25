@@ -280,7 +280,7 @@ console.example.com {
 
 A customer's own custom domain works the same way — point it at your proxy and
 route it to the tenant container. The runtime treats any hostname it does not
-recognise as a candidate custom domain and looks it up.
+recognize as a candidate custom domain and looks it up.
 
 ## Renaming the product {#platform-brand}
 
@@ -305,7 +305,7 @@ Replace them in your Docker build context.
 Every variable on this page whose name starts with `NEXT_PUBLIC_` is compiled
 into the client bundles when the image is built. Changing one needs
 `docker compose build`, not a restart. A restart will appear to do nothing,
-which is the failure mode worth recognising.
+which is the failure mode worth recognizing.
 :::
 
 This is the **deployment-level** rename, and it is orthogonal to the per-organization
@@ -492,7 +492,7 @@ Two things the grammar cannot do, both of which fail quietly rather than
 loudly: **a description may not contain a comma** (the comma separates
 entries, so the text after it is parsed as a new entry, found to have no
 origin, and dropped), and a path that does not begin with `/` is ignored in
-favour of `/api/health` rather than pasted onto the origin.
+favor of `/api/health` rather than pasted onto the origin.
 
 Whatever you configure, the page reports a service as operational **only**
 when it answers 200 with the platform's own health body. A reply it cannot

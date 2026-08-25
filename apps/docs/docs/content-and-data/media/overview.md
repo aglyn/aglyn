@@ -137,7 +137,7 @@ A tag is tidied **as you add it**, not quietly at save time:
 That matters for finding things again. The library's filter chips and the `tag:` search
 prefix match the **stored** tag, so a tag that carried a trailing space used to become a
 tag no chip could ever match — a file you tagged and then could not find by that tag.
-Normalising at entry is what makes the chip you see and the tag that gets stored the
+Normalizing at entry is what makes the chip you see and the tag that gets stored the
 same thing. The exact caps are in
 [Tag limits](#tag-limits).
 

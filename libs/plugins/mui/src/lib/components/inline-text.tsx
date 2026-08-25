@@ -192,7 +192,7 @@ export const schema: Aglyn.ComponentSchema<InlineTextProps> = {
     },
     {
       name: 'tone',
-      label: 'Colour',
+      label: 'Color',
       description:
         "Palette token for this run. Two-tone text is a muted sentence " +
         'with one run set to Primary (or Accent) — theme tokens, so it ' +

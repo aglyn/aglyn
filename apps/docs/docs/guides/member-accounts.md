@@ -134,7 +134,7 @@ Click a member to open the **member drawer**:
 - **Profile** — email, display name, and join date, with a **Suspended** chip
   when applicable.
 - **Lifetime purchases** — charged order totals minus refunds (pending and
-  cancelled orders excluded).
+  canceled orders excluded).
 - **Orders** — the member's payment history, newest first: order number,
   status, total, date, any refunded amount, and the Stripe payment reference.
   Needs the editor or admin role on the site.

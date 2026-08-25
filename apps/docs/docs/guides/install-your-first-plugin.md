@@ -43,7 +43,7 @@ site you run — the thing agencies and multi-site teams notice first.
 
 Its own navigation panel lists:
 
-- **Browse All** — the catalogue.
+- **Browse All** — the catalog.
 - **Installed** — what you already have, with upgrade and uninstall.
 - and, once you publish, the seller sections: **Upload / Publish**, **Publisher
   Profile**, **Listings**, **Payouts**, **Sales**.
@@ -58,7 +58,7 @@ one, you're in the wrong section. [More on the split](../developers/plugins/over
 ## Step 2 — Find something {#step-2-browse}
 
 **Browse All** is a grid of listing cards you can search, filter and sort. Cards are a
-catalogue only — clicking one takes you to its **detail page**, which is the only
+catalog only — clicking one takes you to its **detail page**, which is the only
 place an install can happen. You cannot install by accident from the grid.
 
 Two things on a card are worth reading before you click into one:
@@ -79,7 +79,7 @@ On the detail page, read three things before anything else:
    *screens* you rework in Besigner, a *theme*, or **a new empty dataset with its
    fields already defined** for a dataset schema, which is the reminder that **records
    never travel**: you get the shape, not somebody's data. The rows after it cover
-   where it lands (step 4), review, licence and updates. See
+   where it lands (step 4), review, license and updates. See
    [What's included](../developers/plugins/overview.md#whats-included) for every row it
    can produce.
 2. **The badges.** They make two different claims, and it's worth knowing which is
@@ -122,7 +122,7 @@ the page — *Installs org-wide, covering sites you add later*, or *Installs per
 new sites are not covered automatically*. The helper text under the **Install to**
 dropdown is the same fact with your own numbers in it: for the site-scoped case it
 reads "Installs to all 4 sites. New sites won't get it automatically." Two wordings,
-one behaviour — if they ever seem to disagree, the helper text is the one counting your
+one behavior — if they ever seem to disagree, the helper text is the one counting your
 actual sites.
 
 "Selected sites" only appears when there's a choice to make, so on a one-site
@@ -194,7 +194,7 @@ field what the publisher's new version would overwrite before it touches your ed
 ## What to do next
 
 - **Running several client sites?** [Run an agency workspace](./run-an-agency-workspace.md)
-  covers standardising installs across sites, and automating the rest.
+  covers standardizing installs across sites, and automating the rest.
 - **Want to build one?** [Build your first plugin](../developers/plugins/guides/first-plugin.md)
   is the developer half of this page — same product, written for someone who codes.
 - **Selling one?** [Publish a plugin](../developers/plugins/publish-a-plugin.md) and

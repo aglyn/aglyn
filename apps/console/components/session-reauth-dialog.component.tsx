@@ -152,7 +152,7 @@ function signInErrorText(code: string | undefined): string {
     return 'Too many attempts — wait a moment and try again.'
   }
   if (code === 'auth/popup-closed-by-user') {
-    return 'Sign-in cancelled.'
+    return 'Sign-in canceled.'
   }
   return `Sign-in failed: ${code ?? 'unknown error'}`
 }

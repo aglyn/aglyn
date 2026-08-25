@@ -34,7 +34,7 @@ The **console** is where you manage a site. Here's what each part of the chrome 
   full paginated feed.
 - **Account menu** — your avatar opens it. The header shows your name and email with a
   gear to [Manage Account](../workspace-and-billing/manage-account.md), and the first row
-  below repeats that destination as a labelled **Manage account** — a gear is not
+  below repeats that destination as a labeled **Manage account** — a gear is not
   discoverable as a name. Then come **Manage Team**, **Billing** and **Support**, which
   appear only on a page that names a workspace and only for members whose role can reach
   those pages; **Staff console** (Aglyn staff only); a **Documentation** link that opens

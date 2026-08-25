@@ -433,7 +433,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                           {'Stated, not netted. A row keeps only its latest ' +
                             'refund stamp, so two refunds in different ' +
                             'quarters cannot be split apart from the row — ' +
-                            'applying these to the return is a judgement, ' +
+                            'applying these to the return is a judgment, ' +
                             'not a computation.'}
                         </Typography>
                         {[

@@ -745,7 +745,7 @@ export const schema: Aglyn.ComponentSchema<ProductGridProps> = {
   pluginId: BUNDLE_ID,
   displayName: 'Product grid',
   description:
-    'Your catalogue as a grid, with optional search, category chips, sort and paging.',
+    'Your catalog as a grid, with optional search, category chips, sort and paging.',
   category: Aglyn.ComponentCategory.COMMERCE,
   icon: { path: mdiViewGridOutline.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },

@@ -89,7 +89,7 @@ Every element on the canvas is a node in a tree. The hierarchy panel lets you:
 - See which nodes are layout-only vs. screen content.
 - Read how deeply a node is nested by counting the guide lines to the left of its name —
   one per level, the same weight at every level. The branch holding the current selection
-  draws its guides in the accent colour.
+  draws its guides in the accent color.
 - **Copy** a node and its children and **paste** them elsewhere — including into a different
   screen, layout or component. See [Copy & paste elements](copy-paste.md).
 

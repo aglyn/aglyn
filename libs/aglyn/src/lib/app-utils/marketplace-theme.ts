@@ -230,7 +230,7 @@ function validateScheme(
   if (!colors.primary?.main) {
     errors.push({
       path: `${at}.primary.main`,
-      message: `The ${scheme} scheme has no primary colour.`,
+      message: `The ${scheme} scheme has no primary color.`,
     })
   }
 
@@ -556,7 +556,7 @@ export interface ThemeOverrideEntry {
 }
 
 const SEGMENT_LABELS: Record<string, string> = {
-  colorSchemes: 'Colour',
+  colorSchemes: 'Color',
   typography: 'Typography',
   components: 'Component',
   shape: 'Shape',
@@ -567,7 +567,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   background: 'background',
   text: 'text',
   main: '',
-  contrastText: 'label colour',
+  contrastText: 'label color',
   borderRadius: 'corner radius',
   fontFamily: 'font',
 }

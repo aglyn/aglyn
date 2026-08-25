@@ -36,7 +36,7 @@ four sites on one Business plan, they share the 1,000 GB.
 
 1. In the console, open **Billing** from the organization menu.
 2. Find the **Usage** card.
-3. Read the row labelled **Bandwidth (this month, organization)**.
+3. Read the row labeled **Bandwidth (this month, organization)**.
 
 The meter resets on the first of each month, in UTC.
 
@@ -154,7 +154,7 @@ outlive the pause. Every matched path is rewritten to a handler that answers:
 A staff **lockdown outranks a cap** — a suspended site serves the lockdown notice, not
 this one.
 
-The page loader repeats the check as defence in depth and renders the same wording as a
+The page loader repeats the check as defense in depth and renders the same wording as a
 200 with `robots: { index: false }`; that path exists for anything the middleware matcher
 does not cover.
 

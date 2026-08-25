@@ -726,7 +726,7 @@ export const tabsSchema: Aglyn.ComponentSchema<TabsElementProps> = {
     {
       name: 'centered',
       label: 'Centered?',
-      description: 'Centres the tabs in the strip.',
+      description: 'Centers the tabs in the strip.',
       component: Aglyn.FieldComponentType.SWITCH,
       // MUI ignores centered on a scrollable strip and warns in dev.
       condition: STANDARD_ONLY,

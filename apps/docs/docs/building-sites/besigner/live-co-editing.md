@@ -49,7 +49,7 @@ On the canvas, each collaborator shows up as:
   moving around, and dropped once they have an element selected, where the selection
   already carries their name;
 - a **selection outline** around the element they have selected, with their name in a
-  tab above it. Your own other tab is labelled **"You, in another tab"** rather than
+  tab above it. Your own other tab is labeled **"You, in another tab"** rather than
   by name, and its outline is dashed.
 
 A collaborator's cursor is only broadcast while their pointer is genuinely over the

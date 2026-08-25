@@ -1296,7 +1296,7 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   partially_fulfilled: 'Partly fulfilled',
   fulfilled: 'Fulfilled',
   delivered: 'Delivered',
-  cancelled: 'Cancelled',
+  cancelled: 'Canceled',
   refunded: 'Refunded',
 }
 

@@ -250,7 +250,7 @@ for *both* modes, it answers "is this workspace locked at all" and cannot answer
 *instead of* the verdict is therefore mode-blind, and it will refuse a read the
 verdict just passed. That is what 404'd every **private media preview** in the
 console under a read-only lock (AGL-1790): the route declared its read, the
-verdict honoured it, and a legacy line beside the verdict refused on the
+verdict honored it, and a legacy line beside the verdict refused on the
 projection alone. The projection is still a fine *signal* — it is how these
 routes avoid an org-doc read on the happy path — and it still refuses when it
 disagrees with the workspace document, which is a stale projection rather than a
@@ -339,7 +339,7 @@ curl -X POST https://app.aglyn.com/api/admin/lockdown \
 
 `enforcement` is optional and defaults to `standard`, so every existing runbook
 command and saved script keeps failing open exactly as before. A value the
-server does not recognise is **rejected** rather than defaulted, in either
+server does not recognize is **rejected** rather than defaulted, in either
 direction — the response echoes the class back as `verified.enforcement` so you
 can confirm the one you meant is the one that landed.
 
@@ -1165,19 +1165,19 @@ throughout, and Stripe **cancels it at 21.08 days** with
 `cancellation_details.reason: 'payment_failed'`. It never becomes `unpaid`. So the
 30-day grace clock outlives the `past_due`/`unpaid` statuses by nine days, and the
 predicate had no reachable true branch at all until it also accepted a
-**cancelled-for-non-payment** subscription. That reason is now mirrored onto
+**canceled-for-non-payment** subscription. That reason is now mirrored onto
 `orgs/{id}/billing/stripe` as `subscription.canceledReason`, and the sweep locks
-only on the literal `'payment_failed'` — a workspace that cancelled on purpose, and
+only on the literal `'payment_failed'` — a workspace that canceled on purpose, and
 every cancellation recorded before this shipped, fail closed and are never locked.
 
 ### The LIVE dunning schedule — read from the Dashboard, unreadable by API (AGL-2430) {#the-live-dunning-schedule-has-not-been-read-agl-2430}
 
 Every number in the paragraph above is a **test-mode** measurement. Stripe's
-retry schedule, the Smart Retries flag, the after-the-final-retry behaviour and
+retry schedule, the Smart Retries flag, the after-the-final-retry behavior and
 the subscription-email toggles are **Dashboard settings held independently per
 mode** (Settings → Subscriptions and emails). Test and live do not share them,
 and this account has already been shown to diverge between modes on a
-neighbouring setting — product tax codes were live-only until AGL-1877
+neighboring setting — product tax codes were live-only until AGL-1877
 reconciled them.
 
 **What was measured in LIVE, read-only, on 2026-08-20** (live account,
@@ -1186,7 +1186,7 @@ changed):
 
 | Question | Live answer |
 | -- | -- |
-| Retry count / interval / terminal behaviour | **Not readable.** No API surface exposes it |
+| Retry count / interval / terminal behavior | **Not readable.** No API surface exposes it |
 | `GET /v1/account` | No field matching `dunning｜retry｜smart_retr` anywhere in the payload |
 | `/v1/billing/settings`, `/v1/subscription_settings`, `/v1/billing/dunning`, `/v1/billing/retry_settings`, `/v1/account/settings` | All `404 Unrecognized request URL` |
 | `/v1/billing_portal/configurations` | `200` — but it is the customer portal, not dunning |
@@ -1220,7 +1220,7 @@ Card payments → Cards → Manage:
 **Live and test agree.** The divergence this issue was opened to catch did not
 happen: 5 attempts, ~21 days, terminal `canceled` with reason `payment_failed`
 in both modes. Everything AGL-1877 pinned from a test-clock drill does describe
-live behaviour.
+live behavior.
 
 What that read is, and is not:
 
@@ -1239,7 +1239,7 @@ What that read is, and is not:
   duration or the phrase "retry window" returns to that copy.
 - **`BILLING_LOCK_GRACE_DAYS = 30` is reconciled.** Stripe gives up at 21 days
   and cancels, so 30 sits nine days past the terminal state with the slack in
-  the customer's favour. It also stood *before* the read, and that reasoning is
+  the customer's favor. It also stood *before* the read, and that reasoning is
   worth keeping: it is reachable under all three terminal settings the
   Dashboard can hold — *cancel* (the `canceled` + `payment_failed` branch at
   ~21 days), *mark unpaid* and *leave past_due* (both at day 30 on their own
@@ -1262,10 +1262,10 @@ key — which is the point, since live is the mode that matters.
 1. **Re-probes** whether Stripe has shipped an endpoint that exposes the
    schedule. If one appears, the "unreadable" premise recorded above is stale
    and the checker exits 1 so it gets replaced by a real one.
-2. **Watches the account's behaviour** for anything the record forbids — an
+2. **Watches the account's behavior** for anything the record forbids — an
    `unpaid` subscription when the terminal state is recorded as `canceled`, an
    invoice past the recorded attempt count, a retry scheduled beyond the
-   recorded window. Behaviour is downstream of the setting, so a changed
+   recorded window. Behavior is downstream of the setting, so a changed
    setting eventually surfaces here.
 3. **Checks the record against the code** that depends on it, chiefly
    `BILLING_LOCK_GRACE_DAYS`.

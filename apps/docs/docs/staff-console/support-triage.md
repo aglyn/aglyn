@@ -12,7 +12,7 @@ Requires a staff claim. `/admin/*` returns a **404** for everyone else.
 
 [Support queue](support-queue.md) documents the *screen*. This documents the
 *job*: what to do with a ticket once it is open, in what order, and — the part
-that was missing entirely until AGL-2141 — how to recognise the tickets that
+that was missing entirely until AGL-2141 — how to recognize the tickets that
 are not support tickets at all.
 
 ## Why this exists
@@ -38,7 +38,7 @@ plan ladder:
    a data-protection request. These have statutory or evidentiary clocks that
    do not care what the customer pays.
 2. **Money that is wrong right now** — a customer charged twice, charged after
-   cancelling, locked out of a plan they are paying for. Every hour here is an
+   canceling, locked out of a plan they are paying for. Every hour here is an
    hour of someone paying for something they cannot use.
 3. **Blocked from working** — the site is down, publishing fails, they cannot
    sign in.
@@ -101,7 +101,7 @@ org) without touching Stripe.
   what they paid for and no proration credit walks the money back out. Tell
   them that, because the plan card will keep showing the old plan until
   renewal and it looks like the change did not take.
-- **"I was charged after I cancelled."** Cancel sets `cancel_at_period_end`;
+- **"I was charged after I canceled."** Cancel sets `cancel_at_period_end`;
   it does not refund the period in progress. Check the invoice date against the
   cancellation date on the billing card before agreeing that anything is wrong.
 - **"My bill is higher than the plan price."** Metered overage. The Billing

@@ -1274,7 +1274,7 @@ const ElementStylesForm = observer(
                       'component.'
                     : "Styling the component's outer element on this " +
                       'instance. Pick an element inside it to restyle that ' +
-                      'part — a headline that sets its own colour ignores ' +
+                      'part — a headline that sets its own color ignores ' +
                       'one set out here.'
                 }
               >

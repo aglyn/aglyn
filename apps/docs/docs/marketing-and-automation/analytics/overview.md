@@ -105,7 +105,7 @@ Things worth knowing before you draw a conclusion from it:
   history is already waiting the moment an organization upgrades.
 
 Aglyn stores a running total and a count of measurements per screen per day. It never keeps
-an individual visit's duration — that would be a behavioural record of a person, and the
+an individual visit's duration — that would be a behavioral record of a person, and the
 average is the whole of what the feature needs.
 
 ## Google Analytics

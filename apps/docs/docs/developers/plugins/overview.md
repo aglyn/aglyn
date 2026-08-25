@@ -44,7 +44,7 @@ find something, choose which sites get it, install, upgrade, remove — start wi
 ## Install & upgrade
 
 - Open **Marketplace** in the organization navigation and **Browse** the listings. Browse
-  is a catalogue: cards link to the **detail page**, which is the only place an install
+  is a catalog: cards link to the **detail page**, which is the only place an install
   happens, and a confirmation dialog names exactly where it will land before anything is
   written.
 - When you install a plugin, choose where it applies: **All sites** (organization-wide —
@@ -119,7 +119,7 @@ Then, in order, up to four more rows:
   are getting.
 - **Review** — *This version passed marketplace review* — only when the version on offer
   is approved. A new release from the same publisher starts without it.
-- **The licence**, when the publisher set one: *Licensed MIT*.
+- **The license**, when the publisher set one: *Licensed MIT*.
 - **Price and updates.** A paid listing reads *A one-time purchase — updates to this
   listing are included*; a free one reads *Free, including every future update*. Either
   way, updates are not a second charge — but they are still

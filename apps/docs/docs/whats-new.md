@@ -25,7 +25,7 @@ for the how-to.
   type. **Escape** cancels, **Enter** commits a plain element, and a wrapped line of
   inline text is now outlined
   [line box by line box](building-sites/besigner/text-editing.md#wrapped-outlines)
-  instead of by one rectangle covering its neighbours.
+  instead of by one rectangle covering its neighbors.
 - **[Formatted text belongs to the canvas](building-sites/besigner/text-editing.md#the-text-attribute)** —
   once an element carries bold, links or lists, the panel's **Text** field shows it
   read-only and says why, rather than letting a plain edit silently throw the markup
@@ -85,7 +85,7 @@ for the how-to.
   detail drawer or the card menu, for public and private files alike, and the drawer
   says which CDN variants that file actually has.
 - **[The Orders screen you were promised](commerce-and-bookings/commerce/overview.md#orders-screen)** —
-  a real table with a Channel column, coloured status pills, and revenue, order-count and
+  a real table with a Channel column, colored status pills, and revenue, order-count and
   average-order-value tiles against the previous 30 days.
 - **[Free listings say Free](developers/plugins/overview.md#whats-included)** — the
   marketplace shows a price on every card, stars where a listing has been rated, and a

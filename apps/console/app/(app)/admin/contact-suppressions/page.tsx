@@ -211,7 +211,7 @@ const AdminContactSuppressions: NextPageWithLayout<Record<string, never>> = () =
           <Stack spacing={2}>
             <Alert severity="info">
               {
-                'No marketing calls or texts may be sent yet — there is no consent record behind them. This list is what an outbound programme must check once there is one.'
+                'No marketing calls or texts may be sent yet — there is no consent record behind them. This list is what an outbound program must check once there is one.'
               }
             </Alert>
 

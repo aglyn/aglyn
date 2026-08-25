@@ -20,7 +20,7 @@ The line is not simply "platform versus content", so here it is in cases:
 
 | What you noticed | Where it belongs |
 | --- | --- |
-| The heading on your About page is the wrong colour, or says the wrong thing | Your site. Change it in the editor, or ask whoever builds the site for you. |
+| The heading on your About page is the wrong color, or says the wrong thing | Your site. Change it in the editor, or ask whoever builds the site for you. |
 | Headings render at the wrong size on **every** site you open | Aglyn. Report it. |
 | A page returns 404 after you renamed it | Aglyn. Report it. |
 | The contact form on your site emails the wrong address | Your site — that address is a setting on the form. |
@@ -105,7 +105,7 @@ You do not need to describe your setup. The report already carries:
 | The site you were working on | Names the affected site, when you were on one |
 | Your workspace and plan | Says which features and limits were in play |
 | Your role | A bug that only bites one role is a different bug |
-| Which features were switched on | Recognises a report against a surface still rolling out |
+| Which features were switched on | Recognizes a report against a surface still rolling out |
 | The app version and build | Says exactly which release you were running |
 | Your browser and window size | Separates a layout problem from a logic one |
 | A reference id | Ties your report to our server logs for that moment |

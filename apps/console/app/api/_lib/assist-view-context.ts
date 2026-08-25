@@ -197,10 +197,10 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
   {
     key: 'host-theme',
     match: /^\/[^/]+\/hosts\/[^/]+\/theme(\/|$)/,
-    screen: 'Theme — the site-wide colours, type and spacing every screen inherits.',
+    screen: 'Theme — the site-wide colors, type and spacing every screen inherits.',
     plain: [
       'Change something here and it changes everywhere on the site at once.',
-      'This is the place to fix a colour or a font you keep re-setting on individual elements.',
+      'This is the place to fix a color or a font you keep re-setting on individual elements.',
     ],
     technical: [
       'Route: /[orgSlug]/hosts/[host]/theme.',
