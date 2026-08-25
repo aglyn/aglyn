@@ -1074,7 +1074,7 @@ describe('a cancelled order paid anyway (AGL-2244)', () => {
 
     expect(notifications).toHaveLength(1)
     expect(notifications[0].hostId).toBe('host-1')
-    expect(String(notifications[0].title)).toContain('cancelled order was paid')
+    expect(String(notifications[0].title)).toContain('canceled order was paid')
   })
 
   it('does not decrement stock or write a contact for it', async () => {

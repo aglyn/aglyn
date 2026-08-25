@@ -603,7 +603,7 @@ describe('licence keys are RETIRED, never returned to the pool (AGL-2454)', () =
     const events = (order().timeline ?? []) as any[]
     const retired = events.find((event) => event.event === 'license-retired')
     expect(retired).toBeDefined()
-    expect(retired.detail).toContain('1 licence key')
+    expect(retired.detail).toContain('1 license key')
     expect(retired.detail).toContain('not returned to the pool')
   })
 

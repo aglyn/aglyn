@@ -465,7 +465,7 @@ describe('describeThemeOverride — "what have I changed?"', () => {
 
   it('labels a path for humans, not as a JSON path', () => {
     expect(describeThemePath('colorSchemes.dark.primary.main')).toBe(
-      'Colour · dark · primary',
+      'Color · dark · primary',
     )
     expect(describeThemePath('shape.borderRadius')).toBe('Shape · corner radius')
     expect(describeThemePath('components.MuiButton.defaultProps.color')).toBe(

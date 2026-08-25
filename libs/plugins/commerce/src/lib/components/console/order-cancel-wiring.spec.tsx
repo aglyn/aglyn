@@ -146,7 +146,7 @@ describe('the cancel button drives the cancel-order route (AGL-1818)', () => {
     expect(confirm).toHaveBeenCalledTimes(1)
     await waitFor(() =>
       expect(snackbar).toHaveBeenCalledWith(
-        'Order cancelled — 3 units returned to stock',
+        'Order canceled — 3 units returned to stock',
         expect.objectContaining({ variant: 'success' }),
       ),
     )
@@ -160,7 +160,7 @@ describe('the cancel button drives the cancel-order route (AGL-1818)', () => {
     fireEvent.click(cancelButton())
     await waitFor(() =>
       expect(snackbar).toHaveBeenCalledWith(
-        'Order cancelled — 1 unit returned to stock',
+        'Order canceled — 1 unit returned to stock',
         expect.objectContaining({ variant: 'success' }),
       ),
     )
@@ -172,7 +172,7 @@ describe('the cancel button drives the cancel-order route (AGL-1818)', () => {
     fireEvent.click(cancelButton())
     await waitFor(() =>
       expect(snackbar).toHaveBeenCalledWith(
-        'Order cancelled',
+        'Order canceled',
         expect.objectContaining({ variant: 'success' }),
       ),
     )
@@ -238,7 +238,7 @@ describe('the cancel button drives the cancel-order route (AGL-1818)', () => {
     fireEvent.click(cancelButton())
     await waitFor(() => expect(snackbar).toHaveBeenCalledTimes(1))
     const [message] = snackbar.mock.calls[0]
-    expect(message).toContain('NOT known whether the order was cancelled')
+    expect(message).toContain('NOT known whether the order was canceled')
     expect(message).not.toContain('nothing changed')
     // `busy` must reset on this path too, or the merchant cannot retry the
     // retry-safe case.
@@ -255,7 +255,7 @@ describe('the cancel button drives the cancel-order route (AGL-1818)', () => {
     fireEvent.click(cancelButton())
     await waitFor(() =>
       expect(snackbar).toHaveBeenCalledWith(
-        'Order was already cancelled',
+        'Order was already canceled',
         expect.objectContaining({ variant: 'success' }),
       ),
     )
