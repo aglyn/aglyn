@@ -30,17 +30,19 @@ import type { ReactNode } from 'react'
 // identically — the exact defect that rule exists to catch, and one this
 // route only became capable of having when the collection moved into the URL.
 //
-// The subject is the id, not the display name, and deliberately: this runs on
-// the SERVER, where the console has no authorization to spend — an anonymous
-// GET of a console URL returns the server-rendered `<head>`. See
-// `document-subject.ts` for the whole argument. The client upgrades the id to
-// the collection's name in place.
+// The subject is the URL SEGMENT — the collection's slug — not its display
+// name, and deliberately: this runs on the SERVER, where the console has no
+// authorization to spend, and an anonymous GET of a console URL returns the
+// server-rendered `<head>`. A slug is already in the requester's own URL bar,
+// so nothing is disclosed that they did not have to know to make the request.
+// See `document-subject.ts` for the whole argument. The client upgrades the
+// slug to the collection's display name in place.
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ host: string; collectionId: string }>
+  params: Promise<{ host: string; collectionSlug: string }>
 }): Promise<Metadata> {
-  const { host, collectionId } = await params
+  const { host, collectionSlug } = await params
   // The subject wraps INSIDE `segmentTitle`, not around it: this layout has
   // a titled route below it (the entry), so what it declares must stay the
   // `{ default, template }` object — `entityPageTitle` builds the DEFAULT
@@ -49,7 +51,7 @@ export async function generateMetadata({
   return {
     title: segmentTitle(
       entityPageTitle({
-        subject: collectionId,
+        subject: collectionSlug,
         noun: 'Content',
         scope: host,
       }),

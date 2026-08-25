@@ -152,9 +152,22 @@ export enum Route {
   // addressed `collection + entry`, and half of that address cannot live in
   // the path while the other half lives in the query.
   //
-  // `?collection=` still resolves: the page rewrites a legacy parameter onto
-  // this route (AGL-845's DAM deep links are in the wild).
-  HOST_CONTENT_COLLECTION = '/[orgSlug]/hosts/[host]/content/[collectionId]',
+  // The segment is the collection's SLUG, not its document id, and that is a
+  // correction rather than a preference. Collection document ids are not
+  // uniform — the seeded ones were given readable ids (`blog`, `changelog`)
+  // and everything created since gets a `createResourceUid`, so routing by id
+  // produced `/content/changelog` beside `/content/QgXv7lU_rG` on ONE site.
+  // Zach: "one is using the id in the url while others use a slug".
+  //
+  // A slug is the right key on the merits too: it is unique per host and kind
+  // (claimed in a transaction by /api/hosts/collections), it is the
+  // collection's own public address, and it is the thing an author recognises.
+  // A document id is still ACCEPTED and rewritten to the slug form, so no
+  // existing link breaks.
+  //
+  // `?collection=` still resolves the same way (AGL-845's DAM deep links are
+  // in the wild).
+  HOST_CONTENT_COLLECTION = '/[orgSlug]/hosts/[host]/content/[collectionSlug]',
   // One entry's detail page (AGL-2498). `entries` is a LITERAL segment rather
   // than `content/[collectionId]/[entryId]`, and it is load-bearing twice
   // over: it mirrors the Firestore path the entry actually lives at
@@ -165,7 +178,7 @@ export enum Route {
   // `[entryId]` also carries the sentinel `new`, which is a draft that has no
   // document yet. Entry ids come from `createResourceUid`, so nothing real
   // can collide with it.
-  CONTENT_ENTRY_DETAILS = '/[orgSlug]/hosts/[host]/content/[collectionId]/entries/[entryId]',
+  CONTENT_ENTRY_DETAILS = '/[orgSlug]/hosts/[host]/content/[collectionSlug]/entries/[entryId]',
   MANAGE_TEAM = '/[orgSlug]/team',
   MANAGE_TEAM_MEMBER = '/[orgSlug]/team/[uid]',
   // Support is an UMBRELLA, not a page (AGL-1158). The two channels beneath
@@ -325,13 +338,23 @@ export interface RoutePayload {
   [Route.HOST_CONTENT_COLLECTION]: {
     orgSlug: string
     host: string
-    collectionId: string
+    /** The collection's slug — see the route. A document id also resolves. */
+    collectionSlug: string
   }
   [Route.CONTENT_ENTRY_DETAILS]: {
     orgSlug: string
     host: string
-    collectionId: string
-    /** An entry id, or the literal `new` for a draft with no document yet. */
+    collectionSlug: string
+    /**
+     * An entry id, or the literal `new` for a draft with no document yet.
+     *
+     * An ID here while the collection above is a SLUG, deliberately. An entry
+     * slug is unique only WITHIN its collection and it is editable on the
+     * detail page — so routing by it would move the console address out from
+     * under someone in the middle of typing in the slug field, and a draft has
+     * no slug at all to route by. The entry id is also what every activity
+     * record and the DAM's "Used on" list already carry.
+     */
     entryId: string
   }
   [Route.MANAGE_TEAM]: { orgSlug: string }

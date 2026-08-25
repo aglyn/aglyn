@@ -67,6 +67,9 @@ const PUBLISH_AT_SECONDS = 2_000_000_000
  * scheduled with a FUTURE `publishAt` and no `publishedAt` at all, and a
  * draft that has never had either.
  */
+/** Which entry the detail route is open on; set by `renderEntry`. */
+const mockParams = { collectionSlug: 'blog', entryId: 'entry-1' }
+
 const mockEntries = {
   data: [
     {
@@ -110,6 +113,12 @@ jest.mock('@aglyn/aglyn', () => ({
   isHostCollectionKind: () => () => true,
   COLLECTION_CATEGORIES_MAX: 20,
   findCollectionSlugOwner: () => null,
+  // The REAL rule, not a stub (AGL-2498). The slug is authored now, so a
+  // collision is reachable on purpose — and a stub returning `null` would
+  // leave every suite asserting a Save button that a real duplicate disables.
+  findEntrySlugOwner: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/collection-slug',
+  ).findEntrySlugOwner,
   collectionDeleteDenial: () => null,
   collectionTemplateBindings: () => [],
   mediaNodeSrc: () => '',
@@ -286,38 +295,47 @@ jest.mock('next/navigation', () => ({
   // throws on mount.
   useRouter: () => ({ replace: jest.fn(), push: jest.fn() }),
   /**
-   * Bare `/content` — no collection segment, no entry segment.
+   * The route the DETAIL page is mounted at (AGL-2498).
    *
-   * AGL-2498 moved BOTH out of the query string and into the path, so this is
-   * the hook the page now reads its address from. A constant empty object is
-   * exactly right for these suites: they open an entry by clicking its row,
-   * and the URL sync claims the segment it pushed, so the editor stays open
-   * while `useParams` still reports the list. See the detail-page suite for
-   * the addressing itself.
+   * The entry editor is its own route component now, not a branch of the list
+   * — so a suite about the editor mounts the editor, at an address that names
+   * the entry, instead of rendering the list and clicking a row into it. That
+   * is also what the browser does on a pasted link, which makes this the more
+   * honest setup as well as the simpler one.
    */
-  useParams: () => ({}),
+  useParams: () => ({ ...mockParams }),
   usePathname: () => '/org/hosts/site/content',
 }))
 
 /**
- * `require` after the mocks, not a top-level `import`: the page must be
+ * `require` after the mocks, not a top-level `import`: the modules must be
  * evaluated only once every `jest.mock` above is registered.
  */
-const HostContent =
-  require('../app/(app)/[orgSlug]/hosts/[host]/content/page').default
+const { ContentScopeProvider } = require('../components/content/content-scope.context')
+const EntryDetailPage =
+  require('../components/content/entry-detail-page.component').default
+
+/**
+ * The entry detail page, at the address that names one entry.
+ *
+ * The provider is REAL rather than stubbed: it owns the scheduler and
+ * published-date dialogs and the publish/delete writes these suites assert, so
+ * a stubbed scope would leave them testing a fixture instead of the feature.
+ */
+const renderEntry = (entryId: string) => {
+  mockParams.entryId = entryId
+  return render(
+    <ContentScopeProvider>
+      <EntryDetailPage />
+    </ContentScopeProvider>,
+  )
+}
 
 beforeEach(() => {
   jest.clearAllMocks()
   mockEntries.status = 'success'
   mockEntries.fromCache = false
 })
-
-/** Opens the entry editor the way a person does — the row's Edit action. */
-const openEditor = (title: string) => {
-  const row = screen.getByText(title).closest('tr') as HTMLElement
-  fireEvent.click(row.querySelector('button') as HTMLElement)
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }))
-}
 
 const save = () => fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
@@ -327,8 +345,7 @@ const savedOptions = () => mockSetDoc.mock.calls[0][2] as Record<string, unknown
 
 describe('saving an entry leaves its publication dates alone (AGL-2498)', () => {
   it('never NAMES publishedAt or publishAt in the payload', async () => {
-    render(<HostContent />)
-    openEditor('Hello world')
+    renderEntry('entry-1')
     save()
     await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
     const payload = savedPayload()
@@ -342,8 +359,7 @@ describe('saving an entry leaves its publication dates alone (AGL-2498)', () => 
   })
 
   it('merges rather than replaces — the option is what preserves the date', async () => {
-    render(<HostContent />)
-    openEditor('Hello world')
+    renderEntry('entry-1')
     save()
     await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
     // Without `merge: true` the payload above REPLACES the document, and the
@@ -354,8 +370,7 @@ describe('saving an entry leaves its publication dates alone (AGL-2498)', () => 
   })
 
   it('leaves a SCHEDULED entry publishAt untouched when its text is edited', async () => {
-    render(<HostContent />)
-    openEditor('Going out Monday')
+    renderEntry('entry-2')
     // A real edit, so this is not passing merely because nothing happened.
     // Exact, not a regex: "SEO title" also matches /Title/i, and editing the
     // wrong field would still produce a payload that satisfied the assertions.
@@ -373,8 +388,7 @@ describe('saving an entry leaves its publication dates alone (AGL-2498)', () => 
   })
 
   it('does not INVENT a date for a draft that has never had one', async () => {
-    render(<HostContent />)
-    openEditor('Never published')
+    renderEntry('entry-3')
     save()
     await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
     const payload = savedPayload()
@@ -386,8 +400,7 @@ describe('saving an entry leaves its publication dates alone (AGL-2498)', () => 
   })
 
   it('writes the editor fields it IS responsible for, so the omission is specific', async () => {
-    render(<HostContent />)
-    openEditor('Hello world')
+    renderEntry('entry-1')
     save()
     await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
     const payload = savedPayload()

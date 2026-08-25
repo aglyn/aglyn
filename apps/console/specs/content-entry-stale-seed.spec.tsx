@@ -54,6 +54,9 @@ const mockEnqueueSnackbar = jest.fn()
  * along in the payload when the author retypes the title — the reason the
  * guard has to stand in front of this write.
  */
+/** Which entry the detail route is open on; set by `renderEntry`. */
+const mockParams = { collectionSlug: 'blog', entryId: 'entry-1' }
+
 const mockEntries = {
   data: [
     {
@@ -89,6 +92,12 @@ jest.mock('@aglyn/aglyn', () => ({
   isHostCollectionKind: () => () => true,
   COLLECTION_CATEGORIES_MAX: 20,
   findCollectionSlugOwner: () => null,
+  // The REAL rule, not a stub (AGL-2498). The slug is authored now, so a
+  // collision is reachable on purpose — and a stub returning `null` would
+  // leave every suite asserting a Save button that a real duplicate disables.
+  findEntrySlugOwner: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/collection-slug',
+  ).findEntrySlugOwner,
   collectionDeleteDenial: () => null,
   collectionTemplateBindings: () => [],
   mediaNodeSrc: () => '',
@@ -299,22 +308,41 @@ jest.mock('next/navigation', () => ({
   // throws on mount.
   useRouter: () => ({ replace: jest.fn(), push: jest.fn() }),
   /**
-   * Bare `/content` — no collection segment, no entry segment.
+   * The route the DETAIL page is mounted at (AGL-2498).
    *
-   * AGL-2498 moved BOTH out of the query string and into the path, so this is
-   * the hook the page now reads its address from. A constant empty object is
-   * exactly right for these suites: they open an entry by clicking its row,
-   * and the URL sync claims the segment it pushed, so the editor stays open
-   * while `useParams` still reports the list. See the detail-page suite for
-   * the addressing itself.
+   * The entry editor is its own route component now, not a branch of the list
+   * — so a suite about the editor mounts the editor, at an address that names
+   * the entry, instead of rendering the list and clicking a row into it. That
+   * is also what the browser does on a pasted link, which makes this the more
+   * honest setup as well as the simpler one.
    */
-  useParams: () => ({}),
+  useParams: () => ({ ...mockParams }),
   usePathname: () => '/org/hosts/site/content',
 }))
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const HostContent =
-  require('../app/(app)/[orgSlug]/hosts/[host]/content/page').default
+/**
+ * `require` after the mocks, not a top-level `import`: the modules must be
+ * evaluated only once every `jest.mock` above is registered.
+ */
+const { ContentScopeProvider } = require('../components/content/content-scope.context')
+const EntryDetailPage =
+  require('../components/content/entry-detail-page.component').default
+
+/**
+ * The entry detail page, at the address that names one entry.
+ *
+ * The provider is REAL rather than stubbed: it owns the scheduler and
+ * published-date dialogs and the publish/delete writes these suites assert, so
+ * a stubbed scope would leave them testing a fixture instead of the feature.
+ */
+const renderEntry = (entryId: string) => {
+  mockParams.entryId = entryId
+  return render(
+    <ContentScopeProvider>
+      <EntryDetailPage />
+    </ContentScopeProvider>,
+  )
+}
 
 const instance = jest.requireActual('@aglyn/tenant-feature-instance')
 
@@ -334,7 +362,6 @@ beforeEach(() => {
 
 /** Open the stored entry, retype its title, save. */
 const editAndSave = () => {
-  fireEvent.click(screen.getByText('Hello world'))
   fireEvent.change(screen.getByLabelText('Title'), {
     target: { value: 'Hello world, again' },
   })
@@ -350,7 +377,7 @@ const killTheSession = () => {
 describe('Content entry seed guard (AGL-1449)', () => {
   it('REFUSES an entry save seeded from an unconfirmed read', async () => {
     mockEntries.fromCache = true
-    render(<HostContent />)
+    renderEntry('entry-1')
 
     editAndSave()
 
@@ -370,11 +397,20 @@ describe('Content entry seed guard (AGL-1449)', () => {
   })
 
   it('REFUSES when the entries read FAILED, and says so differently', async () => {
-    render(<HostContent />)
-    // Open the editor from the seed that WAS there, then lose the listener —
-    // the state a terminal listen leaves an already-open editor in.
-    fireEvent.click(screen.getByText('Hello world'))
+    const { rerender } = renderEntry('entry-1')
+    // The editor is seeded from the read that WAS there; then the listener is
+    // lost — the state a terminal listen leaves an already-open editor in.
+    //
+    // `rerender` and not just a `fireEvent`: the listener lives in the SCOPE
+    // PROVIDER above this page now, and a state change inside the page does
+    // not re-render its parent. Without this the editor goes on reading the
+    // healthy status it mounted with and the guard is never consulted.
     mockEntries.status = 'error'
+    rerender(
+      <ContentScopeProvider>
+        <EntryDetailPage />
+      </ContentScopeProvider>,
+    )
     fireEvent.change(screen.getByLabelText('Title'), {
       target: { value: 'Hello world, again' },
     })
@@ -390,7 +426,7 @@ describe('Content entry seed guard (AGL-1449)', () => {
   it('REFUSES when the SESSION is stale, through the injected check', async () => {
     killTheSession()
     expect(getSessionHealth().staleSession).toBe(true)
-    render(<HostContent />)
+    renderEntry('entry-1')
 
     editAndSave()
 
@@ -405,14 +441,22 @@ describe('Content entry seed guard (AGL-1449)', () => {
   })
 
   it('SAVES the entry once the server has confirmed the seed', async () => {
-    render(<HostContent />)
+    renderEntry('entry-1')
 
     editAndSave()
 
     await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
     const [, payload, options] = mockSetDoc.mock.calls[0]
     expect(payload.title).toBe('Hello world, again')
-    expect(payload.slug).toBe('hello-world-again')
+    /*
+      The slug does NOT follow the retitle (AGL-2498). This entry is
+      `published`, so its address is in the wild — and `slug: slugify(title)`
+      on every save is exactly what used to move `/blog/hello-world` to
+      `/blog/hello-world-again` because somebody tightened a headline, 404-ing
+      every inbound link with nothing in the console to say so. The slug is an
+      authored field now, and this asserts the write carries the STORED one.
+    */
+    expect(payload.slug).toBe('hello-world')
     // Everything the author did not touch rides along off the seed.
     expect(payload.body).toBe('The body nobody is editing')
     expect(payload.seoTitle).toBe('Hello world — Acme')

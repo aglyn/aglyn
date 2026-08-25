@@ -75,7 +75,7 @@ const PUBLISHED_AT_SECONDS = 1_600_000_000
  * underneath it and the tree re-rendered.
  */
 const mockNav = {
-  params: {} as { collectionId?: string; entryId?: string },
+  params: {} as { collectionSlug?: string; entryId?: string },
   search: '',
   pushed: [] as string[],
   replaced: [] as string[],
@@ -117,7 +117,7 @@ const mockEntries = {
       status: 'draft',
     },
   ] as Array<Record<string, unknown>>,
-  status: 'success' as 'success' | 'error',
+  status: 'success' as 'success' | 'error' | 'loading',
   fromCache: false,
 }
 
@@ -136,6 +136,12 @@ jest.mock('@aglyn/aglyn', () => ({
   isHostCollectionKind: () => () => true,
   COLLECTION_CATEGORIES_MAX: 20,
   findCollectionSlugOwner: () => null,
+  // The REAL rule, not a stub (AGL-2498). The slug is authored now, so a
+  // collision is reachable on purpose — and a stub returning `null` would
+  // leave every suite asserting a Save button that a real duplicate disables.
+  findEntrySlugOwner: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/collection-slug',
+  ).findEntrySlugOwner,
   collectionDeleteDenial: () => null,
   collectionTemplateBindings: () => [],
   mediaNodeSrc: () => '',
@@ -216,12 +222,19 @@ jest.mock('../components/layouts/dashboard.layout', () => ({
   __esModule: true,
   default: ({
     children,
+    header,
     headerRight,
   }: {
     children?: ReactNode
+    header?: { children?: ReactNode }
     headerRight?: ReactNode
   }) => (
     <div>
+      {/* The HEADING as well as the actions (AGL-2498). The detail page's
+          loading and not-found states say what they are in the header, so a
+          mock that dropped it would hide the very states the split exists to
+          make possible. */}
+      <h1>{header?.children}</h1>
       {headerRight}
       {children}
     </div>
@@ -337,8 +350,34 @@ jest.mock('next/navigation', () => ({
   usePathname: () => '/acme/hosts/shop/content',
 }))
 
-const HostContent =
-  require('../app/(app)/[orgSlug]/hosts/[host]/content/page').default
+/**
+ * `require` after the mocks, not a top-level `import`: the modules must be
+ * evaluated only once every `jest.mock` above is registered.
+ */
+const { ContentScopeProvider } = require('../components/content/content-scope.context')
+const CollectionEntriesPage =
+  require('../components/content/collection-entries-page.component').default
+const EntryDetailPage =
+  require('../components/content/entry-detail-page.component').default
+
+/**
+ * The two pages, each inside the REAL scope provider.
+ *
+ * They are two components now, and that is the property this suite mostly
+ * exists to hold. The provider is not stubbed because it owns the address
+ * rewrite, the entries listener and the shared entry actions — a stubbed scope
+ * would leave every address assertion below testing a fixture.
+ */
+const List = () => (
+  <ContentScopeProvider>
+    <CollectionEntriesPage />
+  </ContentScopeProvider>
+)
+const Detail = () => (
+  <ContentScopeProvider>
+    <EntryDetailPage />
+  </ContentScopeProvider>
+)
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -376,7 +415,7 @@ beforeEach(() => {
     slug: 'blog',
     kind: 'content',
   })
-  mockNav.params = { collectionId: 'col-1' }
+  mockNav.params = { collectionSlug: 'blog' }
   mockNav.search = ''
   mockNav.pushed = []
   mockNav.replaced = []
@@ -385,54 +424,42 @@ beforeEach(() => {
   mockOrg.ready = true
 })
 
-/** The title field only exists while the editor is on screen. */
+/** The title field only exists on the entry detail page. */
 const titleField = () => screen.queryByLabelText('Title')
 
 /** Opens an entry by clicking its row, the way the list does. */
-const openByRow = (title: string) =>
-  fireEvent.click(screen.getByText(title))
+const openByRow = (title: string) => fireEvent.click(screen.getByText(title))
 
 /**
- * A URL string → the two route params and the query the component reads.
+ * A URL string → the two route params and the query the pages read.
  *
  * The regex mirrors the two real routes:
- * `…/content/{collectionId}` and
- * `…/content/{collectionId}/entries/{entryId}`.
+ * `…/content/{collectionSlug}` and
+ * `…/content/{collectionSlug}/entries/{entryId}`.
  */
 const addressOf = (url: string) => {
   const [path, query = ''] = url.split('?')
   const match = /\/content(?:\/([^/]+))?(?:\/entries\/([^/]+))?\/?$/.exec(path)
   return {
     params: {
-      ...(match?.[1] ? { collectionId: match[1] } : {}),
+      ...(match?.[1] ? { collectionSlug: match[1] } : {}),
       ...(match?.[2] ? { entryId: match[2] } : {}),
     },
     search: query,
   }
 }
 
-/**
- * A browser Back / Forward / pasted link: the address changes underneath the
- * component, which then has to notice. `render` is called again on the SAME
- * container so the tree is re-rendered rather than remounted.
- */
-const navigateTo = (url: string, rerender: (ui: JSX.Element) => void) => {
+/** Puts an address in the bar without rendering anything. */
+const at = (url: string) => {
   const next = addressOf(url)
   mockNav.params = next.params
   mockNav.search = next.search
-  rerender(<HostContent />)
 }
 
-/** The address the component last asked for. */
+/** The address the app last asked for. */
 const lastPushed = () => mockNav.pushed[mockNav.pushed.length - 1]
-
-/**
- * The pending `router.push` transition completing — the address the component
- * asked for becomes the address it reads back.
- */
-const settleNavigation = (rerender: (ui: JSX.Element) => void) => {
-  navigateTo(lastPushed() ?? '/acme/hosts/shop/content/col-1', rerender)
-}
+/** The address the app last rewrote to. */
+const lastReplaced = () => mockNav.replaced[mockNav.replaced.length - 1]
 
 /** The `datetime-local` value shape, in LOCAL time like the input's own. */
 const localValue = (date: Date) => {
@@ -443,203 +470,94 @@ const localValue = (date: Date) => {
   )
 }
 
-describe('a collection entry opens a detail page (AGL-2498)', () => {
-  it('renders the editor as a PAGE — no dialog, and the list is not behind it', () => {
-    render(<HostContent />)
-    // Before: the list, both rows, no editor.
-    expect(screen.getByText('Never published')).toBeTruthy()
-    expect(titleField()).toBeNull()
-
-    openByRow('Hello world')
-
-    // The editor is here...
-    expect((titleField() as HTMLInputElement).value).toBe('Hello world')
-    // ...and it is NOT a dialog. This is the assertion the conversion is
-    // about: `role="dialog"` is what MUI's Dialog announces itself as, so a
-    // revert to the old container reddens here rather than somewhere subtle.
-    expect(screen.queryByRole('dialog')).toBeNull()
-    // The list is GONE rather than layered underneath. A second entry's row
-    // still being reachable would mean two page headers and two breadcrumb
-    // trails stacked, and the trail is what says which entry you are in.
-    expect(screen.queryByText('Never published')).toBeNull()
-  })
-
-  it('gives the entry an ADDRESS that names BOTH halves of it', () => {
-    // The collection AND the entry, both as path segments. Before AGL-2498's
-    // second pass this was `/content?entry=entry-1`, which says which entry
-    // but not which collection — the collection rode along in a SECOND query
-    // parameter that any link rebuild could drop, and dropping it landed the
-    // reader on whichever collection sorted first.
-    render(<HostContent />)
-
-    openByRow('Hello world')
-
-    expect(mockNav.pushed).toEqual([
-      '/acme/hosts/shop/content/col-1/entries/entry-1',
-    ])
-  })
-
-  it('rewrites a legacy ?collection= deep link onto the routed address', () => {
-    // AGL-845: the DAM's "Used on" list linked straight to a collection with
-    // `?collection=`, and those links are in the wild. They keep working —
-    // by being REWRITTEN onto the path, so the address the reader ends up
-    // with is one they can send on.
-    mockNav.params = {}
-    mockNav.search = '?collection=col-1'
-
-    render(<HostContent />)
-
-    expect(mockNav.replaced).toEqual(['/acme/hosts/shop/content/col-1'])
-  })
-
-  it('rewrites a legacy ?entry= link straight into the entry', () => {
-    // Both legacy parameters at once — the shape a bookmark of the old editor
-    // has. The rewrite must carry the entry as well, or a saved link to a
-    // post silently degrades into a link to its list.
-    mockNav.params = {}
-    mockNav.search = '?collection=col-1&entry=entry-1'
-
-    render(<HostContent />)
-
-    expect(mockNav.replaced).toEqual([
-      '/acme/hosts/shop/content/col-1/entries/entry-1',
-    ])
-  })
-
-  it('carries ?tab= through the rewrite but never the legacy pair', () => {
-    // `?tab=` is HubTabs' own mirroring and has to survive. `?collection=`
-    // and `?entry=` must NOT: they are the address that just moved into the
-    // path, and carrying them forward would leave two answers to "which
-    // collection is open" in one URL with nothing to say which wins.
-    mockNav.params = {}
-    mockNav.search = '?tab=authors&collection=col-1'
-
-    render(<HostContent />)
-
-    expect(mockNav.replaced).toEqual(['/acme/hosts/shop/content/col-1?tab=authors'])
-  })
-
-  it('rewrites an address naming a collection that no longer exists', () => {
-    // A deleted collection, a stale bookmark, a typo. Left alone, `selected`
-    // falls back to the first collection and the address then NAMES one
-    // collection while the page SHOWS another — and the next save writes to
-    // the one on screen.
-    mockNav.params = { collectionId: 'col-gone' }
-
-    render(<HostContent />)
-
-    expect(mockNav.replaced).toEqual(['/acme/hosts/shop/content/col-1'])
-  })
-
-  it('leaves a settled address alone', () => {
-    // The guard against the opposite failure: a rewrite that fires on an
-    // address already in the routed form is a `replace` per render, at the
-    // exact moment the router is mid-navigation.
-    render(<HostContent />)
-
-    expect(mockNav.replaced).toEqual([])
-  })
-
-  it('navigates when the collection Select is changed', () => {
-    // Which collection is open is the page's ADDRESS since AGL-2498, not a
-    // piece of component state — so choosing one goes through the router and
-    // can be linked, bookmarked, reloaded and gone Back out of.
-    mockCollections.push({
-      $id: 'col-2',
-      displayName: 'Changelog',
-      slug: 'changelog',
-      kind: 'content',
-    })
-    render(<HostContent />)
-
-    // MUI's `TextField select` is a listbox behind a combobox, not a native
-    // `<select>`, so it is DRIVEN rather than assigned to — `fireEvent.change`
-    // on it throws "does not have a value setter".
-    fireEvent.mouseDown(screen.getByLabelText('Collection'))
-    fireEvent.click(screen.getByRole('option', { name: /Changelog/ }))
-
-    expect(lastPushed()).toBe('/acme/hosts/shop/content/col-2')
-  })
-
-  it('opens straight into the entry when the address already names one', () => {
-    // The pasted-link case, and the reason the conversion is worth doing at
-    // all: no click, just the URL.
-    mockNav.params = { collectionId: 'col-1', entryId: 'entry-1' }
-    render(<HostContent />)
-
-    expect((titleField() as HTMLInputElement).value).toBe('Hello world')
-    expect((screen.getByLabelText('Excerpt') as HTMLInputElement).value).toBe(
-      'the stored excerpt',
-    )
-  })
-
-  it('waits for the entry rather than opening a BLANK editor over it', () => {
-    // The listener has not answered yet. Seeding an empty buffer here and
-    // calling the segment handled is how a pasted link opens an editor
-    // that never fills — and an empty buffer over a real entry is one Save
-    // away from blanking the post.
+describe('the entry detail is its OWN route (AGL-2498)', () => {
+  /**
+   * The defect this split exists to remove, asserted directly.
+   *
+   * Zach: *"The content collection page flashes before the content detail page
+   * appears, that mean they are not separate pages."*
+   *
+   * While the two screens were one component, the detail could not render
+   * until its buffer was seeded from the entries listener — so on a cold load
+   * the component rendered the only thing it could render meanwhile, which was
+   * the list. `mockEntries.data = []` is exactly that moment.
+   */
+  it('shows its OWN loading state, never the list, before the entry arrives', () => {
+    // The listener has not ANSWERED — which is a different state from having
+    // answered with nothing, and the page has to tell them apart or a slow
+    // read reads as a deleted post. See the "not there" case below.
     mockEntries.data = []
-    mockNav.params = { collectionId: 'col-1', entryId: 'entry-1' }
-    const { rerender } = render(<HostContent />)
+    mockEntries.status = 'loading'
+    at('/acme/hosts/shop/content/blog/entries/entry-1')
 
+    render(<Detail />)
+
+    // Not the list. This is the flash.
+    expect(screen.queryByText('Never published')).toBeNull()
+    expect(screen.queryByRole('table')).toBeNull()
+    // Its own chrome instead, saying what it is doing.
+    expect(screen.getByText(/Loading entry/)).toBeTruthy()
+  })
+
+  it('fills in once the entry arrives, without a blank editor in between', () => {
+    // Seeding an empty buffer while the listener is still out is how a pasted
+    // link opens an editor that never fills — and an empty buffer over a real
+    // entry is one Save away from blanking the post.
+    mockEntries.data = []
+    at('/acme/hosts/shop/content/blog/entries/entry-1')
+    const { rerender } = render(<Detail />)
     expect(titleField()).toBeNull()
 
     mockEntries.data = [
       { $id: 'entry-1', title: 'Hello world', slug: 'hello-world' },
     ]
-    rerender(<HostContent />)
+    rerender(<Detail />)
 
     expect((titleField() as HTMLInputElement).value).toBe('Hello world')
   })
 
-  it('stays open while the pushed address is still in flight', () => {
-    // The transition window. `router.push` does not update `useParams`
-    // synchronously, so for at least one render the editor is open while the
-    // address still says "list". The URL sync must recognise the segment it
-    // asked for as its own — otherwise every re-render in that window closes
-    // the editor the click just opened, and the row appears not to work at
-    // all. Broken once, in this shape, by listing `router`/`entryHref` in the
-    // sync's dependencies: both are fresh objects per render, so the effect
-    // ran every render instead of only when the address changed.
-    //
-    // The hazard SURVIVED the move from `?entry=` to a path segment — a
-    // transition is a transition — which is why this test did not go with it.
-    const { rerender } = render(<HostContent />)
-    openByRow('Hello world')
-    expect(mockNav.params.entryId).toBeUndefined()
+  it('says so plainly when the address names an entry that is not there', () => {
+    // A deleted entry, or a link naming an entry from another collection.
+    // "Loading" forever would be the wrong answer once the listener HAS
+    // answered — the two states are distinct and both are honest.
+    mockEntries.data = []
+    mockEntries.status = 'success'
+    at('/acme/hosts/shop/content/blog/entries/gone')
 
-    rerender(<HostContent />)
+    render(<Detail />)
 
-    expect((titleField() as HTMLInputElement).value).toBe('Hello world')
+    expect(screen.getByText('Entry not found')).toBeTruthy()
   })
 
-  it('closes on Back — the address is what says whether the editor is open', () => {
-    const { rerender } = render(<HostContent />)
-    openByRow('Hello world')
-    settleNavigation(rerender)
-    expect(titleField()).toBeTruthy()
+  it('opens straight into the entry when the address already names one', () => {
+    // The pasted-link case, and the reason the addressing is worth having.
+    at('/acme/hosts/shop/content/blog/entries/entry-1')
 
-    navigateTo('/acme/hosts/shop/content/col-1', rerender)
+    render(<Detail />)
 
-    expect(titleField()).toBeNull()
-    expect(screen.getByText('Never published')).toBeTruthy()
+    expect((titleField() as HTMLInputElement).value).toBe('Hello world')
+    expect((screen.getByLabelText('Excerpt') as HTMLInputElement).value).toBe(
+      'the stored excerpt',
+    )
+    // It is a PAGE, not a dialog: `role="dialog"` is what MUI's Dialog
+    // announces itself as, so a revert to the old container reddens here.
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('leaves a CLEAN editor without asking anything', async () => {
-    render(<HostContent />)
-    openByRow('Hello world')
+    at('/acme/hosts/shop/content/blog/entries/entry-1')
+    render(<Detail />)
 
     fireEvent.click(screen.getByRole('button', { name: /Back to entries/ }))
 
-    await waitFor(() => expect(titleField()).toBeNull())
+    await waitFor(() => expect(lastPushed()).toBe('/acme/hosts/shop/content/blog'))
     expect(mockConfirm).not.toHaveBeenCalled()
-    expect(lastPushed()).toBe('/acme/hosts/shop/content/col-1')
   })
 
   it('asks before dropping unsaved edits, and NO keeps them', async () => {
     mockConfirm.mockResolvedValue(false)
-    render(<HostContent />)
-    openByRow('Hello world')
+    at('/acme/hosts/shop/content/blog/entries/entry-1')
+    render(<Detail />)
     fireEvent.change(screen.getByLabelText('Title'), {
       target: { value: 'Hello world, rewritten' },
     })
@@ -648,54 +566,16 @@ describe('a collection entry opens a detail page (AGL-2498)', () => {
 
     await waitFor(() => expect(mockConfirm).toHaveBeenCalledTimes(1))
     // Still here, still carrying what was typed. A guard that asked and then
-    // closed anyway is worse than no guard: it looks like it protected you.
+    // left anyway is worse than no guard: it looks like it protected you.
     expect((titleField() as HTMLInputElement).value).toBe(
       'Hello world, rewritten',
     )
+    expect(mockNav.pushed).toEqual([])
   })
 
-  it('does not silently drop unsaved edits when the BROWSER goes back', async () => {
-    // The hazard the conversion introduces, and the reason the guard had to
-    // be BUILT rather than preserved: Back is far easier to press than a
-    // dialog was to dismiss, and the dialog had no dirty tracking at all.
-    mockConfirm.mockResolvedValue(false)
-    const { rerender } = render(<HostContent />)
-    openByRow('Hello world')
-    settleNavigation(rerender)
-    fireEvent.change(screen.getByLabelText('Title'), {
-      target: { value: 'Hello world, rewritten' },
-    })
-
-    navigateTo('/acme/hosts/shop/content/col-1', rerender)
-
-    await waitFor(() => expect(mockConfirm).toHaveBeenCalledTimes(1))
-    expect((titleField() as HTMLInputElement).value).toBe(
-      'Hello world, rewritten',
-    )
-    // The address is put back, so the page the question is about is the page
-    // on screen — not a list the editor is invisibly floating over.
-    expect(lastPushed()).toBe(
-      '/acme/hosts/shop/content/col-1/entries/entry-1',
-    )
-  })
-
-  it('lets the browser Back through once the discard is confirmed', async () => {
-    mockConfirm.mockResolvedValue(true)
-    const { rerender } = render(<HostContent />)
-    openByRow('Hello world')
-    settleNavigation(rerender)
-    fireEvent.change(screen.getByLabelText('Title'), {
-      target: { value: 'Hello world, rewritten' },
-    })
-
-    navigateTo('/acme/hosts/shop/content/col-1', rerender)
-
-    await waitFor(() => expect(titleField()).toBeNull())
-  })
-
-  it('treats a SAVED entry as clean — no prompt on the way out', async () => {
-    render(<HostContent />)
-    openByRow('Hello world')
+  it('treats a SAVED entry as clean, and returns to its COLLECTION', async () => {
+    at('/acme/hosts/shop/content/blog/entries/entry-1')
+    render(<Detail />)
     fireEvent.change(screen.getByLabelText('Title'), {
       target: { value: 'Hello world, rewritten' },
     })
@@ -703,22 +583,18 @@ describe('a collection entry opens a detail page (AGL-2498)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
-    // Back on the list, and nothing was asked: the changes are stored, so
-    // "discard unsaved changes?" would be a question about nothing — and
-    // worse, `beforeunload` would go on blocking the tab over them.
-    await waitFor(() => expect(titleField()).toBeNull())
+    // Nothing was asked: the changes are stored, so "discard unsaved changes?"
+    // would be a question about nothing — and worse, `beforeunload` would go
+    // on blocking the tab over them.
     expect(mockConfirm).not.toHaveBeenCalled()
-    // And it returns to the COLLECTION address rather than leaving the entry
-    // segment on a page that no longer shows an entry — a link somebody then
-    // sends that reopens the editor they had just finished with. To the
-    // collection and not to bare `/content`: leaving an entry must not also
+    // The COLLECTION, not bare `/content`: leaving an entry must not also
     // change which collection you are looking at.
-    expect(lastPushed()).toBe('/acme/hosts/shop/content/col-1')
+    expect(lastPushed()).toBe('/acme/hosts/shop/content/blog')
   })
 
   it('schedules from the detail page, still writing publishAt', async () => {
-    render(<HostContent />)
-    openByRow('Hello world')
+    at('/acme/hosts/shop/content/blog/entries/entry-1')
+    render(<Detail />)
 
     fireEvent.click(screen.getByRole('button', { name: /^Schedule/ }))
     const future = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
@@ -731,8 +607,7 @@ describe('a collection entry opens a detail page (AGL-2498)', () => {
     await waitFor(() => expect(mockUpdateDoc).toHaveBeenCalledTimes(1))
     const [, payload] = mockUpdateDoc.mock.calls[0]
     // `publishAt`, the DEFERRED field — one letter from `publishedAt`, which
-    // is when the entry SAYS it went out. Moving the container must not swap
-    // them.
+    // is when the entry SAYS it went out.
     expect(Object.keys(payload).sort()).toEqual(['publishAt', 'status'])
     expect(payload.status).toBe('scheduled')
   })
@@ -744,8 +619,8 @@ describe('a collection entry opens a detail page (AGL-2498)', () => {
       // loading window, that it does not have the feature it pays for.
       mockOrg.org = undefined
       mockOrg.ready = false
-      render(<HostContent />)
-      openByRow('Hello world')
+      at('/acme/hosts/shop/content/blog/entries/entry-1')
+      render(<Detail />)
 
       fireEvent.click(screen.getByRole('button', { name: /^Schedule/ }))
       const future = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
@@ -765,8 +640,8 @@ describe('a collection entry opens a detail page (AGL-2498)', () => {
     it('refuses a Free org once the plan is actually known', async () => {
       mockOrg.org = { plan: 'free' }
       mockOrg.ready = true
-      render(<HostContent />)
-      openByRow('Hello world')
+      at('/acme/hosts/shop/content/blog/entries/entry-1')
+      render(<Detail />)
 
       fireEvent.click(screen.getByRole('button', { name: /^Schedule/ }))
       const future = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
@@ -781,5 +656,222 @@ describe('a collection entry opens a detail page (AGL-2498)', () => {
       expect(message).toMatch(/Business plan/)
       expect(mockUpdateDoc).not.toHaveBeenCalled()
     })
+  })
+})
+
+/**
+ * The entry's address segment is AUTHORED (AGL-2498).
+ *
+ * Zach: *"We are missing the ability to override the default slug."*
+ *
+ * Two wrongs in one: there was no way to choose an address, and
+ * `slug: slugify(title)` on every save silently MOVED a published post
+ * whenever its headline was edited — 404-ing every inbound link with nothing
+ * in the console to say so.
+ */
+describe('an entry slug can be overridden (AGL-2498)', () => {
+  it('writes the AUTHORED slug rather than one derived from the title', async () => {
+    at('/acme/hosts/shop/content/blog/entries/entry-1')
+    render(<Detail />)
+
+    fireEvent.change(screen.getByLabelText('Slug'), {
+      target: { value: 'a-shorter-address' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
+    const [, payload] = mockSetDoc.mock.calls[0]
+    expect(payload.slug).toBe('a-shorter-address')
+  })
+
+  it('slugifies what was typed rather than storing it raw', async () => {
+    at('/acme/hosts/shop/content/blog/entries/entry-1')
+    render(<Detail />)
+
+    fireEvent.change(screen.getByLabelText('Slug'), {
+      target: { value: 'Hello There!! ' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
+    expect(mockSetDoc.mock.calls[0][1].slug).toBe('hello-there')
+  })
+
+  it('does NOT move a published entry address when its title is edited', async () => {
+    // The regression this field exists to stop. `entry-1` is published.
+    at('/acme/hosts/shop/content/blog/entries/entry-1')
+    render(<Detail />)
+
+    fireEvent.change(screen.getByLabelText('Title'), {
+      target: { value: 'Hello world, rewritten' },
+    })
+
+    expect((screen.getByLabelText('Slug') as HTMLInputElement).value).toBe(
+      'hello-world',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
+    expect(mockSetDoc.mock.calls[0][1].slug).toBe('hello-world')
+  })
+
+  it('DOES follow the title while the entry is still a draft', async () => {
+    // An unpublished address is not in the wild, so following the title is
+    // the helpful default — and the only way a new post gets a slug at all
+    // without anybody typing one.
+    at('/acme/hosts/shop/content/blog/entries/entry-2')
+    render(<Detail />)
+
+    fireEvent.change(screen.getByLabelText('Title'), {
+      target: { value: 'A brand new headline' },
+    })
+
+    expect((screen.getByLabelText('Slug') as HTMLInputElement).value).toBe(
+      'a-brand-new-headline',
+    )
+  })
+
+  it('stops following the title once the slug has been touched', async () => {
+    at('/acme/hosts/shop/content/blog/entries/entry-2')
+    render(<Detail />)
+
+    fireEvent.change(screen.getByLabelText('Slug'), {
+      target: { value: 'chosen-by-hand' },
+    })
+    fireEvent.change(screen.getByLabelText('Title'), {
+      target: { value: 'A completely different headline' },
+    })
+
+    expect((screen.getByLabelText('Slug') as HTMLInputElement).value).toBe(
+      'chosen-by-hand',
+    )
+  })
+
+  it('REFUSES a slug another entry in the collection already serves', async () => {
+    // The tenant resolves an entry with `where('slug','==',…)` and takes the
+    // first match, so a duplicate makes one of the two simply unreachable.
+    at('/acme/hosts/shop/content/blog/entries/entry-1')
+    render(<Detail />)
+
+    fireEvent.change(screen.getByLabelText('Slug'), {
+      target: { value: 'never-published' },
+    })
+
+    // Disabled rather than refused on click: the collision is visible while
+    // it is being typed, not after the author has committed to it.
+    expect(
+      (screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true)
+    expect(mockSetDoc).not.toHaveBeenCalled()
+  })
+})
+
+describe('the collection list addresses its entries (AGL-2498)', () => {
+  it('gives the entry an ADDRESS that names BOTH halves of it', () => {
+    // The collection AND the entry, both as path segments. It was
+    // `/content?entry=entry-1`, which says which entry but not which
+    // collection — the collection rode along in a SECOND query parameter that
+    // any link rebuild could drop.
+    render(<List />)
+
+    openByRow('Hello world')
+
+    expect(mockNav.pushed).toEqual([
+      '/acme/hosts/shop/content/blog/entries/entry-1',
+    ])
+  })
+
+  it('addresses the collection by SLUG, not by document id', () => {
+    // Zach: "one is using the id in the url while others use a slug".
+    // Collection document ids are not uniform — seeded ones were given
+    // readable ids and everything created since gets a uid — so routing by id
+    // put `/content/changelog` beside `/content/QgXv7lU_rG` on one site.
+    at('/acme/hosts/shop/content/col-1')
+
+    render(<List />)
+
+    expect(lastReplaced()).toBe('/acme/hosts/shop/content/blog')
+  })
+
+  it('rewrites a legacy ?collection= deep link onto the routed address', () => {
+    // AGL-845's DAM "Used on" links carry a document id in a query parameter,
+    // and they are in the wild. They keep working — by being REWRITTEN, so the
+    // address the reader ends up with is one they can send on.
+    mockNav.params = {}
+    mockNav.search = '?collection=col-1'
+
+    render(<List />)
+
+    expect(mockNav.replaced).toEqual(['/acme/hosts/shop/content/blog'])
+  })
+
+  it('rewrites a legacy ?entry= link straight into the entry', () => {
+    // Both legacy parameters at once — the shape a bookmark of the old editor
+    // has. The rewrite must carry the entry too, or a saved link to a post
+    // silently degrades into a link to its list.
+    mockNav.params = {}
+    mockNav.search = '?collection=col-1&entry=entry-1'
+
+    render(<List />)
+
+    expect(mockNav.replaced).toEqual([
+      '/acme/hosts/shop/content/blog/entries/entry-1',
+    ])
+  })
+
+  it('carries ?tab= through the rewrite but never the legacy pair', () => {
+    // `?tab=` is HubTabs' own mirroring and has to survive. `?collection=` and
+    // `?entry=` must NOT: they are the address that moved into the path, and
+    // carrying them forward would leave two answers to "which collection is
+    // open" in one URL with nothing to say which wins.
+    mockNav.params = {}
+    mockNav.search = '?tab=authors&collection=col-1'
+
+    render(<List />)
+
+    expect(mockNav.replaced).toEqual([
+      '/acme/hosts/shop/content/blog?tab=authors',
+    ])
+  })
+
+  it('rewrites an address naming a collection that no longer exists', () => {
+    // Left alone, `selected` falls back to the first collection and the
+    // address then NAMES one collection while the page SHOWS another — and the
+    // next save writes to the one on screen.
+    at('/acme/hosts/shop/content/gone')
+
+    render(<List />)
+
+    expect(lastReplaced()).toBe('/acme/hosts/shop/content/blog')
+  })
+
+  it('leaves a settled address alone', () => {
+    // The guard against the opposite failure: a rewrite that fires on an
+    // address already in the routed form is a `replace` per render, at the
+    // exact moment the router is mid-navigation.
+    render(<List />)
+
+    expect(mockNav.replaced).toEqual([])
+  })
+
+  it('navigates when the collection Select is changed', () => {
+    // Which collection is open is the page's ADDRESS, not a piece of component
+    // state — so choosing one goes through the router and can be linked,
+    // bookmarked, reloaded and gone Back out of.
+    mockCollections.push({
+      $id: 'col-2',
+      displayName: 'Changelog',
+      slug: 'changelog',
+      kind: 'content',
+    })
+    render(<List />)
+
+    // MUI's `TextField select` is a listbox behind a combobox, not a native
+    // `<select>`, so it is DRIVEN rather than assigned to — `fireEvent.change`
+    // on it throws "does not have a value setter".
+    fireEvent.mouseDown(screen.getByLabelText('Collection'))
+    fireEvent.click(screen.getByRole('option', { name: /Changelog/ }))
+
+    expect(lastPushed()).toBe('/acme/hosts/shop/content/changelog')
   })
 })

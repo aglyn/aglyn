@@ -54,6 +54,9 @@ const mockEnqueueSnackbar = jest.fn()
 /** A published entry dated a year ago, and a draft with no date at all. */
 const PUBLISHED_AT_SECONDS = 1_600_000_000
 
+/** The collection route the list is mounted at. */
+const mockParams = { collectionSlug: 'blog' }
+
 const mockEntries = {
   data: [
     {
@@ -97,6 +100,12 @@ jest.mock('@aglyn/aglyn', () => ({
   isHostCollectionKind: () => () => true,
   COLLECTION_CATEGORIES_MAX: 20,
   findCollectionSlugOwner: () => null,
+  // The REAL rule, not a stub (AGL-2498). The slug is authored now, so a
+  // collision is reachable on purpose — and a stub returning `null` would
+  // leave every suite asserting a Save button that a real duplicate disables.
+  findEntrySlugOwner: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/collection-slug',
+  ).findEntrySlugOwner,
   collectionDeleteDenial: () => null,
   collectionTemplateBindings: () => [],
   mediaNodeSrc: () => '',
@@ -292,22 +301,36 @@ jest.mock('next/navigation', () => ({
   // throws on mount.
   useRouter: () => ({ replace: jest.fn(), push: jest.fn() }),
   /**
-   * Bare `/content` — no collection segment, no entry segment.
-   *
-   * AGL-2498 moved BOTH out of the query string and into the path, so this is
-   * the hook the page now reads its address from. A constant empty object is
-   * exactly right for these suites: they open an entry by clicking its row,
-   * and the URL sync claims the segment it pushed, so the editor stays open
-   * while `useParams` still reports the list. See the detail-page suite for
-   * the addressing itself.
+   * The collection route this list is mounted at (AGL-2498) — no entry
+   * segment, because this suite is about the LIST's row menu.
    */
-  useParams: () => ({}),
+  useParams: () => ({ ...mockParams }),
   usePathname: () => '/org/hosts/site/content',
 }))
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const HostContent =
-  require('../app/(app)/[orgSlug]/hosts/[host]/content/page').default
+/**
+ * `require` after the mocks, not a top-level `import`: the modules must be
+ * evaluated only once every `jest.mock` above is registered.
+ */
+const { ContentScopeProvider } = require('../components/content/content-scope.context')
+const CollectionEntriesPage =
+  require('../components/content/collection-entries-page.component').default
+
+/**
+ * The LIST, at a collection's address.
+ *
+ * This suite is about the row overflow menu — the door AGL-2497 built and the
+ * one AGL-2498 deliberately did NOT remove when it gave the editor its own
+ * copy of the same controls. So it mounts the list rather than the entry
+ * detail, and the provider is real because it owns the two date dialogs the
+ * menu opens.
+ */
+const renderList = () =>
+  render(
+    <ContentScopeProvider>
+      <CollectionEntriesPage />
+    </ContentScopeProvider>,
+  )
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -336,7 +359,7 @@ const localValue = (date: Date) => {
 
 describe('an entry publish date can be set, and BACKDATED (AGL-2497)', () => {
   it('writes the chosen PAST instant to publishedAt, and nothing else', async () => {
-    render(<HostContent />)
+    renderList()
     openRowAction('Hello world', /^Edit published date/)
 
     const backdated = new Date(2019, 4, 1, 9, 30)
@@ -359,7 +382,7 @@ describe('an entry publish date can be set, and BACKDATED (AGL-2497)', () => {
   })
 
   it('seeds the dialog from the entry OWN date, not from today', () => {
-    render(<HostContent />)
+    renderList()
     openRowAction('Hello world', /^Edit published date/)
 
     expect(
@@ -368,7 +391,7 @@ describe('an entry publish date can be set, and BACKDATED (AGL-2497)', () => {
   })
 
   it('seeds an UNDATED draft from now — never from the epoch', () => {
-    render(<HostContent />)
+    renderList()
     openRowAction('Never published', /^Edit published date/)
 
     const value = (screen.getByLabelText('Published on') as HTMLInputElement)
@@ -384,7 +407,7 @@ describe('an entry publish date can be set, and BACKDATED (AGL-2497)', () => {
   })
 
   it('REFUSES a future instant and sends the user to Schedule', async () => {
-    render(<HostContent />)
+    renderList()
     openRowAction('Hello world', /^Edit published date/)
 
     const future = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
@@ -427,7 +450,7 @@ describe('an entry publish date can be set, and BACKDATED (AGL-2497)', () => {
    * than absent.
    */
   it('writes NOTHING when the date is cleared', async () => {
-    render(<HostContent />)
+    renderList()
     openRowAction('Hello world', /^Edit published date/)
 
     fireEvent.change(screen.getByLabelText('Published on'), {
@@ -445,7 +468,7 @@ describe('publishing keeps a date the author already chose (AGL-2497)', () => {
     // could never get a fresh publication instant again. Unpublish DELETES
     // the field, so publish -> unpublish -> publish stamps now, and the
     // preservation below can only ever pick up a date somebody chose.
-    render(<HostContent />)
+    renderList()
     openRowAction('Hello world', 'Unpublish')
 
     await waitFor(() => expect(mockUpdateDoc).toHaveBeenCalledTimes(1))
@@ -464,7 +487,7 @@ describe('publishing keeps a date the author already chose (AGL-2497)', () => {
       toDate: () => new Date(PUBLISHED_AT_SECONDS * 1000),
     }
     try {
-      render(<HostContent />)
+      renderList()
       openRowAction('Never published', 'Publish')
 
       await waitFor(() => expect(mockUpdateDoc).toHaveBeenCalledTimes(1))
@@ -478,7 +501,7 @@ describe('publishing keeps a date the author already chose (AGL-2497)', () => {
   })
 
   it('publishing an entry with NO date still stamps now', async () => {
-    render(<HostContent />)
+    renderList()
     openRowAction('Never published', 'Publish')
 
     await waitFor(() => expect(mockUpdateDoc).toHaveBeenCalledTimes(1))
@@ -497,7 +520,7 @@ describe('publishing keeps a date the author already chose (AGL-2497)', () => {
  */
 describe('future scheduling is UNCHANGED (AGL-123 regression control)', () => {
   it('still accepts a future instant, writing publishAt and status', async () => {
-    render(<HostContent />)
+    renderList()
     openRowAction('Hello world', /^Schedule/)
 
     // Seconds zeroed: `datetime-local` carries minute precision, so an
@@ -521,7 +544,7 @@ describe('future scheduling is UNCHANGED (AGL-123 regression control)', () => {
   })
 
   it('still REFUSES a past instant', async () => {
-    render(<HostContent />)
+    renderList()
     openRowAction('Hello world', /^Schedule/)
 
     fireEvent.change(screen.getByLabelText('Publish at'), {

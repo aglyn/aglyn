@@ -91,35 +91,43 @@ describe('buildRoute', () => {
     ).toBe('/acme/hosts/shop/screens/screen-1/versions/v2/besigner')
   })
 
-  it('addresses a content collection and one of its entries by path', () => {
+  it('addresses a content collection by SLUG, and one of its entries by id', () => {
     // AGL-2498: both used to be query parameters on `/content`, which is why
     // an entry could not be linked without carrying the collection beside it
     // in a second parameter that any link rebuild could drop.
+    //
+    // The collection segment is its SLUG. Routing by document id put
+    // `/content/changelog` beside `/content/QgXv7lU_rG` on one site, because
+    // seeded collections were given readable ids and everything created since
+    // gets a uid.
     expect(
       buildRoute(Route.HOST_CONTENT_COLLECTION, {
         orgSlug: 'acme',
         host: 'shop',
-        collectionId: 'col-1',
+        collectionSlug: 'blog',
       }),
-    ).toBe('/acme/hosts/shop/content/col-1')
+    ).toBe('/acme/hosts/shop/content/blog')
+    // The ENTRY stays an id — its slug is unique only within the collection
+    // and is editable on the detail page, so routing by it would move the
+    // console address out from under someone typing in the slug field.
     expect(
       buildRoute(Route.CONTENT_ENTRY_DETAILS, {
         orgSlug: 'acme',
         host: 'shop',
-        collectionId: 'col-1',
+        collectionSlug: 'blog',
         entryId: 'entry-9',
       }),
-    ).toBe('/acme/hosts/shop/content/col-1/entries/entry-9')
+    ).toBe('/acme/hosts/shop/content/blog/entries/entry-9')
     // The draft sentinel rides the same segment — a `new` entry has no
     // document yet, and the address has to be able to say so.
     expect(
       buildRoute(Route.CONTENT_ENTRY_DETAILS, {
         orgSlug: 'acme',
         host: 'shop',
-        collectionId: 'col-1',
+        collectionSlug: 'blog',
         entryId: 'new',
       }),
-    ).toBe('/acme/hosts/shop/content/col-1/entries/new')
+    ).toBe('/acme/hosts/shop/content/blog/entries/new')
   })
 
   it('leaves param-less routes alone', () => {

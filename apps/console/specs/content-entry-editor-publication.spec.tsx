@@ -54,6 +54,9 @@ const mockEnqueueSnackbar = jest.fn()
 /** A published entry dated a year ago, and a draft with no date at all. */
 const PUBLISHED_AT_SECONDS = 1_600_000_000
 
+/** Which entry the detail route is open on; set by `renderEntry`. */
+const mockParams = { collectionSlug: 'blog', entryId: 'entry-1' }
+
 const mockEntries = {
   data: [
     {
@@ -97,6 +100,12 @@ jest.mock('@aglyn/aglyn', () => ({
   isHostCollectionKind: () => () => true,
   COLLECTION_CATEGORIES_MAX: 20,
   findCollectionSlugOwner: () => null,
+  // The REAL rule, not a stub (AGL-2498). The slug is authored now, so a
+  // collision is reachable on purpose — and a stub returning `null` would
+  // leave every suite asserting a Save button that a real duplicate disables.
+  findEntrySlugOwner: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/collection-slug',
+  ).findEntrySlugOwner,
   collectionDeleteDenial: () => null,
   collectionTemplateBindings: () => [],
   mediaNodeSrc: () => '',
@@ -292,38 +301,47 @@ jest.mock('next/navigation', () => ({
   // throws on mount.
   useRouter: () => ({ replace: jest.fn(), push: jest.fn() }),
   /**
-   * Bare `/content` — no collection segment, no entry segment.
+   * The route the DETAIL page is mounted at (AGL-2498).
    *
-   * AGL-2498 moved BOTH out of the query string and into the path, so this is
-   * the hook the page now reads its address from. A constant empty object is
-   * exactly right for these suites: they open an entry by clicking its row,
-   * and the URL sync claims the segment it pushed, so the editor stays open
-   * while `useParams` still reports the list. See the detail-page suite for
-   * the addressing itself.
+   * The entry editor is its own route component now, not a branch of the list
+   * — so a suite about the editor mounts the editor, at an address that names
+   * the entry, instead of rendering the list and clicking a row into it. That
+   * is also what the browser does on a pasted link, which makes this the more
+   * honest setup as well as the simpler one.
    */
-  useParams: () => ({}),
+  useParams: () => ({ ...mockParams }),
   usePathname: () => '/org/hosts/site/content',
 }))
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const HostContent =
-  require('../app/(app)/[orgSlug]/hosts/[host]/content/page').default
+/**
+ * `require` after the mocks, not a top-level `import`: the modules must be
+ * evaluated only once every `jest.mock` above is registered.
+ */
+const { ContentScopeProvider } = require('../components/content/content-scope.context')
+const EntryDetailPage =
+  require('../components/content/entry-detail-page.component').default
+
+/**
+ * The entry detail page, at the address that names one entry.
+ *
+ * The provider is REAL rather than stubbed: it owns the scheduler and
+ * published-date dialogs and the publish/delete writes these suites assert, so
+ * a stubbed scope would leave them testing a fixture instead of the feature.
+ */
+const renderEntry = (entryId: string) => {
+  mockParams.entryId = entryId
+  return render(
+    <ContentScopeProvider>
+      <EntryDetailPage />
+    </ContentScopeProvider>,
+  )
+}
 
 beforeEach(() => {
   jest.clearAllMocks()
   mockEntries.status = 'success'
   mockEntries.fromCache = false
 })
-
-/**
- * The row actions live behind an overflow menu, one per row. `title` is the
- * entry to act on and `action` the menu item's label.
- */
-const openRowAction = (title: string, action: string | RegExp) => {
-  const row = screen.getByText(title).closest('tr') as HTMLElement
-  fireEvent.click(row.querySelector('button') as HTMLElement)
-  fireEvent.click(screen.getByRole('menuitem', { name: action }))
-}
 
 /** The `datetime-local` value shape, in LOCAL time like the input's own. */
 const localValue = (date: Date) => {
@@ -333,9 +351,6 @@ const localValue = (date: Date) => {
     `T${pad(date.getHours())}:${pad(date.getMinutes())}`
   )
 }
-
-/** Opens the entry editor dialog for a row, via its overflow menu. */
-const openEditor = (title: string) => openRowAction(title, 'Edit')
 
 /**
  * A button INSIDE the editor's Publication section. Deliberately queried by
@@ -348,8 +363,7 @@ const publicationButton = (name: string | RegExp) =>
 
 describe('the entry editor carries the publication controls (AGL-2498)', () => {
   it('SCHEDULES from inside the editor, writing publishAt for that entry', async () => {
-    render(<HostContent />)
-    openEditor('Hello world')
+    renderEntry('entry-1')
 
     fireEvent.click(publicationButton(/^Schedule/))
 
@@ -379,8 +393,7 @@ describe('the entry editor carries the publication controls (AGL-2498)', () => {
    * from 2020 pre-filled, and the Schedule button refuses it.
    */
   it('opens the scheduler seeded to a FUTURE instant, never the entry own date', () => {
-    render(<HostContent />)
-    openEditor('Hello world')
+    renderEntry('entry-1')
 
     fireEvent.click(publicationButton(/^Schedule/))
 
@@ -394,8 +407,7 @@ describe('the entry editor carries the publication controls (AGL-2498)', () => {
   })
 
   it('BACKDATES from inside the editor, writing publishedAt for that entry', async () => {
-    render(<HostContent />)
-    openEditor('Hello world')
+    renderEntry('entry-1')
 
     fireEvent.click(publicationButton(/^Edit published date/))
 
@@ -413,13 +425,12 @@ describe('the entry editor carries the publication controls (AGL-2498)', () => {
     )
   })
 
-  it('seeds each date dialog from the EDITED entry, not the first row', async () => {
+  it('seeds each date dialog from the ROUTED entry, not the first row', async () => {
     // The wiring failure this shape invites, and the reason these assert the
     // write rather than the dialog: a control that reads `entries[0]` instead
-    // of the entry being edited looks correct on screen for row one and
+    // of the entry the address names looks correct on screen for row one and
     // silently re-dates the wrong post for every other row.
-    render(<HostContent />)
-    openEditor('Never published')
+    renderEntry('entry-2')
 
     fireEvent.click(publicationButton(/^Edit published date/))
 
@@ -436,8 +447,7 @@ describe('the entry editor carries the publication controls (AGL-2498)', () => {
   })
 
   it('PUBLISHES from inside the editor', async () => {
-    render(<HostContent />)
-    openEditor('Never published')
+    renderEntry('entry-2')
 
     fireEvent.click(publicationButton('Publish'))
 
@@ -447,8 +457,7 @@ describe('the entry editor carries the publication controls (AGL-2498)', () => {
   })
 
   it('offers UNPUBLISH, not Publish, for an already published entry', () => {
-    render(<HostContent />)
-    openEditor('Hello world')
+    renderEntry('entry-1')
 
     expect(publicationButton('Unpublish')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Publish' })).toBeNull()
@@ -464,8 +473,7 @@ describe('the entry editor carries the publication controls (AGL-2498)', () => {
    * the status line is asserted to state the tense it is talking about.
    */
   it('keeps the published date and the schedule worded APART', () => {
-    render(<HostContent />)
-    openEditor('Hello world')
+    renderEntry('entry-1')
 
     const backdate = publicationButton(/^Edit published date/)
     const schedule = publicationButton(/^Schedule/)
@@ -481,8 +489,7 @@ describe('the entry editor carries the publication controls (AGL-2498)', () => {
   it('offers NO publication controls until the draft exists', () => {
     // A new entry has no document yet, so publishing, scheduling or dating it
     // would write against an id nothing answers to.
-    render(<HostContent />)
-    fireEvent.click(screen.getByRole('button', { name: /new entry/i }))
+    renderEntry('new')
 
     expect(screen.queryByRole('button', { name: 'Publish' })).toBeNull()
     expect(screen.queryByRole('button', { name: /^Schedule/ })).toBeNull()

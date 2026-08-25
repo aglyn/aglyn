@@ -2643,7 +2643,14 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           return buildRoute(Route.CONTENT_ENTRY_DETAILS, {
             orgSlug,
             host: reference.hostSubdomain,
-            collectionId: reference.collectionId,
+            // The scan carries the collection's document ID, and the route
+            // segment is its SLUG. That resolves: the content scope accepts an
+            // id and rewrites the address to the slug form, precisely so links
+            // like this one — and every `…/content/{id}` written before the
+            // segment changed — keep working. Teaching the scan to carry the
+            // slug as well would buy one avoided redirect for a second field
+            // that can disagree with the first.
+            collectionSlug: reference.collectionId,
             entryId: reference.id,
           })
         }

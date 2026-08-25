@@ -136,16 +136,17 @@ describe('the media picker carries the asset alt', () => {
 
 describe('a placement defaults its alt through the one shared rule', () => {
   it('the collection entry editor inherits, and no longer fabricates', () => {
+    // The entry editor moved out of the monolithic content page and into its
+    // own route component (AGL-2498). Named directly rather than scanned as a
+    // directory because THIS rule is about one specific writer — the entry's
+    // media picks — and a directory scan would let it pass on a sibling file
+    // that happens to mention the helper.
     const text = source(
       'apps',
       'console',
-      'app',
-      '(app)',
-      '[orgSlug]',
-      'hosts',
-      '[host]',
+      'components',
       'content',
-      'page.tsx',
+      'entry-detail-page.component.tsx',
     )
     expect(text).toContain(`Aglyn.${HELPER}(`)
     /**
