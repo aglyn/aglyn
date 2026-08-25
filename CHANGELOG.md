@@ -9,6 +9,34 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.17 — 2026-08-25
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.16...v1.0.0-beta.17)
+
+### Added
+
+- **monitoring:** a Vercel log-drain receiver for the platform 5xx ([AGL-1921](https://linear.app/aglyn/issue/AGL-1921), [AGL-1923](https://linear.app/aglyn/issue/AGL-1923), [AGL-723](https://linear.app/aglyn/issue/AGL-723))
+
+### Fixed
+
+- **sso:** the attestation helper stops hard-coding an Aglyn hostname ([AGL-1887](https://linear.app/aglyn/issue/AGL-1887))
+- **lockdown:** a takedown at org and host scope survives a failed read ([AGL-1881](https://linear.app/aglyn/issue/AGL-1881), [AGL-1621](https://linear.app/aglyn/issue/AGL-1621), [AGL-1501](https://linear.app/aglyn/issue/AGL-1501))
+- **rules:** a platform lockdown freezes client-SDK writes too ([AGL-1881](https://linear.app/aglyn/issue/AGL-1881), [AGL-1965](https://linear.app/aglyn/issue/AGL-1965), [AGL-210](https://linear.app/aglyn/issue/AGL-210), [AGL-1501](https://linear.app/aglyn/issue/AGL-1501), [AGL-1887](https://linear.app/aglyn/issue/AGL-1887))
+- **i18n,besigner:** standardize on american spelling, fix token menu width
+
+### Documentation
+
+- **screens,layouts:** screens, layouts, components and templates each get their own page ([AGL-2486](https://linear.app/aglyn/issue/AGL-2486), [AGL-1074](https://linear.app/aglyn/issue/AGL-1074))
+
+<details>
+<summary>Also in this release: 3 test</summary>
+
+- **aglyn,commerce:** specs assert the american spellings the app now renders
+- **console:** the consent-preview spec asserts the american spelling it now renders
+- **sso:** the attestation marker is proven unwritable from any client ([AGL-1887](https://linear.app/aglyn/issue/AGL-1887))
+
+</details>
+
 ## v1.0.0-beta.16 — 2026-08-25
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.15...v1.0.0-beta.16)
